@@ -37,9 +37,10 @@ import {
 } from './a_crews_tools.ts'
 import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
 import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's `review_model` is read against. */
-const HOST_MODELS = ['sonnet', 'opus', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['sonnet', 'opus', 'fable'] }
 /** The model the member is launched on, and the one the declaration gives it as its own. */
 const OWN_MODEL = 'sonnet'
 /** The crew's reviewer model: the other model a switch is allowed to name. */

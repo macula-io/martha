@@ -47,9 +47,10 @@ import { theOwnersDefaultKept } from '../switch_a_members_model/switch_a_members
 import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { THE_MODEL_REPORT_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /** The models a crew names: this member's own, and the one every review runs on. */
-const HOST_MODELS = ['sonnet', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['sonnet', 'fable'] }
 /** The model the member is launched on, and the crew's reviewer model: the one a switch moves it to. */
 const OWN_MODEL = 'sonnet'
 const THE_REVIEWER_MODEL = 'fable'

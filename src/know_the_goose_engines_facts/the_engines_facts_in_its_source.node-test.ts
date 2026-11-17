@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
@@ -11,6 +12,11 @@ import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, type EngineFacts } from './
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
+
+/** The recorded subagent vocabulary turned the other way: closed when it is open, open when it is closed. */
+const OTHER_SUBAGENT_MODELS: ModelVocabulary = RECORDED_FACTS.subagent_models.kind === OPEN_VOCABULARY
+  ? { kind: CLOSED_VOCABULARY, names: ['a-listed-model', 'another-listed-model'] }
+  : { kind: OPEN_VOCABULARY, names: [] }
 
 test('a tree that says the recorded facts reads back as exactly those facts, every part read', () => {
   const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS)))
@@ -69,4 +75,19 @@ test('an extension inserted in a shape the reader does not know makes the map un
   const planted = `${map}\n        map.insert("newext", newext_def());\n`
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.platform_extensions]: planted }))
   assert.deepEqual(unreadable.map(({ part }) => part), [ENGINE_PARTS.find(({ read }) => 'platform_extensions' in read(anEngineSourceSaying(files)))?.part])
+})
+
+test('a delegate tool whose model changes kind is read as that kind, so the review model is never read against the old one', () => {
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, subagent_models: OTHER_SUBAGENT_MODELS })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.subagent_models, OTHER_SUBAGENT_MODELS)
+})
+
+test("a delegate tool's model that is neither a list nor a string is unreadable, never taken as open", () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tool = files[ENGINE_PLACES.delegate_tool] ?? ''
+  const typed = tool.replace(/("model":\s*\{\s*"type":\s*)"string"/, '$1"integer"')
+  assert.notEqual(typed, tool, 'the built delegate tool has no string model to retype')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.delegate_tool]: typed }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [ENGINE_PARTS.find(({ read }) => 'subagent_models' in read(anEngineSourceSaying(files)))?.part])
 })

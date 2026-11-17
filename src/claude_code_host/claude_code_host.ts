@@ -65,6 +65,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { HOSTS, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import type { ASpawnedAgent } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
+import { vocabularyOf, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE_SESSION_START_SOURCES } from './recorded_claude_code_host.ts'
 import { FILE_PATH_ARGUMENT, NOTEBOOK_PATH_ARGUMENT } from './claude_code_file_tools.ts'
 
@@ -236,6 +237,8 @@ export function isMcpToolCall(called: string): boolean {
 /** The models the recorded host accepts in a subagent's `model` field, as that host's own declaration lists them. */
 export interface RecordedModels {
   readonly host_version: string
+  /** Whether the host's declaration names its models (closed) or takes any name (open), as observed of it. */
+  readonly kind: string
   readonly aliases: readonly string[]
 }
 
@@ -249,7 +252,7 @@ export const RECORDED_MODELS: RecordedModels = JSON.parse(
  * must be one of these: the host publishes no alias-to-id mapping, so a name outside this list is one Martha could not
  * spell to the host at all. A host that adds a model changes this list by a re-recording, never by an edit here.
  */
-export const CLAUDE_CODE_MODELS: readonly string[] = RECORDED_MODELS.aliases
+export const CLAUDE_CODE_MODELS: ModelVocabulary = vocabularyOf(RECORDED_MODELS.kind, RECORDED_MODELS.aliases)
 
 /**
  * The tool that spawns a subagent in this host, and the fields of its call that say what the agent is and which model

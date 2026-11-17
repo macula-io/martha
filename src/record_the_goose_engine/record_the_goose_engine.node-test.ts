@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test, type TestContext } from 'node:test'
 
+import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { engineFilesSaying } from '../know_the_goose_engines_facts/an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
@@ -22,6 +23,10 @@ const CHECK = '--check'
 const { [NOTE]: _ignoredWhy, engine_commit: RECORDED_COMMIT, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
 /** A commit that is not the recorded one: the commit is where facts were read, not a fact. */
 const ANOTHER_COMMIT = [...RECORDED_COMMIT].reverse().join('')
+/** The recorded subagent vocabulary turned the other way: closed when it is open, open when it is closed. */
+const OTHER_SUBAGENT_MODELS: ModelVocabulary = RECORDED_FACTS.subagent_models.kind === OPEN_VOCABULARY
+  ? { kind: CLOSED_VOCABULARY, names: ['a-listed-model', 'another-listed-model'] }
+  : { kind: OPEN_VOCABULARY, names: [] }
 
 /** Writes a tree that says `facts` under a fresh directory the test removes, and returns the directory. */
 function aCheckoutSaying(t: TestContext, facts: EngineFacts, drop: string | undefined = undefined): string {
@@ -71,6 +76,12 @@ test('a permission answer the engine adds fails by permission_options', (t) => {
   const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, permission_options: added }))
   assert.equal(ran.status, 1)
   assert.match(ran.stdout, /\ndiffers: permission_options\n$/)
+})
+
+test('a delegate tool whose models change kind fails by subagent_models, so a crew is never read against the old vocabulary', (t) => {
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, subagent_models: OTHER_SUBAGENT_MODELS }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: subagent_models\n$/)
 })
 
 test('two facts that differ are both named, in order', (t) => {

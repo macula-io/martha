@@ -145,7 +145,7 @@ test('approving a config already approved keeps no second line', async (t) => {
  */
 test('#306 r=6: approve reads the crew declaration with the models the host runs, so a crew naming its reviewer model is approved', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
-  const declared = { ...soloDeclaration('Ada Owner'), house_rules: { review_model: CLAUDE_CODE_MODELS[0]! } }
+  const declared = { ...soloDeclaration('Ada Owner'), house_rules: { review_model: CLAUDE_CODE_MODELS.names[0]! } }
   const documents = { read: async () => JSON.stringify(declared) }
   const terminal = terminalAnswering('yes')
 

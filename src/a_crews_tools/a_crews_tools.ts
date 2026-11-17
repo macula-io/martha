@@ -101,6 +101,7 @@ import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnM
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
+import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
@@ -177,7 +178,7 @@ export interface CrewToolPlaces {
    * crew whose `review_model` the host cannot spell is refused by name. A place given none names no model, and a
    * declaration naming one is then refused — nothing here invents a model list.
    */
-  readonly models?: readonly string[]
+  readonly models?: ModelVocabulary
   /** The model this member was launched on (martha#315): what its row says until a switch is confirmed. */
   readonly launched_on?: string
   /**
@@ -872,7 +873,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     ...(places.stamps === undefined ? {} : { stamps: places.stamps }),
     root: places.root,
     documents: places.documents,
-    models: places.models ?? [],
+    models: places.models ?? NO_MODEL_NAMED,
     ledger: places.ledger,
     began_at: state.began_at,
     ends: state.ends,
@@ -882,7 +883,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
 /** The declaration, and the crew's names as a report's rules read them; or why it could not be read. */
 async function crewOrRefusal(places: CrewToolPlaces): Promise<CrewDeclared | { readonly refused: string }> {
   try {
-    const settings = await declareCrew(places.documents, places.root, places.models ?? [])
+    const settings = await declareCrew(places.documents, places.root, places.models ?? NO_MODEL_NAMED)
     return { crew: { owner: settings.owner, members: settings.members.map((member) => member.name) }, settings }
   } catch (error) {
     return { refused: `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}` }

@@ -31,8 +31,9 @@ import { THE_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handov
 import { HANDOVER_LIMIT_PERCENT, refreshesPlace, theFlowOf, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
 import { FORCED_ENDS } from './end_a_running_turn.ts'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
-const HOST_MODELS = ['opus', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 const MEMBER = 'builder'
 const SESSION = 'a-session'
 const SUCCESSOR = 'b-session'

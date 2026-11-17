@@ -14,9 +14,10 @@ import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
 import { nodeIdsFor, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { declareSoloCrew, SOLO_MEMBERS } from './declare_a_solo_crew.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
-const HOST_MODELS = ['opus', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 
 const documents = { read: (path: string) => readFile(path, 'utf8') }
 

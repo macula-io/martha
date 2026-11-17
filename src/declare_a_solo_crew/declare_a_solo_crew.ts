@@ -27,6 +27,7 @@ import {
   type CrewSettings,
 } from '../declare_crew/declare_crew.ts'
 import { nodeIdsFor, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /** The mode a solo crew is declared in: a name for people to read. */
 export const SOLO_MODE = 'solo'
@@ -64,7 +65,7 @@ export interface SoloCrewRequest {
   readonly state: MarthaState
   readonly documents: DocumentStore
   /** The models the host runs (martha#315), as its adapter records them: what the declaration is read back against. */
-  readonly models: readonly string[]
+  readonly models: ModelVocabulary
 }
 
 export type SoloCrewDeclared =

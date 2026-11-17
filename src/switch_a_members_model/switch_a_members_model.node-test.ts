@@ -29,6 +29,7 @@ import {
   theSwitchDirected,
   type ModelMarker,
 } from './switch_a_members_model.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-model-switch-'))
 after(() => removeTheTree(homeOfAll))
@@ -36,7 +37,7 @@ after(() => removeTheTree(homeOfAll))
 const documents = { read: (path: string) => readFile(path, 'utf8') }
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's `review_model` is read against. */
-const HOST_MODELS = ['opus', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 
 /** The crew every test works on: builder and reviewer, a declared model each, and a reviewer model for reviews. */
 interface ADeclaredCrew {
