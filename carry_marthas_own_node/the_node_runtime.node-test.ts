@@ -6,10 +6,11 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { COMMAND_FOLDER, namesAtHead, RUNTIME_FOLDER, theCommand } from './assemble_a_standalone_martha.ts'
 import { hashesFrom } from './record_the_node_runtime.ts'
 import { archiveOf, PLATFORMS, platformOf, theNodeRuntime, type NodeRuntime } from './the_node_runtime.ts'
@@ -68,7 +69,7 @@ test("the names are the installer's and the version is the root package's", () =
 
 test('the command runs Martha with the Node beside it, through an absolute and a relative link', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'martha-standalone-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const release = join(dir, 'release')
   const folder = 'the-tree'
   for (const sub of [join(RUNTIME_FOLDER, 'bin'), join(folder, 'bin'), COMMAND_FOLDER, 'links']) mkdirSync(join(release, sub), { recursive: true })
