@@ -73,7 +73,8 @@ export function theCommand(folder: string): string {
     '  link=$(readlink "$self")',
     '  case $link in /*) self=$link ;; *) self=$(dirname "$self")/$link ;; esac',
     'done',
-    'release=$(cd "$(dirname "$self")/.." && pwd -P)',
+    '# CDPATH is emptied: with it set, cd prints the directory it found, and $release would hold that line twice.',
+    'release=$(CDPATH= cd -P -- "$(dirname "$self")/.." && pwd -P)',
     `exec "$release/${RUNTIME_FOLDER}/bin/node" "$release/${folder}/bin/martha" "$@"`,
     '',
   ].join('\n')

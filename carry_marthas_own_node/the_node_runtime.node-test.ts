@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { test } from 'node:test'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { COMMAND_FOLDER, namesAtHead, RUNTIME_FOLDER, theCommand } from './assemble_a_standalone_martha.ts'
@@ -67,7 +68,7 @@ test("the names are the installer's and the version is the root package's", () =
   assert.deepEqual(namesAtHead(read), { command: names.command, folder: names.releaseFolder, version: (JSON.parse(read('package.json')) as { version: string }).version })
 })
 
-test('the command runs Martha with the Node beside it, through an absolute and a relative link', (t) => {
+test('the command runs Martha with the Node beside it, through an absolute and a relative link, and with CDPATH set', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'martha-standalone-'))
   t.after(() => removeTheTree(dir))
   const release = join(dir, 'release')
@@ -79,8 +80,18 @@ test('the command runs Martha with the Node beside it, through an absolute and a
   chmodSync(join(release, COMMAND_FOLDER, 'cmd'), 0o755)
   symlinkSync(join(release, COMMAND_FOLDER, 'cmd'), join(dir, 'absolute'))
   symlinkSync(join('..', COMMAND_FOLDER, 'cmd'), join(release, 'links', 'relative'))
-  for (const command of [join(release, COMMAND_FOLDER, 'cmd'), join(dir, 'absolute'), join(release, 'links', 'relative')]) {
-    const ran = spawnSync(command, ['--version', 'two words'], { encoding: 'utf8' })
+  // A path relative to the working directory, with CDPATH naming that directory: cd finds the release through CDPATH
+  // and prints it, so a command that did not empty CDPATH would hold that line twice and start no node.
+  const throughCdpath = { cwd: dir, env: { ...process.env, CDPATH: dir } }
+  const launches: readonly (readonly [string, { readonly cwd?: string; readonly env?: NodeJS.ProcessEnv }])[] = [
+    [join(release, COMMAND_FOLDER, 'cmd'), {}],
+    [join(dir, 'absolute'), {}],
+    [join(release, 'links', 'relative'), {}],
+    [join('release', COMMAND_FOLDER, 'cmd'), throughCdpath],
+    [join('release', 'links', 'relative'), throughCdpath],
+  ]
+  for (const [command, options] of launches) {
+    const ran = spawnSync(command, ['--version', 'two words'], { encoding: 'utf8', ...options })
     const real = spawnSync('/bin/sh', ['-c', 'cd "$1" && pwd -P', 'sh', release], { encoding: 'utf8' }).stdout.trim()
     assert.equal(ran.stdout, `${real}/${RUNTIME_FOLDER}/bin/node|${real}/${folder}/bin/martha --version two words\n`, command)
   }
