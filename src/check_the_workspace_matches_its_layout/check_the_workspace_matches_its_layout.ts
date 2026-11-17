@@ -17,20 +17,35 @@
 import type { FileTree, Processes } from '../host_contract/host_contract.ts'
 import type { AListedWorktree, TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { realpathSync } from 'node:fs'
 import { join, sep } from 'node:path'
 
 /**
  * What the check reads with: the tree's names and a git to ask, and the crew's own places and members.
  *
- * A place here is the path itself, every link resolved (martha#79): git answers with the paths it resolved, so a place
- * reached through a link, such as macOS's `/var` -> `/private/var`, is handed in resolved by the caller that reads the
- * declaration. A place given as its link's spelling is another string to this check, and every worktree under it reads
- * as drift.
+ * A place is compared as the path itself, every link resolved (martha#79), the way
+ * ../ask_git_what_a_member_is_about_to_change compares one for the guard: git answers with the paths it resolved, so a
+ * place reached through a link, such as macOS's `/var` -> `/private/var`, would put every worktree under it outside the
+ * place and read as drift. The places are resolved here, once, rather than asked of every caller: a caller that hands
+ * in the spelling it read the declaration with cannot make the check invent drift.
  */
 export interface AnInspectionOfTheWorkspace {
   readonly files: Pick<FileTree, 'childrenOf'>
   readonly processes: Pick<Processes, 'run'>
   readonly workspace: TheWorkspace
+}
+
+/**
+ * The path a place really is, with every link resolved, or the path as it was given when it cannot be read: a place that
+ * does not stand yet is still the place the crew declared, and an unreadable one is not a reason to check nothing.
+ */
+const thePathItself = (path: string | null): string | null => {
+  if (path === null) return null
+  try {
+    return realpathSync(path)
+  } catch {
+    return path
+  }
 }
 
 /** A clone as git answers for it: where it is, what it is on, whether it is clean, where it came from, its worktrees. */
@@ -152,10 +167,18 @@ const defaultBranchOf = async (processes: AnInspectionOfTheWorkspace['processes'
 
 /** Every line the workspace drifts by, in the order a reader fixes them: the clones, then their worktrees, then doubles. */
 export async function theDriftInTheWorkspace(places: AnInspectionOfTheWorkspace): Promise<readonly string[]> {
-  const named = theClonesIn(places)
-  const clones = await Promise.all(named.map((clone) => inspected(places, clone)))
-  const defaults = await Promise.all(named.map((clone) => defaultBranchOf(places.processes, clone)))
-  const place = places.workspace.worktrees
+  // Both places are asked for the path itself before anything is compared: the clones are found through the clone
+  // place, so a link in front of it would name every clone and every worktree as a spelling git never prints.
+  const workspace = {
+    ...places.workspace,
+    clones: thePathItself(places.workspace.clones),
+    worktrees: thePathItself(places.workspace.worktrees),
+  }
+  const resolved: AnInspectionOfTheWorkspace = { ...places, workspace }
+  const named = theClonesIn(resolved)
+  const clones = await Promise.all(named.map((clone) => inspected(resolved, clone)))
+  const defaults = await Promise.all(named.map((clone) => defaultBranchOf(resolved.processes, clone)))
+  const place = workspace.worktrees
   const own = clones.flatMap((clone, at) => driftOfAClone(clone, defaults[at] ?? null))
   const worktrees = place === null ? [] : clones.flatMap((clone) => driftOfAWorktrees(clone, place))
   return [...own, ...worktrees, ...driftOfADoubleClone(clones)]

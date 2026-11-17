@@ -2,12 +2,13 @@
 //
 // Every test makes its own throwaway origin, clone and worktrees, and then plants one drift; what is pinned is that
 // the drift is named in one line and that nothing else is, so a check that fails by name says what a member has to fix
-// and a clean workspace says nothing at all. The last two claims are the check's honesty: a place the crew declared but
-// a git that cannot answer leaves no line invented, and a place that is empty is not a drift.
+// and a clean workspace says nothing at all. The last three claims are the check's honesty: a place reached through a
+// link is the place itself and not drift (martha#79), a place the crew declared but a git that cannot answer leaves no
+// line invented, and a place that is empty is not a drift.
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,6 +20,7 @@ import { theDriftInTheWorkspace } from './check_the_workspace_matches_its_layout
 
 /** A bare origin, a clone of it under the crew's clone place, and the worktree place beside it. */
 interface Fixture {
+  readonly root: string
   readonly clones: string
   readonly worktrees: string
   readonly clone: string
@@ -52,7 +54,7 @@ function aCleanWorkspace(t: TestContext): Fixture {
   const clone = join(clones, 'acme', 'widget')
   // The clone's own record of what its origin starts on, which a fresh clone has and a test may want to drop.
   gitIn(clone, 'remote', 'set-head', 'origin', '--auto')
-  return { clones, worktrees, clone }
+  return { root, clones, worktrees, clone }
 }
 
 /** The places as a check reads them: names from the disk, git from the disk. */
@@ -108,6 +110,22 @@ test('one repository cloned twice is named with both of its clones', async (t) =
   const origin = gitIn(fixture.clone, 'remote', 'get-url', 'origin')
   gitIn(fixture.clones, 'clone', '--quiet', origin, join('acme', 'widget-again'))
   assert.match((await theDriftInTheWorkspace(anInspectionOf(fixture))).join('\n'), /is cloned 2 times/)
+})
+
+test('a place spelled through a link drifts by nothing: the places are asked for the path itself (martha#79)', async (t) => {
+  const fixture = aCleanWorkspace(t)
+  gitIn(fixture.clone, 'worktree', 'add', '--quiet', '-b', 'uranus/9', join(fixture.worktrees, 'widget-9'))
+  // A link to the place, as a machine's temp or work place may be reached by one: git answers with the paths it resolved,
+  // so the declaration's own spelling of the place would put every worktree under it outside the place.
+  const link = join(fixture.root, 'worktrees-link')
+  symlinkSync(fixture.worktrees, link)
+  const throughTheLink = { ...anInspectionOf(fixture), workspace: { clones: fixture.clones, worktrees: link, members: ['Hygiea'] } }
+  assert.deepEqual(await theDriftInTheWorkspace(throughTheLink), [])
+  // And the clone place through a link finds the same clone, so nothing is invented and nothing is missed.
+  const clonesThroughALink = join(fixture.root, 'clones-link')
+  symlinkSync(fixture.clones, clonesThroughALink)
+  const bothThroughLinks = { ...anInspectionOf(fixture), workspace: { clones: clonesThroughALink, worktrees: link, members: ['Hygiea'] } }
+  assert.deepEqual(await theDriftInTheWorkspace(bothThroughLinks), [])
 })
 
 test('a place with no clones in it drifts by nothing, and a git that cannot answer invents no line', async (t) => {
