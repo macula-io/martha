@@ -64,6 +64,7 @@ function aCrewClearingFrom(predecessor: string | null): CrewTools {
     tools: [],
     answer: async () => ({ answer: '' }),
     startBeating: () => () => {},
+    theContractInForce: async () => undefined,
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
     ends: holdingTheEnds(),
