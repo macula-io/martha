@@ -1,0 +1,8 @@
+# An advisory is fixed, or waived here by a dated, named, expiring row (martha#579). One row per advisory:
+#
+#   advisory | package | why it cannot be fixed yet | owner | expires YYYY-MM-DD
+#
+# The row is removed the day a fixed release of the package is published; its expiry is the backstop that
+# makes someone look if it is not.
+
+GHSA-fc5q-39xc-vjpf | picomatch | dev-only, reached through typescript-eslint: no fixed version is published yet, and it matches only our own lint glob patterns | Raf | 2027-02-15
