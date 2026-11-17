@@ -450,7 +450,7 @@ test('a start in flight is killed with everything under it, so nothing it began 
   let writerPid = 0
   t.after(() => {
     if (writerPid > 0) { try { process.kill(writerPid, 'SIGKILL') } catch { /* already gone */ } }
-    try { process.kill(-member.child.pid, 'SIGKILL') } catch { /* no such group */ }
+    member.child.kill('SIGKILL')
   })
   const began = Date.now() + MEMBER_WAIT_MS
   while (!existsSync(pidFile) && Date.now() < began) await delay(POLL_MS)

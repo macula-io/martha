@@ -571,8 +571,40 @@ async function killEveryMember (members, plant) {
   return refusals
 }
 
-/** @param {Member} member */
+/**
+ * Every process started under `pid`, deepest last. A start's wrapper is `script`, which runs the run in a session of
+ * its own: the run is not in the wrapper's process group, so it is found by walking down from the wrapper (martha#590).
+ * @param {number | undefined} pid
+ * @returns {number[]}
+ */
+function descendantsOf (pid) {
+  if (!pid) return []
+  const ran = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' })
+  if (ran.status !== 0) return []
+  const found = []
+  for (const line of ran.stdout.trim().split('\n').filter((child) => child !== '')) {
+    found.push(Number(line))
+    found.push(...descendantsOf(Number(line)))
+  }
+  return found
+}
+
+/**
+ * The tear-down's kill of a member that may never have been named: the wrapper, everything the wrapper started, and
+ * the member's own process group where one was named. What is under the wrapper is collected before any of it is
+ * killed, so a run that forks as it is stopped is still found: a run killed only with its wrapper goes on writing
+ * where it was, which is a relay root made again after the tear-down removed it (martha#590).
+ * @param {Member} member
+ */
 export function killEvenIfGone (member) {
+  const under = descendantsOf(member.child.pid)
+  for (const pid of [...under].reverse()) {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // That process is already gone.
+    }
+  }
   try {
     if (member.pid) process.kill(-member.pid, 'SIGKILL')
   } catch {
