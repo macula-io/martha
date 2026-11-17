@@ -3,7 +3,7 @@
 // the cosign signature index and bundle over its digest, all served by a local registry on 127.0.0.1. Never shipped:
 // the package's "files" leave this directory out.
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
@@ -291,10 +291,12 @@ export const sigstoreStandIn = (signed) => async (/** @type {any} */ options) =>
 })
 
 /**
- * A scratch home, removed by `close`. Its places are the ones the bin would work out for it.
+ * A scratch home, removed by `close`. Its places are the ones the bin would work out for it. The home is the
+ * resolved path, so a TMPDIR reached through a link (macOS's /var, martha#79) never sits between a test's expected
+ * path and the one the file system answers with (martha#496).
  */
 export function scratchMachine () {
-  const home = mkdtempSync(join(tmpdir(), 'martha-install-home-'))
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-install-home-')))
   return { home, places: placesOnThisMachine(home, undefined), close: () => removeEvenReadOnly(home) }
 }
 

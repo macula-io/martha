@@ -194,6 +194,11 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind / / true && bwrap --version
       - run: npm ci
+      # npm test runs the installer job's own steps too (martha#496), so a suite green here is green there: the
+      # installer's dependencies go in first, as that job installs them.
+      - name: the installer's own dependencies, for the suite's run of the installer job
+        working-directory: installer
+        run: npm ci --ignore-scripts
       # The unused rule (martha#171) is held by two checks, and a change runs
       # both: the compiler, here and in the installer job (noUnusedLocals and
       # noUnusedParameters in each tsconfig), names an unused import, local or
