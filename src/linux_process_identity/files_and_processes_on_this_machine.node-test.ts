@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   environmentWith,
   filesOnThisMachine as files,
@@ -15,6 +15,8 @@ import {
   signalAGroupOnThisMachine as signalGroup,
 } from './files_and_processes_on_this_machine.ts'
 import { linuxProcessIdentities } from './process_identity_from_proc.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 function place(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-machine-'))
@@ -74,8 +76,8 @@ test('a scratch directory is made under its root, written inside, and removed', 
   const made = scratch.make(root, 'launch-')
   assert.ok(made.path.startsWith(join(root, 'launch-')), made.path)
 
-  const written = made.write(join('.claude', 'settings.json'), Buffer.from('{}'))
-  assert.equal(written, join(made.path, '.claude', 'settings.json'))
+  const written = made.write(join(CLAUDE_FOLDER, USER_SETTINGS_FILE), Buffer.from('{}'))
+  assert.equal(written, join(made.path, CLAUDE_FOLDER, USER_SETTINGS_FILE))
   assert.equal(readFileSync(written, 'utf8'), '{}')
 
   made.remove()

@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, mock, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
 import { soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
@@ -27,7 +27,7 @@ import {
 } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { recordIngestion, refuseExecutionAfterUngatedText, startFreshSession } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { CREW_TOOL_NAMES, crewToolsOver, type CrewTool, type CrewTools } from './a_crews_tools.ts'
@@ -82,7 +82,7 @@ function toolsOf(place: APlace, member: string, run?: (request: ProcessRequest) 
     beats: dashboardRowsIn(join(place.rows, '..', 'beats')),
     root: place.root,
     documents: place.documents,
-    stores: { crew: crewFilesDirectory(join(place.rows, '..', 'crew-store')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, '..', 'crew-store')) },
     ...(run === undefined ? {} : { processes: { run, runNow: () => ({ exit_code: null, stdout: '', stderr: '' }), identityOf: () => null, signalGroup: () => ({ signalled: false, refusal: 'the to-do tools signal no process' }) } }),
   })
 }

@@ -11,7 +11,7 @@
 
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { sendOutwardAct } from '../log_ledger/log_ledger.ts'
-import { type Addressee, type ChannelHost, appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
+import { type Addressee, type ChannelHost, appendToTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 
@@ -58,17 +58,17 @@ export function addresseesOf(to: unknown, roster: readonly string[]): Addressee 
     return names
   }
 
-  if (to === 'crew') return 'crew'
+  if (to === THE_WHOLE_CREW) return THE_WHOLE_CREW
   if (Array.isArray(to)) return named(to)
   return { refused: `"to" is a list of members' names, or "crew" for every member. The crew is ${roster.join(', ')}. Nothing was sent.` }
 }
 
 /** The line the member is told once its message is in the channel. */
 const toldOf = (sent: number, to: Addressee): string =>
-  to === 'crew' ? `sent as message ${sent} to the whole crew.` : `sent as message ${sent} to ${to.join(', ')}.`
+  to === THE_WHOLE_CREW ? `sent as message ${sent} to the whole crew.` : `sent as message ${sent} to ${to.join(', ')}.`
 
 /** Whether an address is the refusal of one: an array is a list of names, and 'crew' is the crew. */
-const isRefusal = (value: Addressee | { readonly refused: string }): value is { readonly refused: string } => !Array.isArray(value) && value !== 'crew'
+const isRefusal = (value: Addressee | { readonly refused: string }): value is { readonly refused: string } => !Array.isArray(value) && value !== THE_WHOLE_CREW
 
 /** Says one thing, keeps the row first, and concludes the act: what the member is told, or why nothing was sent. */
 export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Saying): Promise<SendOutcome> {
@@ -102,4 +102,4 @@ export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Sa
 }
 
 /** What the act acts on, in one line, as the ledger's own words ask. */
-const whatOf = (to: Addressee, text: string): string => `to ${to === 'crew' ? 'the crew' : to.join(', ')}: ${text.split('\n')[0]?.slice(0, 120) ?? ''}`
+const whatOf = (to: Addressee, text: string): string => `to ${to === THE_WHOLE_CREW ? 'the crew' : to.join(', ')}: ${text.split('\n')[0]?.slice(0, 120) ?? ''}`

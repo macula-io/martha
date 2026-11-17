@@ -15,7 +15,7 @@ import { test, type TestContext } from 'node:test'
 
 import { theRangeACallNames, VERIFY_RANGE, verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { crewToolsIn } from '../claude_code_relay/hooks/crew_tools_answer.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CLONES, DASHBOARD, DECLARATION_DIRECTORY, DECLARATION_FILE, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
@@ -31,7 +31,7 @@ import {
   theFastForwardACallNames,
 } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { crewToolsOver, NO_ACTING_PLACE, THE_TOOLS_ASK, type CrewTools } from './a_crews_tools.ts'
@@ -97,7 +97,7 @@ function aPlaceOf(t: TestContext, run: (request: ProcessRequest) => Promise<Proc
     beats: dashboardRowsIn(join(root, DASHBOARD)),
     root: checkout,
     documents: { read: async () => '{}' },
-    stores: { crew: crewFilesDirectory(join(root, 'crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(root, 'crew-files')) },
     ...(held.processes ? { processes: host.processes } : {}),
     ...(held.settings ? { settings } : {}),
   })
@@ -132,6 +132,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     gate: { kind: 'off' },
     channel_read_seconds: 30,
     handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
+    backlog: null,
   }
 }
 

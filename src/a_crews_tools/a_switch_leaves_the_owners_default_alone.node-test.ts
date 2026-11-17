@@ -8,7 +8,7 @@
 // These are the tests of the mechanism itself, at the launcher's own seam: the production tools, the production order
 // and report asks, and the real lock, over a real settings file in a real config directory. The only stand-in is the
 // host's save, which a test writes the way the host writes one. The end-to-end proof on the recorded host is
-// ../launch_a_claude_code_member/a_switch_does_not_move_the_owners_default.node-test.ts.
+// ../drive_the_recorded_host/a_switch_does_not_move_the_owners_default.node-test.ts.
 
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
@@ -19,14 +19,14 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL } from '../declare_crew/declare_crew.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CREW_ROWS_PLACE, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { modelPlace, theModelOf, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
 import {
@@ -44,8 +44,9 @@ import {
 } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { CARRY_A_MODEL, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { theOwnersDefaultKept } from '../switch_a_members_model/switch_a_members_model.ts'
+import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL, THE_MODEL_REPORT_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+import { THE_MODEL_REPORT_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 /** The models a crew names: this member's own, and the one every review runs on. */
 const HOST_MODELS = ['sonnet', 'fable']
@@ -107,12 +108,12 @@ async function aCrew(owners: Record<string, unknown> | null = OWNERS_SETTINGS): 
     beats,
     root,
     documents,
-    stores: { crew: crewFilesDirectory(crew) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
     models: HOST_MODELS,
     launched_on: OWN_MODEL,
     owners_settings: owners_place,
   })
-  return { tools, crew, owners: owners_place, settings_file, owners_settings: owners, beats, theRow: () => beats.read(MEMBER) as Record<string, unknown> | null, aTurnLater: () => (clock.at += 60_000) }
+  return { tools, crew, owners: owners_place, settings_file, owners_settings: owners, beats, theRow: () => beats.read(MEMBER) as Record<string, unknown> | null, aTurnLater: () => (clock.at += MINUTE_MS) }
 }
 
 /** Gives the crew's declaration its models: this member's own, and the one every review runs on. */
@@ -126,7 +127,7 @@ function declareTheModels(root: string): void {
 
 /** This member's record, as a later launch and the owner read it. */
 function theRecordOf(crew: string): ModelMarker | null {
-  const place = modelPlace({ stores: { crew: crewFilesDirectory(crew) } })
+  const place = modelPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
   assert.ok(!('refusal' in place), `the crew's store refused its model place: ${'refusal' in place ? place.refusal : ''}`)
   const read = theModelOf(place, MEMBER)
   if (read.kind === 'unreadable') assert.fail(read.refusal)
@@ -554,12 +555,12 @@ test('a record a launch cannot finish puts its line in the member\'s own row, no
   const marker = theRecordOf(crew.crew)
   assert.ok(marker !== null, 'the test could not read the record of the member\'s switch')
   const record = await aRecordTheWaitNeverSaw(crew)
-  theOwnersDefaultKept({ stores: { crew: crewFilesDirectory(crew.crew) } }, MEMBER, marker, record)
+  theOwnersDefaultKept({ stores: { crew: keepTheCrewsFilesAsDirectories(crew.crew) } }, MEMBER, marker, record)
   // The owner's own change since, so the launch cannot finish the record by either hash it holds.
   writeFileSync(crew.settings_file, THE_OWNERS_EDIT)
   const said = await finishTheOwnersDefaultAtLaunch({
     member: MEMBER,
-    host: { stores: { crew: crewFilesDirectory(crew.crew) } },
+    host: { stores: { crew: keepTheCrewsFilesAsDirectories(crew.crew) } },
     owners: crew.owners,
     beats: crew.beats,
   })

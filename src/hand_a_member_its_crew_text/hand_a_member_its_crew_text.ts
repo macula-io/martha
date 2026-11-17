@@ -5,7 +5,7 @@
 // ../inbound_paths), so without this slice a member started by Martha is handed no crew text at all.
 //
 // The text is composed from data: the crew's declaration, the texts Martha ships (./texts) and the texts a crew
-// writes for itself under .crew/. Nothing here reads disk and nothing here holds a text as code, so a test can hand
+// writes for itself under .martha/. Nothing here reads disk and nothing here holds a text as code, so a test can hand
 // in any bytes and the launcher decides which bytes are the approved ones (../launch_a_claude_code_member reads them
 // once, at launch).
 //

@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import { MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
 import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { IDLE, OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { MENU } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import {
   BUSY,

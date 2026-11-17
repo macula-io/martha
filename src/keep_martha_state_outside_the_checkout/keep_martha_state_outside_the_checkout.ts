@@ -56,6 +56,7 @@ import {
   type OwnWritesOfTheHistory,
   type OwnWritesStore,
 } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { STAGING_PREFIX } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 
 /** Only the owner may enter, list or write a state directory. */
 export const STATE_DIRECTORY_MODE = 0o700
@@ -88,7 +89,6 @@ const NODE_ID_BYTES = 32
 export const PERMISSION_BITS = 0o777
 const WRITABLE_BY_OTHERS = 0o022
 const OPEN_TO_OTHERS = 0o077
-const STAGING_PREFIX = '.staging-'
 
 /** One project's state directory, opened and checked. */
 export interface MarthaState {
@@ -127,7 +127,7 @@ function closedDirectory(path: string): string | undefined {
 
 /**
  * The directory one project's state is kept in: the state root and the sha256 of the project's real path. A reader
- * outside the launcher — a run watching a member's journal (../launch_a_claude_code_member/drive_the_recorded_host) —
+ * outside the launcher — a run watching a member's journal (../drive_the_recorded_host/drive_the_recorded_host.ts) —
  * derives the same path from the checkout it made, and no one has to be told it.
  */
 export function projectStateDirectory(state_root: string, root: string): string {
@@ -299,8 +299,7 @@ const ENTRY_FIELDS: Readonly<Record<string, readonly string[]>> = {
 }
 
 export const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
-export const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean =>
-  JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...fields].sort())
+export const hasExactly = (value: Record<string, unknown>, fields: readonly string[]): boolean => JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...fields].sort())
 
 const isEntry = (value: unknown): value is ConfigEntry => {
   const fields = isRecord(value) && typeof value['kind'] === 'string' ? ENTRY_FIELDS[value['kind']] : undefined

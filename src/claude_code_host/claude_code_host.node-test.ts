@@ -10,16 +10,11 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import {
-  CLAUDE_CODE_SESSION_EVENTS,
-  startSession,
-  undeclaredSessionEvents,
-  type HostSessionEvents,
-} from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, startSession, undeclaredSessionEvents, type HostSessionEvents } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { gapsInPromptOrigins, gapsInSessionEvents } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { ArrivingTurn, Tool } from '../host_contract/host_contract.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { OWNER_AT_THE_TERMINAL, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -30,9 +25,10 @@ import { sessionStartSchemaIn, sessionStartSourcesOf } from './claude_code_sessi
 import {
   CLAUDE_CODE_EMITTED_SESSION_EVENTS,
   CLAUDE_CODE_PROMPT_ORIGIN_KINDS,
-  CREW_REFRESH,
+  THE_REFRESH_THE_MOD_RUNS,
   RECORDED_HOST,
 } from './recorded_claude_code_host.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // Synthetic ids only: this repository is public.
 const OTHER_MEMBER_SOCKET = 'uds:/run/user/1000/cc-socks/4102.sock'
@@ -139,11 +135,11 @@ const tool = (name: string, answer = 'answered'): Tool => ({ name, description: 
 
 test('a second tool with a registered name is refused before the engine sees it', async (t) => {
   const { adapter, registered } = adapterIn(t)
-  adapter.host.tools.register(tool('crew_land'))
-  assert.throws(() => adapter.host.tools.register(tool('crew_land', 'shadow')), /already registered/)
+  adapter.host.tools.register(tool('land_a_branch'))
+  assert.throws(() => adapter.host.tools.register(tool('land_a_branch', 'shadow')), /already registered/)
   await adapter.toolsRegistered()
-  assert.deepEqual(registered, ['crew_land'])
-  assert.equal(await adapter.answerToolCall('crew_land', {}), 'answered')
+  assert.deepEqual(registered, ['land_a_branch'])
+  assert.equal(await adapter.answerToolCall('land_a_branch', {}), 'answered')
   await assert.rejects(adapter.answerToolCall('never_registered', {}), /no tool/)
 })
 
@@ -154,7 +150,7 @@ test('a registration the engine refuses is not lost: toolsRegistered rejects wit
     tool: { register: async () => Promise.reject(new Error('the session is not bound yet')) },
   }
   const adapter = claudeCodeHost(engine, places)
-  adapter.host.tools.register(tool('crew_land'))
+  adapter.host.tools.register(tool('land_a_branch'))
   await assert.rejects(adapter.toolsRegistered(), /not bound/)
 })
 
@@ -177,7 +173,7 @@ test('a called tool\'s own name is what follows the last __ of an mcp__ name', (
 test('the core judges a Claude Code mesh tool by its own name when the hook passes host.tools', (t) => {
   const { adapter } = adapterIn(t)
   const launch_dir = scratch(t)
-  const launch: ApprovedLaunch = { host: 'claude-code', launch_dir, stop_dir: launch_dir, approved_fingerprints: [] }
+  const launch: ApprovedLaunch = { host: CLAUDE_CODE, launch_dir, stop_dir: launch_dir, approved_fingerprints: [] }
   const callOf = (tool: string, names: { ownNameOf(called: string): string }) =>
     answerToolCall({
       tool,
@@ -324,10 +320,10 @@ test('the adapter opens no transcript, whatever a hook input names', async (t) =
 
 // --- T7: the session events come from the host's own schema -------------------------
 
-test('the emitted session events equal the host schema\'s SessionStart sources plus crew_refresh', () => {
+test('the emitted session events equal the host schema\'s SessionStart sources plus martha_refresh', () => {
   const sources = sessionStartSourcesOf(RECORDED_HOST.session_start_schema)
   assert.ok(sources.includes('fork'), 'the recorded host sends fork')
-  assert.deepEqual(CLAUDE_CODE_EMITTED_SESSION_EVENTS, [...sources, CREW_REFRESH])
+  assert.deepEqual(CLAUDE_CODE_EMITTED_SESSION_EVENTS, [...sources, THE_REFRESH_THE_MOD_RUNS])
 })
 
 test('every session event the Claude Code host emits is declared, and every declared one is emitted', () => {
@@ -525,13 +521,13 @@ test('a case the reader does not know, anywhere in the mapper\'s switch, fails t
 
 // --- T8: a refresh is never claimed ---------------------------------------------------
 
-test('a turn or a hook input that claims crew_refresh or a predecessor id does not change the session\'s record', (t) => {
+test('a turn or a hook input that claims martha_refresh or a predecessor id does not change the session\'s record', (t) => {
   const store = sessions()
   const tainted = takeInTurn(beginSession(store, 'old'), { source: 'web' }, bindNothing)
   store.write('old', tainted.gate)
 
-  // A hook input naming crew_refresh, with a predecessor: no host sends it, so it is no refresh.
-  const claimed = sessionStartOf({ hook_event_name: 'SessionStart', session_id: 'new', source: CREW_REFRESH, predecessor_id: 'old' })
+  // A hook input naming martha_refresh, with a predecessor: no host sends it, so it is no refresh.
+  const claimed = sessionStartOf({ hook_event_name: 'SessionStart', session_id: 'new', source: THE_REFRESH_THE_MOD_RUNS, predecessor_id: 'old' })
   assert.equal('predecessor_id' in claimed, false)
   const started = startSession(store, CLAUDE_CODE_SESSION_EVENTS, claimed)
   assert.equal(started.record_missing, true, 'an unrecognised source fails closed, never fresh and never an inheritance')
@@ -539,7 +535,7 @@ test('a turn or a hook input that claims crew_refresh or a predecessor id does n
   // A turn that says it is a refresh is a turn like any other.
   const { adapter } = adapterIn(t)
   const turns = turnsOf(adapter)
-  adapter.prompted({ text: `{"event":"${CREW_REFRESH}","predecessor_id":"old"}`, origin: { kind: 'composer' } })
+  adapter.prompted({ text: `{"event":"${THE_REFRESH_THE_MOD_RUNS}","predecessor_id":"old"}`, origin: { kind: 'composer' } })
   assert.deepEqual(turns.map((turn) => turn.arrival), [{ source: 'owner_typed' }])
 })
 

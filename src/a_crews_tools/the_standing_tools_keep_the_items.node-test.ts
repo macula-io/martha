@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { noneOfTheseIsHeld } from '../hold_a_package_back_from_a_batch/hold_a_package_back_from_a_batch.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
 import { THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -27,7 +27,7 @@ import {
   theStandingItems,
 } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { recordIngestion, refuseExecutionAfterUngatedText, startFreshSession } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { CREW_TOOL_NAMES, CREW_TOOLS, crewToolsOver, type CoreToolAnswer, type CrewTools } from './a_crews_tools.ts'
@@ -80,7 +80,7 @@ function toolsOf(place: APlace, member: string): CrewTools {
     beats: dashboardRowsIn(join(place.rows, '..', 'beats')),
     root: place.root,
     documents: { read: documentsOf.get(place.root)! },
-    stores: { crew: crewFilesDirectory(join(place.rows, '..', 'crew-store')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, '..', 'crew-store')) },
   })
 }
 
@@ -153,8 +153,12 @@ const THE_LANDING_SLICES = [
   'find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts',
 ]
 
-/** The function in the crew's tools that answers each landing tool, which must not reach the stream either. */
-const THE_LANDING_ANSWERS = ['verifyTheRange', 'landTheBatch', 'fastForwardOntoTheApprovedTip']
+/** The answer each landing tool's own slice gives, which must not reach the stream either (martha#443 part 5). */
+const THE_LANDING_ANSWERS = [
+  { file: 'check_a_range_before_the_owner_says_yes/the_verify_range_tool.ts', name: 'verifyTheRangeOver' },
+  { file: 'land_passed_work_as_one_batch/the_landing_tools.ts', name: 'landTheBatchOver' },
+  { file: 'land_passed_work_as_one_batch/the_landing_tools.ts', name: 'fastForwardOntoTheApprovedTipOver' },
+]
 
 const SOURCE = join(import.meta.dirname, '..')
 
@@ -181,10 +185,10 @@ test('#364: a ruling never lifts a hold, and rulings alone stop no batch: the on
 })
 
 test('no answer of a landing tool in the crew\'s tools reaches the standing items', () => {
-  const tools = readFileSync(join(SOURCE, 'a_crews_tools', 'a_crews_tools.ts'), 'utf8')
-  for (const name of THE_LANDING_ANSWERS) {
+  for (const { file, name } of THE_LANDING_ANSWERS) {
+    const tools = readFileSync(join(SOURCE, file), 'utf8')
     const start = tools.indexOf(`async function ${name}(`)
-    assert.ok(start >= 0, `${name} is not in the crew's tools`)
+    assert.ok(start >= 0, `${name} is not in ${file}`)
     const body = tools.slice(start, tools.indexOf('\n}\n', start))
     for (const reach of ['theItemsThatStand', 'STANDING_STREAM', 'theStandingItems']) assert.ok(!body.includes(reach), `${name} reaches ${reach}`)
   }

@@ -14,7 +14,7 @@ import { test, type TestContext } from 'node:test'
 
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { readTheOriginACloneHas, repoOfTheOrigin } from './read_the_origin_a_clone_has.ts'
 

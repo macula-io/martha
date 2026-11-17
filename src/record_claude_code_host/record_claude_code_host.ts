@@ -15,7 +15,8 @@
 // differs, the version included: members run whatever the binary is, so a
 // recording of another version describes a host nobody runs. memory_off, which is
 // restated by hand, differs when a text it quotes is no longer in the host's code
-// (martha#412). Its standard output
+// (martha#412), and a change inside a function its file-mode guard calls
+// differs by file_mode_guard_calls (martha#438). Its standard output
 // carries only versions and the names of fields and parts, which is what the
 // drift job's public log shows as the reason a run is red; a reader's own
 // error, which can quote the host's code, goes to standard error.
@@ -27,12 +28,12 @@ import { promptOriginsIn } from '../claude_code_host/claude_code_prompt_origins.
 import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_events.ts'
 import { classicHookEventsIn, notificationTypesIn } from '../claude_code_host/owner_dialogs_the_host_raises.ts'
 import { filePermissionRulesIn } from '../claude_code_host/file_permission_rules.ts'
-import { markdownTheHostLoadsIn, type MarkdownTheHostLoads } from '../claude_code_host/markdown_the_host_loads.ts'
-import { protectedConfigPlacesIn } from '../claude_code_host/protected_config_places.ts'
-import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { failedAgentsReportIn } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
+import { markdownTheHostLoadsIn, type MarkdownTheHostLoads } from '../load_the_hosts_markdown/markdown_the_host_loads.ts'
+import { protectedConfigPlacesIn } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
+import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
+import { failedAgentsReportIn } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 import { CARRIED, MEMORY_OFF, memoryOffHoldsOf, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
-import { managedFolderGuardCallsIn } from './what_the_managed_folder_guard_calls.ts'
+import { fileModeGuardCallsIn, managedFolderGuardCallsIn } from './what_the_hosts_guards_call.ts'
 
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
 const VERSION = /^\d+\.\d+\.\d+$/
@@ -49,6 +50,7 @@ const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string
   { part: 'protected config places', read: protectedConfigPlacesIn },
   { part: 'file permission rules', read: (text) => ({ file_permission_rules: filePermissionRulesIn(text) }) },
   { part: "a failed agent's report", read: (text) => ({ failed_agents_report: failedAgentsReportIn(text) }) },
+  { part: 'file-mode memory guard', read: (text) => ({ file_mode_guard_calls: fileModeGuardCallsIn(text) }) },
 ]
 
 /** The markdown the host loads, and what its loader's managed-folder guard calls (martha#146, martha#412). */

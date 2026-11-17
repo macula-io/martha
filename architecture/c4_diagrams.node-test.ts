@@ -12,10 +12,12 @@ import {
   aCountInWords, THE_COUNTS_IN_WORDS,
   ASSETS, components, containers, DIAGRAMS, LEFT_OUT, PACKAGE_BOXES, ROOM_SLICES_WHICH_LOAD,
 } from './c4_diagrams.ts'
-import type { DrawnBox, DrawnLegendEntry, DrawnText } from './c4_diagrams.ts'
+import type { BoxCoverage, DrawnBox, DrawnLegendEntry, DrawnText } from './c4_diagrams.ts'
+import { declaredHostGlue } from '../prove_the_core/only_the_launcher_writes_launch_records.ts'
 
 const README = readFileSync(join(import.meta.dirname, 'README.md'), 'utf8')
-const SRC = join(import.meta.dirname, '..', 'src')
+const REPOSITORY = join(import.meta.dirname, '..')
+const SRC = join(REPOSITORY, 'src')
 
 // Every directory under src/ a module of this process loads, by the resolve hook below. The hook lives
 // in this test's own process, which node --test gives each test file, and the test writes nothing to
@@ -267,10 +269,10 @@ test('every component box has a row in the Components table', () => {
 // page below is the real one with one box's row taken away in a way the check must still see.
 // The boxes are found by a directory each stands for, and their titles are read from the drawing, so a
 // title renamed in c4_diagrams.ts is followed here rather than restated.
-const boxHolding = (directory: string): { readonly name: string; readonly names: readonly string[] } =>
+const boxHolding = (directory: string): BoxCoverage =>
   components().coverage.find((box) => box.names.includes(directory))!
 const CREW_BOX = boxHolding('show_dashboard_beat')
-const STORE_BOX = boxHolding('crew_files_directory')
+const STORE_BOX = boxHolding('keep_the_crews_files_as_directories')
 const HANDOVER_BOX = boxHolding('write_my_handover')
 
 /** The table row whose Component cell opens with the given directory. */
@@ -306,6 +308,58 @@ test('a component box stands for directories that are in src/, and names each on
       assert.ok(box.names.includes(titled), `${box.name} titles ${titled}, which it does not stand for`)
     }
   }
+})
+
+// A box that says it is a host's promises to hold that host's code alone: package.json's
+// martha.hostAdapters is what says which directories that is, so the promise is held to it here
+// (martha#492). Without this check, a core slice drawn in the host's box waits for a reader to
+// notice, and the last one drawn there outlived the four pull requests that edited these pictures.
+const theHostsAdapters = (): ReadonlySet<string> => new Set(declaredHostGlue(REPOSITORY, 'hostAdapters'))
+
+/**
+ * The slices a box drawn as a host's names that package.json does not declare that host's adapter,
+ * as the failure lines. A box that declares no host is never judged: a capability box groups a slice
+ * with its adapter on purpose, and only a box that claims to be a host promises the host's code alone.
+ * It reads a box's title, its names and its host, so the plant below can hand it one.
+ */
+const drawnAsAHostsButNotItsAdapters = (
+  boxes: readonly Pick<BoxCoverage, 'name' | 'names' | 'host'>[],
+  adapters: ReadonlySet<string>,
+): string[] =>
+  boxes
+    .filter((box) => box.host !== undefined)
+    .flatMap((box) => box.names
+      .filter((name) => !adapters.has(name))
+      .map((name) => `${box.name}: ${name} is drawn as ${box.host}'s, but package.json does not list it as a host adapter`))
+
+test('a box drawn as a host holds only the slices package.json declares that host\'s adapters', () => {
+  const wrong = drawnAsAHostsButNotItsAdapters(components().coverage, theHostsAdapters())
+  assert.deepEqual(wrong, [], `a box drawn as a host holds what that host does not declare:\n${wrong.join('\n')}`)
+})
+
+// The check above passes on a picture whose host box holds only adapters, which proves nothing about
+// it on its own. So one box is planted with a slice another box names and package.json does not
+// declare an adapter, and the check must name it; and a box that declares no host, naming that same
+// slice, must stay unjudged. Both slices are read from the picture and the declaration, never spelled
+// here, so a slice renamed in src/ is followed rather than restated.
+test('a box drawn as a host that names a core slice is refused by name, and a box with no declared host is never judged', () => {
+  const adapters = theHostsAdapters()
+  const hostBox = boxHolding('claude_code_host')
+  assert.ok(hostBox.host !== undefined,
+    'the Claude Code host box declares no host, so nothing below would prove the check bites')
+  const unjudged = components().coverage.find((box) => box.host === undefined
+    && box.names.some((name) => !adapters.has(name)))
+  assert.ok(unjudged !== undefined,
+    'no box without a declared host names a slice that is not an adapter, so the plant below would prove nothing')
+  const aCoreSlice = unjudged.names.find((name) => !adapters.has(name))
+  assert.ok(aCoreSlice !== undefined, `${unjudged.name} names no slice, so the plant below has nothing to draw`)
+  // The planted box is one slice alone, so its answer is one line whether or not the real host box
+  // holds a slice it should not: a plant that read the real names would fail twice for two reasons.
+  assert.deepEqual(drawnAsAHostsButNotItsAdapters([{ name: hostBox.name, names: [aCoreSlice], host: hostBox.host }], adapters), [
+    `${hostBox.name}: ${aCoreSlice} is drawn as ${hostBox.host}'s, but package.json does not list it as a host adapter`,
+  ])
+  assert.deepEqual(drawnAsAHostsButNotItsAdapters([unjudged], adapters), [],
+    `a box that declares no host names ${aCoreSlice} and was judged anyway`)
 })
 
 /**

@@ -10,16 +10,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { FreeRow } from '../see_who_is_free/see_who_is_free.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { PARK_A_MEMBER, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
+import { crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-who-is-free-'))
 after(() => removeTheTree(home))
@@ -27,7 +28,7 @@ after(() => removeTheTree(home))
 mkdirSync(join(home, 'row'))
 
 // A made-up project root: this repository is public, so no real path appears here.
-const root = '/crew-project'
+const root = '/martha-project'
 const LEAD = 'Lead'
 const BUILDER = 'Builder1'
 const REVIEWER = 'Reviewer1'
@@ -60,7 +61,7 @@ function theToolsOf(member: string): CrewTools {
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(join(home, 'the-crew-store')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'the-crew-store')) },
   })
 }
 
@@ -77,8 +78,8 @@ test('a member whose role is not allowed assign_work is refused, and the refusal
 
 test('the Supervisor reads a report as the time it last reported, and a park from the marker the member kept', async () => {
   clock.at = 1_000
-  answerOf(await theToolsOf(BUILDER).answer('report_progress', { task: 'build', step: 1, of: 3, package: 'macula-io/martha#319' }, 'session-builder'))
-  answerOf(await theToolsOf(REVIEWER).answer('report_progress', { task: 'review', step: 1, of: 1 }, 'session-reviewer'))
+  answerOf(await theToolsOf(BUILDER).answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 1, of: 3, package: 'macula-io/martha#319' }, 'session-builder'))
+  answerOf(await theToolsOf(REVIEWER).answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'review', step: 1, of: 1 }, 'session-reviewer'))
   clock.at = 21_000
 
   const rows = JSON.parse(answerOf(await theToolsOf(LEAD).answer(WHO_IS_FREE, {}, 'session-lead'))) as FreeRow[]

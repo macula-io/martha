@@ -20,6 +20,7 @@ import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import type { CrewRow } from '../see_the_crew/see_the_crew.ts'
 import { IDLE, OFFLINE, type ShownState } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 /**
  * The context share at which a member is no longer free: the handover limit itself, imported, because a member that
@@ -28,7 +29,7 @@ import { IDLE, OFFLINE, type ShownState } from '../show_dashboard_beat/show_dash
 export const CLAIM_LIMIT_PERCENT = HANDOVER_LIMIT_PERCENT
 
 /** How old a member's last report may be, while it is in the middle of a package, before its row is flagged. */
-export const PROGRESS_STALE_AFTER_MS = 30 * 60_000
+export const PROGRESS_STALE_AFTER_MS = 30 * MINUTE_MS
 
 /** What a declared member that has never started reads as: not idle, because nothing of it runs. */
 export const NOT_RUNNING = 'not running'
@@ -107,7 +108,7 @@ const finished = (row: CrewRow): boolean => row.progress.step >= row.progress.of
 /** Whether a member in the middle of a package has not reported for longer than the stale age. */
 const staleProgress = (row: CrewRow, reported_ago: number | null): boolean => reported_ago !== null && !finished(row) && reported_ago > PROGRESS_STALE_AFTER_MS
 
-const minutesOf = (ms: number): string => `${String(Math.floor(ms / 60_000))}m`
+const minutesOf = (ms: number): string => `${String(Math.floor(ms / MINUTE_MS))}m`
 
 /** Why a member cannot take a package now, or null when it can. The first reason that holds is the one given. */
 export function whyNotFree(row: CrewRow, park: ThePark): string | null {

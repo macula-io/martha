@@ -26,6 +26,9 @@ export const RELAY_DEADLINE_MS = 30_000
 /** The host part of every request: the socket is the address, the URL only names the event. */
 export const RELAY_ORIGIN = 'http://martha-launcher'
 
+/** The pane's id, and the word the owner types to open it (martha#468 row 13): the host names one by the other. */
+export const PANE = 'martha'
+
 /** The events the relay forwards, and the path each is posted to. */
 export const RELAY_PATHS = {
   session_started: '/session-started',
@@ -159,7 +162,7 @@ const isReason = (value: unknown): value is string => typeof value === 'string' 
  * The largest answer the relay sends the launcher for a tool call (martha#129, design step 4.3). The launcher compares
  * the whole answer with the one a signed run's receipt builds, so it needs the answer itself; past this the relay
  * sends the call without it, and the call records A13 rather than a body the launcher stops the member over
- * (LARGEST_RELAY_BODY, in ../../launch_a_claude_code_member/serve_the_relay.ts, is 32 MiB for the whole body).
+ * (LARGEST_RELAY_BODY, in ../../serve_the_relay_to_a_launch/serve_the_relay.ts, is 32 MiB for the whole body).
  */
 export const LARGEST_RELAYED_ANSWER = 8 * 1024 * 1024
 

@@ -9,7 +9,7 @@
 // them — so an unpark is the same marker with `parked: false`, carrying who unparked it, why and when.
 //
 // Both are driven through the contract's test host, over the crew store the host really composes on a disk
-// (../crew_files_directory), so the marker read back is the file a launch would have left.
+// (../keep_the_crews_files_as_directories), so the marker read back is the file a launch would have left.
 
 import assert from 'node:assert/strict'
 import { chmodSync, mkdtempSync } from 'node:fs'
@@ -18,33 +18,36 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { CLAUDE_CODE_SESSION_EVENTS, stampHandover, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { OWNER } from '../declare_crew/declare_crew.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { handoversPlace, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import {
+  isAStorm,
   mayParkOrUnparkAnother,
   parkAMember,
   parkedPlace,
   theNewestHandover,
   theParkMarker,
+  STORM_WINDOW_MS,
   theParkOf,
   unparkAMember,
   type TheDeclaration,
 } from './park_and_wake_a_member.ts'
+import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** A home of the tests: the crew's own directory, as the launcher resolves one, under the state root. */
 const home = mkdtempSync(join(tmpdir(), 'martha-park-'))
 after(() => removeTheTree(home))
-const crew = join(home, 'state', 'crews', 'a-key')
+const crew = join(home, 'state', CREWS_PLACE, 'a-key')
 
 const AT = new Date('2026-11-11T15:00:00Z')
 const LATER = new Date('2026-11-12T09:00:00Z')
 
 /** The contract's test host, over the crew's own store on this disk. */
-const aHost = (): HostForTests => hostForTests({ crew: crewFilesDirectory(crew) })
+const aHost = (): HostForTests => hostForTests({ crew: keepTheCrewsFilesAsDirectories(crew) })
 
 const stampStore = (): HandoverStampStore & { readonly all: Map<string, HandoverStamp> } => {
   const all = new Map<string, HandoverStamp>()
@@ -270,4 +273,11 @@ test('#255: a member whose role is not granted the act unparks nobody, and a mem
   assert.equal(theParkOf(theParkedPlace(host), 'reviewer').kind, 'parked', 'a refused unpark unparked the member anyway')
   const itself = unparkAMember(host.host, parkingOf(declared, 'reviewer', 'reviewer', LATER))
   assert.ok(!('refusal' in itself), 'a member was refused the unpark of itself, which the declaration has nothing to say about')
+})
+
+test('#255: two refreshes inside the window are a storm, and one outside it is not', () => {
+  const now = 10 * STORM_WINDOW_MS
+  assert.equal(isAStorm([now - STORM_WINDOW_MS / 2], now), true)
+  assert.equal(isAStorm([now - STORM_WINDOW_MS - 1], now), false)
+  assert.equal(isAStorm([], now), false)
 })

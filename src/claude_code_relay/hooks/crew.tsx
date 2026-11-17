@@ -10,22 +10,13 @@
 // socket in the environment and the shapes in ./relay_protocol.ts are all this file knows.
 
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
-import { heardToolAnswer, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
+import { heardToolAnswer, PANE, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
 import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
 
-/** The pane's id, as the host names one. */
-export const PANE = 'crew'
-
-/** What the owner types to open the pane. */
-export const OPEN_THE_PANE = 'crew'
-
 /** Why a tool call has no answer: the member was started by hand, or the launcher could not be heard. */
 const NOT_OURS = 'Martha is not running this session, so it answers no tool'
-
-/** A tool as the launcher gives it, as the one parser for its answer reads it. */
-type CrewTool = ALaunchersTool
 
 /** The engine calls this module makes, typed by shape as the relay's own module types them. */
 interface CrewEngine {
@@ -38,7 +29,7 @@ interface CrewEngine {
   readonly prompt: { submit(input: { readonly text: string }): Promise<unknown> }
   /** Ends a running turn by its id (martha#311); the host rejects when that turn is not the one running. */
   readonly turn: { abort(input: { readonly turnId: string }): Promise<unknown> }
-  readonly tool: { register(tool: CrewTool & { description: string }): Promise<unknown> }
+  readonly tool: { register(tool: ALaunchersTool & { description: string }): Promise<unknown> }
   /** `run` runs one of the host's own commands in this session: the refresh flow's clear is that one (martha#255). */
   readonly command: { register(command: { name: string; description: string }): Promise<unknown>; run(command: { command: string; args?: string }): Promise<unknown> }
   /**
@@ -236,7 +227,7 @@ async function askTheLauncher($: CrewEngine, tool: string, args: Readonly<Record
 }
 
 /** Asks the launcher for the tools to register, which it alone names and describes. */
-async function toolsFromTheLauncher($: CrewEngine): Promise<readonly CrewTool[]> {
+async function toolsFromTheLauncher($: CrewEngine): Promise<readonly ALaunchersTool[]> {
   const heard = await hearTheLauncher($, 'the_crews_tools', {})
   const tools = 'said' in heard ? crewToolsIn(heard.said) : null
   if (tools !== null) return tools
@@ -303,7 +294,7 @@ async function openThePane($: CrewEngine): Promise<void> {
   const heard = await hearTheLauncher($, 'see_the_crew', {})
   const shown = 'said' in heard ? paneIn(heard.said) : null
   const list = await theOwnersList($)
-  await $.ui.open({ id: PANE, title: 'Crew', rows: (shown === null ? PANE_CHROME_ROWS : shown.rows) + (list === null ? 1 : list.lines) })
+  await $.ui.open({ id: PANE, title: 'Martha', rows: (shown === null ? PANE_CHROME_ROWS : shown.rows) + (list === null ? 1 : list.lines) })
   if (shown !== null) startRedrawing($, shown.redraw_ms)
 }
 
@@ -315,12 +306,14 @@ const answerFromTheLauncher = async ($: CrewEngine, e: Record<string, unknown>, 
 
 // Each hook is a named function, never a call returning one: the host's plugin validator refuses a hook that is
 // "not a function literal or the name of one", and refuses a tool named by anything but a string literal.
-const answerReportProgress = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'report_progress')
+const answerReportProgress = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'report_where_the_work_stands')
 const answerLogAMilestone = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'log_a_milestone')
 const answerWhatWasSent = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'what_was_sent')
 const answerNoteWhatBecame = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'note_what_became_of_an_act')
+const answerKeepTheContract = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'keep_the_package_contract')
 const answerSeeTheCrew = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'see_the_crew')
 const answerWhoIsFree = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'who_is_free')
+const answerUnheldWork = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'unheld_work')
 const answerSayToTheCrew = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'say_to_the_crew')
 const answerReadTheReceipts = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'read_the_receipts')
 const answerWriteMyHandover = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'write_my_handover')
@@ -337,10 +330,10 @@ const answerWorktreeOpen = ($: CrewEngine, e: Record<string, unknown>): Promise<
 const answerWorktreeFinish = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'worktree_finish')
 const answerOwnerTodoAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'owner_todo_add')
 const answerOwnerTodoDone = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'owner_todo_done')
-const answerQueueAsk = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'queue_ask')
-const answerListAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'list_asks')
-const answerTakeAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'take_asks')
-const answerSettleAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'settle_asks')
+const answerQueueAsk = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'ask_the_owner')
+const answerListAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'see_the_owners_asks')
+const answerTakeAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'take_the_owners_asks')
+const answerSettleAsks = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'settle_the_owners_asks')
 const answerStandingAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_add')
 const answerStandingClose = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_close')
 const answerStanding = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing')
@@ -379,12 +372,14 @@ async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
 export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
   // Every tool is named in full here, because the host refuses a hook that builds its name; the manifest holds the
   // plugin's name, and the test pairing tools with hooks reads it, so a rename fails there (martha#343).
-  on('tool.call', { tool: 'mcp__martha__report_progress' }, answerReportProgress)
+  on('tool.call', { tool: 'mcp__martha__report_where_the_work_stands' }, answerReportProgress)
   on('tool.call', { tool: 'mcp__martha__log_a_milestone' }, answerLogAMilestone)
   on('tool.call', { tool: 'mcp__martha__what_was_sent' }, answerWhatWasSent)
   on('tool.call', { tool: 'mcp__martha__note_what_became_of_an_act' }, answerNoteWhatBecame)
+  on('tool.call', { tool: 'mcp__martha__keep_the_package_contract' }, answerKeepTheContract)
   on('tool.call', { tool: 'mcp__martha__see_the_crew' }, answerSeeTheCrew)
   on('tool.call', { tool: 'mcp__martha__who_is_free' }, answerWhoIsFree)
+  on('tool.call', { tool: 'mcp__martha__unheld_work' }, answerUnheldWork)
   on('tool.call', { tool: 'mcp__martha__say_to_the_crew' }, answerSayToTheCrew)
   on('tool.call', { tool: 'mcp__martha__read_the_receipts' }, answerReadTheReceipts)
   on('tool.call', { tool: 'mcp__martha__write_my_handover' }, answerWriteMyHandover)
@@ -401,19 +396,17 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__worktree_finish' }, answerWorktreeFinish)
   on('tool.call', { tool: 'mcp__martha__owner_todo_add' }, answerOwnerTodoAdd)
   on('tool.call', { tool: 'mcp__martha__owner_todo_done' }, answerOwnerTodoDone)
-  on('tool.call', { tool: 'mcp__martha__queue_ask' }, answerQueueAsk)
-  on('tool.call', { tool: 'mcp__martha__list_asks' }, answerListAsks)
-  on('tool.call', { tool: 'mcp__martha__take_asks' }, answerTakeAsks)
-  on('tool.call', { tool: 'mcp__martha__settle_asks' }, answerSettleAsks)
+  on('tool.call', { tool: 'mcp__martha__ask_the_owner' }, answerQueueAsk)
+  on('tool.call', { tool: 'mcp__martha__see_the_owners_asks' }, answerListAsks)
+  on('tool.call', { tool: 'mcp__martha__take_the_owners_asks' }, answerTakeAsks)
+  on('tool.call', { tool: 'mcp__martha__settle_the_owners_asks' }, answerSettleAsks)
   on('tool.call', { tool: 'mcp__martha__standing_add' }, answerStandingAdd)
   on('tool.call', { tool: 'mcp__martha__standing_close' }, answerStandingClose)
   on('tool.call', { tool: 'mcp__martha__standing' }, answerStanding)
   on('tool.call', { tool: 'mcp__martha__wait_for_ci' }, answerWaitForCi)
 
-  on('command.run', { command: OPEN_THE_PANE }, async ($: CrewEngine) => {
-    await openThePane($)
-    return { text: '' }
-  })
+  // The pane's own command opens it and answers nothing: the drawing is `ui.render`'s (martha#313).
+  on('command.run', { command: PANE }, async ($: CrewEngine) => { await openThePane($); return { text: '' } })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, drawThePane)
 

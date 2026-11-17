@@ -6,8 +6,9 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { BASE_REF, openSignedBase } from './signed_base.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { SIGNED_BASE_REPOSITORY, BASE_REF, openSignedBase } from './signed_base.ts'
+import { LOCK } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 const GIT_ENV = { PATH: process.env['PATH'] ?? '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid' }
 const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, env: GIT_ENV, encoding: 'utf8' }).trim()
@@ -37,7 +38,7 @@ test('the signed branch opens to its commit, its entries with their modes, and b
   assert.ok(typeof opened !== 'string', String(opened))
   assert.equal(opened.fetched, true)
   assert.equal(opened.commit, git(p.remote, 'rev-parse', 'HEAD'))
-  assert.deepEqual(opened.entries.map((e) => [e.path, e.mode]), [['a.ts', '100644'], ['package-lock.json', '100644']])
+  assert.deepEqual(opened.entries.map((e) => [e.path, e.mode]), [['a.ts', '100644'], [LOCK, '100644']])
   const entry = opened.entries.find((e) => e.path === 'a.ts')!
   assert.equal(opened.blob(entry.blob)?.toString('utf8'), 'one\n')
   assert.equal(git(p.remote, 'rev-parse', 'HEAD:a.ts'), entry.blob)
@@ -81,7 +82,7 @@ test('a push to the signed branch moves the base, a force-push included', (t) =>
   const moved = openSignedBase(p.state, p.checkout, p.base, p.inherited)
   assert.ok(typeof moved !== 'string')
   assert.equal(moved.commit, git(p.remote, 'rev-parse', 'HEAD'))
-  assert.equal(git(join(p.state.directory, 'signed_base.git'), 'rev-parse', BASE_REF), moved.commit)
+  assert.equal(git(join(p.state.directory, SIGNED_BASE_REPOSITORY), 'rev-parse', BASE_REF), moved.commit)
 })
 
 test('a remote url with a protocol the list does not allow is not fetched', (t) => {

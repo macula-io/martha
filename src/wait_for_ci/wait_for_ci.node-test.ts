@@ -13,10 +13,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   A_FRESH_BUDGET,
   BACKOFF_MAX_MS,
@@ -42,7 +42,7 @@ after(() => removeTheTree(home))
 
 /** The crew's place for the budget, on this disk. */
 const aPlace = (): CrewPlace => {
-  const place = crewFilesDirectory(join(home, `crew-${String(Math.trunc(Math.random() * 1e9))}`)).place(GITHUB_BUDGET_PLACE)
+  const place = keepTheCrewsFilesAsDirectories(join(home, `crew-${String(Math.trunc(Math.random() * 1e9))}`)).place(GITHUB_BUDGET_PLACE)
   assert.ok(!('refusal' in place), 'the crew store refused its own place')
   return place
 }

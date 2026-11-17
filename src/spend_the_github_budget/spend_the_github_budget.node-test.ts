@@ -9,7 +9,7 @@
 // rather than clearing the flag; and that a pull request is matched by a whole package number, so `#1434` is never the
 // pull request of `#143`.
 //
-// The store is the crew's own, on a disk of the test's making (../crew_files_directory), so the record read back is the
+// The store is the crew's own, on a disk of the test's making (../keep_the_crews_files_as_directories), so the record read back is the
 // one a launch would have left, and the process runner is a stand-in that answers what the test says.
 
 import assert from 'node:assert/strict'
@@ -18,9 +18,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import {
   A_FRESH_BUDGET,
@@ -53,7 +53,7 @@ after(() => removeTheTree(home))
 
 /** The crew's place for the budget, on this disk. */
 const aPlace = (): CrewPlace => {
-  const place = crewFilesDirectory(join(home, `crew-${String(Math.trunc(Math.random() * 1e9))}`)).place(GITHUB_BUDGET_PLACE)
+  const place = keepTheCrewsFilesAsDirectories(join(home, `crew-${String(Math.trunc(Math.random() * 1e9))}`)).place(GITHUB_BUDGET_PLACE)
   assert.ok(!('refusal' in place), 'the crew store refused its own place')
   return place
 }

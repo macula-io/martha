@@ -59,6 +59,36 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: ["a_new/a_new.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
   },
   {
+    what: 'two exported constants the change adds for one new value, in two new modules',
+    base: TOOL,
+    head: { 'a_one/a_one.ts': "export const ONE = 'a-brand-new-word'\n", 'a_two/a_two.ts': "export const TWO = 'a-brand-new-word'\n" },
+    prints: ["a_one/a_one.ts:1: 'a-brand-new-word' restates a_two/a_two.ts TWO", "a_two/a_two.ts:1: 'a-brand-new-word' restates a_one/a_one.ts ONE"],
+  },
+  {
+    what: 'a number the change defines, with a copy of it in another slice',
+    base: { 'a_user/a_user.ts': 'call(60_000)\n' },
+    head: { 'a_new/a_new.ts': 'export const A_MINUTE_MS = 60_000\n' },
+    prints: ["a_user/a_user.ts:1: '60000' restates a_new/a_new.ts A_MINUTE_MS"],
+  },
+  {
+    what: 'a number the tree defines, divided out on a line the change adds',
+    base: { 'a_tool/a_tool.ts': 'export const A_MINUTE_MS = 60_000\n' },
+    head: { 'a_user/a_user.ts': 'const minutes = Math.floor(ms / 60_000)\n' },
+    prints: ["a_user/a_user.ts:1: '60000' restates a_tool/a_tool.ts A_MINUTE_MS"],
+  },
+  {
+    what: 'a number below the floor, which is a count and not a magnitude',
+    base: { 'a_user/a_user.ts': 'call(9_999)\n' },
+    head: { 'a_new/a_new.ts': 'export const A_COUNT = 9_999\n' },
+    prints: [],
+  },
+  {
+    what: 'a number at the floor, which is a magnitude the tree defines',
+    base: { 'a_user/a_user.ts': 'call(10_000)\n' },
+    head: { 'a_new/a_new.ts': 'export const A_CEILING = 10_000\n' },
+    prints: ["a_user/a_user.ts:1: '10000' restates a_new/a_new.ts A_CEILING"],
+  },
+  {
     what: 'a constant the change revalues, with a copy of the old value',
     base: { 'a_tool/a_tool.ts': "export const TOOL = 'the-old-value'\n", 'a_user/a_user.ts': "call('the-old-value')\n" },
     head: { 'a_tool/a_tool.ts': "export const TOOL = 'the-newer-value'\n" },

@@ -44,6 +44,7 @@
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { INBOUND_PATHS, attestationOf, senderIsAttested } from '../inbound_paths/inbound_paths.ts'
+import { UNHELD_WORK_PATH } from '../find_the_unheld_work/unheld_work_path.ts'
 import {
   OWNER_AT_THE_TERMINAL,
   recordIngestion,
@@ -56,7 +57,7 @@ import type { Arrival, AttestedSender, TurnSource } from '../host_contract/host_
 
 /** The inbound path each source is recorded on, so the registry and the host agree. */
 export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
-  crew_room: 'A1',
+  channel_message: 'A1',
   shared_room: 'A2',
   backlog_digest: 'A3',
   ring: 'A4',
@@ -74,6 +75,7 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   web: 'B6',
   subagent: 'B7',
   standing_items: 'A20',
+  package_contract: 'A22',
 }
 
 /** A session, with the record the gate reads and whether that record could be read. */
@@ -160,6 +162,7 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   'A9', // a forged envelope is not something a host reports
   'A12', // a compaction summary is inherited through the record, not taken in
   'A19', // the crew text the launcher hands at a session's start is the owner's approved bytes, not a sender's words (martha#306)
+  UNHELD_WORK_PATH, // the unheld_work answer is a crew tool's MCP result, taken in on B2 like every other (martha#319)
   // a row no text reaches the model on is never taken in: it says why in its control (B1, B8, A16)
   ...INBOUND_PATHS.filter((path) => path.control.kind === 'no-text-reaches-the-model').map((path) => path.id),
   // an answer read as the member's own is never taken in either: the rule says every leaf

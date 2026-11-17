@@ -9,9 +9,12 @@
 //   - ../say_what_the_gate_does, which reads them for the owner and for nobody else;
 //   - ../start_a_member, which makes the crew's folder for it beside the dashboard's own;
 //   - ../answer_a_tool_call, which writes the line before an audited call runs;
-//   - ../launch_a_claude_code_member, which hands that folder from the launch to the relay as a place.
+//   - ../answer_the_relay, which hands that folder from the launch to the relay as a place.
 //
-// A sixth file naming the audit fails here by name, before anybody has to notice it in review.
+// A sixth file naming the audit fails here by name, before anybody has to notice it in review. The one exception is a
+// slice's `coincidences.ts` (martha#289): it declares a word it spells like a constant held elsewhere, a check reads it as
+// a syntax tree and never runs it, and importing the audit's own constant there names the folder and takes nothing into
+// a turn. A check whose inventory of crew-code's names holds the audit's folder (martha#468) is the first such file.
 
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
@@ -19,6 +22,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
+import { COINCIDENCE_FILE } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
 
 /** The repository, from this file: src/audit_the_gate_for_a_member/<this file>. */
 const REPOSITORY = join(import.meta.dirname, '..', '..')
@@ -32,7 +36,7 @@ const MAY_NAME_THE_AUDIT: readonly string[] = [
   'src/say_what_the_gate_does/',
   'src/start_a_member/',
   'src/answer_a_tool_call/',
-  'src/launch_a_claude_code_member/',
+  'src/answer_the_relay/',
 ]
 
 /** The lines of one source's imports that name the audit, each as `<path>:<line>`. */
@@ -46,6 +50,7 @@ function auditReferencesIn(path: string): readonly string[] {
 function sourcePaths(): readonly string[] {
   return readdirSync(join(REPOSITORY, 'src'), { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.node-test.ts'))
+    .filter((entry) => entry.name !== COINCIDENCE_FILE)
     .map((entry) => join(entry.parentPath, entry.name))
 }
 

@@ -69,14 +69,16 @@ import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cro
 import type { HandoverStamp, HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
 import { recordIngestion, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { recordDigestOf, releasedRecordOf, type ReleaseMark } from '../apply_the_owners_release/apply_the_owners_release.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** What an event that starts a session does to the record. */
 export type SessionStartOutcome = 'same_id' | 'inherits' | 'fresh'
 
 export const SESSION_START_OUTCOMES: readonly SessionStartOutcome[] = ['same_id', 'inherits', 'fresh']
 
-/** The refresh the crew's mod runs itself: a start no host sends, with the predecessor's id. */
-export const CREW_REFRESH = 'crew_refresh'
+/** The refresh the crew's mod runs itself: a start no host sends, with the predecessor's id. Martha's own word since
+ * martha#468: it was crew-code's tool name, and the source keeps a name of its own. */
+export const THE_REFRESH_THE_MOD_RUNS = 'martha_refresh'
 
 /** Every event a host can start a session with, and what each does to the record. */
 export interface HostSessionEvents {
@@ -91,21 +93,21 @@ export interface HostSessionEvents {
  * record; a `resume` under a new id has no record there, and so has lost it:
  * fail closed. `fork` carries the parent's context under a new id, so it is
  * declared `same_id`, finds no record under that id, and has lost it. It is never
- * `fresh`. `crew_refresh` is the `/clear` the crew's mod ran itself, after the
+ * `fresh`. `martha_refresh` is the `/clear` the crew's mod ran itself, after the
  * member's handover: the mod reports it as a refresh, with the predecessor's id,
  * because it is one. Only `startup` and a `/clear` the mod did not run start with
  * no context. The events the host emits are derived from its schema by its
  * adapter (../claude_code_host).
  */
 export const CLAUDE_CODE_SESSION_EVENTS: HostSessionEvents = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   events: {
     startup: 'fresh',
     clear: 'fresh',
     compact: 'same_id',
     resume: 'same_id',
     fork: 'same_id',
-    [CREW_REFRESH]: 'inherits',
+    [THE_REFRESH_THE_MOD_RUNS]: 'inherits',
   },
 }
 

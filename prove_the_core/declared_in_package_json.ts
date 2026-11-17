@@ -30,6 +30,8 @@ export interface Manifest {
     readonly sliceCap?: number
     /** The core slices measured above the cap, each at its own ceiling (martha#415). */
     readonly sliceCeilings?: Readonly<Record<string, number>>
+    /** The directories only one program loads, each mapped to that program's directory, both as <core>/<directory> (martha#443). */
+    readonly programParts?: Readonly<Record<string, string>>
     readonly packageImports?: Readonly<Record<string, string>>
     readonly loaderImports?: Readonly<Record<string, string>>
   }
@@ -85,6 +87,22 @@ export function programsRunByScriptsOf(manifest: Manifest): string[] {
   return Object.entries(manifest.scripts)
     .filter(([name]) => name !== TEST_SCRIPT)
     .flatMap(([, command]) => [...command.matchAll(run)].map((match) => match[1] ?? ''))
+}
+
+/** A <core>/<directory> entry of the manifest's martha section, as the directory alone. */
+const directoryOf = (entry: string): string => entry.replace(new RegExp(`^${escaped(CORE)}/`), '')
+
+/**
+ * The parts of the programs the scripts run, each part's directory mapped to its program's (martha#443): directories
+ * only that program loads, which the core's rules treat like the program itself.
+ */
+export function programPartsOf(manifest: Manifest): Readonly<Record<string, string>> {
+  return Object.fromEntries(Object.entries(manifest.martha?.programParts ?? {}).map(([part, program]) => [directoryOf(part), directoryOf(program)]))
+}
+
+/** The directories the core's rules treat as programs: those a script runs with node, and every declared part of one. */
+export function programsAndTheirPartsOf(manifest: Manifest): string[] {
+  return [...programsRunByScriptsOf(manifest), ...Object.keys(programPartsOf(manifest))]
 }
 
 /** The word that runs the next command only when the one before it passed: the test script's commands' separator. */

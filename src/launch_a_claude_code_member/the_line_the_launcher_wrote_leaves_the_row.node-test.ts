@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -20,23 +20,25 @@ import { test, type TestContext } from 'node:test'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SUBAGENT_SPAWN, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
-import { DASHBOARD } from '../declare_crew/declare_crew.ts'
+import { DASHBOARD, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
-import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
+import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { holdingTheEnds } from '../refresh_a_member/hold_the_end.ts'
+import { holdingTheEnds } from '../end_a_running_turn/hold_the_end.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theRowWithNothingSaid, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { memberRelay, type MemberRelay, type TheMembersTelling } from './answer_the_relay.ts'
-import { CLAUDE_CODE, theMembersTelling } from './launch_a_claude_code_member.ts'
-import { removeTheTree } from './relay_copy.ts'
+import { memberRelay, type MemberRelay, type TheMembersTelling } from '../answer_the_relay/answer_the_relay.ts'
+import { A_TELLING_THAT_DID_NOT_REACH, theMembersTelling } from './launch_a_claude_code_member.ts'
+import { readTheNewestRelayJournal, relayJournalKeptIn, RELAY_JOURNAL_PLACE } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const MEMBER = 'builder'
 const SESSION = 'the-session'
@@ -51,7 +53,7 @@ const THE_OTHER_OWNERS_LINE = 'the owner’s default could not be put back; it i
 /** The moment the test's clock starts at, so a beat a write takes and one it never takes are told apart exactly. */
 const THE_MOMENT_TOLD = 1_700_000_000_000
 /** How long the member takes to report back, in the clock the test holds: no real time passes. */
-const THE_MEMBER_GOT_ROUND_TO_IT = 60_000
+const THE_MEMBER_GOT_ROUND_TO_IT = MINUTE_MS
 
 interface Places {
   readonly member: string
@@ -86,7 +88,7 @@ function aRowSaying(places: Places, needs: string): void {
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, DEFAULT_CONFIG_DIR, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 /** A crew that lets every call through and reads a subagent spawn as its review on the reviewer model. */
@@ -122,7 +124,7 @@ function relayFor(places: Places, crew: CrewTools, telling: TheMembersTelling): 
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel({}),
     hookSettings: hookSettingsWatch({
-      user: join(places.home, DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE),
+      user: join(places.home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
       home: places.home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(places.home, 'managed') },
@@ -144,12 +146,15 @@ function relayFor(places: Places, crew: CrewTools, telling: TheMembersTelling): 
   })
 }
 
+/** The host's own id for the member's review, which a refused telling is written down against (martha#430). */
+const THE_CALLS_ID = 'toolu_the_review'
+
 /** The member's review: the subagent spawn the crew's rule reads as one of its reviews. */
 const theReview = () => ({
   session_id: SESSION,
   call: {
     tool: CLAUDE_CODE_SUBAGENT_SPAWN.tools[0]!,
-    tool_use_id: 'toolu_the_review',
+    tool_use_id: THE_CALLS_ID,
     [CLAUDE_CODE_SUBAGENT_SPAWN.type_field]: 'Explore',
     [CLAUDE_CODE_SUBAGENT_SPAWN.description_field]: 'review the patch',
   },
@@ -218,4 +223,28 @@ test('#390 r=1: a line the launcher wrote never takes another owner’s line off
   // Nor does the launcher's own allow, which is the act that otherwise takes the line back.
   await relay.answer('tool_called', theReview())
   assert.equal(theRowNow(places)?.needs, THE_OTHER_OWNERS_LINE, 'the launcher took away a line it never wrote')
+})
+
+test('#430: a telling the member\'s store refuses is written down in the journal, not swallowed', async (t) => {
+  const places = placesOf(t)
+  // A file standing where the rows store would make its directory: every append under it is refused, by the file system.
+  const blocked = join(places.home, 'a-file-where-the-store-would-go')
+  writeFileSync(blocked, '')
+  const journals = join(places.home, RELAY_JOURNAL_PLACE)
+  mkdirSync(journals, { mode: 0o700 })
+  const journal = relayJournalKeptIn(journals, 'launch-of-the-test')
+  const telling = theMembersTelling({ ...places, rows: blocked, journal })
+
+  await telling.theMember(THE_LINE, THE_CALLS_ID)
+
+  const written = readTheNewestRelayJournal(journals).events
+  const noted = written.at(-1)
+  assert.equal(noted?.phase, 'noted', `the refused telling left no line of its own in the journal: ${JSON.stringify(written)}`)
+  assert.equal(noted?.event, A_TELLING_THAT_DID_NOT_REACH, 'the journal line does not say what the launcher could not do')
+  assert.equal(noted?.tool_use_id, THE_CALLS_ID, 'the journal line does not name the review\'s call, so a run cannot put the two halves together')
+  assert.ok((noted?.why ?? '') !== '', 'the journal line carries none of the store\'s own words for the refusal')
+
+  // The refusal is the member's half only: the member is not told twice, and nothing is thrown at the caller that told it.
+  const again = await telling.theMember(THE_LINE, THE_CALLS_ID)
+  assert.equal(again, undefined, 'a refused telling answered with something other than nothing')
 })

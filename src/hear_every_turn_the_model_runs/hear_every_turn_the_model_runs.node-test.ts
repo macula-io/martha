@@ -16,19 +16,18 @@ import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
-import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { THE_NEXT_MESSAGE_ASK, THE_TURN_STARTED_ASK, carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import type { ArrivingTurn } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { appendToTheChannel, takenInBy } from '../keep_the_crew_channel/crew_channel.ts'
-import { memberRelay, type MemberRelay } from '../launch_a_claude_code_member/answer_the_relay.ts'
-import type { RelayJournal } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { memberRelay, type MemberRelay } from '../answer_the_relay/answer_the_relay.ts'
+import type { RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { ARRIVAL_OF_A_PLUGINS_PROMPT, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
@@ -38,6 +37,7 @@ import type { WhatTheHostSaid } from '../say_what_the_host_is_asking/say_what_th
 import { recordOf, sessionRecordStreamOf, sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
 import { A_TURN_OF_UNNAMED_SOURCE, theCommandLineOf } from './hear_every_turn_the_model_runs.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const MEMBER = 'Builder'
 const SENDER = 'Reviewer'
@@ -73,7 +73,7 @@ function theFixedPlaceOf(home: string, checkout: string, rows: ReturnType<typeof
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel({}),
     hookSettings: hookSettingsWatch({
-      user: join(home, DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE),
+      user: join(home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
       home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(home, 'managed') },
@@ -89,7 +89,7 @@ function theFixedPlaceOf(home: string, checkout: string, rows: ReturnType<typeof
       user_scope: {
         markdown_kinds: RECORDED_HOST.markdown_kinds,
         output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-        reported_output_styles_dir: join(home, DEFAULT_CONFIG_DIR, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+        reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
       },
     }),
   }
@@ -111,7 +111,13 @@ function aLaunch(t: TestContext): ALaunch {
   turns.onTurn((turn) => void raised.push(turn))
   const screen: WhatTheHostSaid[] = []
   const noted: { event: string; why: string }[] = []
-  const journal: RelayJournal = { received: () => ({ answered: () => {} }), noted: (event, why) => void noted.push({ event, why }) }
+  // The journal #440's case watches, with #430's second note-styled method along for the shape: this run never finishes
+  // something it could not hand on, so that half stays empty and is there only because the interface requires it.
+  const journal: RelayJournal = {
+    received: () => ({ answered: () => {} }),
+    noted: (event, why) => void noted.push({ event, why }),
+    notedWhatItCouldNotFinish: () => {},
+  }
   const relay = memberRelay({
     ...theFixedPlaceOf(home, checkout, rows),
     crew: crewToolsOver({
@@ -120,7 +126,7 @@ function aLaunch(t: TestContext): ALaunch {
       beats: dashboardRowsIn(join(home, 'the-owners-rows')),
       root: checkout,
       documents: host.stores.documents,
-      stores: { crew: crewFilesDirectory(join(home, 'crew-files')) },
+      stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'crew-files')) },
       carrier: carryingTo({ member: MEMBER, host: channel }),
     }),
     turns,

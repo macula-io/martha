@@ -16,6 +16,7 @@ import {
   type Comparison,
   type Sources,
 } from './check_no_test_the_base_passed_goes_missing.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 export type Scan =
   | { readonly verdict: 'compared'; readonly comparison: Comparison; readonly skipped: readonly string[] }
@@ -82,7 +83,7 @@ const patternsAt = (repository: string, mergeBase: string, paths: readonly strin
   const matchers: Matcher[] = []
   const skipped: string[] = []
   for (const folder of PACKAGES) {
-    const manifestPath = folder === '.' ? 'package.json' : `${folder}/package.json`
+    const manifestPath = folder === '.' ? MANIFEST : `${folder}/${MANIFEST}`
     if (!paths.includes(manifestPath)) {
       skipped.push(folder)
       continue

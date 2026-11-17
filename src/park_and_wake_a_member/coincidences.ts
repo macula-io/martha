@@ -3,7 +3,7 @@
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { A_ROLE_A_TEST_CREW_DECLARES } from '../declare_crew/coincidences.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { PARKED_PLACE } from './park_and_wake_a_member.ts'
 
 /** Why a reader of a park names its kind by literal (martha#319): a union's tag is a type, and the place is another word. */

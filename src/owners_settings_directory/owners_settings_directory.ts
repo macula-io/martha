@@ -3,7 +3,7 @@
 // This exists so the slice that decides what to do about the owner's default (../put_the_owners_model_back) reads and
 // writes no disk of its own: the file is the host's — `<config dir>/settings.json`, where Claude Code's own `/model`
 // command saves the switched model as the owner's default for new sessions — and reaching it is glue, as reaching the
-// crew's store is (../crew_files_directory).
+// crew's store is (../keep_the_crews_files_as_directories).
 //
 // Three rules, the ones every file of Martha's own state is kept by:
 //

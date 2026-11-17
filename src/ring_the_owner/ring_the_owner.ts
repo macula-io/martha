@@ -5,7 +5,7 @@
 // into "needs you", never on every beat. It is the host's word and not a member's report: a member that says it waits on
 // the owner moves its row, and rings nothing, so the bell cannot be used as a nuisance by what it reports.
 //
-// The launcher holds the member's terminal (../launch_a_claude_code_member/member_on_the_owners_terminal), so these
+// The launcher holds the member's terminal (../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts), so these
 // bytes go to the launcher's own terminal and nowhere else: a member started without one has no terminal to ring, and
 // rings nothing. crew-code's ghost bell, which had to find its terminal by walking up to the process's own, cannot
 // happen here by construction.

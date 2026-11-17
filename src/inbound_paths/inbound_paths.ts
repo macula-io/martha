@@ -15,6 +15,7 @@ import { admitsInCrewRoom, admitsInSharedRoom, type DeliveryGate } from '../admi
 import { admitsAnAskToTheOwner } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { admitsLaunch, type LaunchGate } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { passesOnlySwitchesThatLoadNoConfig, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { UNHELD_WORK_PATH } from '../find_the_unheld_work/unheld_work_path.ts'
 
 /**
  * How the path reaches the member.
@@ -339,7 +340,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A19',
-    what: "the crew text the launcher hands a session as it starts (martha#306): who the member is, the crew's practice when the crew switched it on, the member's role text, the mode's text, the lines it sends, and the crew's conventions — from Martha's own texts and from the crew's files under .crew/",
+    what: "the crew text the launcher hands a session as it starts (martha#306): who the member is, the crew's practice when the crew switched it on, the member's role text, the mode's text, the lines it sends, and the crew's conventions — from Martha's own texts and from the crew's files under .martha/",
     klass: 'delivered',
     control: {
       kind: 'approved-text',
@@ -358,9 +359,16 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A21',
-    what: "an ask a member queued for the owner, handed to the session that takes the batch and offers it as one menu: the queue_ask tools' question, and, when the ask would delete a branch, the branch and the tip each copy of it stands at (martha#391, ../read_the_tips_a_removal_covers), all of which reach another member's model as the launcher's own answer to take_asks (martha#313, ../queue_the_owners_asks). The seam records that answer on B2, the row every MCP tool's result is taken in on; this row is the path its gate stands on, and no source of its own (../take_in_a_turn). Not closed: a row written into the crew's ask stream by a shell of the same OS user, which the gate refuses by name when it is taken but which is in the stream the session reads",
+    what: "an ask a member queued for the owner, handed to the session that takes the batch and offers it as one menu: the ask_the_owner tools' question, and, when the ask would delete a branch, the branch and the tip each copy of it stands at (martha#391, ../read_the_tips_a_removal_covers), all of which reach another member's model as the launcher's own answer to take_the_owners_asks (martha#313, ../queue_the_owners_asks). The seam records that answer on B2, the row every MCP tool's result is taken in on; this row is the path its gate stands on, and no source of its own (../take_in_a_turn). Not closed: a row written into the crew's ask stream by a shell of the same OS user, which the gate refuses by name when it is taken but which is in the stream the session reads",
     klass: 'delivered',
     control: { kind: 'ask-gate', gate: 'a-crews-own-asker' },
+    attestation: 'none',
+  },
+  {
+    id: 'A22',
+    what: "a package's contract, handed to a member at its start and after a refresh (martha#513): the goal, every acceptance criterion with where its evidence is, the actions the package allows, its budget and what done means, read from the newest `contract_kept` row of the crew's `ledger/<package>` stream and handed only to the member whose row holds that package. The block is written by the Supervisor through `keep_the_package_contract`, which reads the brief the Supervisor names, so the text a member is handed is text a member of this crew put in the stream. After a refresh the same part arrives a second time, in the prompt the flow hands the successor, because the fresh session also starts and is handed this line (r=1): the part is identical either way, and the arrival this row gates is the start's, which is why the resume prompt's copy is not a second source. Not closed: a process of the same OS user can append to the stream (martha#1 decision 2's residual), which is why the line is taken in rather than exempt, and a brief read from a path the Supervisor named is that file's bytes, as A20's items are the stream's",
+    klass: 'delivered',
+    control: { kind: 'shell-gate' },
     attestation: 'none',
   },
   {
@@ -433,6 +441,13 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
       kind: 'no-words-to-admit',
       why: "no peer's words can be in it: every leaf the pinned server's answer carries is admitted only by equality with what the launch supplied or can compute (the member's own node id, its petname, the entry's approved settings, the HOME the launcher gave the server, the host version it started, the call's own input, the station those settings name, the server's own recorded defaults), or is a stamp, a count, a boolean or a 64-hex id, none of which can carry an instruction (../prove_a_mesh_answer_is_wordless, whose table the coverage check holds to the recording and fails by name when the two drift). The rule is on the content, not on which server answered: another server's tool of the same name is read leaf by leaf against that same recording, and any leaf it adds is words and stays on B2. Anything else — a provider's error, a policy file's quoted text, a joined realm's own strings, a leaf a release adds — is words and stays on B2. A joined identity is not read this way at all: the realm writes the strings it describes a member with",
     },
+    attestation: 'none',
+  },
+  {
+    id: UNHELD_WORK_PATH,
+    what: "the `unheld_work` tool's answer (martha#319): the titles and Purpose lines of open issues GitHub's search finds in the places the crew's backlog names, which other people wrote, and anyone with triage rights can label one into the list. The answer reaches the model as a crew tool's MCP result, which the seam takes in on B2 like every other result; this row names where that text comes from, so it is no turn source of its own. The idle nudge the crew's pane draws beside it (../nudge_an_idle_crew) carries only a declared member's name, a count and a time, never an issue's text",
+    klass: 'fetched',
+    control: { kind: 'shell-gate' },
     attestation: 'none',
   },
   {

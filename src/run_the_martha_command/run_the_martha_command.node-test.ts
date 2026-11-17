@@ -13,20 +13,20 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { NOT_A_TERMINAL } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
 import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
+import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, OWNERS_ACT_NEEDS_A_TERMINAL, SAID_BY, startedLine, USAGE } from './run_the_martha_command.ts'
 import { MEMBER_SWITCH } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { NOT_IN_A_MEMBER } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
-import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
+import { hostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREWS_PLACE, CREW_ROWS_PLACE, crewStateDirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { CREW_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { THE_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 import { notRunningToRestart } from '../stop_and_restart_a_member/restart_a_member.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
@@ -36,6 +36,7 @@ import { rowFileNameOf, theRowWithNothingSaid } from '../show_dashboard_beat/sho
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 
@@ -188,7 +189,7 @@ test('martha approve whose input is no terminal refuses, so a member\'s shell ca
 test('martha --version prints the version package.json carries, and nothing else', (t) => {
   const run = martha(placeFor(t, { checkout: false }), '--version')
   assert.equal(run.status, 0)
-  const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'package.json'), 'utf8')) as { version: string }
+  const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', MANIFEST), 'utf8')) as { version: string }
   assert.equal(run.out, `${manifest.version}\n`)
 })
 
@@ -411,16 +412,16 @@ test('martha wake starts the member on its newest handover, and the prompt it is
   assert.ok(!('refusal' in crew), `the test could not reach the crew's store: ${'refusal' in crew ? crew.refusal : ''}`)
   const stamps = handoverStampsIn(crew.path)
   const session = startSession({ read: () => undefined, write: () => {} }, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
-  const written = writeMyHandover({ stores: { crew: crewFilesDirectory(crew.path) } }, { member, content, at, stamps, session })
-  assert.equal(written, CREW_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${JSON.stringify(written)}`)
-  const handovers = crewFilesDirectory(crew.path).place(HANDOVERS_PLACE)
+  const written = writeMyHandover({ stores: { crew: keepTheCrewsFilesAsDirectories(crew.path) } }, { member, content, at, stamps, session })
+  assert.equal(written, THE_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${JSON.stringify(written)}`)
+  const handovers = keepTheCrewsFilesAsDirectories(crew.path).place(HANDOVERS_PLACE)
   assert.ok(!('refusal' in handovers), 'the crew store refused its handovers place')
   const file = join(handovers.path, theHandoverFile(member, at))
 
   const run = marthaOnATerminal(place, claude.env, 'wake', member)
 
   assert.equal(run.status, 0, run.said)
-  assert.match(run.said, new RegExp(`^${member} woken from .*HANDOVER_2026-11-12_${member}\\.md$`, 'm'), 'the wake did not say which handover it woke the member from')
+  assert.match(run.said, new RegExp(`^${member} woken from .*MARTHA_HANDOVER_2026-11-12_${member}\\.md$`, 'm'), 'the wake did not say which handover it woke the member from')
   const calls = readFileSync(claude.args, 'utf8')
     .split('---\n')
     .map((call) => call.split('\n').filter((line) => line !== ''))

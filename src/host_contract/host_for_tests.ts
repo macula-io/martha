@@ -10,7 +10,7 @@
 // Nor does it hold files on a disk or make scratch directories: a test that
 // needs them passes them, and without them every read and every scratch
 // directory is refused. The crew's own store is the same: a test that needs one
-// passes it (../crew_files_directory on a directory of its own), and without one
+// passes it (../keep_the_crews_files_as_directories on a directory of its own), and without one
 // no place can be asked for.
 //
 // It fails closed where the core trusts the host (#42): with nothing given, the

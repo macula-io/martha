@@ -13,17 +13,18 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { refuseExecutionAfterUngatedText, recordIngestion, startFreshSession } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { notRunningToRestart } from '../stop_and_restart_a_member/restart_a_member.ts'
 import { LIFECYCLE_PLACE, theRequestOf, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
-import { CREW_TOOL_NAMES, RESTART_A_MEMBER, crewToolsOver } from './a_crews_tools.ts'
+import { RESTART_A_MEMBER } from '../stop_and_restart_a_member/the_restart_tool.ts'
+import { CREW_TOOL_NAMES, crewToolsOver } from './a_crews_tools.ts'
 
 const HOST_MODELS = ['opus', 'fable']
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-restart-tool-'))
@@ -50,7 +51,7 @@ async function aCrewOfTools(member: string, options: { grant?: readonly string[]
   }
   mkdirSync(join(home, 'its-rows'), { mode: 0o700 })
   const rows = rowStreamsDirectory(join(home, 'its-rows'))
-  const lifecycle = crewFilesDirectory(crew).place(LIFECYCLE_PLACE)
+  const lifecycle = keepTheCrewsFilesAsDirectories(crew).place(LIFECYCLE_PLACE)
   const host: StoppingHost = {
     stores: { lifecycle, rows },
     launches: () => [],
@@ -64,7 +65,7 @@ async function aCrewOfTools(member: string, options: { grant?: readonly string[]
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(crew) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
     ...(options.lifecycle === false ? {} : { lifecycle: host }),
   })
   return { tools, lifecycle }

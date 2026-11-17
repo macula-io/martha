@@ -13,10 +13,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, declareCrew, OWNER, REVIEW_MODEL, type CrewSettings } from '../declare_crew/declare_crew.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   homeModelOf,
   modelPlace,
@@ -73,7 +73,7 @@ async function aDeclaredCrewOfModels(): Promise<ADeclaredCrew> {
 }
 
 /** The crew's store, as a tool and the owner's own reading both reach it. */
-const theStore = (crew: string) => ({ stores: { crew: crewFilesDirectory(crew) } })
+const theStore = (crew: string) => ({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
 
 /** What `member`'s record says, read the way the tool reads it. */
 function whatTheStoreSays(crew: string, member: string) {

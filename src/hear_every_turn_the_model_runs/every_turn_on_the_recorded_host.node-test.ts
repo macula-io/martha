@@ -1,7 +1,7 @@
 // On the recorded host, the launcher hears every main turn the member's model runs (martha#440).
 //
 // The real `martha` command, the real Claude Code at the recorded version, the real relay, mod and launcher; only the
-// model is a stand-in (../launch_a_claude_code_member/drive_the_recorded_host.ts). The cases skip on
+// model is a stand-in (../drive_the_recorded_host/drive_the_recorded_host.ts). The cases skip on
 // RECORDED_HOST_SKIP: ci.yml's relay job runs them with the recorded host, as
 // prove_the_relay_loads/recorded_host_runs.json lists.
 //
@@ -23,7 +23,6 @@ import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { DEFAULT_CONFIG_DIR } from '../claude_code_host/settings_env_reaching_servers.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import {
@@ -32,17 +31,20 @@ import {
   firstRunDone,
   marthaOnATerminal,
   plainTextOf,
-  stateHomeUnder,
   whatTheLaunchSaw,
   type ModelRequest,
   type RecordedHostRun,
   type TheOwnersHands,
-} from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+} from '../drive_the_recorded_host/drive_the_recorded_host.ts'
+import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+// The run's silence budget is the one the launcher gives a host that shows nothing new (martha#441): named once, there.
+import { HOST_SILENCE_MS } from '../drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'
 import { ARRIVAL_OF_A_PLUGINS_PROMPT, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { recordOf, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const MEMBER = 'builder'
 const SENDER = 'the-owner'
@@ -59,7 +61,6 @@ const SETTLED_MS = 3_000
 /** A tool still running while the owner types: long enough to type into, done well inside the shell tool's limit. */
 const THE_LONG_TOOL = 'node -e "setTimeout(() => {}, 15000)"'
 const THE_SHELL_LIMIT_MS = 120_000
-const SILENCE_MS = 120_000
 const END = { text: 'Done.' }
 /** What the owner pastes: long enough that the host holds it as a pasted text, not as typing. */
 const PASTED = Array.from({ length: 30 }, (_, line) => `line ${line + 1} of the notes the owner pastes`).join('\n')
@@ -149,7 +150,7 @@ async function untilTheTurnCarryingItEnded(hands: TheOwnersHands, text: string):
 
 /** The sessions the host kept transcripts for in this run: the record of each is read by its id. */
 function theSessionsOf(project: Project): readonly string[] {
-  const projects = join(project.home, DEFAULT_CONFIG_DIR, 'projects')
+  const projects = join(project.home, CLAUDE_FOLDER, 'projects')
   return readdirSync(projects, { recursive: true, encoding: 'utf8' })
     .filter((name) => name.endsWith('.jsonl') && !name.includes('subagents'))
     .map((name) => basename(name, '.jsonl'))
@@ -171,7 +172,7 @@ const countOf = (paths: readonly string[], path: string): number => paths.filter
 
 /** Drives the run, failing with what the launch saw when it stopped short. */
 async function ran(project: Project, run: Omit<RecordedHostRun, 'claude' | 'home' | 'checkout' | 'member' | 'owner_turn' | 'silence_ms'>) {
-  const done = await driveTheRecordedHost({ claude: recordedHost(), ...project, member: MEMBER, owner_turn: OWNER_TURN, silence_ms: SILENCE_MS, ...run }).catch((error: unknown) => {
+  const done = await driveTheRecordedHost({ claude: recordedHost(), ...project, member: MEMBER, owner_turn: OWNER_TURN, silence_ms: HOST_SILENCE_MS, ...run }).catch((error: unknown) => {
     throw new Error(`the run did not end as a member does: ${String(error).split('\n')[0]}`, { cause: whatTheLaunchSaw(error) })
   })
   assert.equal(done.exit_code, 0, `the member did not end as the owner ended it:\n${plainTextOf(done.shown).slice(-3000)}`)

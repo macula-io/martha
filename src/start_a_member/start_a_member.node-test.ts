@@ -20,6 +20,7 @@ import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, REVIEW_MODEL, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew, SOLO_MEMBERS, SOLO_MODE, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import {
+  STATE_ROOT_NAME,
   nodeIdsFor,
   openState,
   OWN_WRITES_LAUNCHES_KEPT,
@@ -27,33 +28,35 @@ import {
   ownWritesKeptForLaunch,
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { OWN_WRITE_MODES, ownWritesOfLaunch, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { reviewModelRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { readApprovals } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { NOT_STARTED, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
-import { NO_CREW_TOOLS, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
-import { RELAY_SOCKET_NAME } from '../launch_a_claude_code_member/relay_directory.ts'
+import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
+import { NO_CREW_TOOLS, type MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
+import { RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { RELAY_ORIGIN, RELAY_PATHS, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { shortRelayRoot } from '../launch_a_claude_code_member/short_relay_root.ts'
-import { POLL_MS, until } from '../launch_a_claude_code_member/wait_until_the_event.ts'
+import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
+import { POLL_MS, until } from '../drive_the_recorded_host/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
-import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { stopTheCrew } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
-import { crewRowsDirectoryOf } from '../launch_a_claude_code_member/drive_the_recorded_host.ts'
-import { hostAnswers } from '../launch_a_claude_code_member/host_stand_in.ts'
+import { crewRowsDirectoryOf } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
+import { hostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
 import { canonicalHashWithoutModel, sha256Of } from '../put_the_owners_model_back/the_owners_settings_file.ts'
 import { MODEL_PLACE, theModelMarker, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
 import { crewSubdirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
 const HOST_MODELS = ['opus', 'fable']
@@ -314,7 +317,7 @@ test('init, approve and start bring a member up on the approved config, recorded
   assert.deepEqual(records.map((record) => [record.key, record.row['node_id']]), [[BUILDER!.name, ids.ids[BUILDER!.name]]])
   assert.ok(lines.some((line) => approved.kind === 'approved' && line.includes(approved.fingerprint)), 'the owner is shown the approval in use')
   await until('the fake host to write its arguments', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
-  assert.ok(readFileSync(fake.args, 'utf8').includes('--mcp-config'), 'the approved copy is passed')
+  assert.ok(readFileSync(fake.args, 'utf8').includes(MCP_CONFIG_SWITCH), 'the approved copy is passed')
 })
 
 test('a place ends the member it started before it removes the home, while a child of it is still writing there (#272)', async (t) => {
@@ -378,7 +381,7 @@ test('start whose input is no terminal starts nothing, so a member\'s shell cann
 const REFUSED_ARGUMENTS: readonly (readonly string[])[] = [
   ['--settings', '{"hooks":{}}'],
   ['--setting-sources', 'user,project'],
-  ['--mcp-config', '/elsewhere/servers.json'],
+  [MCP_CONFIG_SWITCH, '/elsewhere/servers.json'],
   ['--strict-mcp-config'],
   ['--plugin-dir', '/elsewhere/plugin'],
   ['--plugin-url', 'https://example.invalid/plugin.zip'],
@@ -443,7 +446,7 @@ test("a member started with Martha's own prompt carries it after the owner's arg
   await declared(place)
   const fake = aClaudeThatWritesEachCall(place)
   const args = ['--effort', 'high']
-  const prompt = `${BUILDER!.name}, you are resuming from your handover at /somewhere/HANDOVER_2026-11-12_${BUILDER!.name}.md. Read it first.`
+  const prompt = `${BUILDER!.name}, you are resuming from your handover at /somewhere/MARTHA_HANDOVER_2026-11-12_${BUILDER!.name}.md. Read it first.`
   const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args, initial_prompt: prompt })
   assert.ok(started.started, started.started ? '' : started.refusal)
   await until('the fake host to write the arguments it was started as a member with', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
@@ -573,7 +576,7 @@ test("a run reading a member's rows derives the same place the launcher writes t
   mkdirSync(checkout, { recursive: true })
   execFileSync('git', ['init', '-q', '.'], { cwd: checkout })
   try {
-    const state = openState(join(state_home, '.local', 'state', 'martha'), checkout)
+    const state = openState(join(state_home, '.local', 'state', STATE_ROOT_NAME), checkout)
     assert.ok('directory' in state, 'the state opens')
     const places = launcherPlacesOf(state, join(state_home, 'relay-places'), checkout)
     assert.ok('rows' in places, 'the launcher places are made')
@@ -894,7 +897,7 @@ test('#312: a member Martha started is stopped by its own launcher when the owne
 test('#359: a switch a killed launch left unfinished is finished before the member\'s host starts', async (t) => {
   const place = placeFor(t, {})
   await declared(place)
-  const config = join(place.home, DEFAULT_CONFIG_DIR)
+  const config = join(place.home, CLAUDE_FOLDER)
   mkdirSync(config, { recursive: true })
   const settings_file = join(config, USER_SETTINGS_FILE)
   const theOwnersModel = 'opus'

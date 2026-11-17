@@ -2,14 +2,10 @@
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
-import { OWN_WRITES_SUFFIX } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
-import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
-
-/** Why `'.jsonl'` is written by literal where a probe reads the host (#289 part b). */
-const THE_HOSTS_TRANSCRIPT_SUFFIX = 'Claude Code\'s own suffix for a session transcript, which a probe reads; the constant of that word is the suffix of the launcher\'s own-writes records'
+import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 
 export const COINCIDENCES: readonly Exception[] = [
-  { value: OWN_WRITES_SUFFIX, file: 'probe_launch_hosts/probe_hosts.ts', reason: THE_HOSTS_TRANSCRIPT_SUFFIX },
-  { value: CONFIG, file: 'probe_launch_hosts/probe_hosts.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  // The timeout a test gives the host it runs itself (martha#441): a bound on a host that must finish on its own, not
+  // the launcher's wait for one answer from a host it launched.
+  { value: HOST_ANSWER_TIMEOUT_MS, file: 'probe_launch_hosts/stop_a_host_that_outlives_the_run.node-test.ts', reason: 'a test\'s timeout for a host it runs itself and expects to finish; the tree\'s half minute is the launcher\'s wait for a host answer' },
 ]

@@ -9,7 +9,7 @@
 //
 // The launch is the real one: `martha init`, `martha approve` and `martha start`, twice, on one checkout where both
 // members share one crew's streams. Only the models are stand-ins
-// (../src/launch_a_claude_code_member/drive_the_recorded_host): the reviewer's first turn calls the host's own agent
+// (../src/drive_the_recorded_host/drive_the_recorded_host.ts): the reviewer's first turn calls the host's own agent
 // tool, and the stand-in answers that agent's request while the member's turn is still open.
 //
 // The order is what this observes: the builder says its hand-off while the reviewer is inside its subagent, so a member
@@ -27,9 +27,10 @@ import process from 'node:process'
 
 import { SOLO_MEMBERS } from '../src/declare_a_solo_crew/declare_a_solo_crew.ts'
 import { FRAME_OPENING, framed } from '../src/hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
-import type { ModelRequest, ModelScript, ScriptedTurn } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
-import { crewRowsDirectoryOf, driveTheRecordedHost, plainTextOf, stateHomeUnder } from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
-import { HOST_SILENCE_MS } from '../src/launch_a_claude_code_member/wait_while_the_host_keeps_showing.ts'
+import type { ModelRequest, ModelScript, ScriptedTurn } from '../src/drive_the_recorded_host/drive_the_recorded_host.ts'
+import { crewRowsDirectoryOf, driveTheRecordedHost, plainTextOf } from '../src/drive_the_recorded_host/drive_the_recorded_host.ts'
+import { stateHomeUnder } from '../src/find_a_homes_state_root/find_a_homes_state_root.ts'
+import { HOST_SILENCE_MS } from '../src/drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'
 import { addressedTo, readTheChannel, tookInRowsOf, type ChannelHost, type PlacedMessage } from '../src/keep_the_crew_channel/crew_channel.ts'
 import { CREW_LINES, VALUE_SHAPES } from '../src/read_a_crew_line/crew_lines.ts'
 import { readACrewLine } from '../src/read_a_crew_line/read_a_crew_line.ts'

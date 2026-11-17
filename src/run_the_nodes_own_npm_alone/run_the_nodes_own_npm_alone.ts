@@ -14,9 +14,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
-
-/** Where npm's own program sits beside the node that runs this: `<prefix>/bin/node` and `<prefix>/lib/node_modules/npm`. */
-const NPM_CLI_FROM_PREFIX = ['lib', 'node_modules', 'npm', 'bin', 'npm-cli.js']
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 /**
  * The variables npm is given: HOME, where it keeps its config and cache, and PATH, which it looks for git and tar
@@ -25,9 +23,9 @@ const NPM_CLI_FROM_PREFIX = ['lib', 'node_modules', 'npm', 'bin', 'npm-cli.js']
  */
 export const NPM_RUNS_WITH: readonly string[] = ['HOME', 'PATH']
 
-/** The npm program that ships with this node. */
+/** The npm program that ships with this node: `<prefix>/bin/node` and `<prefix>/lib/node_modules/npm`. */
 export function npmBesideNode(node: string = process.execPath): string {
-  return join(dirname(dirname(node)), ...NPM_CLI_FROM_PREFIX)
+  return join(dirname(dirname(node)), 'lib', DEPENDENCIES, 'npm', 'bin', 'npm-cli.js')
 }
 
 export type Ran = { readonly ran: true } | { readonly ran: false; readonly why: string }

@@ -4,7 +4,7 @@
 // roster answered with the roster and nothing written, and — when the member holds a package — the send announced
 // and concluded in that package's ledger, so a member refreshed mid-send finds an act it never saw confirmed.
 
-import { OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -17,12 +17,12 @@ import { crewToolsOver, CREW_TOOL_NAMES, THE_TOOLS_ASK } from '../a_crews_tools/
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
-import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
+import { readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { readLedger, ledgerStreamOf } from '../log_ledger/log_ledger.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { addresseesOf, CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 
 const ROSTER = ['Builder', 'Reviewer', 'Supervisor'] as const
 
@@ -60,10 +60,10 @@ test('#253: a message to one member is one row, addressed to that member only', 
 
 test('#253: "crew" addresses every member, and is kept as the crew rather than as a list', async () => {
   const channel = channelHost()
-  await sendACrewMessage(channel, sending({ to: 'crew', text: 'a remark to all' }))
+  await sendACrewMessage(channel, sending({ to: THE_WHOLE_CREW, text: 'a remark to all' }))
 
   const [kept] = await readTheChannel(channel)
-  assert.equal(kept?.message.to, 'crew')
+  assert.equal(kept?.message.to, THE_WHOLE_CREW)
 })
 
 test('#253: a name off the roster is answered with the roster, and nothing is written', async () => {
@@ -126,7 +126,7 @@ test('#253: a member holding no package still sends, and says nothing was announ
 
 test('#253: addresses are read from the argument, and a name is never built from its text', () => {
   assert.deepEqual(addresseesOf(['Reviewer'], ROSTER), ['Reviewer'])
-  assert.equal(addresseesOf('crew', ROSTER), 'crew')
+  assert.equal(addresseesOf(THE_WHOLE_CREW, ROSTER), THE_WHOLE_CREW)
   assert.deepEqual(addresseesOf(['Builder', 'Reviewer'], ROSTER), ['Builder', 'Reviewer'])
 })
 
@@ -150,14 +150,14 @@ const NO_BEATS: DashboardStore = { read: () => null, change: () => ({ kept: fals
 function crewOverAFreshPlace(t: { after(fn: () => void): void }): ReturnType<typeof crewToolsOver> {
   const home = mkdtempSync(join(tmpdir(), 'martha-253-say-'))
   t.after(() => removeTheTree(home))
-  const { host } = hostForTests({ now: 1_000, documents: { [join(home, '.crew', 'crew.json')]: JSON.stringify(DECLARATION) } })
+  const { host } = hostForTests({ now: 1_000, documents: { [join(home, DECLARATION_DIRECTORY, DECLARATION_FILE)]: JSON.stringify(DECLARATION) } })
   return crewToolsOver({
     member: 'Builder',
     ledger: { clock: host.clock, stores: { rows: host.stores.rows } },
     beats: NO_BEATS,
     root: home,
     documents: host.stores.documents,
-    stores: { crew: crewFilesDirectory(join(home, 'crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'crew-files')) },
   })
 }
 

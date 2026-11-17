@@ -59,6 +59,7 @@ import {
   WORDLESS_TOOLS,
   type RecordedMeshAnswerShape,
 } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
+import { CLAUDE_CODE, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 export interface Gap {
   readonly path: string
@@ -352,7 +353,7 @@ export const ARGUMENT_PROBES: readonly ArgumentProbe[] = [
   { passes: false, what: 'a prompt on the command line', args: ['a prompt'] },
   { passes: false, what: 'a settings file or JSON', args: ['--settings', '{}'] },
   { passes: false, what: 'which settings sources load', args: ['--setting-sources', 'user,project'] },
-  { passes: false, what: 'a tool-server config', args: ['--mcp-config', 'servers.json'] },
+  { passes: false, what: 'a tool-server config', args: [MCP_CONFIG_SWITCH, 'servers.json'] },
   { passes: false, what: 'a plugin directory', args: ['--plugin-dir', 'plugin'] },
   { passes: false, what: 'skipping every permission check', args: ['--dangerously-skip-permissions'] },
   { passes: false, what: 'a permission mode', args: ['--permission-mode', 'bypassPermissions'] },
@@ -416,7 +417,7 @@ function claimedControlGap(
 
 // A host the launch probes use, its first listed file, and a second one: the
 // probes are built from the module's own lists, never a restated file name.
-const PROBE_HOST: Host = 'claude-code'
+const PROBE_HOST: Host = CLAUDE_CODE
 const [SERVERS, SETTINGS] = LAUNCH_FILES_OF_HOST[PROBE_HOST]
 
 const sha = (digit: string) => digit.repeat(64)

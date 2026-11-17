@@ -5,7 +5,7 @@ import { join, sep } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { ARGUMENT_GATES, ASK_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   admitsLaunch,
   fingerprintOf,
@@ -18,7 +18,7 @@ import {
   startFreshSession,
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { CLAUDE_CODE_SESSION_EVENTS, CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { CLAUDE_CODE_SESSION_EVENTS, THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { ARGUMENT_PROBES, claimsTheShellGate, CONFIG_PATH_PROBES, gapsInConfigPathCoverage, gapsInGateCoverage, gapsInMeshAnswerShapes, gapsInMeshTools, gapsInPromptOrigins, gapsInRingResultKeys, gapsInSessionEvents, LAUNCH_PROBES, PATH_PROBES, shellGateRowsNothingRecords, type ConfigPathProbe, type PathGate, type PathProbe } from './check_every_path_is_gated.ts'
 import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -28,6 +28,7 @@ import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS, type RecordedRingResultKey
 import { ADMITS, MESH_GOODBYE, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type RecordedMeshAnswerShape } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { admitsAWriteNoLaterGitRunReads } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 
 const policy: Policy = { may_send_executable_text: [] }
 
@@ -60,8 +61,8 @@ const coverageOf = (
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 21 }, (_, index) => `A${index + 1}`),
-    ...Array.from({ length: 9 }, (_, index) => `B${index + 1}`),
+    ...Array.from({ length: 22 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 10 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 2 }, (_, index) => `C${index + 1}`),
   ]
   const seen = INBOUND_PATHS.map((path) => path.id).sort()
@@ -443,10 +444,10 @@ test('a planted session event the declaration does not list turns the check red,
 })
 
 test('a declared session event the host stops emitting turns the check red, by name', () => {
-  const emitted = EMITTED.filter((event) => event !== CREW_REFRESH)
+  const emitted = EMITTED.filter((event) => event !== THE_REFRESH_THE_MOD_RUNS)
   const gaps = gapsInSessionEvents(CLAUDE_CODE_SESSION_EVENTS, emitted)
   assert.equal(gaps.length, 1)
-  assert.match(gaps[0]?.path ?? '', /crew_refresh/)
+  assert.match(gaps[0]?.path ?? '', new RegExp(THE_REFRESH_THE_MOD_RUNS))
 })
 
 const STAMPED = Object.keys(CLAUDE_CODE_PROMPT_ORIGINS.sources)
@@ -729,7 +730,7 @@ function standInNow(t: TestContext): (probe: ConfigPathProbe) => PathProbe {
     const top = mkdtempSync(join(tmpdir(), 'martha-192-probe-'))
     made.push(top)
     mkdirSync(join(top, '.git'), { recursive: true })
-    writeFileSync(join(top, '.git', 'config'), `${probe.config.join('\n')}\n`)
+    writeFileSync(join(top, '.git', CONFIG), `${probe.config.join('\n')}\n`)
     return { admits: probe.admits, what: probe.what, path: join(top, probe.writes), cwd: top, home: top }
   }
 }

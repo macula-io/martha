@@ -15,7 +15,7 @@
 // any of the shapes TOKEN_PREFIXES names; and a check that is one of two typed questions whose argv is built here,
 // never a shell string. The pane and the terminal draw what this slice hands them and decide nothing.
 
-import { OWNER, type Act } from '../declare_crew/declare_crew.ts'
+import { OWNER, type Act, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { HostContract, Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
@@ -328,7 +328,6 @@ export const commandLine = (act: TodoCommand): string => `! ${act.command}`
 /** What the copy puts on the clipboard for a row: one act per line, in the row's order. */
 export const copyText = (row: OwnerTodoRow): string => row.commands.map(commandLine).join('\n')
 
-const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
 const DAY_MS = 24 * HOUR_MS
 

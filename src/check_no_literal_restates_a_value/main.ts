@@ -1,26 +1,26 @@
-// Run the check: node src/check_no_literal_restates_a_value/main.ts [--range <base>..<head>] [--report] [--self-test] [--root <dir>]
+// Run the check: node src/check_no_literal_restates_a_value/main.ts [--range <base>..<head>] [--self-test] [--root <dir>]
 //
 // Exit 0 clean, 1 findings (one line each, `file:line: '<literal>' restates <module> <NAME>`),
 // 2 the check could not be made. It never passes because it could not look.
 //
-// The gate judges what a change adds, not the whole tree: the lines it adds, and
-// every literal equal to a value it defines, revalues or takes away, over the whole
-// tree. How a range is read is ./judge_a_change.ts; this file only prints it.
+// Two runs, each a gate. Without `--range` it judges the whole tree: every literal
+// equal to a value an exported constant holds, anywhere. With `--range` it judges
+// what a change adds: the lines it adds, and every literal equal to a value it
+// defines, revalues or takes away, over the whole tree. The range run is the only
+// one that sees a value a change took away, since no constant holds that value any
+// more for the whole-tree run to compare against. How a range is read is
+// ./judge_a_change.ts; this file only prints it.
 //
 // A record marked `satisfies DefinesItsValues` (../host_contract/defines_its_values.ts) the check
 // cannot read entry by entry, or a marker anywhere else, is a finding in every
 // mode: the marker's claim holds over the whole tree, not only where a change
 // touches it.
 //
-// `--report` runs the same rule over the whole tree and prints how many sites are
-// left. That number is a report and never a gate: the cleanup is its own package,
-// cut by slice, and the gate turns whole-tree when the count reaches zero.
-//
 // The range is read as git holds it, so a range whose two ends are the same commit
 // adds no line and brings no value: it judges nothing and passes, and says so with
-// its own count. Only a range that cannot be read at all — `--range` left out, an
-// end missing, or a base of zeroes, which is what a repository's first push hands
-// over — falls back to the whole tree.
+// its own count. A range that cannot be read at all — an end missing, or a base of
+// zeroes, which is what a repository's first push hands over — falls back to the
+// whole tree, and says so.
 //
 // The coincidences each slice declares in its own `coincidences.ts` are read from
 // the tree in both modes (../../prove_the_core/the_coincidences_a_slice_declares.ts),
@@ -36,8 +36,6 @@ import {
   exceptionsNotHeld,
   lineOfAFinding,
   lineOfAMarkerNotHeld,
-  markersNotHeld,
-  restatementsIn,
   type MarkerNotHeld,
 } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { coreSources } from '../../prove_the_core/core_sources.ts'
@@ -92,23 +90,14 @@ function reportMarkers(markers: readonly MarkerNotHeld[]): void {
   if (markers.length > 0) console.error(`${NAME}: ${markers.length} marker(s) claim more than the check can read. Mark only a top-level exported record of plain keys and string values, by the marker's own name.`)
 }
 
-function runReport(root: string, exceptions: readonly DeclaredCoincidence[]): number {
-  const sources = coreSources(join(root, CORE))
-  const markers = markersNotHeld(sources)
-  reportMarkers(markers)
-  const remaining = restatementsIn(sources, { judged: null, exceptions })
-  console.log(`${NAME}: ${remaining.length} site(s) remain in the tree. This is a report, not a gate: the cleanup is its own package, cut by slice.`)
-  return markers.length === 0 ? 0 : 1
-}
-
 function runGate(root: string, exceptions: readonly DeclaredCoincidence[]): number {
-  const verdict = verdictOf(root, option('--range'), exceptions)
+  const range = option('--range')
+  const verdict = verdictOf(root, range, exceptions)
   if (verdict.stale.length > 0) return reportStale(verdict.stale)
-  if (verdict.judged === null) console.log(`${NAME}: no readable range, so the whole tree is judged`)
+  if (verdict.judged === null && range !== undefined) console.log(`${NAME}: no readable range, so the whole tree is judged`)
   reportMarkers(verdict.markers)
   for (const finding of verdict.findings) console.log(lineOfAFinding(finding))
-  const summary = summaryOf(NAME, verdict)
-  if (summary !== null) console.log(summary)
+  console.log(summaryOf(NAME, verdict))
   if (verdict.findings.length === 0 && verdict.markers.length === 0) {
     console.log(`${NAME}: no literal restates a defined value`)
     return 0
@@ -123,12 +112,7 @@ const main = (): number => {
   const declared = coincidencesIn(coreSources(join(root, CORE)))
   const refused = [...declared.unreadable.map(lineOfAnUnreadableCoincidence), ...entriesOutsideTheirSlice(declared.entries).map(lineOfAnEntryOutsideItsSlice)]
   if (refused.length > 0) return reportRefused(refused)
-  const exceptions = exceptionsThatApply(root, CHECKOUT, declared.entries)
-  if (process.argv.includes('--report')) {
-    const stale = exceptionsNotHeld(coreSources(join(root, CORE)), exceptions)
-    return stale.length > 0 ? reportStale(stale) : runReport(root, exceptions)
-  }
-  return runGate(root, exceptions)
+  return runGate(root, exceptionsThatApply(root, CHECKOUT, declared.entries))
 }
 
 try {

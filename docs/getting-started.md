@@ -47,20 +47,29 @@ martha init
 ```
 
 ```text
-Declared a solo crew in <your project>/.crew/crew.json: builder, reviewer.
+Declared a solo crew in <your project>/.martha/martha.json: builder, reviewer.
 ```
 
 `<your project>` is the checkout's absolute path as Martha prints it.
 
-It writes `.crew/crew.json` and never writes over one: if you already have a
+It writes `.martha/martha.json` and never writes over one: if you already have a
 declaration it says so and exits 1. It takes the owner's name from git, so a
 checkout with no `user.name` is refused with the command that sets one. Commit
 the declaration with the rest of the project if you want your crew to travel
 with it:
 
 ```sh
-git add .crew/crew.json && git commit -m "Declare the crew"
+git add .martha/martha.json && git commit -m "Declare the crew"
 ```
+
+A checkout declared by a release before this one holds `.crew/crew.json`
+instead. Martha does not read it: it refuses the declaration by name, and the
+message names the file it found, because that folder is crew-code's and a
+declaration there is read by crew-code's own mod. Move the whole folder —
+`git mv .crew .martha`, and rename `crew.json` to `martha.json` — with the
+roles and modes text it holds, then run `martha approve` again: the approval
+names those files by their path, so every crew's approval is stale after a
+move.
 
 ## 2. Read the config your members would start from, and approve it
 
@@ -203,7 +212,7 @@ martha wake builder
 ```
 
 ```text
-builder woken from ~/.local/state/martha/crews/6f2c…/handovers/HANDOVER_2026-11-12_builder.md
+builder woken from ~/.local/state/martha/crews/6f2c…/handovers/MARTHA_HANDOVER_2026-11-12_builder.md
 ```
 
 A member whose role the declaration grants `resume_parked_work` can also bring
@@ -286,7 +295,7 @@ With it on, a background agent closes the shell while it runs — its text has n
 call to be placed on yet — though the member can still read files, and once the
 agent stops and Martha saw every call it made answered, the shell comes back.
 
-To turn it on, add the rule to the crew's declaration, `.crew/crew.json`, as a
+To turn it on, add the rule to the crew's declaration, `.martha/martha.json`, as a
 top-level key beside `owner` and `mode`:
 
 ```json
@@ -336,7 +345,7 @@ it:
 | What you see | What to do |
 |---|---|
 | `... is not inside a git checkout. Run martha in the checkout your crew works in.` | `cd` to your project and run it there |
-| `.../.crew/crew.json already exists, and martha init never writes over a declaration.` | keep it; `martha init` is done |
+| `.../.martha/martha.json already exists, and martha init never writes over a declaration.` | keep it; `martha init` is done |
 | `... carries no readable installer pin ...` | this release predates the pin; upgrade once with the bootstrap line |
 | `... npm does not serve <name>@<version>, which this release pins ...` | that installer version is not on npm; nothing was installed |
 | `... npm served bytes for <name>@<version> that are not the ones this release pins ...` | npm serves other bytes than the release vouched for; nothing was installed |
@@ -354,7 +363,7 @@ Exit codes: `0` done, `1` refused, `2` not a way the command is used
 
 ## Where it keeps things
 
-- `.crew/crew.json` in your checkout: the crew's declaration. Commit it or not,
+- `.martha/martha.json` in your checkout: the crew's declaration. Commit it or not,
   as you prefer; it holds names and roles, no secrets.
 - `$XDG_STATE_HOME/martha`, or `~/.local/state/martha`: one directory per
   project, named by a hash of the project's path, holding what Martha keeps for
@@ -380,4 +389,4 @@ Exit codes: `0` done, `1` refused, `2` not a way the command is used
 
 To start over: end your members, then delete `$XDG_STATE_HOME/martha`, or
 `~/.local/state/martha` when that variable is unset, and edit or
-delete `.crew/crew.json` as you would any file of your project.
+delete `.martha/martha.json` as you would any file of your project.

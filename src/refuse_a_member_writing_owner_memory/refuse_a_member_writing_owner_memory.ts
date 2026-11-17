@@ -95,23 +95,20 @@ import { basename, dirname, join, normalize, relative, resolve, sep } from 'node
 
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
-import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE, userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
-import { FILE_ARGUMENTS } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { HOST_TRUST_RECORD_FILE } from '../launch_a_claude_code_member/host_runs_the_relay.ts'
-import type { ProtectedConfigPlaces } from '../claude_code_host/protected_config_places.ts'
+import { FILE_ARGUMENTS } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { HOST_TRUST_RECORD_FILE } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import type { ProtectedConfigPlaces } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
-import { whatALaterGitRunReads, type WhatALaterGitRunReads } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
+import { CONFIG, whatALaterGitRunReads, type WhatALaterGitRunReads } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import type { PathProbe } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
+import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The file tools a member writes a file with. */
 export const FILE_WRITING_TOOLS = [WHOLE_FILE_TOOL, EDIT_TOOL, 'MultiEdit', NOTEBOOK_EDIT_TOOL] as const
 
-/** The variable that moves the folder of every project's memory under another root. */
-export const REMOTE_MEMORY_ROOT = 'CLAUDE_CODE_REMOTE_MEMORY_DIR'
-/** The variable that names one folder memory is read from and written to instead. */
-export const MEMORY_FOLDER_OVERRIDE = 'CLAUDE_COWORK_MEMORY_PATH_OVERRIDE'
 /** The settings key that names the folder memory lives in. */
 export const MEMORY_DIRECTORY_KEY = 'autoMemoryDirectory'
 
@@ -235,7 +232,7 @@ export const XDG_CONFIG_HOME_VARIABLE = 'XDG_CONFIG_HOME'
 /** The user-level git config file, under the home git reads it from. */
 const OWNERS_GITCONFIG = '.gitconfig'
 /** The user-level git config file's path under `$XDG_CONFIG_HOME` (and under `~/.config` when that is unset). */
-const GIT_CONFIG_UNDER_XDG = ['git', 'config'] as const
+const GIT_CONFIG_UNDER_XDG = ['git', CONFIG] as const
 /** The file in a worktree's git dir that names the git dir it shares, relative to its own. */
 const COMMONDIR = 'commondir'
 
@@ -1023,7 +1020,7 @@ export function memoryDenyRules(places: OwnerMemoryPlaces): string[] {
 export function userScopeUnder(home: string): OwnerUserScope {
   const settings = userSettingsPath({ HOME: home })
   // With only a HOME, `userSettingsPath` never refuses; the fallback is the host's own default, never a restated one.
-  const config = 'path' in settings ? dirname(settings.path) : join(home, DEFAULT_CONFIG_DIR)
+  const config = 'path' in settings ? dirname(settings.path) : join(home, CLAUDE_FOLDER)
   return {
     markdown_kinds: RECORDED_HOST.markdown_kinds,
     output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,

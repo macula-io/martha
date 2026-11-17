@@ -6,7 +6,7 @@
 // failed to start is still parked, and the owner can try again.
 //
 // The handover is written here by the host's own write (../write_my_handover) and stamped into the crew's own stamp
-// store (../crew_files_directory), so what the wake reads is the file a launch would have left, at the path the host
+// store (../keep_the_crews_files_as_directories), so what the wake reads is the file a launch would have left, at the path the host
 // chose, with the stamp the host wrote.
 
 import assert from 'node:assert/strict'
@@ -16,9 +16,9 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   mayParkOrUnparkAnother,
   parkAMember,
@@ -27,8 +27,9 @@ import {
   theParkOf,
   type TheDeclaration,
 } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
-import { theResumePrompt, wakeAMember, type TheStart, type TheWakeAsking } from './wake_a_member.ts'
+import { THE_HANDOVER_WRITTEN, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { THE_WAKE_CLEARS_THE_PARK, theResumePrompt, wakeAMember, type TheStart, type TheWakeAsking } from './wake_a_member.ts'
+import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-wake-'))
 after(() => removeTheTree(home))
@@ -52,8 +53,8 @@ const THE_CREW: TheDeclaration = {
 let crewsSoFar = 0
 const aWakeHost = () => {
   crewsSoFar += 1
-  const itsOwn = join(home, 'state', 'crews', `a-key-${crewsSoFar}`)
-  return { stores: hostForTests({ crew: crewFilesDirectory(itsOwn) }).host.stores, stamps: handoverStampsIn(itsOwn) }
+  const itsOwn = join(home, 'state', CREWS_PLACE, `a-key-${crewsSoFar}`)
+  return { stores: hostForTests({ crew: keepTheCrewsFilesAsDirectories(itsOwn) }).host.stores, stamps: handoverStampsIn(itsOwn) }
 }
 
 /** A start that records what it was asked, and says what the test told it to. */
@@ -70,7 +71,7 @@ function aStartSaying(started: boolean, refusal?: string) {
 function handedOver(host: ReturnType<typeof aWakeHost>, member = 'builder', content = 'What stands: the package, its branch, its tip.') {
   const session = startSession({ read: () => undefined, write: () => {} }, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'a-session' })
   const written = writeMyHandover(host, { member, content, at: AT, stamps: host.stamps, session })
-  assert.equal(written, 'CREW-HANDOVER-WRITTEN', `the host did not write the handover the test needed: ${written}`)
+  assert.equal(written, THE_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${written}`)
   return theHandoverFile(member, AT)
 }
 
@@ -102,13 +103,13 @@ test('#255 part 2: a parked member with a handover is started on it, and its par
   assert.ok(!('refusal' in place), 'the host refused the park place')
   const park = theParkOf(place, 'builder')
   assert.equal(park.kind, 'not_parked', 'a woken member is still parked')
-  assert.equal(park.kind === 'not_parked' ? park.last_marker?.reason : '', 'woken from its handover by the owner', 'the marker does not say the member was woken')
+  assert.equal(park.kind === 'not_parked' ? park.last_marker?.reason : '', THE_WAKE_CLEARS_THE_PARK, 'the marker does not say the member was woken')
 })
 
 test('#255 part 2: the prompt names the handover\'s file and does not carry its text', () => {
   const text = 'What stands: the package, its branch, its tip.'
-  const prompt = theResumePrompt({ file: '/somewhere/HANDOVER_2026-11-12_builder.md', content: text }, 'builder')
-  assert.match(prompt, /\/somewhere\/HANDOVER_2026-11-12_builder\.md/, 'the prompt does not name the handover file')
+  const prompt = theResumePrompt({ file: '/somewhere/MARTHA_HANDOVER_2026-11-12_builder.md', content: text }, 'builder')
+  assert.match(prompt, /\/somewhere\/MARTHA_HANDOVER_2026-11-12_builder\.md/, 'the prompt does not name the handover file')
   assert.ok(!prompt.includes(text), 'the prompt carries the handover\'s text, which would be a second handover nothing stamped')
 })
 

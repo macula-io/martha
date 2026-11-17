@@ -12,7 +12,9 @@ import { test } from 'node:test'
 import { orderIn, PANE_CHROME_ROWS, paneIn, switchTheModelOnTheHost, theOwnersListIn } from './crew_answers.ts'
 import { theActAsked, theListForThePane, theStandingLines } from '../../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { STANDING_HEADING } from '../../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
-import { CARRY_A_TEXT, CARRY_THE_CLEAR, CARRY_THE_END, NO_ACT, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
+import { CARRY_THE_END } from '../../end_a_running_turn/end_the_running_turn.ts'
+import { NO_ACT } from '../../refresh_a_member/refresh_a_member.ts'
+import { CARRY_A_TEXT, CARRY_THE_CLEAR, theOrderOf, type TheAct } from '../../refresh_a_member/the_refresh_flow.ts'
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS as THE_LAUNCHERS_CHROME, seeTheCrew, thePaneAnsweredBy } from '../../see_the_crew/see_the_crew.ts'
 
 /** The model a switch moves a session to, in these tests: any name at all, since the slice only passes it on. */

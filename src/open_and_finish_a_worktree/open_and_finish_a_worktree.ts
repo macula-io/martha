@@ -24,7 +24,8 @@ import { join } from 'node:path'
 
 import { type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
-import { ActNotSent, OutcomeNotKept, WORK_PACKAGE, sendOutwardAct, type LedgerHost } from '../log_ledger/log_ledger.ts'
+import { WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
+import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 
 /** The tools this slice registers. */
@@ -220,11 +221,12 @@ async function removeTheBranch(
 /**
  * The deletion itself: the one outward act this slice sends. Its row is kept before git runs, and when the store
  * will not keep it, git is not run — so what a successor reads never claims an act that did not happen, and never
- * misses one that did.
+ * misses one that did. A deletion that fails is not sent again on its own: ../recover_a_failed_act names the failure,
+ * reads what origin really holds, and decides, one attempt at most (martha#512).
  */
 async function deleteTheBranch(host: WorktreesRequest['host'], clone: string, branch: string, work: TheAct): Promise<string> {
   try {
-    const said = await sendOutwardAct(
+    const said = await sendAnActAndRecover(
       host,
       { package: work.package, member: work.member, act: { kind: 'push', what: `origin ${branch}` } },
       async () => {
@@ -232,6 +234,7 @@ async function deleteTheBranch(host: WorktreesRequest['host'], clone: string, br
         if (pushed.exit_code !== 0) throw new Error(saidBy(pushed))
         return `removed ${branch} on origin`
       },
+      async () => theBranchOnOrigin(host, clone, branch),
     )
     return `; ${said}`
   } catch (failure) {
@@ -240,16 +243,25 @@ async function deleteTheBranch(host: WorktreesRequest['host'], clone: string, br
 }
 
 /**
- * What the answer says when the deletion did not end cleanly. The three endings are kept apart, as the ledger keeps
- * them apart, because each says what the next attempt may do: the row was not kept, so nothing was sent and sending
- * again is safe; git failed, so it was sent and its failure is the row that was kept; or it was sent and its outcome
- * was not kept, so whoever reads it next checks what happened rather than sending it again.
+ * Whether the branch is on origin, read from origin itself with `git ls-remote` and never from this clone's
+ * remote-tracking ref, which is behind the remote as soon as anyone pushes. The deletion happened when nothing answers
+ * for the branch; a remote that cannot be asked at all is a state nothing can be said about, so it is not one.
+ */
+async function theBranchOnOrigin(host: WorktreesRequest['host'], clone: string, branch: string): Promise<AnInspection> {
+  const read = `origin's refs for ${branch}`
+  const asked = await git(host, clone, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])
+  if (asked.exit_code !== 0) return { state: 'cannot_tell', read, found: saidBy(asked) }
+  const on_origin = asked.stdout.trim()
+  if (on_origin === '') return { state: 'it_happened', read, found: `${branch} is no longer on origin` }
+  return { state: 'it_did_not_happen', read, found: `${branch} is still on origin at ${on_origin.split('\t')[0] ?? on_origin}` }
+}
+
+/**
+ * What the answer says when the deletion did not end cleanly. A failure this slice recovered from carries its own words:
+ * the class, what origin was found to hold, and what the package does now; so does a deletion a paused package held back
+ * (martha#512). Anything else says the branch stays.
  */
 function whatBecameOfTheDeletion(failure: unknown, branch: string): string {
-  if (failure instanceof ActNotSent) return `${branch} stays on origin, since ${failure.message}`
-  if (failure instanceof OutcomeNotKept) {
-    const state = failure.sent.succeeded ? 'was deleted on origin' : 'may still be on origin'
-    return `${branch} ${state}, and its ledger row was not concluded: ${failure.message}. Check what happened before sending anything again.`
-  }
+  if (failure instanceof RecoveryDecided || failure instanceof PackagePaused) return failure.told
   return `${branch} stays on origin (${failure instanceof Error ? failure.message : String(failure)})`
 }

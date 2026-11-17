@@ -33,14 +33,14 @@ import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
-import { handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
 import type { CrewStore, DocumentStore, RowStore } from '../host_contract/host_contract.ts'
 import { LIFECYCLE_PLACE, watchForAStop, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { readingOnly } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import { DeclarationRefused, declareCrew, OWNER_BELL, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
@@ -62,15 +62,14 @@ import {
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import {
-  CLAUDE_CODE,
   HOOK_SETTINGS_CHECK_MS,
   launchClaudeCodeMember,
-  NOT_STARTED,
   type LauncherPlaces,
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
-import type { MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
-import { userSettingsPath } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
+import type { MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
+import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
 import { finishTheOwnersDefaultAtLaunch, type OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
@@ -78,13 +77,15 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
-import { RELAY_JOURNAL_PLACE } from '../launch_a_claude_code_member/keep_the_relays_journal.ts'
+import { RELAY_JOURNAL_PLACE } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { runAKeptShape } from '../run_an_owner_signed_command/run_a_signed_shape.ts'
 import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { theApprovalInUse, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
 export const NOT_A_TERMINAL =
@@ -93,12 +94,9 @@ export const NOT_A_TERMINAL =
 /** The launcher's places, and where its approved snapshots go. */
 export type MemberPlaces = LauncherPlaces & { readonly snapshot_root: string; readonly relay_journal: string }
 
-/** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names them. */
-/** The directory inside Martha's state that holds the launcher's launch records. */
-const LAUNCH_RECORDS_PLACE = 'launches'
-
-/** Everything the launcher keeps per checkout: the rows are the crew's, not a checkout's (martha#254 R1). */
-const STATE_PLACES = [LAUNCH_RECORDS_PLACE, 'snapshots', 'mesh-servers', RELAY_JOURNAL_PLACE] as const
+/** The directories inside Martha's state that the launcher keeps a member's files in, in the order MemberPlaces names
+ * them: the rows are the crew's, not a checkout's (martha#254 R1). */
+const STATE_PLACES = [THE_PLACES_A_STATE_ROOT_KEEPS.records_place, 'snapshots', 'mesh-servers', RELAY_JOURNAL_PLACE] as const
 
 /** Why the relay root may not hold a launch's socket, or undefined; made mode 0700 when missing. */
 function closedRelayRoot(relay_root: string): string | undefined {
@@ -228,7 +226,7 @@ function signedShapeNames(state: MarthaState): readonly string[] {
 function theCrewsStores(state: MarthaState, root: string): { readonly crew: CrewStore; readonly stamps: HandoverStampStore } {
   const crew = crewStateDirectory(state.state_root, root)
   if ('refusal' in crew) return { crew: { place: () => crew }, stamps: { read: () => crew, write: () => crew } }
-  return { crew: crewFilesDirectory(crew.path), stamps: handoverStampsIn(crew.path) }
+  return { crew: keepTheCrewsFilesAsDirectories(crew.path), stamps: handoverStampsIn(crew.path) }
 }
 
 /**
@@ -249,7 +247,7 @@ function ownersDefaultPlaceOf(request: MemberStartRequest): OwnersDefaultPlace |
  */
 export function stoppingHostOn(places: { readonly launcher: MemberPlaces; readonly crew: string }): StoppingHost {
   return {
-    stores: { lifecycle: crewFilesDirectory(places.crew).place(LIFECYCLE_PLACE), rows: rowStreamsDirectory(places.launcher.rows) },
+    stores: { lifecycle: keepTheCrewsFilesAsDirectories(places.crew).place(LIFECYCLE_PLACE), rows: rowStreamsDirectory(places.launcher.rows) },
     launches: () => launchesIn(readingOnly(launchRecordsDirectory(places.launcher.launch_records))),
     processes: thisMachine.processes,
     clock: { now: () => Date.now() },

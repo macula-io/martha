@@ -9,7 +9,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { OWNER } from '../declare_crew/declare_crew.ts'
 import { readingOnly, type CrewPlace, type Refused } from '../host_contract/host_contract.ts'
@@ -51,11 +51,11 @@ export interface WhereTheCrewIs {
 /** The launcher's records on this machine, as the binder's own reader reads them. */
 const theLaunchesIn = (places: WhereTheCrewIs) => launchesIn(readingOnly(launchRecordsDirectory(places.launcher.launch_records)))
 
-const placeOrRefusal = (crew: string): CrewPlace | Refused => crewFilesDirectory(crew).place(LIFECYCLE_PLACE)
+const placeOrRefusal = (crew: string): CrewPlace | Refused => keepTheCrewsFilesAsDirectories(crew).place(LIFECYCLE_PLACE)
 
 /** One line per declared member, in the declaration's order. */
 export function theCrewListed(places: TheCrewsPlaces, now: number): readonly string[] {
-  const store = crewFilesDirectory(places.crew)
+  const store = keepTheCrewsFilesAsDirectories(places.crew)
   const lifecycle = placeOrRefusal(places.crew)
   const parked = parkedPlace({ stores: { crew: store } })
   const names = places.settings.members.map((member) => member.name)
@@ -113,7 +113,7 @@ export function holdOnThisTerminal<Ended>(
 ): Promise<HeldEnd<Ended>> {
   const dashboard = dashboardRowsIn(places.launcher.dashboard)
   const host = {
-    stores: { lifecycle: placeOrRefusal(places.crew), rows: rowStreamsDirectory(places.launcher.rows), crew: crewFilesDirectory(places.crew) },
+    stores: { lifecycle: placeOrRefusal(places.crew), rows: rowStreamsDirectory(places.launcher.rows), crew: keepTheCrewsFilesAsDirectories(places.crew) },
     stamps: handoverStampsIn(places.crew),
     processes: thisMachine.processes,
     clock: { now: () => Date.now() },

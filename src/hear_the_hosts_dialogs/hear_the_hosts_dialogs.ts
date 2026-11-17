@@ -44,7 +44,7 @@ export function theCallIn(call: unknown): ACallTheHostMade | undefined {
   const held = call as Fields
   if (typeof held['tool'] !== 'string') return undefined
   // A call's input is everything the host put on it beside the fields it stamped itself, exactly as the launcher reads
-  // it for its gates (../launch_a_claude_code_member/answer_the_relay's own callOf).
+  // it for its gates (../answer_the_relay/answer_the_relay.ts's own callOf).
   const { tool: _tool, tool_use_id: _use, agent_id: _agent, agentId: _agentId, ...input } = held
   return aCallOf(held['tool'], input, held)
 }

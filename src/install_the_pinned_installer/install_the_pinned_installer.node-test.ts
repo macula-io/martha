@@ -12,7 +12,7 @@ import { basename, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { fakeNpmRegistry, sha512Of, type FakePackage, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { INSTALLER_ENTRY, installThePinnedInstaller, PIN_FILE, TEMP_DIR_PREFIX, type InstallOutcome, type InstallRequest, type Pin } from './install_the_pinned_installer.ts'
@@ -132,7 +132,7 @@ const reported = (out: string): { readonly args: string[]; readonly bundle: bool
 
 test('a release with no pin is refused by name, before anything is fetched', (t) => {
   const tree = scratch(t, 'no-pin')
-  writeFileSync(join(tree, 'package.json'), JSON.stringify({ martha: { installerPackage: NAME } }))
+  writeFileSync(join(tree, MANIFEST), JSON.stringify({ martha: { installerPackage: NAME } }))
   const npm = standInNpm(t)
   const refusal = refusalOf(installThePinnedInstaller(requestFor(tree, { npm: npm.npm })))
   assert.ok(refusal.includes(PIN_FILE), refusal)

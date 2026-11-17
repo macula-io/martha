@@ -16,15 +16,15 @@ import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the
 /** The crew's own files, as the host keeps them: these tests read and write them through the launcher's own calls. */
 const STATE_LINES = { append: appendStateLine, read: readStateFile }
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { answerToolCall, type ApprovedLaunch, type ToolCallAnswer } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { GATE_AUDIT_PLACE, auditFileIn, theLinesIn, type GateAuditPlace } from './audit_the_gate_for_a_member.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const names = claudeCodeToolNames
 const policy: Policy = { may_send_executable_text: [] }

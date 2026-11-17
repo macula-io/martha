@@ -19,6 +19,8 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
+
 const SANS = '"Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif'
 const MONO = '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace'
 
@@ -184,6 +186,13 @@ export interface Box {
    * A component box sets it, and the test beside this file holds every one of them to src/.
    */
   readonly names?: readonly string[]
+  /**
+   * The host this box says it is, when it claims to be one: a box drawn as a host's holds that host's
+   * adapters and nothing else. The test beside this file holds every slice such a box names to
+   * package.json's martha.hostAdapters (martha#492); a box that declares no host is never judged,
+   * because a capability box groups a slice with its adapter on purpose.
+   */
+  readonly host?: string
   readonly person?: true
   readonly code?: true
 }
@@ -192,6 +201,8 @@ export interface Box {
 export interface BoxCoverage {
   readonly name: string
   readonly names: readonly string[]
+  /** The host the box declared, when it declared one: what the test holds its names to. */
+  readonly host?: string
   /** The title, the type and every description line, joined, so a name split over two lines is still found. */
   readonly text: string
   /**
@@ -370,6 +381,7 @@ class Diagram {
     if (b.names) this.coverage.push({
       name: b.name,
       names: b.names,
+      ...(b.host === undefined ? {} : { host: b.host }),
       text: [b.name, b.type, ...b.desc].join(''),
       said: [b.name, b.type, ...b.desc].join(' '),
     })
@@ -520,7 +532,7 @@ export const PACKAGE_BOXES: readonly Box[] = [
   { kind: 'b-later', x: 32, y: 546, w: 268, h: 132, name: 'the team mode', type: '[planned]',
     desc: ['Realm admission and the shared room,', 'not built here; solo admits nothing.', 'The parts every launch loads are', 'drawn below'] },
 
-  { kind: 'b-dat', x: 332, y: 76, w: 268, h: 120, name: 'the crew declaration', type: '[.crew/crew.json]',
+  { kind: 'b-dat', x: 332, y: 76, w: 268, h: 120, name: 'the crew declaration', type: '[.martha/martha.json]',
     desc: ['Who is on the crew, and the mode\'s', 'table of who may do what; written', 'once by init, never written over'] },
   { kind: 'b-cmp', x: 332, y: 216, w: 268, h: 140, name: 'the approval', type: '[approve_a_checkouts_config]', code: true,
     desc: ['Shows every file that would start code', 'and the checkout\'s tree, then takes one', 'word: yes. Its fingerprint covers the', 'files and the tree'] },
@@ -582,6 +594,30 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
   },
   {
+    name: 'declare_a_launch_probe',
+    why: 'what one row of npm run probe:launch is, shared by its rows and its runner; the command never loads it',
+  },
+  {
+    name: 'probe_a_checkouts_own_config',
+    why: "npm run probe:launch's rows about a checkout's own config; the command never loads them",
+  },
+  {
+    name: 'probe_the_owners_hooks',
+    why: "npm run probe:launch's rows about the owner's hooks; the command never loads them",
+  },
+  {
+    name: 'probe_the_owners_own_folders',
+    why: "npm run probe:launch's rows about the owner's own folders; the command never loads them",
+  },
+  {
+    name: 'probe_the_hosts_auto_memory',
+    why: "npm run probe:launch's rows about the host's auto-memory; the command never loads them",
+  },
+  {
+    name: 'drive_the_recorded_host',
+    why: 'the harness the recorded-host tests drive: a recorded host stood up with a script, and the waits its runs need; no member ever loads it',
+  },
+  {
     name: 'record_mesh_answers',
     why: 'a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote, and never runs it',
   },
@@ -592,6 +628,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
   {
     name: 'record_claude_code_host',
     why: 'a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it',
+  },
+  {
+    name: 'check_no_member_outlives_its_run',
+    why: 'a script run by hand, npm run check:no-member-outlives-its-run, over this machine\'s /proc; find_a_member_a_run_left_behind is what it reads with, and martha ls shows the same lines without loading the program',
   },
 ]
 
@@ -656,26 +696,26 @@ function withItsCountDrawn(b: LooseBox): LooseBox {
 /** The Component page's boxes, row by row and column by column: inRows places them. */
 const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
-    { col: 0, kind: 'b-sys', name: 'run_the_martha_command', names: ['run_the_martha_command', 'list_stop_and_restart_the_crew', 'release_a_held_member'], type: '[the acts]', code: true,
-      desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, release <member>,', 'gate, --version: the words checked first,', 'a refusal on stderr with the command that', 'fixes it, 0 / 1 / 2. release_a_held_member', 'is the owner\'s release of a held member,', 'and list_stop_and_restart_the_crew is', 'martha ls, stop and restart\'s wiring here'] },
+    { col: 0, kind: 'b-sys', name: 'run_the_martha_command', names: ['run_the_martha_command', 'list_stop_and_restart_the_crew', 'release_a_held_member', 'show_the_owners_text_safely', 'find_a_member_a_run_left_behind'], type: '[the acts]', code: true,
+      desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, release <member>,', 'gate, --version: the words checked first,', 'a refusal on stderr with the command that', 'fixes it, 0 / 1 / 2. release_a_held_member', 'is the owner\'s release of a held member,', 'and list_stop_and_restart_the_crew is', 'martha ls, stop and restart\'s wiring here;', 'show_the_owners_text_safely writes every', 'terminal control out before the owner', 'reads it, and find_a_member_a_run_left_', 'behind names a member a run started and', 'left running, by its name and the time', 'it started'] },
     { col: 1, kind: 'b-cmp', name: 'declare_a_solo_crew, declare_crew', names: ['declare_a_solo_crew', 'declare_crew', 'who_may_act'], type: '[the declaration]', code: true,
-      desc: ['Reads .crew/crew.json once into typed', 'settings; writes it only when none exists.', 'who_may_act holds the mode\'s table of', 'who may assign, approve and resume'] },
+      desc: ['Reads .martha/martha.json once into typed', 'settings; writes it only when none exists.', 'who_may_act holds the mode\'s table of', 'who may assign, approve and resume'] },
     { col: 2, kind: 'b-cmp', name: 'approve_a_checkouts_config', names: ['approve_a_checkouts_config'], type: '[the owner\'s yes]', code: true,
       desc: ['Names every file that starts code and', 'the checkout\'s tree, asks on the owner\'s', 'own terminal, and keeps the fingerprint', 'it was given in approvals.jsonl'] },
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'start_a_member', names: ['start_a_member', 'pass_only_switches_that_load_no_config'], type: '[one member]', code: true,
       desc: ['Refuses no terminal, a name the crew lacks', 'and a stale approval; -- words pass only', 'pass_only_switches_that_load_no_config', 'allows, then names the approval it starts', 'on and holds the terminal'] },
-    { col: 1, kind: 'b-cmp', name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command', 'raise_a_turn_to_the_member', 'hand_a_crew_message_to_its_member'], type: '[the launcher]', code: true,
-      desc: ['Martha\'s places, the approved snapshot,', 'a launch record before the host starts;', 'raise_a_turn_to_the_member raises each', 'kept turn to its listeners, and hand_a_', 'crew_message_to_its_member hands one', 'message at a time and counts it taken', 'in; run_an_owner_signed_command runs a', 'shape the owner signed on a verified', 'copy, in a sandbox'] },
-    { col: 2, kind: 'b-cmp', name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'judge_a_checkouts_tree', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes', 'run_marthas_own_git', 'empty_directory_of_a_launch'], type: '[the launch gate]', code: true,
-      desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved, plus remember_a_members_', 'own_writes; judge_a_checkouts_tree', 'reads and judges a checkout\'s tree;', 'refuse_code_a_checkout_', 'runs_itself closes a checkout\'s scripts;', 'run_marthas_own_git the settings each', 'of Martha\'s own git runs carries, and', 'empty_directory_of_a_launch the place', 'their hooks are pointed at'] },
+    { col: 1, kind: 'b-cmp', name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command', 'raise_a_turn_to_the_member', 'hand_a_crew_message_to_its_member', 'answer_the_relay', 'ask_the_host_what_it_loads', 'end_a_launch', 'keep_the_relays_journal', 'place_the_hosts_settings', 'serve_the_relay_to_a_launch', 'start_the_member_on_the_owners_terminal', 'sweep_leftover_launch_directories', 'end_a_launch_when_its_run_ends'], type: '[the launcher]', code: true,
+      desc: ['The launch itself: Martha\'s places, the', 'approved snapshot and the launch record', 'written before the host starts.', 'place_the_hosts_settings settles what the', 'host reads, ask_the_host_what_it_loads', 'proves it loads the relay copy, and', 'serve_the_relay_to_a_launch makes the', 'socket and the copy; answer_the_relay', 'answers the relay\'s events on it,', 'keep_the_relays_journal keeps what the', 'launch did, and end_a_launch starts the', 'host in its own process group and cleans', 'up when it ends. start_the_member_on_', 'the_owners_terminal gives it the owner\'s', 'terminal, sweep_leftover_launch_', 'directories takes a dead launch\'s', 'directories away; raise_a_turn_to_the_', 'member raises each kept turn to its', 'listeners, hand_a_crew_message_to_its_', 'member hands one message at a time and', 'counts it taken in, and run_an_owner_', 'signed_command runs a shape the owner', 'signed on a verified copy, in a sandbox;', 'end_a_launch_when_its_run_ends gives', 'the launch its run\'s lifeline, so a run', 'that ends takes its member with it'] },
+    { col: 2, kind: 'b-cmp', name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'judge_a_checkouts_tree', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes', 'run_marthas_own_git', 'empty_directory_of_a_launch', 'know_claude_codes_own_facts'], type: '[the launch gate]', code: true,
+      desc: ['Fingerprints the config and the tree', 'id at start, and allows only what was', 'approved, plus remember_a_members_', 'own_writes; judge_a_checkouts_tree', 'reads and judges a checkout\'s tree;', 'refuse_code_a_checkout_', 'runs_itself closes a checkout\'s scripts;', 'run_marthas_own_git the settings each', 'of Martha\'s own git runs carries, and', 'empty_directory_of_a_launch the place', 'their hooks are pointed at;', 'know_claude_codes_own_facts the names', 'and switches Claude Code itself reads'] },
   ],
   [
-    { col: 0, kind: 'b-dat', name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'row_streams_directory', 'dashboard_rows_directory', 'keep_what_the_owner_signed'], type: '[Martha\'s state]', code: true,
-      desc: ['One directory per project, named by a', 'hash of its path: approvals, launches,', 'keep_what_the_owner_signed;', 'row_streams_directory appends rows', 'as files; dashboard_rows_directory', 'writes the owner\'s row for a member as', 'one file, renamed into place whole'] },
-    { col: 1, kind: 'b-cmp', name: 'host_contract, linux_process_identity', names: ['host_contract', 'linux_process_identity'], type: '[the host contract, and this machine]', code: true,
-      desc: ['What the core may ask of a coding tool:', 'a clock, stores, running a process,', 'delivery in and out; linux_process_identity', 'answers all of it for this machine'] },
+    { col: 0, kind: 'b-dat', name: 'keep_martha_state_outside_the_checkout', names: ['keep_martha_state_outside_the_checkout', 'find_a_homes_state_root', 'row_streams_directory', 'dashboard_rows_directory', 'keep_what_the_owner_signed'], type: '[Martha\'s state]', code: true,
+      desc: ['One directory per project, named by a', 'hash of its path: approvals, launches,', 'keep_what_the_owner_signed;', 'find_a_homes_state_root says where a', 'home\'s state root is and what it keeps;', 'row_streams_directory appends rows', 'as files; dashboard_rows_directory', 'writes the owner\'s row for a member as', 'one file, renamed into place whole'] },
+    { col: 1, kind: 'b-cmp', name: 'host_contract, linux_process_identity', names: ['host_contract', 'linux_process_identity', 'read_a_kernel_and_a_home'], type: '[the host contract, and this machine]', code: true,
+      desc: ['What the core may ask of a coding tool:', 'a clock, stores, running a process,', 'delivery in and out; linux_process_identity', 'answers all of it for this machine, and', 'read_a_kernel_and_a_home adds a whole', 'process tree\'s readings and the launch', 'records a home\'s state root holds'] },
     { col: 2, kind: 'b-cmp', name: 'install_the_recorded_mesh_server', names: ['install_the_recorded_mesh_server', 'record_mesh_server_tools', 'record_ring_results', 'prove_the_mesh_server_bytes'], type: '[recorded trees]', code: true,
       desc: ['A tree by bytes, never by version:', 'record_mesh_server_tools records it,', 'record_ring_results rings one server', 'with another and keeps the keys,', 'prove_the_mesh_server_bytes compares it', 'again, and the launcher installs it'] },
   ],
@@ -684,24 +724,24 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
       desc: ['Every way text reaches a session and', 'every way a checkout starts code, each', 'row naming the gate on it; check_every_', 'path_is_gated fails CI on a gap'] },
     { col: 1, kind: 'b-cmp', name: 'take_in_a_turn, shell_tools, answer_a_tool_call', names: ['take_in_a_turn', 'take_in_a_tool_result', 'shell_tools', 'answer_a_tool_call', 'refuse_execution_after_ungated_text', 'read_a_ring_results_sender', 'trust_only_framed_envelopes', 'keep_the_shell_for_an_owner_signed_command', 'hash_a_file_under_a_tree', 'prove_a_mesh_answer_is_wordless', 'name_a_node_by_its_petname', 'session_records_in_rows', 'read_the_gate_mode', 'audit_the_gate_for_a_member', 'say_what_the_gate_does', 'apply_the_owners_release'], type: '[the shell gate]', code: true,
       desc: ['A turn or a tool\'s result: take_in_a_turn,', 'take_in_a_tool_result, shell_tools,', 'answer_a_tool_call, read_a_ring_results_', 'sender, refuse_execution_after_ungated_', 'text, trust_only_framed_envelopes; keep_', 'the_shell_for_an_owner_signed_command;', 'hash_a_file_under_a_tree, what a file is;', 'prove_a_mesh_answer_is_wordless,', 'name_a_node_by_its_petname; session_', 'records_in_rows keeps a session\'s', 'records in the host\'s row streams, and', 'a record nobody can vouch for is lost.', 'read_the_gate_mode says what the gate', 'does to each member (off, enforced or', 'audited); audit_the_gate_for_a_member', 'keeps the refusal an audited member was', 'not given, and say_what_the_gate_does', 'prints it; apply_the_owners_release reads', 'a member the owner released'] },
-    { col: 2, kind: 'b-cmp', name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
-      desc: ['The origin a host attests, carried with', 'the turn: attribute_a_cross_session_sender,', 'carry_taint_across_a_refresh, and the shell', 'gate\'s reading; trust_only_signed_lists is', 'how every list a gate trusts is opened'] },
+    { col: 2, kind: 'b-cmp', name: 'name_the_source_of_a_prompt', names: ['name_the_source_of_a_prompt', 'attribute_a_cross_session_sender', 'carry_taint_across_a_refresh', 'hear_every_turn_the_model_runs', 'trust_only_signed_lists'], type: '[whose text it was]', code: true,
+      desc: ['The origin a host attests, carried with', 'the turn: attribute_a_cross_session_sender,', 'carry_taint_across_a_refresh, and the shell', 'gate\'s reading; hear_every_turn_the_', 'model_runs hears every main turn the', 'model runs, whatever started it, and', 'records its source; trust_only_signed_', 'lists is how every list a gate trusts is', 'opened'] },
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'refuse_widening_a_member_reach'], type: '[loaded; the room is not built]', code: true,
       desc: ['Every launch loads these, though the room', 'they serve is not built: the node id a', 'member has; read_a_room_through_its_gate', 'gives the mesh server\'s tools, and refuse_', 'widening_a_member_reach refuses the rest'] },
-    { col: 1, kind: 'b-cmp', name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'hear_the_hosts_dialogs', 'refuse_a_member_writing_owner_memory', 'find_what_a_later_git_run_reads', 'hear_every_turn_the_model_runs'], type: '[the Claude Code host]', code: true,
-      desc: ['The host contract on Claude Code: the', 'plugin, its hooks, the relay on a socket', 'and the member\'s tools;', 'hear_the_hosts_dialogs reads in the', 'crew\'s words the dialogs the host', 'raises; refuse_a_member_writing_', 'owner_memory keeps a member\'s writes', 'out of the owner\'s memory, and find_', 'what_a_later_git_run_reads reads what', 'a later git run would read;', 'hear_every_turn_the_model_runs hears', 'each turn the model runs, whatever', 'started it'] },
-    { col: 2, kind: 'b-cmp', name: 'check_nothing_private_gets_in, check_every_link_resolves', names: ['check_nothing_private_gets_in', 'check_every_link_resolves', 'check_the_logos_are_valid_svg', 'check_no_test_the_base_passed_goes_missing', 'check_posted_text_carries_nothing_private', 'check_no_literal_restates_a_value', 'check_a_host_directory_stays_under_its_ceiling', 'check_every_recorded_host_test_is_run'], type: '[this repository\'s own checks]', code: true,
-      desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; so does a home path in the text', 'members post on GitHub, which check_', 'posted_text_carries_nothing_private', 'reads daily. A badge host that answers', '408 is asked again before its link is', 'broken; check_the_logos_are_valid_svg', 'holds every logo to well-formed XML;', 'check_no_test_the_base_passed_goes_', 'missing names a dropped test, and', 'check_no_literal_restates_a_value', 'names a literal spelling out a value', 'an exported constant already holds;', 'check_a_host_directory_stays_under_', 'its_ceiling fails a host directory', 'one code line over its ceiling, by name;', 'check_every_recorded_host_test_is_run', 'names a recorded-host case no CI job runs'] },
+    { col: 1, kind: 'b-cmp', name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'cut_the_rules_from_the_host_binary', 'refuse_settings_that_turn_hooks_off', 'load_the_hosts_markdown', 'install_the_mesh_server_for_claude_code', 'hear_the_hosts_dialogs', 'refuse_a_member_writing_owner_memory', 'find_what_a_later_git_run_reads', 'read_what_claude_code_says_of_an_agent'], host: CLAUDE_CODE, type: '[the Claude Code host]', code: true,
+      desc: ['The host contract on Claude Code: the', 'plugin, its hooks, the relay on a socket', 'and the member\'s tools; cut_the_rules_', 'from_the_host_binary holds the rules cut', 'out of the host, and refuse_settings_', 'that_turn_hooks_off the refusal of a', 'launch that reads one; load_the_hosts_', 'markdown is the markdown it loads and', 'the settings env reaching servers, and', 'install_the_mesh_server_for_claude_code', 'the server a launch hands the model;', 'hear_the_hosts_dialogs reads in the', 'crew\'s words the dialogs the host', 'raises; refuse_a_member_writing_', 'owner_memory keeps a member\'s writes', 'out of the owner\'s memory, and find_', 'what_a_later_git_run_reads reads what a', 'later git run would read; read_what_', 'claude_code_says_of_an_agent reads what', 'the host says of an agent that failed'] },
+    { col: 2, kind: 'b-cmp', name: 'check_nothing_private_gets_in, check_every_link_resolves', names: ['check_nothing_private_gets_in', 'check_every_link_resolves', 'check_the_logos_are_valid_svg', 'check_no_test_the_base_passed_goes_missing', 'check_posted_text_carries_nothing_private', 'check_no_literal_restates_a_value', 'check_a_host_directory_stays_under_its_ceiling', 'check_every_recorded_host_test_is_run', 'check_marthas_names_are_its_own', 'check_no_import_cycle'], type: '[this repository\'s own checks]', code: true,
+      desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; so does a home path in the text', 'members post on GitHub, which check_', 'posted_text_carries_nothing_private', 'reads daily. A badge host that answers', '408 is asked again before its link is', 'broken; check_the_logos_are_valid_svg', 'holds every logo to well-formed XML;', 'check_no_test_the_base_passed_goes_', 'missing names a dropped test, and', 'check_no_literal_restates_a_value', 'names a literal spelling out a value', 'an exported constant already holds;', 'check_a_host_directory_stays_under_', 'its_ceiling fails a host directory', 'one code line over its ceiling, by name;', 'check_every_recorded_host_test_is_run', 'names a recorded-host case no CI job runs;', 'check_marthas_names_are_its_own fails', 'a file, folder, tool, marker or', 'variable of Martha\'s that crew-code', 'names too, by name; and check_no_', 'import_cycle names the whole loop when', 'files of the core load each other'] },
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'install_the_pinned_installer', names: ['install_the_pinned_installer', 'read_the_words_of_martha_install', 'hold_the_launch_to_the_version_floor'], type: '[the installer this release pins]', code: true,
       desc: ['martha install: reads the pin from the', 'running release, fetches exactly that', 'installer version through run_the_nodes_', 'own_npm_alone, refuses other bytes, and', 'runs it with the words unchanged;', 'read_the_words_of_martha_install says', 'which words it takes, and hold_the_', 'launch_to_the_version_floor refuses', 'every other act of a release below the', 'floor this machine holds (martha#21)'] },
     { col: 1, kind: 'b-cmp', name: 'run_the_nodes_own_npm_alone', names: ['run_the_nodes_own_npm_alone'], type: '[npm, and nothing of the machine\'s]', code: true,
       desc: ['The npm beside this node, run with', 'empty user and global config, one named', 'registry, --ignore-scripts and an', 'environment built from HOME and PATH', 'alone: the mesh server and the installer,', 'one isolation'] },
-    { col: 2, kind: 'b-cmp', name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_progress', 'see_the_crew', 'tell_the_owner_a_session_waits', 'say_what_the_host_is_asking', 'ring_the_owner', 'see_who_is_free', 'keep_the_ledger', 'a_crews_tools', 'log_ledger', 'keep_the_crew_channel', 'send_a_crew_message', 'show_what_a_message_became', 'read_a_crew_line', 'hand_a_member_its_crew_text', 'nudge_the_supervisor', 'watch_waits', 'spend_the_github_budget', 'wait_for_ci'], type: '[the crew\'s rows and its ledger]', code: true,
-      desc: ['show_dashboard_beat holds a member\'s row', 'and the rule the newest beat wins;', 'report_progress moves it, see_the_crew', 'lays every one out, see_who_is_free', 'says who can take a package,', 'tell_the_owner_a_session_waits says what', 'the host is asking the owner;', 'say_what_the_host_is_asking decides which', 'of its events opens a dialog and which', 'closes it, ring_the_owner rings for it', 'once, and', 'a_crews_tools answers every tool the', 'crew registers.', 'keep_the_ledger loads log_ledger, whose', 'streams sit in the crew\'s own state;', 'keep_the_crew_channel is where a message', 'lives, send_a_crew_message writes one, and', 'show_what_a_message_became reads back', 'what became of it; read_a_crew_line reads', 'the HANDOFF and VERDICT lines of a', 'message, and hand_a_member_its_crew_text', 'composes the crew text a member is', 'handed at every session\'s start;', 'nudge_the_supervisor and watch_waits', 'find what has stalled from those rows', 'and lines, and the nudge asks GitHub', 'for each waiting package\'s pull-request', 'head and issue state (martha#320);', 'spend_the_github_budget spends the', 'crew\'s one GitHub allowance on those', 'reads, and wait_for_ci reads the CI on', 'a sha through it'] },
+    { col: 2, kind: 'b-cmp', name: 'show_dashboard_beat, keep_the_ledger', names: ['show_dashboard_beat', 'report_where_the_work_stands', 'see_the_crew', 'tell_the_owner_a_session_waits', 'say_what_the_host_is_asking', 'ring_the_owner', 'see_who_is_free', 'find_the_unheld_work', 'nudge_an_idle_crew', 'keep_the_ledger', 'a_crews_tools', 'log_ledger', 'keep_the_crew_channel', 'send_a_crew_message', 'show_what_a_message_became', 'read_a_crew_line', 'hand_a_member_its_crew_text', 'nudge_the_supervisor', 'watch_waits', 'spend_the_github_budget', 'wait_for_ci', 'recover_a_failed_act'], type: '[the crew\'s rows and its ledger]', code: true,
+      desc: ['show_dashboard_beat holds a member\'s row', 'and the rule the newest beat wins;', 'report_where_the_work_stands moves it,', 'see_the_crew lays every one out,', 'see_who_is_free says who can take a', 'package, tell_the_owner_a_session_waits', 'says what', 'the host is asking the owner;', 'say_what_the_host_is_asking decides which', 'of its events opens a dialog and which', 'closes it, ring_the_owner rings for it', 'once, and', 'a_crews_tools answers every tool the', 'crew registers.', 'keep_the_ledger loads log_ledger, whose', 'streams sit in the crew\'s own state;', 'keep_the_crew_channel is where a message', 'lives, send_a_crew_message writes one, and', 'show_what_a_message_became reads back', 'what became of it; read_a_crew_line reads', 'the HANDOFF and VERDICT lines of a', 'message, and hand_a_member_its_crew_text', 'composes the crew text a member is', 'handed at every session\'s start;', 'nudge_the_supervisor and watch_waits', 'find what has stalled from those rows', 'and lines, and the nudge asks GitHub', 'for each waiting package\'s pull-request', 'head and issue state (martha#320);', 'spend_the_github_budget spends the', 'crew\'s one GitHub allowance on those', 'reads, and wait_for_ci reads the CI on', 'a sha through it; find_the_unheld_work', 'lists the backlog work no member holds', 'and nudge_an_idle_crew names members', 'idle beside it (martha#319);', 'recover_a_failed_act names a failed', 'outward act, reads what is really', 'there and decides, one attempt at', 'most, then the Supervisor (martha#512)'] },
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'check_a_range_before_the_owner_says_yes', names: ['check_a_range_before_the_owner_says_yes', 'land_passed_work_as_one_batch', 'find_the_work_a_verdict_passed', 'open_and_finish_a_worktree', 'read_the_origin_a_clone_has', 'hold_a_package_back_from_a_batch', 'forecast_what_a_batch_lands', 'find_where_a_merge_clashes'], type: '[the crew\'s tools that act]', code: true,
@@ -712,16 +752,16 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
       desc: ['The Supervisor\'s standing items', '(martha#317): what it holds back, who', 'owes what, and the rulings it recorded', 'as the owner\'s words. A hold closes', 'only on evidence; a fresh Supervisor', 'session is handed them at its start,', 'and the pane shows them'] },
   ],
   [
-    { col: 0, kind: 'b-cmp', name: 'write_my_handover, refresh_a_member', names: ['write_my_handover', 'refresh_a_member'], type: '[the host writes a handover]', code: true,
-      desc: ['A member\'s handover is written by the', 'host, at the path the host chose, and', 'stamped: one file per member per day', 'in the crew\'s own store, so a file the', 'member wrote itself is not a handover.', 'refresh_a_member is the flow around it:', 'when a refresh is due, the ask, the', 'send-back and the decline, the clear,', 'and the prompt the successor resumes on'] },
+    { col: 0, kind: 'b-cmp', name: 'write_my_handover, refresh_a_member', names: ['write_my_handover', 'refresh_a_member', 'end_a_running_turn', 'keep_the_package_contract'], type: '[the host writes a handover]', code: true,
+      desc: ['A member\'s handover is written by the', 'host, at the path the host chose, and', 'stamped: one file per member per day', 'in the crew\'s own store, so a file the', 'member wrote itself is not a handover.', 'refresh_a_member is the flow around it:', 'when a refresh is due, the ask, the', 'send-back and the decline, the clear,', 'and the prompt the successor resumes on;', 'end_a_running_turn ends the turn a', 'handover waits behind (martha#311).', 'keep_the_package_contract keeps a', 'package\'s contract as a version of it', 'in the package\'s ledger and hands the', 'same version to a member at its start', 'and after a refresh (martha#513)'] },
     { col: 1, kind: 'b-cmp', name: 'park_and_wake_a_member', names: ['park_and_wake_a_member', 'wake_a_member', 'stop_and_restart_a_member'], type: '[a park that outlives a session]', code: true,
       desc: ['A member\'s park is a marker in the', 'crew\'s store, so a clear, a restart or a', 'refresh cannot lose it; who may park', 'another member is the declaration\'s', 'table, not who_may_act (martha#255 r=3).', 'wake_a_member is martha wake: the park', 'cleared and the member started on its', 'newest handover (part 2).', 'stop_and_restart_a_member is martha ls', 'and martha stop: a stop is a request the', 'launcher holding the member acts on', '(martha#312)'] },
-    { col: 2, kind: 'b-cmp', name: 'crew_files_directory', names: ['crew_files_directory'], type: '[the crew\'s store, on this machine]', code: true,
+    { col: 2, kind: 'b-cmp', name: 'keep_the_crews_files_as_directories', names: ['keep_the_crews_files_as_directories'], type: '[the crew\'s store, on this machine]', code: true,
       desc: ['The host contract\'s crew store as files', 'in one directory: a place per name, a', 'file kept whole under a staging name', 'and 0600, and nothing read that is not', 'this user\'s alone (martha#254, #255)'] },
   ],
   [
-    { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, put_the_owners_model_back', names: ['switch_a_members_model', 'put_the_owners_model_back', 'owners_settings_directory', 'run_reviews_on_the_review_model', 'name_a_review_the_host_reported_failed', 'read_a_failed_agents_report'], type: '[a model, the owner\'s, a review\'s]', code: true,
-      desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model;', 'read_a_failed_agents_report cuts the', 'host\'s failed-agent report from its own', 'text, and name_a_review_the_host_', 'reported_failed names that review, on the', 'model it ran on and in the host\'s words', '(martha#390)'] },
+    { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, put_the_owners_model_back', names: ['switch_a_members_model', 'put_the_owners_model_back', 'owners_settings_directory', 'run_reviews_on_the_review_model', 'name_a_review_the_host_reported_failed'], type: '[a model, the owner\'s, a review\'s]', code: true,
+      desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model;', 'name_a_review_the_host_reported_failed', 'names a review the host reports failed,', 'from the report read_what_claude_code_s', 'ays_of_an_agent cuts', 'from the host\'s own text, on the model it', 'ran on and in the host\'s words', '(martha#390)'] },
   ],
 ]
 

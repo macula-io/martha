@@ -64,7 +64,7 @@ test('a compaction and a handover are not turn sources: they are inheritances', 
 test('only the attested paths may carry an identity', () => {
   assert.deepEqual([...sourcesThatMayCarryAnIdentity()].sort(), [
     'backlog_digest',
-    'crew_room',
+    'channel_message',
     'cross_session',
     'owner_typed',
     'ring',
@@ -95,7 +95,7 @@ test('every unattested source drops the identity the host offers', () => {
 
 test('an attested path keeps the identity the host holds', () => {
   const session = takeInTurn(beginSession(store(), 's-1'), {
-    source: 'crew_room',
+    source: 'channel_message',
     from_identity: supervisor_identity,
   }, bindNothing)
   assert.equal(shellAllowed(session), true)

@@ -14,14 +14,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { parkedPlace, theParkMarker, theParkOf } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { THE_TOOLS_ASK, PARK_A_MEMBER, WAKE_A_MEMBER, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+import { THE_TOOLS_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+import { PARK_A_MEMBER, WAKE_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
 const HOST_MODELS = ['opus', 'fable']
@@ -55,14 +56,14 @@ async function aCrewOfTools(member: string): Promise<ACrew> {
     beats: dashboardRowsIn(join(home, 'row')),
     root,
     documents,
-    stores: { crew: crewFilesDirectory(crew) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
   })
   return { tools, crew }
 }
 
 /** What the crew's store holds for `member`, as the wake and the launcher read it. */
 function theParkInTheStore(crew: string, member: string) {
-  const place = parkedPlace({ stores: { crew: crewFilesDirectory(crew) } })
+  const place = parkedPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
   assert.ok(!('refusal' in place), `the crew's store refused its park place: ${'refusal' in place ? place.refusal : ''}`)
   return theParkOf(place, member)
 }

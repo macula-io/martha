@@ -5,7 +5,7 @@
 // `launcherPlacesOf`, as a real launch does, and drive the channel, the carrier and the receipts through those places:
 // A says something to B from the worktree, B is handed it in the clone, and A reads that B took it in.
 
-import { OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -17,12 +17,12 @@ import { test } from 'node:test'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { carryingTo, THE_NEXT_MESSAGE_ASK, THE_TURN_STARTED_ASK, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
-import { openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { STATE_ROOT_NAME, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { launcherPlacesOf } from './start_a_member.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 
@@ -43,8 +43,8 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   const home = mkdtempSync(join(tmpdir(), 'martha-253-roots-'))
   t.after(() => removeTheTree(home))
   const clone = join(home, 'project')
-  mkdirSync(join(clone, '.crew'), { recursive: true })
-  writeFileSync(join(clone, '.crew', 'crew.json'), DECLARATION)
+  mkdirSync(join(clone, DECLARATION_DIRECTORY), { recursive: true })
+  writeFileSync(join(clone, DECLARATION_DIRECTORY, DECLARATION_FILE), DECLARATION)
   writeFileSync(join(clone, 'README.md'), 'a project\n')
   git(clone, 'init', '-q', '.')
   git(clone, 'add', '--all')
@@ -52,7 +52,7 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   const worktree = join(home, 'worktree')
   git(clone, 'worktree', 'add', '-q', '--detach', worktree)
 
-  const state = openState(join(home, '.local', 'state', 'martha'), clone)
+  const state = openState(join(home, '.local', 'state', STATE_ROOT_NAME), clone)
   assert.ok('directory' in state, 'the state opens')
   const inTheClone = launcherPlacesOf(state, join(home, 'relay-places'), clone)
   const inTheWorktree = launcherPlacesOf(state, join(home, 'relay-places'), worktree)
@@ -60,7 +60,7 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
   assert.equal(inTheWorktree.rows, inTheClone.rows, 'a worktree and its clone were given different row stores, so no message can cross them')
 
   // Both members read and write the one store the two places name, as their launchers do.
-  const declaredAt = (root: string): string => join(root, '.crew', 'crew.json')
+  const declaredAt = (root: string): string => join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   const { host } = hostForTests({ now: 1_000, documents: { [declaredAt(clone)]: DECLARATION, [declaredAt(worktree)]: DECLARATION } })
   const channel = { clock: host.clock, stores: { rows: rowStreamsDirectory(inTheClone.rows) } }
   // One carrier per member, as one launch holds one: the turn start the mod reports reaches the carrier that handed.
@@ -71,7 +71,7 @@ test('#253: a message a member sends in a worktree reaches its reviewer in the c
     return held
   }
   const crewOf = (member: string, root: string): ReturnType<typeof crewToolsOver> =>
-    crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: crewFilesDirectory(join(home, 'crew-files')) }, carrier: carrierOf(member) })
+    crewToolsOver({ member, ledger: channel, beats: dashboardRowsIn(join(home, `row-${member}`)), root, documents: host.stores.documents, stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'crew-files')) }, carrier: carrierOf(member) })
 
   const sent = await crewOf('Builder', worktree).answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-a')
   assert.ok('answer' in sent, `the send from the worktree was not answered: ${JSON.stringify(sent)}`)

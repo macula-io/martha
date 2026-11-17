@@ -1,11 +1,11 @@
 {
   "_why": "What the Claude Code host itself says, recorded from its binary so the adapter derives from the host and not from a list typed by hand (#41). Re-record with: npm run record:claude-code-host -- <claude binary> <version>.",
-  "host_version": "2.1.325",
+  "host_version": "2.1.326",
   "memory_off": {
-    "version": "2.1.325",
-    "file_mode_guard": "function Db(){if(ho())return\"off\";if(AE())return\"off\";if(K())return\"off\";let e=process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY;if(Pe(e))return\"off\";if(ws(e))return\"forced_on\";return Nb()?\"off\":\"unset\"}",
+    "version": "2.1.326",
+    "file_mode_guard": "function Xb(){if(Wo())return\"off\";if(LT())return\"off\";if(q())return\"off\";let e=process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY;if(Ce(e))return\"off\";if(Ss(e))return\"forced_on\";return Jb()?\"off\":\"unset\"}",
     "hosted_mode_variable": "CLAUDE_CODE_POST_TURN_MEMORY",
-    "on_check": "function Pe(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}"
+    "on_check": "function Ce(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}"
   },
   "session_start_schema": "hook_event_name:T(\"SessionStart\"),source:B([\"startup\",\"resume\",\"clear\",\"compact\",\"fork\"])",
   "classic_hook_events": [
@@ -62,16 +62,16 @@
     "auth_storage_failure",
     "plugin_notification"
   ],
-  "prompt_origin_mapper": "function N_e(e,n){switch(e.kind){case\"human\":return n===!0?{kind:\"bridge\"}:{kind:\"composer\"};case\"plugin\":return e.asUser===!0?{kind:\"plugin\",name:e.name,asUser:!0}:{kind:\"plugin\",name:e.name};case\"channel\":return{kind:\"channel\",server:e.server};case\"task-notification\":{let{subkind:r}=e;return r!==void 0&&IVe(r)?{kind:r}:{kind:\"task-notification\"}}case\"peer\":case\"coordinator\":case\"unclassified\":case\"observer\":case\"auto-continuation\":case\"observer-activity\":case\"slack-ping\":return{kind:e.kind};case\"voice-call\":return{kind:\"unclassified\"}}}",
-  "prompt_origin_fallback": "function RVi({origin:e,bridgeOrigin:n,wakeupSource:r,mode:s,promptSource:h}){if(e)return N_e(e,n);if(s===\"task-notification\")return{kind:\"task-notification\"};if(r)return{kind:\"scheduled-trigger\"};switch(h){case\"typed\":case\"queued\":case\"suggestion_accepted\":return{kind:\"unclassified\"};case\"sdk\":return{kind:\"sdk\"};case\"system\":return{kind:\"unclassified\"}}}",
-  "prompt_origin_subkinds": "var XHt=new Set([\"scheduled-trigger\",\"peer-send-message\",\"projects-relay\"]);var IVe=(e)=>XHt.has(e)",
-  "hooks_switches": "function s(){let o=be(\"policySettings\");if(o?.disableAllHooks===!0)return{};if(o?.allowManagedHooksOnly===!0||ho())return o?.hooks??{};if(yl(\"hooks\"))return o?.hooks??{};let t=Pr();if(t.disableAllHooks===!0){if(!OWr())return o?.hooks??{};return l()}if(vye())return l();return c(t.hooks??{})}",
+  "prompt_origin_mapper": "function Gwe(e,n){switch(e.kind){case\"human\":return n===!0?{kind:\"bridge\"}:{kind:\"composer\"};case\"plugin\":return e.asUser===!0?{kind:\"plugin\",name:e.name,asUser:!0}:{kind:\"plugin\",name:e.name};case\"channel\":return{kind:\"channel\",server:e.server};case\"task-notification\":{let{subkind:r}=e;return r!==void 0&&i3e(r)?{kind:r}:{kind:\"task-notification\"}}case\"peer\":case\"coordinator\":case\"unclassified\":case\"observer\":case\"auto-continuation\":case\"observer-activity\":case\"slack-ping\":return{kind:e.kind};case\"voice-call\":return{kind:\"unclassified\"}}}",
+  "prompt_origin_fallback": "function pra({origin:e,bridgeOrigin:n,wakeupSource:r,mode:a,promptSource:h}){if(e)return Gwe(e,n);if(a===\"task-notification\")return{kind:\"task-notification\"};if(r)return{kind:\"scheduled-trigger\"};switch(h){case\"typed\":case\"queued\":case\"suggestion_accepted\":return{kind:\"unclassified\"};case\"sdk\":return{kind:\"sdk\"};case\"system\":return{kind:\"unclassified\"}}}",
+  "prompt_origin_subkinds": "var Gzt=new Set([\"scheduled-trigger\",\"peer-send-message\",\"projects-relay\"]);var i3e=(e)=>Gzt.has(e)",
+  "hooks_switches": "function r(){let o=ye(\"policySettings\");if(o?.disableAllHooks===!0)return{};if(o?.allowManagedHooksOnly===!0||Wo())return o?.hooks??{};if(Ul(\"hooks\"))return o?.hooks??{};let t=Hr();if(t.disableAllHooks===!0){if(!fYr())return o?.hooks??{};return l()}if(rre())return l();return c(t.hooks??{})}",
   "hooks_switch_calls": [
-    "function ho(){return Pe(process.env.CLAUDE_CODE_SAFE_MODE)||i(\"--safe-mode\")||!1}",
-    "function yl(o){let t=be(\"policySettings\")?.strictPluginOnlyCustomization;if(t===!0)return!0;if(Array.isArray(t))return t.includes(o);return!1}",
-    "function vye(){return ge()&&Uzo()}",
+    "function Wo(){return Ce(process.env.CLAUDE_CODE_SAFE_MODE)||NHt(\"--safe-mode\")||!1}",
+    "function Ul(o){let t=ye(\"policySettings\")?.strictPluginOnlyCustomization;if(t===!0)return!0;if(Array.isArray(t))return t.includes(o);return!1}",
+    "function rre(){return ge()&&$Zo()}",
     "function ge(){return!n().host.launchOptions.isInteractive()}",
-    "function Uzo(){return yYe(()=>i.CLAUDE_CODE_IGNORE_PERSISTED_TRUST)||process.argv.includes(\"--ignore-persisted-trust\")}"
+    "function $Zo(){return DZe(()=>s.CLAUDE_CODE_IGNORE_PERSISTED_TRUST)||process.argv.includes(\"--ignore-persisted-trust\")}"
   ],
   "managed_settings": {
     "dir": "/etc/claude-code",
@@ -80,200 +80,230 @@
   },
   "frontmatter_pattern": "^---\\s*\\n([\\s\\S]*?)---\\s*\\n?",
   "frontmatter_reader": [
-    "function Rd(e,n,r){let s=e;e=UA(e);let h=e.indexOf(\"---\",3)<0?null:e.match(qx);",
-    "function UA(e){return e.charCodeAt(0)===65279?e.slice(1):e}"
+    "function Cd(e,n,r){let a=e;e=oR(e);let h=e.indexOf(\"---\",3)<0?null:e.match(TI);",
+    "function oR(e){return e.charCodeAt(0)===65279?e.slice(1):e}"
   ],
-  "markdown_loader": "async function vur(e,n,r,s){let h=Date.now(),y=yf(),k=y===null?null:M0(y,e),v=M0(lv(),\".claude\",e),H=await $pe(e,n),q=new Set(await Promise.all(H.map(async(Ct)=>mm(await wCe(Ct).catch(()=>Ct))))),Y=e===\"agents\"?L(await Promise.all(ed().map(async(Ct)=>{let Pt=M0(sQe(Ct),\".claude\",e),Mt=await wCe(Pt).catch(()=>Pt);return await a2e(Pt)?void 0:Mt}))).filter((Ct)=>Ct!==void 0&&!q.has(mm(Ct))):[],ne=H.length;iQe(H,e,n);for(let Ct=H.length-1;Ct>=ne;Ct--)if(await a2e(H[Ct]))H.splice(Ct,1);let ve=e===\"agents\"&&yl(\"agents\"),ke=Kt(\"projectSettings\")&&!ve,Ce=s||Woe();if(Ce&&!K())t(`${v}: not read: this session takes its managed settings from its organization, and its own account could have written the managed folder`);let[Ae,xe,Fe,Ne]=await Promise.all([(ije()||Ce?Promise.resolve([]):_G(v,r)).then((Ct)=>Ct.map((Pt)=>({...Pt,baseDir:v,source:\"policySettings\"}))),k!==null&&Kt(\"userSettings\")&&!ve?(r?Rur(e,k,r):_G(k)).then((Ct)=>Ct.map((Pt)=>({...Pt,baseDir:k,source:\"userSettings\"}))):Promise.resolve([]),ke?Promise.all(H.map((Ct)=>_G(Ct,r).then((Pt)=>Pt.map((Mt)=>({...Mt,baseDir:Ct,source:\"projectSettings\"}))))):Promise.resolve([]),ke?Promise.all(Y.map((Ct)=>_G(Ct,r).then((Pt)=>Pt.map((Mt)=>({...Mt,baseDir:Ct,source:\"projectSettings\",fromAdditionalDirectory:!0}))))):Promise.resolve([])]),Xe=Fe.flat(),tt=Ne.flat(),st=[...Q$o(Ae),...xe,...tt,...Xe],ot=await Promise.all(st.map((Ct)=>Tur(Ct.filePath))),yt=new Map,_t=[];for(let[Ct,Pt]of st.entries()){let Mt=ot[Ct]??null;if(Mt===null){_t.push(Pt);continue}let Nt=yt.get(Mt);if(Nt!==void 0){t(`Skipping duplicate file '${Pt.filePath}' from ${Pt.source} (same inode already loaded from ${Nt})`);continue}yt.set(Mt,Pt.source),_t.push(Pt)}let vt=st.length-_t.length;if(vt>0)t(`Deduplicated ${vt} files in ${e} (same inode via symlinks or hard links)`);return l(\"tengu_dir_search\",{durationMs:Date.now()-h,managedFilesFound:Ae.length,userFilesFound:xe.length,projectFilesFound:Xe.length,projectDirsSearched:H.length,subdir:f(e)}),_t}",
+  "markdown_loader": "async function Nbr(e,n,r,a){let h=Date.now(),y=ff(),k=y===null?null:hU(y,e),v=hU(KS(),\".claude\",e),N=await e_e(e,n),V=new Set(await Promise.all(N.map(async(Pt)=>sh(await lPe(Pt).catch(()=>Pt))))),oe=e===\"agents\"?D(await Promise.all(Wl().map(async(Pt)=>{let Dt=hU(fnt(Pt),\".claude\",e),Lt=await lPe(Dt).catch(()=>Dt);return await OKe(Dt)?void 0:Lt}))).filter((Pt)=>Pt!==void 0&&!V.has(sh(Pt))):[],re=N.length;pnt(N,e,n);for(let Pt=N.length-1;Pt>=re;Pt--)if(await OKe(N[Pt]))N.splice(Pt,1);let _e=e===\"agents\"&&Ul(\"agents\"),ke=Vt(\"projectSettings\")&&!_e,Re=a||yae();if(Re&&!q())t(`${v}: not read: this session takes its managed settings from its organization, and its own account could have written the managed folder`);let[xe,Pe,Be,Fe]=await Promise.all([(uHe()||Re?Promise.resolve([]):bq(v,r)).then((Pt)=>Pt.map((Dt)=>({...Dt,baseDir:v,source:\"policySettings\"}))),k!==null&&Vt(\"userSettings\")&&!_e?(r?$br(e,k,r):bq(k)).then((Pt)=>Pt.map((Dt)=>({...Dt,baseDir:k,source:\"userSettings\"}))):Promise.resolve([]),ke?Promise.all(N.map((Pt)=>bq(Pt,r).then((Dt)=>Dt.map((Lt)=>({...Lt,baseDir:Pt,source:\"projectSettings\"}))))):Promise.resolve([]),ke?Promise.all(oe.map((Pt)=>bq(Pt,r).then((Dt)=>Dt.map((Lt)=>({...Lt,baseDir:Pt,source:\"projectSettings\",fromAdditionalDirectory:!0}))))):Promise.resolve([])]),qe=Be.flat(),Qe=Fe.flat(),ot=[...N5o(xe),...Pe,...Qe,...qe],it=await Promise.all(ot.map((Pt)=>Dbr(Pt.filePath))),kt=new Map,St=[];for(let[Pt,Dt]of ot.entries()){let Lt=it[Pt]??null;if(Lt===null){St.push(Dt);continue}let $t=kt.get(Lt);if($t!==void 0){t(`Skipping duplicate file '${Dt.filePath}' from ${Dt.source} (same inode already loaded from ${$t})`);continue}kt.set(Lt,Dt.source),St.push(Dt)}let At=ot.length-St.length;if(At>0)t(`Deduplicated ${At} files in ${e} (same inode via symlinks or hard links)`);return l(\"tengu_dir_search\",{durationMs:Date.now()-h,managedFilesFound:xe.length,userFilesFound:Pe.length,projectFilesFound:qe.length,projectDirsSearched:N.length,subdir:f(e)}),St}",
   "markdown_kinds": [
     "agents",
     "commands",
     "skills"
   ],
-  "output_style_schema": "{name:F_().optional().describe(\"Style name used in the Output style picker in `/config` and in settings. Defaults to the filename.\"),description:F_().optional().describe(\"Shown in the Output style picker in `/config`.\"),\"keep-coding-instructions\":oN().optional().describe(\"If true, the default coding instructions stay in the system prompt alongside this style.\"),\"force-for-plugin\":oN().optional().describe(\"@internal \\u2014 only meaningful for plugin-bundled styles; ignored for user styles\")}",
+  "output_style_schema": "{name:q_().optional().describe(\"Style name used in the Output style picker in `/config` and in settings. Defaults to the filename.\"),description:q_().optional().describe(\"Shown in the Output style picker in `/config`.\"),\"keep-coding-instructions\":BF().optional().describe(\"If true, the default coding instructions stay in the system prompt alongside this style.\"),\"force-for-plugin\":BF().optional().describe(\"@internal \\u2014 only meaningful for plugin-bundled styles; ignored for user styles\")}",
   "user_output_styles_dir": "user_output_styles_dir:o().optional().describe(\"@internal Absolute path of the user-level output-styles directory this CLI lists styles from: the output-styles folder of the config home as the CLI resolves it after the settings env blocks are applied, so a CLAUDE_CONFIG_DIR set in user or managed settings is honored. A host that writes a user-level style file writes it here; absent on older CLIs, where the host falls back to its own reading of CLAUDE_CONFIG_DIR.\")",
   "managed_folder_guard_calls": {
     "guard_calls": {
-      "ije": 0,
-      "Woe": 1
+      "uHe": 0,
+      "yae": 1
     },
     "functions": [
       {
-        "function": "function ije(){return K()||XV()}",
+        "function": "function uHe(){return q()||wV()}",
         "calls": {
-          "K": 2,
-          "XV": 3
+          "q": 2,
+          "wV": 3
         }
       },
       {
-        "function": "function Woe(e=Za(lv(),\".claude\")){if(!GWe())return!1;if(K())return!0;let o=oo(),r=tk(e),n=o.managedFileProtections.siblingRecords,s=n.get(r);if(s===void 0){try{let p=Ja(r);s={uid:p.uid,gid:p.gid,mode:p.mode}}catch{s=\"none\"}n.set(r,s)}let i=s===\"none\"?void 0:s;return Ewn(o,r,i,i)}",
+        "function": "function yae(e=zm(KS(),\".claude\")){if(!fKe())return!1;if(q())return!0;return Jm(e)}",
         "calls": {
-          "lv": 4,
-          "GWe": 5,
-          "K": 2,
-          "oo": 6,
-          "Ewn": 7
+          "KS": 4,
+          "fKe": 5,
+          "q": 2,
+          "Jm": 6
         }
       },
       {
-        "function": "function K(){return Gt()}",
+        "function": "function q(){return Et()}",
         "calls": {
-          "Gt": 8
+          "Et": 7
         }
       },
       {
-        "function": "function XV(){return!1}",
+        "function": "function wV(){return!1}",
         "calls": {}
       },
       {
-        "function": "function lv(){return uu.getManagedFilePath()}",
+        "function": "function KS(){return Su.getManagedFilePath()}",
         "calls": {}
       },
       {
-        "function": "function GWe(){let e=WWe;if(e.isAsking)return e.readAs??=_p(),e.readAs;let n=_p();if(e.asks!==void 0){e.isAsking=!0;try{n=e.asks()}finally{e.isAsking=!1}}let r=e.readAs!==void 0&&e.readAs!==n;if(e.readAs=n,r)oo().invalidatePolicyLayer();return n}",
+        "function": "function fKe(){let e=uKe;if(e.isAsking)return e.readAs??=Hp(),e.readAs;let n=Hp();if(e.asks!==void 0){e.isAsking=!0;try{n=e.asks()}finally{e.isAsking=!1}}let r=e.readAs!==void 0&&e.readAs!==n;if(e.readAs=n,r)eo().invalidatePolicyLayer();return n}",
         "calls": {
-          "_p": 9,
-          "oo": 6
+          "Hp": 8,
+          "eo": 9
         }
       },
       {
-        "function": "function oo(){return v7r.of(F().host)}",
+        "function": "function Jm(e){let o=eo(),r=KR(e),n=o.managedFileProtections.siblingRecords,s=n.get(r);if(s===void 0){try{let p=Xm(r);s={uid:p.uid,gid:p.gid,mode:p.mode}}catch{s=\"none\"}n.set(r,s)}let i=s===\"none\"?void 0:s;return APn(o,r,i,i)}",
         "calls": {
-          "F": 10
+          "eo": 9,
+          "APn": 10
         }
       },
       {
-        "function": "function Ewn(e,n,r,s){let l=process.geteuid?.(),c=process.getuid?.();if(Gu(!0)&&(n===zlt||n.startsWith(`${CH}${C_}`)))return Tu;if(l===0||c===0)return!0;if(R()===\"windows\"||l===void 0)return Tu;let f=e.managedDocumentLinks.linkOf(n),m=lu(l,c);if(Os(m,r,f===null?s:r)!==!1||f?.kind===\"unverified\")return!0;let y=e.policy.writableNow??=new Map,S=y.get(n)??As(n);if(y.set(n,S),S!==\"no\")return!0;let b=e.policy.walkedDocuments??=new Map,k=b.get(n)??du(n,m,e.policy.certainDirectories??=new Map);return b.set(n,k),k}",
+        "function": "function Et(){return n().host.launchOptions.diskless()}",
         "calls": {
-          "Gu": 11,
-          "R": 12,
-          "lu": 13,
-          "Os": 14,
-          "As": 15,
-          "du": 16
+          "n": 11
         }
       },
       {
-        "function": "function Gt(){return n().host.launchOptions.diskless()}",
+        "function": "function Hp(){return uh()??nG()}",
         "calls": {
-          "n": 17
+          "uh": 12,
+          "nG": 13
         }
       },
       {
-        "function": "function _p(){return ih()??zj()}",
+        "function": "function eo(){return Hlo.of(F().host)}",
         "calls": {
-          "ih": 18,
-          "zj": 19
+          "F": 14
         }
+      },
+      {
+        "function": "function APn(e,n,r,a){let l=process.geteuid?.(),d=process.getuid?.();if(tp(!0)&&(n===Amt||n.startsWith(`${dF}${U_}`)))return ju;if(l===0||d===0)return!0;if(P()===\"windows\"||l===void 0)return ju;let g=e.managedDocumentLinks.linkOf(n),f=mu(l,d);if(Os(f,r,g===null?a:r)!==!1||g?.kind===\"unverified\")return!0;let y=e.policy.writableNow??=new Map,S=y.get(n)??As(n);if(y.set(n,S),S!==\"no\")return!0;let b=e.policy.walkedDocuments??=new Map,v=b.get(n)??hu(n,f,e.policy.certainDirectories??=new Map);return b.set(n,v),v}",
+        "calls": {
+          "tp": 15,
+          "P": 16,
+          "mu": 17,
+          "Os": 18,
+          "As": 19,
+          "hu": 20
+        }
+      },
+      {
+        "function": "function n(){return b()?.session??v}",
+        "calls": {}
+      },
+      {
+        "function": "function uh(){try{return sl()===void 0?void 0:aj()}catch(e){i(e);return}}",
+        "calls": {
+          "sl": 21,
+          "aj": 22,
+          "i": 23
+        }
+      },
+      {
+        "function": "function nG(){let e=s.CLAUDE_CODE_ENTRYPOINT;return e!==void 0&&i.has(e)}",
+        "calls": {}
       },
       {
         "function": "function F(){return n()}",
         "calls": {
-          "n": 17
+          "n": 11
         }
       },
       {
-        "function": "function Gu(e){return R()===\"wsl\"&&(!e||u8r())}",
+        "function": "function tp(e){return P()===\"wsl\"&&(!e||Sso())}",
         "calls": {
-          "R": 12,
-          "u8r": 20
+          "P": 16,
+          "Sso": 24
         }
       },
       {
-        "function": "function R(){return o().getPlatform()}",
+        "function": "function P(){return s().getPlatform()}",
         "calls": {
-          "o": 21
+          "s": 25
         }
       },
       {
-        "function": "function lu(e,n){return{uids:n===void 0||n===e?[e]:[e,n],groups:()=>[...process.getgroups?.()??[],...process.getegid?[process.getegid()]:[],...process.getgid?[process.getgid()]:[]]}}",
+        "function": "function mu(e,n){return{uids:n===void 0||n===e?[e]:[e,n],groups:()=>[...process.getgroups?.()??[],...process.getegid?[process.getegid()]:[],...process.getgid?[process.getgid()]:[]]}}",
         "calls": {}
       },
       {
-        "function": "function Os(e,n,r){for(let s of e.uids){let l=$Ua({file:n,folder:r,posix:!0,euid:s,groups:e.groups});if(l!==!1)return l}return!1}",
+        "function": "function Os(e,n,r){for(let a of e.uids){let l=XXa({file:n,folder:r,posix:!0,euid:a,groups:e.groups});if(l!==!1)return l}return!1}",
         "calls": {
-          "$Ua": 22
+          "XXa": 26
         }
       },
       {
-        "function": "function As(e){try{return ou(e,Cs.W_OK),\"yes\"}catch(n){return au(n)}}",
+        "function": "function As(e){try{return du(e,Cs.W_OK),\"yes\"}catch(n){return fu(n)}}",
         "calls": {
-          "au": 23
+          "fu": 27
         }
       },
       {
-        "function": "function du(e,n,r){let s=Es(e);try{for(let l=0;l<=MS;l++){let c=OS(s).root,g,f=s.slice(c.length).split(eu).filter(Boolean),m;for(let[h,y]of f.entries()){let S=r.get(c);if(S===void 0){g??=Qc(c);let v={uid:g.uid,gid:g.gid,mode:g.mode};S=Os(n,v,v)===!1&&As(c)===\"no\",r.set(c,S)}if(!S)return!0;let b=vs(c,y);if(r.has(b)){c=b,g=void 0;continue}let k=Qc(b);if(k.isSymbolicLink()){let v=wS(b),H=v.split(eu).filter((M)=>M&&M!==\".\");if(H.lastIndexOf(\"..\")>H.findIndex((M)=>M!==\"..\"))return!0;m=Es(c,v,...f.slice(h+1));break}c=b,g=k}if(m===void 0)return!1;s=m}}catch{}return!0}",
+        "function": "function hu(e,n,r){let a=vs(e);try{for(let l=0;l<=WS;l++){let d=HS(a).root,p,g=a.slice(d.length).split(iu).filter(Boolean),f;for(let[h,y]of g.entries()){let S=r.get(d);if(S===void 0){p??=su(d);let k={uid:p.uid,gid:p.gid,mode:p.mode};S=Os(n,k,k)===!1&&As(d)===\"no\",r.set(d,S)}if(!S)return!0;let b=ks(d,y);if(r.has(b)){d=b,p=void 0;continue}let v=su(b);if(v.isSymbolicLink()){let k=TS(b),N=k.split(iu).filter((R)=>R&&R!==\".\");if(N.lastIndexOf(\"..\")>N.findIndex((R)=>R!==\"..\"))return!0;f=vs(d,k,...g.slice(h+1));break}d=b,p=v}if(f===void 0)return!1;a=f}}catch{}return!0}",
         "calls": {
-          "Os": 14,
-          "As": 15
+          "Os": 18,
+          "As": 19
         }
       },
       {
-        "function": "function n(){return b()?.session??y}",
+        "function": "function sl(){return n().entrypoint}",
+        "calls": {
+          "n": 28
+        }
+      },
+      {
+        "function": "function aj(){let e=sl();return e!==void 0&&i.has(e)}",
+        "calls": {
+          "sl": 21
+        }
+      },
+      {
+        "function": "function i(t){let e=H(t);try{if(Ce(process.env.CLAUDE_CODE_USE_BEDROCK)||Ce(process.env.CLAUDE_CODE_USE_VERTEX)||Ce(process.env.CLAUDE_CODE_USE_FOUNDRY)||Ce(process.env.CLAUDE_CODE_USE_ANTHROPIC_AWS)||Ce(process.env.CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD)||Ce(process.env.CLAUDE_CODE_USE_MANTLE)||process.env.DISABLE_ERROR_REPORTING||ht())return;let s={error:xMn(e),timestamp:new Date().toISOString()};mgt.remember(s),mgt.dispatch({type:\"error\",error:e})}catch{}}",
+        "calls": {
+          "H": 29,
+          "Ce": 30,
+          "ht": 31,
+          "xMn": 32
+        }
+      },
+      {
+        "function": "function Sso(){let e=Jrs();return e!==void 0&&yZt(e)}",
+        "calls": {
+          "Jrs": 33,
+          "yZt": 34
+        }
+      },
+      {
+        "function": "function s(){return h??=new u({platform:\"linux\",env:process.env,readProcVersionSync:Jrs,readProcVersion:()=>f(\"/proc/version\",{encoding:\"utf8\"}),osRelease:p,readOsRelease:()=>f(\"/etc/os-release\",\"utf8\")})}",
         "calls": {}
       },
       {
-        "function": "function ih(){try{return ol()===void 0?void 0:lq()}catch(e){a(e);return}}",
-        "calls": {
-          "ol": 24,
-          "lq": 25,
-          "a": 26
-        }
-      },
-      {
-        "function": "function zj(){let e=i.CLAUDE_CODE_ENTRYPOINT;return e!==void 0&&r.has(e)}",
+        "function": "function XXa({file:e,folder:t,euid:o,groups:r,posix:s}){if(!s||o===void 0)return;if(o===0)return!0;let i=[e,t].filter((l)=>l!==void 0),a=i.map((l)=>{if(l.uid===o||(l.mode&2)!==0)return!0;if((l.mode&16)===0)return!1;return l.gid===void 0?void 0:r().includes(l.gid)});if(a.includes(!0))return!0;return i.length<2||a.includes(void 0)?void 0:!1}",
         "calls": {}
       },
       {
-        "function": "function u8r(){let e=s6o();return e!==void 0&&j5t(e)}",
+        "function": "function fu(e){switch(w(e)){case\"EACCES\":case\"EPERM\":case\"EROFS\":return\"no\";default:return\"unknown\"}}",
         "calls": {
-          "s6o": 27,
-          "j5t": 28
+          "w": 35
         }
       },
       {
-        "function": "function o(){return h??=new u({platform:\"linux\",env:process.env,readProcVersionSync:s6o,readProcVersion:()=>f(\"/proc/version\",{encoding:\"utf8\"}),osRelease:p,readOsRelease:()=>f(\"/etc/os-release\",\"utf8\")})}",
+        "function": "function n(){return m.of(F().host)}",
+        "calls": {
+          "F": 14
+        }
+      },
+      {
+        "function": "function H(n){return n instanceof Error?n:Error(String(n))}",
         "calls": {}
       },
       {
-        "function": "function $Ua({file:e,folder:t,euid:o,groups:r,posix:s}){if(!s||o===void 0)return;if(o===0)return!0;let i=[e,t].filter((l)=>l!==void 0),a=i.map((l)=>{if(l.uid===o||(l.mode&2)!==0)return!0;if((l.mode&16)===0)return!1;return l.gid===void 0?void 0:r().includes(l.gid)});if(a.includes(!0))return!0;return i.length<2||a.includes(void 0)?void 0:!1}",
+        "function": "function Ce(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}",
         "calls": {}
       },
       {
-        "function": "function au(e){switch(w(e)){case\"EACCES\":case\"EPERM\":case\"EROFS\":return\"no\";default:return\"unknown\"}}",
+        "function": "function ht(){return yOn()===\"essential-traffic\"}",
         "calls": {
-          "w": 29
+          "yOn": 36
         }
       },
       {
-        "function": "function ol(){return n().entrypoint}",
+        "function": "function xMn(n){let e=n.message?`${n.name}: ${n.message}`:n.name,t=n.stack;if(!t)return e;if(t.startsWith(e))return t;let r=t.split(`\n`),o=r[0]??\"\",i=o===n.name||o.startsWith(`${n.name}:`)?r.slice(1):r;return[e,...i].join(`\n`)}",
+        "calls": {}
+      },
+      {
+        "function": "function Jrs(){if(l())return;try{return se().readFileSync(\"/proc/version\",{encoding:\"utf8\"}).toLowerCase()}catch{return}}",
         "calls": {
-          "n": 30
+          "l": 37,
+          "se": 38
         }
       },
       {
-        "function": "function lq(){let e=ol();return e!==void 0&&r.has(e)}",
-        "calls": {
-          "ol": 24
-        }
-      },
-      {
-        "function": "function a(t){let e=N(t);try{if(Pe(process.env.CLAUDE_CODE_USE_BEDROCK)||Pe(process.env.CLAUDE_CODE_USE_VERTEX)||Pe(process.env.CLAUDE_CODE_USE_FOUNDRY)||Pe(process.env.CLAUDE_CODE_USE_ANTHROPIC_AWS)||Pe(process.env.CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD)||Pe(process.env.CLAUDE_CODE_USE_MANTLE)||process.env.DISABLE_ERROR_REPORTING||ht())return;let s={error:TEn(e),timestamp:new Date().toISOString()};Tct.remember(s),Tct.dispatch({type:\"error\",error:e})}catch{}}",
-        "calls": {
-          "N": 31,
-          "Pe": 32,
-          "ht": 33,
-          "TEn": 34
-        }
-      },
-      {
-        "function": "function s6o(){if(l())return;try{return se().readFileSync(\"/proc/version\",{encoding:\"utf8\"}).toLowerCase()}catch{return}}",
-        "calls": {
-          "l": 35,
-          "se": 36
-        }
-      },
-      {
-        "function": "function j5t(n){return n.includes(\"microsoft\")||n.includes(\"wsl\")}",
+        "function": "function yZt(n){return n.includes(\"microsoft\")||n.includes(\"wsl\")}",
         "calls": {}
       },
       {
@@ -281,42 +311,18 @@
         "calls": {}
       },
       {
-        "function": "function n(){return m.of(F().host)}",
+        "function": "function yOn(){if(process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC)return\"essential-traffic\";if(process.env.DISABLE_TELEMETRY)return\"no-telemetry\";if(Ce(process.env.DO_NOT_TRACK))return\"no-telemetry\";return\"default\"}",
         "calls": {
-          "F": 10
+          "Ce": 30
         }
-      },
-      {
-        "function": "function N(n){return n instanceof Error?n:Error(String(n))}",
-        "calls": {}
-      },
-      {
-        "function": "function Pe(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}",
-        "calls": {}
-      },
-      {
-        "function": "function ht(){return kkn()===\"essential-traffic\"}",
-        "calls": {
-          "kkn": 37
-        }
-      },
-      {
-        "function": "function TEn(n){let e=n.message?`${n.name}: ${n.message}`:n.name,t=n.stack;if(!t)return e;if(t.startsWith(e))return t;let r=t.split(`\n`),o=r[0]??\"\",i=o===n.name||o.startsWith(`${n.name}:`)?r.slice(1):r;return[e,...i].join(`\n`)}",
-        "calls": {}
       },
       {
         "function": "function l(){return d.value}",
         "calls": {}
       },
       {
-        "function": "function se(){return fv}",
+        "function": "function se(){return lk}",
         "calls": {}
-      },
-      {
-        "function": "function kkn(){if(process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC)return\"essential-traffic\";if(process.env.DISABLE_TELEMETRY)return\"no-telemetry\";if(Pe(process.env.DO_NOT_TRACK))return\"no-telemetry\";return\"default\"}",
-        "calls": {
-          "Pe": 32
-        }
       }
     ]
   },
@@ -358,7 +364,7 @@
     ".config.json"
   ],
   "file_permission_rules": {
-    "matcher": "let g=s.toolName===\"Write\"||s.toolName===\"NotebookEdit\"||s.toolName===\"MultiEdit\"?\"Edit\":s.toolName===\"Glob\"?\"Read\":void 0;"
+    "matcher": "let p=a.toolName===\"Write\"||a.toolName===\"NotebookEdit\"||a.toolName===\"MultiEdit\"?\"Edit\":a.toolName===\"Glob\"?\"Read\":void 0;"
   },
   "failed_agents_report": {
     "notification": "task-notification",
@@ -393,6 +399,63 @@
       "completed",
       "failed",
       "cancelled"
+    ]
+  },
+  "file_mode_guard_calls": {
+    "guard_calls": {
+      "Wo": 0,
+      "LT": 1,
+      "q": 2,
+      "Ce": 3,
+      "Ss": 4,
+      "Jb": 5
+    },
+    "functions": [
+      {
+        "function": "function Wo(){return Ce(process.env.CLAUDE_CODE_SAFE_MODE)||NHt(\"--safe-mode\")||!1}",
+        "calls": {
+          "Ce": 3,
+          "NHt": 6
+        }
+      },
+      {
+        "function": "function LT(){return n().host.launchOptions.restrictedSession()}",
+        "calls": {
+          "n": 7
+        }
+      },
+      {
+        "function": "function q(){return Et()}",
+        "calls": {
+          "Et": 8
+        }
+      },
+      {
+        "function": "function Ce(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}",
+        "calls": {}
+      },
+      {
+        "function": "function Ss(e){if(e===void 0)return!1;if(typeof e===\"boolean\")return!e;let n=String(e).toLowerCase().trim();return[\"0\",\"false\",\"no\",\"off\"].includes(n)}",
+        "calls": {}
+      },
+      {
+        "function": "function Jb(){if(s.CLAUDE_CODE_SIMPLE)return!0;return Boolean(s.CLAUDE_CODE_REMOTE)&&!process.env.CLAUDE_CODE_REMOTE_MEMORY_DIR&&!s.CLAUDE_COWORK_MEMORY_PATH_OVERRIDE}",
+        "calls": {}
+      },
+      {
+        "function": "function NHt(e,n=process.argv){let r=n.indexOf(e);if(r===-1)return!1;let t=n.indexOf(\"--\");return t===-1||r<t}",
+        "calls": {}
+      },
+      {
+        "function": "function n(){return b()?.session??v}",
+        "calls": {}
+      },
+      {
+        "function": "function Et(){return n().host.launchOptions.diskless()}",
+        "calls": {
+          "n": 7
+        }
+      }
     ]
   }
 }

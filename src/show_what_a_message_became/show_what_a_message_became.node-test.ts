@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { appendToTheChannel, keepTakenIn, type ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
+import { appendToTheChannel, keepTakenIn, THE_WHOLE_CREW, type ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { whatBecameOfWhatISent } from './show_what_a_message_became.ts'
 
 const ROSTER = ['A', 'B', 'C'] as const
@@ -17,7 +17,7 @@ const bench = (): ChannelHost => {
   return { clock: host.clock, stores: { rows: host.stores.rows } }
 }
 
-const say = (host: ChannelHost, from: string, to: readonly string[] | 'crew', text: string): Promise<number> =>
+const say = (host: ChannelHost, from: string, to: readonly string[] | typeof THE_WHOLE_CREW, text: string): Promise<number> =>
   appendToTheChannel(host, { from, to, text, sent_at: 5_000 })
 
 test('#253: a message sent and not taken in reads as written, and not yet taken in', async () => {
@@ -37,7 +37,7 @@ test('#253: once the member took it in, the sender reads that it did', async () 
 
 test('#253: a message to the whole crew reads each member\'s own state, and never the sender\'s', async () => {
   const host = bench()
-  const position = await say(host, 'A', 'crew', 'to all')
+  const position = await say(host, 'A', THE_WHOLE_CREW, 'to all')
   await keepTakenIn(host, 'B', position)
 
   assert.equal(await whatBecameOfWhatISent(host, 'A', ROSTER), 'message 0 to the whole crew: written, taken in by B, not yet taken in by C')

@@ -13,8 +13,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { THE_FAILED_TASK_STATUS } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
+import { THE_FAILED_TASK_STATUS } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 import {
+  nameTheFailedReviewIn,
+  REVIEWS_REMEMBERED,
   reviewSpawnsRemembered,
   theFailedReviewIn,
   theLineAboutIt,
@@ -29,7 +31,7 @@ const THE_REVIEWER_MODEL = 'opus'
 const ANOTHER_MODEL = 'sonnet'
 const RESOLVED = 'claude-opus-5-5'
 
-/** The host's own names for the envelope, as its binary gives them (../read_a_failed_agents_report/read_a_failed_agents_report). */
+/** The host's own names for the envelope, as its binary gives them (../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report). */
 const THE_REPORT: TheReportTheHostWrites = { notification: 'task-notification', status: 'status', tool_use: 'tool-use-id', summary: 'summary', failed: THE_FAILED_TASK_STATUS }
 
 /** The id of the Agent call the envelope names: the review that failed. */
@@ -113,4 +115,69 @@ test('the line names the model and repeats the host\'s own words (martha#390)', 
   const line = theLineAboutIt({ tool_use_id: THE_CALLS_ID, model: RESOLVED, reason: 'the host says so' })
   assert.match(line, new RegExp(RESOLVED), 'the line does not name the model')
   assert.match(line, /the host says so/, 'the line does not carry the host\'s own words')
+})
+
+// --- what the table keeps, and for how long (martha#430) ------------------------------------------------------------------
+
+/** A telling that writes down what it was told, so a case can see the row told and the member told as they happened. */
+function aTellingThatWritesDown(told: string[]): { readonly theRow: (line: string) => void; readonly theMember: (line: string, call: string) => Promise<void> } {
+  return { theRow: (line) => void told.push(`row: ${line}`), theMember: async (line, call) => void told.push(`member: ${line} (call ${call})`) }
+}
+
+test('the call is forgotten once the line about it is written, so the same stop is not put in the row twice (martha#430)', async () => {
+  const spawns = aRememberedReview()
+  const told: string[] = []
+  await nameTheFailedReviewIn(spawns, THE_HOSTS_TEXT, READ, aTellingThatWritesDown(told))
+  assert.equal(told.length, 2, `the row and the member were not both told: ${JSON.stringify(told)}`)
+  // The review's call goes with the line to the member, so a store that refuses it can be written down against the call.
+  assert.ok(told.at(1)?.endsWith(`(call ${THE_CALLS_ID})`) === true, `the member was not handed the review's call: ${String(told.at(1))}`)
+  assert.equal(spawns.theSpawn(THE_CALLS_ID), undefined, 'the review this launcher allowed still stands after its line was written')
+
+  // The host repeating the same envelope names nothing now: one stop is one line, not a second one for the same stop.
+  const again: string[] = []
+  await nameTheFailedReviewIn(spawns, THE_HOSTS_TEXT, READ, aTellingThatWritesDown(again))
+  assert.deepEqual(again, [], 'a second envelope naming the same stop put the line in again')
+})
+
+test('a turn that names no review of this launcher\'s forgets nothing (martha#430)', async () => {
+  const spawns = aRememberedReview()
+  const told: string[] = []
+  // Another agent's failure, over the same words: nothing is named, and the review this launcher allowed is still held.
+  await nameTheFailedReviewIn(spawns, withTheElement(THE_REPORT.tool_use, 'toolu_someone_else'), READ, aTellingThatWritesDown(told))
+  assert.deepEqual(told, [], 'a failure of another agent was told as this crew\'s review')
+  assert.notEqual(spawns.theSpawn(THE_CALLS_ID), undefined, 'a turn that named nothing took the held review away')
+})
+
+test('the row is told before the member, so a store that refuses the member\'s half leaves the owner\'s line standing (martha#430)', async () => {
+  const spawns = aRememberedReview()
+  const order: string[] = []
+  await assert.rejects(
+    nameTheFailedReviewIn(spawns, THE_HOSTS_TEXT, READ, {
+      theRow: () => void order.push('row'),
+      theMember: async () => {
+        order.push('member')
+        throw new Error('the rows store refused the append')
+      },
+    }),
+    /the rows store refused the append/,
+  )
+  assert.deepEqual(order, ['row', 'member'], 'the member was told before the row, or the row was never told')
+})
+
+test('the table holds the newest reviews and no more, so a launch spawning reviews all day does not keep every one (martha#430)', () => {
+  const spawns = reviewSpawnsRemembered()
+  const theCalls = Array.from({ length: REVIEWS_REMEMBERED + 1 }, (_, held) => `toolu_the_review_${String(held)}`)
+  for (const id of theCalls) {
+    spawns.remember(id, THE_REVIEWER_MODEL)
+    spawns.resolved(id, RESOLVED)
+  }
+  assert.equal(spawns.theSpawn(theCalls[0] ?? ''), undefined, 'the oldest review stands past the table\'s bound, so the table grows with every review the launch runs')
+  assert.notEqual(spawns.theSpawn(theCalls[1] ?? ''), undefined, 'the table held one fewer than its bound: the second-oldest review was forgotten as though the table were already full')
+  assert.notEqual(spawns.theSpawn(theCalls[theCalls.length - 1] ?? ''), undefined, 'the newest review was dropped, so the stop that just happened would not be named')
+  // A review remembered again is the newest, not the oldest: it is the one the host is about to report on, so the bound
+  // must not be the thing that drops it.
+  spawns.remember(theCalls[1] ?? '', THE_REVIEWER_MODEL)
+  spawns.remember(theCalls[0] ?? '', THE_REVIEWER_MODEL)
+  assert.notEqual(spawns.theSpawn(theCalls[1] ?? ''), undefined, 'a review remembered again was dropped as though it were the oldest')
+  assert.equal(spawns.theSpawn(theCalls[2] ?? ''), undefined, 'the bound dropped a review that was not the oldest, so a stop still to be reported can go unnamed')
 })

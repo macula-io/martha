@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   WHAT_CLEARS_IT,
   type Policy,
@@ -29,6 +29,7 @@ import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const names = claudeCodeToolNames
 
@@ -37,7 +38,7 @@ const names = claudeCodeToolNames
 const launch_home = mkdtempSync(join(tmpdir(), 'martha-no-launch-config-'))
 after(() => removeTheTree(launch_home))
 const launch: ApprovedLaunch = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   launch_dir: mkdtempSync(join(launch_home, 'work-')),
   stop_dir: launch_home,
   approved_fingerprints: [],
@@ -128,7 +129,7 @@ test('the member may still read the text it is not allowed to act on', () => {
 
 test('a turn the policy names may run a shell straight away', () => {
   const session = takeInTurn(beginSession(store(), 's-1'), {
-    source: 'crew_room',
+    source: 'channel_message',
     from_identity: supervisor_identity,
   }, bindNothing)
   assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine }), undefined)
@@ -188,7 +189,7 @@ function approvedCheckout(t: TestContext): ApprovedLaunch {
   git(checkout, 'add', '--all')
   git(checkout, 'commit', '-q', '-m', 'reviewed')
 
-  const place = { host: 'claude-code', launch_dir: checkout, stop_dir: home }
+  const place = { host: CLAUDE_CODE, launch_dir: checkout, stop_dir: home }
   return { ...place, approved_fingerprints: [fingerprintOf(readLaunchState(place, thisMachine))] }
 }
 

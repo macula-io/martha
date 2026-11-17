@@ -37,9 +37,6 @@ export interface ReadingTheChannel {
   isIdle(): boolean
 }
 
-/** Whether an event is a subagent's: the host stamps those with the agent they belong to, and the main turn with none. */
-const subagents = (agentId: unknown): boolean => agentId !== undefined
-
 /**
  * Builds the reading. `askTheLauncher` answers the next message the member has not taken in, framed, or null when
  * there is none; `submit` puts the text into the session as a prompt.
@@ -68,11 +65,12 @@ export function readingTheChannelWith(
   return {
     readWhileIdle,
     aTurnStarted: (agentId) => {
-      if (subagents(agentId)) return
+      // A subagent's start is stamped with the agent it belongs to; the main turn's is stamped with none.
+      if (agentId !== undefined) return
       busy = true
     },
     aTurnEnded: async (agentId) => {
-      if (subagents(agentId)) return
+      if (agentId !== undefined) return
       busy = false
       await readWhileIdle()
     },

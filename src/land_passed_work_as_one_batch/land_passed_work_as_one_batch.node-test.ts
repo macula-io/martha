@@ -20,19 +20,19 @@ import { test, type TestContext } from 'node:test'
 
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { DASHBOARD } from '../declare_crew/declare_crew.ts'
 import { forecastWhatABatchLands } from '../forecast_what_a_batch_lands/forecast_what_a_batch_lands.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree } from '../check_a_host_directory_stays_under_its_ceiling/a_tree_whose_ceilings_a_test_reads.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, RowStore, StoredRow } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { noteMilestone, readLedger } from '../log_ledger/log_ledger.ts'
 import { reviewWaitsIn } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { GIT, GITHUB_CLI, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { A_HOLD_REFUSES } from '../hold_a_package_back_from_a_batch/hold_a_package_back_from_a_batch.ts'
 import { STANDING_CLOSE, closeAStandingItem, recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
@@ -1323,7 +1323,7 @@ function theToolsOver(fixture: Fixture, tests: HostForTests): CrewTools {
     beats: dashboardRowsIn(join(fixture.root, DASHBOARD)),
     root: fixture.root,
     documents: { read: async () => '{}' },
-    stores: { crew: crewFilesDirectory(join(fixture.root, 'crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(fixture.root, 'crew-files')) },
     processes: tests.host.processes,
   })
 }

@@ -15,23 +15,23 @@ import { test, type TestContext } from 'node:test'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
-import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { sourcesALaunchHandsTheModel } from '../claude_code_host/what_a_launch_hands_the_model.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { memberRelay, type MemberRelay, type MemberRelayPlace } from '../launch_a_claude_code_member/answer_the_relay.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { memberRelay, type MemberRelay, type MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** The crew's own files, as the host keeps them: these tests read and write them through the launcher's own calls. */
 const STATE_LINES = { append: appendStateLine, read: readStateFile }
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { GATE_AUDIT_PLACE, theLinesIn } from './audit_the_gate_for_a_member.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 interface Places {
   readonly home: string
@@ -60,7 +60,7 @@ function placesOf(t: TestContext): Places {
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, DEFAULT_CONFIG_DIR, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 /** The relay as the launcher builds it, with the gate's mode and audit folder this launch was given. */
@@ -75,7 +75,7 @@ function relayFor(places: Places, gate: MemberRelayPlace['gate'], audit: MemberR
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel({}),
     hookSettings: hookSettingsWatch({
-      user: join(places.home, DEFAULT_CONFIG_DIR, USER_SETTINGS_FILE),
+      user: join(places.home, CLAUDE_FOLDER, USER_SETTINGS_FILE),
       home: places.home,
       approved: undefined,
       managed: { ...RECORDED_HOST.managed_settings, dir: join(places.home, 'managed') },

@@ -10,12 +10,12 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { CREW_CODE_DECLARATION_DIRECTORY, DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import {
   CrewTextRefused,
   crewTextFilesOf,
@@ -52,6 +52,7 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     gate: { kind: 'off' },
     channel_read_seconds: 30,
     handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
+    backlog: null,
   }
 }
 
@@ -134,6 +135,16 @@ test('#306: a crew\'s own role text wins over the one Martha ships, and its own 
   const section = handAMemberItsCrewText(texts)
   assert.match(section, /Our builder text\./)
   assert.doesNotMatch(section, /You build and test one work package at a time/, 'the shipped text reached a crew that wrote its own')
+})
+
+test('#468: the crew\'s texts are Martha\'s folder\'s alone, so a crew that leaves its own under crew-code\'s is handed the shipped text', () => {
+  // The move takes the declaration and every text beside it (design §3): a crew whose roles stayed behind loses them
+  // without an error, so this case says plainly which folder a member\'s text is read from.
+  const settings = settingsOf()
+  const leftBehind = { [join(ROOT, CREW_CODE_DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md')]: 'Our builder text, left behind.' }
+  const texts = sectionFor(settings, 'builder', shippedReader(leftBehind))
+  assert.doesNotMatch(texts.role_text?.text ?? '', /left behind/, 'a text under crew-code\'s folder reached a member of a crew whose declaration is Martha\'s')
+  assert.match(texts.role_text?.text ?? '', /You build and test one work package at a time/)
 })
 
 test('#306: a declaration names the conventions file, and a file that is not there is a refusal, not a crew with none', () => {

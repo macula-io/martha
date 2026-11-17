@@ -162,8 +162,9 @@ export function sourceOfAMeshToolResult(own_name: string): TurnSource {
   return Object.hasOwn(SOURCE_OF_A_RING_TOOL, own_name) ? (SOURCE_OF_A_RING_TOOL[own_name] ?? 'mcp_result') : 'mcp_result'
 }
 
-/** The rooms a member can read, by the turn source their delivery is recorded on. */
-export type ReadableRoom = 'crew_room' | 'shared_room'
+/** The rooms a member can read, by the turn source their delivery is recorded on: the two of the contract's words a
+ * room is delivered on, derived from that one definition so the two cannot drift apart (martha#468). */
+export type ReadableRoom = Extract<TurnSource, 'channel_message' | 'shared_room'>
 
 /** One envelope as the mesh returns it: the gate's fields, plus what the model would read. */
 export interface RoomEnvelope extends RoomMessage {

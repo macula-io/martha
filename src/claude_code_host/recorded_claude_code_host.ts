@@ -9,18 +9,18 @@
 
 import { readFileSync } from 'node:fs'
 
-import { CREW_REFRESH } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { promptOriginKindsOf } from './claude_code_prompt_origins.ts'
 import { sessionStartSourcesOf } from './claude_code_session_events.ts'
 import { WHOLE_FILE_TOOL } from './claude_code_file_tools.ts'
 import { ruleMatchersIn, theToolItsChecksMatch, type FilePermissionRules } from './file_permission_rules.ts'
-import type { OwnersMarkdown } from './hooks_and_plugins_the_owner_declares.ts'
-import type { ProtectedConfigPlaces } from './protected_config_places.ts'
-import { outputStylesFieldIn, outputStylesFolderIn, type MarkdownTheHostLoads } from './markdown_the_host_loads.ts'
-import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from './settings_that_turn_hooks_off.ts'
-import { THE_FAILED_TASK_STATUS, type ARecordedFailedAgentsReport } from '../read_a_failed_agents_report/read_a_failed_agents_report.ts'
+import type { OwnersMarkdown } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import type { ProtectedConfigPlaces } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
+import { outputStylesFieldIn, outputStylesFolderIn, type MarkdownTheHostLoads } from '../load_the_hosts_markdown/markdown_the_host_loads.ts'
+import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
+import { THE_FAILED_TASK_STATUS, type ARecordedFailedAgentsReport } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 
-export { CREW_REFRESH }
+export { THE_REFRESH_THE_MOD_RUNS }
 
 /** How one host version keeps auto-memory off (martha#136). */
 export interface MemoryOff {
@@ -153,7 +153,7 @@ export const CLAUDE_CODE_CLASSIC_HOOK_EVENTS: readonly string[] = RECORDED_HOST.
 export const CLAUDE_CODE_NOTIFICATION_TYPES: readonly string[] = RECORDED_HOST.notification_types
 
 /** Every event the Claude Code host emits when a session starts, the crew's refresh included. */
-export const CLAUDE_CODE_EMITTED_SESSION_EVENTS: readonly string[] = [...CLAUDE_CODE_SESSION_START_SOURCES, CREW_REFRESH]
+export const CLAUDE_CODE_EMITTED_SESSION_EVENTS: readonly string[] = [...CLAUDE_CODE_SESSION_START_SOURCES, THE_REFRESH_THE_MOD_RUNS]
 
 /** The settings keys that turn Martha's relay off in the recorded host, by where it honours them (martha#122). */
 export const CLAUDE_CODE_HOOK_SWITCHES: HookSwitches = hookSwitchesOf(RECORDED_HOST.hooks_switches, RECORDED_HOST.hooks_switch_calls)

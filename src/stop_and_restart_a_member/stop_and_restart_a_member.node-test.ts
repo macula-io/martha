@@ -1,7 +1,7 @@
 // Stopping and listing members, as martha#312's design states them: the owner's `martha ls` and `martha stop`, and the
 // launcher's watch that answers a stop.
 //
-// The requests are kept in the crew store the host really composes on a disk (../crew_files_directory), so a request
+// The requests are kept in the crew store the host really composes on a disk (../keep_the_crews_files_as_directories), so a request
 // read back is the file a launcher would read. The processes are the test's: a table of pids and the identity each
 // holds, and a signaller that records every signal it was asked to send and ends a group the way the kernel would.
 
@@ -13,10 +13,10 @@ import { after, mock, test } from 'node:test'
 
 import { launchesIn, type MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { OWNER } from '../declare_crew/declare_crew.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { CrewPlace, GroupSignal, KeyedRow, Processes } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { BEAT_INTERVAL_MS, OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
@@ -42,7 +42,7 @@ after(() => removeTheTree(home))
 let crews = 0
 /** A fresh crew directory per test, so no request of one test is read by another. */
 const aLifecyclePlace = (): CrewPlace => {
-  const place = crewFilesDirectory(join(home, `crew-${++crews}`)).place(LIFECYCLE_PLACE)
+  const place = keepTheCrewsFilesAsDirectories(join(home, `crew-${++crews}`)).place(LIFECYCLE_PLACE)
   if ('refusal' in place) throw new Error(place.refusal)
   return place
 }

@@ -6,7 +6,7 @@
 // file the member wrote itself is not a handover and clears nothing (this is martha#16's rule 3, wired here).
 //
 // The slice is driven through the contract's test host, with the crew store the host really composes over a directory
-// (../crew_files_directory), so what it writes is a file on a disk the way a launch writes one. The name the file has,
+// (../keep_the_crews_files_as_directories), so what it writes is a file on a disk the way a launch writes one. The name the file has,
 // and the stamp, are this slice's, and are what these cases pin.
 
 import assert from 'node:assert/strict'
@@ -16,17 +16,29 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { CLAUDE_CODE_SESSION_EVENTS, readHandover, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rememberSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
-import { CREW_HANDOVER_WRITTEN, handoversPlace, theHandoverFile, writeMyHandover } from './write_my_handover.ts'
+import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
+import {
+  HANDOVERS_PLACE,
+  THE_HANDOVER_WRITTEN,
+  handoversPlace,
+  theHandoverFile,
+  theHandoverPrompt,
+  theSendBackNote,
+  whatBecameOfTheHandover,
+  WRITE_MY_HANDOVER_TOOL,
+  writeMyHandover,
+} from './write_my_handover.ts'
+import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** A home of the tests: the crew's own directory, as the launcher resolves one, under the state root. */
 const home = mkdtempSync(join(tmpdir(), 'martha-handover-'))
 after(() => removeTheTree(home))
-const crew = join(home, 'state', 'crews', 'a-key')
+const crew = join(home, 'state', CREWS_PLACE, 'a-key')
 
 const MEMBER = 'builder'
 const AT = new Date('2026-11-11T15:00:00Z')
@@ -34,7 +46,7 @@ const THE_DAY = '2026-11-11'
 const CONTENT = '# Handover: builder\n\n## Package lines\n\n- macula-io/martha#255, branch vesta/255-part1, nothing committed\n'
 
 /** The contract's test host, over the crew's own store on this disk. */
-const aHost = (over: string = crew): HostForTests => hostForTests({ crew: crewFilesDirectory(over) })
+const aHost = (over: string = crew): HostForTests => hostForTests({ crew: keepTheCrewsFilesAsDirectories(over) })
 
 const sessions = (): SessionRecordStore => {
   const records = new Map<string, never>()
@@ -71,9 +83,9 @@ test('#255: the host writes the handover at the path it chose, whole, and stamps
 
   const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: AT, stamps, session: predecessor })
 
-  assert.equal(said, CREW_HANDOVER_WRITTEN, 'the answer a member reads is the one word the flow waits for')
+  assert.equal(said, THE_HANDOVER_WRITTEN, 'the answer a member reads is the one word the flow waits for')
   const file = theHandoverFile(MEMBER, AT)
-  assert.equal(file, `HANDOVER_${THE_DAY}_${MEMBER}.md`, 'the handover file is named for the day and the member, and by nothing the member chose')
+  assert.equal(file, `MARTHA_HANDOVER_${THE_DAY}_${MEMBER}.md`, 'the handover file is named for the day and the member, and by nothing the member chose')
   const written = join(thePlace(host), file)
   assert.equal(readFileSync(written, 'utf8'), CONTENT, 'the file the host wrote is not the handover it was given')
   assert.equal(statSync(written).mode & 0o777, 0o600, 'a handover is readable by this user only')
@@ -125,9 +137,9 @@ test('#255: the stamp carries the moment the handover is named for, never the cl
 
   const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: longAgo, stamps, session })
 
-  assert.equal(said, CREW_HANDOVER_WRITTEN)
+  assert.equal(said, THE_HANDOVER_WRITTEN)
   const file = theHandoverFile(MEMBER, longAgo)
-  assert.equal(file, 'HANDOVER_2001-02-03_builder.md', 'the file is not named for the day it is stamped for')
+  assert.equal(file, 'MARTHA_HANDOVER_2001-02-03_builder.md', 'the file is not named for the day it is stamped for')
   assert.equal(
     stamps.all.get(join(thePlace(host), file))?.written_at,
     longAgo.toISOString(),
@@ -172,7 +184,7 @@ test('#255: a crew store the host will not write into refuses the handover, and 
   // A crew whose handovers place cannot be made: a file is already there under the place's name.
   const blocked = join(home, 'a-crew-that-cannot-write')
   mkdirSync(blocked, { recursive: true, mode: 0o700 })
-  writeFileSync(join(blocked, 'handovers'), 'not a directory', { mode: 0o600 })
+  writeFileSync(join(blocked, HANDOVERS_PLACE), 'not a directory', { mode: 0o600 })
   const host = aHost(blocked)
   const store = sessions()
   const stamps = stampStore()
@@ -181,4 +193,41 @@ test('#255: a crew store the host will not write into refuses the handover, and 
   const said = writeMyHandover(host.host, { member: MEMBER, content: CONTENT, at: AT, stamps, session })
   assert.ok(typeof said !== 'string' && 'refusal' in said, 'a store that could not make the place took the handover anyway')
   assert.equal(stamps.all.size, 0, 'a handover that was never written was stamped, so a successor could inherit from nothing')
+})
+
+test('#255: a handover written before the flow asked for one is not this flow’s handover', () => {
+  const verdict = whatBecameOfTheHandover({
+    stamp: { member: 'builder', predecessor_id: 'a-session', written_at: new Date(500).toISOString(), digest: 'x', record_length: 0, record_digest: 'y' },
+    text: 'a handover',
+    asked_at: 1_000,
+    holds: [],
+    sent_back: 0,
+    at_limit: false,
+  })
+  assert.deepEqual(verdict, { kind: 'not_written', why: 'the handover was written before this session was asked for one' })
+})
+
+test('#255: a handover missing the line of a package the row holds is sent back once, and clears on the second miss', () => {
+  const asked = { stamp: { member: 'builder', predecessor_id: 'a-session', written_at: new Date(2_000).toISOString(), digest: 'x', record_length: 0, record_digest: 'y' }, text: 'a handover with no package in it', asked_at: 1_000, holds: ['synthetic-owner/repo#7'] }
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: false }), { kind: 'sent_back', missing: ['no line naming synthetic-owner/repo#7'] })
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 1, at_limit: false }), { kind: 'cleared_anyway', missing: ['no line naming synthetic-owner/repo#7'] })
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: true }), { kind: 'cleared_anyway', missing: ['no line naming synthetic-owner/repo#7'] })
+  assert.deepEqual(
+    whatBecameOfTheHandover({ ...asked, text: 'it holds synthetic-owner/repo#7, at a branch and a sha', sent_back: 1, at_limit: false }),
+    { kind: 'accepted', missing: [] },
+  )
+})
+
+test('#255: the send-back note names what was missing and the word to answer with', () => {
+  const note = theSendBackNote(['no line naming synthetic-owner/repo#7'])
+  assert.ok(note.includes('no line naming synthetic-owner/repo#7'), 'the note does not say what was missing')
+  assert.ok(note.includes(THE_HANDOVER_WRITTEN), 'the note does not say which word to answer with')
+})
+
+test('#255: the handover prompt names the limit and the tool, and asks for the word', () => {
+  const atTheLimit = theHandoverPrompt({ at_limit: true, percent: HANDOVER_LIMIT_PERCENT + 2 })
+  assert.ok(atTheLimit.includes(`${HANDOVER_LIMIT_PERCENT}%`), 'the prompt does not name the limit')
+  assert.ok(atTheLimit.includes(WRITE_MY_HANDOVER_TOOL), 'the prompt does not name the tool that writes the handover')
+  assert.ok(atTheLimit.includes(THE_HANDOVER_WRITTEN), 'the prompt does not name the word to answer with')
+  assert.ok(!theHandoverPrompt({ at_limit: false, percent: 30 }).includes('handover limit'), 'a task’s end reads as the limit')
 })

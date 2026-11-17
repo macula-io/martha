@@ -8,9 +8,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { turnBudgets } from './probe_hosts.ts'
-
-/** The fewest turns a row may start the model with: one to spend, and one to answer or finish in. */
-const ROOM_TO_FINISH = 2
+import { ROOM_TO_FINISH } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
 
 test('no row asks the model to answer in one turn (martha#223)', () => {
   const oneTurn = turnBudgets().filter((row) => row.maxTurns !== undefined && row.maxTurns < ROOM_TO_FINISH)

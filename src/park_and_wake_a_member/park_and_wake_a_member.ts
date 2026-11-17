@@ -3,7 +3,7 @@
 // A park has to outlive the session it is about: a clear, a restart or a refresh all replace the session, so a park kept
 // in one would be forgotten exactly when it matters. The marker is therefore a small file per member, in the crew store
 // every member reads, under the same rule every crew file is written by — and that writer is host glue behind the host
-// contract (src/crew_files_directory), so this slice decides and the host writes.
+// contract (src/keep_the_crews_files_as_directories), so this slice decides and the host writes.
 //
 // Who may park another member is answered from what the launcher already holds — the declaration it started its member
 // from — and not from who_may_act: that compares node ids against signed lists, and a solo crew has neither (r=3).
@@ -22,7 +22,7 @@
 
 import { join } from 'node:path'
 
-import { OWNER } from '../declare_crew/declare_crew.ts'
+import { OWNER, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, HandoverStampStore, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 
 /** Where a crew keeps its park markers, under the one crew store (martha#254 part 1). */
@@ -199,4 +199,36 @@ export function theNewestHandover(place: CrewPlace, stamps: HandoverStampStore, 
   }
   if ('refusal' in read) return { kind: 'unreadable', refusal: read.refusal }
   return { kind: 'a_handover', handover: { file: join(place.path, newest.name), content: read.text } }
+}
+
+/** Two refreshes of one member inside this window are a storm, and a storm is parked, not refused. */
+export const STORM_WINDOW_MS = 30 * MINUTE_MS
+
+/** How many refreshes inside the window are a storm. */
+export const STORM_THRESHOLD = 2
+
+/** Whether this refresh is one too many inside the window: a storm, parked rather than refused. */
+export function isAStorm(refreshed_at: readonly number[], now: number): boolean {
+  const inside = refreshed_at.filter((at) => now - at < STORM_WINDOW_MS)
+  return inside.length + 1 >= STORM_THRESHOLD
+}
+
+/** The line a storm sends the Supervisor, once: which member, at which contexts, from which handover. */
+export function theStormLine(storm: { readonly member: string; readonly percents: readonly number[]; readonly file: string }): string {
+  const minutes = Math.round(STORM_WINDOW_MS / MINUTE_MS)
+  return (
+    `${storm.member} was parked after ${storm.percents.length} refreshes inside ${minutes} minutes ` +
+    `(at ${storm.percents.join('%, ')}%), the last from ${storm.file}. It stays parked until the owner or the Supervisor wakes it.`
+  )
+}
+
+/** The members whose park marker says they are parked, or none when the crew's store will not answer (martha#255): a
+ * store that cannot say is not the same fact as a member nobody parked, and a reader that cannot say reads no park. */
+export function theParkedMembers(host: ParkingHost, members: readonly string[]): readonly string[] {
+  const place = parkedPlace(host)
+  if ('refusal' in place) return []
+  return members.filter((member) => {
+    const park = theParkOf(place, member)
+    return 'marker' in park && park.marker.parked
+  })
 }

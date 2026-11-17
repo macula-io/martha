@@ -15,15 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import process, { env } from 'node:process'
 
-import type {
-  EnvironmentChange,
-  FileKind,
-  FileTree,
-  Processes,
-  ScratchDirectories,
-  ScratchDirectory,
-} from '../host_contract/host_contract.ts'
-import { OWNER_EXECUTES } from '../host_contract/host_contract.ts'
+import { OWNER_EXECUTES, type EnvironmentChange, type FileKind, type FileTree, type Processes, type ScratchDirectories, type ScratchDirectory } from '../host_contract/host_contract.ts'
 import { linuxProcessIdentities } from './process_identity_from_proc.ts'
 
 /** The files on this machine's disk, read as they are. */

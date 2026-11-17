@@ -19,7 +19,7 @@ import {
   type Rules,
 } from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
 import { rulesOf } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { postedTextSources } from './posted_text.ts'
 import { standInPage } from './plant_every_surface.ts'
 import { API, readPostedText, ROUTES, type Call, type Request } from './read_posted_text.ts'

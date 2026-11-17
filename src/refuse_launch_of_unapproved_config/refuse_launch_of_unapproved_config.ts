@@ -52,6 +52,8 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 
 export type { LaunchHost }
@@ -65,18 +67,21 @@ export interface HostSwitches {
 }
 
 /**
- * The environment to start the host with: `inherited` without the dropped
+ * The environment to start `host` with: `inherited` without the dropped
  * variables, with the switches' own on top, so no inherited value can switch
- * project config back on.
+ * project config back on, and the host's own `env_last` last, so nothing above it
+ * can undo it (martha#460: the host's auto-updater stays off). Another host's
+ * variables never reach it (martha#474).
  */
 export function launchEnvironment(
   inherited: Readonly<Record<string, string | undefined>>,
   switches: HostSwitches,
+  host: Host,
 ): Record<string, string> {
   const kept = Object.entries(inherited).filter(
     (entry): entry is [string, string] => entry[1] !== undefined && !switches.env_dropped.includes(entry[0]),
   )
-  return { ...Object.fromEntries(kept), ...switches.env }
+  return { ...Object.fromEntries(kept), ...switches.env, ...HOSTS[host].env_last }
 }
 
 /**
@@ -86,7 +91,7 @@ export function launchEnvironment(
  */
 export const LAUNCH_FILES_OF_HOST = {
   // The last one Claude Code writes itself: a member's own permission answers.
-  'claude-code': ['.mcp.json', '.claude/settings.json', '.claude/settings.local.json'],
+  [CLAUDE_CODE]: ['.mcp.json', '.claude/settings.json', '.claude/settings.local.json'],
   // The last one holds a checkout's plugins and their installed packages.
   opencode: ['opencode.json', 'opencode.jsonc', '.opencode'],
 } as const
@@ -99,6 +104,14 @@ export interface HostLaunch {
   readonly project_config_off: HostSwitches
   /** How the approved copy of a listed file is passed. A file not named here is never carried. */
   readonly carried: Readonly<Record<string, (path: string) => HostSwitches>>
+  /**
+   * Set on this host's environment after everything else, so neither an inherited value nor a switch can undo it
+   * (martha#460). It holds the host's own auto-updater switch: a launch hands the host a home of its own, where the
+   * owner's answer to updating is not read, and an update the host then runs installs over the owner's own copy.
+   * It is spread rather than written into each builder, so a launch path added later carries it or fails the test
+   * that names it (every_launch_switches_the_hosts_auto_updater_off.node-test.ts).
+   */
+  readonly env_last: Readonly<Record<string, string>>
 }
 
 const NO_ENV: Readonly<Record<string, string>> = {}
@@ -113,6 +126,14 @@ const NOTHING_DROPPED: readonly string[] = []
 const OPENCODE_PROJECT_CONFIG_OFF = ['OPENCODE_CONFIG_PROJECT_DISABLE', 'OPENCODE_DISABLE_PROJECT_CONFIG'] as const
 /** Each brings config in that is no listed file: inline content, and a whole config directory. */
 const OPENCODE_CONFIG_ELSEWHERE = ['OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_DIR'] as const
+
+/**
+ * OpenCode's own auto-updater switch (martha#474). OpenCode 2.2.7 skips its update check when this is 1 or true,
+ * before it reads any config (measured in the 2.2.7 binary). With no config of its own its policy is only to notify,
+ * but an owner's config may say auto, and an npm-installed OpenCode then updates with `npm install --global`, which
+ * lands on the owner's own copy as Claude Code's did (martha#460).
+ */
+const OPENCODE_AUTO_UPDATER_OFF: Readonly<Record<string, string>> = { OPENCODE_DISABLE_AUTOUPDATE: '1' }
 
 /**
  * Claude Code 2.1 reads this from its own environment and starts every tool
@@ -139,18 +160,18 @@ export const CLAUDE_MEMORY_OFF: Readonly<Record<string, string>> = { CLAUDE_CODE
 export const CLAUDE_MEMORY_ELSEWHERE = [
   'CLAUDE_CODE_POST_TURN_MEMORY',
   'CLAUDE_MEMORY_STORES',
-  'CLAUDE_COWORK_MEMORY_PATH_OVERRIDE',
-  'CLAUDE_CODE_REMOTE_MEMORY_DIR',
+  MEMORY_FOLDER_OVERRIDE,
+  REMOTE_MEMORY_ROOT,
 ] as const
 
-export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
+export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST[CLAUDE_CODE]
 const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS] = LAUNCH_FILES_OF_HOST.opencode
 
 /** The switches that hand Claude Code a settings file: the carried copy, or the one a launch writes (martha#136). */
 export const claudeSettingsSwitches = (path: string): HostSwitches => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED })
 
 export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
-  'claude-code': {
+  [CLAUDE_CODE]: {
     // --strict-mcp-config: only the servers passed by --mcp-config start.
     project_config_off: {
       args: ['--setting-sources', 'user', '--strict-mcp-config'],
@@ -158,9 +179,10 @@ export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
       env_dropped: [...CLAUDE_COMMAND_ELSEWHERE, ...CLAUDE_MEMORY_ELSEWHERE],
     },
     carried: {
-      [CLAUDE_SERVERS]: (path) => ({ args: ['--mcp-config', path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
+      [CLAUDE_SERVERS]: (path) => ({ args: [MCP_CONFIG_SWITCH, path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
       [CLAUDE_SETTINGS]: claudeSettingsSwitches,
     },
+    env_last: CLAUDE_AUTO_UPDATER_OFF,
   },
   opencode: {
     // The background service ignores a client's environment, so the host runs
@@ -174,11 +196,10 @@ export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
       [OPENCODE_CONFIG]: (path) => ({ args: NO_ARGS, env: { OPENCODE_CONFIG: path }, env_dropped: NOTHING_DROPPED }),
       [OPENCODE_CONFIG_WITH_COMMENTS]: (path) => ({ args: NO_ARGS, env: { OPENCODE_CONFIG: path }, env_dropped: NOTHING_DROPPED }),
     },
+    env_last: OPENCODE_AUTO_UPDATER_OFF,
   },
 }
 
-/** A directory a host keeps installed packages in; its presence counts, its contents do not. */
-const INSTALLED_PACKAGES = 'node_modules'
 
 /**
  * What a launch started the host with, down to the names a host's declaration lists (martha#135): its arguments,
@@ -480,7 +501,7 @@ function crewTextPathsOf(place: LaunchPlace): ReadonlySet<string> {
 export type PreparedLaunch =
   | {
       readonly allow: true
-      /** Add these to the host's command line, and start it with `launchEnvironment(process.env, switches)`. */
+      /** Add these to the host's command line, and start it with `launchEnvironment(process.env, switches, host)`. */
       readonly switches: HostSwitches
       /** Where the approved copies are. The launcher removes it when the member stops. */
       readonly snapshot_dir: string
@@ -641,7 +662,7 @@ function entriesAt(machine: LaunchHost, start: string, dir: string, name: string
 function walk(machine: LaunchHost, start: string, path: string): readonly ConfigEntry[] {
   const entry = entryOf(machine, start, path)
   if (entry.kind !== 'directory') return [entry]
-  if (path.split(sep).at(-1) === INSTALLED_PACKAGES) return [entry]
+  if (path.split(sep).at(-1) === DEPENDENCIES) return [entry]
 
   let children: string[]
   try {

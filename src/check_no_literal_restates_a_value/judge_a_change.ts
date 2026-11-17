@@ -1,7 +1,8 @@
-// What the gate judges in a change, read from git (martha#289).
+// What the range run judges in a change, read from git (martha#289).
 //
-// The gate judges what a change adds, not the whole tree: the lines it adds, and
-// every literal equal to a value it defines, revalues or takes away — those are
+// This module reads the range run, `--range`; the whole-tree run is ./main.ts with
+// no range. The range run judges what a change adds: the lines it adds, and every
+// literal equal to a value it defines, revalues or takes away — those are
 // judged over the whole tree, because a constant added today makes every old copy
 // of its value stale at once, and a revalued, renamed or removed one leaves every
 // literal still holding the old value behind (Uranus's R1). The change is read as
@@ -177,8 +178,12 @@ export function verdictOf<Entry extends Exception>(root: string, range: string |
   return { sources, stale, markers, judged, defined, findings }
 }
 
-/** The line a gate prints to prove it looked: the range, the literal sites on its lines, and the values judged over the whole tree. */
-export const summaryOf = (name: string, verdict: Verdict): string | null =>
+/**
+ * The line a gate prints to prove it looked: over the whole tree, the literal sites
+ * it holds; over a range, the range, the literal sites on its lines, and the values
+ * judged over the whole tree.
+ */
+export const summaryOf = (name: string, verdict: Verdict): string =>
   verdict.judged === null
-    ? null
+    ? `${name}: the whole tree, ${literalSitesJudged(verdict.sources, null)} literal site(s) judged`
     : `${name}: range ${verdict.judged.merge_base}..${verdict.judged.head} (asked ${verdict.judged.asked}), ${literalSitesJudged(verdict.sources, verdict.judged.added)} literal site(s) judged, ${verdict.defined.length} value(s) judged over the whole tree`

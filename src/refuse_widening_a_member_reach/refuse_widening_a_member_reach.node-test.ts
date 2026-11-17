@@ -7,12 +7,13 @@ import { after, test } from 'node:test'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { claudeCodeToolNames, openCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_TOOLS_REFUSED, MESH_TOOLS_THAT_RUN } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const names = claudeCodeToolNames
 
@@ -21,7 +22,7 @@ const names = claudeCodeToolNames
 const launch_home = mkdtempSync(join(tmpdir(), 'martha-no-launch-config-'))
 after(() => removeTheTree(launch_home))
 const launch: ApprovedLaunch = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   launch_dir: mkdtempSync(join(launch_home, 'work-')),
   stop_dir: launch_home,
   approved_fingerprints: [],

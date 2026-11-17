@@ -18,7 +18,7 @@ import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cro
 import { readHandover, stampHandover } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   WHAT_CLEARS_IT,
@@ -38,6 +38,7 @@ import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result
 
 import { answerToolCall, type ApprovedLaunch, type ToolCallAnswer } from './answer_a_tool_call.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const names = claudeCodeToolNames
 
@@ -48,10 +49,10 @@ const checkout = join(launch_home, 'work')
 mkdirSync(checkout)
 writeFileSync(join(checkout, 'README.md'), 'a checkout\n')
 const launch: ApprovedLaunch = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   launch_dir: checkout,
   stop_dir: launch_home,
-  approved_fingerprints: [fingerprintOf(readLaunchState({ host: 'claude-code', launch_dir: checkout, stop_dir: launch_home }, thisMachine))],
+  approved_fingerprints: [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: checkout, stop_dir: launch_home }, thisMachine))],
 }
 
 const policy: Policy = { may_send_executable_text: [] }

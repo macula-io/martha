@@ -5,7 +5,7 @@
 // its predecessor reached, so a threshold measured from zero asks again on the very first report, clears, and resumes
 // into the same size. A decline is measured exactly as an ask is, which is the same rule applied to the answer.
 //
-// The flow's own file is driven through the crew store the host really composes on a disk (../crew_files_directory), so
+// The flow's own file is driven through the crew store the host really composes on a disk (../keep_the_crews_files_as_directories), so
 // what a launcher reads back is the file it would have left.
 
 import assert from 'node:assert/strict'
@@ -14,10 +14,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
-import { CREW_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   aDeclineIsAllowed,
   theFlowSentBack,
@@ -26,19 +25,14 @@ import {
   aRefreshIsDue,
   FLOW_WINDOW_MS,
   HANDOVER_LIMIT_PERCENT,
-  isAStorm,
   keepTheFlow,
   REFRESH_MARGIN_PERCENT,
   refreshesPlace,
-  STORM_WINDOW_MS,
   theFlowAbandoned,
   theFlowClearing,
   theFlowDeclined,
   theFlowOf,
-  theHandoverPrompt,
   theRefreshFile,
-  theSendBackNote,
-  whatBecameOfTheHandover,
   type ARefresh,
   type TheSessionsReading,
 } from './refresh_a_member.ts'
@@ -130,50 +124,6 @@ test('#255: only the two automatic triggers may be declined; a refresh someone a
   assert.equal(aDeclineIsAllowed('asked'), false)
 })
 
-test('#255: a handover written before the flow asked for one is not this flow’s handover', () => {
-  const verdict = whatBecameOfTheHandover({
-    stamp: { member: 'builder', predecessor_id: 'a-session', written_at: new Date(500).toISOString(), digest: 'x', record_length: 0, record_digest: 'y' },
-    text: 'a handover',
-    asked_at: 1_000,
-    holds: [],
-    sent_back: 0,
-    at_limit: false,
-  })
-  assert.deepEqual(verdict, { kind: 'not_written', why: 'the handover was written before this session was asked for one' })
-})
-
-test('#255: a handover missing the line of a package the row holds is sent back once, and clears on the second miss', () => {
-  const asked = { stamp: { member: 'builder', predecessor_id: 'a-session', written_at: new Date(2_000).toISOString(), digest: 'x', record_length: 0, record_digest: 'y' }, text: 'a handover with no package in it', asked_at: 1_000, holds: ['synthetic-owner/repo#7'] }
-  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: false }), { kind: 'sent_back', missing: ['no line naming synthetic-owner/repo#7'] })
-  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 1, at_limit: false }), { kind: 'cleared_anyway', missing: ['no line naming synthetic-owner/repo#7'] })
-  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: true }), { kind: 'cleared_anyway', missing: ['no line naming synthetic-owner/repo#7'] })
-  assert.deepEqual(
-    whatBecameOfTheHandover({ ...asked, text: 'it holds synthetic-owner/repo#7, at a branch and a sha', sent_back: 1, at_limit: false }),
-    { kind: 'accepted', missing: [] },
-  )
-})
-
-test('#255: the send-back note names what was missing and the word to answer with', () => {
-  const note = theSendBackNote(['no line naming synthetic-owner/repo#7'])
-  assert.ok(note.includes('no line naming synthetic-owner/repo#7'), 'the note does not say what was missing')
-  assert.ok(note.includes(CREW_HANDOVER_WRITTEN), 'the note does not say which word to answer with')
-})
-
-test('#255: the handover prompt names the limit and the tool, and asks for the word', () => {
-  const atTheLimit = theHandoverPrompt({ at_limit: true, percent: HANDOVER_LIMIT_PERCENT + 2 })
-  assert.ok(atTheLimit.includes(`${HANDOVER_LIMIT_PERCENT}%`), 'the prompt does not name the limit')
-  assert.ok(atTheLimit.includes(WRITE_MY_HANDOVER_TOOL), 'the prompt does not name the tool that writes the handover')
-  assert.ok(atTheLimit.includes(CREW_HANDOVER_WRITTEN), 'the prompt does not name the word to answer with')
-  assert.ok(!theHandoverPrompt({ at_limit: false, percent: 30 }).includes('handover limit'), 'a task’s end reads as the limit')
-})
-
-test('#255: two refreshes inside the window are a storm, and one outside it is not', () => {
-  const now = 10 * STORM_WINDOW_MS
-  assert.equal(isAStorm([now - STORM_WINDOW_MS / 2], now), true)
-  assert.equal(isAStorm([now - STORM_WINDOW_MS - 1], now), false)
-  assert.equal(isAStorm([], now), false)
-})
-
 test('#255: a flow past its window is stalled, and one inside it is not', () => {
   const flow = aFlow({ at: 1_000 })
   assert.equal(aFlowStalled(flow, 1_000 + FLOW_WINDOW_MS - 1), false)
@@ -181,7 +131,7 @@ test('#255: a flow past its window is stalled, and one inside it is not', () => 
 })
 
 test('#255: a flow is kept whole in the crew’s own store, and read back as it was written', () => {
-  const host = hostForTests({ crew: crewFilesDirectory(crew) })
+  const host = hostForTests({ crew: keepTheCrewsFilesAsDirectories(crew) })
   const place = refreshesPlace(host.host)
   assert.ok(!('refusal' in place), `the crew's store refused the flow place: ${'refusal' in place ? place.refusal : ''}`)
   assert.equal(theFlowOf(place, 'builder'), undefined)
@@ -196,7 +146,7 @@ test('#255: a flow is kept whole in the crew’s own store, and read back as it 
 })
 
 test('#255: a flow file that is not one is a refusal, never read as no flow', () => {
-  const host = hostForTests({ crew: crewFilesDirectory(join(home, 'other-crew')) })
+  const host = hostForTests({ crew: keepTheCrewsFilesAsDirectories(join(home, 'other-crew')) })
   const place = refreshesPlace(host.host)
   assert.ok(!('refusal' in place), 'the crew store refused the flow place')
   place.keep(theRefreshFile('builder'), 'not a flow at all\n')

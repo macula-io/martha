@@ -8,7 +8,10 @@ import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import {
   ACTS,
+  BACKLOG,
   CHANNEL_READ_SECONDS_WHEN_UNNAMED,
+  CREW_CODE_DECLARATION_DIRECTORY,
+  CREW_CODE_DECLARATION_FILE,
   HANDOVER_CEILING_MINUTES_LEAST,
   HANDOVER_CEILING_MINUTES_MOST,
   HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
@@ -27,9 +30,10 @@ import {
   declareCrew,
   type CrewSettings,
 } from './declare_crew.ts'
+import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 
 // A made-up project root: this repository is public, so no real path appears here.
-const root = '/crew-project'
+const root = '/martha-project'
 const crew_directory = join(root, DECLARATION_DIRECTORY)
 const declaration_path = join(crew_directory, DECLARATION_FILE)
 
@@ -47,7 +51,7 @@ const solo = {
   version: DECLARATION_VERSION,
   owner: 'Ann',
   members: [{ name: 'Builder', role: 'builder' }],
-  mode: { name: 'solo', roles: ['builder'], may: allActsTo([OWNER]) },
+  mode: { name: SOLO_MODE, roles: ['builder'], may: allActsTo([OWNER]) },
   channel_read_seconds: 30,
 }
 
@@ -100,7 +104,7 @@ test('a solo declaration gives typed settings', async () => {
   const settings = await declare(solo).settings
   assert.equal(settings.owner, 'Ann')
   assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null }])
-  assert.equal(settings.mode.name, 'solo')
+  assert.equal(settings.mode.name, SOLO_MODE)
   for (const act of ACTS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
   assert.deepEqual(settings.paths, {
     root,
@@ -158,6 +162,20 @@ test('the declaration is read exactly once, and using the settings reads nothing
 })
 
 // --- 3. no silent default -----------------------------------------------------
+
+test('#468: a checkout still holding crew-code\'s declaration is refused by name, not as a plain absence', async () => {
+  const crewCodeDeclaration = join(root, CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE)
+  const { store } = storeOf({ [crewCodeDeclaration]: JSON.stringify(solo) })
+  await assert.rejects(declareCrew(store, root, HOST_MODELS), (error: unknown) => {
+    assert.ok(error instanceof DeclarationRefused)
+    assert.equal(error.file, declaration_path)
+    assert.equal(error.field, null)
+    // The message names the file found and the file Martha reads, so a person can move one to the other.
+    assert.ok(error.message.includes(crewCodeDeclaration), error.message)
+    assert.ok(error.message.includes(declaration_path), error.message)
+    return true
+  })
+})
 
 test('a missing declaration is refused by its file, never replaced by a default', async () => {
   const { store } = storeOf({})
@@ -458,4 +476,24 @@ test('#320: the windows a crew declares are the ones its settings carry', async 
     [settings.house_rules.stalled_minutes, settings.house_rules.review_minutes, settings.house_rules.person_minutes],
     [60, 45, 30],
   )
+})
+
+test('#319 B test 6: a backlog that names no idle_minutes is refused, naming the field, and is never given a default', async () => {
+  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'] } }, `${BACKLOG}.idle_minutes`)
+  const { settings } = declare({ ...solo, [BACKLOG]: { places: ['macula-io'] } })
+  await assert.rejects(settings, /idle_minutes is missing: a backlog names how long a member may sit idle beside unheld work, 0 for no nudge/)
+})
+
+test('#319 B: a backlog names at least one organisation or owner/repo, and a whole number of idle minutes', async () => {
+  await refusedWith({ ...solo, [BACKLOG]: { places: [], idle_minutes: 30 } }, `${BACKLOG}.places`)
+  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io/martha/extra'], idle_minutes: 30 } }, `${BACKLOG}.places`)
+  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'], idle_minutes: -1 } }, `${BACKLOG}.idle_minutes`)
+  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'], idle_minutes: 1.5 } }, `${BACKLOG}.idle_minutes`)
+  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'], idle_minutes: 30, every: 5 } }, `${BACKLOG}.every`)
+  await refusedWith({ ...solo, [BACKLOG]: ['macula-io'] }, BACKLOG)
+})
+
+test('#319 B: a declaration without a backlog has none, and one with it reads its places and window, 0 included', async () => {
+  assert.equal((await declare(solo).settings).backlog, null)
+  assert.deepEqual((await declare({ ...solo, [BACKLOG]: { places: ['macula-io', 'macula-io/macula'], idle_minutes: 0 } }).settings).backlog, { places: ['macula-io', 'macula-io/macula'], idle_minutes: 0 })
 })

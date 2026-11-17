@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 
-import { INSTALL_WITHOUT_ASKING, PACKAGE_SWITCH, PINNED_INSTALLER } from '../src/claude_code_host/mesh_server_install.ts'
+import { INSTALL_WITHOUT_ASKING, PACKAGE_SWITCH, PINNED_INSTALLER } from '../src/install_the_mesh_server_for_claude_code/mesh_server_install.ts'
 import { YES } from '../src/approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../src/declare_crew/declare_crew.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS, type RecordedMeshServer } from '../src/read_a_room_through_its_gate/mesh_server_tools.ts'
@@ -25,11 +25,11 @@ import {
   marthaOnATerminal,
   plainTextOf,
   RECORDED_HOST_VARIABLE,
-  stateHomeUnder,
   whatTheLaunchSaw,
   type ModelRequest,
   type RecordedHostRan,
-} from '../src/launch_a_claude_code_member/drive_the_recorded_host.ts'
+} from '../src/drive_the_recorded_host/drive_the_recorded_host.ts'
+import { stateHomeUnder } from '../src/find_a_homes_state_root/find_a_homes_state_root.ts'
 import type { Ingestion } from '../src/refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { ROW_SUFFIX } from '../src/row_streams_directory/row_streams_directory.ts'
 import { RECORD_LOST } from '../src/take_in_a_turn/take_in_a_turn.ts'

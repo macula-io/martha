@@ -18,11 +18,11 @@
 //
 // The core reads no disk: the crew place, the launches, the rows, the dashboard and the start are the host's.
 
-import { OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { OWNER, RESTART_MEMBER, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { HandoverStampStore, Processes, Refused, RowStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { theNewestHandover, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { STORM_WINDOW_MS } from '../refresh_a_member/refresh_a_member.ts'
-import { STATE_OF_PHASE } from '../report_progress/report_progress.ts'
+import { STORM_WINDOW_MS } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { STATE_OF_PHASE } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
 import {
@@ -152,7 +152,7 @@ export async function aRestartTooSoon(rows: RowStore, member: string, now: numbe
   if (last === undefined) return undefined
   const asked_at = Date.parse(last['asked_at'] as string)
   if (now - asked_at >= STORM_WINDOW_MS) return undefined
-  const minutes = Math.round(STORM_WINDOW_MS / 60_000)
+  const minutes = Math.round(STORM_WINDOW_MS / MINUTE_MS)
   return `${member} was restarted by ${String(last['by'])} at ${String(last['asked_at'])}, inside the last ${minutes} minutes, so it is not restarted again by a tool. The owner's martha restart ${member} is not limited.`
 }
 

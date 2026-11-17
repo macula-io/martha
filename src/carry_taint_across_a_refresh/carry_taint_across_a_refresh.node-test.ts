@@ -6,7 +6,7 @@ import { after, test } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import type { Policy, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import {
   beginSession,
@@ -16,7 +16,7 @@ import {
   type HostSession,
   type SessionRecordStore,
 } from '../take_in_a_turn/take_in_a_turn.ts'
-import { CLAUDE_CODE_SESSION_EVENTS, SESSION_START_OUTCOMES, readHandover, stampHandover, startSession, undeclaredSessionEvents } from './carry_taint_across_a_refresh.ts'
+import { THE_REFRESH_THE_MOD_RUNS, CLAUDE_CODE_SESSION_EVENTS, SESSION_START_OUTCOMES, readHandover, stampHandover, startSession, undeclaredSessionEvents } from './carry_taint_across_a_refresh.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_contract.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -24,6 +24,7 @@ import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { releaseMarkFor } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const names = claudeCodeToolNames
 
@@ -32,7 +33,7 @@ const names = claudeCodeToolNames
 const launch_home = mkdtempSync(join(tmpdir(), 'martha-no-launch-config-'))
 after(() => removeTheTree(launch_home))
 const launch: ApprovedLaunch = {
-  host: 'claude-code',
+  host: CLAUDE_CODE,
   launch_dir: mkdtempSync(join(launch_home, 'work-')),
   stop_dir: launch_home,
   approved_fingerprints: [],
@@ -76,7 +77,7 @@ test('a tainted session refreshed under a new id leaves a tainted successor', ()
   taintedPredecessor(store, stampStore())
 
   const successor = startSession(store, CLAUDE_CODE_SESSION_EVENTS, {
-    event: 'crew_refresh',
+    event: THE_REFRESH_THE_MOD_RUNS,
     session_id: 'new',
     predecessor_id: 'old',
   })
@@ -91,7 +92,7 @@ test('a clean session refreshed under a new id keeps its shell', () => {
   rememberSession(store, startSession(store, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: 'old' }))
 
   const successor = startSession(store, CLAUDE_CODE_SESSION_EVENTS, {
-    event: 'crew_refresh',
+    event: THE_REFRESH_THE_MOD_RUNS,
     session_id: 'new',
     predecessor_id: 'old',
   })
@@ -102,7 +103,7 @@ test('an inheriting start with no predecessor, or one whose record is gone, has 
   const store = sessions()
   for (const predecessor_id of [undefined, 'a-session-the-store-never-saw']) {
     const successor = startSession(store, CLAUDE_CODE_SESSION_EVENTS, {
-      event: 'crew_refresh',
+      event: THE_REFRESH_THE_MOD_RUNS,
       session_id: `new-${String(predecessor_id)}`,
       ...(predecessor_id === undefined ? {} : { predecessor_id }),
     })
@@ -285,7 +286,7 @@ test('a lost record, inherited by a refresh, is still lost', () => {
   const store = sessions()
   rememberSession(store, resumeSession(store, 'gone'))
   const successor = startSession(store, CLAUDE_CODE_SESSION_EVENTS, {
-    event: 'crew_refresh',
+    event: THE_REFRESH_THE_MOD_RUNS,
     session_id: 'new',
     predecessor_id: 'gone',
   })
@@ -339,7 +340,7 @@ test('a predecessor record rewritten to a clean one of the same length still tai
   const stamps = stampStore()
   const predecessor = taintedPredecessor(store, stamps)
   const rewritten = takeInTurn(beginSession(sessions(), 'scratch'), {
-    source: 'crew_room',
+    source: 'channel_message',
     from_identity: supervisor_identity,
   }, bindNothing)
   assert.equal(rewritten.gate.ingested.length, predecessor.gate.ingested.length)

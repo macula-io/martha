@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -16,7 +16,7 @@ import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
-import { removeTheTree } from './relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
@@ -25,7 +25,7 @@ import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../
 import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type Ran, type Refused, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { linuxProcessIdentities, PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { fakeNpmRegistry, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
@@ -36,28 +36,32 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { POLL_MS, until } from './wait_until_the_event.ts'
+import { POLL_MS, until } from '../drive_the_recorded_host/wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 import { unplacedToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { handedAtThisStart, memberRelay, NO_SIGNED_RUNS, type MemberRelay, type MemberRelayPlace, type RelayReply } from './answer_the_relay.ts'
+import { handedAtThisStart, memberRelay, NO_SIGNED_RUNS, type MemberRelay, type MemberRelayPlace, type RelayReply } from '../answer_the_relay/answer_the_relay.ts'
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
-import { MCP_CONFIG_SWITCH, notACommandThisLauncherCanRun } from './host_runs_the_relay.ts'
-import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from './host_stand_in.ts'
+import { HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { PLUGIN_DIRS_VARIABLE } from '../claude_code_host/hooks_and_plugins_the_owner_declares.ts'
-import { hookSettingsWatch } from '../claude_code_host/settings_that_turn_hooks_off.ts'
-import { CLAUDE_CODE, launchClaudeCodeMember, NOT_STARTED, recordedInsideTheHold, RELAY_PLUGIN_DIR } from './launch_a_claude_code_member.ts'
-import { LAUNCHER_RECORD_NAME, type LaunchRecord, recordTheLauncher } from './leftover_relay_directories.ts'
-import { MEMBER_PID_FD } from './member_on_the_owners_terminal.ts'
-import * as relayCopy from './relay_copy.ts'
-import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from './relay_directory.ts'
-import { GAVE_UP_BEFORE_ALLOW, readTheNewestRelayJournal, relayJournalKeptIn, type RelayJournal } from './keep_the_relays_journal.ts'
-import { HOST_EXIT_COMMAND, HOST_TERMINAL } from './drive_the_recorded_host.ts'
-import { serveTheRelay } from './serve_the_relay.ts'
-import { shortRelayRoot } from './short_relay_root.ts'
+import { PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
+import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
+import { keepTheLifelineIn, RUN_LIFELINE_FD } from '../end_a_launch_when_its_run_ends/keep_the_lifeline_in.ts'
+import { RUN_LIFELINE_VARIABLE, THE_RUN_IS_GONE } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
+import { RELAY_PLUGIN_DIR } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
+import { LAUNCHER_RECORD_NAME, type LaunchRecord } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
+import { MEMBER_PID_FD } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
+import * as relayCopy from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { makeRelayDirectory, RELAY_DIRECTORY_MODE, RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_directory.ts'
+import { GAVE_UP_BEFORE_ALLOW, readTheNewestRelayJournal, relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
+import { HOST_EXIT_COMMAND, HOST_TERMINAL } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
+import { serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
+import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { LOST, recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseMarkFor, releasesIn, RELEASE_STREAM, releaseStreamOf } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
@@ -66,15 +70,20 @@ import { memoryDenyRules, ownerMemoryPlaces, writesTheOwnersMemory, type OwnerUs
 import { CONTACT_POLICY_FILE_UNDER_HOME, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
-import { crewFilesDirectory } from '../crew_files_directory/crew_files_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import { USER_SETTINGS_FILE } from '../claude_code_host/settings_env_reaching_servers.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
+import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
   output_styles_folder: CLAUDE_CODE_OUTPUT_STYLES_FOLDER,
-  reported_output_styles_dir: join(home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
+  reported_output_styles_dir: join(home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER),
 })
 
 // --- a member's places ----------------------------------------------------------
@@ -360,13 +369,13 @@ test('on the same session, a turn that only claims the owner\'s typing still tak
   }
 })
 
-test('a fresh start allows the shell; fork and a claimed crew_refresh start lost, whatever the input claims', async (t) => {
+test('a fresh start allows the shell; fork and a claimed martha_refresh start lost, whatever the input claims', async (t) => {
   const { relay, rows } = answering(placeFor(t))
   await relay.answer('session_started', start('startup'))
   assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' })), ALLOW_REPLY)
 
   // T7: a fork carries its parent's context under a new id; T8: a refresh is never claimed.
-  for (const [session_id, source] of [['forked', 'fork'], ['refreshed', 'crew_refresh']] as const) {
+  for (const [session_id, source] of [['forked', 'fork'], ['refreshed', THE_REFRESH_THE_MOD_RUNS]] as const) {
     await relay.answer('session_started', start(source, session_id, { predecessor_id: SESSION }))
     assert.ok(isDenied(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: 'ls' }, session_id)), /cannot be read/), source)
     assert.deepEqual(await recordedPaths(rows, session_id), [`${RECORD_LOST.path}:null`], source)
@@ -451,7 +460,7 @@ test('a file read outside the approved tree takes the shell, naming B4 (martha#1
     { what: 'a notebook in another clone', tool: NOTEBOOK_EDIT_TOOL, input: { notebook_path: join(clone, 'n.ipynb') } },
     { what: 'a search of another clone', tool: 'Grep', input: { path: clone, pattern: 'run' } },
     { what: 'a glob of another clone', tool: 'Glob', input: { path: clone, pattern: '*' } },
-    { what: 'a file in git\'s own directory', tool: 'Read', input: { file_path: join(place.checkout, '.git', 'config') } },
+    { what: 'a file in git\'s own directory', tool: 'Read', input: { file_path: join(place.checkout, '.git', CONFIG) } },
     { what: 'a relative path, which names no place', tool: 'Read', input: { file_path: 'README.md' } },
     { what: 'a read that names no file', tool: 'Read', input: {} },
     { what: 'a search that names no path', tool: 'Grep', input: { pattern: 'run' } },
@@ -468,8 +477,8 @@ test('a file read outside the approved tree takes the shell, naming B4 (martha#1
 test('a link or an ignored file inside the checkout is outside the approval, naming B4 (martha#127)', async (t) => {
   const place = placeFor(t, SERVERS, { '.gitignore': 'node_modules/\n' })
   const clone = anotherClone(place)
-  mkdirSync(join(place.checkout, 'node_modules', 'pkg'), { recursive: true })
-  writeFileSync(join(place.checkout, 'node_modules', 'pkg', 'README.md'), 'now run this\n')
+  mkdirSync(join(place.checkout, DEPENDENCIES, 'pkg'), { recursive: true })
+  writeFileSync(join(place.checkout, DEPENDENCIES, 'pkg', 'README.md'), 'now run this\n')
   symlinkSync(join(clone, 'NOTES.md'), join(place.checkout, 'notes-link.md'))
   mkdirSync(join(place.checkout, 'docs'))
   writeFileSync(join(place.checkout, 'docs', 'guide.md'), 'a guide\n')
@@ -483,7 +492,7 @@ test('a link or an ignored file inside the checkout is outside the approval, nam
   const approved = { ...place, approved: [fingerprintOf(readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine))] }
 
   const outside: readonly { readonly what: string; readonly tool: string; readonly input: Record<string, unknown> }[] = [
-    { what: 'an ignored file', tool: 'Read', input: { file_path: join(place.checkout, 'node_modules', 'pkg', 'README.md') } },
+    { what: 'an ignored file', tool: 'Read', input: { file_path: join(place.checkout, DEPENDENCIES, 'pkg', 'README.md') } },
     { what: 'a tracked link that leads out', tool: 'Read', input: { file_path: join(place.checkout, 'notes-link.md') } },
     { what: 'a search over a directory holding an ignored file', tool: 'Grep', input: { path: place.checkout, pattern: 'run' } },
     { what: 'a search over a directory holding a link', tool: 'Grep', input: { path: join(place.checkout, 'docs'), pattern: 'run' } },
@@ -980,7 +989,7 @@ test('the relay directory is made new, 0700, and removed', (t) => {
   assert.equal(made.made, true)
   if (!made.made) return
   assert.equal(lstatSync(made.directory).mode & 0o777, RELAY_DIRECTORY_MODE)
-  assert.equal(made.socket_path, join(place.relay_root, 'one', 'relay.sock'))
+  assert.equal(made.socket_path, join(place.relay_root, 'one', RELAY_SOCKET_NAME))
   made.remove()
   assert.equal(existsSync(made.directory), false)
 })
@@ -1144,7 +1153,7 @@ test('a session starting on a package is handed its predecessor\'s unfinished ac
     beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.rows, 'crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')) },
   })
   // The predecessor's row: the member holds a package, and says so where the launcher reads it.
   const kept = dashboardRowsIn(place.dashboard).change(member, () => ({
@@ -1190,7 +1199,7 @@ test('a session starting on no package is handed nothing, and its start is taken
     beats: dashboardRowsIn(place.dashboard),
     root: place.checkout,
     documents: { read: async (path) => readFileSync(path, 'utf8') },
-    stores: { crew: crewFilesDirectory(join(place.rows, 'crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')) },
   })
 
   const { relay } = answering(place, rowStreamsDirectory(place.rows), [], undefined, undefined, undefined, crew)
@@ -1269,7 +1278,7 @@ function fakeClaude(
     [
       '#!/bin/sh',
       // The session init reports the folder the launcher must deny: this place's own config dir (#154).
-      ...hostAnswers({ callsFile: files.callsFile, initAnswer: reportsOutputStyles(join(place.home, '.claude', CLAUDE_CODE_OUTPUT_STYLES_FOLDER)), ...answers }),
+      ...hostAnswers({ callsFile: files.callsFile, initAnswer: reportsOutputStyles(join(place.home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER)), ...answers }),
       `: > '${files.ranFile}'`,
       `printf '%s\\n' "$@" > '${files.argsFile}'`,
       `printf '%s' "$${RELAY_SOCKET_VARIABLE}" > '${files.envFile}'`,
@@ -1290,7 +1299,7 @@ function fakeClaude(
 const isAlive = (pid: number): boolean => {
   try {
     process.kill(pid, 0)
-    return !readFileSync(`/proc/${pid}/stat`, 'utf8').includes(') Z ')
+    return !readFileSync(`${PROC_ROOT}/${pid}/stat`, 'utf8').includes(') Z ')
   } catch {
     return false
   }
@@ -1336,10 +1345,10 @@ async function environmentOf(pid: number, settle: Settle, read: ProcRead = readP
   let text: string | undefined
   await settle(`the environment of process ${pid} to settle`, () => {
     try {
-      const stat = read(`/proc/${pid}/stat`)
+      const stat = read(`${PROC_ROOT}/${pid}/stat`)
       const [state, parent] = stat.slice(stat.lastIndexOf(') ') + 2).split(' ')
       if (state === 'Z' || pid === KERNEL_THREAD_PARENT || Number(parent) === KERNEL_THREAD_PARENT) return true
-      text = read(`/proc/${pid}/environ`)
+      text = read(`${PROC_ROOT}/${pid}/environ`)
       return text !== ''
     } catch {
       text = undefined
@@ -1355,8 +1364,8 @@ function plantedProc(pid: number, stat: string, answers: string[]): { read: Proc
   let reads = 0
   return {
     read: (path) => {
-      if (path === `/proc/${pid}/stat`) return stat
-      if (path === `/proc/${pid}/environ`) return answers[Math.min(reads++, answers.length - 1)] ?? ''
+      if (path === `${PROC_ROOT}/${pid}/stat`) return stat
+      if (path === `${PROC_ROOT}/${pid}/environ`) return answers[Math.min(reads++, answers.length - 1)] ?? ''
       throw new Error(`no ${path}`)
     },
     reads: () => reads,
@@ -1678,7 +1687,7 @@ test('a member with no owner to answer its host, whose relay never reports its s
   const fake = fakeClaude(place)
   const lines: string[] = []
   const session_start_deadline_ms = 300
-  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command, place.approved, lines), session_start_deadline_ms, trust_answer_deadline_ms: 60_000 })
+  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command, place.approved, lines), session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS })
   if (!started.started) assert.fail(started.refusal)
   const stopped = await started.stopped
   assert.equal(stopped.signal, 'SIGKILL')
@@ -1805,7 +1814,7 @@ const NEVER_REACHES_THE_MESH_SERVER = ['NODE_OPTIONS', 'SOME_ADDON_PREBUILD', RE
  * It answers every name it is asked, null for one it was not started with, so a
  * check on a name it was never asked about fails instead of reading it as absent.
  */
-const ASKED_OF_THE_STAND_IN = [...NEVER_REACHES_THE_MESH_SERVER, 'CLAUDE_CODE_PLUGIN_DIRS'] as const
+const ASKED_OF_THE_STAND_IN = [...NEVER_REACHES_THE_MESH_SERVER, PLUGIN_DIRS_VARIABLE] as const
 const STAND_IN_ANSWER = [
   `const asked = ${JSON.stringify(ASKED_OF_THE_STAND_IN)}`,
   'const started = { ...process.env }',
@@ -1826,7 +1835,7 @@ async function recordedTreeOf(t: TestContext, version: string): Promise<{ regist
 
 const serverConfigIn = (argsFile: string) => {
   const args = readFileSync(argsFile, 'utf8').split('\n')
-  const path = args[args.indexOf('--mcp-config') + 1]
+  const path = args[args.indexOf(MCP_CONFIG_SWITCH) + 1]
   assert.ok(path !== undefined)
   return JSON.parse(readFileSync(path, 'utf8')) as { mcpServers: Record<string, { command: string; args: string[] }> }
 }
@@ -1839,12 +1848,12 @@ test('an approved config that installs a recorded mesh server version starts the
   const fake = fakeClaude(place)
   const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes(MCP_CONFIG_SWITCH), t)
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula
   assert.ok(entry !== undefined)
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
   // Started by path, confined to its tree by the launcher's hook (martha#73).
-  assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, DEPENDENCIES, MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   // What the stand-in writes is captured, never let through into the run (martha#92).
   const run = spawnSync(entry.command, entry.args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   assert.equal(run.status, 0, run.stderr)
@@ -1907,7 +1916,7 @@ test('what the launcher\'s environment would load into the mesh server never rea
   }
   const started = await aMemberStartedIn(t, place, planted)
   assert.ok(started.started, started.started ? '' : started.refusal)
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes(MCP_CONFIG_SWITCH), t)
   // The host's own environment, read from the kernel, under the entry's env: how Claude Code starts a server.
   const hostEnv = (await environmentOf(started.pid, inTest(t))) ?? {}
   assert.equal(hostEnv.NODE_OPTIONS, `--require ${preload}`, 'the host itself was given the planted preload')
@@ -1931,7 +1940,7 @@ test('what the launcher\'s environment would load into the mesh server never rea
 // The host gives every server its own environment, then the env of each settings
 // file it loaded: the owner's user settings and the approved --settings copy.
 
-const USER_SETTINGS = join('.claude', 'settings.json')
+const USER_SETTINGS = join(CLAUDE_FOLDER, USER_SETTINGS_FILE)
 const settingsWithEnv = (env: Record<string, string>) => JSON.stringify({ env })
 
 function ownerSettings(place: Place, env: Record<string, string>): string {
@@ -1989,7 +1998,7 @@ test('a name in the approved --settings env nobody approved starts nothing, nami
 
 for (const [shape, configDir] of [
   ['empty', ''],
-  ['relative', '.claude'],
+  ['relative', CLAUDE_FOLDER],
 ] as const) {
   test(`a CLAUDE_CONFIG_DIR that is ${shape} starts nothing, naming the variable (#65 r=4)`, async (t) => {
     const recorded = RECORDED_MESH_SERVERS[0]
@@ -2014,7 +2023,7 @@ test("a blank CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the me
   ownerSettings(place, fromSettings)
   const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, [], recording))
   assert.ok(started.started, started.started ? '' : started.refusal)
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes('--mcp-config'), t)
+  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes(MCP_CONFIG_SWITCH), t)
   const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
   assert.ok(entry !== undefined)
   // The host's environment, then the settings env, then the entry's: how Claude Code starts a server.
@@ -2303,7 +2312,7 @@ test('a mesh server tree changed since it was installed starts nothing, naming t
   await first.stopped
   rmSync(fake.ranFile, { force: true })
 
-  const changed = join('node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js')
+  const changed = join(DEPENDENCIES, MESH_SERVER_PACKAGE, 'dist', 'index.js')
   writeFileSync(join(place.mesh_servers, recorded.server_version, changed), "console.log('planted')\n")
   const lines: string[] = []
   const second = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, lines, recording))
@@ -2357,11 +2366,11 @@ test('an approved launch starts the host with the switches and the relay, and a 
     '--setting-sources',
     'user',
     '--strict-mcp-config',
-    '--mcp-config',
+    MCP_CONFIG_SWITCH,
     join(place.snapshot_root, snapshot[0] ?? '', '.mcp.json'),
     // Written by the launch when none is carried: the rules that keep the host's own writes out of the owner's memory (martha#136).
     '--settings',
-    join(place.snapshot_root, snapshot[0] ?? '', '.claude', 'settings.json'),
+    join(place.snapshot_root, snapshot[0] ?? '', CLAUDE_FOLDER, USER_SETTINGS_FILE),
     '--plugin-dir',
     plugin_dir,
   ])
@@ -2414,7 +2423,7 @@ test('a member that exits by itself leaves no record, socket or snapshot, and no
 /** The process group of a pid, or undefined when the process is gone. */
 function groupOf(pid: number): number | undefined {
   try {
-    return Number(readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.split(' ')[2])
+    return Number(readFileSync(`${PROC_ROOT}/${pid}/stat`, 'utf8').split(') ')[1]?.split(' ')[2])
   } catch {
     return undefined
   }
@@ -2437,7 +2446,7 @@ async function carriesRelayRoot(pid: number, relay_root: string, read: ProcRead 
  */
 async function killGroupsCarrying(relay_root: string): Promise<void> {
   const own = groupOf(process.pid)
-  for (const entry of readdirSync('/proc')) {
+  for (const entry of readdirSync(PROC_ROOT)) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1) continue
     if (!(await carriesRelayRoot(pid, relay_root))) continue
@@ -2454,7 +2463,7 @@ async function killGroupsCarrying(relay_root: string): Promise<void> {
 /** Every process this user has that names this relay root in its environment. */
 async function pidsCarrying(relay_root: string): Promise<number[]> {
   const found: number[] = []
-  for (const entry of readdirSync('/proc')) {
+  for (const entry of readdirSync(PROC_ROOT)) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1) continue
     if (await carriesRelayRoot(pid, relay_root)) found.push(pid)
@@ -2462,12 +2471,49 @@ async function pidsCarrying(relay_root: string): Promise<number[]> {
   return found
 }
 
-/** Waits, within cleanup's own bound, for every process that still carries this relay root to be gone (martha#216). */
-async function noProcessCarries(relay_root: string, alsoGone: readonly number[]): Promise<void> {
+/**
+ * What one look at the place sees: every pid that still carries its relay root, and the launcher, which carries none
+ * (martha#216). A look reads the processes that exist when it begins, so it is a photograph, never a watch.
+ */
+type ALook = () => Promise<number[]>
+
+/**
+ * Waits, within cleanup's own bound, for nothing to carry the relay root any more, and answers the pids that outlast
+ * the wait: those are the ones a test left behind (martha#216).
+ *
+ * The bound is on how long a process is waited for, never on how long a look may take: a look reads every process's
+ * environment, and one caught in `exec` holds the look for up to CLEANUP_SETTLE_MS (martha#85), so a busy machine can
+ * spend the whole bound inside one look and end the wait on a photograph taken before anything was looked for.
+ *
+ * A look that finds nothing is followed by one more (martha#466): the photograph it took is of the processes that
+ * existed when it began, so a process forked while it ran is in neither its list nor the one before it, and believing
+ * the first quiet photograph failed a run on a process that was only on its way out.
+ */
+async function waitForNothingToCarry(look: ALook): Promise<number[]> {
   const deadline = Date.now() + CLEANUP_SETTLE_MS * 4
-  const stillHere = async (): Promise<boolean> =>
-    alsoGone.some((pid) => pid > 1 && isAlive(pid)) || (await pidsCarrying(relay_root)).length > 0
-  while (Date.now() < deadline && (await stillHere())) await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  while (Date.now() < deadline) {
+    if (await nothingCarriesTwice(look)) return []
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  }
+  return look()
+}
+
+/**
+ * Whether two looks in a row found nothing. The second is taken after the first has ended, so a process forked while
+ * the first ran — which that look's own list does not hold — is seen by it (martha#466). A first look that finds
+ * something is answered without a second: it is not quiet, and the wait goes on.
+ */
+async function nothingCarriesTwice(look: ALook): Promise<boolean> {
+  if ((await look()).length > 0) return false
+  return (await look()).length === 0
+}
+
+/** Waits for every process that still carries this relay root to be gone, and answers the ones that outlast it. */
+async function noProcessCarries(relay_root: string, alsoGone: readonly number[]): Promise<number[]> {
+  return waitForNothingToCarry(async () => [
+    ...(await pidsCarrying(relay_root)),
+    ...alsoGone.filter((pid) => pid > 1 && isAlive(pid)),
+  ])
 }
 
 /**
@@ -2477,12 +2523,12 @@ async function noProcessCarries(relay_root: string, alsoGone: readonly number[])
  * (martha#216 r=3).
  */
 async function killWhateverNamesTheHome(home: string): Promise<void> {
-  for (const entry of readdirSync('/proc')) {
+  for (const entry of readdirSync(PROC_ROOT)) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) continue
     let line = ''
     try {
-      line = readFileSync(`/proc/${pid}/cmdline`, 'utf8')
+      line = readFileSync(`${PROC_ROOT}/${pid}/cmdline`, 'utf8')
     } catch {
       continue
     }
@@ -2503,16 +2549,15 @@ async function killWhateverNamesTheHome(home: string): Promise<void> {
  *
  * Whatever still holds the home when it is due is killed here, so a red run never leaves a member behind, and the test
  * then fails by name naming those pids: a home that goes under a running host is never again only an occasioned
- * ENOTEMPTY (martha#216).
+ * ENOTEMPTY (martha#216). A pid is named only once it has outlasted the wait that the look before it began: a process
+ * that is on its way out is waited for, never named (martha#466).
  */
 async function theHomeGoes(place: Pick<Place, 'home' | 'relay_root'>, alsoGone: readonly number[] = []): Promise<void> {
-  await noProcessCarries(place.relay_root, alsoGone)
-  const left = (await pidsCarrying(place.relay_root)).filter((pid) => !alsoGone.includes(pid))
-  const launcherLeft = alsoGone.filter((pid) => pid > 1 && isAlive(pid))
+  const left = await noProcessCarries(place.relay_root, alsoGone)
   await killGroupsCarrying(place.relay_root)
   removeTheTree(place.home)
-  if (left.length > 0 || launcherLeft.length > 0) {
-    throw new Error(`the place's home was due for removal while ${[...left, ...launcherLeft].join(', ')} still held it: a test that starts a member in a process of its own marks the place, and removes the home after that process has gone (martha#216)`)
+  if (left.length > 0) {
+    throw new Error(`the place's home was due for removal while ${left.join(', ')} still held it: a test that starts a member in a process of its own marks the place, and removes the home after that process has gone (martha#216)`)
   }
 }
 
@@ -2526,10 +2571,44 @@ const thePlaceGoesWithItsProcesses = (t: TestContext, place: Place): void => {
   t.after(() => theHomeGoes(place))
 }
 
+test('a quiet look is not a watch: a second look in a row is what ends the wait (martha#466)', async () => {
+  // One look reads the processes that exist when it begins, so a quiet one may simply have been taken before the one
+  // that was leaving was forked. The wait may end only on two quiet looks in a row, so a place that is quiet every
+  // time is looked at exactly twice: a wait that stopped on the first quiet look would take one.
+  let looks = 0
+  const left = await waitForNothingToCarry(async () => {
+    looks += 1
+    return []
+  })
+  assert.deepEqual(left, [])
+  assert.equal(looks, 2, 'the wait ended on one quiet look, which is the photograph that can miss a process forked while it ran')
+})
+
+test('the removal waits for a process that is only on its way out, and does not name it (martha#466)', async () => {
+  // The looks a busy machine can hand the wait: the first quiet, then — in the one look that closes the window a
+  // photograph leaves — a process that is already leaving, gone by the look after. Nothing was left behind, so nothing
+  // is named, and a run that changed nothing is not failed for it. The first quiet look is not believed, which is what
+  // lets the second one see the process at all.
+  const looks = [[], [41234], []]
+  let at = 0
+  const left = await waitForNothingToCarry(async () => looks[at++] ?? [])
+  assert.deepEqual(left, [])
+  assert.ok(at > 1, 'the wait ended on the first quiet look and so never saw the process the look after it found')
+})
+
+test('the removal names a process that outlasts its wait (martha#216)', async () => {
+  // A member a test never stopped is there every time the wait looks: it is named, never passed over.
+  const left = await waitForNothingToCarry(async () => [41234])
+  assert.deepEqual(left, [41234])
+})
+
 /**
  * A launcher in a process of its own, started on this place, that says when its
  * member runs, and stops it on SIGUSR2 the way a refusal does. It stays up after
- * its member has stopped, until it is ended.
+ * its member has stopped, until it is ended — unless `staysUp` is false, which is
+ * how a test asks whether a launch that never got a member still ends by itself
+ * (#472): the interval that keeps this one up is the only thing between a refused
+ * launch and a process that exits, so a test that keeps the interval proves nothing.
  */
 /** The owner's arguments a launcher process passes unless told otherwise: one prompt, answered and printed. */
 const OWNER_PROMPT_ARGS = ['-p', 'the owner prompt']
@@ -2542,6 +2621,7 @@ function launcherProcess(
   mesh_trees?: MeshTreeRecording,
   deadlines: SessionStartDeadlines = {},
   args: readonly string[] = OWNER_PROMPT_ARGS,
+  staysUp = true,
 ): string {
   // A member runs here, in a process this one does not own: the place's own hook leaves the removal to this test, which
   // alone can wait for that process before the home goes (martha#216).
@@ -2551,12 +2631,12 @@ function launcherProcess(
   writeFileSync(
     script,
     [
-      `import { CLAUDE_CODE, launchClaudeCodeMember } from ${JSON.stringify(launchModule)}`,
+      `import { launchClaudeCodeMember } from ${JSON.stringify(launchModule)}`,
       `const place = ${JSON.stringify(place)}`,
       'const started = await launchClaudeCodeMember({',
       "  member_name: 'Mercury',",
       `  node_id: ${JSON.stringify(NODE_ID)},`,
-      '  place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },',
+      `  place: { host: ${JSON.stringify(CLAUDE_CODE)}, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },`,
       '  policy: { may_send_executable_text: [] },',
       '  places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },',
       ...(mesh_trees === undefined ? [] : [`  mesh_trees: ${JSON.stringify(mesh_trees)},`]),
@@ -2572,14 +2652,16 @@ function launcherProcess(
       "if (started.started) process.once('SIGUSR2', () => started.stop('the test said so'))",
       "process.stdout.write(started.started ? `started ${started.pid}\\n` : `refused: ${started.refusal}\\n`)",
       "if (started.started) { const stopped = await started.stopped; process.stdout.write(`stopped ${stopped.signal ?? 'by itself'}\\n${stopped.stopped_because === null ? '' : `because ${stopped.stopped_because}\\n`}`) }",
-      'setInterval(() => undefined, 1 << 30)',
+      ...(staysUp ? ['setInterval(() => undefined, 1 << 30)'] : []),
       '',
     ].join('\n'),
   )
   return script
 }
 
-for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+// Every signal a launcher can be ended by without its own say, including the two a terminal's hangup and its quit key
+// send (martha#472): a launcher signalled directly cleans up exactly like one spoken to by martha stop.
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
   test(`${signal} to the launcher kills its member's group and leaves no socket or snapshot`, async (t) => {
     const place = placeFor(t)
     const fake = fakeClaude(place)
@@ -2613,35 +2695,337 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   })
 }
 
-test("a member is written into its launch directory's record inside the hold, and a write that fails refuses it (#124 r=4)", async (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'martha-124-held-'))
-  t.after(() => {
-    chmodSync(directory, 0o700)
-    removeTheTree(directory)
-  })
-  assert.equal(recordTheLauncher(directory), undefined, 'the launch records itself before the member is spawned')
+// --- the run a member is started under (martha#472) ---------------------------------
 
-  // A real child, alive while its place in the record is written and read back.
-  const member = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
-  t.after(() => member.kill('SIGKILL'))
-  await new Promise((resolve) => member.once('spawn', resolve))
-  const pid = member.pid ?? 0
-  assert.ok(pid > 0, 'the member is a process this test started')
+/**
+ * A host that answers as a stand-in does, ignores a terminal's hangup as a real one does — so no test can pass on the
+ * fake's own death — and keeps a child in its group, as a tool server does. Given `park`, it waits before answering
+ * anything until `waitFor` exists, saying in `parked` that it is waiting: the launcher is then provably parked in its
+ * own questions, which is where a test puts the end of a run without racing it (#472).
+ */
+function fakeHostUnderARun(
+  place: Place,
+  park?: { readonly waitFor: string; readonly parked: string },
+): { command: string; argsFile: string; readyFile: string; childFile: string } {
+  const dir = join(place.home, 'fake-run')
+  mkdirSync(dir)
+  const files = { argsFile: join(dir, 'args'), readyFile: join(dir, 'ready'), childFile: join(dir, 'child') }
+  const command = join(dir, 'claude')
+  writeFileSync(
+    command,
+    [
+      '#!/bin/sh',
+      ...(park === undefined ? [] : [`: > '${park.parked}'; while [ ! -e '${park.waitFor}' ]; do sleep 0.01; done`]),
+      ...hostAnswers({ initAnswer: reportsOutputStyles(join(place.home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER)) }),
+      // Its own pid, which `exec` keeps, so a test can tell the member from the process under it by which one it reads.
+      `echo $$ > '${files.readyFile}'`,
+      `printf '%s\\n' "$@" > '${files.argsFile}'`,
+      // A host ignores a terminal's hangup, so nothing but the launcher's group kill can take it away (#472).
+      `trap '' HUP`,
+      'sleep 600 &',
+      `echo $! > '${files.childFile}'`,
+      'exec sleep 600',
+      '',
+    ].join('\n'),
+    { mode: 0o700 },
+  )
+  return { command, ...files }
+}
 
-  const held = recordedInsideTheHold(directory, pid, { recorded: true })
-  assert.deepEqual(held, { admitted: true, recorded: { recorded: true }, inTheLaunchRecord: true }, 'the member runs only when its place is in the record')
-  const record = JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')) as LaunchRecord
-  assert.equal(record.member?.pid, pid, 'the record names the member, so a sweep cannot take the directory of a member still running')
-  assert.equal(record.member?.process_started_at, linuxProcessIdentities.identityOf(pid))
+/** The group a process leads or belongs to, or nothing when it went while it was looked at. */
+function groupOfOrNothing(pid: number): number | undefined {
+  try {
+    return groupOf(pid)
+  } catch {
+    return undefined
+  }
+}
 
-  // A launch directory this user can no longer write: the member's place cannot be kept.
-  chmodSync(directory, 0o500)
-  const refused = recordedInsideTheHold(directory, pid, { recorded: true })
-  chmodSync(directory, 0o700)
-  assert.equal(refused.admitted, false, 'a member whose place cannot be written is refused, not run with no record of it')
-  assert.match(refused.recorded.recorded ? 'it was recorded' : refused.recorded.refusal, /could not be written/)
-  assert.equal((JSON.parse(readFileSync(join(directory, LAUNCHER_RECORD_NAME), 'utf8')) as LaunchRecord).member?.pid, pid, 'and the record is left as it was')
+/** Every process in `group`, as the kernel lists them. */
+function pidsInGroup(group: number): number[] {
+  return readdirSync(PROC_ROOT)
+    .map(Number)
+    .filter((pid) => Number.isInteger(pid) && pid > 1 && groupOfOrNothing(pid) === group)
+}
+
+/** What one of a process's descriptors names, or nothing when it went with its process. */
+function descriptorNames(pid: number, descriptor: string): string {
+  try {
+    return readlinkSync(`${PROC_ROOT}/${pid}/fd/${descriptor}`)
+  } catch {
+    return ''
+  }
+}
+
+/** Every process in `group` that holds a descriptor naming `path`: the run's plumbing, if it reached the member (#472). */
+function holdersInGroupOf(group: number, path: string): number[] {
+  return pidsInGroup(group).filter((pid) => readdirSync(`${PROC_ROOT}/${pid}/fd`).some((descriptor) => descriptorNames(pid, descriptor) === path))
+}
+
+/**
+ * Fails unless the member's environment names the pipe nowhere (#472). What it says when it fails is the entries that
+ * name it and nothing else: that environment is the run's own, so every other entry of it is one of the owner's.
+ */
+function assertThePipeIsUnnamed(environment: readonly string[]): void {
+  const naming = environment.filter((named) => named.startsWith(`${RUN_LIFELINE_VARIABLE}=`))
+  assert.equal(naming.length, 0, `the member is handed no variable naming the pipe: ${JSON.stringify(naming)}`)
+}
+
+/**
+ * How long a launcher's own answer to its run's end may take: a pipe closing and a group kill, not a host's pace
+ * (#472). A wait for that answer with no bound would end as the harness's timeout, which names no assertion.
+ */
+const REACTS_WITHIN_MS = 25_000
+
+/**
+ * The session-start backstop's deadline, put beyond any wait a lifeline test holds: the backstop stops a host that never
+ * reported its session, and a test that let it within its own run could not tell that stop from the lifeline's (#472).
+ */
+const BEYOND_ANY_WAIT_MS = 900_000
+
+/** Waits for what a launcher reacts with, no longer than `ms`: true when it came. */
+async function reactsWithin(holds: () => boolean, ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms
+  while (Date.now() < deadline) {
+    if (holds()) return true
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  }
+  return holds()
+}
+
+test('a member handed a variable naming the pipe is failed by that entry alone, never by its whole environment (#472)', () => {
+  const anOwnersOwn = 'AN_OWNERS_OWN_SECRET=what-no-log-carries'
+  const naming = `${RUN_LIFELINE_VARIABLE}=${RUN_LIFELINE_FD}`
+  assert.doesNotThrow(() => assertThePipeIsUnnamed(['PATH=/usr/bin', anOwnersOwn]), 'an environment naming no pipe passes')
+  let said = ''
+  try {
+    assertThePipeIsUnnamed(['PATH=/usr/bin', naming, anOwnersOwn])
+  } catch (error) {
+    said = error instanceof Error ? error.message : String(error)
+  }
+  assert.ok(said.includes(naming), `the entry that names the pipe is what a failure says: ${said}`)
+  assert.equal(said.includes(anOwnersOwn), false, `and never the rest of the member's environment: ${said}`)
 })
+
+test('a run that closes its lifeline takes its member down with it, leaving no relay directory, snapshot or record (#472)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeHostUnderARun(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // The backstop is put beyond this test, so what stops the member can only be the lifeline's own end.
+  const launcher = spawn(process.execPath, [launcherProcess(place, fake.command, 'ignore', lifeline.environment, undefined, { session_start_deadline_ms: BEYOND_ANY_WAIT_MS })], { stdio: lifeline.stdio })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  // Before any assertion: a test that fails must not leave the member running.
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to start its member', () => said.includes('started') && existsSync(fake.childFile), t, () => said, () => REFUSED_LINE.exec(said)?.[0])
+  const member = Number(readFileSync(fake.readyFile, 'utf8').trim())
+  const child = Number(readFileSync(fake.childFile, 'utf8').trim())
+  assert.equal(isAlive(member), true)
+  assert.equal(isAlive(child), true)
+  // The launcher took the pipe in close-on-exec and closed the number it was handed: nothing the member runs holds it.
+  assert.deepEqual(holdersInGroupOf(groupOf(member) ?? member, lifeline.path), [])
+  // And the member is handed no variable naming it (#472 r=3): the number it would name is one the launcher has closed,
+  // so a tool server or a nested `martha start` reading it would be told of a run it cannot read. The rest of the run's
+  // own environment is inherited, which is what says this environment was read at all.
+  const environment = readFileSync(`${PROC_ROOT}/${member}/environ`, 'utf8').split('\0')
+  assertThePipeIsUnnamed(environment)
+  assert.equal(environment.some((named) => named.startsWith('PATH=')), true, 'and inherits the run\'s own environment besides it')
+  assert.equal(readdirSync(place.relay_root).length, 1, 'the launch has its relay directory while it runs')
+  assert.equal(readdirSync(place.snapshot_root).length, 1)
+  assert.equal(readdirSync(place.launch_records).length, 1)
+  // The run goes: its end of the pipe closes, and nothing else has to happen for the member to be taken with it.
+  lifeline.closeTheRunsEnd()
+  // The reason is what tells this kill from the backstop's, which this launch cannot reach: an assertion only that the
+  // member stopped would pass on the wrong killer (#472 r=1).
+  assert.ok(
+    await reactsWithin(() => said.includes('stopped'), REACTS_WITHIN_MS),
+    `the launcher never said it stopped its member after its run went: ${JSON.stringify(said)}`,
+  )
+  assert.ok(said.includes(`because ${THE_RUN_IS_GONE}`), `not the run's end that stopped it: ${JSON.stringify(said)}`)
+  await until('the member and the process under it to be killed', () => !isAlive(member) && !isAlive(child), t)
+  await until('the launch directory and the snapshot to go', () => readdirSync(place.relay_root).length === 0 && readdirSync(place.snapshot_root).length === 0, t)
+  await until('the launch record to go', () => readdirSync(place.launch_records).length === 0, t)
+})
+
+test('a launch refused while its run is still there ends by itself: its run\'s lifeline never holds a launcher up (#472)', async (t) => {
+  const place = placeFor(t)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // Nothing keeps this launcher up but its own work: the command is not one it can run, so no member starts, and the
+  // script holds no interval. The run keeps its end open for the whole test, so a launcher that waited on it would
+  // never end — which is what a pipe left referenced does (#472 r=1).
+  const script = launcherProcess(place, join(place.home, 'no-such-command'), 'ignore', lifeline.environment, undefined, {}, OWNER_PROMPT_ARGS, false)
+  const launcher = spawn(process.execPath, [script], { stdio: lifeline.stdio })
+  let ended = false
+  launcher.once('exit', () => (ended = true))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to refuse', () => REFUSED_LINE.test(said), t, () => said)
+  assert.ok(said.includes('is not a command this launcher can run'), said)
+  assert.ok(
+    await reactsWithin(() => ended, REACTS_WITHIN_MS),
+    `the launcher never ended on its refusal while its run was still there: ${JSON.stringify(said)}`,
+  )
+  assert.deepEqual(readdirSync(place.relay_root), [], 'a refusal leaves nothing behind')
+})
+
+test('a run killed hard is still taken with its member: the pipe\'s end closes however the run ends (#472)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeHostUnderARun(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const launcher = launcherProcess(place, fake.command, 'ignore', { [RUN_LIFELINE_VARIABLE]: String(RUN_LIFELINE_FD) }, undefined, { session_start_deadline_ms: BEYOND_ANY_WAIT_MS })
+  // The run, in a process of its own, keeps the pipe's write end and starts the launcher through `script`, so the
+  // launcher is its grandchild and survives it: nothing in the chain dies of the kill, and only the pipe says so.
+  const runScript = join(place.home, 'the-run.ts')
+  // What the launcher's terminal shows, written to a file by the terminal itself: a pipe carried back through this run
+  // would end with the run, and the reason this test asserts is said after the run is killed.
+  const shownAt = join(place.home, 'the-launcher-said')
+  const shown = (): string => (existsSync(shownAt) ? readFileSync(shownAt, 'utf8') : '')
+  writeFileSync(
+    runScript,
+    [
+      `import { spawn } from 'node:child_process'`,
+      `import { openSync } from 'node:fs'`,
+      `import { keepTheLifelineIn } from ${JSON.stringify(new URL('../end_a_launch_when_its_run_ends/keep_the_lifeline_in.ts', import.meta.url).href)}`,
+      `const lifeline = keepTheLifelineIn(${JSON.stringify(runtime)})`,
+      `spawn(${JSON.stringify(PTY_RUNNER)}, ['-qec', ${JSON.stringify(`'${process.execPath}' '${launcher}'`)}, '/dev/null'], { stdio: [lifeline.stdio[0], openSync(${JSON.stringify(shownAt)}, 'w'), lifeline.stdio[2], lifeline.stdio[3]] })`,
+      `process.stdout.write('the run is up\\n')`,
+      'setInterval(() => undefined, 1 << 30)',
+      '',
+    ].join('\n'),
+  )
+  const run = spawn(process.execPath, [runScript], { stdio: ['ignore', 'pipe', 'inherit'] })
+  t.after(async () => {
+    if (run.exitCode === null && run.signalCode === null) run.kill('SIGKILL')
+    await killGroupsCarrying(place.relay_root)
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  await until('the run to start its launcher\'s member', () => existsSync(fake.childFile) && textIn(fake.readyFile) !== '', t, shown)
+  const member = Number(textIn(fake.readyFile))
+  const child = Number(textIn(fake.childFile))
+  assert.equal(isAlive(member), true, 'the member runs before the kill')
+  run.kill('SIGKILL')
+  await until('the member and the process under it to be killed', () => !isAlive(member) && !isAlive(child), t, shown)
+  // Bounded, and the backstop was put out of reach: a member nobody stops fails here, naming the reason it never said.
+  assert.ok(await reactsWithin(() => shown().includes('stopped'), REACTS_WITHIN_MS), `the launcher never said it stopped its member: ${JSON.stringify(shown())}`)
+  assert.ok(shown().includes(`because ${THE_RUN_IS_GONE}`), `not the run's end that stopped it: ${JSON.stringify(shown())}`)
+  await until('the launch directory and the snapshot to go', () => readdirSync(place.relay_root).length === 0 && readdirSync(place.snapshot_root).length === 0, t)
+  await until('the launch record to go', () => readdirSync(place.launch_records).length === 0, t)
+})
+
+test('a run that goes while the launcher waits on the host leaves the member\'s command unrun (#472)', async (t) => {
+  const place = placeFor(t)
+  const marker = join(place.home, 'the-questions-may-be-answered')
+  const fake = fakeHostUnderARun(place, { waitFor: marker, parked: join(place.home, 'the-launcher-is-parked') })
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // On a terminal, because a member is admitted there through the hold this test puts the run's end in: the member is
+  // never started at all, rather than started and then stopped.
+  const script = launcherProcess(place, fake.command, 'inherit', lifeline.environment)
+  const terminal = spawn(PTY_RUNNER, ['-qec', `'${process.execPath}' '${script}'`, '/dev/null'], { stdio: lifeline.stdio })
+  const ended = new Promise<void>((resolve) => terminal.once('exit', () => resolve()))
+  t.after(async () => {
+    terminal.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  terminal.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to be parked on its questions', () => existsSync(join(place.home, 'the-launcher-is-parked')), t, () => said)
+  lifeline.closeTheRunsEnd()
+  writeFileSync(marker, '')
+  // Bounded, so a hold that admits a member anyway fails by name here rather than as the harness's timeout (#472 r=1).
+  assert.ok(
+    await reactsWithin(() => REFUSED_LINE.test(said), REACTS_WITHIN_MS),
+    `the launcher never refused the member its run's end forbids: ${JSON.stringify(said)}`,
+  )
+  assert.ok(said.includes(THE_RUN_IS_GONE), said)
+  assert.equal(existsSync(fake.argsFile), false, 'the member\'s command never ran: not stopped, unrun')
+  assert.deepEqual(readdirSync(place.relay_root), [])
+  assert.deepEqual(readdirSync(place.snapshot_root), [])
+})
+
+test('a run that goes before the launcher knows its member\'s group still takes the member down (#472)', async (t) => {
+  const place = placeFor(t)
+  const marker = join(place.home, 'the-questions-may-be-answered')
+  const fake = fakeHostUnderARun(place, { waitFor: marker, parked: join(place.home, 'the-launcher-is-parked') })
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // Off the owner's terminal, so there is no hold to refuse the member in: it is started, and the run's end arrives
+  // before its group is in the launcher's hand. `theGroupIsKnown` is the launch's only answer for that, which is why
+  // this case exists apart from the one above. The backstop is put beyond this test, so only the lifeline can stop it.
+  const script = launcherProcess(place, fake.command, 'ignore', lifeline.environment, undefined, { session_start_deadline_ms: BEYOND_ANY_WAIT_MS })
+  const launcher = spawn(process.execPath, [script], { stdio: lifeline.stdio })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to be parked on its questions', () => existsSync(join(place.home, 'the-launcher-is-parked')), t, () => said)
+  lifeline.closeTheRunsEnd()
+  writeFileSync(marker, '')
+  assert.ok(
+    await reactsWithin(() => said.includes('stopped'), REACTS_WITHIN_MS),
+    `the launcher never stopped the member it started after its run went: ${JSON.stringify(said)}`,
+  )
+  assert.ok(/^started \d+$/m.test(said), `the member was started, not refused: there is no hold off the owner's terminal: ${JSON.stringify(said)}`)
+  assert.ok(said.includes(`because ${THE_RUN_IS_GONE}`), `not the run's end that stopped it: ${JSON.stringify(said)}`)
+  const member = Number(/^started (\d+)$/m.exec(said)?.[1])
+  assert.equal(isAlive(member), false, 'the member the run\'s end found in the group it had is dead')
+  await until('the launch directory and the snapshot to go', () => readdirSync(place.relay_root).length === 0 && readdirSync(place.snapshot_root).length === 0, t)
+  await until('the launch record to go', () => readdirSync(place.launch_records).length === 0, t)
+})
+
+test('a lifeline whose run is already gone refuses the launch by name, before anything is made (#472)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeHostUnderARun(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  lifeline.closeTheRunsEnd()
+  const launcher = spawn(process.execPath, [launcherProcess(place, fake.command, 'ignore', lifeline.environment)], { stdio: lifeline.stdio })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to refuse', () => REFUSED_LINE.test(said), t, () => said)
+  assert.ok(said.includes(RUN_LIFELINE_VARIABLE), said)
+  assert.ok(said.includes('already closed'), said)
+  assert.equal(existsSync(fake.argsFile), false, 'no member started')
+  assert.deepEqual(readdirSync(place.relay_root), [], 'nothing was made: no relay directory')
+  assert.deepEqual(readdirSync(place.snapshot_root), [], 'and no snapshot')
+})
+
 
 test('a launcher killed hard leaves its directory behind, and the next launch takes it away (#124)', async (t) => {
   const place = placeFor(t)
@@ -2796,6 +3180,12 @@ interface OwnersTerminal {
   press(keys: string): void
   /** What the terminal has shown so far. */
   shown(): string
+  /**
+   * The status the launcher ended with and the last of what it printed, when it ended without starting a member
+   * (martha#454): a script that cannot load dies before the launcher says `started`, so nothing else it could say
+   * tells a test why the member never came. Undefined while it runs, and for one that started or refused one.
+   */
+  launcherEnd(): { readonly code: number; readonly said: string } | undefined
 }
 
 /** How the owner's terminal launches: what it starts, its environment, and where the launcher's stderr goes. */
@@ -2813,6 +3203,8 @@ interface TerminalLaunch {
   readonly deadlines?: SessionStartDeadlines
   /** The owner's arguments to the host, instead of a prompt to print an answer to. */
   readonly args?: readonly string[]
+  /** The launcher script the terminal runs, instead of the one the harness writes, for a script that cannot load (martha#454). */
+  readonly launcher_script?: string
 }
 
 /** The deadlines a test gives a launch in place of the launcher's own. */
@@ -2838,13 +3230,41 @@ async function ownersTerminal(t: TestContext, place: Place, how: TerminalLaunch 
 /** The line the launcher process prints when it refuses (launcherProcess), as the terminal shows it. */
 const REFUSED_LINE = /refused: [^\r\n]*/
 
+/** The line the launcher process prints when it starts its member, as the terminal shows it. */
+const STARTED_LINE = /started \d+/
+
+/**
+ * The last of what a launcher printed, for a message that has to carry its own error: the stack frames are left out,
+ * since the line that says what went wrong is the one above them, and what remains is capped so the message stays one
+ * line a reader can follow.
+ */
+const theLastOf = (said: string): string =>
+  said
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('at '))
+    .slice(-3)
+    .join(' / ')
+    .slice(-400)
+
 /**
  * Waits on the owner's terminal for what a test means, and fails at once when
  * the launcher has said it refused: after that, no member event can come
  * (martha#94).
+ *
+ * A launcher that ends fails the wait at once too, naming the status it ended
+ * with and the last of what it printed (martha#454): a script that cannot load
+ * says nothing on the terminal and starts no member, so the wait would otherwise
+ * run to the harness's timeout and leave only that as the failure.
  */
-const untilOnTerminal = (terminal: Pick<OwnersTerminal, 'shown'>, what: string, holds: () => boolean, t: TestContext): Promise<void> =>
-  until(what, holds, t, () => terminal.shown(), () => REFUSED_LINE.exec(terminal.shown())?.[0])
+const untilOnTerminal = (terminal: Pick<OwnersTerminal, 'shown' | 'launcherEnd'>, what: string, holds: () => boolean, t: TestContext): Promise<void> =>
+  until(what, holds, t, () => terminal.shown(), () => {
+    const refused = REFUSED_LINE.exec(terminal.shown())?.[0]
+    if (refused !== undefined) return refused
+    const ended = terminal.launcherEnd()
+    if (ended === undefined) return undefined
+    return `the launcher ended with status ${ended.code} and started nothing${ended.said === '' ? '' : `; it said: ${ended.said}`}`
+  })
 
 /** The owner's terminal with the launch started, not waited on: for a launch that may start no member. */
 function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit<OwnersTerminal, 'launcher'> & { launcher(): number } {
@@ -2852,14 +3272,16 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
   const notes = join(place.home, 'terminal')
   mkdirSync(notes)
   const note = (name: string) => join(notes, name)
-  const launcher = launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines, how.args)
+  const launcher = how.launcher_script ?? launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines, how.args)
   const stderr = how.stderrTo === undefined ? '' : ` 2> '${how.stderrTo}'`
   const shell = [
     `echo $$ > '${note('shell')}'`,
-    `readlink /proc/$$/fd/0 > '${note('tty')}'`,
+    `readlink ${PROC_ROOT}/$$/fd/0 > '${note('tty')}'`,
     `stty -g > '${note('before')}'`,
     // A shell without job control gives a background command /dev/null as its input, unless told otherwise.
-    `'${process.execPath}' '${launcher}' < /dev/tty${stderr} & echo $! > '${note('launcher')}'; wait`,
+    // The launcher's own status is noted when it ends, so a test waiting on the terminal can fail at once with it
+    // rather than run to the harness's timeout (martha#454).
+    `'${process.execPath}' '${launcher}' < /dev/tty${stderr} & launcher=$!; echo $launcher > '${note('launcher')}'; wait $launcher; echo $? > '${note('ended')}'`,
     'read finished',
   ].join('; ')
   const runner = spawn(PTY_RUNNER, ['-qec', shell, '/dev/null'], { stdio: ['pipe', 'pipe', 'inherit'] })
@@ -2894,6 +3316,15 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
     type: (line: string) => void runner.stdin.write(`${line}\n`),
     press: (keys: string) => void runner.stdin.write(keys),
     shown: () => shown,
+    // What the launcher printed is the terminal itself, unless the test sent its stderr to a file: either way it is the
+    // launcher's own error, which is the whole point of naming it (martha#454).
+    launcherEnd: () => {
+      const ended = textIn(note('ended'))
+      // A launcher that started or refused a member has said what became of it: what follows its end is another
+      // test's to wait for, and its end rules nothing out (martha#454).
+      if (ended === '' || STARTED_LINE.test(shown) || REFUSED_LINE.test(shown)) return undefined
+      return { code: Number(ended), said: theLastOf(how.stderrTo === undefined ? shown : textIn(how.stderrTo)) }
+    },
   }
 }
 
@@ -2938,7 +3369,7 @@ test('a member on the owner\'s terminal starts the recorded mesh server tree, by
   assert.ok(entry !== undefined)
   assert.equal(entry.command, process.execPath, 'npx is never what starts the mesh server')
   // Started by path, confined to its tree by the launcher's hook (martha#73).
-  assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, 'node_modules', MESH_SERVER_PACKAGE, 'dist', 'index.js'))
+  assert.equal(entry.args.at(-1), join(realpathSync(place.mesh_servers), recorded.server_version, DEPENDENCIES, MESH_SERVER_PACKAGE, 'dist', 'index.js'))
   terminal.type(LEAVE_LINE)
   await untilOnTerminal(terminal, 'the launcher to say its member stopped by itself', () => terminal.shown().includes('stopped by itself'), t)
 })
@@ -2967,7 +3398,7 @@ test('a member on the owner\'s terminal is not held to the deadline of a member 
 test('a member on the owner\'s terminal whose relay never reports its session start is stopped at the trust answer deadline, saying the host may still have been asking (#104 r=2)', async (t) => {
   const place = placeFor(t)
   const trust_answer_deadline_ms = 500
-  const terminal = await ownersTerminal(t, place, { deadlines: { session_start_deadline_ms: 60_000, trust_answer_deadline_ms } })
+  const terminal = await ownersTerminal(t, place, { deadlines: { session_start_deadline_ms: MINUTE_MS, trust_answer_deadline_ms } })
   await until('the launcher to stop the member', () => terminal.shown().includes('because '), t, () => terminal.shown())
   const why = /because (.*)/.exec(terminal.shown())?.[1] ?? ''
   assert.ok(why.includes(`within ${trust_answer_deadline_ms / 1000} s`), why)
@@ -2976,14 +3407,14 @@ test('a member on the owner\'s terminal whose relay never reports its session st
 
 /** The host's own record of the folders it trusts, as Claude Code keeps it in the config folder the member's HOME names. */
 function hostTrustRecord(place: Place, record: string | undefined): void {
-  if (record !== undefined) writeFileSync(join(place.home, '.claude.json'), record)
+  if (record !== undefined) writeFileSync(join(place.home, HOST_TRUST_RECORD_FILE), record)
 }
 
 test('a member on the owner\'s terminal in a folder the host\'s record already trusts is held to the short deadline: the host asks nothing (#104 r=3)', async (t) => {
   const place = placeFor(t)
   hostTrustRecord(place, JSON.stringify({ projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
   const session_start_deadline_ms = 300
-  const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: 60_000 } })
+  const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS } })
   await until('the launcher to stop the member', () => terminal.shown().includes('because '), t, () => terminal.shown())
   const why = /because (.*)/.exec(terminal.shown())?.[1] ?? ''
   assert.ok(why.includes(`within ${session_start_deadline_ms / 1000} s`), why)
@@ -2999,7 +3430,7 @@ test('a member on the owner\'s terminal whose owner passes the host its ignore-p
   const session_start_deadline_ms = 300
   const flag = CLAUDE_CODE_HOOK_SWITCHES.outside_a_terminal.flags[0]
   assert.ok(flag !== undefined, 'the recording names no argument for the exit')
-  const terminal = await ownersTerminal(t, place, { args: [flag], inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: 60_000 } })
+  const terminal = await ownersTerminal(t, place, { args: [flag], inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS } })
   const member = Number(textIn(terminal.fake.readyFile))
   await new Promise((resolve) => setTimeout(resolve, 5 * session_start_deadline_ms))
   assert.equal(isAlive(member), true, 'the member still runs: the host was told to ignore its record, so it may ask')
@@ -3017,7 +3448,7 @@ for (const [what, record] of [
     const place = placeFor(t)
     hostTrustRecord(place, typeof record === 'function' ? record(place) : record)
     const session_start_deadline_ms = 300
-    const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: 60_000 } })
+    const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS } })
     const member = Number(textIn(terminal.fake.readyFile))
     await new Promise((resolve) => setTimeout(resolve, 5 * session_start_deadline_ms))
     assert.equal(isAlive(member), true, 'the member still runs')
@@ -3145,6 +3576,25 @@ for (const [what, make] of [
   })
 }
 
+test('a launcher script that cannot load fails the test at once, naming the export it wanted and did not get (martha#454)', async (t) => {
+  const place = placeFor(t)
+  // A script whose import names something the launch module does not export. The host ends it before it starts anything,
+  // and the terminal shows no line at all, so the launcher's own error is the only thing that can say why: without it
+  // the wait runs to the harness's timeout, which reports the wait and never the script.
+  const script = join(place.home, 'launcher-that-cannot-load.ts')
+  const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
+  writeFileSync(script, `import { launchClaudeCodeMember, NOTHING_THIS_MODULE_EXPORTS } from ${JSON.stringify(launchModule)}\nvoid launchClaudeCodeMember\nvoid NOTHING_THIS_MODULE_EXPORTS\n`)
+  // A file, so what the launcher printed is read as the launcher wrote it, with no race against the terminal.
+  const said = join(place.home, 'launcher-that-cannot-load.stderr')
+  await assert.rejects(ownersTerminal(t, place, { launcher_script: script, stderrTo: said }), (failure: Error) => {
+    // The harness's timeout is the failure this replaces, and it names nothing.
+    assert.doesNotMatch(failure.message, /timed out/)
+    assert.match(failure.message, /the launcher ended with status 1 and started nothing/)
+    assert.match(failure.message, /does not provide an export named 'NOTHING_THIS_MODULE_EXPORTS'/)
+    return true
+  })
+})
+
 // The recorded host itself, on the owner's terminal (martha#117). The host writes
 // its generated types into the folder --plugin-dir names on an interactive start,
 // only the files that are missing, and keeps what is there; no stand-in does, so
@@ -3174,7 +3624,7 @@ test(
     // What an owner's first run records: onboarding done and the checkout trusted. No account and no key.
     const home = join(place.home, 'host-home')
     mkdirSync(home, { mode: 0o700 })
-    writeFileSync(join(home, '.claude.json'), JSON.stringify({ hasCompletedOnboarding: true, projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
+    writeFileSync(join(home, HOST_TRUST_RECORD_FILE), JSON.stringify({ hasCompletedOnboarding: true, projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
     const before = treeOf(RELAY_PLUGIN_DIR)
 
     const terminal = terminalLaunch(t, place, { command: host, inherited: { HOME: home, TERM: HOST_TERMINAL }, args: [] })

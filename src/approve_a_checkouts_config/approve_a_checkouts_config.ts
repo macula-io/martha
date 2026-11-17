@@ -27,7 +27,6 @@
 import { crewTextFilesToApprove } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
-import { CLAUDE_CODE } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   appendApproval,
@@ -41,6 +40,7 @@ import {
   type ConfigEntry,
   type LaunchState,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The one answer that approves. */
 export const YES = 'yes'

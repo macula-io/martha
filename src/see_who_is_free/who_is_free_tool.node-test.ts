@@ -11,7 +11,7 @@ import { test } from 'node:test'
 
 import { soloDeclaration, SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { ACTS, OWNER } from '../declare_crew/declare_crew.ts'
-import { SUPERVISOR } from '../report_progress/report_progress.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { whoIsFreeOver } from './who_is_free_tool.ts'
 

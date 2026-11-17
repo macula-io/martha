@@ -64,6 +64,14 @@ that is one file, the one that reads a member's own write back
 ([`src/launch_a_claude_code_member/remember_own_write_of_a_call.ts`](../src/launch_a_claude_code_member/remember_own_write_of_a_call.ts),
 martha#158).
 
+A program a script runs, such as the launch probe (`npm run probe:launch`), is
+not a slice either, and it may be cut into several directories to stay under the
+slice cap. `martha.programParts` names each such directory and the program it
+belongs to. The core's rules treat a part like its program, and the part is still
+held to the slice cap. In exchange, only its program and that program's other
+parts may import it. `prove_the_core/a_program_part_is_loaded_by_its_program_alone.ts`
+names any other file that does (martha#443).
+
 - **Rows** live one directory per stream, the name encoded so it is never a
   path, one file per row named by its position. A row is staged, then linked to
   its position, and a link never replaces a file, so two writers cannot both

@@ -3,7 +3,7 @@
 // This exists so the Supervisor can put a member on a stronger or cheaper model for one piece of work, and so the
 // owner can see afterwards what a package cost on which model. The record has to outlive the session it was made in —
 // a refresh replaces the session, as it does for a park — so it is a small file per member in the crew store every
-// member reads, written by the host like every other crew file (../crew_files_directory), never a path of this
+// member reads, written by the host like every other crew file (../keep_the_crews_files_as_directories), never a path of this
 // slice's own.
 //
 // A switch names a model the declaration already names for this member: its own `model`, or the crew's

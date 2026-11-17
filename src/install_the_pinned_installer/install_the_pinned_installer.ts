@@ -18,6 +18,7 @@ import { basename, join } from 'node:path'
 import process from 'node:process'
 
 import { runIsolatedNpm } from '../run_the_nodes_own_npm_alone/run_the_nodes_own_npm_alone.ts'
+import { DEPENDENCIES, LOCK, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 /** The pin a release carries, written by `pack_a_release/pin_the_installer` into the signed layer. */
 export const PIN_FILE = 'installer.json'
@@ -37,9 +38,6 @@ const LOCK_PROJECT = 'martha-installer-pin'
 export const TEMP_DIR_PREFIX = 'martha-install-'
 /** npm's own home for the run: its empty config files and its cache, in the temporary directory that is removed. */
 const NPM_HOME = '.npm'
-const NODE_MODULES = 'node_modules'
-const PACKAGE_JSON = 'package.json'
-const PACKAGE_LOCK = 'package-lock.json'
 const INTEGRITY_FAILED = 'EINTEGRITY'
 const NOT_SERVED = 'E404'
 
@@ -102,7 +100,7 @@ function parsePin(text: string): Pin | InstallOutcome {
 /** The installer package the running tree's own `package.json` names, or why it names none. */
 function installerPackage(tree: string): string | InstallOutcome {
   try {
-    const manifest = JSON.parse(readFileSync(join(tree, PACKAGE_JSON), 'utf8')) as { martha?: { installerPackage?: unknown } }
+    const manifest = JSON.parse(readFileSync(join(tree, MANIFEST), 'utf8')) as { martha?: { installerPackage?: unknown } }
     const named = manifest.martha?.installerPackage
     return typeof named === 'string' ? named : refused(`this release's package.json names no installer package, so Martha cannot tell which installer to run.`)
   } catch {
@@ -136,7 +134,7 @@ function lockFiles(pin: Pin, registry: string): { readonly manifest: string; rea
     requires: true,
     packages: {
       '': project,
-      [`${NODE_MODULES}/${pin.name}`]: {
+      [`${DEPENDENCIES}/${pin.name}`]: {
         version: pin.version,
         resolved: `${registry}${pin.name}/-/${tarballName(pin)}`,
         integrity: pin.integrity,
@@ -165,11 +163,11 @@ function runInstaller(entry: string, request: InstallRequest): InstallOutcome {
 function installingIn(work: string, pin: Pin, request: InstallRequest): InstallOutcome {
   const registry = request.registry ?? NPM_REGISTRY
   const files = lockFiles(pin, registry)
-  writeFileSync(join(work, PACKAGE_JSON), files.manifest)
-  writeFileSync(join(work, PACKAGE_LOCK), files.lock)
+  writeFileSync(join(work, MANIFEST), files.manifest)
+  writeFileSync(join(work, LOCK), files.lock)
   const ran = runIsolatedNpm(['ci'], work, registry, join(work, NPM_HOME), request.npm)
   if (!ran.ran) return refused(whyNpmRefused(pin, ran.why))
-  return runInstaller(join(work, NODE_MODULES, ...pin.name.split('/'), ...INSTALLER_ENTRY.split('/')), request)
+  return runInstaller(join(work, DEPENDENCIES, ...pin.name.split('/'), ...INSTALLER_ENTRY.split('/')), request)
 }
 
 /**

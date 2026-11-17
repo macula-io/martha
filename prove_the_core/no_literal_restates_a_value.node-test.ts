@@ -184,6 +184,18 @@ test('an exception whose literal is no finding any more matches nothing, and is 
   assert.deepEqual(exceptionsNotHeld([typeOnly], [entry]), [entry], 'no constant holds the value, so nothing needs excusing')
 })
 
+test('a coincidence that names a number\'s constant holds the value that constant defines (martha#441)', () => {
+  const minute = source('a_tool/a_tool.ts', 'export const MINUTE = 60_000\n')
+  const copy = source('a_user/a_user.ts', 'const wait = 60_000\n')
+  // The entry names the tree's minute by the number it holds, as a coincidence file does: a number here, not the
+  // string the reader would hand the rule. It has to reach the rule as the value the constant defines, or it excuses
+  // nothing — one test for each place an entry enters.
+  const entry: Exception = { value: 60_000, file: 'a_user/a_user.ts', reason: 'a wait of its own, not the tree\'s minute' }
+
+  assert.deepEqual(restatementsIn([minute, copy], { judged: everyLine(copy), exceptions: [entry] }), [])
+  assert.deepEqual(exceptionsNotHeld([minute, copy], [entry]), [], 'the entry excuses a finding, so it is held')
+})
+
 // A change that adds an exported constant a holder in another module already holds made a second copy, and the
 // copy is the NEW line: before, the change's own definition was never judged, so the finding fell on the old
 // holder, where that file's exception excused it (martha#289 part b, stage 2).
@@ -280,5 +292,26 @@ test('a constant inside an address is not named, and the same constant in any ot
   assert.deepEqual(restatementsIn([repo, user], { judged: null }).map(lineOfAFinding), [
     "a_user/a_user.ts:4: 'the-repo' (a path segment) restates a_repo/a_repo.ts THE_REPO",
     "a_user/a_user.ts:5: 'the-repo' (a path segment) restates a_repo/a_repo.ts THE_REPO",
+  ])
+})
+
+test('two new exported definitions of one new value, in two new modules, are each named against the other', () => {
+  const one = source('a_one/a_one.ts', "export const ONE = 'a-brand-new-word'\n")
+  const two = source('a_two/a_two.ts', "export const TWO = 'a-brand-new-word'\n")
+  const defined: DefinedByTheChange[] = [{ value: 'a-brand-new-word', module: 'a_one/a_one.ts', name: 'ONE' }, { value: 'a-brand-new-word', module: 'a_two/a_two.ts', name: 'TWO' }]
+
+  assert.deepEqual(restatementsIn([one, two], { judged: everyLine(one, two), defined }).map(lineOfAFinding), [
+    "a_one/a_one.ts:1: 'a-brand-new-word' restates a_two/a_two.ts TWO",
+    "a_two/a_two.ts:1: 'a-brand-new-word' restates a_one/a_one.ts ONE",
+  ])
+})
+
+test('a new exported definition is named against the holder that held its value before, ahead of another holder the change adds', () => {
+  const sortsFirst = source('a_aaa/a_aaa.ts', "export const FIRST = 'the-tool'\n")
+  const defined: DefinedByTheChange[] = [{ value: 'the-tool', module: 'a_aaa/a_aaa.ts', name: 'FIRST' }, ...ADDS_A_SECOND_HOLDER]
+
+  assert.deepEqual(restatementsIn([EXPORTER, A_SECOND_HOLDER, sortsFirst], { judged: everyLine(A_SECOND_HOLDER, sortsFirst), defined }).map(lineOfAFinding), [
+    "a_aaa/a_aaa.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL",
+    "a_new/a_new.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL",
   ])
 })

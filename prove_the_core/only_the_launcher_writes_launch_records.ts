@@ -70,7 +70,7 @@ const BINDER_WRITES = ['recordMemberLaunch', 'recordMemberStopped']
 const BINDER_READS = ['binderOverLaunches', 'launchesIn']
 
 /** Where package.json declares host glue, and the one shape an entry may have. */
-const HOST_GLUE_ROOT = 'src'
+export const HOST_GLUE_ROOT = 'src'
 const HOST_GLUE_ENTRY = new RegExp(`^${HOST_GLUE_ROOT}/([A-Za-z0-9_-]+)$`)
 
 export interface PlantedSource {
@@ -131,7 +131,7 @@ export function declaredHostGlue(repository: string, key: HostGlueKey = 'hostGlu
     } catch {
       return false
     }
-  })
+  }, key)
 }
 
 function compilerOptions(repository: string): ts.CompilerOptions {

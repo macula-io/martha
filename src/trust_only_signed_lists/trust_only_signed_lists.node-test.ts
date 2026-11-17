@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { fixtureKey, signLikeAHardwareKey, type FixtureKey } from './sign_like_a_hardware_key.ts'
 import { ED25519, verifySshSignature } from './ssh_signature.ts'
 import {
@@ -74,9 +74,9 @@ const signed = (document: Buffer, key: FixtureKey = owner, flags?: number) =>
   signLikeAHardwareKey(key, document, { namespace: TRUST_LIST_NAMESPACE, ...(flags === undefined ? {} : { flags }) })
 
 const open = (overrides: Partial<TrustListToOpen> = {}) => {
-  const document = overrides.document ?? documentOf('crew_roster', [member])
+  const document = overrides.document ?? documentOf('martha_roster', [member])
   return openTrustList({
-    kind: 'crew_roster',
+    kind: 'martha_roster',
     document,
     signature: signed(document),
     pinned_keys: [owner.line],
@@ -117,13 +117,13 @@ test('a missing list refuses everyone', () => {
 })
 
 test('a list edited after signing, with one node id added, refuses everyone', () => {
-  const document = documentOf('crew_roster', [member])
-  const edited = documentOf('crew_roster', [member, attacker])
+  const document = documentOf('martha_roster', [member])
+  const edited = documentOf('martha_roster', [member, attacker])
   refusesEveryone(open({ document: edited, signature: signed(document) }), /does not verify/)
 })
 
 test('a list signed for another crew refuses everyone', () => {
-  const document = documentOf('crew_roster', [member], { crew: 'another-crew' })
+  const document = documentOf('martha_roster', [member], { crew: 'another-crew' })
   refusesEveryone(open({ document, signature: signed(document) }), /another crew/)
 })
 
@@ -133,42 +133,42 @@ test('a list signed as another kind refuses everyone', () => {
 })
 
 test('an expired list refuses everyone', () => {
-  const document = documentOf('crew_roster', [member], { expires_at: '2026-11-01T00:00:00Z' })
+  const document = documentOf('martha_roster', [member], { expires_at: '2026-11-01T00:00:00Z' })
   refusesEveryone(open({ document, signature: signed(document) }), /expired/)
 })
 
 test('an older epoch after a newer one refuses everyone, and the same epoch still opens', () => {
   const epochs = epochStore()
-  const newer = documentOf('crew_roster', [member], { epoch: 5 })
+  const newer = documentOf('martha_roster', [member], { epoch: 5 })
   assert.equal(open({ document: newer, signature: signed(newer), epochs }).trusted, true)
 
-  const older = documentOf('crew_roster', [member, attacker], { epoch: 4 })
+  const older = documentOf('martha_roster', [member, attacker], { epoch: 4 })
   refusesEveryone(open({ document: older, signature: signed(older), epochs }), /older than epoch 5/)
   assert.equal(open({ document: newer, signature: signed(newer), epochs }).trusted, true)
 })
 
 test('a refused list does not raise the epoch', () => {
   const epochs = epochStore()
-  const expired = documentOf('crew_roster', [member], { epoch: 9, expires_at: '2026-11-01T00:00:00Z' })
+  const expired = documentOf('martha_roster', [member], { epoch: 9, expires_at: '2026-11-01T00:00:00Z' })
   open({ document: expired, signature: signed(expired), epochs })
-  assert.equal(epochs.newest(crew, 'crew_roster'), undefined)
+  assert.equal(epochs.newest(crew, 'martha_roster'), undefined)
 })
 
 test('a list signed by a key that is not pinned refuses everyone, even with its key inside the signature', () => {
   const stranger = fixtureKey()
-  const document = documentOf('crew_roster', [attacker])
+  const document = documentOf('martha_roster', [attacker])
   refusesEveryone(open({ document, signature: signed(document, stranger) }), /not pinned/)
 })
 
 test('a document cannot name its own verifying key', () => {
   const stranger = fixtureKey()
-  const document = documentOf('crew_roster', [attacker], { public_key: stranger.line })
+  const document = documentOf('martha_roster', [attacker], { public_key: stranger.line })
   refusesEveryone(open({ document, signature: signed(document, stranger), pinned_keys: [owner.line, stranger.line] }), /fields/)
 })
 
 test('a pinned key that is not a hardware key is refused, so a key file cannot be the anchor', () => {
   const file_key = fixtureKey(ED25519)
-  const document = documentOf('crew_roster', [member])
+  const document = documentOf('martha_roster', [member])
   refusesEveryone(open({ document, signature: signed(document, file_key), pinned_keys: [file_key.line] }), /not a hardware key/)
 })
 
@@ -178,33 +178,33 @@ test('no pinned key, or one that cannot be read, refuses everyone', () => {
 })
 
 test('a signature the owner did not touch the key for refuses everyone', () => {
-  const document = documentOf('crew_roster', [member])
+  const document = documentOf('martha_roster', [member])
   refusesEveryone(open({ document, signature: signed(document, owner, 0) }), /not touched/)
 })
 
 test('a signature for another namespace refuses everyone', () => {
-  const document = documentOf('crew_roster', [member])
+  const document = documentOf('martha_roster', [member])
   const elsewhere = signLikeAHardwareKey(owner, document, { namespace: 'file' })
   refusesEveryone(open({ document, signature: elsewhere }), /namespace/)
 })
 
 test('a body holding anything but node ids, or an extra field, refuses everyone', () => {
   for (const body of [{ member_node_ids: ['not-a-node-id'] }, { member_node_ids: [member], extra: [] }, { member_node_ids: member }]) {
-    const document = documentOf('crew_roster', [], { body })
+    const document = documentOf('martha_roster', [], { body })
     refusesEveryone(open({ document, signature: signed(document) }), /node id|nothing else|not a list/)
   }
 })
 
 test('a signature that is not armored, or a truncated one, refuses everyone', () => {
   refusesEveryone(open({ signature: 'not a signature' }), /armored/)
-  const document = documentOf('crew_roster', [member])
+  const document = documentOf('martha_roster', [member])
   const lines = signed(document).trim().split('\n')
   const truncated = [lines[0], ...lines.slice(1, -1).map((line) => line.slice(0, 20)), lines.at(-1)].join('\n')
   assert.equal(open({ document, signature: truncated }).trusted, false)
 })
 
 test('a signature blob with bytes after its last field refuses everyone', () => {
-  const document = documentOf('crew_roster', [member])
+  const document = documentOf('martha_roster', [member])
   const lines = signed(document).trim().split('\n')
   const blob = Buffer.concat([Buffer.from(lines.slice(1, -1).join(''), 'base64'), Buffer.from('trailing')])
   const padded = [lines[0], blob.toString('base64'), lines.at(-1)].join('\n')
@@ -224,7 +224,7 @@ const scratch = (run: (dir: string) => void) => {
 
 test('ssh-keygen -Y verify accepts the hardware key signature the fixtures write', () => {
   scratch((dir) => {
-    const document = documentOf('crew_roster', [member])
+    const document = documentOf('martha_roster', [member])
     writeFileSync(join(dir, 'allowed_signers'), `a-signer ${owner.line}\n`)
     writeFileSync(join(dir, 'roster.json.sig'), signed(document))
     const out = execFileSync(
@@ -240,7 +240,7 @@ test('a signature ssh-keygen -Y sign writes verifies here, and a plain key is st
   scratch((dir) => {
     const key = join(dir, 'id_ed25519')
     execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', 'fixture', '-f', key])
-    const document = documentOf('crew_roster', [member])
+    const document = documentOf('martha_roster', [member])
     writeFileSync(join(dir, 'roster.json'), document)
     execFileSync('ssh-keygen', ['-q', '-Y', 'sign', '-f', key, '-n', TRUST_LIST_NAMESPACE, join(dir, 'roster.json')])
 
@@ -304,19 +304,19 @@ test('a refused supervisor list lets nobody act as supervisor', () => {
 
 test('a different list signed at the epoch already opened refuses everyone', () => {
   const epochs = epochStore()
-  const first = documentOf('crew_roster', [member], { epoch: 5 })
+  const first = documentOf('martha_roster', [member], { epoch: 5 })
   assert.equal(open({ document: first, signature: signed(first), epochs }).trusted, true)
 
-  const other = documentOf('crew_roster', [member, attacker], { epoch: 5 })
+  const other = documentOf('martha_roster', [member, attacker], { epoch: 5 })
   refusesEveryone(open({ document: other, signature: signed(other), epochs }), /epoch 5 .*another list/)
 })
 
 test('a duplicate key at any depth refuses everyone: the owner signed one reading, not two', () => {
   const approved = `"body":{"member_node_ids":["${member}"]}`
   const shadow = `"body":{"member_node_ids":["${attacker}"]}`
-  const top = Buffer.from(`{"crew":"${crew}","kind":"crew_roster","epoch":1,"issued_at":"${issued}","expires_at":"${later}",${approved},${shadow}}`)
+  const top = Buffer.from(`{"crew":"${crew}","kind":"martha_roster","epoch":1,"issued_at":"${issued}","expires_at":"${later}",${approved},${shadow}}`)
   const inner = Buffer.from(
-    `{"crew":"${crew}","kind":"crew_roster","epoch":1,"issued_at":"${issued}","expires_at":"${later}","body":{"member_node_ids":["${member}"],"member_node_ids":["${attacker}"]}}`,
+    `{"crew":"${crew}","kind":"martha_roster","epoch":1,"issued_at":"${issued}","expires_at":"${later}","body":{"member_node_ids":["${member}"],"member_node_ids":["${attacker}"]}}`,
   )
   for (const document of [top, inner]) {
     const opened = open({ document, signature: signed(document) })
@@ -327,7 +327,7 @@ test('a duplicate key at any depth refuses everyone: the owner signed one readin
 
 test('the same list at the same epoch, in the other layout, opens again: one list, not another', () => {
   const epochs = epochStore()
-  const value = documentValue('crew_roster', [member], { epoch: 5 })
+  const value = documentValue('martha_roster', [member], { epoch: 5 })
   const compact = Buffer.from(JSON.stringify(value))
   const pretty = Buffer.from(`${JSON.stringify(value, null, PRETTY_INDENT)}\n`)
   assert.equal(open({ document: compact, signature: signed(compact), epochs }).trusted, true)
@@ -335,7 +335,7 @@ test('the same list at the same epoch, in the other layout, opens again: one lis
 })
 
 test('a key spelled with escapes, or any other layout, refuses everyone', () => {
-  const value = documentValue('crew_roster', [member])
+  const value = documentValue('martha_roster', [member])
   const escaped = Buffer.from(JSON.stringify(value).replace('"crew":', '"\\u0063rew":'))
   const spaced = Buffer.from(JSON.stringify(value, null, PRETTY_INDENT + 1))
   const two_newlines = Buffer.from(`${JSON.stringify(value)}\n\n`)
@@ -349,7 +349,7 @@ test('a key spelled with escapes, or any other layout, refuses everyone', () => 
 test(`a list signed to live more than ${MAXIMUM_LIFETIME_DAYS} days refuses everyone, even in its final days`, () => {
   const ten_years = 10 * 365
   const last_days = 100
-  const document = documentOf('crew_roster', [member], {
+  const document = documentOf('martha_roster', [member], {
     issued_at: daysFromNow(last_days - ten_years),
     expires_at: daysFromNow(last_days),
   })
@@ -359,22 +359,22 @@ test(`a list signed to live more than ${MAXIMUM_LIFETIME_DAYS} days refuses ever
 test(`a list signed to live exactly ${MAXIMUM_LIFETIME_DAYS} days opens, and one second more refuses everyone`, () => {
   const issued_at = daysFromNow(-1)
   const end = Date.parse(issued_at) + MAXIMUM_LIFETIME_DAYS * DAY_MS
-  const limit = documentOf('crew_roster', [member], { issued_at, expires_at: new Date(end).toISOString() })
+  const limit = documentOf('martha_roster', [member], { issued_at, expires_at: new Date(end).toISOString() })
   assert.equal(open({ document: limit, signature: signed(limit) }).trusted, true)
-  const over = documentOf('crew_roster', [member], { issued_at, expires_at: new Date(end + 1000).toISOString() })
+  const over = documentOf('martha_roster', [member], { issued_at, expires_at: new Date(end + 1000).toISOString() })
   refusesEveryone(open({ document: over, signature: signed(over) }), new RegExp(`lives more than ${MAXIMUM_LIFETIME_DAYS} days`))
 })
 
 test('a list issued in the future refuses everyone', () => {
-  const document = documentOf('crew_roster', [member], { issued_at: daysFromNow(1), expires_at: daysFromNow(2) })
+  const document = documentOf('martha_roster', [member], { issued_at: daysFromNow(1), expires_at: daysFromNow(2) })
   refusesEveryone(open({ document, signature: signed(document) }), /issued in the future/)
 })
 
 test('a list with no issued_at, or one that cannot be read, refuses everyone', () => {
-  const { issued_at: _, ...without } = documentValue('crew_roster', [member])
+  const { issued_at: _, ...without } = documentValue('martha_roster', [member])
   const missing = Buffer.from(JSON.stringify(without))
   refusesEveryone(open({ document: missing, signature: signed(missing) }), /fields are/)
-  const unreadable = documentOf('crew_roster', [member], { issued_at: 'yesterday' })
+  const unreadable = documentOf('martha_roster', [member], { issued_at: 'yesterday' })
   refusesEveryone(open({ document: unreadable, signature: signed(unreadable) }), /issue date cannot be read/)
 })
 
@@ -387,19 +387,19 @@ const INSTANT_TESTS = 'an instant that is not RFC 3339 UTC'
 test(`${INSTANT_TESTS} refuses everyone: no offset, a free form, an impossible date`, () => {
   const issued_forms = ['2026-11-01T00:00:00', 'Nov 1 2026', '2026-11-31T00:00:00Z', '2026-13-01T00:00:00Z', '2026-11-01T24:00:00Z']
   for (const issued_at of issued_forms) {
-    const document = documentOf('crew_roster', [member], { issued_at })
+    const document = documentOf('martha_roster', [member], { issued_at })
     refusesEveryone(open({ document, signature: signed(document) }), /issue date cannot be read/)
   }
   const expires_forms = ['2026-12-01T00:00:00', 'Dec 1 2026', '2026-11-31T00:00:00Z', '2026-12-01T00:00:00+00:00']
   for (const expires_at of expires_forms) {
-    const document = documentOf('crew_roster', [member], { expires_at })
+    const document = documentOf('martha_roster', [member], { expires_at })
     refusesEveryone(open({ document, signature: signed(document) }), /expiry cannot be read/)
   }
 })
 
 test(`${INSTANT_TESTS}: an RFC 3339 UTC instant opens, with or without milliseconds`, () => {
   for (const issued_at of ['2026-11-01T00:00:00Z', '2026-11-01T00:00:00.5Z', '2026-11-01T00:00:00.250Z']) {
-    const document = documentOf('crew_roster', [member], { issued_at })
+    const document = documentOf('martha_roster', [member], { issued_at })
     assert.equal(open({ document, signature: signed(document) }).trusted, true)
   }
 })

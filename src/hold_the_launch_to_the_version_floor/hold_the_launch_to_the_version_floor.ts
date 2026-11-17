@@ -15,6 +15,8 @@
 
 import { basename, dirname, join } from 'node:path'
 
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+
 /** A placed release's directory name: the version, then the digest of its manifest. */
 const PLACED_RELEASE = /^\d+\.\d+\.\d+-sha256-[0-9a-f]{64}$/
 /** The directory every placed release sits in. */
@@ -28,6 +30,12 @@ const NO_RECORD = 'ENOENT'
 
 /** What reading the record gave: its text, or the error code the read failed with. */
 export type TheRecordRead = { readonly text: string } | { readonly code: string }
+
+/** The version a release tree carries in its own manifest. */
+export function releaseVersionOf(tree: string, readText: (path: string) => string): string {
+  const manifest = JSON.parse(readText(join(tree, MANIFEST))) as { version?: unknown }
+  return String(manifest.version)
+}
 
 /** What `readText` gave for `record`: its text, or the code the read failed with. */
 export function readTheRecord(record: string, readText: (path: string) => string): TheRecordRead {

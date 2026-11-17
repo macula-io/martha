@@ -2,7 +2,7 @@
 // starts the member again, who may ask through the tool, and the storm window that stops a restart loop.
 //
 // The requests and the handovers are kept in the crew store the host really composes on a disk
-// (../crew_files_directory), and the handovers are written and stamped by the host's own write (../write_my_handover),
+// (../keep_the_crews_files_as_directories), and the handovers are written and stamped by the host's own write (../write_my_handover),
 // so what the hold reads is what a launch would have left. The processes and the start are the test's.
 
 import assert from 'node:assert/strict'
@@ -13,15 +13,15 @@ import { after, mock, test } from 'node:test'
 
 import { launchesIn, type MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { crewFilesDirectory, handoverStampsIn } from '../crew_files_directory/crew_files_directory.ts'
-import { OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
+import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
+import { OWNER, RESTART_MEMBER, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, KeyedRow, Processes, RowStore } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { STORM_WINDOW_MS } from '../refresh_a_member/refresh_a_member.ts'
+import { STORM_WINDOW_MS } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
-import { CREW_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { THE_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { holdTheMember, notRunningToRestart, restartAMember, restartByTool, type AStart, type HoldingHost } from './restart_a_member.ts'
 import {
   ANSWER_DEADLINE_MS,
@@ -49,7 +49,7 @@ const LAUNCH = { pid: 101, process_started_at: 'boot:1' }
 let crews = 0
 function aCrew() {
   const directory = join(home, `crew-${++crews}`)
-  const crew = crewFilesDirectory(directory)
+  const crew = keepTheCrewsFilesAsDirectories(directory)
   const lifecycle = crew.place(LIFECYCLE_PLACE)
   if ('refusal' in lifecycle) throw new Error(lifecycle.refusal)
   return { crew, lifecycle, stamps: handoverStampsIn(directory) }
@@ -92,7 +92,7 @@ function keepARestart(lifecycle: CrewPlace, options: { fresh?: boolean; by?: str
 function handedOver(crew: ReturnType<typeof aCrew>, at: Date): string {
   const session = startSession({ read: () => undefined, write: () => {} }, CLAUDE_CODE_SESSION_EVENTS, { event: 'startup', session_id: `s-${at.getTime()}` })
   const written = writeMyHandover({ stores: { crew: crew.crew } }, { member: 'builder', content: 'What stands.', at, stamps: crew.stamps, session })
-  assert.equal(written, CREW_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${written}`)
+  assert.equal(written, THE_HANDOVER_WRITTEN, `the host did not write the handover the test needed: ${written}`)
   return theHandoverFile('builder', at)
 }
 
@@ -125,7 +125,7 @@ const ended = (why: string) => ({ started: true as const, pid: LAUNCH.pid, stopp
 test('#312 test 4: a restart starts the member again on the wake\'s prompt, naming the newest handover by stamp time', async () => {
   const crew = aCrew()
   const older = handedOver(crew, new Date(START - 2 * 86_400_000))
-  const newest = handedOver(crew, new Date(START - 60_000))
+  const newest = handedOver(crew, new Date(START - MINUTE_MS))
   const request = keepARestart(crew.lifecycle)
   const { rows } = anAskingHost(crew.lifecycle, {})
   const { host, asked } = aHold(crew, [{ started: true, pid: 202, stopped: Promise.resolve('ended for good') }], rows)
@@ -143,7 +143,7 @@ test('#312 test 4: a restart starts the member again on the wake\'s prompt, nami
 
 test('#312 r=2: the launcher answers which handover the member was started on', async () => {
   const crew = aCrew()
-  const newest = handedOver(crew, new Date(START - 60_000))
+  const newest = handedOver(crew, new Date(START - MINUTE_MS))
   keepARestart(crew.lifecycle)
   const { rows } = anAskingHost(crew.lifecycle, {})
   const { host } = aHold(crew, [{ started: true, pid: 202, stopped: Promise.resolve('done') }], rows)
@@ -213,7 +213,7 @@ test('#312 r=2: a ledger that fails after a refused start says the member was no
 
 test('#312 test 4: a fresh restart carries no handover', async () => {
   const crew = aCrew()
-  handedOver(crew, new Date(START - 60_000))
+  handedOver(crew, new Date(START - MINUTE_MS))
   keepARestart(crew.lifecycle, { fresh: true })
   const { rows } = anAskingHost(crew.lifecycle, {})
   const { host, asked } = aHold(crew, [{ started: true, pid: 202, stopped: Promise.resolve('done') }], rows)

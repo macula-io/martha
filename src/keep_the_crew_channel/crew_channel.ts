@@ -1,10 +1,10 @@
 // Where a crew's messages live, and the only way one is written or read back (martha#253, slice 1).
 //
 // This exists so every slice of the crew channel reads one shape and one set of stream names. A message is one row
-// of `crew_channel`, in the crew's one rows store: who sent it, who it is for, its text, and when it was sent. Its
+// of `martha_channel`, in the crew's one rows store: who sent it, who it is for, its text, and when it was sent. Its
 // position in the stream is its message id, so a reader can name one message without a second index.
 //
-// What a member took in is a row of that member's own stream, `crew_channel_taken/<member>`, holding the position of
+// What a member took in is a row of that member's own stream, `martha_channel_taken/<member>`, holding the position of
 // the message it took in. Both are append-only, as every stream here is: nothing is rewritten, so a member refreshed
 // mid-read finds the same channel its predecessor read.
 //
@@ -16,13 +16,17 @@ import type { HostContract, Row, StoredRow } from '../host_contract/host_contrac
 import { ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 
 /** The stream the crew's messages live in, in the crew's one rows store. */
-export const CHANNEL_STREAM = 'crew_channel'
+export const CHANNEL_STREAM = 'martha_channel'
 
-/** The stream that records what one member took in. Keyed by the member's name, never by a session's. */
-export const takenStreamOf = (member: string): string => `crew_channel_taken/${member}`
+/** The stream that records what one member took in. Keyed by the member's name, never by a session's. Built from
+ * the channel's own stream, so the two names cannot drift apart (martha#468). */
+export const takenStreamOf = (member: string): string => `${CHANNEL_STREAM}_taken/${member}`
+
+/** The addressee that means every member of the crew, and not one of them. */
+export const THE_WHOLE_CREW = 'crew'
 
 /** Who a message is for: the members it names, or the whole crew. */
-export type Addressee = readonly string[] | 'crew'
+export type Addressee = readonly string[] | typeof THE_WHOLE_CREW
 
 /** One message of the crew's channel, as it is kept. */
 export interface ChannelRow {
@@ -52,7 +56,7 @@ const isText = (value: unknown): value is string => typeof value === 'string'
 export function isChannelRow(row: Row): row is Row & ChannelRow {
   if (!isText(row['from']) || !isText(row['text']) || typeof row['sent_at'] !== 'number') return false
   const to = row['to']
-  return to === 'crew' || (Array.isArray(to) && to.every(isText))
+  return to === THE_WHOLE_CREW || (Array.isArray(to) && to.every(isText))
 }
 
 /** Appends one message to the channel and answers its position, the message's id. */
@@ -87,7 +91,7 @@ export async function readTheChannel(host: ChannelHost): Promise<readonly Placed
 
 /** Whether a message is for this member: it names the member, or it names the whole crew. */
 export function addressedTo(message: Pick<ChannelRow, 'to'>, member: string): boolean {
-  return message.to === 'crew' || message.to.includes(member)
+  return message.to === THE_WHOLE_CREW || message.to.includes(member)
 }
 
 /** Records that a member took one message in. */

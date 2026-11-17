@@ -9,9 +9,10 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { fingerprintOf, type ConfigEntry } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import {
+  STATE_ROOT_NAME,
   appendApproval,
   APPROVALS_FILE,
   MEMBERS_FILE,
@@ -31,7 +32,7 @@ function homeFor(t: TestContext): { home: string; project: string; stateRoot: st
   t.after(() => removeTheTree(home))
   const project = join(home, 'project')
   mkdirSync(project)
-  return { home, project, stateRoot: join(home, 'state', 'martha') }
+  return { home, project, stateRoot: join(home, 'state', STATE_ROOT_NAME) }
 }
 
 function opened(stateRoot: string, project: string): MarthaState {

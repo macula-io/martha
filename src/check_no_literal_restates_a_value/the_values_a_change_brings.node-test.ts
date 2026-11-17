@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { GONE } from '../../prove_the_core/no_literal_restates_a_value.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 const CHECK = join(import.meta.dirname, 'main.ts')
 

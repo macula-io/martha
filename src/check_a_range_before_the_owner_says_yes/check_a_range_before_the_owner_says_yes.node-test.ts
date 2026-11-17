@@ -19,7 +19,11 @@ import { test, type TestContext } from 'node:test'
 
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
-import { removeTheTree } from '../launch_a_claude_code_member/relay_copy.ts'
+import { keepThePackageContract } from '../keep_the_package_contract/keep_the_package_contract.ts'
+import { ASK_QUEUED, ASKS_SETTLED, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { SHORT_SHA } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -340,4 +344,195 @@ test('#256: a verify_range call that names no clone, no end or no list is refuse
   assert.match(refusedBy(theRangeACallNames({})), /names the clone it is checked in, as path/)
   assert.match(refusedBy(theRangeACallNames({ path: '/clone', base: '', tip: 'b' })), /names its base/)
   assert.match(refusedBy(theRangeACallNames({ path: '/clone', base: 'a', tip: 'b', packages: 'nope' })), /packages is the list of work packages/)
+})
+
+test('#513: the menu line says what each package\'s acceptance criteria have at the exact tip', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#513`
+  const head = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  gitIn(fixture.clone, 'checkout', '--quiet', '-b', 'batch', base)
+  mergeHere(fixture.clone, head, `Land #281 (${work_package}, PASS)`)
+  const tip = gitIn(fixture.clone, 'rev-parse', 'HEAD')
+  const tests = aHostOver(aGithub(oneOpenPullRequestAtEach(fixture.repo, [head], 281)))
+  await aPassedVerdict(tests, work_package, base, head)
+
+  const without = theLineOf(await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: [work_package] }))
+  assert.ok(without.includes(`acceptance of ${work_package}: no package contract recorded`), without)
+
+  // Two criteria: the file the branch adds is at the tip, and one nobody added is not.
+  const brief = [
+    '```package-contract',
+    'goal: the package is checked against its own criteria',
+    'acceptance: the work the branch adds is at the tip | document: work.txt',
+    'acceptance: a document nobody added is at the tip | document: nowhere.txt',
+    'allowed: push',
+    'budget: 30 minutes',
+    'done: every criterion is met at the tip',
+    '```',
+  ].join('\n')
+  const kept = await keepThePackageContract(tests.host, { package: work_package, member: SUPERVISOR, brief })
+  assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')
+
+  const line = theLineOf(await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: [work_package] }))
+  assert.ok(line.includes(`acceptance of ${work_package}: 1 of 2 criteria met at ${tip.slice(0, SHORT_SHA)}`), line)
+  assert.match(line, /not met: "a document nobody added is at the tip" \(nowhere\.txt is not at /)
+})
+
+test('#513: a criterion\'s evidence is read at the tip, not at whatever the clone has checked out (r=1 M7)', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#513`
+  const head = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  gitIn(fixture.clone, 'checkout', '--quiet', '-b', 'batch', base)
+  mergeHere(fixture.clone, head, `Land #281 (${work_package}, PASS)`)
+  const tip = gitIn(fixture.clone, 'rev-parse', 'HEAD')
+  // The clone is left standing on another branch, which holds a file the tip does not: the tip is no longer HEAD, so a
+  // check reading HEAD instead of the tip names the wrong evidence either way.
+  aBranchWithOneCommit(fixture, 'elsewhere', base, 'elsewhere-only.txt', 'not part of the tip\n')
+  assert.notEqual(gitIn(fixture.clone, 'rev-parse', 'HEAD'), tip, 'the clone still stands on the tip, so this proves nothing')
+  const tests = aHostOver(aGithub(oneOpenPullRequestAtEach(fixture.repo, [head], 281)))
+  await aPassedVerdict(tests, work_package, base, head)
+
+  const brief = [
+    '```package-contract',
+    'goal: the evidence is read at the revision the owner is asked about',
+    'acceptance: the work the branch adds is at the tip | document: work.txt',
+    'acceptance: a document only the clone holds | document: elsewhere-only.txt',
+    'allowed: push',
+    'budget: 30 minutes',
+    'done: every criterion is met at the tip',
+    '```',
+  ].join('\n')
+  const kept = await keepThePackageContract(tests.host, { package: work_package, member: SUPERVISOR, brief })
+  assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')
+
+  const line = theLineOf(await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: [work_package] }))
+  assert.ok(line.includes(`acceptance of ${work_package}: 1 of 2 criteria met at ${tip.slice(0, SHORT_SHA)}`), line)
+  assert.match(line, /not met: "a document only the clone holds" \(elsewhere-only\.txt is not at /)
+})
+
+/** The fixture #513's `ci` criteria are read on: a passed package landed at a tip GitHub answers for, held to a brief. */
+interface ACIPackage {
+  readonly fixture: Fixture
+  readonly base: string
+  readonly tip: string
+  readonly work_package: string
+  readonly tests: HostForTests
+  readonly answers: Map<string, unknown>
+  readonly never: number
+  readonly run: { readonly id: number; readonly name: string; readonly status: string; readonly conclusion: string }
+  readonly green_job: Record<string, unknown>
+  readonly installer_ran: Record<string, unknown>
+  readonly failed_job: Record<string, unknown>
+  /** The one menu line, the tip read again under whatever GitHub has answered since this was called. */
+  readonly theLineNow: () => Promise<string>
+  /** What the tip's own run of `CI` holds as its jobs. */
+  readonly theJobsAre: (jobs: readonly unknown[]) => void
+}
+
+async function aPackageHeldToItsCICriteria(t: TestContext): Promise<ACIPackage> {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#513`
+  const head = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  gitIn(fixture.clone, 'checkout', '--quiet', '-b', 'batch', base)
+  mergeHere(fixture.clone, head, `Land #281 (${work_package}, PASS)`)
+  const tip = gitIn(fixture.clone, 'rev-parse', 'HEAD')
+  const run = { id: 9001, name: 'CI', status: 'completed', conclusion: 'success' }
+  const green_job = { id: 1, name: 'structural floor', status: 'completed', conclusion: 'success' }
+  const failed_job = { id: 2, name: 'installer', status: 'completed', conclusion: 'failure' }
+  const installer_ran = { id: 3, name: 'installer', status: 'completed', conclusion: 'success' }
+  // The answers are one map a test rewrites between calls, so the same tip is read under several states of its own run.
+  const answers = oneOpenPullRequestAtEach(fixture.repo, [head], 281)
+  answers.set(`repos/${fixture.repo}/actions/runs?head_sha=`, { total_count: 1, workflow_runs: [run] })
+  const theJobsAre = (jobs: readonly unknown[]): void => {
+    answers.set(`repos/${fixture.repo}/actions/runs/${String(run.id)}/jobs`, { total_count: jobs.length, jobs })
+  }
+  theJobsAre([green_job, failed_job])
+  const tests = aHostOver(aGithub(answers))
+  const ask = await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'is the evidence of this package enough?', asked_by: SUPERVISOR, since: 0 })
+  const never = await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'an ask the owner never answered', asked_by: SUPERVISOR, since: 0 })
+  await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [ask] })
+
+  const brief = [
+    '```package-contract',
+    'goal: the CI evidence is read from the runs on the tip and the owner\'s yes from their asks',
+    'acceptance: the whole CI ran green at the tip | ci: CI',
+    'acceptance: the structural floor ran green at the tip | ci: structural floor',
+    'acceptance: the installer ran green at the tip | ci: installer',
+    'acceptance: a job nothing ran | ci: a job nothing ran',
+    'acceptance: the owner said the evidence is enough | owner_yes: ' + String(ask),
+    'acceptance: an ask the owner never answered | owner_yes: ' + String(never),
+    'allowed: push',
+    'budget: 30 minutes',
+    'done: every criterion is met at the tip',
+    '```',
+  ].join('\n')
+  const kept = await keepThePackageContract(tests.host, { package: work_package, member: SUPERVISOR, brief })
+  assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')
+  await aPassedVerdict(tests, work_package, base, head)
+  return {
+    fixture,
+    base,
+    tip,
+    work_package,
+    tests,
+    answers,
+    never,
+    run,
+    green_job,
+    installer_ran,
+    failed_job,
+    theJobsAre,
+    theLineNow: async () => theLineOf(await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: [work_package] })),
+  }
+}
+
+test('#513: a ci criterion is met by a green job or by a whole green run, and an owner_yes one by the owner\'s yes', async (t) => {
+  const one = await aPackageHeldToItsCICriteria(t)
+  const { tip, work_package, never, theJobsAre, theLineNow } = one
+  const at = tip.slice(0, SHORT_SHA)
+
+  // One job of the run failed, so the workflow `CI` is not green and neither is the job that failed; the green job and
+  // the owner's yes to their own ask are met, and the ask they never answered is not — this is the case the slice's own
+  // example writes, where `CI` is the workflow and not a job of it (r=1 R1).
+  const failing_line = await theLineNow()
+  assert.ok(failing_line.includes(`acceptance of ${work_package}: 2 of 6 criteria met at ${at}`), failing_line)
+  assert.doesNotMatch(failing_line, /not met: "the structural floor ran green at the tip"/)
+  assert.match(failing_line, /"the installer ran green at the tip" \(no CI job or run named "installer" was green on /)
+  assert.doesNotMatch(failing_line, /not met: "the owner said the evidence is enough"/)
+  assert.match(failing_line, /not met: "the whole CI ran green at the tip" \(no CI job or run named "CI" was green on /)
+  assert.match(failing_line, /"a job nothing ran" \(no CI job or run named "a job nothing ran" was green on /)
+  assert.match(failing_line, new RegExp(`"an ask the owner never answered" \\(the owner has not said yes to ask ${String(never)}\\)`))
+
+  // Every job of the run succeeded, so the workflow named `CI` is green: the criterion the slice's example writes is met.
+  theJobsAre([one.green_job, one.installer_ran])
+  const green_line = await theLineNow()
+  assert.ok(green_line.includes(`acceptance of ${work_package}: 4 of 6 criteria met at ${at}`), green_line)
+  assert.doesNotMatch(green_line, /not met: "the whole CI ran green at the tip"/)
+  assert.match(green_line, /not met: "a job nothing ran"/)
+  assert.match(green_line, new RegExp(`"an ask the owner never answered" \\(the owner has not said yes to ask ${String(never)}\\)`))
+})
+
+test('#513: a run of that name holding no job, or a red one beside a green one, is not the workflow green (r=3)', async (t) => {
+  const one = await aPackageHeldToItsCICriteria(t)
+  const { fixture, tip, work_package, theJobsAre, theLineNow } = one
+  const at = tip.slice(0, SHORT_SHA)
+
+  // A run of that name holding no job at all is not green: it ran nothing, whatever GitHub concludes about it.
+  theJobsAre([])
+  const empty_line = await theLineNow()
+  assert.ok(empty_line.includes(`acceptance of ${work_package}: 1 of 6 criteria met at ${at}`), empty_line)
+  assert.match(empty_line, /not met: "the whole CI ran green at the tip" \(no CI job or run named "CI" was green on /)
+
+  // Two runs of one workflow on one sha, as a push and a pull_request give: a red one is not overruled by a green one
+  // beside it, because the criterion named the workflow and the workflow was red.
+  const pull_request_run = { id: one.run.id + 1, name: 'CI', status: 'completed', conclusion: 'success' }
+  one.answers.set(`repos/${fixture.repo}/actions/runs?head_sha=`, { total_count: 2, workflow_runs: [one.run, pull_request_run] })
+  theJobsAre([one.green_job, one.installer_ran])
+  one.answers.set(`repos/${fixture.repo}/actions/runs/${String(pull_request_run.id)}/jobs`, { total_count: 1, jobs: [one.failed_job] })
+  const twice_line = await theLineNow()
+  assert.ok(twice_line.includes(`acceptance of ${work_package}: 3 of 6 criteria met at ${at}`), twice_line)
+  assert.match(twice_line, /not met: "the whole CI ran green at the tip" \(no CI job or run named "CI" was green on /)
 })
