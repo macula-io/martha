@@ -15,6 +15,7 @@ import { test, type TestContext } from 'node:test'
 
 import type { FileTree, Processes } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { theDriftInTheWorkspace } from './check_the_workspace_matches_its_layout.ts'
 
 /** A bare origin, a clone of it under the crew's clone place, and the worktree place beside it. */
@@ -105,7 +106,7 @@ test('a worktree whose directory is gone is named, and one the crew declared is 
 
 test('one repository cloned twice is named with both of its clones', async (t) => {
   const fixture = aCleanWorkspace(t)
-  const origin = gitIn(fixture.clone, 'config', '--get', 'remote.origin.url')
+  const origin = gitIn(fixture.clone, CONFIG, '--get', 'remote.origin.url')
   gitIn(fixture.clones, 'clone', '--quiet', origin, join('acme', 'widget-again'))
   assert.match((await theDriftInTheWorkspace(anInspectionOf(fixture))).join('\n'), /is cloned 2 times/)
 })

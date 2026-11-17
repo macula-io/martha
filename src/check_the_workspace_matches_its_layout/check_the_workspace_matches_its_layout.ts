@@ -15,6 +15,7 @@
 
 import type { FileTree, Processes } from '../host_contract/host_contract.ts'
 import type { AListedWorktree, TheWorkspace } from '../guard_workspace/guard_workspace.ts'
+import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { join, sep } from 'node:path'
 
@@ -41,7 +42,7 @@ const THE_BRANCH = ['rev-parse', '--abbrev-ref', 'HEAD']
 const THE_DIRTY_WORK = ['status', '--porcelain']
 
 /** The argument git takes to name the place a clone came from, which is what tells one repository from another. */
-const THE_ORIGIN = ['config', '--get', 'remote.origin.url']
+const THE_ORIGIN = [CONFIG, '--get', 'remote.origin.url']
 
 /** The argument git takes to list a clone's worktrees, the branch of each and whether only its record is left. */
 const THE_WORKTREES = ['worktree', 'list', '--porcelain']
