@@ -1299,7 +1299,7 @@ function fakeClaude(
 const isAlive = (pid: number): boolean => {
   try {
     process.kill(pid, 0)
-    return !readFileSync(`/proc/${pid}/stat`, 'utf8').includes(') Z ')
+    return !readFileSync(`${PROC_ROOT}/${pid}/stat`, 'utf8').includes(') Z ')
   } catch {
     return false
   }
@@ -1345,10 +1345,10 @@ async function environmentOf(pid: number, settle: Settle, read: ProcRead = readP
   let text: string | undefined
   await settle(`the environment of process ${pid} to settle`, () => {
     try {
-      const stat = read(`/proc/${pid}/stat`)
+      const stat = read(`${PROC_ROOT}/${pid}/stat`)
       const [state, parent] = stat.slice(stat.lastIndexOf(') ') + 2).split(' ')
       if (state === 'Z' || pid === KERNEL_THREAD_PARENT || Number(parent) === KERNEL_THREAD_PARENT) return true
-      text = read(`/proc/${pid}/environ`)
+      text = read(`${PROC_ROOT}/${pid}/environ`)
       return text !== ''
     } catch {
       text = undefined
@@ -1364,8 +1364,8 @@ function plantedProc(pid: number, stat: string, answers: string[]): { read: Proc
   let reads = 0
   return {
     read: (path) => {
-      if (path === `/proc/${pid}/stat`) return stat
-      if (path === `/proc/${pid}/environ`) return answers[Math.min(reads++, answers.length - 1)] ?? ''
+      if (path === `${PROC_ROOT}/${pid}/stat`) return stat
+      if (path === `${PROC_ROOT}/${pid}/environ`) return answers[Math.min(reads++, answers.length - 1)] ?? ''
       throw new Error(`no ${path}`)
     },
     reads: () => reads,
@@ -2423,7 +2423,7 @@ test('a member that exits by itself leaves no record, socket or snapshot, and no
 /** The process group of a pid, or undefined when the process is gone. */
 function groupOf(pid: number): number | undefined {
   try {
-    return Number(readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.split(' ')[2])
+    return Number(readFileSync(`${PROC_ROOT}/${pid}/stat`, 'utf8').split(') ')[1]?.split(' ')[2])
   } catch {
     return undefined
   }
@@ -2528,7 +2528,7 @@ async function killWhateverNamesTheHome(home: string): Promise<void> {
     if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) continue
     let line = ''
     try {
-      line = readFileSync(`/proc/${pid}/cmdline`, 'utf8')
+      line = readFileSync(`${PROC_ROOT}/${pid}/cmdline`, 'utf8')
     } catch {
       continue
     }
@@ -2751,7 +2751,7 @@ function pidsInGroup(group: number): number[] {
 /** What one of a process's descriptors names, or nothing when it went with its process. */
 function descriptorNames(pid: number, descriptor: string): string {
   try {
-    return readlinkSync(`/proc/${pid}/fd/${descriptor}`)
+    return readlinkSync(`${PROC_ROOT}/${pid}/fd/${descriptor}`)
   } catch {
     return ''
   }
@@ -2759,7 +2759,7 @@ function descriptorNames(pid: number, descriptor: string): string {
 
 /** Every process in `group` that holds a descriptor naming `path`: the run's plumbing, if it reached the member (#472). */
 function holdersInGroupOf(group: number, path: string): number[] {
-  return pidsInGroup(group).filter((pid) => readdirSync(`/proc/${pid}/fd`).some((descriptor) => descriptorNames(pid, descriptor) === path))
+  return pidsInGroup(group).filter((pid) => readdirSync(`${PROC_ROOT}/${pid}/fd`).some((descriptor) => descriptorNames(pid, descriptor) === path))
 }
 
 /**
@@ -2836,7 +2836,7 @@ test('a run that closes its lifeline takes its member down with it, leaving no r
   // And the member is handed no variable naming it (#472 r=3): the number it would name is one the launcher has closed,
   // so a tool server or a nested `martha start` reading it would be told of a run it cannot read. The rest of the run's
   // own environment is inherited, which is what says this environment was read at all.
-  const environment = readFileSync(`/proc/${member}/environ`, 'utf8').split('\0')
+  const environment = readFileSync(`${PROC_ROOT}/${member}/environ`, 'utf8').split('\0')
   assertThePipeIsUnnamed(environment)
   assert.equal(environment.some((named) => named.startsWith('PATH=')), true, 'and inherits the run\'s own environment besides it')
   assert.equal(readdirSync(place.relay_root).length, 1, 'the launch has its relay directory while it runs')
@@ -3276,7 +3276,7 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
   const stderr = how.stderrTo === undefined ? '' : ` 2> '${how.stderrTo}'`
   const shell = [
     `echo $$ > '${note('shell')}'`,
-    `readlink /proc/$$/fd/0 > '${note('tty')}'`,
+    `readlink ${PROC_ROOT}/$$/fd/0 > '${note('tty')}'`,
     `stty -g > '${note('before')}'`,
     // A shell without job control gives a background command /dev/null as its input, unless told otherwise.
     // The launcher's own status is noted when it ends, so a test waiting on the terminal can fail at once with it
