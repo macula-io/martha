@@ -224,3 +224,33 @@ test('once the owner approves the new tree, the calls run again', (t) => {
   const again = { ...approved, approved_fingerprints: [fingerprintOf(readLaunchState(approved, thisMachine))] }
   assert.equal(answerToolCall({ names, tool: 'Read', session, policy, launch: again, host: thisMachine }), undefined)
 })
+
+// --- the package's own contract, last (martha#513 slice 2) --------------------
+
+/** A contract on a package, allowing the acts it names. */
+const aContract = (allowed: readonly ('push' | 'tag' | 'handoff' | 'land')[]) => ({
+  package: 'synthetic-owner/repo#7',
+  version: 2,
+  kind: 'bounded' as const,
+  allowed,
+})
+
+test('a call that is an act the contract leaves out is refused, naming the act, the version and what it allows', () => {
+  const session = beginSession(store(), 's-1')
+  const answer = denied(
+    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push origin main' }, contract: aContract(['handoff', 'land']) }),
+  )
+  assert.match(answer, /this call pushes, and package synthetic-owner\/repo#7's contract \(version 2\) allows handoff, land only/)
+  // A call that is no act runs whatever the contract says, and one the contract allows runs too.
+  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'npm test' }, contract: aContract([]) }), undefined)
+  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push' }, contract: aContract(['push']) }), undefined)
+})
+
+test('the contract is asked last of all: a call the gate refuses keeps the gate\'s own reason', () => {
+  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
+  const answer = denied(
+    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: tainted, policy, launch, host: thisMachine, input: { command: 'git push' }, contract: aContract([]) }),
+  )
+  assert.match(answer, /nothing executes/i)
+  assert.doesNotMatch(answer, /contract/)
+})

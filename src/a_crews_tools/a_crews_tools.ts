@@ -24,6 +24,7 @@ import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/c
 import { THE_CHANNEL_READ_ASK, theChannelReadAsk } from '../keep_the_crew_channel/the_channel_read.ts'
 import { LOG_A_MILESTONE_TOOL, NOTE_WHAT_BECAME_TOOL, WHAT_WAS_SENT_TOOL, logTheMilestone, noteTheActsOutcome, whatTheMemberSent } from '../keep_the_ledger/the_ledger_tools.ts'
 import { KEEP_THE_CONTRACT_TOOL, keepTheContract } from '../keep_the_package_contract/the_contract_tools.ts'
+import { theNewestContractOf } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import { THE_OWNERS_TODO_ASK, addAnAct, closeAnAct } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { OWNER_TODO_ADD_TOOL, OWNER_TODO_DONE_TOOL, keepTheOwnersList, startSweeping, theOwnersTodoAsk } from '../keep_the_owners_todo_list/the_todo_tools.ts'
 import { closeAStandingItem, recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
@@ -51,6 +52,8 @@ import {
   type TheOfferingAsked,
 } from '../queue_the_owners_asks/the_ask_tools.ts'
 import { refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
+import { CONTRACT_ACTS, type AContractAct } from '../refuse_calls_outside_the_package_contract/the_acts_of_a_call.ts'
+import type { TheContractInForce } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 import {
   THE_REFRESH_ASK,
   aSwitchMayFollow,
@@ -232,6 +235,12 @@ export interface CrewTools extends TheReviewRule {
    * so it only narrows a yes, and hands the end out on a yes to the last call in flight.
    */
   readonly ends: TheEndsHold
+  /**
+   * The contract the package this member holds is run under (martha#513 slice 2): the package its own row holds, and that
+   * package's newest version in the ledger. Undefined when it holds none, or the package has no contract — and the gate
+   * then refuses nothing, which is slice 1's rule that a package without a contract is told so rather than refused.
+   */
+  theContractInForce(): Promise<TheContractInForce | undefined>
 }
 
 /** The tools, in the order the mod registers them, each as the slice that owns it defines it. */
@@ -354,7 +363,23 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     ...theReviewRuleOver({ declared: () => crewOrRefusal(held), spawn: held.spawn }),
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
     ends: state.ends,
+    theContractInForce: () => theContractTheMemberHolds(held),
   }
+}
+
+/**
+ * The contract the package this member holds is run under (martha#513 slice 2), read from the two places that already
+ * know it: the member's own dashboard row says which package it holds, and the package's ledger says which contract it
+ * is on. The acts are read in the gate's own words, so the two vocabularies cannot drift apart silently.
+ */
+async function theContractTheMemberHolds(places: CrewToolPlaces): Promise<TheContractInForce | undefined> {
+  const held_package = places.beats.read(places.member)?.holds ?? ''
+  if (held_package === '') return undefined
+  const newest = await theNewestContractOf(places.ledger, held_package)
+  if (newest === undefined) return undefined
+  const { version, contract } = newest
+  const allowed: readonly AContractAct[] = contract.kind === 'bounded' ? CONTRACT_ACTS.filter((act) => contract.allowed.includes(act)) : []
+  return { package: held_package, version, kind: contract.kind, allowed }
 }
 
 /**
