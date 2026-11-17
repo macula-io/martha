@@ -119,8 +119,10 @@ export interface RelayJournal {
   /**
    * Something the launcher took in that no relay event carried, as one answered line with its words (martha#440: a
    * turn of unnamed source, heard from the mod's turn-start report): the record says what it was, this says it ran.
+   * `tool_use_id` is the host's own id for the call the line is about, where it is about one (martha#498: the end of a
+   * turn, carried on a call's answer, so a run can tell that from an end ordered after the call finished).
    */
-  noted(event: string, why: string): void
+  noted(event: string, why: string, tool_use_id?: string): void
   /**
    * Something the launcher set out to do and could not finish, where a run has nowhere else to read it: what it could
    * not do, under `event`'s name, why, and — when it is about one of the host's calls — the call's own id (martha#430).
@@ -301,9 +303,9 @@ export function relayJournalKeptIn(directory: string, launch: string, now: () =>
         },
       }
     },
-    noted: (event, why) => {
+    noted: (event, why, tool_use_id) => {
       writing.written += 1
-      writing.events.push({ at: isoOf(now()), phase: 'answered', event, answer: 'taken', why })
+      writing.events.push({ at: isoOf(now()), phase: 'answered', event, answer: 'taken', why, ...(tool_use_id === undefined ? {} : { tool_use_id }) })
       keep()
     },
   }
