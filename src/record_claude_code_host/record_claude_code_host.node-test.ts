@@ -587,3 +587,31 @@ test("a read inside a function nested in the guard is the guard's, not the neste
   const { guard_calls } = fileModeGuardCallsIn(guardModules(GUARD, FILE_GUARD, memory))
   assert.deepEqual(Object.keys(guard_calls).sort(), [...Object.keys(FILE_GUARD.guard_calls), 'aReader'].sort())
 })
+
+// Both shapes at once (martha#564 r=2): a helper declared before a nested reader is a declaration that does not hold
+// the read sitting between the read and the declaration that does, so a walk that stops at the first one behind a
+// holder records the nested reader -- and calls its callees the guard's, with no refusal to show for it.
+test('a helper before a reader nested in the guard leaves the guard the one recorded (martha#564 r=2)', () => {
+  const memory = withHelperFirst(withReadNestedInTheGuard(MEMORY_TEXT))
+  assert.notEqual(memory, withReadNestedInTheGuard(MEMORY_TEXT), 'the helper is planted before the nested reader')
+  const { guard_calls } = fileModeGuardCallsIn(guardModules(GUARD, FILE_GUARD, memory))
+  assert.deepEqual(Object.keys(guard_calls).sort(), [...Object.keys(FILE_GUARD.guard_calls), 'aHelper', 'aReader'].sort())
+})
+
+// Where the walk ends (martha#564 r=2): a declaration in the module before the read's, whose braces run past the
+// boundary into it, holds the read by span alone. The walk stops at the start of the read's module, so it is never
+// the guard, and the guard's own callees are the ones recorded.
+test('a declaration in the module before, whose braces cross into the read, is not the guard (martha#564 r=2)', () => {
+  const guards = `\n${CHUNK}\nfunction aCutOff(){${guardModules(GUARD, FILE_GUARD)}`
+  const { guard_calls } = fileModeGuardCallsIn(guards)
+  assert.deepEqual(Object.keys(guard_calls).sort(), Object.keys(FILE_GUARD.guard_calls).sort())
+})
+
+// A declaration that ends exactly where the read begins does not hold it (martha#564 r=2): the read is at module
+// level, so the host is refused rather than read as the helper's.
+test('a declaration that ends where the read begins does not hold it (martha#564 r=2)', (t) => {
+  const memory = `function aHelper(){return 1}${OFF_SWITCH_READ}`
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, guards: guardModules(GUARD, FILE_GUARD, memory) }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: file-mode memory guard\n`)
+})

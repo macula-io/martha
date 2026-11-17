@@ -166,20 +166,23 @@ const OFF_SWITCH_READ = Object.keys(CLAUDE_MEMORY_OFF).map((name) => `process.en
 /** A function declaration's start, at `at` alone. */
 const DECLARATION = /(?<![\w$.#])function\*? ?[A-Za-z_$][\w$]*\(/y
 
+/** Where the module that holds `read` starts: the bundle's chunk marker at or before it, the boundary bundleOf splits on. */
+const moduleStartAt = (text: string, read: number): number => Math.max(0, text.lastIndexOf(CHUNK, read))
+
 /**
  * Where the function declaration that holds `read` starts: the guard itself, not a helper declared before the read
- * (martha#564). A helper's declaration ends before the read, so it is walked past; a read inside a function nested in
- * the guard still belongs to the guard, whose callees decide, so the search keeps the outermost declaration holding
- * the read and stops at the first one behind it that does not. Undefined when no declaration holds it, a module read.
+ * (martha#564). Every declaration whose span ends before the read is walked past, and one that begins where a
+ * declaration ends does not hold it either. Of the declarations that do hold it, the outermost is the guard: a read
+ * inside a function nested in the guard belongs to the guard, whose callees decide. The walk ends at the start of the
+ * read's module, so a declaration in another module is never the guard even when its braces run past the boundary.
+ * Undefined when no declaration of that module holds the read, which is a read at module level.
  */
 function declarationHolding(text: string, read: number): number | undefined {
   let holding: number | undefined
-  for (let at = text.lastIndexOf('function', read); at >= 0; at = at === 0 ? -1 : text.lastIndexOf('function', at - 1)) {
+  for (let at = text.lastIndexOf('function', read); at >= moduleStartAt(text, read); at = at === 0 ? -1 : text.lastIndexOf('function', at - 1)) {
     DECLARATION.lastIndex = at
     if (!DECLARATION.test(text)) continue
-    const holds = at + declarationAt(text, at).length > read
-    if (holds) holding = at
-    else if (holding !== undefined) return holding
+    if (at + declarationAt(text, at).length > read) holding = at
   }
   return holding
 }
