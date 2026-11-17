@@ -99,14 +99,14 @@ interface ACrew {
 
 function aCrew(
   t: TestContext,
-  changes: { readonly member?: string; readonly nudges?: boolean; readonly processes?: HostContract['processes'] } = {},
+  changes: { readonly member?: string; readonly nudges?: boolean; readonly processes?: HostContract['processes']; readonly declaration?: string } = {},
 ): ACrew {
   const home = mkdtempSync(join(tmpdir(), 'martha-320-pane-'))
   t.after(() => removeTheTree(home))
   const root = join(home, 'checkout')
   const declared = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   mkdirSync(join(root, DECLARATION_DIRECTORY), { recursive: true })
-  writeFileSync(declared, theDeclaration(changes.nudges ?? true))
+  writeFileSync(declared, changes.declaration ?? theDeclaration(changes.nudges ?? true))
   const crew = join(home, 'crew-store')
   mkdirSync(crew, { recursive: true })
 
@@ -355,4 +355,23 @@ test('#512: a member\'s own resume through log_a_milestone is refused, and the p
   const own = await crew.tools.answer(LOG_A_MILESTONE, { package: 'macula-io/martha#512', event: RESUME_EVENT, note: 'I checked, it is fine' }, 'a-session')
   assert.ok('answer' in own && own.answer.startsWith(`Not recorded: ${MEMBER} may not resume a paused package; only ${RECEIVER}`), `a member resumed its own package: ${JSON.stringify(own)}`)
   assert.equal((await readLedger(crew.ledger, 'macula-io/martha#512')).length, before, 'the refused resume wrote a row')
+})
+
+test('#512 r=2: over a declaration that cannot be read, nobody may resume through log_a_milestone, and nothing is written', async (t) => {
+  const crew = aCrew(t, { declaration: 'this is not a declaration {' })
+  await pauseThePackage(crew, 'macula-io/martha#512')
+  const before = (await readLedger(crew.ledger, 'macula-io/martha#512')).length
+
+  const asked = await crew.tools.answer(LOG_A_MILESTONE, { package: 'macula-io/martha#512', event: RESUME_EVENT, note: 'origin read: the branch is still there' }, 'a-session')
+  assert.ok('answer' in asked && asked.answer.startsWith(`Not recorded: ${RECEIVER} may not resume a paused package; only nobody`), `a resume went through an unreadable declaration: ${JSON.stringify(asked)}`)
+  assert.equal((await readLedger(crew.ledger, 'macula-io/martha#512')).length, before, 'the refused resume wrote a row')
+})
+
+test('#512 r=2: a paused package that only a crew line names reaches the receiver\'s pane (M8)', async (t) => {
+  const crew = aCrew(t)
+  await appendToTheChannel(crew.ledger, { from: MEMBER, to: [OTHER], text: handoff('macula-io/martha#512'), sent_at: NOW - HOUR })
+  await pauseThePackage(crew, 'macula-io/martha#512')
+
+  const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
+  assert.equal(drawn.filter((line) => line.startsWith(`- paused: ${MEMBER} on macula-io/martha#512, since `)).length, 1, `a pause named only by a line did not reach the pane: ${JSON.stringify(drawn)}`)
 })

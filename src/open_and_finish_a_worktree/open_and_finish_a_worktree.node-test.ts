@@ -24,7 +24,7 @@ import { DECLARATION_DIRECTORY, DECLARATION_FILE, type CrewSettings, HANDOVER_CE
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { readLedger } from '../log_ledger/log_ledger.ts'
+import { noteRecovery, readLedger } from '../log_ledger/log_ledger.ts'
 import {
   NO_LAYOUT,
   finishAWorktree,
@@ -590,3 +590,23 @@ test('worktree_finish names the package its row is kept under, and refuses befor
   assert.deepEqual(await rowKinds(tools.host), [], 'nothing was kept')
 })
 
+
+test('worktree_finish on a paused package tells the member the pause, and leaves the branch on origin (martha#512 r=2)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  await noteRecovery(tools.host.host, {
+    package: PACKAGE,
+    member: MEMBER,
+    act: { kind: 'tag', what: 'v1.2.3' },
+    failure: { class: 'unknown', evidence: 'the failure carried nothing to read it by' },
+    inspection: { read: 'origin', found: 'the tag is not there' },
+    decision: 'paused',
+  })
+  const answer = toldOf(await tools.finish.answer(finished('acme/widget', SLUG)))
+  assert.match(answer, /the push \(origin Ceres\/261-the-refusals\) was not sent, because the package is paused since the tag \(v1\.2\.3\) failed as unknown/)
+  assert.doesNotMatch(answer, /stays on origin \(/, 'the pause is told in its own words, not as a failure of the deletion')
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'the branch is where it was: nothing was sent')
+  assert.deepEqual(await rowKinds(tools.host), ['recovery_decided'], 'nothing was announced')
+})

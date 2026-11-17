@@ -315,14 +315,24 @@ async function keptOrSaid(writing: Promise<void>, what: string): Promise<AKeptRo
  */
 function theWordsOf(input: AnAttempt, parts: TheParts, unkept: readonly AKeptRow[] = []): string {
   const act = `the ${input.act.kind} (${input.act.what})`
-  const asked =
-    parts.decision.decision === 'paused'
-      ? ` The package is paused: the Supervisor is nudged about it, and no act is sent on it until the Supervisor or the owner resumes it (${HOW_A_PAUSE_IS_LIFTED()}).`
-      : ''
+  const asked = parts.decision.decision === 'paused' ? thePauseWords(unkept) : ''
   const lost = unkept.flatMap((row) =>
     row.kept ? [] : [` ${row.what.charAt(0).toUpperCase()}${row.what.slice(1)} was not recorded (${row.said}).`],
   ).join('')
   return `${input.package}: ${act} failed as ${parts.failure.class} (${parts.failure.evidence}). ${theSawOf(parts.inspection)}. ${parts.decision.why}.${lost} Nothing more is sent.${asked}`
+}
+
+/**
+ * What a pause does, told only as far as the ledger holds it (martha#512 r=2). The hold and the nudge both read the
+ * `paused` row, so they are claimed only when every row the pause passed was kept. On each paused path the rows passed
+ * are exactly the ones whose refusal leaves no `paused` row: the pause row itself, or the row whose refusal stopped the
+ * package before a pause row was written. Otherwise nothing holds the package, and the duty is the member's.
+ */
+function thePauseWords(unkept: readonly AKeptRow[]): string {
+  if (unkept.every((row) => row.kept)) {
+    return ` The package is paused: the Supervisor is nudged about it, and no act is sent on it until the Supervisor or the owner resumes it (${HOW_A_PAUSE_IS_LIFTED()}).`
+  }
+  return ' The pause could not be recorded, so nothing holds the package and the Supervisor is not nudged: do not go on with this package, and tell the Supervisor yourself.'
 }
 
 /**

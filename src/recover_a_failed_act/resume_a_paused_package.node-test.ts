@@ -136,3 +136,56 @@ test('a paused package reaches the Supervisor as a `paused` nudge, until it is r
   await keepTheMilestone(host, { package: work.package, member: RECEIVER, event: RESUME_EVENT, note: 'read and settled' }, mayResume)
   assert.deepEqual(await thePausedNudges(host, [work.package]), [])
 })
+
+// A pause the store would not keep holds nothing and nudges nobody, so the member is never told it does (martha#512 r=2).
+
+/** A look that arms the store to refuse the next row, the recovery's own decision, and then answers what it found. */
+const aLookThatRefusesTheDecision = (refuseNextAppend: (reason: string) => void, found: AnInspection) => async (): Promise<AnInspection> => {
+  refuseNextAppend('the disk is full')
+  return found
+}
+
+test('a pause whose row the store refused tells the member nothing holds the package, and the next act runs', async () => {
+  const { host, refuseNextAppend } = hostForTests()
+  const cannotTell: AnInspection = { state: 'cannot_tell', read: 'origin', found: 'no answer' }
+  const failure = await caught(() =>
+    sendAnActAndRecover(host, { ...work, act: push }, async () => {
+      throw {}
+    }, aLookThatRefusesTheDecision(refuseNextAppend, cannotTell)),
+  )
+  assert.ok(failure instanceof RecoveryDecided && failure.decision === 'paused', `the package was expected to stop: ${String(failure)}`)
+  assert.match(failure.told, /The decision was not recorded \(the store refused the row: the disk is full\)/)
+  assert.match(failure.told, /The pause could not be recorded, so nothing holds the package and the Supervisor is not nudged: do not go on with this package, and tell the Supervisor yourself\.$/)
+  assert.doesNotMatch(failure.told, /The package is paused/)
+  assert.equal(thePauseOn(await readLedger(host, work.package)), undefined)
+  assert.deepEqual(await thePausedNudges(host, [work.package]), [])
+  assert.equal(await sendAnActAndRecover(host, { ...work, act: tag }, async () => 'tagged', nowhere), 'tagged', 'nothing holds the package')
+})
+
+test('a retry whose row the store refused stops the package without claiming a hold, and the next act runs', async () => {
+  const { host, refuseNextAppend } = hostForTests()
+  let sends = 0
+  // The act's own row is refused, so nothing was sent and a retry is decided; then the store refuses that decision too.
+  refuseNextAppend('disk full on the act')
+  const failure = await caught(() =>
+    sendAnActAndRecover(host, { ...work, act: push }, async () => {
+      sends += 1
+      throw new Error('rejected: non-fast-forward')
+    }, aLookThatRefusesTheDecision(refuseNextAppend, { state: 'it_did_not_happen', read: 'origin', found: 'nothing there' })),
+  )
+  assert.ok(failure instanceof RecoveryDecided && failure.decision === 'paused', `the package was expected to stop: ${String(failure)}`)
+  assert.equal(sends, 0, 'neither the act nor its retry was sent')
+  assert.match(failure.told, /the decision could not be kept on the package, so sending the act again would spend an attempt/, 'the stop path was the one taken')
+  assert.match(failure.told, /The decision was not recorded \(the store refused the row: the disk is full\)/)
+  assert.match(failure.told, /The pause could not be recorded, so nothing holds the package and the Supervisor is not nudged/)
+  assert.doesNotMatch(failure.told, /The package is paused/)
+  assert.equal(thePauseOn(await readLedger(host, work.package)), undefined)
+  assert.equal(await sendAnActAndRecover(host, { ...work, act: tag }, async () => 'tagged', nowhere), 'tagged', 'nothing holds the package')
+})
+
+test('who may resume is compared without regard to case (martha#512 r=2, M9)', async () => {
+  const { host } = hostForTests()
+  await aPausedPackage(host)
+  const resumed = await keepTheMilestone(host, { package: work.package, member: RECEIVER.toUpperCase(), event: RESUME_EVENT, note: 'read and settled' }, mayResume)
+  assert.match(resumed.told, /^Kept: synthetic-owner\/repo#7 is resumed/)
+})
