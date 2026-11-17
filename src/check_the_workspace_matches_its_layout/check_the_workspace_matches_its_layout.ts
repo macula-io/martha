@@ -9,15 +9,13 @@
 // It runs where the guard cannot see — after a member's shell, at a launch, or by hand — and it asks git only, with
 // Martha's own settings (../run_marthas_own_git). A place the crew did not declare is not checked, and a git that cannot
 // answer a question leaves that question unasked rather than inventing an answer. Nothing runs it yet: package 2 wires
-// it to the launch and to the crew's hygiene command, and until then it is run by hand
-// (`node src/check_the_workspace_matches_its_layout/main.ts <clones> <worktrees> [declaration.json]`).
+// it to the launch and to the crew's hygiene command, and until then it is called by a test and by nothing else.
 //
 // What it cannot see: a worktree made outside the crew's places, once its clone no longer records it; and a repository
 // cloned twice under two organisations the crew did not put in one place.
 
 import type { FileTree, Processes } from '../host_contract/host_contract.ts'
 import type { AListedWorktree, TheWorkspace } from '../guard_workspace/guard_workspace.ts'
-import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { join, sep } from 'node:path'
 
@@ -44,7 +42,7 @@ const THE_BRANCH = ['rev-parse', '--abbrev-ref', 'HEAD']
 const THE_DIRTY_WORK = ['status', '--porcelain']
 
 /** The argument git takes to name the place a clone came from, which is what tells one repository from another. */
-const THE_ORIGIN = [CONFIG, '--get', 'remote.origin.url']
+const THE_ORIGIN = ['config', '--get', 'remote.origin.url']
 
 /** The argument git takes to list a clone's worktrees, the branch of each and whether only its record is left. */
 const THE_WORKTREES = ['worktree', 'list', '--porcelain']

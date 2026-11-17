@@ -1,5 +1,9 @@
 // Asking git what a member is about to change (martha#562, port-map step 9).
 //
+// A host adapter, not machine glue (owner ruling 2026-11-17, package 1): host glue imports only the host contract,
+// node:* and its own folder, and no slice imports the glue, so a slice that runs the guard over a shared reader cannot
+// sit there. A git-asking adapter that uses core slices is what the adapters are for.
+//
 // The workspace guard (../guard_workspace) decides from a call's own words and a few facts only git can say: the
 // branches a clone has, which is what tells `checkout main` from `checkout src/app.ts`, and the worktrees a removal or
 // a prune would meet, with the branch each of them is on. This slice asks for them, runs the guard, and hands back the

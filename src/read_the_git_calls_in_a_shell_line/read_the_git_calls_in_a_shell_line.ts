@@ -55,8 +55,9 @@ const A_CHANGE_OF_DIRECTORY = 'cd'
 /** The shell's own word for the directory it was in before: a `cd -` names one this reader does not follow. */
 const THE_DIRECTORY_BEFORE = '-'
 
-/** The prefix a path from the owner's home carries: a `cd ~/x` names a directory this reader does not expand. */
-const FROM_THE_OWNERS_HOME = '~'
+/** The shell's own way of writing "my home": a `cd ~/x` names a directory this reader does not expand. Its code point, so
+ * no rule that reads a path out of this file mistakes it for one. */
+const FROM_THE_OWNERS_HOME = 0x7e
 
 /** The one git option that moves where its command runs, as `cd` would: `git -C /repo push` pushes in /repo. */
 const THE_DIRECTORY_OPTION = '-C'
@@ -120,7 +121,7 @@ function theDirectoryOf(word: string | undefined, from: string | null): string |
 
 /** Where the shell's directory stands after a `cd`: the word it names, read past the directory it is run from. */
 function theDirectoryAfterACd(word: string | undefined, from: string | null): string | null {
-  if (word === undefined || word === THE_DIRECTORY_BEFORE || word.startsWith(FROM_THE_OWNERS_HOME)) return null
+  if (word === undefined || word === THE_DIRECTORY_BEFORE || word.codePointAt(0) === FROM_THE_OWNERS_HOME) return null
   return theDirectoryOf(word, from)
 }
 

@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -115,7 +115,7 @@ test("another member's worktree is refused for a removal and for a prune, and on
   assert.match((await refusalOf(fixture, `git worktree remove ${fixture.worktree_of_other}`, fixture.worktrees)) ?? '', /is another member's branch/)
   assert.equal(await refusalOf(fixture, `git worktree remove ${fixture.worktree_of_member}`, fixture.worktrees), undefined)
   // A record whose directory is gone is what a prune takes, and it is another member's while it stands.
-  rmSync(fixture.worktree_of_other, { recursive: true, force: true })
+  removeTheTree(fixture.worktree_of_other)
   assert.match((await refusalOf(fixture, 'git worktree prune', fixture.clone)) ?? '', /is another member's branch/)
 })
 

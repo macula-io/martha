@@ -45,12 +45,12 @@
       "src/empty_directory_of_a_launch",
       "src/linux_process_identity",
       "src/owners_settings_directory",
-      "src/row_streams_directory",
-      "src/ask_git_what_a_member_is_about_to_change"
+      "src/row_streams_directory"
     ],
     "hostAdapters": [
       "src/answer_the_relay",
       "src/approve_a_checkouts_config",
+      "src/ask_git_what_a_member_is_about_to_change",
       "src/ask_the_host_what_it_loads",
       "src/claude_code_host",
       "src/claude_code_relay",
