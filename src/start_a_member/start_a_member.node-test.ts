@@ -28,6 +28,7 @@ import {
   ownWritesKeptForLaunch,
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
@@ -219,7 +220,7 @@ function isRunning(pid: number): boolean {
 /** A process's state letter, as `/proc` keeps it; undefined where it cannot be read. */
 function stateOf(pid: number): string | undefined {
   try {
-    return readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.charAt(0)
+    return readFileSync(`${PROC_ROOT}/${pid}/stat`, 'utf8').split(') ')[1]?.charAt(0)
   } catch {
     return undefined
   }

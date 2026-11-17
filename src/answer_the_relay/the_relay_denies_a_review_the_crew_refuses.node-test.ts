@@ -73,10 +73,13 @@ function aCrewRefusingEverything(asked: string[]): CrewTools {
     tools: [],
     answer: async () => ({ answer: '' }),
     startBeating: () => () => {},
+    theContractInForce: async () => undefined,
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
     ends: holdingTheEnds(),
     thePredecessorOf: async () => null,
+    theSpendInForce: async () => undefined,
+    noteTheCallCounted: async () => undefined,
     theReviewModelOfTheCall: async () => null,
     theReviewModel: async () => null,
     // This crew hears no menu close, which is what the ask queue reads a settle on (martha#313).

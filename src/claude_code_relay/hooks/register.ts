@@ -133,12 +133,7 @@ function withTheLineHanded(passed: unknown, line: string): Readonly<Record<strin
 }
 
 /** Posts one event to the launcher and hears its answer; never rejects. */
-export async function relay(
-  $: RelayEngine,
-  event: RelayEvent,
-  body: Readonly<Record<string, unknown>>,
-  hear: (status: number, text: string) => Heard,
-): Promise<Heard> {
+export async function relay($: RelayEngine, event: RelayEvent, body: Readonly<Record<string, unknown>>, hear: (status: number, text: string) => Heard): Promise<Heard> {
   try {
     // The host takes only a literal name here (it lists the variables a module reads before running it) and
     // refuses the whole module for a constant (#104). The name is RELAY_SOCKET_VARIABLE's; the relay's tests
@@ -166,6 +161,14 @@ export async function relay(
   }
 }
 
+/**
+ * Where this machine's live process tree stands, as the host reads it for the relay (martha#437): the relay's own copy
+ * of the core's `PROC_ROOT`, held by literal because the host installs the relay as a copy of its own folder, so a hooks
+ * module imports only its own files. This file is its only reader, and the relay's tests read the core's constant, so a
+ * copy that drifted from it goes unanswered and fails them by name.
+ */
+const PROC_ROOT = '/proc'
+
 /** The process group this host runs in: field 5 of its own /proc stat line. */
 export function processGroupOf(stat: string): number | undefined {
   // The command name (field 2) is in parentheses and may hold spaces or `)`;
@@ -188,7 +191,7 @@ const HOLD_TIMEOUT_MS = 570_000
 export async function stopThisMember($: RelayEngine, why: string): Promise<never> {
   try {
     void $.ui.toast(refusal(`the member is being stopped, because ${why}`))
-    const group = processGroupOf(await $.fs.read('/proc/self/stat'))
+    const group = processGroupOf(await $.fs.read(`${PROC_ROOT}/self/stat`))
     if (group !== undefined) await $.process.run(['kill', '-s', 'KILL', '--', `-${group}`])
   } catch {
     // Nothing to do but hold: the hook must not return.

@@ -21,6 +21,21 @@
 //
 //   - a literal whose text equals a constant's value, anywhere in a module,
 //     the module that defines it included;
+//   - a literal holding a constant's value as a whole path segment, split on
+//     `/` only: `join(checkout, '.git/config')` restates CONFIG as surely as
+//     `'config'` would, and `join(checkout, '.git', CONFIG)` is what the rule asks
+//     for (martha#437). A word inside prose is never split out, so prose stays a
+//     word, and a literal that is exactly the path of a source the check reads
+//     names that file as a module specifier does, so its segments are never
+//     judged: `file: 'wake_a_member/wake_a_member.ts'` in a slice's coincidences
+//     is the slice's directory, not the WAKE_A_MEMBER tool. A literal holding
+//     an address is judged whole too, never split (the owner's ruling on
+//     martha#437, r=3): a URL, anything with `://`, and a GitHub owner/repo
+//     name whose owner has a hyphen, as the whole literal or one word of it, or
+//     after `repos/` in an API route — `macula-io/martha`, `-R macula-io/martha`,
+//     `macula-io/martha#253`, `repos/macula-io/martha/actions/runs`. A
+//     hyphen-free `owner/repo` is spelled like a relative path (`actions/runs`)
+//     and stays split;
 //   - a *definition* whose value equals an exported constant of ANOTHER module,
 //     exported or not: three private `const X = 'node_modules'` beside
 //     `DEPENDENCIES` are three restatements, and `const T = 'Bash'` is the same
@@ -57,9 +72,10 @@
 //
 // Out of reach, and left to review: a value built at run time (`'Ba' + 'sh'`, a
 // template with a substitution, a value read from a fixture), and a literal that
-// CONTAINS a value without equalling it — the sixteen `mcp__<server>__<tool>` names
-// in the relay's hooks contain the plugin's name from its manifest, and never equal
-// it (martha#289; the manifest, not a constant, since #343).
+// CONTAINS a value other than as a whole path segment — the sixteen
+// `mcp__<server>__<tool>` names in the relay's hooks contain the plugin's name from
+// its manifest, and never equal it (martha#289; the manifest, not a constant, since
+// #343) — or a value that itself spans more than one segment.
 
 import ts from 'typescript'
 
@@ -122,6 +138,8 @@ export interface Finding {
   readonly rule: Rule
   /** True when no constant holds the value any more: the change took it away. */
   readonly gone: boolean
+  /** True when the literal holds the value as one path segment rather than equalling it (martha#437). */
+  readonly segment: boolean
 }
 
 /** What to judge: the lines a change adds, and the values it defines or revalues. */
@@ -378,6 +396,7 @@ const findingAt = (path: string, line: number, literal: string, constant: { read
   name: constant.name,
   rule,
   gone,
+  segment: false,
 })
 
 /** The constant a finding names: the holder to import, or, when none holds the value any more, the one the change took away. */
@@ -438,18 +457,49 @@ function findingsForAUse(path: string, line: number, literal: string, declared: 
   return holder === undefined ? [] : [findingAt(path, line, literal, { module: holder.path, name: holder.name }, 'restates_a_constant')]
 }
 
+/** What splits a literal into the segments of a path: only `/`, so a word in prose is never split out (martha#437). */
+export const PATH_SEPARATOR = '/'
+
+/**
+ * The distinct segments of a literal written as a path, each long enough to be a
+ * value, never the literal itself: `'.git/config'` holds `config`, and a literal
+ * with no separator holds none (martha#437).
+ */
+export const pathSegmentsOf = (literal: string): string[] =>
+  [...new Set(literal.split(PATH_SEPARATOR))].filter((segment) => segment !== literal && segment.length >= SHORTEST_VALUE)
+
+/** What a URL holds, wherever it stands in a literal. */
+const URL_MARK = '://'
+
+/** A GitHub owner with a hyphen, then a repository: what tells a slug from a relative path such as `actions/runs`. */
+const SLUG = '[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+/[A-Za-z0-9._-]+'
+
+/** An owner/repo name as a word of its own, or after `repos/` in a GitHub API route. */
+const OWNER_REPO = new RegExp(`(?:^|\\s)(?:${SLUG}(?=$|\\s|#)|repos/${SLUG}(?=$|\\s|#|/))`)
+
+/**
+ * Whether a literal holds an address, which is judged whole and never split: a
+ * URL, or a GitHub owner/repo name (the owner's ruling on martha#437, r=3).
+ */
+export const holdsAnAddress = (literal: string): boolean => literal.includes(URL_MARK) || OWNER_REPO.test(literal)
+
+/** A value written as one segment of a path literal: a use of it, as the bare value would be (martha#437). */
+const findingsForTheSegments = (path: string, line: number, literal: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] =>
+  pathSegmentsOf(literal).flatMap((segment) => findingsForAUse(path, line, segment, declared, definitions).map((finding) => ({ ...finding, segment: true })))
+
 /** The literals of a source that can carry a value: not a module's path, not a property's name, not a type (rule 1 of part b). */
 const literalsThatCarryAValue = (file: ts.SourceFile): ts.Node[] =>
   nodesOf(file).filter(isAValueLiteral).filter((node) => !namesAModule(node) && !namesAProperty(node) && !isInAType(node))
 
-/** What one literal is, if it restates something. */
-function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], everyDefinition: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>): Finding[] {
+/** What one literal is, if it restates something; `files` are the paths of the sources read, whose segments name directories, not values. */
+function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], everyDefinition: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>, files: ReadonlySet<string>): Finding[] {
   const literal = valueOfALiteral(node as ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral)
   if (!isANumber(literal) && literal.length < SHORTEST_VALUE) return []
   const definition = definitionAt.get(node)
-  return definition === undefined
+  const whole = definition === undefined
     ? findingsForAUse(path, line, literal, declared, definitions)
     : findingsForADefinition(definition, line, declared, definitions, everyDefinition)
+  return files.has(literal) || holdsAnAddress(literal) ? whole : [...whole, ...findingsForTheSegments(path, line, literal, declared, definitions)]
 }
 
 /**
@@ -468,13 +518,14 @@ export function restatementsIn(sources: readonly CoreSource[], judge: Judge): Fi
   // value, only what a copy elsewhere should import.
   const definitions = everyDefinition.filter((definition) => !exceptions.some((exception) => exception.value === definition.value && exception.file === definition.path))
   const judged = judge.judged
+  const files = new Set(reads.map((read) => read.path))
   const definitionAt = new Map(everyDefinition.flatMap((definition) => literalsUnder(definition.node).map((literal) => [literal, definition] as const)))
   const isDeclaredACoincidence = (finding: Finding): boolean =>
     exceptions.some((exception) => exception.value === finding.literal && exception.file === finding.path)
   const isJudged = (finding: Finding): boolean =>
     judged === null || judged.has(at(finding.path, finding.line)) || declared.some((entry) => entry.value === finding.literal)
   return reads
-    .flatMap(({ path, file }) => literalsThatCarryAValue(file).flatMap((node) => findingsAt(node, lineOf(file, node), path, declared, definitions, everyDefinition, definitionAt)))
+    .flatMap(({ path, file }) => literalsThatCarryAValue(file).flatMap((node) => findingsAt(node, lineOf(file, node), path, declared, definitions, everyDefinition, definitionAt, files)))
     .filter((finding) => !isDeclaredACoincidence(finding) && isJudged(finding))
     .sort(byPlace)
 }
@@ -505,7 +556,7 @@ export const GONE = '(gone in this change: keep a constant that holds this value
 
 /** Each finding as the one line CI prints. */
 export const lineOfAFinding = (finding: Finding): string =>
-  `${finding.path}:${finding.line}: '${asTheMessageShowsIt(finding.literal)}' restates ${finding.module} ${finding.name}${finding.gone ? ` ${GONE}` : ''}`
+  `${finding.path}:${finding.line}: '${asTheMessageShowsIt(finding.literal)}'${finding.segment ? ' (a path segment)' : ''} restates ${finding.module} ${finding.name}${finding.gone ? ` ${GONE}` : ''}`
 
 /** A marker the check cannot hold to its claim: misplaced, renamed, or on a record it cannot read entry by entry. */
 export interface MarkerNotHeld {

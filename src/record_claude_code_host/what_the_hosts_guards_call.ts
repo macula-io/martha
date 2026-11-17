@@ -166,13 +166,25 @@ const OFF_SWITCH_READ = Object.keys(CLAUDE_MEMORY_OFF).map((name) => `process.en
 /** A function declaration's start, at `at` alone. */
 const DECLARATION = /(?<![\w$.#])function\*? ?[A-Za-z_$][\w$]*\(/y
 
-/** Where the last function declaration before `read` starts, searched back from it; undefined when none does. */
-function lastDeclarationBefore(text: string, read: number): number | undefined {
-  for (let at = text.lastIndexOf('function', read); at >= 0; at = at === 0 ? -1 : text.lastIndexOf('function', at - 1)) {
+/** Where the module that holds `read` starts: the bundle's chunk marker at or before it, the boundary bundleOf splits on. */
+const moduleStartAt = (text: string, read: number): number => Math.max(0, text.lastIndexOf(CHUNK, read))
+
+/**
+ * Where the function declaration that holds `read` starts: the guard itself, not a helper declared before the read
+ * (martha#564). Every declaration whose span ends before the read is walked past, and one that begins where a
+ * declaration ends does not hold it either. Of the declarations that do hold it, the outermost is the guard: a read
+ * inside a function nested in the guard belongs to the guard, whose callees decide. The walk ends at the start of the
+ * read's module, so a declaration in another module is never the guard even when its braces run past the boundary.
+ * Undefined when no declaration of that module holds the read, which is a read at module level.
+ */
+function declarationHolding(text: string, read: number): number | undefined {
+  let holding: number | undefined
+  for (let at = text.lastIndexOf('function', read); at >= moduleStartAt(text, read); at = at === 0 ? -1 : text.lastIndexOf('function', at - 1)) {
     DECLARATION.lastIndex = at
-    if (DECLARATION.test(text)) return at
+    if (!DECLARATION.test(text)) continue
+    if (at + declarationAt(text, at).length > read) holding = at
   }
-  return undefined
+  return holding
 }
 
 /**
@@ -183,10 +195,9 @@ function fileModeGuardIn(text: string): { readonly at: number; readonly source: 
   const reads = OFF_SWITCH_READ.flatMap((read) => [...text.matchAll(new RegExp(`${escaped(read).replaceAll('.', '\\.')}(?![\\w$])`, 'g'))].map((match) => match.index))
   if (reads.length !== 1) throw new Error(`The host reads the memory off switch ${String(reads.length)} times, not once, so its ${FILE_MODE_GUARD} cannot be told.`)
   const [read = 0] = reads
-  const at = lastDeclarationBefore(text, read)
-  const source = at === undefined ? '' : declarationAt(text, at)
-  if (at === undefined || at + source.length <= read) throw new Error(`The host reads the memory off switch outside a function declaration, so its ${FILE_MODE_GUARD} cannot be told.`)
-  return { at, source }
+  const at = declarationHolding(text, read)
+  if (at === undefined) throw new Error(`The host reads the memory off switch outside a function declaration, so its ${FILE_MODE_GUARD} cannot be told.`)
+  return { at, source: declarationAt(text, at) }
 }
 
 /** What the host's file-mode memory guard calls, followed through the bundle (martha#438). */
