@@ -41,6 +41,11 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      # npm test runs the installer job's own steps too (martha#496), so a suite green here is green there: the
+      # installer's dependencies go in first, as that job installs them.
+      - name: the installer's own dependencies, for the suite's run of the installer job
+        working-directory: installer
+        run: npm ci --ignore-scripts
       - run: npx tsc --noEmit
       - run: npm test
 
