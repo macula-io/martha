@@ -5,7 +5,7 @@
 // names with their own copy of the rule, some trimming and some not, and nothing failed when a copy drifted.
 //
 // The rule is mechanical, because whether a fold is "between two member names" is not something a reader of the text
-// can tell: every case fold (`toLowerCase`, `toLocaleLowerCase`) in a script file under src/ that is not a test is
+// can tell: every case fold (`toLowerCase`, `toUpperCase` and their locale forms) in a script file under src/ that is not a test is
 // named, except in ../src/declare_crew/member_names.ts, which holds the one rule, and in the files the list below
 // declares with how many folds each holds and why none of them is a member's name (a node id, a git key, a package).
 // A new fold anywhere is named by file and line; one more in a declared file changes its count and is named too, and a
@@ -38,6 +38,7 @@ export const FOLDS_THAT_ARE_NOT_NAMES: readonly AFoldThatIsNotAName[] = [
   { path: 'name_a_node_by_its_petname/name_a_node_by_its_petname.ts', folds: 1, reason: A_NODE_ID },
   { path: 'prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts', folds: 4, reason: A_NODE_ID },
   { path: 'read_a_ring_results_sender/read_a_ring_results_sender.ts', folds: 2, reason: A_NODE_ID },
+  { path: 'recover_a_failed_act/recover_a_failed_act.ts', folds: 1, reason: 'the first letter of a sentence, capitalised for the member to read' },
   { path: 'refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts', folds: 1, reason: 'one ASCII letter of a path, folded as the host folds paths' },
   { path: 'refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts', folds: 1, reason: 'an npm config name from the environment, which npm reads ignoring case' },
   { path: 'refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts', folds: 2, reason: A_NODE_ID },
@@ -54,8 +55,8 @@ export interface AFoldNamed {
   readonly why: string
 }
 
-/** A case fold, as a script calls one. */
-const A_FOLD = /\.to(?:Locale)?LowerCase\s*\(/g
+/** A case fold, as a script calls one: either half, since a copy that upper-cases both names is the same comparison. */
+const A_FOLD = /\.to(?:Locale)?(?:Lower|Upper)Case\s*\(/g
 
 /** The lines of a source that fold case, by number; a line that is only a comment is not code and folds nothing. */
 function foldsIn(text: string): readonly number[] {

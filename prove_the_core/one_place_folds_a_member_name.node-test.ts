@@ -51,6 +51,15 @@ test('#528: a declared file is held to its count, one more fold and one fewer bo
   assert.deepEqual(fewer.map((fold) => fold.why), ['folds case 0 times, and its declaration says 1'])
 })
 
+test('#528 r=2: a copy that upper-cases both names is named too, in either form', () => {
+  const upper = source('a_slice/a_slice.ts', 'const same = (name: string, other: string): boolean => name.toUpperCase() === other.toLocaleUpperCase()\n')
+  const found = theFoldsNamedIn([upper], { test_suffixes, declared: [] })
+  assert.deepEqual(found, [
+    { path: 'a_slice/a_slice.ts', line: 1, why: 'folds case outside the one rule' },
+    { path: 'a_slice/a_slice.ts', line: 1, why: 'folds case outside the one rule' },
+  ])
+})
+
 test('#528: a test file that folds case is not read', () => {
   assert.deepEqual(theFoldsNamedIn([source('a_slice/a_slice.node-test.ts', A_COPY)], { test_suffixes, declared: [] }), [])
 })
