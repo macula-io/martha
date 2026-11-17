@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -25,7 +25,7 @@ import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../
 import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type Ran, type Refused, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { linuxProcessIdentities, PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { fakeNpmRegistry, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
@@ -51,6 +51,8 @@ import { PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugi
 import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
+import { keepTheLifelineIn, RUN_LIFELINE_FD } from '../end_a_launch_when_its_run_ends/keep_the_lifeline_in.ts'
+import { RUN_LIFELINE_VARIABLE, THE_RUN_IS_GONE } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import { RELAY_PLUGIN_DIR } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
 import { LAUNCHER_RECORD_NAME, type LaunchRecord } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { MEMBER_PID_FD } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
@@ -2444,7 +2446,7 @@ async function carriesRelayRoot(pid: number, relay_root: string, read: ProcRead 
  */
 async function killGroupsCarrying(relay_root: string): Promise<void> {
   const own = groupOf(process.pid)
-  for (const entry of readdirSync('/proc')) {
+  for (const entry of readdirSync(PROC_ROOT)) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1) continue
     if (!(await carriesRelayRoot(pid, relay_root))) continue
@@ -2461,7 +2463,7 @@ async function killGroupsCarrying(relay_root: string): Promise<void> {
 /** Every process this user has that names this relay root in its environment. */
 async function pidsCarrying(relay_root: string): Promise<number[]> {
   const found: number[] = []
-  for (const entry of readdirSync('/proc')) {
+  for (const entry of readdirSync(PROC_ROOT)) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1) continue
     if (await carriesRelayRoot(pid, relay_root)) found.push(pid)
@@ -2521,7 +2523,7 @@ async function noProcessCarries(relay_root: string, alsoGone: readonly number[])
  * (martha#216 r=3).
  */
 async function killWhateverNamesTheHome(home: string): Promise<void> {
-  for (const entry of readdirSync('/proc')) {
+  for (const entry of readdirSync(PROC_ROOT)) {
     const pid = Number(entry)
     if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) continue
     let line = ''
@@ -2603,7 +2605,10 @@ test('the removal names a process that outlasts its wait (martha#216)', async ()
 /**
  * A launcher in a process of its own, started on this place, that says when its
  * member runs, and stops it on SIGUSR2 the way a refusal does. It stays up after
- * its member has stopped, until it is ended.
+ * its member has stopped, until it is ended — unless `staysUp` is false, which is
+ * how a test asks whether a launch that never got a member still ends by itself
+ * (#472): the interval that keeps this one up is the only thing between a refused
+ * launch and a process that exits, so a test that keeps the interval proves nothing.
  */
 /** The owner's arguments a launcher process passes unless told otherwise: one prompt, answered and printed. */
 const OWNER_PROMPT_ARGS = ['-p', 'the owner prompt']
@@ -2616,6 +2621,7 @@ function launcherProcess(
   mesh_trees?: MeshTreeRecording,
   deadlines: SessionStartDeadlines = {},
   args: readonly string[] = OWNER_PROMPT_ARGS,
+  staysUp = true,
 ): string {
   // A member runs here, in a process this one does not own: the place's own hook leaves the removal to this test, which
   // alone can wait for that process before the home goes (martha#216).
@@ -2646,7 +2652,7 @@ function launcherProcess(
       "if (started.started) process.once('SIGUSR2', () => started.stop('the test said so'))",
       "process.stdout.write(started.started ? `started ${started.pid}\\n` : `refused: ${started.refusal}\\n`)",
       "if (started.started) { const stopped = await started.stopped; process.stdout.write(`stopped ${stopped.signal ?? 'by itself'}\\n${stopped.stopped_because === null ? '' : `because ${stopped.stopped_because}\\n`}`) }",
-      'setInterval(() => undefined, 1 << 30)',
+      ...(staysUp ? ['setInterval(() => undefined, 1 << 30)'] : []),
       '',
     ].join('\n'),
   )
@@ -2688,6 +2694,315 @@ for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
     assert.deepEqual(readdirSync(place.snapshot_root), [])
   })
 }
+
+// --- the run a member is started under (martha#472) ---------------------------------
+
+/**
+ * A host that answers as a stand-in does, ignores a terminal's hangup as a real one does — so no test can pass on the
+ * fake's own death — and keeps a child in its group, as a tool server does. Given `park`, it waits before answering
+ * anything until `waitFor` exists, saying in `parked` that it is waiting: the launcher is then provably parked in its
+ * own questions, which is where a test puts the end of a run without racing it (#472).
+ */
+function fakeHostUnderARun(
+  place: Place,
+  park?: { readonly waitFor: string; readonly parked: string },
+): { command: string; argsFile: string; readyFile: string; childFile: string } {
+  const dir = join(place.home, 'fake-run')
+  mkdirSync(dir)
+  const files = { argsFile: join(dir, 'args'), readyFile: join(dir, 'ready'), childFile: join(dir, 'child') }
+  const command = join(dir, 'claude')
+  writeFileSync(
+    command,
+    [
+      '#!/bin/sh',
+      ...(park === undefined ? [] : [`: > '${park.parked}'; while [ ! -e '${park.waitFor}' ]; do sleep 0.01; done`]),
+      ...hostAnswers({ initAnswer: reportsOutputStyles(join(place.home, CLAUDE_FOLDER, CLAUDE_CODE_OUTPUT_STYLES_FOLDER)) }),
+      // Its own pid, which `exec` keeps, so a test can tell the member from the process under it by which one it reads.
+      `echo $$ > '${files.readyFile}'`,
+      `printf '%s\\n' "$@" > '${files.argsFile}'`,
+      // A host ignores a terminal's hangup, so nothing but the launcher's group kill can take it away (#472).
+      `trap '' HUP`,
+      'sleep 600 &',
+      `echo $! > '${files.childFile}'`,
+      'exec sleep 600',
+      '',
+    ].join('\n'),
+    { mode: 0o700 },
+  )
+  return { command, ...files }
+}
+
+/** The group a process leads or belongs to, or nothing when it went while it was looked at. */
+function groupOfOrNothing(pid: number): number | undefined {
+  try {
+    return groupOf(pid)
+  } catch {
+    return undefined
+  }
+}
+
+/** Every process in `group`, as the kernel lists them. */
+function pidsInGroup(group: number): number[] {
+  return readdirSync(PROC_ROOT)
+    .map(Number)
+    .filter((pid) => Number.isInteger(pid) && pid > 1 && groupOfOrNothing(pid) === group)
+}
+
+/** What one of a process's descriptors names, or nothing when it went with its process. */
+function descriptorNames(pid: number, descriptor: string): string {
+  try {
+    return readlinkSync(`/proc/${pid}/fd/${descriptor}`)
+  } catch {
+    return ''
+  }
+}
+
+/** Every process in `group` that holds a descriptor naming `path`: the run's plumbing, if it reached the member (#472). */
+function holdersInGroupOf(group: number, path: string): number[] {
+  return pidsInGroup(group).filter((pid) => readdirSync(`/proc/${pid}/fd`).some((descriptor) => descriptorNames(pid, descriptor) === path))
+}
+
+/**
+ * How long a launcher's own answer to its run's end may take: a pipe closing and a group kill, not a host's pace
+ * (#472). A wait for that answer with no bound would end as the harness's timeout, which names no assertion.
+ */
+const REACTS_WITHIN_MS = 25_000
+
+/**
+ * The session-start backstop's deadline, put beyond any wait a lifeline test holds: the backstop stops a host that never
+ * reported its session, and a test that let it within its own run could not tell that stop from the lifeline's (#472).
+ */
+const BEYOND_ANY_WAIT_MS = 900_000
+
+/** Waits for what a launcher reacts with, no longer than `ms`: true when it came. */
+async function reactsWithin(holds: () => boolean, ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms
+  while (Date.now() < deadline) {
+    if (holds()) return true
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  }
+  return holds()
+}
+
+test('a run that closes its lifeline takes its member down with it, leaving no relay directory, snapshot or record (#472)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeHostUnderARun(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // The backstop is put beyond this test, so what stops the member can only be the lifeline's own end.
+  const launcher = spawn(process.execPath, [launcherProcess(place, fake.command, 'ignore', lifeline.environment, undefined, { session_start_deadline_ms: BEYOND_ANY_WAIT_MS })], { stdio: lifeline.stdio })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  // Before any assertion: a test that fails must not leave the member running.
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to start its member', () => said.includes('started') && existsSync(fake.childFile), t, () => said, () => REFUSED_LINE.exec(said)?.[0])
+  const member = Number(readFileSync(fake.readyFile, 'utf8').trim())
+  const child = Number(readFileSync(fake.childFile, 'utf8').trim())
+  assert.equal(isAlive(member), true)
+  assert.equal(isAlive(child), true)
+  // The launcher took the pipe in close-on-exec and closed the number it was handed: nothing the member runs holds it.
+  assert.deepEqual(holdersInGroupOf(groupOf(member) ?? member, lifeline.path), [])
+  // And the member is handed no variable naming it (#472 r=3): the number it would name is one the launcher has closed,
+  // so a tool server or a nested `martha start` reading it would be told of a run it cannot read. The rest of the run's
+  // own environment is inherited, which is what says this environment was read at all.
+  const environment = readFileSync(`/proc/${member}/environ`, 'utf8').split('\0')
+  assert.equal(environment.some((named) => named.startsWith(`${RUN_LIFELINE_VARIABLE}=`)), false, `the member is handed no variable naming the pipe: ${JSON.stringify(environment)}`)
+  assert.equal(environment.some((named) => named.startsWith('PATH=')), true, 'and inherits the run\'s own environment besides it')
+  assert.equal(readdirSync(place.relay_root).length, 1, 'the launch has its relay directory while it runs')
+  assert.equal(readdirSync(place.snapshot_root).length, 1)
+  assert.equal(readdirSync(place.launch_records).length, 1)
+  // The run goes: its end of the pipe closes, and nothing else has to happen for the member to be taken with it.
+  lifeline.closeTheRunsEnd()
+  // The reason is what tells this kill from the backstop's, which this launch cannot reach: an assertion only that the
+  // member stopped would pass on the wrong killer (#472 r=1).
+  assert.ok(
+    await reactsWithin(() => said.includes('stopped'), REACTS_WITHIN_MS),
+    `the launcher never said it stopped its member after its run went: ${JSON.stringify(said)}`,
+  )
+  assert.ok(said.includes(`because ${THE_RUN_IS_GONE}`), `not the run's end that stopped it: ${JSON.stringify(said)}`)
+  await until('the member and the process under it to be killed', () => !isAlive(member) && !isAlive(child), t)
+  await until('the launch directory and the snapshot to go', () => readdirSync(place.relay_root).length === 0 && readdirSync(place.snapshot_root).length === 0, t)
+  await until('the launch record to go', () => readdirSync(place.launch_records).length === 0, t)
+})
+
+test('a launch refused while its run is still there ends by itself: its run\'s lifeline never holds a launcher up (#472)', async (t) => {
+  const place = placeFor(t)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // Nothing keeps this launcher up but its own work: the command is not one it can run, so no member starts, and the
+  // script holds no interval. The run keeps its end open for the whole test, so a launcher that waited on it would
+  // never end — which is what a pipe left referenced does (#472 r=1).
+  const script = launcherProcess(place, join(place.home, 'no-such-command'), 'ignore', lifeline.environment, undefined, {}, OWNER_PROMPT_ARGS, false)
+  const launcher = spawn(process.execPath, [script], { stdio: lifeline.stdio })
+  let ended = false
+  launcher.once('exit', () => (ended = true))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to refuse', () => REFUSED_LINE.test(said), t, () => said)
+  assert.ok(said.includes('is not a command this launcher can run'), said)
+  assert.ok(
+    await reactsWithin(() => ended, REACTS_WITHIN_MS),
+    `the launcher never ended on its refusal while its run was still there: ${JSON.stringify(said)}`,
+  )
+  assert.deepEqual(readdirSync(place.relay_root), [], 'a refusal leaves nothing behind')
+})
+
+test('a run killed hard is still taken with its member: the pipe\'s end closes however the run ends (#472)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeHostUnderARun(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const launcher = launcherProcess(place, fake.command, 'ignore', { [RUN_LIFELINE_VARIABLE]: String(RUN_LIFELINE_FD) }, undefined, { session_start_deadline_ms: BEYOND_ANY_WAIT_MS })
+  // The run, in a process of its own, keeps the pipe's write end and starts the launcher through `script`, so the
+  // launcher is its grandchild and survives it: nothing in the chain dies of the kill, and only the pipe says so.
+  const runScript = join(place.home, 'the-run.ts')
+  // What the launcher's terminal shows, written to a file by the terminal itself: a pipe carried back through this run
+  // would end with the run, and the reason this test asserts is said after the run is killed.
+  const shownAt = join(place.home, 'the-launcher-said')
+  const shown = (): string => (existsSync(shownAt) ? readFileSync(shownAt, 'utf8') : '')
+  writeFileSync(
+    runScript,
+    [
+      `import { spawn } from 'node:child_process'`,
+      `import { openSync } from 'node:fs'`,
+      `import { keepTheLifelineIn } from ${JSON.stringify(new URL('../end_a_launch_when_its_run_ends/keep_the_lifeline_in.ts', import.meta.url).href)}`,
+      `const lifeline = keepTheLifelineIn(${JSON.stringify(runtime)})`,
+      `spawn(${JSON.stringify(PTY_RUNNER)}, ['-qec', ${JSON.stringify(`'${process.execPath}' '${launcher}'`)}, '/dev/null'], { stdio: [lifeline.stdio[0], openSync(${JSON.stringify(shownAt)}, 'w'), lifeline.stdio[2], lifeline.stdio[3]] })`,
+      `process.stdout.write('the run is up\\n')`,
+      'setInterval(() => undefined, 1 << 30)',
+      '',
+    ].join('\n'),
+  )
+  const run = spawn(process.execPath, [runScript], { stdio: ['ignore', 'pipe', 'inherit'] })
+  t.after(async () => {
+    if (run.exitCode === null && run.signalCode === null) run.kill('SIGKILL')
+    await killGroupsCarrying(place.relay_root)
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  await until('the run to start its launcher\'s member', () => existsSync(fake.childFile) && textIn(fake.readyFile) !== '', t, shown)
+  const member = Number(textIn(fake.readyFile))
+  const child = Number(textIn(fake.childFile))
+  assert.equal(isAlive(member), true, 'the member runs before the kill')
+  run.kill('SIGKILL')
+  await until('the member and the process under it to be killed', () => !isAlive(member) && !isAlive(child), t, shown)
+  // Bounded, and the backstop was put out of reach: a member nobody stops fails here, naming the reason it never said.
+  assert.ok(await reactsWithin(() => shown().includes('stopped'), REACTS_WITHIN_MS), `the launcher never said it stopped its member: ${JSON.stringify(shown())}`)
+  assert.ok(shown().includes(`because ${THE_RUN_IS_GONE}`), `not the run's end that stopped it: ${JSON.stringify(shown())}`)
+  await until('the launch directory and the snapshot to go', () => readdirSync(place.relay_root).length === 0 && readdirSync(place.snapshot_root).length === 0, t)
+  await until('the launch record to go', () => readdirSync(place.launch_records).length === 0, t)
+})
+
+test('a run that goes while the launcher waits on the host leaves the member\'s command unrun (#472)', async (t) => {
+  const place = placeFor(t)
+  const marker = join(place.home, 'the-questions-may-be-answered')
+  const fake = fakeHostUnderARun(place, { waitFor: marker, parked: join(place.home, 'the-launcher-is-parked') })
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // On a terminal, because a member is admitted there through the hold this test puts the run's end in: the member is
+  // never started at all, rather than started and then stopped.
+  const script = launcherProcess(place, fake.command, 'inherit', lifeline.environment)
+  const terminal = spawn(PTY_RUNNER, ['-qec', `'${process.execPath}' '${script}'`, '/dev/null'], { stdio: lifeline.stdio })
+  const ended = new Promise<void>((resolve) => terminal.once('exit', () => resolve()))
+  t.after(async () => {
+    terminal.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  terminal.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to be parked on its questions', () => existsSync(join(place.home, 'the-launcher-is-parked')), t, () => said)
+  lifeline.closeTheRunsEnd()
+  writeFileSync(marker, '')
+  // Bounded, so a hold that admits a member anyway fails by name here rather than as the harness's timeout (#472 r=1).
+  assert.ok(
+    await reactsWithin(() => REFUSED_LINE.test(said), REACTS_WITHIN_MS),
+    `the launcher never refused the member its run's end forbids: ${JSON.stringify(said)}`,
+  )
+  assert.ok(said.includes(THE_RUN_IS_GONE), said)
+  assert.equal(existsSync(fake.argsFile), false, 'the member\'s command never ran: not stopped, unrun')
+  assert.deepEqual(readdirSync(place.relay_root), [])
+  assert.deepEqual(readdirSync(place.snapshot_root), [])
+})
+
+test('a run that goes before the launcher knows its member\'s group still takes the member down (#472)', async (t) => {
+  const place = placeFor(t)
+  const marker = join(place.home, 'the-questions-may-be-answered')
+  const fake = fakeHostUnderARun(place, { waitFor: marker, parked: join(place.home, 'the-launcher-is-parked') })
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // Off the owner's terminal, so there is no hold to refuse the member in: it is started, and the run's end arrives
+  // before its group is in the launcher's hand. `theGroupIsKnown` is the launch's only answer for that, which is why
+  // this case exists apart from the one above. The backstop is put beyond this test, so only the lifeline can stop it.
+  const script = launcherProcess(place, fake.command, 'ignore', lifeline.environment, undefined, { session_start_deadline_ms: BEYOND_ANY_WAIT_MS })
+  const launcher = spawn(process.execPath, [script], { stdio: lifeline.stdio })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to be parked on its questions', () => existsSync(join(place.home, 'the-launcher-is-parked')), t, () => said)
+  lifeline.closeTheRunsEnd()
+  writeFileSync(marker, '')
+  assert.ok(
+    await reactsWithin(() => said.includes('stopped'), REACTS_WITHIN_MS),
+    `the launcher never stopped the member it started after its run went: ${JSON.stringify(said)}`,
+  )
+  assert.ok(/^started \d+$/m.test(said), `the member was started, not refused: there is no hold off the owner's terminal: ${JSON.stringify(said)}`)
+  assert.ok(said.includes(`because ${THE_RUN_IS_GONE}`), `not the run's end that stopped it: ${JSON.stringify(said)}`)
+  const member = Number(/^started (\d+)$/m.exec(said)?.[1])
+  assert.equal(isAlive(member), false, 'the member the run\'s end found in the group it had is dead')
+  await until('the launch directory and the snapshot to go', () => readdirSync(place.relay_root).length === 0 && readdirSync(place.snapshot_root).length === 0, t)
+  await until('the launch record to go', () => readdirSync(place.launch_records).length === 0, t)
+})
+
+test('a lifeline whose run is already gone refuses the launch by name, before anything is made (#472)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeHostUnderARun(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-lifeline-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  lifeline.closeTheRunsEnd()
+  const launcher = spawn(process.execPath, [launcherProcess(place, fake.command, 'ignore', lifeline.environment)], { stdio: lifeline.stdio })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to refuse', () => REFUSED_LINE.test(said), t, () => said)
+  assert.ok(said.includes(RUN_LIFELINE_VARIABLE), said)
+  assert.ok(said.includes('already closed'), said)
+  assert.equal(existsSync(fake.argsFile), false, 'no member started')
+  assert.deepEqual(readdirSync(place.relay_root), [], 'nothing was made: no relay directory')
+  assert.deepEqual(readdirSync(place.snapshot_root), [], 'and no snapshot')
+})
+
 
 test('a launcher killed hard leaves its directory behind, and the next launch takes it away (#124)', async (t) => {
   const place = placeFor(t)

@@ -32,7 +32,8 @@ import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { stateRootOf, THE_PLACES_A_STATE_ROOT_KEEPS, theReadingsThisMachineGives } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
+import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
+import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
@@ -44,7 +45,6 @@ import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_t
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { showingSafely } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
-import { theLeftoversShown } from '../find_a_member_a_run_left_behind/the_leftovers_a_run_left.ts'
 import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
@@ -286,7 +286,7 @@ async function ls(io: CommandIo, places: Places): Promise<number> {
   for (const line of theCrewListed(crew, Date.now())) io.out(line)
   // A member a run started and left running is no member of this crew's: it is no line of the list, which is one line
   // per declared member, so it is a notice beside it (martha#472).
-  for (const line of theLeftoversShown(theReadingsThisMachineGives('/proc', THE_PLACES_A_STATE_ROOT_KEEPS))) io.err(line)
+  for (const line of theLeftoversThisMachineShows()) io.err(line)
   return EXIT_DONE
 }
 
