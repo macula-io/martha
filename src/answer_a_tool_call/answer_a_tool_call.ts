@@ -43,6 +43,7 @@ import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_co
 import { keepAWouldRefusal, type AWouldRefusal, type GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { ApprovedLaunch, LaunchHost } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { refuseACallPastTheBudget, type ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
 
 export type { ApprovedLaunch, LaunchHost }
 
@@ -80,6 +81,14 @@ export interface ToolCall {
    * A caller with no audit folder says so rather than leaving the field out, so a launcher reads one line here.
    */
   readonly audit?: GateAuditPlace | undefined
+  /**
+   * What the package this member holds has spent of its budget (martha#513, slice 3), read by the caller: the units its
+   * contract names and what was spent of each. Absent, undefined, or a package with count left refuses nothing.
+   *
+   * It is asked last of all, so a call refused for what it is keeps the more serious reason, and after the gate, so a
+   * call refused for tainted text is refused by the gate and not by a budget the member could not spend anyway.
+   */
+  readonly spend?: ASpendInForce | undefined
 }
 
 /** The refusal an audited member's call gets when its own line cannot be kept: the gate's words, then why it stopped. */
@@ -88,7 +97,7 @@ const refusedBecauseTheAuditCouldNotBeKept = (refusal: string, why: string): Too
 })
 
 /** Refuse the tool call, or let it run. */
-export function answerToolCall({ tool, session, policy, input, launch, names, host, agents_running = [], gate = 'enforced', audit }: ToolCall): ToolCallAnswer {
+export function answerToolCall({ tool, session, policy, input, launch, names, host, agents_running = [], gate = 'enforced', audit, spend }: ToolCall): ToolCallAnswer {
   const launched = recheckLaunchPassingOwnWrites(launch, host)
   if (!launched.allow) {
     return {
@@ -120,7 +129,21 @@ export function answerToolCall({ tool, session, policy, input, launch, names, ho
       : auditedOrRefused(audit, { tool, arrival: { path: null, from_node_id: null, why: offTheRecord.why }, refusal: offTheRecord.refusal })
   }
 
-  return theGatesAnswer({ tool, session, policy, gate, audit })
+  return theGatesAndTheBudgetsAnswer({ tool, session, policy, gate, audit, spend, names })
+}
+
+/**
+ * What the gate and then the package's budget answer (martha#513, slice 3), in that order: the gate first, so a call it
+ * refuses keeps its own reason, and the budget last, so it can only turn a yes into a no. The four calls that end a
+ * package run whatever the package has spent.
+ */
+function theGatesAndTheBudgetsAnswer(
+  asked: Pick<ToolCall, 'tool' | 'session' | 'policy' | 'names'> & { readonly gate: GateMode; readonly audit: GateAuditPlace | undefined; readonly spend: ASpendInForce | undefined },
+): ToolCallAnswer {
+  const gate_answer = theGatesAnswer(asked)
+  if (gate_answer !== undefined) return gate_answer
+  const spent = refuseACallPastTheBudget({ tool: asked.tool }, asked.spend, asked.names.ownNameOf)
+  return spent === undefined ? undefined : { deny: spent }
 }
 
 /**

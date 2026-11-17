@@ -68,6 +68,8 @@ function aCrewHolding(ends: TheEndsHold): CrewTools {
     theReviewModelOfTheCall: async () => null,
     theReviewModel: async () => null,
     thePredecessorOf: async () => null,
+    theSpendInForce: async () => undefined,
+    noteTheCallCounted: async () => undefined,
     noteTheCallsAnswer: () => undefined,
     refusesTheSubagent: async () => undefined,
   }
