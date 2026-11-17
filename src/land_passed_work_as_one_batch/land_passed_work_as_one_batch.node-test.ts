@@ -28,7 +28,7 @@ import { LINTER_CONFIG, theManifestOfAPlantedTree } from '../check_a_host_direct
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, RowStore, StoredRow } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { noteMilestone, readLedger } from '../log_ledger/log_ledger.ts'
+import { noteMilestone, noteRecovery, readLedger } from '../log_ledger/log_ledger.ts'
 import { reviewWaitsIn } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
@@ -263,13 +263,16 @@ const theLandBranchesIn = (clone: string): readonly string[] =>
     .filter((branch) => branch !== '')
 
 /** A store that keeps every row but one, at the position the test names: an append the host does not keep. */
-function aStoreThatRefusesTheAppendAt(refused: number): HostContract['stores']['rows'] {
+function aStoreThatRefusesTheAppendAt(refused: number, asItRefuses: () => void = () => undefined): HostContract['stores']['rows'] {
   const streams = new Map<string, Row[]>()
   let appends = 0
   return {
     append: async (stream: string, row: Row): Promise<number> => {
       appends += 1
-      if (appends === refused) throw new Error(`the store kept no row at append ${String(appends)}`)
+      if (appends === refused) {
+        asItRefuses()
+        throw new Error(`the store kept no row at append ${String(appends)}`)
+      }
       const held = streams.get(stream) ?? []
       held.push(row)
       streams.set(stream, held)
@@ -657,30 +660,12 @@ test('#256: a push git refuses is answered with what git said, and kept in the l
   await aPassedVerdict(tests, work_package, base, tip)
 
   const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
-  assert.match(wordsOf(forwarded), /was refused/)
+  assert.match(wordsOf(forwarded), /failed as command_failed/)
+  assert.match(wordsOf(forwarded), /the act was sent and refused/)
   assert.match(wordsOf(forwarded), /the branch is protected/, 'the answer did not keep what git said')
   assert.equal(theOriginMain(fixture), base, 'the default branch moved although the push was refused')
   const concluded = (await readLedger(tests.host, work_package)).filter((row) => row.kind === 'act_concluded')
   assert.equal(concluded[0]?.kind === 'act_concluded' ? concluded[0].outcome.succeeded : true, false, 'a push git refused was kept as succeeded')
-})
-
-test('#256: a push whose outcome the ledger cannot keep stands announced and unconcluded, and the answer says so', async (t) => {
-  const fixture = aRepository(t)
-  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
-  const work_package = `${fixture.repo}#256`
-  const tip = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
-  // The package's PASS row is the first append; the push's announcement the second; its outcome the third, which this
-  // store will not keep.
-  const rows = aStoreThatRefusesTheAppendAt(3)
-  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())), rows)
-  await aPassedVerdict(tests, work_package, base, tip)
-
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
-  assert.match(wordsOf(forwarded), /was sent/)
-  assert.match(wordsOf(forwarded), /its outcome was not recorded/)
-  const kept = await readLedger(tests.host, work_package)
-  assert.equal(kept.filter((row) => row.kind === 'act_announced').length, 1, 'the push was not announced before it ran')
-  assert.equal(kept.filter((row) => row.kind === 'act_concluded').length, 0, 'an outcome was kept although the store refused it')
 })
 
 test('#256: a landing call that names no package, no base or no tip is refused by name', () => {
@@ -690,22 +675,22 @@ test('#256: a landing call that names no package, no base or no tip is refused b
   assert.match(refusedBy(theFastForwardACallNames({ path: '/clone', base: '', packages: ['synthetic-owner/widget#1'] })), /names the base the range was checked against/)
 })
 
-test('#256: a fast-forward whose row one package will not keep does not run, and the package already announced is told so', async (t) => {
+test('#512 slice 2: a fast-forward whose row one package will not keep is sent once more, and the package already announced is concluded as not sent first', async (t) => {
   const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
   const tip = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
   const packages = [1, 2].map((entry) => `${fixture.repo}#${String(300 + entry)}`)
-  // The first package's announcement is the first row this store keeps, and the second package's is the one it refuses.
+  // The first package's announcement is the first row this store keeps, and the second package's is the one it refuses:
+  // nothing ran, so the one attempt the packages are given sends it again, and it lands.
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())), aStoreThatRefusesTheAppendAt(2))
   const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages })
-  assert.match(wordsOf(forwarded), /was not sent/)
-  assert.ok(wordsOf(forwarded).includes(at(packages, 1)), 'the answer did not name the package whose row was not kept')
-  assert.equal(theOriginMain(fixture), base, 'the default branch moved although the push was never sent')
-  const concluded = (await readLedger(tests.host, at(packages, 0))).filter((row) => row.kind === 'act_concluded')
-  assert.equal(concluded.length, 1, 'the package announced before the refusal was left without an outcome')
-  assert.equal(concluded[0]?.kind === 'act_concluded' ? concluded[0].outcome.succeeded : true, false, 'an act that was never sent was kept as succeeded')
+  assert.ok('told' in forwarded, `a fast-forward that was never sent was not sent once more: ${wordsOf(forwarded)}`)
+  assert.equal(theOriginMain(fixture), tip, 'the retry did not land the tip')
+  const first = await readLedger(tests.host, at(packages, 0))
+  assert.deepEqual(first.map((row) => row.kind), ['act_announced', 'act_concluded', 'recovery_decided', 'act_announced', 'act_concluded', 'package_landed'])
+  assert.equal(first[1]?.kind === 'act_concluded' ? first[1].outcome.succeeded : true, false, 'an act that was never sent was kept as succeeded')
+  assert.deepEqual((await readLedger(tests.host, at(packages, 1))).map((row) => row.kind), ['recovery_decided', 'act_announced', 'act_concluded', 'package_landed'])
 })
-
 test('#256: a clone that does not say who commits is refused before a branch is cut, with what to set', async (t) => {  const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
   // A merge writes a commit, and git refuses one with no committer: the run must say so rather than cut a branch it
@@ -1397,4 +1382,86 @@ test('#339 r=2: a batch that leaves every head out pushes nothing and offers no 
   assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch that landed nothing pushed a land branch')
   assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'a batch that landed nothing kept a land branch in the clone')
   assert.equal(theOriginMain(fixture), main_before, 'a batch that landed nothing moved main')
+})
+
+// martha#512 slice 2: the landing's pushes go through the recovery. A push whose outcome was not kept is read on origin
+// and never sent again, and a package a failed act paused holds every push that would land it.
+
+/** Pauses a package the way a recovery does: a `paused` decision kept on its ledger. */
+const pauseThePackage = async (host: HostForTests['host'], work_package: string): Promise<void> =>
+  noteRecovery(host, {
+    package: work_package,
+    member: MEMBER,
+    act: { kind: 'push', what: 'origin Ceres/512-a-branch' },
+    failure: { class: 'unknown', evidence: 'the failure carried nothing to read it by' },
+    inspection: { read: 'origin', found: 'the branch is still there' },
+    decision: 'paused',
+  })
+
+test('#512 slice 2: a fast-forward whose outcome was not kept is read on origin, concluded as landed, and never pushed again', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#512`
+  const tip = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  // The PASS row is the first append, the push's announcement the second, and its outcome the third: refused.
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())), aStoreThatRefusesTheAppendAt(3))
+  await aPassedVerdict(tests, work_package, base, tip)
+
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  assert.ok('told' in forwarded, `a fast-forward origin shows landed was refused: ${wordsOf(forwarded)}`)
+  assert.equal(theOriginMain(fixture), tip)
+  const rows = await readLedger(tests.host, work_package)
+  assert.equal(rows.filter((row) => row.kind === 'act_announced').length, 1, 'the push was sent again')
+  assert.ok(rows.some((row) => row.kind === 'recovery_decided'), 'the recovery did not keep what it read on origin')
+})
+
+test('#512 slice 2: a fast-forward origin has already moved past is read as landed, because the default branch contains the tip', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#512`
+  const tip = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  // While the outcome is being refused, someone else lands on top of the tip: origin's main contains it and is not at it.
+  const later = (): void => {
+    gitIn(fixture.clone, 'checkout', '--quiet', '-b', 'later', tip)
+    writeIn(fixture.clone, 'later.txt', 'landed after\n')
+    commitIn(fixture.clone, 'the work landed after')
+    gitIn(fixture.clone, 'push', '--quiet', 'origin', 'HEAD:main')
+  }
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())), aStoreThatRefusesTheAppendAt(3, later))
+  await aPassedVerdict(tests, work_package, base, tip)
+
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  assert.ok('told' in forwarded, `a fast-forward origin's main contains was refused: ${wordsOf(forwarded)}`)
+  assert.notEqual(theOriginMain(fixture), tip, 'origin did not move past the tip, so this test reads nothing')
+  const rows = await readLedger(tests.host, work_package)
+  assert.equal(rows.filter((row) => row.kind === 'act_announced').length, 1, 'the push was sent again')
+})
+
+test('#512 slice 2: a paused package holds the fast-forward: nothing is announced and git never runs', async () => {
+  const work_package = 'macula-io/martha#512'
+  const { tests, ran } = aHostThatMayRunNothing()
+  await pauseThePackage(tests.host, work_package)
+  const before = (await readLedger(tests.host, work_package)).length
+
+  const others = ['macula-io/martha#1', 'macula-io/martha#2']
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: '/no/clone/is/read', base: 'a'.repeat(40), tip: 'b'.repeat(40), packages: [at(others, 0), work_package, at(others, 1)] })
+  assert.ok('refused' in forwarded, `the fast-forward of a paused package ran: ${wordsOf(forwarded)}`)
+  assert.match(forwarded.refused, /paused/)
+  assert.ok(forwarded.refused.includes(work_package), 'the refusal did not name the paused package')
+  assert.deepEqual(ran, [], 'the fast-forward of a paused package ran git')
+  assert.equal((await readLedger(tests.host, work_package)).length, before, 'a push was announced on a paused package')
+  for (const other of others) assert.deepEqual(await readLedger(tests.host, other), [], `a row was written on ${other}, which is not paused`)
+})
+
+test('#512 slice 2: a paused package holds the batch before a branch is cut, and git never runs', async () => {
+  const work_package = 'macula-io/martha#512'
+  const { tests, ran } = aHostThatMayRunNothing()
+  await pauseThePackage(tests.host, work_package)
+
+  const others = ['macula-io/martha#1', 'macula-io/martha#2']
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: '/no/clone/is/read', packages: [at(others, 0), work_package, at(others, 1)] })
+  assert.ok('refused' in landed, `a batch holding a paused package was not refused: ${wordsOf(landed)}`)
+  assert.match(landed.refused, /^nothing was landed: macula-io\/martha#512 is paused since the push \(origin Ceres\/512-a-branch\) failed as unknown/)
+  assert.deepEqual(ran, [], 'a batch holding a paused package ran git')
+  for (const other of others) assert.deepEqual(await readLedger(tests.host, other), [], `a row was written on ${other}, which is not paused`)
 })

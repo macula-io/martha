@@ -16,11 +16,12 @@ import { test } from 'node:test'
 import { crewToolsOver, CREW_TOOL_NAMES, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
+import type { HostContract } from '../host_contract/host_contract.ts'
 import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
-import { readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
-import { readLedger, ledgerStreamOf } from '../log_ledger/log_ledger.ts'
+import { appendToTheChannel, readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
+import { readLedger, ledgerStreamOf, noteRecovery } from '../log_ledger/log_ledger.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { addresseesOf, CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
+import { addresseesOf, CREW_SAY_DESCRIPTION, NOBODY_TO_REPORT_TO, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 
@@ -43,6 +44,7 @@ const channelHost = (): ChannelHost & { readonly clock: { now(): number } } => {
 const sending = (more: Partial<Parameters<typeof sendACrewMessage>[1]> = {}): Parameters<typeof sendACrewMessage>[1] => ({
   member: 'Builder',
   roster: ROSTER,
+  receivers: ['Supervisor'],
   package: null,
   to: ['Reviewer'],
   text: 'a hand-off, in words',
@@ -252,4 +254,107 @@ test('#253: the description a member reads teaches every line a card teaches', (
   for (const { line } of taught) {
     assert.ok(CREW_SAY_DESCRIPTION.includes(line), `the description a member reads does not teach ${line}`)
   }
+})
+
+// martha#512 slice 2: a crew message goes through the recovery. A message whose row was refused is sent once more; one
+// whose outcome was not kept is read back from the channel and never sent twice; a paused package holds it.
+
+/** A row store over the in-memory one that refuses the append at `refused` (1-based), counting every stream. */
+function aStoreThatRefusesTheAppendAt(refused: number): HostContract['stores']['rows'] {
+  const { host } = hostForTests()
+  let appends = 0
+  return {
+    append: async (stream, row) => {
+      appends += 1
+      if (appends === refused) throw new Error(`the store kept no row at append ${String(appends)}`)
+      return host.stores.rows.append(stream, row)
+    },
+    read: (stream) => host.stores.rows.read(stream),
+  }
+}
+
+const PAUSED = 'macula-io/martha#512'
+
+test('#512 slice 2: a message whose row the store refused is sent once more, and reaches the channel once', async () => {
+  // The announcement is the first append: refused, so nothing was sent and the one attempt sends it.
+  const { host } = hostForTests({ now: 7_500, rows: aStoreThatRefusesTheAppendAt(1) })
+  const sent = await sendACrewMessage(host, sending({ package: PAUSED }))
+  assert.ok('sent' in sent, `the message was not sent: ${JSON.stringify(sent)}`)
+  assert.equal((await readTheChannel(host)).length, 1, 'the message did not reach the channel exactly once')
+  assert.deepEqual((await readLedger(host, PAUSED)).map((row) => row.kind), ['recovery_decided', 'act_announced', 'act_concluded'])
+})
+
+test('#512 slice 2: a message whose outcome was not kept is read back from the channel, and never sent twice', async () => {
+  // The announcement is append 1, the message itself append 2, and its outcome append 3: refused.
+  const { host } = hostForTests({ now: 7_500, rows: aStoreThatRefusesTheAppendAt(3) })
+  const sent = await sendACrewMessage(host, sending({ package: PAUSED }))
+  assert.ok('sent' in sent, `a message the channel holds was answered as not sent: ${JSON.stringify(sent)}`)
+  assert.equal((await readTheChannel(host)).length, 1, 'the message was sent twice')
+  const rows = await readLedger(host, PAUSED)
+  assert.equal(rows.filter((row) => row.kind === 'act_announced').length, 1, 'the message was announced twice')
+  assert.ok(rows.some((row) => row.kind === 'recovery_decided'), 'the recovery did not keep what it read in the channel')
+})
+
+test('#512 slice 2: a paused package holds a message to a member, and nothing reaches the channel', async () => {
+  const { host } = hostForTests({ now: 7_500 })
+  await aPausedPackage(host)
+  const before = (await readLedger(host, PAUSED)).length
+  const sent = await sendACrewMessage(host, sending({ package: PAUSED, to: ['Reviewer'] }))
+  assert.ok('refused' in sent, `a paused package sent a message: ${JSON.stringify(sent)}`)
+  assert.match(sent.refused, /paused/)
+  assert.deepEqual(await readTheChannel(host), [], 'the message reached the channel')
+  assert.equal((await readLedger(host, PAUSED)).length, before, 'the message was announced')
+})
+
+/** A package paused by a recovery the failure could not be read for, as slice 1 records it. */
+async function aPausedPackage(host: Parameters<typeof noteRecovery>[0]): Promise<void> {
+  await noteRecovery(host, {
+    package: PAUSED,
+    member: 'Builder',
+    act: { kind: 'push', what: 'origin Builder/512-a-branch' },
+    failure: { class: 'unknown', evidence: 'the failure carried nothing to read it by' },
+    inspection: { read: 'origin', found: 'the branch is still there' },
+    decision: 'paused',
+  })
+}
+
+test('#512 slice 2: a message only to those the nudges go to passes a pause, compared by member name, and still goes through the recovery', async () => {
+  const { host } = hostForTests({ now: 7_500 })
+  await aPausedPackage(host)
+  // The declaration spells the receiver in capitals: the names are compared as member names, not as strings.
+  const sent = await sendACrewMessage(host, sending({ package: PAUSED, to: ['Supervisor'], receivers: ['SUPERVISOR'] }))
+  assert.ok('sent' in sent, `a report to the Supervisor was held by the pause: ${JSON.stringify(sent)}`)
+  assert.equal((await readTheChannel(host)).length, 1, 'the report did not reach the channel exactly once')
+  const kinds = (await readLedger(host, PAUSED)).map((row) => row.kind)
+  assert.deepEqual(kinds.slice(-2), ['act_announced', 'act_concluded'], 'the report was not announced and concluded in the ledger')
+})
+
+test('#512 slice 2: a paused member whose crew names nobody for the nudges is told so by name, and nothing is sent', async () => {
+  const { host } = hostForTests({ now: 7_500 })
+  await aPausedPackage(host)
+  const sent = await sendACrewMessage(host, sending({ package: PAUSED, to: ['Supervisor'], receivers: [] }))
+  assert.ok('refused' in sent, `a message passed a pause with nobody to report to: ${JSON.stringify(sent)}`)
+  assert.ok(sent.refused.endsWith(NOBODY_TO_REPORT_TO), `the member was not told that nobody is named: ${sent.refused}`)
+  assert.deepEqual(await readTheChannel(host), [], 'the message reached the channel')
+})
+
+test('#512 slice 2: the words of a pause name the one message it lets through', async () => {
+  const { host } = hostForTests({ now: 7_500 })
+  await aPausedPackage(host)
+  const sent = await sendACrewMessage(host, sending({ package: PAUSED, to: ['Reviewer'] }))
+  assert.ok('refused' in sent, `a paused package sent a message to a member: ${JSON.stringify(sent)}`)
+  assert.ok(sent.refused.includes("except a message only to those the crew's nudges go to"), `the pause words do not name the exception: ${sent.refused}`)
+})
+
+test('#512 slice 2: the same words sent before the send began are not taken for this send, and the failure stands', async () => {
+  // The same member said the same words to the same member earlier (append 1). This send's announcement is append 2,
+  // and the message itself append 3: refused, so it did not reach the channel and the look must not find the old one.
+  const { host } = hostForTests({ now: 7_500, rows: aStoreThatRefusesTheAppendAt(3) })
+  const words = 'the same words, said twice'
+  const earlier = sending({ package: PAUSED, text: words })
+  await appendToTheChannel(host, { from: earlier.member, to: ['Reviewer'], text: words, sent_at: 1_000 })
+  const sent = await sendACrewMessage(host, earlier)
+  assert.ok('refused' in sent, `the earlier message was taken for this one: ${JSON.stringify(sent)}`)
+  assert.ok(sent.refused.includes(`the crew channel found no message from ${earlier.member} with this text`), `the look did not say it found nothing: ${sent.refused}`)
+  assert.equal((await readTheChannel(host)).length, 1, 'the channel holds more than the earlier message')
 })
