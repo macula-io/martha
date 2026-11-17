@@ -549,4 +549,10 @@ test('a host that reads the memory off switch twice, or outside a function, cann
     assert.equal(run.status, 1, run.stdout)
     assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: file-mode memory guard\n`)
   }
+  // A longer variable whose name starts with the switch's is another variable, not a second read of the switch.
+  for (const longer of [`${OFF_SWITCH_READ}_AND_MORE`, `${OFF_SWITCH_READ}$`]) {
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, guards: guardModules(GUARD, FILE_GUARD, `${memory};var aLongerName=${longer}`) }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 0, run.stdout)
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\n`)
+  }
 })
