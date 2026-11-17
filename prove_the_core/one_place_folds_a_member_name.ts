@@ -34,6 +34,7 @@ export const FOLDS_THAT_ARE_NOT_NAMES: readonly AFoldThatIsNotAName[] = [
   { path: 'check_nothing_private_gets_in/check_nothing_private_gets_in.ts', folds: 6, reason: 'a GitHub owner/repo, which GitHub compares ignoring case' },
   { path: 'find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts', folds: 4, reason: 'a git config section, key or boolean word, which git reads ignoring case' },
   { path: 'keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts', folds: 1, reason: A_NODE_ID },
+  { path: 'keep_the_package_contract/keep_the_package_contract.ts', folds: 2, reason: 'a package, owner/repo#n, which GitHub names ignoring case' },
   { path: 'keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts', folds: 2, reason: 'a package, owner/repo#n, which GitHub names ignoring case' },
   { path: 'name_a_node_by_its_petname/name_a_node_by_its_petname.ts', folds: 1, reason: A_NODE_ID },
   { path: 'prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts', folds: 4, reason: A_NODE_ID },

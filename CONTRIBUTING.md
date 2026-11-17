@@ -21,10 +21,20 @@ Node 24.18.1 or later, from the repository root:
 
 ```bash
 npm ci
-npm test               # every capability's tests
+(cd installer && npm ci --ignore-scripts)   # the installer's own dependencies
+npm test               # every capability's tests, and the installer job's steps
 npm run typecheck      # tsc --noEmit
 npm run lint           # the structural floor
 ```
+
+The installer is a project of its own, and CI runs it as a job of its own. So
+that a suite green here is green there, `npm test` runs that job's steps too,
+read from `.github/workflows/ci.yml`, before its parallel run
+(`prove_the_core/run_the_installer_job.ts`); without the installer's
+dependencies it fails, naming the line to run. It also holds
+what the clean-install proof loads out of the installed release by name to the
+tree: each file it loads is there and exports every name it reads
+(`prove_the_core/what_the_clean_install_loads_is_there.ts`).
 
 `npm test` ends on its own. A test that runs longer than the test script's
 `--test-timeout` fails by name, and `--test-force-exit` ends each test file's
