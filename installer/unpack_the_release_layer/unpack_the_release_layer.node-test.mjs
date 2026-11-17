@@ -1,6 +1,6 @@
 // Every hostile tar class and every cap, refused by name before a byte is written (martha#21, design step 6).
 import assert from 'node:assert/strict'
-import { mkdtempSync, readdirSync, readFileSync, readlinkSync, statSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -10,9 +10,13 @@ import { Refused } from '../refuse_in_words/refuse_in_words.mjs'
 import { goodEntries, paxRecord, removeEvenReadOnly, tarOf } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { UNPACK_LIMITS, cleanPath, unpackLayer } from './unpack_the_release_layer.mjs'
 
-/** @param {import('node:test').TestContext} t */
+/**
+ * A stage under the resolved TMPDIR: a TMPDIR reached through a link (martha#79) would add one hop to every chain a
+ * case resolves, and the chain of exactly as many links as the kernel follows would then be one too many (martha#496).
+ * @param {import('node:test').TestContext} t
+ */
 const stage = (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'martha-unpack-'))
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'martha-unpack-')))
   t.after(() => removeEvenReadOnly(dir))
   return dir
 }
