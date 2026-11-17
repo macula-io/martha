@@ -143,7 +143,9 @@ export const A_BACKLOG_PLACE = /^[A-Za-z0-9][A-Za-z0-9-]*(\/[A-Za-z0-9._-]+)?$/
 /**
  * The roots a reboot deletes (martha#314): the top-level key naming them, as absolute paths. A declaration that names
  * none reads as an empty list, and the launch's own machine roots apply (../tell_a_citer_of_a_volatile_path), so a
- * crew declared before this key existed still declares after an upgrade.
+ * crew declared before this key existed still declares after an upgrade. An explicit empty list is refused rather than
+ * read as "none of mine": the key declares roots, it does not switch the note off, so a crew that wants the machine's
+ * roots leaves the key out.
  */
 export const VOLATILE_PATHS = 'volatile_paths'
 
