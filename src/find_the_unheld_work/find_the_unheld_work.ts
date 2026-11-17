@@ -16,7 +16,7 @@
 //
 // Core: no disk and no clock of its own. GitHub is reached through the `run` it is handed, and the time is handed in.
 
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { sameMemberName, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { A_PAGE } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import type { ProcessOutcome } from '../host_contract/host_contract.ts'
 
@@ -193,7 +193,7 @@ export interface TheSplit {
 }
 
 /** Whether `name` is `member`, compared as the declaration compares member names. */
-const same = (name: string, member: string): boolean => name.trim().toLowerCase() === member.trim().toLowerCase()
+const same = sameMemberName
 
 /** The split of a read among the crew's members: a holder counts only when it is one of them. */
 export function theSplitOf(issues: readonly AnIssue[], members: readonly string[]): TheSplit {

@@ -17,7 +17,7 @@
 //
 // Core: no disk and no clock of its own. The rows, the parks, the kept times and the read are handed in.
 
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { sameMemberName, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, Refused } from '../host_contract/host_contract.ts'
 import type { Nudge } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { IDLE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
@@ -42,7 +42,7 @@ export interface IdleInput {
   readonly now: number
 }
 
-const same = (name: string, other: string): boolean => name.trim().toLowerCase() === other.trim().toLowerCase()
+const same = sameMemberName
 
 /** Whether a row is a member idle beside the work: idle, live, not parked, not a receiver. */
 const idleBeside = (row: DashboardRow, input: IdleInput): boolean =>

@@ -65,6 +65,7 @@ import {
 import { REPORT_PROGRESS_TOOL, reportProgressOver } from '../report_where_the_work_stands/report_progress_tool.ts'
 import type { TheCrew } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { type ASpawnedAgent, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
+import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { SEE_THE_CREW_TOOL, seeTheCrewOver } from '../see_the_crew/the_see_the_crew_tool.ts'
 import { WHO_IS_FREE_TOOL, whoIsFreeOver } from '../see_who_is_free/who_is_free_tool.ts'
@@ -558,6 +559,12 @@ const theParkAsked = (places: CrewToolPlaces, declared: CrewDeclared, args: Read
   onto: textOf(args['member']),
 })
 
+/** Who may resume a paused package (martha#512): who this crew's nudges go to, or nobody when its declaration cannot be read. */
+const whoMayResume = async (places: CrewToolPlaces): Promise<readonly string[]> => {
+  const declared = await crewOrRefusal(places)
+  return 'refused' in declared ? [] : theNudgesGoTo(declared.settings)
+}
+
 /** What each tool answers, over one place: every tool is one slice's answer, told to the member. */
 function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Record<CrewToolName, AHandler>> {
   const ledger = { ledger: places.ledger, member: places.member }
@@ -578,7 +585,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
   }
   return {
     [REPORT_PROGRESS_TOOL.name]: declaring(places, async (declared, args) => reportProgressOver(theProgressAsked(places, state, declared), args)),
-    [LOG_A_MILESTONE_TOOL.name]: async (args) => logTheMilestone(ledger, { package: textOf(args['package']), event: args['event'], note: args['note'] }),
+    [LOG_A_MILESTONE_TOOL.name]: async (args) => logTheMilestone(ledger, { package: textOf(args['package']), event: args['event'], note: args['note'] }, async () => whoMayResume(places)),
     [WHAT_WAS_SENT_TOOL.name]: async (args) => whatTheMemberSent(ledger, textOf(args['package'])),
     [NOTE_WHAT_BECAME_TOOL.name]: async (args) => noteTheActsOutcome(ledger, { package: textOf(args['package']), announced_at: args['announced_at'], succeeded: args['succeeded'], detail: args['detail'] }),
     [KEEP_THE_CONTRACT_TOOL.name]: declaring(places, async (declared, args) => keepTheContract({ ...ledger, documents: places.documents, settings: declared.settings }, args)),

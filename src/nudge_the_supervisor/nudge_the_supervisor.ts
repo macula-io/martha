@@ -20,7 +20,7 @@
 // Pure: no I/O and no clock of its own. The rows, the messages, the parks and the time are handed in, so both hosts run
 // the same rule and the tests hold it.
 
-import { MEMBER_NAME, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
+import { memberNameKey, sameMemberName, MEMBER_NAME, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
 import type { LandedPackage } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
@@ -29,8 +29,9 @@ import type { AHead } from '../spend_the_github_budget/spend_the_github_budget.t
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 import { OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
-/** The kinds of stall a nudge names, as the Supervisor reads them. A wait on the owner is that person's nudge. */
-export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock', 'head', 'unheld'] as const
+/** The kinds of stall a nudge names, as the Supervisor reads them. A wait on the owner is that person's nudge, and a
+ * `paused` one is a package a failed act paused until it is resumed (../recover_a_failed_act, martha#512). */
+export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock', 'head', 'unheld', 'paused'] as const
 export type NudgeKind = (typeof NUDGE_KINDS)[number]
 
 /**
@@ -80,7 +81,7 @@ export interface SentMessage {
 const toTheWholeCrew = (to: Addressee): to is Extract<Addressee, string> => typeof to === 'string'
 
 /** Whether `name` and `other` are the same name, compared as the declaration compares member names. */
-const same = (name: string, other: string): boolean => name.trim().toLowerCase() === other.trim().toLowerCase()
+const same = sameMemberName
 
 /** Whether a row is one of the members a nudge is delivered to, who are never a subject of one. */
 const isAReceiver = (member: string, receivers: readonly string[]): boolean => receivers.some((receiver) => same(member, receiver))
@@ -300,8 +301,8 @@ export function headNudges(waits: readonly ReviewWait[], heads: Readonly<Record<
  * names the wait is the one kept; a stalled line only says the row has not moved.
  */
 const oneWaitPerMember = (nudges: readonly Nudge[]): Nudge[] => {
-  const named = new Set(nudges.filter((nudge) => nudge.kind !== 'stalled').map((nudge) => nudge.member.toLowerCase()))
-  return nudges.filter((nudge) => nudge.kind !== 'stalled' || !named.has(nudge.member.toLowerCase()))
+  const named = new Set(nudges.filter((nudge) => nudge.kind !== 'stalled').map((nudge) => memberNameKey(nudge.member)))
+  return nudges.filter((nudge) => nudge.kind !== 'stalled' || !named.has(memberNameKey(nudge.member)))
 }
 
 /** What a nudge is made from: the rows, the waits, the parks, the windows, the receivers, and the time. */

@@ -72,12 +72,13 @@ export interface TheLedgerAsked {
   readonly member: string
 }
 
-/** `log_a_milestone`: one row on the package, in the member's own name. */
+/** `log_a_milestone`: one row on the package, in the member's own name; a `resume` only for whoever the nudges go to. */
 export async function logTheMilestone(
   asked: TheLedgerAsked,
   row: { readonly package: string; readonly event: unknown; readonly note: unknown },
+  whoMayResume: () => Promise<readonly string[]>,
 ): Promise<AToolAnswer> {
-  const { told } = await keepTheMilestone(asked.ledger, { package: row.package, member: asked.member, event: row.event, note: row.note })
+  const { told } = await keepTheMilestone(asked.ledger, { package: row.package, member: asked.member, event: row.event, note: row.note }, whoMayResume)
   return { answer: told }
 }
 

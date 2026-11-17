@@ -17,7 +17,7 @@
 // The task's own limit is defined once, here, and read by the tool's description, by the cut, and by the test: the
 // number the model is told is exactly the number its words are cut at (martha#254 r=1 R2).
 
-import { OWNER } from '../declare_crew/declare_crew.ts'
+import { sameMemberName, OWNER } from '../declare_crew/declare_crew.ts'
 import { STATES, type Progress, type State, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The name the tool is registered under (martha#468): one act, and not the name of any tool crew-code registers. */
@@ -88,9 +88,8 @@ export function cutTask(task: string): string {
 
 /** Whether `name` is somebody the crew has, compared as the declaration compares names: ignoring case. */
 export function theCrewHas(crew: TheCrew, name: string): boolean {
-  const folded = name.trim().toLowerCase()
-  if (folded === OWNER || folded === SUPERVISOR) return true
-  return crew.members.some((member) => member.toLowerCase() === folded)
+  if (sameMemberName(name, OWNER) || sameMemberName(name, SUPERVISOR)) return true
+  return crew.members.some((member) => sameMemberName(member, name))
 }
 
 /** Takes one report: what it records, and what the member is told. */
@@ -167,8 +166,7 @@ function sinceOf(before: ProgressBefore, on: string, from: string, now: number):
 
 /** Whether a wait names a person: the owner, the Supervisor, or a member of this crew. */
 function isAPerson(crew: TheCrew, name: string): boolean {
-  const folded = name.trim().toLowerCase()
-  return folded === OWNER || folded === SUPERVISOR || crew.members.some((member) => member.toLowerCase() === folded)
+  return sameMemberName(name, OWNER) || sameMemberName(name, SUPERVISOR) || crew.members.some((member) => sameMemberName(member, name))
 }
 
 /** The package the row holds: the one this report names, or the one it already held when the name it gives is no package. */

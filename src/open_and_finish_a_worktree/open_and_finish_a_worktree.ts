@@ -25,7 +25,7 @@ import { join } from 'node:path'
 import { type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
-import { RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
+import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 
 /** The tools this slice registers. */
@@ -258,9 +258,10 @@ async function theBranchOnOrigin(host: WorktreesRequest['host'], clone: string, 
 
 /**
  * What the answer says when the deletion did not end cleanly. A failure this slice recovered from carries its own words:
- * the class, what origin was found to hold, and what the package does now. Anything else says the branch stays.
+ * the class, what origin was found to hold, and what the package does now; so does a deletion a paused package held back
+ * (martha#512). Anything else says the branch stays.
  */
 function whatBecameOfTheDeletion(failure: unknown, branch: string): string {
-  if (failure instanceof RecoveryDecided) return failure.told
+  if (failure instanceof RecoveryDecided || failure instanceof PackagePaused) return failure.told
   return `${branch} stays on origin (${failure instanceof Error ? failure.message : String(failure)})`
 }

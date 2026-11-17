@@ -1,9 +1,11 @@
 // The `see_the_crew` tool (martha#254, #320, #443 part 5): its name, what it is for, and what the pane is answered.
 //
-// Every member's row, in the declaration's order, and the nudges this member is told under them. The nudges run here, in
+// Every member's row, in the declaration's order, and the nudges this member is told under them, among them the packages
+// a failed act paused (martha#512), read from the ledgers of the packages the rows hold and the crew's lines name. The nudges run here, in
 // the launcher's own process, and nothing here acts on what it finds: a nudge says what it sees, and whoever reads it
 // decides. The tools slice (../a_crews_tools) keeps only the table that calls this.
 
+import { sameMemberName } from '../declare_crew/declare_crew.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { Processes, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
@@ -13,6 +15,7 @@ import { headNudges, nudgesOf, packagesNamedIn, theNudgesGoTo, theNudgesPartLine
 import { theParkedMembers } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theBacklogReaderIn } from '../find_the_unheld_work/the_backlog_reader_of_a_launch.ts'
 import { theUnheldNudgesFor } from '../nudge_an_idle_crew/nudge_an_idle_crew.ts'
+import { thePausedNudges } from '../recover_a_failed_act/resume_a_paused_package.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { GITHUB_BUDGET_PLACE, theClosesOfTheWaits, theClosesRecorded, theGithubSpenderOf, theHeadsOfTheWaits, type AHead } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
@@ -59,14 +62,15 @@ async function theNudgesFor(asked: SeeTheCrewAsked): Promise<readonly string[]> 
   const { settings } = asked
   if (!settings.house_rules.nudges) return []
   const receivers = theNudgesGoTo(settings)
-  if (!receivers.some((receiver) => receiver.toLowerCase() === asked.member.toLowerCase())) return []
+  if (!receivers.some((receiver) => sameMemberName(receiver, asked.member))) return []
   const channel = await readTheChannel(asked.ledger)
   const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
   const waits = await theWaitsTheClosesLeave(messages, receivers, await whatEndsAWaitIn(asked, messages))
   const input = { rows: Object.values(asked.rows), waits, parked: theParkedMembers({ stores: asked.stores }, settings.members.map((member) => member.name)), windows: windowsOf(settings.house_rules), now: asked.now, owner: settings.owner, receivers }
   const heads = await theHeadsOfTheWaiters(asked, waits)
   const unheld = await theUnheldNudgesFor({ backlog: settings.backlog, members: settings.members.map((member) => member.name), reader: theBacklogReaderIn(asked), rows: input.rows, parked: input.parked, receivers })
-  return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads), ...unheld]), settings)
+  const paused = await thePausedNudges(asked.ledger, [...input.rows.map((row) => row.holds), ...packagesNamedIn(messages)])
+  return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads), ...unheld, ...paused]), settings)
 }
 
 /** What ends a wait besides the channel's lines, for nudge_the_supervisor to apply (martha#415): the landings the ledgers

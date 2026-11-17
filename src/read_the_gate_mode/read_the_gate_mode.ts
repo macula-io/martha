@@ -29,6 +29,8 @@
 // keep declaring after an upgrade). It is not a second switch beside the new fields — when `gate_enforces` names a
 // mode, that is the mode, and `strict_gate` is not consulted.
 
+import { sameMemberName } from '../declare_crew/member_names.ts'
+
 /** The field that names who the gate enforces for: `all`, `nobody`, or members' names. */
 export const GATE_ENFORCES = 'gate_enforces'
 
@@ -141,9 +143,9 @@ function namesOf(value: readonly unknown[], field: string, members: readonly str
   const names: string[] = []
   for (const [index, name] of value.entries()) {
     if (typeof name !== 'string' || name.trim() === '') return refuse(`${field}[${index}]`, 'is not a member name')
-    const known = members.find((member) => member.toLowerCase() === name.toLowerCase())
+    const known = members.find((member) => sameMemberName(member, name))
     if (known === undefined) return refuse(`${field}[${index}]`, `names ${name}, who is not a member of this crew`)
-    if (names.some((seen) => seen.toLowerCase() === known.toLowerCase())) {
+    if (names.some((seen) => sameMemberName(seen, known))) {
       return refuse(`${field}[${index}]`, `names ${name} twice (names are compared ignoring case)`)
     }
     names.push(known)
@@ -163,8 +165,7 @@ const refuse = (field: string, why: string): GateRefused => ({ refused: true, fi
 export function gateModeFor(setting: GateSetting, member: string): GateMode {
   if (setting.kind === 'off') return 'off'
   if (setting.kind === 'every-member') return setting.mode
-  const folded = member.toLowerCase()
-  const holds = (names: readonly string[]): boolean => names.some((name) => name.toLowerCase() === folded)
+  const holds = (names: readonly string[]): boolean => names.some((name) => sameMemberName(name, member))
   if (holds(setting.enforced)) return 'enforced'
   // A member named in neither is OFF, not audited: auditing is asked for by name (martha#321, question 2).
   return holds(setting.audited) ? 'audited' : 'off'
