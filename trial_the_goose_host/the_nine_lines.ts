@@ -58,17 +58,56 @@ export const lineTwo: Line = async (trial) => {
 
 /** Line 3: every tool call arrives as a permission request, and a once-rejection stops it. */
 export const lineThree: Line = async (trial) => {
-  const shellMade = join(trial.place.checkout, 'a_shell_call_made_this')
-  const writeMade = join(trial.place.checkout, 'a_write_call_made_this')
-  const refusedShell = await turnAsking(trial, 'reject_once', `Use the shell tool to run exactly this command, nothing else: touch ${shellMade}`)
-  const refusedWrite = await turnAsking(trial, 'reject_once', `Use the write tool to create the file ${writeMade} whose text is ok`)
-  await turnAsking(trial, 'allow_once', `Use the shell tool to run exactly this command, nothing else: touch ${shellMade}`)
+  const made = {
+    allowed: join(trial.place.checkout, 'an_allowed_shell_made_this'),
+    refusedShell: join(trial.place.checkout, 'a_refused_shell_made_this'),
+    write: join(trial.place.checkout, 'a_refused_write_made_this'),
+  }
+  const allowedAsked = await anAllowedShellCall(trial, 'an_allowed_shell_made_this')
+  const refusedShell = await turnAsking(trial, 'reject_once', 'Use the shell tool to run exactly this command, nothing else: touch a_refused_shell_made_this')
+  const refusedWrite = await turnAsking(trial, 'reject_once', 'Use the write tool to create a file named a_refused_write_made_this in the working directory, whose text is ok')
   const asked = trial.acp.answers.asked.map((one) => `${one.title || one.toolName}: ${one.answered}`)
-  const unanswered = asked.length === 0
-  return say(unanswered ? 'not-observed' : !existsSync(writeMade) && existsSync(shellMade) ? 'pass' : 'fail',
-    unanswered ? 'the model made no tool call, so nothing was asked'
-      : `asked ${asked.length} time(s); the rejected write made nothing, the allowed shell call made its file`,
-    { asked, shellRefusedSaid: refusedShell.text.slice(0, 300), writeRefusedSaid: refusedWrite.text.slice(0, 300), shellMade, writeMade })
+  const saw = { asked: asked.length, allowedAsked, allowed: existsSync(made.allowed), refusedRan: existsSync(made.refusedShell) || existsSync(made.write) }
+  return say(lineThreeVerdict(saw), lineThreeSaid(saw), {
+    ...saw, asked,
+    refusedShellSaid: refusedShell.text.slice(0, 300), writeRefusedSaid: refusedWrite.text.slice(0, 300),
+    allowedShellMade: made.allowed, refusedShellMade: made.refusedShell, writeMade: made.write,
+  })
+}
+
+/** What line 3 saw: how many calls were asked about, and which of the three files the calls would make exist. */
+interface LineThreeSaw {
+  readonly asked: number
+  readonly allowedAsked: boolean
+  readonly allowed: boolean
+  readonly refusedRan: boolean
+}
+
+function lineThreeVerdict(saw: LineThreeSaw): Observation['verdict'] {
+  if (saw.asked === 0) return 'not-observed'
+  if (saw.refusedRan) return 'fail'
+  return saw.allowedAsked && !saw.allowed ? 'fail' : 'pass'
+}
+
+function lineThreeSaid(saw: LineThreeSaw): string {
+  if (saw.asked === 0) return 'the model made no tool call, so nothing was asked'
+  if (saw.refusedRan) return 'a rejected call ran anyway'
+  const asked = `asked ${saw.asked} time(s); each rejected call made nothing`
+  if (!saw.allowedAsked) return `${asked}, but the model never offered the allowed call, so the positive half is not observed`
+  return saw.allowed ? `${asked}, and the allowed call made its file` : `${asked}, and the allowed call made no file`
+}
+
+/**
+ * One allowed shell call, asked for twice: a small model sometimes answers in words without calling the
+ * tool, and the line needs the positive half — the same kind of call running once it is allowed — to mean
+ * anything. Says whether a permission request was asked at all.
+ */
+async function anAllowedShellCall(trial: Trial, file: string): Promise<boolean> {
+  const before = trial.acp.answers.asked.length
+  await turnAsking(trial, 'allow_once', `Use the shell tool to run exactly this command, nothing else: touch ${file}`)
+  if (trial.acp.answers.asked.length > before) return true
+  await turnAsking(trial, 'allow_once', `Run this exact command with the shell tool now, and nothing else: touch ${file}`)
+  return trial.acp.answers.asked.length > before
 }
 
 /** One turn in which the tool calls are answered the same way. */

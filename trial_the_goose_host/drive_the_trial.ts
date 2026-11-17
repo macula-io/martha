@@ -10,6 +10,10 @@
 // Each line gets its own launch: a stand-in owner home full of markers, a GOOSE_PATH_ROOT and HOME written
 // for it, a recording proxy between Goose and the local model, and strace over every file Goose opens.
 // Run it with HOME set to the stand-in owner home; nothing of it reads or writes the real one.
+//
+// The launch places live outside the home (--launch, /var/tmp/martha-goose-trial by default) and the launch
+// gets a PATH of its own: a checkout under the home makes any search for a repository walk up through the
+// home, and the owner's own PATH finds a shell under the home before the system's.
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -31,6 +35,7 @@ interface Options {
   readonly gooseSource: string
   readonly model: string
   readonly evidence: string
+  readonly launch: string
   readonly lines: readonly number[]
   readonly ollama: string
 }
@@ -66,15 +71,19 @@ function optionsFrom(argv: readonly string[]): Options {
   }
   const asked = at('--line') ?? 'all'
   const lines = asked === 'all' ? [1, 2, 3, 4, 5, 6, 7, 8, 9] : asked.split(',').map((one) => Number(one))
-  return { goose: goose!, gooseSource: source!, model: model!, evidence: evidence!, lines, ollama: at('--ollama') ?? 'http://127.0.0.1:11434' }
+  return {
+    goose: goose!, gooseSource: source!, model: model!, evidence: evidence!,
+    launch: at('--launch') ?? '/var/tmp/martha-goose-trial',
+    lines, ollama: at('--ollama') ?? 'http://127.0.0.1:11434',
+  }
 }
 
-/** What Goose is given: a home and a path root of the launch's own, and none of the owner's keys. */
+/** What Goose is given: a home and a path root of the launch's own, a system PATH, and none of the owner's keys. */
 function theEnvironment(place: Place): Record<string, string> {
   return {
     HOME: place.home,
     GOOSE_PATH_ROOT: place.root,
-    PATH: process.env.PATH ?? '/usr/bin:/bin',
+    PATH: '/usr/bin:/bin',
     SHELL: '/bin/sh',
   }
 }
@@ -105,13 +114,15 @@ async function shakeHands(acp: GooseOverAcp, place: Place): Promise<{ sessionId:
 }
 
 async function startARun(line: number, options: Options): Promise<Running> {
-  const place = aPlaceFor(line, options.evidence)
+  const place = aPlaceFor(line, options.evidence, options.launch)
   if (line === 1) plant(place.ownerHome, HOME_MARKERS)
   if (line === 2) plant(place.checkout, CHECKOUT_MARKERS)
   const proxy = new RecordingProxy(options.ollama)
   const port = await proxy.start()
-  writeTheConfig(place, options.model, `http://127.0.0.1:${port}`)
-  const tracePath = join(place.base, 'trace.log')
+  writeTheConfig(place, options.model, `http://127.0.0.1:${port}`, options.gooseSource)
+  const evidenceForLine = join(options.evidence, `line-${line}`)
+  mkdirSync(evidenceForLine, { recursive: true })
+  const tracePath = join(evidenceForLine, 'trace.log')
   const child = startGoose(place, options, line, tracePath)
   const acp = new GooseOverAcp(child)
   const { sessionId, currentMode } = await shakeHands(acp, place)
@@ -132,6 +143,7 @@ function trialOf(running: Running): Trial {
 
 async function conduct(running: Running): Promise<Observation> {
   if (running.line === 7) {
+    running.acp.answers.next = 'allow_once'
     await promptOver(running.acp, running.sessionId, 'Use the shell tool to run: echo the launch has work to end')
     return { verdict: 'not-observed', say: 'the launch is running; what line 7 observes is the kill', evidence: { asked: running.acp.answers.asked.length } }
   }
@@ -157,7 +169,7 @@ async function killTheGroup(child: ChildProcess, waitMs = 20000): Promise<string
 
 function readTrace(place: Place, goose: string, tracePath: string): TraceFindings {
   if (!existsSync(tracePath)) return { opens: 0, underTheOwnerHome: [], underTheRealHome: ['no trace was written'] }
-  const allowed = [dirname(resolve(goose)), place.base]
+  const allowed = [dirname(resolve(goose)), place.base, dirname(resolve(tracePath))]
   return findingsIn(pathsIn(readFileSync(tracePath, 'utf8')), place.ownerHome, userInfo().homedir, allowed)
 }
 
@@ -186,8 +198,9 @@ async function runLine(line: number, options: Options): Promise<void> {
   const observation = await conduct(running).catch((error: Error) => ({ verdict: 'fail' as const, say: `the line could not be run: ${error.message}`, evidence: {} }))
   const { trace, groupLeft } = await endARun(running)
   const result = { line, ...verdictOf(line, running.currentMode, observation, trace, groupLeft), trace, groupLeft }
-  mkdirSync(running.place.base, { recursive: true })
-  writeFileSync(join(running.place.base, 'result.json'), JSON.stringify(result, null, 2))
+  const evidenceForLine = join(options.evidence, `line-${line}`)
+  mkdirSync(evidenceForLine, { recursive: true })
+  writeFileSync(join(evidenceForLine, 'result.json'), JSON.stringify(result, null, 2))
   console.log(`line ${line}: ${result.verdict} — ${result.say}`)
 }
 

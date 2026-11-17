@@ -39,19 +39,31 @@ interface Rpc {
   readonly error?: { readonly message?: string }
 }
 
+/** A permission request's params, as much of them as the trial reads. */
+interface PermissionParams {
+  readonly toolCall?: { readonly title?: unknown; readonly toolCallId?: unknown }
+  readonly options?: readonly { readonly optionId?: string }[]
+}
+
+const optionIds = (params: PermissionParams): string[] => (params.options ?? []).map((option) => option.optionId ?? '')
+
+/** The answer given among the options offered: the one the line set, else the first, never an "always". */
+const chosen = (options: readonly string[], wanted: OnceAnswer): string =>
+  options.includes(wanted) ? wanted : options[0] ?? 'reject_once'
+
+const said = (value: unknown): string => (typeof value === 'string' ? value : '')
+
 /** Goose over ACP on stdio: ask it something, answer its permission requests, keep what it says. */
 export class GooseOverAcp {
   readonly updates: Record<string, unknown>[] = []
   readonly answers: Answers = { next: 'reject_once', asked: [] }
   readonly notes: string[] = []
-  readonly #child: ChildProcess
   readonly #stdin: Writable
   readonly #pending = new Map<number, Pending>()
   #nextId = 1
   #buffered = ''
 
   constructor(child: ChildProcess) {
-    this.#child = child
     this.#stdin = child.stdin as Writable
     const out = child.stdout as Readable
     out.setEncoding('utf8')
@@ -113,15 +125,14 @@ export class GooseOverAcp {
   }
 
   #record(params: unknown): Asked {
-    const body = (params ?? {}) as { readonly toolCall?: Record<string, unknown>; readonly options?: readonly { readonly optionId?: string }[] }
-    const options = (body.options ?? []).map((option) => option.optionId ?? '')
-    const answered = options.includes(this.answers.next) ? this.answers.next : options[0] ?? 'reject_once'
+    const body = (params ?? {}) as PermissionParams
+    const options = optionIds(body)
     const asked: Asked = {
-      toolName: String(body.toolCall?.title ?? body.toolCall?.toolCallId ?? ''),
-      toolCallId: String(body.toolCall?.toolCallId ?? ''),
-      title: String(body.toolCall?.title ?? ''),
+      toolName: said(body.toolCall?.title) || said(body.toolCall?.toolCallId),
+      toolCallId: said(body.toolCall?.toolCallId),
+      title: said(body.toolCall?.title),
       options,
-      answered,
+      answered: chosen(options, this.answers.next),
     }
     this.answers.asked.push(asked)
     return asked

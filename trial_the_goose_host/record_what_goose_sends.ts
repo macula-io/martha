@@ -42,7 +42,7 @@ export class RecordingProxy {
     })
   }
 
-  #handle(request: IncomingMessage, response: IncomingMessage extends never ? never : import('node:http').ServerResponse): void {
+  #handle(request: IncomingMessage, response: ServerResponse): void {
     const chunks: Buffer[] = []
     request.on('data', (chunk: Buffer) => chunks.push(chunk))
     request.on('end', () => {
@@ -52,11 +52,7 @@ export class RecordingProxy {
     })
   }
 
-  #forward(
-    request: IncomingMessage,
-    response: import('node:http').ServerResponse,
-    body: string,
-  ): void {
+  #forward(request: IncomingMessage, response: ServerResponse, body: string): void {
     const headers = { ...request.headers, host: this.#target.host }
     const upstream = sendRequest(
       { hostname: this.#target.hostname, port: this.#target.port, path: request.url, method: request.method, headers },
