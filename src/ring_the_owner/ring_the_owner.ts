@@ -12,6 +12,11 @@
 //
 // What the notification carries is base64 and only base64, as crew-code's OSC 99 does: a question an MCP server wrote
 // cannot end the escape sequence early, so no text a stranger wrote can steer the terminal it lands on.
+//
+// The sequence is the one kitty's desktop-notification protocol reads (martha#574): a title chunk that holds the
+// notification open, then the body chunk that completes it, both saying their payload is base64 — a notification with no
+// completing chunk is one kitty holds back forever, and one without `e=1` would show the base64 itself. Each member's
+// notification carries its own id, so a second member asking does not take the first member's notification away.
 
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
@@ -34,8 +39,63 @@ export function theBellsTheOwnerDeclared(on: boolean): TheBellsSwitch {
 }
 
 /** The kitty notification protocol's opening, and the string terminator that ends it whatever it carried. */
-export const NOTIFICATION_OPENING = '\u001b]99;i=martha:d=0;'
+export const NOTIFICATION_ESCAPE = '\u001b]99;'
 export const NOTIFICATION_ENDING = '\u001b\\'
+
+/**
+ * The keys kitty's desktop-notification protocol reads (martha#574), by the protocol's own one-letter names: the
+ * notification's identifier, whether this chunk completes it, whether the payload is base64, and which of the two a
+ * chunk carries. Read from here wherever the sequence is written, so no key is spelled twice.
+ */
+const THE_NOTIFICATION_KEYS = { identifier: 'i', done: 'd', encoded: 'e', as: 'p' } as const
+
+/** What `d` says of a chunk: more of the notification follows, or this is the last of it (martha#574). */
+const MORE_OF_THE_NOTIFICATION_FOLLOWS = '0'
+const THE_LAST_OF_THE_NOTIFICATION = '1'
+
+/** What `e` says of a payload: base64-encoded UTF-8, which is what every chunk here carries (martha#574). */
+const THE_PAYLOAD_IS_BASE64 = '1'
+
+/** What `p` says a chunk carries, in the protocol's own two words (martha#574). */
+const THE_TITLE = 'title'
+const THE_BODY = 'body'
+
+/** What an identifier may hold: letters, digits and `_ - + .`, never the `:` and `;` the sequence is built from (martha#574). */
+const NOT_ALLOWED_IN_AN_IDENTIFIER = /[^A-Za-z0-9_+.-]/g
+
+/** What Martha's own notifications are named by, before the member's name, so a terminal can tell them from another program's. */
+const MARTHAS_NOTIFICATION = 'martha-'
+
+/** A notification's id for one member, so each member's notification replaces only its own (martha#574). */
+export const notificationIdOf = (member: string): string => `${MARTHAS_NOTIFICATION}${member.replaceAll(NOT_ALLOWED_IN_AN_IDENTIFIER, '')}`
+
+/** The one line a desktop shows first: whose member is asking (martha#574). */
+export const theTitleFor = (member: string): string => `${member} needs you`
+
+/** One chunk: its metadata, then the payload as base64 and only base64, ended by the terminator (martha#574). */
+function aChunk(id: string, done: string, as: string, words: string): string {
+  const metadata = [
+    `${THE_NOTIFICATION_KEYS.identifier}=${id}`,
+    `${THE_NOTIFICATION_KEYS.done}=${done}`,
+    `${THE_NOTIFICATION_KEYS.encoded}=${THE_PAYLOAD_IS_BASE64}`,
+    `${THE_NOTIFICATION_KEYS.as}=${as}`,
+  ].join(':')
+  return `${NOTIFICATION_ESCAPE}${metadata};${Buffer.from(words, 'utf8').toString('base64')}${NOTIFICATION_ENDING}`
+}
+
+/**
+ * One notification as the bytes a terminal reads (martha#574): a title chunk that holds it open, then the body chunk
+ * that completes it, so kitty shows it rather than holding it back forever. Two chunks, because the protocol reads a
+ * chunk's payload as the title unless it says otherwise: the owner reads who is asking first, then what is asked. Both
+ * carry base64 and say so with `e=1`; without it the terminal would show the base64 itself.
+ */
+export function notificationOf(id: string, title: string, body: string): string {
+  return `${aChunk(id, MORE_OF_THE_NOTIFICATION_FOLLOWS, THE_TITLE, title)}${aChunk(id, THE_LAST_OF_THE_NOTIFICATION, THE_BODY, body)}`
+}
+
+/** The notification for one member's row: its own id, its title, and the words the row carries (martha#574). */
+export const notificationFor = (row: DashboardRow): string =>
+  notificationOf(notificationIdOf(row.member), theTitleFor(row.member), whatTheOwnerIsShown(row).needs)
 
 /** The state a row reads while the owner is being asked, as the dialogs slice says it. */
 const ASKING = 'needs-you'
@@ -53,7 +113,7 @@ export function theBellsFor(
 ): string {
   if (!onTheOwnersTerminal) return ''
   if (!isTheFirstChangeIntoAsking(before, after)) return ''
-  return bellBytes(bells, theWordsTheNotificationCarries(after))
+  return bellBytes(bells, after)
 }
 
 /** Whether this beat is the one the owner started being asked on, which is the only one that rings. */
@@ -63,16 +123,6 @@ function isTheFirstChangeIntoAsking(before: DashboardRow | null, after: Dashboar
 }
 
 /** The bytes for this change: the bell, the notification, both, or neither. */
-function bellBytes(bells: TheBellsSwitch, words: string): string {
-  return `${bells.bell ? THE_BELL : ''}${bells.notify ? notificationOf(words) : ''}`
-}
-
-/** A notification for these words: base64 only, so nothing in them can end the sequence early. */
-export function notificationOf(words: string): string {
-  return `${NOTIFICATION_OPENING}${Buffer.from(words, 'utf8').toString('base64')}${NOTIFICATION_ENDING}`
-}
-
-/** What the notification says: the owner's own words for what is being asked, as the row reads them. */
-function theWordsTheNotificationCarries(row: DashboardRow): string {
-  return whatTheOwnerIsShown(row).needs
+function bellBytes(bells: TheBellsSwitch, row: DashboardRow): string {
+  return `${bells.bell ? THE_BELL : ''}${bells.notify ? notificationFor(row) : ''}`
 }
