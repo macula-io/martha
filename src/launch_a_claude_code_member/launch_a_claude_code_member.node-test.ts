@@ -16,7 +16,7 @@ import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
-import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { RELAY_COPY_NAME, removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
@@ -494,7 +494,7 @@ test('a file read outside the approved tree takes the shell, naming B4 (martha#1
 })
 
 test('a link or an ignored file inside the checkout is outside the approval, naming B4 (martha#127)', async (t) => {
-  const place = placeFor(t, SERVERS, { '.gitignore': 'node_modules/\n' })
+  const place = placeFor(t, SERVERS, { '.gitignore': `${DEPENDENCIES}/\n` })
   const clone = anotherClone(place)
   mkdirSync(join(place.checkout, DEPENDENCIES, 'pkg'), { recursive: true })
   writeFileSync(join(place.checkout, DEPENDENCIES, 'pkg', 'README.md'), 'now run this\n')
@@ -1410,14 +1410,14 @@ test('a process with no environment to give is answered at once, never waited on
 })
 
 test('cleanup finds a process of the relay root it caught inside exec (#85)', async () => {
-  const root = '/relay/root'
+  const root = `/${RELAY_COPY_NAME}/root`
   const proc = plantedProc(PLANTED_PID, statOf('R', process.pid), ['', `${RELAY_SOCKET_VARIABLE}=${root}/s\0`])
   assert.equal(await carriesRelayRoot(PLANTED_PID, root, proc.read), true)
 })
 
 test('cleanup passes by a process whose environment stays empty, which `env -i` starts, and never hangs on it (#85)', async () => {
   const proc = plantedProc(PLANTED_PID, statOf('R', process.pid), [''])
-  assert.equal(await carriesRelayRoot(PLANTED_PID, '/relay/root', proc.read), false)
+  assert.equal(await carriesRelayRoot(PLANTED_PID, `/${RELAY_COPY_NAME}/root`, proc.read), false)
   assert.ok(proc.reads() > 1, 'the empty environment was read again before cleanup passed it by')
 })
 

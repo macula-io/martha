@@ -9,7 +9,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { buildTheRunDirectory, runInTheSandbox, sandboxRefusal, type RunCopy } from './run_in_a_sandbox.ts'
 import { SANDBOX_REQUIRED_VARIABLE, skipWithoutTheSandbox } from './sandbox_under_test.ts'
-import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { DEPENDENCIES, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 const [REGULAR] = OWN_WRITE_MODES
 const MARKER = 'stranger-marker-129'
@@ -86,11 +86,11 @@ test('every bin name gets a link inside its package, and the run calls each one'
   const run = runDirectory(t, {
     packages: [tool('one'), tool('two')],
     bin_links: [
-      { link: 'node_modules/.bin/one', target: 'node_modules/tool/bin/one', points_at: '../tool/bin/one' },
-      { link: 'node_modules/.bin/two', target: 'node_modules/tool/bin/two', points_at: '../tool/bin/two' },
+      { link: `${DEPENDENCIES}/.bin/one`, target: `${DEPENDENCIES}/tool/bin/one`, points_at: '../tool/bin/one' },
+      { link: `${DEPENDENCIES}/.bin/two`, target: `${DEPENDENCIES}/tool/bin/two`, points_at: '../tool/bin/two' },
     ],
   })
-  const ended = await runInTheSandbox(run, ['/bin/sh', '-c', 'node_modules/.bin/one && node_modules/.bin/two'])
+  const ended = await runInTheSandbox(run, ['/bin/sh', '-c', `${DEPENDENCIES}/.bin/one && ${DEPENDENCIES}/.bin/two`])
   assert.ok(typeof ended !== 'string', String(ended))
   assert.equal(ended.output.toString('utf8'), 'one-ran\ntwo-ran\n')
   assert.equal(ended.status, 0)
@@ -100,7 +100,7 @@ test('a bin link whose target was not copied builds no run directory', (t) => {
   const parent = mkdtempSync(join(tmpdir(), 'martha-129-run-'))
   t.after(() => removeTheTree(parent))
   mkdirSync(join(parent, 'x'))
-  const built = buildTheRunDirectory(parent, { files: [], packages: [], bin_links: [{ link: 'node_modules/.bin/x', target: 'node_modules/x/cli', points_at: '../x/cli' }] })
+  const built = buildTheRunDirectory(parent, { files: [], packages: [], bin_links: [{ link: `${DEPENDENCIES}/.bin/x`, target: `${DEPENDENCIES}/x/cli`, points_at: '../x/cli' }] })
   assert.match(String(built), /not a file of its package/)
 })
 

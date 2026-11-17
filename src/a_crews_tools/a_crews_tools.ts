@@ -71,6 +71,8 @@ import {
   type TheSessionsQuestion,
 } from '../refresh_a_member/the_refresh_flow.ts'
 import { REPORT_PROGRESS_TOOL, reportProgressOver } from '../report_where_the_work_stands/report_progress_tool.ts'
+import { theBudgetOver, theSpendOnARow, type TheBudgetAsACrewHoldsIt } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
+import type { ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
 import type { TheCrew } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { type ASpawnedAgent, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
@@ -82,9 +84,11 @@ import { theBacklogReaderIn } from '../find_the_unheld_work/the_backlog_reader_o
 import { SAY_TO_THE_CREW_TOOL, sayToTheCrewOver } from '../send_a_crew_message/say_to_the_crew_tool.ts'
 import {
   BEAT_INTERVAL_MS,
+  SPEND_FIELD,
   beatAfter,
   rowAfterASwitch,
   theRowWithNothingSaid,
+  type AUnitOnARow,
   type DashboardRow,
   type DashboardStore,
   type TheOwnersDefaultTold,
@@ -231,6 +235,18 @@ export interface CrewTools extends TheReviewRule {
    */
   thePredecessorOf(session_id: string): Promise<string | null>
   /**
+   * What the package this member holds has spent of its budget (martha#513, slice 3): the units its newest contract
+   * names and what was spent of each, read once for each session and package the member's row names and then answered
+   * from memory. Undefined when the member holds no package, holds one with no bounded contract, or the crew could not
+   * read what it spent.
+   */
+  theSpendInForce(session_id: string): Promise<ASpendInForce | undefined>
+  /**
+   * One more call counted against that package's budget, before the call runs (martha#513, slice 3): undefined when it
+   * was kept, and the reason when it was not — a call nobody counted is a budget a member can walk around.
+   */
+  noteTheCallCounted(session_id: string, own_name: string): Promise<string | undefined>
+  /**
    * The launcher saw the host answer one of this session's calls (martha#313): the menu tool's answer is what a settle
    * of the owner's asks stands on, so the relay hands every answer here and the queue decides which one is a menu.
    */
@@ -350,12 +366,15 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     owner_needs: null,
   }
   const handlers = handlersOver(held, state)
+  // One budget over this launch's places (martha#513, slice 3): it reads a package's spend once per session and keeps
+  // the tally, so the relay's every call costs one append and no read.
+  const budget = theBudgetOver(held)
 
   return {
     tools: CREW_TOOLS,
     async answer(name: string, args: Readonly<Record<string, unknown>>, from: string): Promise<CoreToolAnswer> {
       state.session = from
-      const asked = await answerAnAskOfTheMods(held, state, name, args, from)
+      const asked = await answerAnAskOfTheMods(held, state, budget, name, args, from)
       if (asked !== undefined) return asked
       const handle = handlers[name as CrewToolName]
       if (handle === undefined) {
@@ -378,6 +397,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     startSweeping: () => sweepTheOwnersList(held),
     theLineToHandAtStart: () => theStartLineOf(held, state),
     thePredecessorOf: (session_id) => thePredecessorOf(held, session_id),
+    theSpendInForce: (session_id) => budget.theSpendInForce(session_id),
+    noteTheCallCounted: (session_id, own_name) => budget.noteTheCallCounted(session_id, own_name),
     ...theReviewRuleOver({ declared: () => crewOrRefusal(held), spawn: held.spawn }),
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
     ends: state.ends,
@@ -425,6 +446,7 @@ async function theContractTheMemberHolds(
 async function answerAnAskOfTheMods(
   places: CrewToolPlaces,
   state: SessionState,
+  budget: TheBudgetAsACrewHoldsIt,
   name: string,
   args: Readonly<Record<string, unknown>>,
   from: string,
@@ -433,7 +455,7 @@ async function answerAnAskOfTheMods(
   if (name === THE_CHANNEL_READ_ASK) return await theChannelRead(places)
   const channel = await answerAChannelAsk(places.carrier, name, args)
   if (channel !== undefined) return channel
-  if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, args, from)
+  if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
   return undefined
@@ -465,7 +487,13 @@ async function theChannelRead(places: CrewToolPlaces): Promise<CoreToolAnswer> {
  * The question the refresh flow is answered on (martha#255): what this session says about itself, and the one act it is
  * told to take. The mod makes it at a session's start and at every turn's end, and decides nothing itself.
  */
-async function theSessionsAct(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>, from: string): Promise<CoreToolAnswer> {
+async function theSessionsAct(
+  places: CrewToolPlaces,
+  state: SessionState,
+  budget: TheBudgetAsACrewHoldsIt,
+  args: Readonly<Record<string, unknown>>,
+  from: string,
+): Promise<CoreToolAnswer> {
   const question = theQuestionIn(args, from)
   if (typeof question === 'string') return { refused: question }
   // A switch whose report never came (martha#359): the mod reports the host's command before it asks this question
@@ -475,7 +503,10 @@ async function theSessionsAct(places: CrewToolPlaces, state: SessionState, args:
   const act = await theRefreshAct(refreshPlacesOf(places, state), question)
   const ordered = theOrderOf(act)
   const switching = aSwitchMayFollow(ordered, question) ? await theModelOrder(anOrderOver(places, state)) : null
-  writeRow(places, state, (row) => theRowAfterTheTurn(state, row, question, act))
+  // What the package has spent, through the one budget this launch keeps: a session's first question is where that
+  // read happens, so the row costs nothing a call would not have cost anyway (martha#513, slice 3).
+  const spend = theSpendOnARow(await budget.theSpendInForce(from))
+  writeRow(places, state, (row) => theRowAfterTheTurn(state, row, question, act, spend))
   return { answer: JSON.stringify(switching ?? ordered) }
 }
 
@@ -483,10 +514,16 @@ async function theSessionsAct(places: CrewToolPlaces, state: SessionState, args:
  * The row after one turn's question, in ONE write: what the session reported about itself and what the flow said it is
  * doing, because the row store keeps the newest beat and two writes in the same millisecond would lose the second.
  */
-function theRowAfterTheTurn(state: SessionState, row: DashboardRow, question: TheSessionsQuestion, act: TheAct): DashboardRow {
+function theRowAfterTheTurn(
+  state: SessionState,
+  row: DashboardRow,
+  question: TheSessionsQuestion,
+  act: TheAct,
+  spend: readonly AUnitOnARow[] | undefined,
+): DashboardRow {
   const host = { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd }
   const refresh = act.refresh === undefined ? {} : { refresh: act.refresh }
-  return { ...row, ...refresh, needs: theNeedsAfter(state, row), session: question.session_id, host }
+  return { ...row, ...refresh, needs: theNeedsAfter(state, row), session: question.session_id, host, [SPEND_FIELD]: spend }
 }
 
 /** The row's `needs` after this turn (martha#359): what the owner's file said, or its own line taken away again. */

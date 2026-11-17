@@ -53,7 +53,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 
 export type { LaunchHost }
@@ -91,7 +91,7 @@ export function launchEnvironment(
  */
 export const LAUNCH_FILES_OF_HOST = {
   // The last one Claude Code writes itself: a member's own permission answers.
-  [CLAUDE_CODE]: ['.mcp.json', '.claude/settings.json', '.claude/settings.local.json'],
+  [CLAUDE_CODE]: ['.mcp.json', `${CLAUDE_FOLDER}/settings.json`, `${CLAUDE_FOLDER}/settings.local.json`],
   // The last one holds a checkout's plugins and their installed packages.
   opencode: ['opencode.json', 'opencode.jsonc', '.opencode'],
 } as const
@@ -423,6 +423,17 @@ export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, ma
 }
 
 /** The config and the work tree, as the gate reads them. */
+/**
+ * The checkout's tree as it is now, before the host starts, when the owner approved this start state; `null` otherwise.
+ * A checkout with no config is launched whatever it holds and approves nothing, so it gets `null`, and every read in it
+ * counts (decided 2026-11-07, martha#127). It lives here because what a launch approves is this slice's subject; the
+ * relay that asks it holds the host it reads through.
+ */
+export function approvedStartTreeOf(launch: ApprovedLaunch, host: LaunchHost): string | null {
+  const state = readLaunchState(launch, host, launch.approved_tree)
+  return launch.approved_fingerprints.includes(fingerprintOf(state)) ? state.tree : null
+}
+
 export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approved_tree?: string): LaunchState {
   const read = readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine, approved_tree ?? place.approved_tree)
   const crewText = readCrewText(place, machine)
