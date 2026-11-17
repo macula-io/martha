@@ -32,7 +32,7 @@ export function theTabTitle(row: CrewRow): string {
 }
 
 /**
- * The title to set for `member` in the reader's `rows`, or undefined when it is the one last set (`last`) or when the
+ * The title to set for `member` among the reader's rows, or undefined when it is the one last set (`last`) or when the
  * member is not on the crew: a title is set once per change, never once per redraw.
  */
 export function theTitleToSet(rows: readonly CrewRow[], member: string, last: string | undefined): string | undefined {
