@@ -131,6 +131,19 @@ test('a place spelled through a link drifts by nothing: the places are asked for
   assert.deepEqual(await theDriftInTheWorkspace(bothThroughLinks), [])
 })
 
+test('a clone whose origin names no default branch is named, with the call that sets one', async (t) => {
+  const fixture = aCleanWorkspace(t)
+  // The guard's switch rule cannot fire without that fact, so this check is what makes its failing open safe: the
+  // clone is named, and the call that sets a head with it.
+  gitIn(fixture.clone, 'remote', 'set-head', 'origin', '--delete')
+  const drift = (await theDriftInTheWorkspace(anInspectionOf(fixture))).join('\n')
+  assert.match(drift, /names no default branch for its origin/)
+  assert.match(drift, /git remote set-head origin --auto/)
+  // And it is not a way of reporting everything: with a head set, the same workspace drifts by nothing.
+  gitIn(fixture.clone, 'remote', 'set-head', 'origin', '--auto')
+  assert.deepEqual(await theDriftInTheWorkspace(anInspectionOf(fixture)), [])
+})
+
 test('a place with no clones in it drifts by nothing, and a git that cannot answer invents no line', async (t) => {
   const fixture = aCleanWorkspace(t)
   const empty = { ...anInspectionOf(fixture), workspace: { clones: join(fixture.clones, 'nothing-here'), worktrees: fixture.worktrees, members: [] } }
