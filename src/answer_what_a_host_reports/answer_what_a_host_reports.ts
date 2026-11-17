@@ -19,7 +19,7 @@
 
 import type { ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
-import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { approvedStartTreeOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { type HostSession, rememberSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
@@ -76,7 +76,7 @@ export function answersOver(
   const broken = new Map<string, string>()
   let queue: Promise<unknown> = Promise.resolve()
 
-  const approved_start = approvedStartTree(places)
+  const approved_start = approvedStartTreeOf(places.launch, places.machine)
 
   const breakSession = (session: HostSession, why: string): string => {
     sessions.delete(session.id)
@@ -140,14 +140,4 @@ function sessionNamed(
   const lost = broken.get(session_id)
   if (lost !== undefined) return lost
   return sessions.get(session_id) ?? `no start of session ${session_id} was taken, so nothing it takes in can be recorded`
-}
-
-/**
- * The checkout's tree as it is now, before the host starts, when the owner approved this start state; `null`
- * otherwise. A checkout with no config is launched whatever it holds and approves nothing, so it gets `null`, and every
- * read in it counts (decided 2026-11-07, martha#127).
- */
-function approvedStartTree(places: ThePlacesAHostReportsOver): string | null {
-  const state = readLaunchState(places.launch, places.machine, places.launch.approved_tree)
-  return places.launch.approved_fingerprints.includes(fingerprintOf(state)) ? state.tree : null
 }
