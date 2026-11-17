@@ -146,6 +146,9 @@ ANSWER_LINE='"role":"assistant","content":[{"type":"text","text":"'
 READ_LINE="\"type\":\"tool_result\",\"content\":\"# ${OUTSIDER_HEADING}"
 SHELL_CALL_LINE='"name":"Bash","input":{"command":"'
 SHELL_CALL_WORDS="touch ${OUTSIDER_MARK}"
+# The headings a failed member step writes above what it keeps of the member: its transcript, then its screen.
+KEPT_TRANSCRIPT_WORDS="the member's transcript, as the checks read it:"
+KEPT_SCREEN_WORDS="the member's screen:"
 # How long the owner has to sign in, how long the member has to do what it is asked, how long a typed turn has to
 # reach the transcript, how often each is asked about, and the pause after a key. Each is the environment's when it
 # names one, so the self-test runs in moments; the container idles for longer than all of them together.
@@ -540,6 +543,24 @@ member_done() {
   [ -z "$(member_shortfall)" ]
 }
 
+# What the member did, kept in the log when the member step fails: the host's transcript read as the checks read it
+# (TRANSCRIPTS only, so nothing else under the host's folder, never its credentials, and no request blob) and the
+# member's screen. It is kept before the tear-down, which takes the container and the run's folder with it.
+keep_what_the_member_did() {
+  local text
+  text="$(transcript)" || text='(the container could not give it)'
+  log "${KEPT_TRANSCRIPT_WORDS}"
+  log "${text}"
+  log "${KEPT_SCREEN_WORDS}"
+  log "$(screen_text 2> /dev/null || true)"
+}
+
+# A member step that fails: the one line that says why, then what the member did.
+member_failed() {
+  failed member "$1"
+  keep_what_the_member_did
+}
+
 # The member step: the member started by its own command, the owner's turn typed at its terminal once the first-run
 # screens are answered, and what it did read from the host's transcript and the container within the window.
 member_step() {
@@ -548,24 +569,24 @@ member_step() {
   trap '' PIPE
   open_the_members_terminal
   if ! screen_shows "${MEMBER_STARTED_WORDS}" "${STARTED_WINDOW_S}"; then
-    failed member "the member never said '${MEMBER_STARTED_WORDS}': $(screen_text | tail -c 300 | tr '\n' ' ')"
+    member_failed "the member never said '${MEMBER_STARTED_WORDS}': $(screen_text | tail -c 300 | tr '\n' ' ')"
     return 1
   fi
   if screen_shows "${TRUST_WORDS}" "${TURN_WINDOW_S}"; then
-    type_keys "${DOWN_KEY}" && type_keys "${ENTER_KEY}" || { failed member 'the member ended at the folder question'; return 1; }
+    type_keys "${DOWN_KEY}" && type_keys "${ENTER_KEY}" || { member_failed 'the member ended at the folder question'; return 1; }
   fi
   if ! type_the_turn; then
-    failed member "the owner's turn never reached the host's transcript, typed twice"
+    member_failed "the owner's turn never reached the host's transcript, typed twice"
     return 1
   fi
   while [ "${waited}" -lt "${MEMBER_WINDOW_S}" ] && ! member_done; do
     sleep "${POLL_S}"
     waited=$((waited + POLL_S))
   done
-  TRANSCRIPT="$(transcript)" || { failed member 'the container could not give the host transcript'; return 1; }
+  TRANSCRIPT="$(transcript)" || { member_failed 'the container could not give the host transcript'; return 1; }
   shortfall="$(member_shortfall)"
   if [ -n "${shortfall}" ]; then
-    failed member "${shortfall}"
+    member_failed "${shortfall}"
     return 1
   fi
   MEMBER_PROVEN=1
@@ -937,7 +958,7 @@ member_case() {
 
 self_test() {
   local standin case_failed=0 child waited installer_name installer_version release_version major image
-  local pulled_at created_at
+  local pulled_at created_at secret failed_at kept_at screen_at torn_at
   SELF_TEST_ROOT="$(mktemp -d)"
   STAND_INS="${SELF_TEST_ROOT}/bin"
   SELF="$(readlink -f "$0")"
@@ -1012,6 +1033,30 @@ self_test() {
   member_case 'only-a-request-blob-holds-it' member.blob-only '' 1 "^FAIL member: the owner's turn never reached" || case_failed=1
   member_case 'a-member-that-never-answers' member.silent '' 1 '^FAIL member: the member gave no answer$' || case_failed=1
   member_case 'a-member-that-reads-nothing' member.unread '' 1 "^FAIL member: the member did not read the outsider's README$" || case_failed=1
+  # A member step that fails keeps what the member did in the log before the tear-down: the transcript as the checks
+  # read it and the screen. The credentials hold words of their own here, and none of them may reach the log.
+  standin="${root}/a-failed-member-keeps-its-record"
+  secret='words-only-the-credentials-hold'
+  a_case "${standin}"
+  printf '%s\n' "$(json_field "${RELEASE_PACKAGE}" 'version')" > "${standin}/version.words"
+  : > "${standin}/member.unread"
+  printf '%s\n' "${secret}" > "${standin}/home/${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}"
+  expect_status 1 "${standin}" 'a-host' || case_failed=1
+  failed_at="$(grep -n '^FAIL member: ' "${standin}/out" | head -1 | cut -d: -f1 || true)"
+  kept_at="$(grep -nxF -- "${KEPT_TRANSCRIPT_WORDS}" "${standin}/out" | head -1 | cut -d: -f1 || true)"
+  screen_at="$(grep -nxF -- "${KEPT_SCREEN_WORDS}" "${standin}/out" | head -1 | cut -d: -f1 || true)"
+  torn_at="$(grep -n '^ok tear down: ' "${standin}/out" | head -1 | cut -d: -f1 || true)"
+  if [ -z "${failed_at}" ] || [ -z "${kept_at}" ] || [ -z "${screen_at}" ] || [ -z "${torn_at}" ] \
+    || [ "${failed_at}" -ge "${kept_at}" ] || [ "${kept_at}" -ge "${screen_at}" ] || [ "${screen_at}" -ge "${torn_at}" ]; then
+    echo 'the self-test: a failed member step did not keep its transcript and screen between the failure and the tear-down' >&2
+    case_failed=1
+  else
+    sed -n "${kept_at},${screen_at}p" "${standin}/out" | grep -qF -- "${TURN_LINE}" \
+      || { echo 'the self-test: a failed member step kept no transcript' >&2; case_failed=1; }
+    sed -n "${screen_at},${torn_at}p" "${standin}/out" | grep -qF -- "${MEMBER_STARTED_WORDS}" \
+      || { echo 'the self-test: a failed member step kept no screen' >&2; case_failed=1; }
+  fi
+  if grep -qF -- "${secret}" "${standin}/out" "${standin}/err"; then echo 'the self-test: a failed member step put the credentials in the log' >&2; case_failed=1; fi
   member_case 'a-member-that-asks-no-shell-call' member.no-shell '' 1 '^FAIL member: the member asked for no shell call of ' || case_failed=1
   member_case 'the-command-did-not-run' member.gated '' 1 "^FAIL member: ${OUTSIDER_MARK} is absent: the command did not run" || case_failed=1
   # The folder question drops what is typed until it is answered: a run that did not answer it would lose its turn.
@@ -1262,7 +1307,8 @@ self_test() {
     a-create-podman-refused a-create-ssh-could-not-carry a-create-ssh-killed the-image-cannot-be-pulled \
     the-owner-never-signs-in the-owner-ends-without-signing-in claude-code-at-another-version the-checkout-cannot-be-made \
     the-member-never-starts a-turn-the-host-never-takes only-a-request-blob-holds-it a-member-that-asks-no-shell-call \
-    the-command-did-not-run the-folder-question a-member-that-never-answers a-member-that-reads-nothing; do
+    the-command-did-not-run the-folder-question a-member-that-never-answers a-member-that-reads-nothing \
+    a-failed-member-keeps-its-record; do
     if [ -e "${root}/${standin}/container.present" ]; then
       echo "the self-test: the ${standin} run left its container behind" >&2
       case_failed=1
