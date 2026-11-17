@@ -5,6 +5,7 @@
 // and clears nothing. The tools slice (../a_crews_tools) keeps only the table that calls this.
 
 import type { HandoverStampStore } from '../host_contract/host_contract.ts'
+import { theVolatileNote, volatilePathsIn } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { WRITE_MY_HANDOVER_TOOL, theHandoverAToolWrote, type HandingOverHost } from './write_my_handover.ts'
 
@@ -32,6 +33,8 @@ export interface TheHandoverAsked {
   readonly session: string
   readonly member: string
   readonly now: () => number
+  /** The roots a reboot deletes (martha#314), already in force: the crew's own, or the machine's when it names none. */
+  readonly volatile_roots: readonly string[]
 }
 
 /** What the tool answers: the file it wrote and stamped, or why nothing was written. */
@@ -50,5 +53,10 @@ export function theHandoverToolOver(asked: TheHandoverAsked, args: Readonly<Reco
     { host: asked.host, stamps: asked.stamps, session, member: asked.member, now: () => new Date(asked.now()) },
     args,
   )
-  return 'answer' in wrote ? wrote : { refused: wrote.refusal }
+  if (!('answer' in wrote)) return { refused: wrote.refusal }
+  // A handover that sends its successor to a path a reboot deletes says so to the member that wrote it, at the moment
+  // it hands over (martha#314): the file is written as it always was, and the note is added to the answer.
+  const content = args['content']
+  const cited = volatilePathsIn(typeof content === 'string' ? content : '', asked.volatile_roots)
+  return cited.length === 0 ? wrote : { answer: `${wrote.answer} ${theVolatileNote(cited)}` }
 }
