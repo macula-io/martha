@@ -55,7 +55,7 @@ export async function theNewestContractOf(host: LedgerHost, package_name: string
 
 /**
  * The newest version a package holds, or why the ledger could not say: a read that throws is an answer here, not a
- * crash, because both the gate and the launcher refuse a package on an unreadable ledger rather than guess one is kept.
+ * crash, because the gate refuses a package on an unreadable ledger rather than guess one is kept.
  */
 export async function theNewestContractOrWhy(
   host: LedgerHost,

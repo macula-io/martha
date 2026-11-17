@@ -50,10 +50,6 @@ export type TheContractHanded = TheContractInForce | AContractThatCannotBeRead |
 export const isAContractThatCannotBeRead = (contract: TheContractHanded): contract is AContractThatCannotBeRead =>
   contract !== undefined && 'why' in contract
 
-/** Whether the package has no contract at all, so none of its work may run. */
-export const isAContractNotRecorded = (contract: TheContractHanded): contract is AContractNotRecorded =>
-  contract !== undefined && !('kind' in contract) && !('why' in contract)
-
 /** The acts this call is that the contract leaves out, in the contract's own words. */
 export function theActsNotAllowed(
   call: AReadableCall,
