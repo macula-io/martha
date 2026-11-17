@@ -31,12 +31,12 @@ import {
   firstRunDone,
   marthaOnATerminal,
   plainTextOf,
-  stateHomeUnder,
   whatTheLaunchSaw,
   type ModelRequest,
   type RecordedHostRun,
   type TheOwnersHands,
 } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
+import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 // The run's silence budget is the one the launcher gives a host that shows nothing new (martha#441): named once, there.
 import { HOST_SILENCE_MS } from '../drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'

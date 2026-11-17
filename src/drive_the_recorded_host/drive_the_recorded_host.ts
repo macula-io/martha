@@ -15,7 +15,6 @@
 // A model request is one that offers tools: the host's side requests (a title, a summary) offer none, are
 // answered with text and are not counted.
 
-import { spawn, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -25,19 +24,15 @@ import process from 'node:process'
 import { StringDecoder } from 'node:string_decoder'
 
 import { HOST_TRUST_RECORD_FILE, isRunnableFile } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { ranOnAPtyHoldingALifeline, spawnOnAPtyHoldingALifeline } from '../end_a_launch_when_its_run_ends/keep_the_lifeline_in.ts'
 import { anyJournalHasALine, readTheNewestRelayJournal, relayJournalDirectory } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { waitWhileTheHostKeepsShowing, type ProgressWait } from './wait_while_the_host_keeps_showing.ts'
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-
-/**
- * The state home a run's processes find Martha's state in, under the home the run is given. Exported so a run that
- * reads back what the launcher kept derives it here rather than spelling the shape a second time.
- */
-export const stateHomeUnder = (home: string): string => join(home, '.local', 'state')
 
 /**
  * Where a run derived from this home and checkout reads the crew's streams (martha#254): the same place the launcher
@@ -258,13 +253,8 @@ export function marthaOnATerminal(run: Pick<RecordedHostRun, 'claude' | 'home' |
   const runtime = mkdtempSync(join(tmpdir(), 'm-'))
   try {
     const command = [process.execPath, MARTHA, ...args].map(quoted).join(' ')
-    const ran = spawnSync(PTY_RUNNER, ['-qefc', command, '/dev/null'], {
-      cwd: run.checkout,
-      env: environmentOf(run, 'http://127.0.0.1:9', runtime),
-      input,
-      encoding: 'utf8',
-    })
-    return { exit_code: ran.status, shown: ran.stdout + ran.stderr }
+    const ran = ranOnAPtyHoldingALifeline(PTY_RUNNER, command, { cwd: run.checkout, env: environmentOf(run, 'http://127.0.0.1:9', runtime), input }, runtime)
+    return { exit_code: ran.status, shown: ran.shown }
   } finally {
     // A launch killed mid-run leaves its read-only relay copy here (martha#117).
     removeTheTree(runtime)
@@ -458,7 +448,9 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
   // Where the launcher keeps what it is doing (martha#240): derived from the state home this run hands the launcher, so
   // the run reads the path the launcher was told and cannot quietly read none (r=1).
   const journal_directory = relayJournalDirectory(environment.XDG_STATE_HOME, run.checkout)
-  const terminal = spawn(PTY_RUNNER, ['-qefc', command, '/dev/null'], { cwd: run.checkout, env: environment, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
+  // The run's end of the lifeline its member is held by (#472): whatever becomes of this run, its end closes and the
+  // launcher takes the member down. The read end is the child's fourth stream; the write end is this process's alone.
+  const { terminal, lifeline } = spawnOnAPtyHoldingALifeline(PTY_RUNNER, command, { cwd: run.checkout, env: environment }, runtime)
   let shown = ''
   // Each stream is decoded as it arrives rather than chunk by chunk, so a character split across two chunks still
   // reads whole (martha#264). One decoder per stream, because a partial character on one is not the other's to finish.
@@ -510,6 +502,8 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
     if (exit_code === undefined && terminal.pid !== undefined) process.kill(-terminal.pid, 'SIGKILL')
     await ended
     await model.close()
+    // The run is over: its end of the lifeline goes with it, as it would if this process had died (martha#472).
+    lifeline.close()
     // A launch killed mid-run leaves its read-only relay copy here (martha#117).
     removeTheTree(runtime)
   }

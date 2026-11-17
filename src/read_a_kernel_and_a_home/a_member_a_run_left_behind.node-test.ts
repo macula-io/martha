@@ -24,7 +24,7 @@ import { STATE_DIRECTORY_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outs
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { NOT_OURS } from './launch_records_under_a_state_root.ts'
-import { THE_PLACES_A_STATE_ROOT_KEEPS } from './read_a_kernel_and_a_home.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 
 const PROJECT = 'a-project-of-this-run'
 
