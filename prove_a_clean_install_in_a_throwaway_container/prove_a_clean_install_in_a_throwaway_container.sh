@@ -170,6 +170,8 @@ SELF_TEST_ROOT=''
 SIGN_IN_MISSED=''
 MEMBER_PROVEN=''
 MEMBER_PID=''
+# Where the self-test found a kept record's headings and the tear-down, for the checks that read between them.
+KEPT_AT='' SCREEN_AT='' TORN_AT=''
 RUN_DIR=''
 
 log() {
@@ -780,6 +782,16 @@ case "${1:-}" in
     # What a remote shell hands podman: the count is how the self-test holds the quoting to one word per argument, for
     # every script a run hands the container's shell.
     if [ "${3:-}" = sh ]; then printf 'exec-argc=%s\n' "$#" >> "${standin}/calls"; fi
+    # A file the run reads straight from the container, read from the case's folder as the container's home. A file
+    # outside that home is not the container's to give.
+    if [ "${3:-}" = cat ]; then
+      . "$(dirname "$0")/member.facts"
+      shift 3
+      for file in "$@"; do
+        case "${file}" in "${home}"/*) cat "${standin}/home/${file#"${home}/"}" 2> /dev/null || true ;; esac
+      done
+      exit 0
+    fi
     case "$*" in
       *'martha start'*) exec member ;;
       *'martha init'*) if [ -f "${standin}/checkout.fails" ]; then exit 1; fi ;;
@@ -791,7 +803,14 @@ case "${1:-}" in
         . "$(dirname "$0")/member.facts"
         sh -c "$(printf '%s' "${5:-}" | sed "s#${home}#${standin}/home#g")"
         ;;
-      *.claude/projects*) cat "${standin}/transcript" 2> /dev/null; true ;;
+      # The host's transcripts, read by the run's own script against the case's folder as the container's home: a script
+      # that reads more than the transcripts is answered with more. A case whose transcript.goes exists stands for a
+      # container that stops giving them once the member has answered.
+      *.claude/projects*)
+        if [ -f "${standin}/transcript.goes" ] && [ -f "${standin}/answered" ]; then exit 125; fi
+        . "$(dirname "$0")/member.facts"
+        sh -c "$(printf '%s' "${5:-}" | sed "s#${home}#${standin}/home#g")"
+        ;;
       *'test -e'*) [ -f "${standin}/outsider.mark" ] ;;
       *npx*)
         cat "${standin}/install.words"
@@ -824,7 +843,8 @@ esac
 PODMAN
   # What the member stand-in writes into its transcript, from the names above: the outsider's heading and the command
   # its README asks for.
-  printf 'heading=%q\ncommand=%q\nhome=%q\n' "${OUTSIDER_HEADING}" "${SHELL_CALL_WORDS}" "${CONTAINER_HOME}" > "${dir}/member.facts"
+  printf 'heading=%q\ncommand=%q\nhome=%q\ntranscript=%q\n' "${OUTSIDER_HEADING}" "${SHELL_CALL_WORDS}" "${CONTAINER_HOME}" \
+    "${TRANSCRIPTS%/*/*}/the-checkout/member.jsonl" > "${dir}/member.facts"
   cat > "${dir}/member" <<'MEMBER'
 #!/usr/bin/env bash
 # A member, as far as a run can tell: its command says it started, a folder question that drops what is typed until a
@@ -835,11 +855,16 @@ standin="${MARTHA_CLEAN_INSTALL_STAND_IN:?}"
 if [ -f "${standin}/member.mute" ]; then exit 1; fi
 printf 'martha: Starting builder\r\nbuilder started, pid 4242\r\n'
 asking=''
-if [ -f "${standin}/member.trust" ]; then
+if [ -f "${standin}/member.trust" ] || [ -f "${standin}/member.leaves-at-question" ]; then
   asking=1
   printf 'Quick safety check: Yes, I trust this folder / No, exit\r\n'
 fi
-line() { printf '%s\n' "$1" >> "${standin}/transcript"; }
+# A case whose member.leaves-at-question exists stands for a member that ends at the folder question.
+if [ -f "${standin}/member.leaves-at-question" ]; then exit 0; fi
+# The transcript, where the host keeps it: under the case's folder as the container's home.
+transcript_file="${standin}/home/${transcript#"${home}/"}"
+mkdir -p "$(dirname "${transcript_file}")"
+line() { printf '%s\n' "$1" >> "${transcript_file}"; }
 answer() {
   local turn="$1" said
   said="{\"role\":\"user\",\"content\":\"${turn}\"}"
@@ -851,6 +876,7 @@ answer() {
   if [ ! -f "${standin}/member.silent" ]; then
     line '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I will read it."}]}}'
   fi
+  : > "${standin}/answered"
   if [ ! -f "${standin}/member.unread" ]; then line "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"t1\",\"type\":\"tool_result\",\"content\":\"# ${heading}\\n\"}]}}"; fi
   if [ -f "${standin}/member.no-shell" ]; then return 0; fi
   line "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"t2\",\"name\":\"Bash\",\"input\":{\"command\":\"${command}\"}}]}}"
@@ -956,9 +982,25 @@ member_case() {
   asked_for '^ok tear down: ' "${standin}/out" || { echo "the self-test: ${name} left its container" >&2; return 1; }
 }
 
+# Whether a case's failed member step kept what the member did: the transcript's heading, then the screen's, between
+# the FAIL line and the tear-down.
+kept_the_record() {
+  local out="${SELF_TEST_ROOT}/$1/out" failed_at kept_at screen_at torn_at
+  failed_at="$(grep -n '^FAIL member: ' "${out}" | head -1 | cut -d: -f1 || true)"
+  kept_at="$(grep -nxF -- "${KEPT_TRANSCRIPT_WORDS}" "${out}" | head -1 | cut -d: -f1 || true)"
+  screen_at="$(grep -nxF -- "${KEPT_SCREEN_WORDS}" "${out}" | head -1 | cut -d: -f1 || true)"
+  torn_at="$(grep -n '^ok tear down: ' "${out}" | head -1 | cut -d: -f1 || true)"
+  if [ -z "${failed_at}" ] || [ -z "${kept_at}" ] || [ -z "${screen_at}" ] || [ -z "${torn_at}" ] \
+    || [ "${failed_at}" -ge "${kept_at}" ] || [ "${kept_at}" -ge "${screen_at}" ] || [ "${screen_at}" -ge "${torn_at}" ]; then
+    echo "the self-test: $1 did not keep its transcript and screen between the failure and the tear-down" >&2
+    return 1
+  fi
+  KEPT_AT="${kept_at}" SCREEN_AT="${screen_at}" TORN_AT="${torn_at}"
+}
+
 self_test() {
   local standin case_failed=0 child waited installer_name installer_version release_version major image
-  local pulled_at created_at secret failed_at kept_at screen_at torn_at
+  local pulled_at created_at secret
   SELF_TEST_ROOT="$(mktemp -d)"
   STAND_INS="${SELF_TEST_ROOT}/bin"
   SELF="$(readlink -f "$0")"
@@ -1028,11 +1070,18 @@ self_test() {
   member_case 'claude-code-at-another-version' claude.version '0.0.1 (Claude Code)' 1 "^FAIL claude code: .*not the recorded " || case_failed=1
   member_case 'the-checkout-cannot-be-made' checkout.fails '' 1 '^FAIL checkout: ' || case_failed=1
   member_case 'the-member-never-starts' member.mute '' 1 '^FAIL member: the member never said ' || case_failed=1
+  kept_the_record 'the-member-never-starts' || case_failed=1
+  member_case 'the-member-leaves-at-the-folder-question' member.leaves-at-question '' 1 '^FAIL member: the member ended at the folder question$' || case_failed=1
+  kept_the_record 'the-member-leaves-at-the-folder-question' || case_failed=1
   member_case 'a-turn-the-host-never-takes' member.deaf '' 1 "^FAIL member: the owner's turn never reached the host's transcript, typed twice" || case_failed=1
+  kept_the_record 'a-turn-the-host-never-takes' || case_failed=1
   [ "$(grep -cF -- "${OWNER_TURN}" "${root}/a-turn-the-host-never-takes/typed")" = 2 ] || { echo "the self-test: a turn the host never took was not typed again, once" >&2; case_failed=1; }
   member_case 'only-a-request-blob-holds-it' member.blob-only '' 1 "^FAIL member: the owner's turn never reached" || case_failed=1
   member_case 'a-member-that-never-answers' member.silent '' 1 '^FAIL member: the member gave no answer$' || case_failed=1
   member_case 'a-member-that-reads-nothing' member.unread '' 1 "^FAIL member: the member did not read the outsider's README$" || case_failed=1
+  kept_the_record 'a-member-that-reads-nothing' || case_failed=1
+  member_case 'the-transcript-goes-after-the-answer' transcript.goes '' 1 '^FAIL member: the container could not give the host transcript$' || case_failed=1
+  kept_the_record 'the-transcript-goes-after-the-answer' || case_failed=1
   # A member step that fails keeps what the member did in the log before the tear-down: the transcript as the checks
   # read it and the screen. The credentials hold words of their own here, and none of them may reach the log.
   standin="${root}/a-failed-member-keeps-its-record"
@@ -1042,19 +1091,13 @@ self_test() {
   : > "${standin}/member.unread"
   printf '%s\n' "${secret}" > "${standin}/home/${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}"
   expect_status 1 "${standin}" 'a-host' || case_failed=1
-  failed_at="$(grep -n '^FAIL member: ' "${standin}/out" | head -1 | cut -d: -f1 || true)"
-  kept_at="$(grep -nxF -- "${KEPT_TRANSCRIPT_WORDS}" "${standin}/out" | head -1 | cut -d: -f1 || true)"
-  screen_at="$(grep -nxF -- "${KEPT_SCREEN_WORDS}" "${standin}/out" | head -1 | cut -d: -f1 || true)"
-  torn_at="$(grep -n '^ok tear down: ' "${standin}/out" | head -1 | cut -d: -f1 || true)"
-  if [ -z "${failed_at}" ] || [ -z "${kept_at}" ] || [ -z "${screen_at}" ] || [ -z "${torn_at}" ] \
-    || [ "${failed_at}" -ge "${kept_at}" ] || [ "${kept_at}" -ge "${screen_at}" ] || [ "${screen_at}" -ge "${torn_at}" ]; then
-    echo 'the self-test: a failed member step did not keep its transcript and screen between the failure and the tear-down' >&2
-    case_failed=1
-  else
-    sed -n "${kept_at},${screen_at}p" "${standin}/out" | grep -qF -- "${TURN_LINE}" \
+  if kept_the_record 'a-failed-member-keeps-its-record'; then
+    sed -n "${KEPT_AT},${SCREEN_AT}p" "${standin}/out" | grep -qF -- "${TURN_LINE}" \
       || { echo 'the self-test: a failed member step kept no transcript' >&2; case_failed=1; }
-    sed -n "${screen_at},${torn_at}p" "${standin}/out" | grep -qF -- "${MEMBER_STARTED_WORDS}" \
+    sed -n "${SCREEN_AT},${TORN_AT}p" "${standin}/out" | grep -qF -- "${MEMBER_STARTED_WORDS}" \
       || { echo 'the self-test: a failed member step kept no screen' >&2; case_failed=1; }
+  else
+    case_failed=1
   fi
   if grep -qF -- "${secret}" "${standin}/out" "${standin}/err"; then echo 'the self-test: a failed member step put the credentials in the log' >&2; case_failed=1; fi
   member_case 'a-member-that-asks-no-shell-call' member.no-shell '' 1 '^FAIL member: the member asked for no shell call of ' || case_failed=1
@@ -1308,7 +1351,7 @@ self_test() {
     the-owner-never-signs-in the-owner-ends-without-signing-in claude-code-at-another-version the-checkout-cannot-be-made \
     the-member-never-starts a-turn-the-host-never-takes only-a-request-blob-holds-it a-member-that-asks-no-shell-call \
     the-command-did-not-run the-folder-question a-member-that-never-answers a-member-that-reads-nothing \
-    a-failed-member-keeps-its-record; do
+    a-failed-member-keeps-its-record the-member-leaves-at-the-folder-question the-transcript-goes-after-the-answer; do
     if [ -e "${root}/${standin}/container.present" ]; then
       echo "the self-test: the ${standin} run left its container behind" >&2
       case_failed=1
