@@ -5,7 +5,7 @@
 // read from what the call itself says, never from a name given to it — the same rule the shell gate reads text by.
 //
 //   land     the crew's own tools that move the default branch, under whatever name the host calls them by
-//   push     a shell command that runs `git push`, wherever in its words that sits
+//   push     a shell command that runs `git push`, wherever in its words that sits and however git is named
 //   tag      a shell command that runs `git tag`; `git push --tags` is both, and needs both allowed
 //   handoff  a message whose first line readACrewLine reads as a HANDOFF for the package this member holds
 //
@@ -81,8 +81,15 @@ export function theWordsOfACommand(command: string): readonly string[] {
   return words
 }
 
-/** git's own options that take the word after them: `git -C <dir> push` and `git -c <key>=<value> push` run push. */
-const GIT_OPTIONS_THAT_TAKE_A_WORD = new Set(['-C', '-c'])
+/**
+ * git's own options that take the word after them, so the command word sits past it: `git -C <dir> push`,
+ * `git -c <key>=<value> push`, `git --git-dir <dir> push`, `git --work-tree <dir> push`, `git --namespace <name> push`
+ * and `git --config-env <key>=<value> push` all run push. An option written with `=` takes no word of its own.
+ */
+const GIT_OPTIONS_THAT_TAKE_A_WORD = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'])
+
+/** Whether a word runs git: `git` itself, or a path to it, `/usr/bin/git` and `./git` alike. */
+const isGit = (word: string | undefined): boolean => word !== undefined && (word === 'git' || word.endsWith('/git'))
 
 /** Where git's command word sits, past git's own options, and what it is: `git -C /repo push` runs `push` in /repo. */
 interface TheCommandOfGit {
@@ -107,9 +114,9 @@ function theWordsOfThePush(words: readonly string[], at: number): readonly strin
   return words.slice(at + 1, end === -1 ? words.length : end)
 }
 
-/** The acts the word at `at` begins, when it is `git`: none for any other word. */
+/** The acts the word at `at` begins, when it runs git: none for any other word. */
 function theActsAt(words: readonly string[], at: number): readonly AContractAct[] {
-  if (words[at] !== 'git') return []
+  if (!isGit(words[at])) return []
   const command = theCommandOfGit(words, at)
   if (command.word === 'tag') return ['tag']
   if (command.word !== 'push') return []

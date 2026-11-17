@@ -79,6 +79,27 @@ test('a push inside parentheses is a push', () => {
   assert.deepEqual(theActsOfACall(aShellCall('(git push)'), PACKAGE), ['push'])
 })
 
+test("a push behind git's own --git-dir is a push", () => {
+  assert.deepEqual(theActsOfACall(aShellCall('git --git-dir /r push'), PACKAGE), ['push'])
+})
+
+test("a push behind git's own --work-tree is a push", () => {
+  assert.deepEqual(theActsOfACall(aShellCall('git --work-tree /r push'), PACKAGE), ['push'])
+})
+
+test("a push behind git's own --namespace is a push", () => {
+  assert.deepEqual(theActsOfACall(aShellCall('git --namespace n push'), PACKAGE), ['push'])
+})
+
+test("a push behind git's own --config-env is a push", () => {
+  assert.deepEqual(theActsOfACall(aShellCall('git --config-env k=v push'), PACKAGE), ['push'])
+})
+
+test('a push run through a path to git is a push', () => {
+  assert.deepEqual(theActsOfACall(aShellCall('/usr/bin/git push'), PACKAGE), ['push'])
+  assert.deepEqual(theActsOfACall(aShellCall('./git push'), PACKAGE), ['push'])
+})
+
 test('words that only talk about a push are no act, quoted, and sh -c stays out of scope', () => {
   assert.deepEqual(theActsOfACall(aShellCall('echo "git push"'), PACKAGE), [])
   assert.deepEqual(theActsOfACall(aShellCall('sh -c "git push"'), PACKAGE), [])
