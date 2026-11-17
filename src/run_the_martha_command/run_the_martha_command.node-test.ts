@@ -17,7 +17,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
 import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, OWNERS_ACT_NEEDS_A_TERMINAL, SAID_BY, startedLine, USAGE } from './run_the_martha_command.ts'
+import { CLEAR_THE_TERMINAL, EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, OWNERS_ACT_NEEDS_A_TERMINAL, SAID_BY, startedLine, USAGE } from './run_the_martha_command.ts'
 import { MEMBER_SWITCH } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { NOT_IN_A_MEMBER } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/relay_protocol.ts'
@@ -465,6 +465,55 @@ test('#312: martha stop with nothing running says so and ends done; a name the c
   const stranger = marthaWith(place, runtimeOf(place), STOP, 'nobody')
   assert.equal(stranger.status, EXIT_REFUSED)
   assert.match(stranger.err, /nobody is not on this crew \(its members are /)
+})
+
+// --- martha crew (martha#572) --------------------------------------------------------------------------------------
+
+/** How long `martha crew` may take to draw its first frame before the test gives up on it. */
+const FIRST_FRAME_MS = 20_000
+
+test('#572: martha crew takes no argument', (t) => {
+  const place = placeFor(t)
+  assert.equal(marthaWith(place, runtimeOf(place), 'crew', 'Terra').status, EXIT_USAGE)
+  assert.ok(USAGE.includes('martha ls | martha crew |'), USAGE)
+})
+
+test('#572: martha crew clears the terminal and draws the header and every declared member, in the declaration order', async (t) => {
+  const place = placeFor(t)
+  assert.equal(martha(place, 'init').status, 0)
+  const declaration = JSON.parse(readFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as { members: { name: string }[] }
+  const names = declaration.members.map((member) => member.name)
+  const strip = spawn(process.execPath, [MARTHA, 'crew'], {
+    cwd: place.root,
+    env: { PATH: process.env.PATH, HOME: place.home, XDG_STATE_HOME: join(place.home, 'state'), GIT_CONFIG_NOSYSTEM: '1', ...runtimeOf(place) },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  t.after(() => strip.kill('SIGKILL'))
+  let out = ''
+  let err = ''
+  strip.stderr.on('data', (chunk: Buffer) => void (err += chunk.toString('utf8')))
+  const drawn = await new Promise<boolean>((resolve) => {
+    const giveUp = setTimeout(() => resolve(false), FIRST_FRAME_MS)
+    strip.stdout.on('data', (chunk: Buffer) => {
+      out += chunk.toString('utf8')
+      if (out.split('\n').length > names.length + 1) {
+        clearTimeout(giveUp)
+        resolve(true)
+      }
+    })
+    strip.on('exit', () => {
+      clearTimeout(giveUp)
+      resolve(false)
+    })
+  })
+  const ended = new Promise((resolve) => strip.on('close', resolve))
+  strip.kill('SIGTERM')
+  await ended
+  assert.ok(drawn, `martha crew drew no whole frame: out ${JSON.stringify(out)} err ${JSON.stringify(err)}`)
+  assert.ok(out.startsWith(CLEAR_THE_TERMINAL), `the frame does not open by clearing the terminal: ${JSON.stringify(out)}`)
+  const [header, ...lines] = out.slice(CLEAR_THE_TERMINAL.length).trimEnd().split('\n')
+  assert.equal(header, `0/${names.length} online · 0 waiting · 0 need you`)
+  assert.deepEqual(lines, names.map((name) => `${name}: idle ·  0/1`), out)
 })
 
 // --- martha restart (martha#312) ------------------------------------------------------------------------------------
