@@ -21,6 +21,13 @@
 // a fact does not fire. That is deliberate. A member's shell must not wait on, or be refused by, something the guard
 // could not look at — failing open is recoverable, and every miss is visible in the member's row and in the scan.
 //
+// One limit follows from that and is stated here rather than discovered: a clone whose origin names no default branch
+// (`symbolic-ref refs/remotes/origin/HEAD` answers nothing) leaves the switch rule unable to tell a way off the branch
+// from a way back onto it, so the rule does not fire and the member's `checkout` of another branch is not refused. It
+// is not a hole the guard can close on its own: refusing there would refuse the very call that puts the clone right.
+// The drift check names such a clone until someone sets its head, which is the half of the pair that reports rather
+// than refuses (Supervisor's ruling, 2026-11-18).
+//
 // Ownership is read the way ../open_and_finish_a_worktree writes it: every branch the crew's worktrees are on is
 // `<member>/<slug>`, so the text before the first `/` is the member, compared with ../declare_crew's sameMemberName.
 // One rule for both, so a branch this guard calls another member's is exactly one `worktree_finish` would not remove.
