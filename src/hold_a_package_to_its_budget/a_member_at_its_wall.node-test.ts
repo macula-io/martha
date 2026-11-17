@@ -107,6 +107,7 @@ function aCrewWithABudget(ledger: LedgerHost): CrewTools {
     thePredecessorOf: async () => null,
     theSpendInForce: (session_id) => budget.theSpendInForce(session_id),
     noteTheCallCounted: (session_id, own_name) => budget.noteTheCallCounted(session_id, own_name),
+    theContractInForce: async () => undefined,
     theReviewModelOfTheCall: async () => null,
     theReviewModel: async () => null,
     noteTheCallsAnswer: () => undefined,

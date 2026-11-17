@@ -78,6 +78,7 @@ function aCrewHolding(ends: TheEndsHold): CrewTools {
     tools: [],
     answer: async () => ({ answer: '' }),
     startBeating: () => () => {},
+    theContractInForce: async () => undefined,
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
     ends,

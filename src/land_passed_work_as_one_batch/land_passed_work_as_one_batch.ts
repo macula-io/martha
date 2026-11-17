@@ -32,7 +32,8 @@ import {
   type LandedWork,
 } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
 import { A_HOLD_REFUSES, noneOfTheseIsHeld } from '../hold_a_package_back_from_a_batch/hold_a_package_back_from_a_batch.ts'
-import { announceAct, concludeAct, noteMilestone, readLedger, type LedgerHost, type LedgerRow, type Outcome } from '../log_ledger/log_ledger.ts'
+import { PackagePaused, RecoveryDecided, noneOfTheseIsPaused, sendAnActOnEveryPackageAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
+import { noteMilestone, readLedger, type LedgerHost, type LedgerRow } from '../log_ledger/log_ledger.ts'
 import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { mergedInMemory, whatEachPathClashesWith, type AFirstParent, type AStep } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
@@ -130,12 +131,6 @@ interface TheCutBatch {
   readonly base: string
 }
 
-/** An announcement kept in one package's ledger, waiting for the outcome of the act it announces. */
-interface Announcement {
-  readonly package: string
-  readonly at: number
-}
-
 /**
  * Lands a batch of passed work: one integration branch, one `--no-ff` merge per package at the head its reviewer
  * passed, and one push. Answers with the range for `verify_range`, or why nothing was landed.
@@ -170,8 +165,9 @@ export async function fastForwardAfterTheOwnersYes(host: LandingHost, member: st
   if (forward.packages.length === 0) return no('the fast-forward names no package it lands.')
   const held = await noneOfTheseIsHeld(host, forward.packages, NOTHING_PUSHED)
   if ('refused' in held) return held
+  // A package that stands paused is refused by the recovery itself, before any ledger is written or git runs.
   const what = `the default branch of ${forward.path} fast-forwarded to ${forward.tip}`
-  const sent = await pushForEveryPackage(host, member, forward.packages, what, () => fastForward(host, forward))
+  const sent = await pushForEveryPackage(host, member, forward.packages, { what, send: () => fastForward(host, forward), look: () => theDefaultBranchHoldsTheTip(host, forward) })
   if ('refused' in sent) return sent
   // The packages are on the default branch: that is the fact a package's waits end on (martha#320), so each package's
   // ledger is told, by the act that landed it, with the range that landed. Nothing is written before the push is sent or
@@ -220,6 +216,8 @@ export async function theBatchMayStart(host: LandingHost, batch: TheBatch): Prom
   if (batch.packages.length === 0) return no('a batch names no package to land.')
   const held = await noneOfTheseIsHeld(host, batch.packages, NOTHING_LANDED)
   if ('refused' in held) return held
+  const paused = await noneOfTheseIsPaused(host, batch.packages, NOTHING_LANDED)
+  if ('refused' in paused) return paused
   const fetched = await git(host, batch.path, ['fetch', '--quiet', '--prune', 'origin'])
   if (fetched.exit_code !== 0) return no(`git fetch did not work in ${batch.path}: ${saidBy(fetched)}.`)
   return { ok: true }
@@ -576,7 +574,11 @@ async function pushTheBatch(host: LandingHost, member: string, cut: TheCutBatch,
   const landed = merged.landed.map((one) => `${one.package} (PR ${String(one.pr)})`).join(', ')
   const what = `the batch ${cut.branch} of ${landed}`
   const packages = merged.landed.map((one) => one.package)
-  const sent = await pushForEveryPackage(host, member, packages, what, () => pushTheBranch(host, cut.batch.path, cut.branch, tip))
+  const sent = await pushForEveryPackage(host, member, packages, {
+    what,
+    send: () => pushTheBranch(host, cut.batch.path, cut.branch, tip),
+    look: () => theBranchOnOriginIsAt(host, cut.batch.path, cut.branch, tip),
+  })
   if ('refused' in sent) return sent
   const redone_said =
     merged.redone.length === 0
@@ -616,72 +618,50 @@ const branchOf = (default_branch: string): string =>
   default_branch.startsWith(THE_ORIGIN_PREFIX) ? default_branch.slice(THE_ORIGIN_PREFIX.length) : default_branch
 
 /**
- * Runs one outward act that lands several packages: every package's ledger announces it before it runs, and every
- * announcement gets the outcome afterwards. A package whose row cannot be kept stops the act before it runs, so no
- * package is told afterwards that something was sent.
+ * Runs one outward act that lands several packages, through the recovery (martha#512 slice 2): every package's ledger
+ * announces it before it runs and gets its outcome afterwards, a failure is read on origin through `look` before
+ * anything is sent again, and the act is sent once more at most. A decision not to send it again is answered in the
+ * recovery's own words.
  */
 async function pushForEveryPackage(
   host: LandingHost,
   member: string,
   packages: readonly string[],
-  what: string,
-  send: () => Promise<string>,
+  push: { readonly what: string; readonly send: () => Promise<string>; readonly look: () => Promise<AnInspection> },
 ): Promise<{ readonly sent: string } | Refusal> {
-  const announced = await announceForEvery(host, member, packages, what)
-  if ('refused' in announced) return announced
-  let sent: string
   try {
-    sent = await send()
-  } catch (error) {
-    return notSentTheWayItEnded(host, member, announced.ok, what, error)
+    return { sent: await sendAnActOnEveryPackageAndRecover(host, { packages, member, act: { kind: 'push', what: push.what } }, push.send, push.look) }
+  } catch (failure) {
+    if (failure instanceof RecoveryDecided || failure instanceof PackagePaused) return no(failure.told)
+    return no(`${push.what} was not sent: ${detailOf(failure)}.`)
   }
-  const not_kept = await concludeEvery(host, member, announced.ok, { succeeded: true, detail: sent })
-  if (not_kept === undefined) return { sent }
-  return no(`${what} was sent (${sent}), and its outcome was not recorded (${not_kept}): check what happened before sending it again.`)
 }
 
-/** Every package's ledger announces the act, or the act does not run; the packages already announced are told so. */
-async function announceForEvery(host: LandingHost, member: string, packages: readonly string[], what: string): Promise<Step<readonly Announcement[]>> {
-  const announced: Announcement[] = []
-  for (const work_package of packages) {
-    try {
-      announced.push({ package: work_package, at: await announceAct(host, { package: work_package, member, act: { kind: 'push', what } }) })
-    } catch (error) {
-      const not_kept = await concludeEvery(host, member, announced, {
-        succeeded: false,
-        detail: `it was not sent: the row for ${work_package} was not kept`,
-      })
-      const recorded = not_kept === undefined ? '' : ` What was kept of the others could not be concluded either (${not_kept}).`
-      return no(`${what} was not sent: its row was not kept for ${work_package} (${detailOf(error)}).${recorded}`)
-    }
-  }
-  return { ok: announced }
+/** What origin holds of one branch: it is at the tip, it is not, or git could not say (thrown, so the look cannot tell). */
+async function theBranchOnOriginIsAt(host: LandingHost, path: string, branch: string, tip: string): Promise<AnInspection> {
+  const listed = await git(host, path, ['ls-remote', 'origin', `refs/heads/${branch}`])
+  if (listed.exit_code !== 0) throw new Error(`git ls-remote did not work in ${path}: ${saidBy(listed)}`)
+  const at = listed.stdout.trim().split(/\s+/)[0] ?? ''
+  const read = `origin's ${branch}`
+  if (at === tip) return { state: 'it_happened', read, found: `${branch} at ${tip}` }
+  return { state: 'it_did_not_happen', read, found: at === '' ? `no ${branch}` : `${branch} at ${at}, not ${tip}` }
 }
 
-/** The act failed: its outcome is kept as a failure, and the answer says what git said and whether that was recorded. */
-async function notSentTheWayItEnded(
-  host: LandingHost,
-  member: string,
-  announced: readonly Announcement[],
-  what: string,
-  error: unknown,
-): Promise<Refusal> {
-  const not_kept = await concludeEvery(host, member, announced, { succeeded: false, detail: detailOf(error) })
-  const recorded = not_kept === undefined ? '' : ` What became of it was not recorded either (${not_kept}).`
-  return no(`${what} was refused: ${detailOf(error)}.${recorded}`)
-}
-
-/** The outcome of the act, kept in every package's ledger; the first failure, when one was not kept. */
-async function concludeEvery(host: LandingHost, member: string, announced: readonly Announcement[], outcome: Outcome): Promise<string | undefined> {
-  let first_not_kept: string | undefined
-  for (const one of announced) {
-    try {
-      await concludeAct(host, { package: one.package, member, announced_at: one.at, outcome })
-    } catch (error) {
-      first_not_kept ??= detailOf(error)
-    }
-  }
-  return first_not_kept
+/**
+ * Whether origin's default branch holds the tip: it does once the fast-forward happened, and still does after the branch
+ * moved on past it, so a landing that went through is never pushed again (Mercurius, slice 2's ruling).
+ */
+async function theDefaultBranchHoldsTheTip(host: LandingHost, forward: TheFastForward): Promise<AnInspection> {
+  const fetched = await git(host, forward.path, ['fetch', '--quiet', 'origin'])
+  if (fetched.exit_code !== 0) throw new Error(`git fetch did not work in ${forward.path}: ${saidBy(fetched)}`)
+  const origin = await readTheOriginACloneHas(host, forward.path)
+  if ('refused' in origin) throw new Error(origin.refused)
+  const branch = origin.origin.default_branch
+  const holds = await git(host, forward.path, ['merge-base', '--is-ancestor', forward.tip, branch])
+  const read = `origin's ${branchOf(branch)}`
+  if (holds.exit_code === 0) return { state: 'it_happened', read, found: `${branchOf(branch)} holds ${forward.tip}` }
+  if (holds.exit_code === 1) return { state: 'it_did_not_happen', read, found: `${branchOf(branch)} does not hold ${forward.tip}` }
+  throw new Error(`git merge-base did not work in ${forward.path}: ${saidBy(holds)}`)
 }
 
 /** What a failure says, as one line. */

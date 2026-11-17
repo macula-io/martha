@@ -121,7 +121,12 @@ function namespaceIn(proc_root: string): string | undefined {
   }
 }
 
-/** Where this machine's kernel shows its processes: every reader of the live process tree takes it from here. */
+/**
+ * Where this machine's kernel shows its processes: every reader of the live process tree takes it from here. The relay
+ * (../claude_code_relay) is the one reader that holds its own copy of the word, because the host installs the relay as a
+ * copy of its own folder and a hooks module imports only its own files (martha#437); the relay's tests read this
+ * constant, so its copy cannot drift from this one unseen.
+ */
 export const PROC_ROOT = '/proc'
 
 /** The live kernel's process identities. */
