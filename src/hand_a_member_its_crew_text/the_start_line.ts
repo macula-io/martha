@@ -7,6 +7,7 @@
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import { theContractPartOf } from '../keep_the_package_contract/keep_the_package_contract.ts'
+import { theSpendPartOfTheStart } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
 import { theStandingItemsOf } from '../keep_the_supervisors_standing_items/the_standing_tools.ts'
 import { theStandingPartOfTheStart, todayOf } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { mayKeepTheOwnersList } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -50,8 +51,11 @@ export async function theLineToHandAtStart(asked: TheStartLineAsked): Promise<Th
   const standing = await theStandingPartHanded(asked)
   const held = asked.held?.holds ?? ''
   const contract = await theContractPartOf(asked.ledger, held)
+  // What the package has spent of its budget, and the units this host cannot count (martha#513, slice 3): a session that
+  // starts at the wall is told so, rather than discovering it on its first call.
+  const spend = await theSpendPartOfTheStart(asked.ledger, held, asked.now)
   const acts = await theOpenActsHanded(asked)
-  const line = [contract, standing, acts].filter((part) => part !== null && part !== undefined).join('\n\n')
+  const line = [contract, spend, standing, acts].filter((part) => part !== null && part !== undefined).join('\n\n')
   if (line === '') return null
   const taken_in: TurnSource[] = []
   if (contract !== undefined) taken_in.push(PACKAGE_CONTRACT_SOURCE)

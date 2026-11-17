@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
+import { BACKLOG } from '../declare_crew/declare_crew.ts'
 import { BACKLOG_READ_INTERVAL_MS, THE_READ_FILE, theBacklogNow, type TheBacklogReader } from './keep_the_backlog_read.ts'
 import { unheldWorkOver, type UnheldWorkAsked } from './unheld_work_tool.ts'
 import { UNHELD_WORK_PATH } from './unheld_work_path.ts'
@@ -17,7 +18,7 @@ function aPlace(): CrewPlace & { readonly files: Map<string, string> } {
   const files = new Map<string, string>()
   return {
     files,
-    path: '/a-crew-store/backlog',
+    path: `/a-crew-store/${BACKLOG}`,
     keep: (name, text) => void files.set(name, text),
     read: (name) => (files.has(name) ? { text: files.get(name) ?? '' } : undefined),
     names: () => [...files.keys()],

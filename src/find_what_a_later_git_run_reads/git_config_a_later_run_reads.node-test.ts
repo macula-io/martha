@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { entriesInText } from './git_config_a_later_run_reads.ts'
+import { CONFIG, entriesInText } from './git_config_a_later_run_reads.ts'
 
 // Mercurius's G6 (martha#192 r=3): git reads `[core] ; note` as the header and
 // nothing else — the key on the next line is its own entry (measured, 2.56.0, and in
@@ -17,12 +17,12 @@ import { entriesInText } from './git_config_a_later_run_reads.ts'
 // bracket). The guard called the line an unmodelled form and refused every write into
 // the checkout, which is the refusing side but refuses a config git reads perfectly.
 test('a comment after a section header is no entry, and the key below it is git\'s (#192 r=3)', () => {
-  assert.deepEqual(entriesInText('/scratch/config', '[core] ; note\n\tkey = v\n'), { kind: 'entries', entries: [{ file: '/scratch/config', line: 2, key: 'core.key', value: 'v' }] })
+  assert.deepEqual(entriesInText(`/scratch/${CONFIG}`, '[core] ; note\n\tkey = v\n'), { kind: 'entries', entries: [{ file: `/scratch/${CONFIG}`, line: 2, key: 'core.key', value: 'v' }] })
 })
 
 test('an old-style subsection is lowercased as git lowercases it (#192 r=2)', () => {
   // git reads `[sec.Sub]` as the section `sec.sub` (measured), and a guard that kept
   // the case would read a key under a name git never looks the key up by.
-  const read = entriesInText('/scratch/config', '[sec.Sub]\n\tkey = v\n')
-  assert.deepEqual(read, { kind: 'entries', entries: [{ file: '/scratch/config', line: 2, key: 'sec.sub.key', value: 'v' }] })
+  const read = entriesInText(`/scratch/${CONFIG}`, '[sec.Sub]\n\tkey = v\n')
+  assert.deepEqual(read, { kind: 'entries', entries: [{ file: `/scratch/${CONFIG}`, line: 2, key: 'sec.sub.key', value: 'v' }] })
 })
