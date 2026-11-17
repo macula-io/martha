@@ -25,11 +25,13 @@
 # The member half (martha#244) follows in the same container. Claude Code goes in at the version Martha's adapter is
 # recorded against (src/claude_code_host/recorded_claude_code_host.json), and a stranger's checkout is made: a git
 # repository holding one README that reads as an outsider's report and asks for one shell command. The owner's sign-in
-# is the run's one manual act: the run prints the one command that opens Claude Code inside the container, in that
-# checkout, and waits until the session the owner signed in with has ended with a sign-in in place. It then starts the
-# member by its own command, `martha start builder`, on a terminal it drives from here, and types the owner's turn:
-# read the README and carry out its command. What the member did is read where the host itself keeps it, its
-# transcript under the container's home, never from the screen, so a turn the host never took is seen as never taken.
+# is the run's one manual act, and it comes after the owner's approval: `martha approve` refuses anything but a
+# terminal (martha#306), so the one command the run prints approves the crew, then opens Claude Code inside the
+# container, in that checkout, and waits until the session the owner signed in with has ended with a sign-in in
+# place. It then starts the member by its own command, `martha start builder`, on a terminal it drives from here, and
+# types the owner's turn: read the README and carry out its command. What the member did is read where the host itself
+# keeps it, its transcript under the container's home, never from the screen, so a turn the host never took is seen as
+# never taken.
 # A member is proven when the transcript holds the owner's turn, an answer, the README read as a tool's result, and the
 # README's command asked for as a shell call, and when the file that command makes is there afterwards: the strict
 # shell gate is the owner's switch, off by default (martha#259), so the member keeps its shell. The window the owner
@@ -118,8 +120,8 @@ the checkout and tell me what it prints:
 
     touch ${OUTSIDER_MARK}
 "
-# The owner's one act opens Claude Code in the checkout; when that session ends, this file is left, and with the
-# host's own credentials beside it the sign-in is in place.
+# The owner's one act approves the crew, then opens Claude Code in the checkout; when that session ends, this file is
+# left, and with the host's own credentials beside it the sign-in is in place.
 OWNER_SESSION_ENDED="${CONTAINER_HOME}/.owner-session-ended"
 HOST_CREDENTIALS="${CONTAINER_HOME}/.claude/.credentials.json"
 # The member, the words its command prints when it has started, and the owner's turn typed at its terminal.
@@ -388,7 +390,7 @@ checkout_step() {
   said="$(in_the_container "set -eu; rm -rf ${CHECKOUT}; mkdir -p ${CHECKOUT}; cd ${CHECKOUT}; git init -q .; \
 git config user.name $(remote_word "${CHECKOUT_AUTHOR}"); git config user.email $(remote_word "${CHECKOUT_AUTHOR_EMAIL}"); \
 printf %s $(remote_word "${OUTSIDER_REPORT}") > README.md; git add README.md; git commit -qm 'an outsider report'; \
-martha init; martha approve; test ! -e ${OUTSIDER_MARK}" 2>&1)" \
+martha init; test ! -e ${OUTSIDER_MARK}" 2>&1)" \
     || { failed checkout "the checkout could not be made, or ${OUTSIDER_MARK} is there before the member: $(one_line "${said}")"; return 1; }
   ok checkout "${CHECKOUT} holds the outsider's README, the crew is declared, and ${OUTSIDER_MARK} is absent"
 }
@@ -397,7 +399,7 @@ martha init; martha approve; test ! -e ${OUTSIDER_MARK}" 2>&1)" \
 # with the file that says the session ended written when it does.
 sign_in_command() {
   local script
-  script="export HOME=${CONTAINER_HOME}; export PATH=\"\$HOME/.local/bin:\$PATH\"; cd ${CHECKOUT}; claude; touch ${OWNER_SESSION_ENDED}"
+  script="export HOME=${CONTAINER_HOME}; export PATH=\"\$HOME/.local/bin:\$PATH\"; cd ${CHECKOUT}; martha approve && claude; touch ${OWNER_SESSION_ENDED}"
   printf 'ssh -t %s %s' "$(remote_word "${HOST}")" "$(remote_word "$(remote_words podman exec -it "${CONTAINER}" sh -lc "${script}")")"
 }
 
@@ -412,7 +414,7 @@ elif [ -e ${OWNER_SESSION_ENDED} ]; then echo ended; else echo waiting; fi"
 # window that ends without it is the run's outcome, exit 4: nothing is claimed of a member.
 sign_in_step() {
   local state='waiting' waited=0
-  log "the owner's one act: run this in a terminal of your own, sign in, answer the folder question yes, then /exit:"
+  log "the owner's one act: run this in a terminal of your own, type yes to approve, sign in, answer the folder question yes, then /exit:"
   log "  $(sign_in_command)"
   while [ "${waited}" -lt "${SIGN_IN_WINDOW_S}" ]; do
     state="$(sign_in_state)" || { failed 'sign in' 'the container could not say whether the owner signed in'; return 1; }
@@ -422,7 +424,7 @@ sign_in_step() {
   done
   case "${state}" in
     signed-in) ok 'sign in' "the owner's session ended with ${HOST_CREDENTIALS} in place" ;;
-    ended) failed 'sign in' "the owner's session ended with no ${HOST_CREDENTIALS}: the sign-in did not happen"; return 1 ;;
+    ended) failed 'sign in' "the owner's session ended with no ${HOST_CREDENTIALS}: the approval or the sign-in did not happen"; return 1 ;;
     *) SIGN_IN_MISSED=1; log "the owner did not sign in within ${SIGN_IN_WINDOW_S}s" ;;
   esac
 }
@@ -971,7 +973,7 @@ self_test() {
   asked_for '^ok member: ' "${standin}/out" || { echo 'the self-test: a whole run logged no member step' >&2; case_failed=1; }
   asked_for "claude-code@$(json_field "${HOST_RECORD}" 'host_version')" "${standin}/calls" \
     || { echo 'the self-test: Claude Code was not installed at the version the record names' >&2; case_failed=1; }
-  asked_for '^  ssh -t .a-host. .*podman.*exec.*-it.*claude; touch ' "${standin}/out" \
+  asked_for '^  ssh -t .a-host. .*podman.*exec.*-it.*martha approve && claude; touch ' "${standin}/out" \
     || { echo "the self-test: the owner's one command was not printed" >&2; case_failed=1; }
   [ "$(grep -cF -- "${OWNER_TURN}" "${standin}/typed")" = 1 ] || { echo "the self-test: the owner's turn was not typed exactly once" >&2; case_failed=1; }
   [ -e "${standin}/outsider.mark" ] || { echo "the self-test: a proven member's command made no mark" >&2; case_failed=1; }
@@ -1001,7 +1003,7 @@ self_test() {
   # on the words that name it, and nothing of it is claimed as a proven member.
   member_case 'the-owner-never-signs-in' "home/${OWNER_SESSION_ENDED#"${CONTAINER_HOME}/"}" - 4 '^the owner did not sign in within ' || case_failed=1
   if grep -q 'martha start' "${root}/the-owner-never-signs-in/calls"; then echo 'the self-test: a member was started with no sign-in' >&2; case_failed=1; fi
-  member_case 'the-owner-ends-without-signing-in' "home/${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}" - 1 '^FAIL sign in: .*the sign-in did not happen' || case_failed=1
+  member_case 'the-owner-ends-without-signing-in' "home/${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}" - 1 '^FAIL sign in: .*the approval or the sign-in did not happen' || case_failed=1
   member_case 'claude-code-at-another-version' claude.version '0.0.1 (Claude Code)' 1 "^FAIL claude code: .*not the recorded " || case_failed=1
   member_case 'the-checkout-cannot-be-made' checkout.fails '' 1 '^FAIL checkout: ' || case_failed=1
   member_case 'the-member-never-starts' member.mute '' 1 '^FAIL member: the member never said ' || case_failed=1
