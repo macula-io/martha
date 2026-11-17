@@ -20,6 +20,7 @@
 // same machine — one the gate is not holding — can type it, because a terminal is the same OS user's. Martha's gate
 // refuses the shell only and has no protected-writes class yet; this slice does not pretend to close that (A13).
 
+import { sameMemberName } from '../declare_crew/declare_crew.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import type { Row, RowStore } from '../host_contract/host_contract.ts'
 import { OWNER_AT_THE_TERMINAL, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -65,7 +66,7 @@ const refused = (refusal: string): TheRelease => ({ released: false, refusal })
  */
 export async function releaseAHeldMember(asked: ReleaseAsked): Promise<TheRelease> {
   if (!asked.onATerminal) return refused(A_RELEASE_NEEDS_THE_OWNERS_TERMINAL)
-  const member = asked.members.find((name) => name.toLowerCase() === asked.member.toLowerCase())
+  const member = asked.members.find((name) => sameMemberName(name, asked.member))
   if (member === undefined) {
     return refused(`the declaration does not know ${asked.member}, so nothing was released (its members are ${asked.members.join(', ')}).`)
   }
