@@ -33,6 +33,8 @@ export const FOLDS_THAT_ARE_NOT_NAMES: readonly AFoldThatIsNotAName[] = [
   { path: 'attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts', folds: 2, reason: A_NODE_ID },
   { path: 'check_nothing_private_gets_in/check_nothing_private_gets_in.ts', folds: 6, reason: 'a GitHub owner/repo, which GitHub compares ignoring case' },
   { path: 'find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts', folds: 4, reason: 'a git config section, key or boolean word, which git reads ignoring case' },
+  { path: 'know_the_goose_engines_facts/an_engine_source_from_its_facts.ts', folds: 1, reason: "a wire id written back as the Rust variant the engine's source names it by" },
+  { path: 'know_the_goose_engines_facts/the_engines_facts_in_its_source.ts', folds: 1, reason: "a Rust variant name, spelled as the engine's serde snake_case puts it on the wire" },
   { path: 'keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts', folds: 1, reason: A_NODE_ID },
   { path: 'keep_the_package_contract/keep_the_package_contract.ts', folds: 2, reason: 'a package, owner/repo#n, which GitHub names ignoring case' },
   { path: 'keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts', folds: 2, reason: 'a package, owner/repo#n, which GitHub names ignoring case' },

@@ -394,6 +394,23 @@ jobs:
       - run: npm ci
       - run: prove_the_recorded_host_is_current/prove_the_drift_check_bites.sh
 
+  # The engine drift check can fail (macula-io/martha#541, package 10): the recorder's --check passes on a tree that
+  # says what the recording says and fails, naming the fact, on one that does not, with no engine checkout. Then it
+  # passes on the engine's real source at the recorded commit, so the reader is proven on the engine itself and not
+  # only on the tree the tests build. Only engine-drift.yml's comparison with the fork's tip depends on the fork moving.
+  engine-drift-bites:
+    name: the engine drift check bites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: prove_the_recorded_engine_is_current/prove_the_engine_drift_check_bites.sh
+      - name: the recording says what the engine says at the recorded commit
+        run: prove_the_recorded_engine_is_current/prove_the_recorded_engine_is_current.sh "${{ runner.temp }}/engine-at-the-pin" --at-the-pin
+
   # Posted text (martha#265): the check that reads what members post on GitHub can fail. Its self-test
   # plants a cited path, in memory, on each of the six surfaces it reads, and a placeholder that must
   # pass, then names the surface whose reader stopped refusing. It needs no token and no network, so it

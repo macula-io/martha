@@ -1,0 +1,213 @@
+// What the Goose engine says about itself, read from its own source tree (macula-io/martha#541, package 10).
+//
+// This exists so a member can work in Goose with nothing about the engine typed by hand: the launcher writes the
+// engine's config root from these facts (which extension keys to switch off, which mode to pin, which variable moves
+// the config root), the adapter answers permission requests from the kinds the engine offers, and the model stand-in
+// listens on the path the engine's OpenAI provider posts to. Each fact is read from the place in the engine's source
+// that decides it, so a change there is a difference the drift check names, never a launch that quietly trusts an
+// old list.
+//
+// It is pure: the caller hands in a reader over one checkout of the engine, and every part either reads or throws,
+// naming what it could not find. The recorder (src/record_the_goose_engine/) does the reading from disk.
+
+import { join } from 'node:path'
+
+/** One platform extension the engine declares, by the key its config switches it with (martha#541 trial, finding 4). */
+export interface PlatformExtension {
+  /** The key in the config root's `extensions` mapping: not always the extension's display name. */
+  readonly key: string
+  /** Whether the engine turns it on in a config that does not name it. */
+  readonly default_enabled: boolean
+  /** Whether the engine hides it from its own extension lists; a hidden extension still runs when enabled. */
+  readonly hidden: boolean
+  /** The cargo feature it is compiled under, or null when every build carries it. */
+  readonly feature: string | null
+}
+
+/** Everything the recording holds about one engine, besides the commit it was read at. */
+export interface EngineFacts {
+  /** The engine's own name: its binary, and the folders it keeps for itself. */
+  readonly engine_name: string
+  /** The workspace version every crate of the engine carries. */
+  readonly engine_version: string
+  /** The subcommand that runs the engine as an ACP agent on stdio. */
+  readonly acp_command: string
+  /** The variable that moves every folder the engine reads through its paths to one root. */
+  readonly path_root_variable: string
+  /** The setting that turns `/` commands on and off, and what the engine does when it is not set. */
+  readonly slash_commands: { readonly setting: string; readonly when_unset: boolean }
+  /** The setting that names the mode, the modes it takes, and the mode the engine runs when it is not set. */
+  readonly mode: { readonly setting: string; readonly values: readonly string[]; readonly when_unset: string }
+  /** Every platform extension, in the order the engine declares them. */
+  readonly platform_extensions: readonly PlatformExtension[]
+  /** The answers the engine's ACP server offers a client for a tool call, as their wire ids, in its order. */
+  readonly permission_options: readonly string[]
+  /** The OpenAI provider: its name, the settings it reads, and the path it posts to under a host. */
+  readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string }
+}
+
+/** Reads one checkout of the engine: a file's text, or undefined when there is none; a directory's entries, or []. */
+export interface EngineSource {
+  readonly read: (path: string) => string | undefined
+  readonly list: (directory: string) => readonly string[]
+}
+
+/** Where in the engine each fact is decided, relative to the checkout. A file that moves makes its part unreadable. */
+export const ENGINE_PLACES = {
+  workspace: 'Cargo.toml',
+  engine_name: 'crates/martha-engine-name/src/lib.rs',
+  cli: 'crates/goose-cli/src/cli.rs',
+  paths: 'crates/goose/src/config/paths.rs',
+  slash_commands: 'crates/goose/src/agents/execute_commands.rs',
+  modes: 'crates/goose-provider-types/src/goose_mode.rs',
+  mode_when_unset: 'crates/goose/src/config/base.rs',
+  platform_extensions: 'crates/goose/src/agents/platform_extensions/mod.rs',
+  acp_server: 'crates/goose/src/acp/server.rs',
+  openai_provider: 'crates/goose-providers/src/openai.rs',
+} as const
+
+/** The crate root the platform extension map's `crate::` paths start from. */
+const GOOSE_CRATE = 'crates/goose/src'
+const RUST = '.rs'
+
+/** Each part the reader takes from the engine, by the name a failed read reports. */
+export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read: (source: EngineSource) => Partial<EngineFacts> }> = [
+  { part: 'engine name', read: (source) => ({ engine_name: engineNameIn(source) }) },
+  { part: 'engine version', read: (source) => ({ engine_version: engineVersionIn(source) }) },
+  { part: 'acp command', read: (source) => ({ acp_command: acpCommandIn(source) }) },
+  { part: 'path root variable', read: (source) => ({ path_root_variable: pathRootVariableIn(source) }) },
+  { part: 'slash commands switch', read: (source) => ({ slash_commands: slashCommandsIn(source) }) },
+  { part: 'modes', read: (source) => ({ mode: modeIn(source) }) },
+  { part: 'platform extensions', read: (source) => ({ platform_extensions: platformExtensionsIn(source) }) },
+  { part: 'permission options', read: (source) => ({ permission_options: permissionOptionsIn(source) }) },
+  { part: 'openai provider', read: (source) => ({ openai_provider: openaiProviderIn(source) }) },
+]
+
+/** A file the part needs, or a throw that names it. */
+function fileOf(source: EngineSource, path: string): string {
+  const text = source.read(path)
+  if (text === undefined) throw new Error(`no ${path}`)
+  return text
+}
+
+/** The first group `pattern` captures in `text`, or a throw naming what was looked for and where. */
+function captured(text: string, pattern: RegExp, what: string, path: string): string {
+  const found = pattern.exec(text)?.[1]
+  if (found === undefined) throw new Error(`${path} says nothing of ${what}`)
+  return found
+}
+
+function engineNameIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.engine_name
+  return captured(fileOf(source, path), /macro_rules!\s*engine_name\s*\{\s*\(\)\s*=>\s*\{\s*"([^"]+)"/, 'the engine name', path)
+}
+
+function engineVersionIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.workspace
+  return captured(fileOf(source, path), /\[workspace\.package\][^[]*?\nversion\s*=\s*"([^"]+)"/, 'the workspace version', path)
+}
+
+function acpCommandIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.cli
+  return captured(fileOf(source, path), /Some\(Command::Acp\s*\{\s*\.\.\s*\}\)\s*=>\s*"([^"]+)"/, 'the acp command', path)
+}
+
+function pathRootVariableIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.paths
+  return captured(fileOf(source, path), /fn path_root\(\)[^{]*\{[^}]*?env::var_os\("([^"]+)"\)/, 'the path root variable', path)
+}
+
+function slashCommandsIn(source: EngineSource): EngineFacts['slash_commands'] {
+  const path = ENGINE_PLACES.slash_commands
+  const body = captured(fileOf(source, path), /fn slash_commands_enabled\(\)\s*->\s*bool\s*\{([^}]*)\}/, 'the slash commands switch', path)
+  return {
+    setting: captured(body, /get_param::<bool>\("([^"]+)"\)/, 'the slash commands setting', path),
+    when_unset: captured(body, /unwrap_or\((true|false)\)/, 'the slash commands default', path) === 'true',
+  }
+}
+
+/** A Rust variant name as serde's snake_case spells it on the wire. */
+const snakeCase = (variant: string): string => variant.replace(/(?<!^)([A-Z])/g, '_$1').toLowerCase()
+
+function modeIn(source: EngineSource): EngineFacts['mode'] {
+  const modes = ENGINE_PLACES.modes
+  const body = captured(fileOf(source, modes), /pub enum GooseMode\s*\{([^}]*)\}/, 'the modes', modes)
+  // Attributes are dropped first: a variant is the word that ends a line with a comma once they are gone.
+  const variants = body.replace(/#\[[^\]]*\]/g, '').split(',').map((part) => part.trim()).filter((part) => /^[A-Z]\w*$/.test(part))
+  if (variants.length === 0) throw new Error(`${modes} names no mode`)
+  const unset = ENGINE_PLACES.mode_when_unset
+  const resolve = captured(fileOf(source, unset), /fn resolve_goose_mode\([^)]*\)[^{]*\{([\s\S]*?)\n {4}\}/, 'how an unset mode resolves', unset)
+  return {
+    setting: captured(resolve, /get_param_strict\("([^"]+)"\)/, 'the mode setting', unset),
+    values: variants.map(snakeCase),
+    when_unset: snakeCase(captured(resolve, /NotFound\(_\)\)\s*=>\s*Ok\(GooseMode::(\w+)\)/, 'the mode an unset setting runs', unset)),
+  }
+}
+
+function platformExtensionsIn(source: EngineSource): readonly PlatformExtension[] {
+  const path = ENGINE_PLACES.platform_extensions
+  const text = fileOf(source, path)
+  const inserts = [...text.matchAll(/(#\[cfg\(feature = "([^"]+)"\)\]\s*)?map\.insert\(\s*([^,]+?),\s*PlatformExtensionDef\s*\{([\s\S]*?)\n\s*\},?\s*\);/g)]
+  if (inserts.length === 0) throw new Error(`${path} inserts no platform extension`)
+  return inserts.map((insert) => {
+    const fields = insert[4] ?? ''
+    return {
+      key: extensionKeyOf(source, (insert[3] ?? '').trim()),
+      default_enabled: captured(fields, /default_enabled:\s*(true|false)/, 'an extension default', path) === 'true',
+      hidden: captured(fields, /hidden:\s*(true|false)/, 'whether an extension is hidden', path) === 'true',
+      feature: insert[2] ?? null,
+    }
+  })
+}
+
+/** A key of the map: a string as written, or a module's EXTENSION_NAME read from that module. */
+function extensionKeyOf(source: EngineSource, key: string): string {
+  if (key.startsWith('"')) return key.slice(1, -1)
+  const segments = key.split('::')
+  if (segments.at(-1) !== 'EXTENSION_NAME') throw new Error(`a platform extension is keyed by ${key}, which is neither a string nor a module's EXTENSION_NAME`)
+  const modules = segments.slice(0, -1)
+  const base = modules[0] === 'crate' ? GOOSE_CRATE : join(GOOSE_CRATE, 'agents', 'platform_extensions')
+  const module = join(base, ...modules.filter((segment) => segment !== 'crate'))
+  // A module is one file or a directory of them; the constant may sit in any file of the directory (skills keeps it in client.rs).
+  const files = [`${module}${RUST}`, ...source.list(module).filter((entry) => entry.endsWith(RUST)).map((entry) => join(module, entry))]
+  for (const file of files) {
+    const name = /EXTENSION_NAME: &str = "([^"]+)"/.exec(source.read(file) ?? '')?.[1]
+    if (name !== undefined) return name
+  }
+  throw new Error(`no EXTENSION_NAME in ${module}`)
+}
+
+function permissionOptionsIn(source: EngineSource): readonly string[] {
+  const path = ENGINE_PLACES.acp_server
+  const list = captured(fileOf(source, path), /let options = vec!\[([^\]]*)\]/, 'the permission options', path)
+  const kinds = [...list.matchAll(/option\(PermissionOptionKind::(\w+)\)/g)].map((found) => snakeCase(found[1] ?? ''))
+  if (kinds.length === 0) throw new Error(`${path} offers no permission option`)
+  return kinds
+}
+
+function openaiProviderIn(source: EngineSource): EngineFacts['openai_provider'] {
+  const path = ENGINE_PLACES.openai_provider
+  const text = fileOf(source, path)
+  const settings = [...text.matchAll(/ConfigKey::new\(\s*"([^"]+)"/g)].map((found) => found[1] ?? '')
+  if (settings.length === 0) throw new Error(`${path} reads no setting`)
+  return {
+    name: captured(text, /pub const OPEN_AI_PROVIDER_NAME: &str = "([^"]+)"/, 'the provider name', path),
+    settings,
+    default_base_path: captured(text, /pub const OPEN_AI_DEFAULT_BASE_PATH: &str = "([^"]+)"/, 'the default base path', path),
+  }
+}
+
+/** What one checkout says, part by part, and the parts that could not be read with why. */
+export function engineFactsIn(source: EngineSource): { readonly facts: Partial<EngineFacts>; readonly unreadable: ReadonlyArray<{ readonly part: string; readonly why: string }> } {
+  const read = ENGINE_PARTS.map(({ part, read: readPart }) => {
+    try {
+      return { part, fields: readPart(source), why: '' }
+    } catch (error) {
+      return { part, fields: undefined, why: error instanceof Error ? error.message : String(error) }
+    }
+  })
+  return {
+    facts: Object.assign({}, ...read.map(({ fields }) => fields ?? {})) as Partial<EngineFacts>,
+    unreadable: read.filter(({ fields }) => fields === undefined).map(({ part, why }) => ({ part, why })),
+  }
+}
