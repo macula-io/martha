@@ -4357,3 +4357,63 @@ test('a launcher whose run was already gone ends at once, taking its member and 
   assert.deepEqual(pidsNamingTheHome(place.home), [], 'and nothing names the home any more')
   assert.equal(existsSync(lifeline.path), true, 'the run\'s own pipe is the launcher\'s to read, and never to remove')
 })
+
+test('a run that goes off the owner\'s terminal takes its member with it, and ends only the pid that is its own shell (#559)', async (t) => {
+  // Off a terminal there is no hangup to fall back on, so the member ends only because the launcher stopped it — which is
+  // what the mid-way test cannot tell apart from the terminal's own hangup.
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-cc-the-run-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // A pid a stale note might name: it is not this launcher's shell, and nothing but that check keeps it alive.
+  const foreign = spawn(process.execPath, ['-e', 'setInterval(() => undefined, 1 << 30)'], { stdio: 'ignore' })
+  const foreignPid = foreign.pid
+  if (foreignPid === undefined) assert.fail('the foreign process did not start')
+  mkdirSync(join(place.home, 'terminal'), { recursive: true })
+  writeFileSync(join(place.home, 'terminal', 'shell'), String(foreignPid))
+  const launcher = spawn(process.execPath, [launcherProcess(place, fake.command, 'ignore', {}, undefined, {}, OWNER_PROMPT_ARGS, true, lifeline.path)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    foreign.kill('SIGKILL')
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to start its member', () => /^started \d+$/m.test(said), t)
+  const member = Number(/^started (\d+)$/m.exec(said)?.[1])
+  assert.equal(isAlive(member), true, 'the member runs before the run goes')
+  lifeline.closeTheRunsEnd()
+  await until('the launcher to end by itself', () => launcher.exitCode !== null || launcher.signalCode !== null, t, () => said)
+  assert.equal(await ended, 0, `the launcher did not end by itself: ${JSON.stringify(said)}`)
+  assert.equal(isAlive(member), false, 'the member was stopped by the launcher, with no terminal to hang it up')
+  assert.equal(isAlive(foreignPid), true, 'a pid the note holds that is not this launcher\'s shell was left alone')
+  assert.equal(existsSync(place.home), false, 'the home the run made went with it')
+})
+
+test('a launcher told a run\'s end it cannot even open ends at once, taking its home (#559)', async (t) => {
+  // The pipe is gone rather than closed — a run killed between making the lifeline and starting the launcher leaves
+  // this. A path that cannot be opened is the run gone, never a reason to wait for it.
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-cc-the-run-'))
+  const neverMade = join(runtime, 'no-such-run')
+  const launcher = spawn(process.execPath, [launcherProcess(place, fake.command, 'ignore', {}, undefined, {}, OWNER_PROMPT_ARGS, true, neverMade)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to end by itself', () => launcher.exitCode !== null || launcher.signalCode !== null, t, () => said)
+  assert.equal(await ended, 0, `the launcher did not end by itself: ${JSON.stringify(said)}`)
+  assert.equal(existsSync(place.home), false, 'the home the run made went with it')
+})
