@@ -531,7 +531,7 @@ async function stopMember (member, plant) {
 export async function tearDown (log, { work, registry, relayRoot, members }, plant) {
   try {
     await step({ log }, 'tear down', async () => {
-      const refusals = [...await killEveryMember(members, plant), ...await stopTheRegistry(registry, plant), ...removeTheBox(work), ...removeTheBox(relayRoot)]
+      const refusals = [...await killEveryMember(members, plant), ...await stopTheRegistry(registry, plant), ...removeTheBox(work), ...await removeTheRelayRoot(relayRoot)]
       const root = relayRoot ? `; relay root ${relayRoot}` : ''
       if (refusals.length) throw new Error(`${refusals.join('; ')}${root}`)
       const crew = members.length ? `${members.length} members ended, ` : ''
@@ -600,6 +600,35 @@ function removeTheBox (work) {
   } catch (error) {
     return [`${work} was not removed: ${reason(error)}`]
   }
+}
+
+/**
+ * The relay root removed, and removed again until it stays removed. One removal is not a removal here: a run that a
+ * start was interrupted in goes on writing where it was until it next reads its own end, and a write that lands after
+ * the removal brings the root back or makes the removal itself fail, so the step that says the root is removed would
+ * say it of a root still there, or fail on a tree a moment from being empty (martha#590). The root is removed until a
+ * look a POLL_MS later finds it gone; one still there, or still refusing, after MEMBER_WAIT_MS is named with the last
+ * reason rather than passed.
+ * @param {string | undefined} relayRoot
+ * @returns {Promise<string[]>} why it did not stay removed, if it did not
+ */
+async function removeTheRelayRoot (relayRoot) {
+  if (!relayRoot) return []
+  const deadline = Date.now() + MEMBER_WAIT_MS
+  let refusal = ''
+  let gone = false
+  while (!gone) {
+    refusal = ''
+    try {
+      removeEvenReadOnly(relayRoot)
+    } catch (error) {
+      refusal = `${relayRoot} was not removed: ${reason(error)}`
+    }
+    await delay(POLL_MS)
+    gone = !existsSync(relayRoot)
+    if (!gone && Date.now() > deadline) return [refusal === '' ? `${relayRoot} was made again after it was removed` : refusal]
+  }
+  return []
 }
 
 /** @param {string[]} argv @returns {{ logFile?: string }} */
