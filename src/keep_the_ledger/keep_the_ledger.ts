@@ -15,13 +15,15 @@ import {
   actsAwaitingOutcome,
   concludeAct,
   noteMilestone,
+  PACKAGE_RESUMED,
   type ActAwaitingOutcome,
   type LedgerHost,
   type Milestone,
 } from '../log_ledger/log_ledger.ts'
+import { resumeAPausedPackage } from '../recover_a_failed_act/resume_a_paused_package.ts'
 
 /** The milestone names the crew's own tool uses, and the ledger's name for each. */
-export const CREW_LOG_EVENTS = ['checkpoint', 'review_round', 'release', 'fix_after_ship'] as const
+export const CREW_LOG_EVENTS = ['checkpoint', 'review_round', 'release', 'fix_after_ship', 'resume'] as const
 export type CrewLogEvent = (typeof CREW_LOG_EVENTS)[number]
 
 export const MILESTONE_OF_EVENT: Readonly<Record<CrewLogEvent, Milestone>> = {
@@ -29,7 +31,14 @@ export const MILESTONE_OF_EVENT: Readonly<Record<CrewLogEvent, Milestone>> = {
   review_round: 'review_round_closed',
   release: 'release_shipped',
   fix_after_ship: 'fix_shipped_after_release',
+  resume: PACKAGE_RESUMED,
 }
+
+/** Who may resume when a caller says nothing of it: nobody. */
+const NOBODY_MAY_RESUME = async (): Promise<readonly string[]> => []
+
+/** The event that lifts a package's pause (martha#512): only whoever the crew's nudges go to may log it. */
+export const RESUME_EVENT: CrewLogEvent = 'resume'
 
 /** Who is keeping something, and on which package. */
 export interface AWorker {
@@ -37,10 +46,15 @@ export interface AWorker {
   readonly member: string
 }
 
-/** Keeps one milestone of a package; resolves to what the member is told. */
+/**
+ * Keeps one milestone of a package; resolves to what the member is told. A `resume` lifts the package's pause, and is
+ * kept only for a member `whoMayResume` names (martha#512): a member cannot lift its own package's pause, and a caller
+ * that names nobody lets nobody.
+ */
 export async function keepTheMilestone(
   host: LedgerHost,
   input: AWorker & { readonly event: unknown; readonly note: unknown },
+  whoMayResume: () => Promise<readonly string[]> = NOBODY_MAY_RESUME,
 ): Promise<{ readonly told: string }> {
   const event = CREW_LOG_EVENTS.find((candidate) => candidate === input.event)
   if (event === undefined) {
@@ -49,6 +63,7 @@ export async function keepTheMilestone(
   if (typeof input.note !== 'string' || input.note.trim() === '') {
     return { told: `Not recorded: a ${event} needs a note saying what it was, in one short line.` }
   }
+  if (event === RESUME_EVENT) return resumeAPausedPackage(host, { package: input.package, member: input.member, note: input.note.trim(), may: await whoMayResume() })
   await noteMilestone(host, { package: input.package, member: input.member, milestone: MILESTONE_OF_EVENT[event], note: input.note.trim() })
   return { told: `Kept: ${event} on ${input.package}.` }
 }
@@ -104,7 +119,8 @@ export const LOG_A_MILESTONE = 'log_a_milestone'
 /** The description of log_a_milestone, as the crew's mod registers it. */
 export const CREW_LOG_DESCRIPTION =
   `Log a work package milestone in the crew's ledger, which the owner and every later session of this crew reads. ` +
-  `The events are ${CREW_LOG_EVENTS.join(', ')}. Every later session on the package reads back what you kept.`
+  `The events are ${CREW_LOG_EVENTS.join(', ')}. Every later session on the package reads back what you kept. ` +
+  `${RESUME_EVENT} lifts a package a failed act paused, and only whoever the crew routes work through may log it.`
 
 /** The description of what_was_sent, as the crew's mod registers it. */
 export const WHAT_WAS_SENT_DESCRIPTION =
