@@ -27,8 +27,10 @@ import {
   findTheWorkTheseVerdictsPassed,
   type LandedWork,
 } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
+import { theAcceptanceOf } from '../keep_the_package_contract/the_acceptance_of_a_package.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { SHORT_SHA, THE_REDO_SCRIPT } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { theAsksTheOwnerSaidYesTo } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { readTheOriginACloneHas } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { GIT, GITHUB_CLI, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -124,7 +126,9 @@ export async function verifyRange(host: RangeCheckHost, range: TheRange): Promis
   if ('refused' in shape) return shape
   const ci = await theRunsAtTip(host, settled.ok)
   if ('refused' in ci) return ci
-  return { told: [shape.ok.commits, shape.ok.stat, '', theLine(settled.ok, shape.ok, work.ok, ci.ok)].join('\n') }
+  const acceptance = await theAcceptanceAtTheTip(host, settled.ok, work.ok, ci.ok)
+  if ('refused' in acceptance) return acceptance
+  return { told: [shape.ok.commits, shape.ok.stat, '', theLine(settled.ok, shape.ok, work.ok, ci.ok, acceptance.ok)].join('\n') }
 }
 
 /** What `verify_range` says it is for, as the launcher answers the mod's ask (martha#256). */
@@ -360,16 +364,70 @@ const isAConclusion = (value: unknown): boolean => value === null || typeof valu
 const asARecord = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
 
-/** The one menu line the owner reads: the range, how much of it there is, the CI on its tip and what needs an eye. */
-function theLine(settled: SettledRange, shape: TheShape, work: readonly LandedWork[] | undefined, ci: TheRuns): string {
+/** The one menu line the owner reads: the range, how much of it there is, the CI on its tip, what needs an eye, the
+ * packages it lands, and what each package's own acceptance criteria have at that tip (martha#513). */
+function theLine(settled: SettledRange, shape: TheShape, work: readonly LandedWork[] | undefined, ci: TheRuns, acceptance: readonly string[]): string {
   const size = shape.summary === '' ? 'no file changed' : shape.summary
   const eye = shape.by_eye.length === 0 ? '' : `; needs a by-eye read (the range touches ${shape.by_eye.join(' and ')})`
   const packages = work === undefined ? '' : `; packages: ${work.map(landedWord).join(', ')}`
-  return `${settled.repo} ${short(settled.base)}..${short(settled.tip)}: ${size}; ${theCILine(settled.tip, ci)}${eye}${packages}`
+  const criteria = acceptance.length === 0 ? '' : `; ${acceptance.join('; ')}`
+  return `${settled.repo} ${short(settled.base)}..${short(settled.tip)}: ${size}; ${theCILine(settled.tip, ci)}${eye}${packages}${criteria}`
 }
 
 /** One package of a batch, as the line names it: which package, which pull request, and that its verdict passed. */
 const landedWord = (one: LandedWork): string => `${one.package} (PR ${String(one.pr)}, PASS)`
+
+/**
+ * What each package's contract says about the tip (martha#513): one clause per package, each criterion looked for at the
+ * revision the owner is asked to say yes to. A package that landed no merge in this range names none, and a package with
+ * no contract is said so rather than passed.
+ */
+async function theAcceptanceAtTheTip(
+  host: RangeCheckHost,
+  settled: SettledRange,
+  work: readonly LandedWork[] | undefined,
+  ci: TheRuns,
+): Promise<Step<readonly string[]>> {
+  if (work === undefined) return { ok: [] }
+  const said_yes = await theAsksTheOwnerSaidYesTo(host)
+  const at = {
+    revision: settled.tip,
+    ciSucceeded: (what: string) => theCISucceeded(what, ci),
+    fileIsThere: (path: string) => fileAtTheTip(host, settled.path, settled.tip, path),
+    ownerSaidYes: async (ask: number) => said_yes.includes(ask),
+  }
+  const clauses: string[] = []
+  for (const one of work) {
+    try {
+      clauses.push(await theAcceptanceOf(host, one.package, at))
+    } catch (error) {
+      return no(`the acceptance of ${one.package} could not be read from its ledger: ${error instanceof Error ? error.message : String(error)}.`)
+    }
+  }
+  return { ok: clauses }
+}
+
+/** Whether `path` is in the tree at `tip`: git answers by its exit alone, and its own words when it cannot look. */
+const fileAtTheTip = async (host: Pick<HostContract, 'processes'>, cwd: string, tip: string, path: string): Promise<boolean> =>
+  (await git(host, cwd, ['cat-file', '-e', `${tip}:${path}`])).exit_code === 0
+
+/**
+ * Whether a criterion's `ci` evidence is green on the tip (martha#513): a job of that name that succeeded, or every run
+ * of that name green — a criterion may name a job or a workflow, and the contract's own example names a workflow. A run
+ * holding no job is not green: it ran nothing, whatever GitHub concludes about it. One red run of that name is not
+ * overruled by a green one beside it on the same sha, since the criterion named the workflow and the workflow was red.
+ */
+function theCISucceeded(what: string, ci: TheRuns): boolean {
+  if ([...ci.jobs.values()].flat().some((one) => one.name === what && one.conclusion === 'success')) return true
+  const named = ci.runs.filter((run) => run.name === what)
+  return (
+    named.length > 0 &&
+    named.every((run) => {
+      const held = ci.jobs.get(run.id) ?? []
+      return held.length > 0 && held.every((one) => one.conclusion === 'success')
+    })
+  )
+}
 
 /** What GitHub holds on the tip, said in one clause: no run at all, every job green, or each job that is not. */
 function theCILine(tip: string, ci: TheRuns): string {
