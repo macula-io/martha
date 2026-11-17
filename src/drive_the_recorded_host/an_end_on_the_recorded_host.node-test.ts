@@ -27,7 +27,8 @@ import { crewStateDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outsid
 import { refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { theHandoverPrompt } from '../write_my_handover/write_my_handover.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { crewRowsDirectoryOf, stateHomeUnder, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, whatTheLaunchSaw, type ModelRequest } from './drive_the_recorded_host.ts'
+import { crewRowsDirectoryOf, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, whatTheLaunchSaw, type ModelRequest } from './drive_the_recorded_host.ts'
+import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 const MEMBER = 'builder'

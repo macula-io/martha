@@ -33,9 +33,9 @@ import {
   marthaOnATerminal,
   plainTextOf,
   standInCallId,
-  stateHomeUnder,
   type TheOwnersHands,
 } from './drive_the_recorded_host.ts'
+import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { HOST_SILENCE_MS, POLL_MS } from './wait_while_the_host_keeps_showing.ts'
 

@@ -25,11 +25,11 @@ import {
   marthaOnATerminal,
   plainTextOf,
   RECORDED_HOST_VARIABLE,
-  stateHomeUnder,
   whatTheLaunchSaw,
   type ModelRequest,
   type RecordedHostRan,
 } from '../src/drive_the_recorded_host/drive_the_recorded_host.ts'
+import { stateHomeUnder } from '../src/find_a_homes_state_root/find_a_homes_state_root.ts'
 import type { Ingestion } from '../src/refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { ROW_SUFFIX } from '../src/row_streams_directory/row_streams_directory.ts'
 import { RECORD_LOST } from '../src/take_in_a_turn/take_in_a_turn.ts'
