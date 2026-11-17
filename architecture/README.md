@@ -14,10 +14,11 @@ verification and state — is in
 > `src/` and run. So do the crew's tools (`a_crews_tools`): the dashboard's rows and the
 > pane that draws them (`show_dashboard_beat`), the ledger of what a member did
 > (`keep_the_ledger`), and a message from one member to another (`send_a_crew_message`).
-> What does not run yet is the room across machines, and the handover that would let a
-> member outlive its context; the order the rest arrives in is in
-> [the port map](../docs/port-map.md). A box drawn for something not built says so, and is
-> dashed in the pictures.
+> So does the handover that lets a member outlive its context (`refresh_a_member`). What
+> does not run yet is the room across machines; which steps of
+> [the port map](../docs/port-map.md) are built, in flight or planned is in
+> [where we are](../docs/port-map.md#where-we-are). A box drawn for something not built
+> says so, and is dashed in the pictures.
 
 ## Context: who uses Martha, and what it reaches
 
