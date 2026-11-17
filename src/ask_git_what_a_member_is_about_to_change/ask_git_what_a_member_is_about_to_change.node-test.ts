@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -123,6 +123,22 @@ test("another member's branch is refused for a delete the shell writes, which ne
   const fixture = aCrew(t)
   assert.match((await refusalOf(fixture, `git branch -D ${fixture.branch_of_other}`, null)) ?? '', /is another member's branch/)
   assert.equal(await refusalOf(fixture, 'git branch -D hygiea/562', null), undefined)
+})
+
+test("a call that spells a place through a link meets the same rule", async (t) => {
+  const fixture = aCrew(t)
+  // A link to the worktree place, as a machine's temp or work place may be reached by one (martha#79): git answers with
+  // the path it resolved, and the shell names the path through the link.
+  const throughALink = join(fixture.clones, 'worktrees-link')
+  symlinkSync(fixture.worktrees, throughALink)
+  assert.match(
+    (await refusalOf(fixture, `git worktree remove ${join(throughALink, 'widget-9')}`, fixture.worktrees)) ?? '',
+    /is another member's branch/,
+  )
+  // The place itself, spelled through the link, is the same place: a clone in it is still a clone.
+  const clonesThroughALink = join(fixture.worktrees, 'clones-link')
+  symlinkSync(fixture.clones, clonesThroughALink)
+  assert.match((await refusalOf(fixture, 'git checkout main', join(clonesThroughALink, 'acme', 'widget'))) ?? '', /a clone stays on its default branch/)
 })
 
 test('a call nowhere near a repository is asked nowhere, and refused by nothing it could not look at', async (t) => {

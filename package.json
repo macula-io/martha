@@ -129,7 +129,7 @@
       "src/start_a_member": 239,
       "src/start_the_member_on_the_owners_terminal": 86,
       "src/sweep_leftover_launch_directories": 153,
-      "src/ask_git_what_a_member_is_about_to_change": 57
+      "src/ask_git_what_a_member_is_about_to_change": 76
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",

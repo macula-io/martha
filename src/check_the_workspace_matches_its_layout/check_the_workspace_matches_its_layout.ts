@@ -19,7 +19,14 @@ import type { AListedWorktree, TheWorkspace } from '../guard_workspace/guard_wor
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { join, sep } from 'node:path'
 
-/** What the check reads with: the tree's names and a git to ask, and the crew's own places and members. */
+/**
+ * What the check reads with: the tree's names and a git to ask, and the crew's own places and members.
+ *
+ * A place here is the path itself, every link resolved (martha#79): git answers with the paths it resolved, so a place
+ * reached through a link, such as macOS's `/var` -> `/private/var`, is handed in resolved by the caller that reads the
+ * declaration. A place given as its link's spelling is another string to this check, and every worktree under it reads
+ * as drift.
+ */
 export interface AnInspectionOfTheWorkspace {
   readonly files: Pick<FileTree, 'childrenOf'>
   readonly processes: Pick<Processes, 'run'>

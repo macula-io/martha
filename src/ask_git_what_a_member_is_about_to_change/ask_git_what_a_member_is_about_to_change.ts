@@ -27,6 +27,7 @@ import type { HostContract } from '../host_contract/host_contract.ts'
 import { refuseACallInTheWorkspace, type AGuardedCall, type AListedWorktree, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { realpathSync } from 'node:fs'
 import { isAbsolute, join, sep } from 'node:path'
 
 /** A call to judge: the git calls it makes, the member making it, the crew's places, and the host that runs git. */
@@ -54,6 +55,29 @@ const LIST_WORKTREES = ['worktree', 'list', '--porcelain']
 
 /** Whether a directory stands in a place or under it: the place itself, or a path past the separator that ends it. */
 const isUnder = (directory: string, place: string): boolean => directory === place || directory.startsWith(`${place}${sep}`)
+
+/**
+ * The path a place really is, with every link resolved, or the path as it was given when it cannot be read (martha#79).
+ *
+ * Git answers with the paths it resolved, and a shell names the paths its owner typed: on a machine whose temp or work
+ * place is reached through a link, such as macOS's `/var` -> `/private/var`, the two spellings of one directory are
+ * different strings. Both sides are asked here for the path itself, so a call, the place it runs in and the worktree git
+ * lists are compared as what they are and not as what they are called.
+ */
+const thePathItself = (path: string): string => {
+  try {
+    return realpathSync(path)
+  } catch {
+    return path
+  }
+}
+
+/** A call as the rules read it: its directory and every path it names, asked for the path itself. */
+const theCallResolved = (call: AGitCall): AGitCall => ({
+  ...call,
+  directory: call.directory === null ? null : thePathItself(call.directory),
+  args: call.args.map((word) => (isAbsolute(word) ? thePathItself(word) : word)),
+})
 
 /** The clone a directory lands in, as `worktree_open` lays one out: `<clones>/<org>/<repo>`, the first two words past it. */
 function theCloneOf(directory: string | null, clones: string | null): string | null {
@@ -101,7 +125,15 @@ async function theWorktreesOf(host: AQuestionAboutACall['host'], where: string |
 
 /** The refusal a call meets, asking git what it needs to know: undefined when the layout holds, or cannot be looked at. */
 export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutACall): Promise<string | undefined> {
-  const { host, workspace, member, calls } = request
+  const { host, member } = request
+  // The places and the calls are asked for the path itself before anything is compared: git answers with resolved
+  // paths, and a member's shell names the path it typed (martha#79).
+  const workspace: TheWorkspace = {
+    ...request.workspace,
+    clones: request.workspace.clones === null ? null : thePathItself(request.workspace.clones),
+    worktrees: request.workspace.worktrees === null ? null : thePathItself(request.workspace.worktrees),
+  }
+  const calls = request.calls.map(theCallResolved)
   const clone = calls.map((call) => theCloneOf(call.directory, workspace.clones)).find((found) => found !== null) ?? null
   const where = calls.map(theWorktreeListedAt).find((found) => found !== null) ?? clone
   const [branches, worktrees] = await Promise.all([theBranchesOf(host, clone), theWorktreesOf(host, where)])

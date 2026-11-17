@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -33,7 +33,7 @@ const commitIn = (cwd: string, message: string): void => {
 
 /** A clean clone of one repository, on the default branch its origin starts on. */
 function aCleanWorkspace(t: TestContext): Fixture {
-  const root = mkdtempSync(join(tmpdir(), 'martha-562-scan-'))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'martha-562-scan-')))
   t.after(() => removeTheTree(root))
   const origin = join(root, 'origin.git')
   const clones = join(root, 'some-clones')
