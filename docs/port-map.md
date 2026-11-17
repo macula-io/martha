@@ -84,10 +84,10 @@ links check fails on it, so the table is changed on the landing that moves it.
 | 7. track_backlog | built | [`find_the_unheld_work`](../src/find_the_unheld_work), [`see_who_is_free`](../src/see_who_is_free), [`nudge_an_idle_crew`](../src/nudge_an_idle_crew) |
 | 7. nudge_review_waits | built | [`nudge_the_supervisor`](../src/nudge_the_supervisor) |
 | 7. watch_waits | built | [`watch_waits`](../src/watch_waits) |
-| 8. read_shared_room, announce_node_events | planned; the room's gate and the node id already load on every launch | [`read_a_room_through_its_gate`](../src/read_a_room_through_its_gate), [`admit_a_room_message`](../src/admit_a_room_message); the rest: [#310](https://github.com/macula-io/martha/issues/310) |
+| 8. read_shared_room, announce_node_events | built in part: the room's gate and the node id load on every launch; reading the shared room and announcing node events are planned | [`read_a_room_through_its_gate`](../src/read_a_room_through_its_gate), [`admit_a_room_message`](../src/admit_a_room_message); the rest: [#310](https://github.com/macula-io/martha/issues/310) |
 | 9. prove_landing | built | [`check_a_range_before_the_owner_says_yes`](../src/check_a_range_before_the_owner_says_yes), [`land_passed_work_as_one_batch`](../src/land_passed_work_as_one_batch), [`hold_a_package_back_from_a_batch`](../src/hold_a_package_back_from_a_batch) |
 | 9. open_and_finish_worktree | built | [`open_and_finish_a_worktree`](../src/open_and_finish_a_worktree) |
-| 9. guard_workspace | planned; the crew's declared layout (`workspace_layout`) is built, the guard wherever git runs is not | [`declare_crew`](../src/declare_crew); the guard: [#562](https://github.com/macula-io/martha/issues/562) |
+| 9. guard_workspace | in flight; the crew's declared layout (`workspace_layout`) is built, and the guard wherever git runs is in review | [`declare_crew`](../src/declare_crew); the guard: [#562](https://github.com/macula-io/martha/issues/562), [PR 584](https://github.com/macula-io/martha/pull/584) |
 | 10. the Claude Code adapter shrinks to a composer | in flight | [`claude_code_host`](../src/claude_code_host); [#443](https://github.com/macula-io/martha/issues/443) splits it, [#41](https://github.com/macula-io/martha/issues/41) is the adapter's track |
 
 | Container | Where it stands | On `main`, or tracked in |
