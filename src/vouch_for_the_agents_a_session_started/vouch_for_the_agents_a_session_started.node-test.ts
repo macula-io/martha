@@ -69,14 +69,14 @@ test('the agents still running under a session hold it, and one this launcher ne
 
 test("an agent's call and answer are noted on its run, and the member's own call carries no agent", () => {
   const runs = new Map<string, AgentRun>()
-  const call = { tool: 'Bash', tool_use_id: 'call-1', agent_id: AGENT }
+  const call = { tool: 'a_tool', tool_use_id: 'call-1', agent_id: AGENT }
   assert.equal(noteTheAgentsCall(runs, SESSION, { call }), AGENT)
   assert.equal(noteAnAgentsAnswer(runs, { call }), AGENT)
   assert.deepEqual([...runs.get(AGENT)!.calls_seen], ['call-1'])
   assert.deepEqual([...runs.get(AGENT)!.calls_answered], ['call-1'])
   // The member's own call carries no id, notes nothing and makes no run.
-  assert.equal(noteTheAgentsCall(runs, SESSION, { call: { tool: 'Bash', tool_use_id: 'call-2' } }), undefined)
-  assert.equal(noteAnAgentsAnswer(runs, { call: { tool: 'Bash', tool_use_id: 'call-2' } }), undefined)
+  assert.equal(noteTheAgentsCall(runs, SESSION, { call: { tool: 'a_tool', tool_use_id: 'call-2' } }), undefined)
+  assert.equal(noteAnAgentsAnswer(runs, { call: { tool: 'a_tool', tool_use_id: 'call-2' } }), undefined)
   assert.equal(runs.size, 1)
 })
 
