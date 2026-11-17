@@ -89,11 +89,11 @@ test('a pinned package missing from the install refuses, unless it is optional',
 
 test('an extra package on disk, every listed one agreeing, refuses by name', () => {
   const disk = { ...DISK, node_modules: [...DISK.node_modules!, '@types'], 'node_modules/@types': ['marker'] }
-  assert.deepEqual(judge({}, disk).refusals, ['node_modules/@types/marker is installed and is not in node_modules/.package-lock.json'])
+  assert.deepEqual(judge({}, disk).refusals, [`${DEPENDENCIES}/@types/marker is installed and is not in ${DEPENDENCIES}/.package-lock.json`])
   const stray_child = { ...DISK, 'node_modules/@s': ['one', 'two'] }
-  assert.deepEqual(judge({}, stray_child).refusals, ['node_modules/@s/two is installed and is not in node_modules/.package-lock.json'])
+  assert.deepEqual(judge({}, stray_child).refusals, [`${DEPENDENCIES}/@s/two is installed and is not in ${DEPENDENCIES}/.package-lock.json`])
   const nested = { ...DISK, 'node_modules/a/node_modules': ['b', 'c'] }
-  assert.deepEqual(judge({}, nested).refusals, ['node_modules/a/node_modules/c is installed and is not in node_modules/.package-lock.json'])
+  assert.deepEqual(judge({}, nested).refusals, [`${DEPENDENCIES}/a/${DEPENDENCIES}/c is installed and is not in ${DEPENDENCIES}/.package-lock.json`])
 })
 
 test('a package installed that the base lock does not pin refuses', () => {

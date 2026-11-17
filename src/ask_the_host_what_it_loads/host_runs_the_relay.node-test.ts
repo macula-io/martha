@@ -21,7 +21,7 @@ import {
   versionIn,
 } from './host_runs_the_relay.ts'
 import { hostAnswers, LOADS_THE_RELAY, refusesTheRelay } from '../drive_the_recorded_host/host_stand_in.ts'
-import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { RELAY_COPY_NAME, removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 function placeFor(t: TestContext): string {
@@ -36,7 +36,7 @@ function standIn(dir: string, lines: readonly string[], name = 'claude'): string
   return file
 }
 
-const RELAY = '/the/relay'
+const RELAY = `/the/${RELAY_COPY_NAME}`
 
 test('the first error is the manifest\'s, then each content file\'s, then the refusal of the whole plugin', () => {
   const with_ = (manifest: string[], contents: string[][], digestRefusal?: string) => ({

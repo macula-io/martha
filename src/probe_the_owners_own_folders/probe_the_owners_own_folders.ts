@@ -8,7 +8,7 @@ import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_o
 import { claude, HEADLESS_CLAUDE, ownerSettingsPath, PROMPT, type OwnerMarkdownFile, type Place, type Probe } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
 import { deniedWriteIn } from './the_write_the_host_was_refused.ts'
 import { skillsListedIn } from './the_skills_the_host_listed.ts'
-import { TRASH_FOLDER } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // --- the trash, and the skills the host syncs from the owner's account (martha#243) ---
@@ -37,8 +37,8 @@ export const TRASH_PROBE: Probe = {
   planned: true,
   owner_settings: () => JSON.stringify({}),
   owner_markdown: (): readonly OwnerMarkdownFile[] => [
-    { folder: 'skills/.trash', name: 'SKILL.md', text: `---\nname: ${TRASH_TOP}\ndescription: a probe skill\n---\n${PROMPT}\n` },
-    { folder: 'skills/.trash/entry', name: 'SKILL.md', text: `---\nname: ${TRASH_BELOW}\ndescription: a probe skill\n---\n${PROMPT}\n` },
+    { folder: `${SKILLS_KIND}/${TRASH_FOLDER}`, name: 'SKILL.md', text: `---\nname: ${TRASH_TOP}\ndescription: a probe skill\n---\n${PROMPT}\n` },
+    { folder: `${SKILLS_KIND}/${TRASH_FOLDER}/entry`, name: 'SKILL.md', text: `---\nname: ${TRASH_BELOW}\ndescription: a probe skill\n---\n${PROMPT}\n` },
   ],
   from_output: (_place: Place, printed: string) => {
     const listed = skillsListedIn(printed)
@@ -50,12 +50,12 @@ export const TRASH_PROBE: Probe = {
 /** Two skills a signed-in host serves, as the clean-install run met them: one backslash each, inside a quoted description, and no hook. */
 const SERVED_SKILLS: readonly OwnerMarkdownFile[] = [
   {
-    folder: 'skills/synced/acct-1/google-workspace',
+    folder: `${SKILLS_KIND}/${SYNCED_SKILLS_FOLDER}/acct-1/google-workspace`,
     name: 'SKILL.md',
     text: '---\nname: google-workspace\ndescription: "Read this before the first Google Drive call. Use it to change a Google Doc, even \\"change it\\" or \\"add a tab\\"."\n---\nBody.\n',
   },
   {
-    folder: 'skills/synced/acct-1/xlsx',
+    folder: `${SKILLS_KIND}/${SYNCED_SKILLS_FOLDER}/acct-1/xlsx`,
     name: 'SKILL.md',
     text: '---\nname: xlsx\ndescription: "Use this any time a spreadsheet is the input, by name or path \\u{2014} even casually."\n---\nBody.\n',
   },

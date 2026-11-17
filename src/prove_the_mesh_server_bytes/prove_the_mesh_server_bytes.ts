@@ -40,6 +40,7 @@ import { createHash } from 'node:crypto'
 
 import { olderFirst, type PackageSource } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import recording from './recorded_mesh_server_trees.json' with { type: 'json' }
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 /** One package as npm's lock holds it; only what this check reads is typed. */
 export interface LockedPackage {
@@ -102,7 +103,7 @@ export const TREE_HASH = 'sha512'
 export const SETTING_PREFIX = 'MACULA_'
 
 const SRI = new RegExp(`^${TREE_HASH}-[A-Za-z0-9+/]+=*$`)
-const NODE_MODULES = 'node_modules/'
+const NODE_MODULES = `${DEPENDENCIES}/`
 
 /** The integrity string npm writes for these bytes. */
 export const sriOf = (bytes: Uint8Array): string => `${TREE_HASH}-${createHash(TREE_HASH).update(bytes).digest('base64')}`
