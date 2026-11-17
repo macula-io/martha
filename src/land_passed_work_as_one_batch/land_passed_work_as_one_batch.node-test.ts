@@ -43,6 +43,8 @@ import {
   LAND,
   LAND_BATCH,
   LAND_BATCH_DESCRIPTION,
+  NO_CEILINGS_AHEAD,
+  NO_CEILINGS_CHECKED,
   REDONE_GENERATED,
   THE_CEILINGS_STILL_AHEAD,
   THE_CHECK_PROGRAM,
@@ -299,6 +301,20 @@ const A_STAND_IN_FOR_THE_C4_PROGRAM = [
 const codeLines = (name: string, n: number): string =>
   Array.from({ length: n }, (_, at) => `export const ${name}${String(at)} = ${String(at)}\n`).join('')
 
+/** The manifest of a repository that is not Martha's: its own scripts, and nothing of Martha's declared in it. */
+const A_STRANGERS_MANIFEST = `${JSON.stringify({ name: 'demo', private: true, type: 'module', scripts: { test: 'node --test' } }, null, 2)}\n`
+
+/**
+ * The tree a batch's heads are cut from in a repository that is not Martha's: committed on the default branch and pushed,
+ * with no linter config and no program of Martha's in it.
+ */
+function aTreeOnTheDefaultBranch(fixture: Fixture, files: Readonly<Record<string, string>>): string {
+  for (const [file, text] of Object.entries(files)) writeIn(fixture.clone, file, text)
+  commitIn(fixture.clone, 'the tree the batch lands on')
+  gitIn(fixture.clone, 'push', '--quiet', 'origin', 'main')
+  return gitIn(fixture.clone, 'rev-parse', 'HEAD')
+}
+
 /** The package.json of a planted tree under these ceilings, with scripts a change outside the map made. */
 function aManifestWithScripts(scripts: Readonly<Record<string, string>>, ceilings: Readonly<Record<string, number>>): string {
   const manifest = JSON.parse(theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings })) as Record<string, unknown>
@@ -308,10 +324,19 @@ function aManifestWithScripts(scripts: Readonly<Record<string, string>>, ceiling
 /** The tree a batch's heads are cut from, committed on the default branch and pushed. */
 function theBaseTreeOfABatch(fixture: Fixture, files: Readonly<Record<string, string>>): string {
   writeIn(fixture.clone, 'eslint.config.mjs', LINTER_CONFIG)
+  // A repository whose tree holds its own checks holds the programs a landing runs; what these files hold is never run,
+  // because the harness above runs this tree's own programs in their place (martha#604).
+  for (const [program, text] of Object.entries(THE_PROGRAMS_A_TREE_THAT_CHECKS_HOLDS)) writeIn(fixture.clone, program, text)
   for (const [file, text] of Object.entries(files)) writeIn(fixture.clone, file, text)
   commitIn(fixture.clone, 'the tree the batch lands on')
   gitIn(fixture.clone, 'push', '--quiet', 'origin', 'main')
   return gitIn(fixture.clone, 'rev-parse', 'HEAD')
+}
+
+/** The programs a fixture's tree holds when it is a repository that holds the checks a landing runs (martha#604). */
+const THE_PROGRAMS_A_TREE_THAT_CHECKS_HOLDS: Readonly<Record<string, string>> = {
+  [THE_CHECK_PROGRAM]: '// the ceilings check, as a tree that holds one holds it\n',
+  [THE_REDO_PROGRAM]: '// the redo of generated files, as a tree that holds one holds it\n',
 }
 
 /** A branch from `from` holding one commit that writes every file of `files`, pushed; answers the commit it made. */
@@ -877,6 +902,30 @@ test('#423: the dry run of two heads the landing leaves one of out on the ceilin
   for (const [entry, pr] of [281, 282].entries()) {
     assert.ok(words.includes(`- lands: ${at(packages, entry)} (PR ${String(pr)}) (${THE_CEILINGS_STILL_AHEAD})`), `PR ${String(pr)} is not answered lands as a forecast that still faces the ceilings: ${words}`)
   }
+})
+
+test('#604: a batch lands in a repository that holds none of Martha’s files: no ceilings are checked, and a clash is left to its builder', async (t) => {
+  const fixture = aRepository(t)
+  const base = aTreeOnTheDefaultBranch(fixture, { 'package.json': A_STRANGERS_MANIFEST, 'README.md': '# demo\n' })
+  const packages = [`${fixture.repo}#604`, `${fixture.repo}#605`]
+  // The second head writes the very line the first one does, so it clashes by hand, and this tree holds no redo to settle it.
+  const heads = [
+    aBranchWithOneCommit(fixture, 'passed', base, 'greet.txt', 'Hello, Ann!\n'),
+    aBranchWithOneCommit(fixture, 'passed-too', base, 'greet.txt', 'Hello, Bea!\n'),
+  ]
+  const answers = theAnswersFor(fixture.repo, new Map())
+  heads.forEach((head, entry) => answers.set(`repos/${fixture.repo}/commits/${head}/pulls`, anOpenPullRequest(281 + entry, head)))
+  // Every process is the real one: a tree holding none of Martha's files has no program to stand in for.
+  const tests = hostForTests({ run: aGithub(answers), now: THE_DAY })
+  for (const [entry, work_package] of packages.entries()) await aPassedVerdict(tests, work_package, base, at(heads, entry))
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  const words = aBatchLeftOneOut(fixture, landed, base, [at(heads, 0)], { package: at(packages, 1), pr: 282 })
+  assert.ok(words.includes('has no redo of generated files to settle one'), `the clash was not left to its builder, in the landing’s own words: ${words}`)
+  assert.match(words, /it clashes in greet\.txt with PR 281/, `the answer did not say what the package left out clashes with: ${words}`)
+  assert.ok(words.includes(NO_CEILINGS_CHECKED), `the answer does not say that no ceilings were checked: ${words}`)
+  const dry = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
+  assert.ok(wordsOf(dry).includes(NO_CEILINGS_AHEAD), `the dry run does not say that no ceilings will be checked: ${wordsOf(dry)}`)
 })
 
 test('#381: the programs the landing runs are the ones package.json runs them by, in the scripts it names', () => {

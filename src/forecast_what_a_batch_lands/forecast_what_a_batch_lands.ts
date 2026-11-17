@@ -30,17 +30,20 @@ import {
   type TheStages,
 } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
 import {
+  NO_CEILINGS_AHEAD,
   SHORT_SHA,
   THE_CEILINGS_STILL_AHEAD,
   THE_REDO_SCRIPT,
   aFirstParentNamed,
   theBatchMayStart,
+  theChecksTheTreeHolds,
   theCloneSaysWhoCommits,
   theClashesSaid,
   theLeftOutHeadItHolds,
   type LandingHost,
   type Landing,
   type TheBatch,
+  type TheRepositorysChecks,
 } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { readTheOriginACloneHas } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
@@ -54,6 +57,9 @@ const NOTHING_WRITTEN = 'nothing was merged, written or pushed'
 
 /** What a forecast of a redone landing still has ahead of it. */
 const STILL_AHEAD = 'a forecast: the redraw, the ceilings check, and the type check and the suite still run before the push'
+
+/** What a forecast of a redone landing still has ahead of it where the tree holds no ceilings check (martha#604). */
+const STILL_AHEAD_WITHOUT_CEILINGS = 'a forecast: the redraw, and the type check and the suite still run before the push'
 
 type Step<T> = { readonly ok: T } | { readonly refused: string }
 
@@ -88,10 +94,12 @@ export async function forecastWhatABatchLands(host: LandingHost, batch: TheBatch
   if ('refused' in work) return work
   const base = await gitSaid(host, batch.path, ['rev-parse', '--verify', '--quiet', origin.origin.default_branch])
   if (base === undefined) return { refused: `${batch.path} cannot read ${origin.origin.default_branch}: fetch there, then try again.` }
+  // The landing runs the checks the tree holds, and the dry run says which of them will run (martha#604).
+  const checks = await theChecksTheTreeHolds(host, batch.path, base)
   const clone: TheClone = { path: batch.path, default_branch: origin.origin.default_branch }
   const forecasts = await everyForecast(host, clone, base, work.work)
   if ('refused' in forecasts) return forecasts
-  return theAnswer(clone, base, forecasts.ok)
+  return theAnswer(clone, base, forecasts.ok, checks)
 }
 
 /** Each pull request's forecast, in the batch's order, each merged onto the chain the ones before it left. */
@@ -158,18 +166,19 @@ async function theChainGrown(host: LandingHost, path: string, chain: TheChain, o
 }
 
 /** The dry run's answer: one line per pull request, told when every one lands and refused when one does not. */
-function theAnswer(clone: TheClone, base: string, forecasts: readonly AForecast[]): Landing {
+function theAnswer(clone: TheClone, base: string, forecasts: readonly AForecast[], checks: TheRepositorysChecks): Landing {
   const head = `The dry run of ${String(forecasts.length)} package(s) onto ${clone.default_branch} at ${short(base)} (${NOTHING_WRITTEN}):`
-  const lines = [head, ...forecasts.map(aLine)].join('\n')
+  const lines = [head, ...forecasts.map((forecast) => aLine(forecast, checks))].join('\n')
   const not_landing = forecasts.filter((forecast) => !('lands' in forecast))
   return not_landing.length === 0 ? { told: lines } : { refused: lines }
 }
 
 /** One pull request's line. */
-function aLine(forecast: AForecast): string {
+function aLine(forecast: AForecast, checks: TheRepositorysChecks): string {
   if ('lands' in forecast) {
     const named = theWork(forecast.lands)
-    return forecast.redone.length === 0 ? `- lands: ${named} (${THE_CEILINGS_STILL_AHEAD})` : `- lands, redone: ${named}: ${forecast.redone.join('; ')} (${STILL_AHEAD})`
+    if (forecast.redone.length === 0) return `- lands: ${named} (${checks.ceilings ? THE_CEILINGS_STILL_AHEAD : NO_CEILINGS_AHEAD})`
+    return `- lands, redone: ${named}: ${forecast.redone.join('; ')} (${checks.ceilings ? STILL_AHEAD : STILL_AHEAD_WITHOUT_CEILINGS})`
   }
   if ('clashes' in forecast) {
     const redone = forecast.redone.length === 0 ? '' : ` (it would redo ${forecast.redone.join('; ')})`
