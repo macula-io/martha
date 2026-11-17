@@ -257,6 +257,24 @@ const refusalBy = (answered: { readonly answer: string } | { readonly refused: s
   return answered.refused
 }
 
+test('a yes about another package marks nothing, whether it says "unbounded" or names a package whose name runs on', async () => {
+  const host = aHostKeeping()
+  // A question saying "unbounded" about a package that is not this one says nothing about this one.
+  const another_package = await anAskSaidYesTo(host, 'is synthetic-owner/other#9 unbounded?')
+  assert.match(
+    refusalBy(await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: theBriefWithBlock(anUnboundedBlock(another_package)) })),
+    /did not ask about it/,
+  )
+  // And a name that merely opens with this package's is another package: the package numbered 70 is not the one
+  // numbered 7 (martha#513 r=3).
+  const longer_name = await anAskSaidYesTo(host, 'may synthetic-owner/repo#70 skip its contract?')
+  assert.match(
+    refusalBy(await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: theBriefWithBlock(anUnboundedBlock(longer_name)) })),
+    /did not ask about it/,
+  )
+  assert.equal((await theContractVersionsOf(host.host, PACKAGE)).length, 0)
+})
+
 // --- the contract a session is handed --------------------------------------------
 
 test('a package with no contract says so, and names the tool that records one', () => {

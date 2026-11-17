@@ -66,10 +66,22 @@ export type TheContractKept = { readonly answer: string } | { readonly refused: 
 /** Whether this version is the one the package already holds, so a re-read of the same brief keeps no second row. */
 const alreadyHeld = (newest: AContractVersion | undefined, digest: string): boolean => newest?.digest === digest
 
-/** Whether an ask's own question is about this package: it names the package, or says the package needs no contract. */
+/** A character that carries a package's name on, so a package numbered 7 is not named by one numbered 70. */
+const isANameCharacter = (character: string): boolean => character !== '' && /[a-z0-9_/#-]/.test(character)
+
+/**
+ * Whether an ask's own question names this package, whole: the package's name appears in it, and neither end of that
+ * appearance runs on into another name. A yes is about the package it named, and the package numbered 7 is not the one
+ * numbered 70 — nor does a question saying the word "unbounded" about anything at all say this package needs none.
+ */
 const asksAboutThePackage = (package_name: string, question: string): boolean => {
   const said = question.toLowerCase()
-  return said.includes(package_name.toLowerCase()) || said.includes('unbounded')
+  const name = package_name.toLowerCase()
+  for (let at = said.indexOf(name); at !== -1; at = said.indexOf(name, at + 1)) {
+    const before = at === 0 ? '' : said.charAt(at - 1)
+    if (!isANameCharacter(before) && !isANameCharacter(said.charAt(at + name.length))) return true
+  }
+  return false
 }
 
 /**

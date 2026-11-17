@@ -412,17 +412,21 @@ const fileAtTheTip = async (host: Pick<HostContract, 'processes'>, cwd: string, 
   (await git(host, cwd, ['cat-file', '-e', `${tip}:${path}`])).exit_code === 0
 
 /**
- * Whether a criterion's `ci` evidence is green on the tip (martha#513): a job of that name that succeeded, or a run of
- * that name whose every job succeeded — a criterion may name either, and the contract's own example names a workflow. A
- * run holding no job is not green: it ran nothing, whatever GitHub concludes about it.
+ * Whether a criterion's `ci` evidence is green on the tip (martha#513): a job of that name that succeeded, or every run
+ * of that name green — a criterion may name a job or a workflow, and the contract's own example names a workflow. A run
+ * holding no job is not green: it ran nothing, whatever GitHub concludes about it. One red run of that name is not
+ * overruled by a green one beside it on the same sha, since the criterion named the workflow and the workflow was red.
  */
 function theCISucceeded(what: string, ci: TheRuns): boolean {
   if ([...ci.jobs.values()].flat().some((one) => one.name === what && one.conclusion === 'success')) return true
-  return ci.runs.some((run) => {
-    if (run.name !== what) return false
-    const held = ci.jobs.get(run.id) ?? []
-    return held.length > 0 && held.every((one) => one.conclusion === 'success')
-  })
+  const named = ci.runs.filter((run) => run.name === what)
+  return (
+    named.length > 0 &&
+    named.every((run) => {
+      const held = ci.jobs.get(run.id) ?? []
+      return held.length > 0 && held.every((one) => one.conclusion === 'success')
+    })
+  )
 }
 
 /** What GitHub holds on the tip, said in one clause: no run at all, every job green, or each job that is not. */
