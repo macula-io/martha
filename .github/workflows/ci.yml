@@ -319,6 +319,38 @@ jobs:
           fi
           grep -q "planted.ts:1: 'report_progress'" "${{ runner.temp }}/names-self-test/verdict.txt"
 
+  # Two modules that load each other (martha#525). In an ES module cycle one module can read another's export before it
+  # has been set, so the value is `undefined` where it is used, and nothing reports the cycle: what CI shows instead is a
+  # scatter of failing tests in modules the change never touched. The check follows every value import between the
+  # core's sources and names the whole loop, file by file; `import type` closes none, because a type is erased.
+  #
+  # The planted pair is read back from the check's own verdict, and exit 1 (refused) is required, not any non-zero:
+  # exit 2 is "could not look", which must never read as a bite either.
+  cycles:
+    name: no import cycle in the core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:no-import-cycle
+      - name: the check bites
+        run: |
+          planted="${{ runner.temp }}/cycles-self-test"
+          mkdir -p "$planted/src/one" "$planted/src/two"
+          printf "import { b } from '../two/b.ts'\nexport const a = b\n" > "$planted/src/one/a.ts"
+          printf "import { a } from '../one/a.ts'\nexport const b = a\n" > "$planted/src/two/b.ts"
+          status=0
+          npm run --silent check:no-import-cycle -- --root "$planted" > "$planted/verdict.txt" 2>&1 || status=$?
+          if [ "$status" -ne 1 ]; then
+            cat "$planted/verdict.txt"
+            exit 1
+          fi
+          grep -q "src/one/a.ts -> src/two/b.ts -> src/one/a.ts" "$planted/verdict.txt"
+
   # The relay loads in the recorded host (martha#104). The host reads a hooks module before it runs it and refuses it
   # whole for a rule it holds; a refused relay runs no gate, and the relay's unit tests drive a stand-in engine that
   # holds none of those rules. This installs Claude Code at the version the adapter was recorded from (read from the
