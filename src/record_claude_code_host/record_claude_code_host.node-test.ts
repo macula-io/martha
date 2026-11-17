@@ -15,7 +15,7 @@ import { test, type TestContext } from 'node:test'
 import { RECORDED_HOST, recordedHostFrom } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CHUNK } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { MEMORY_OFF, type Committed } from './carry_over_what_is_restated_by_hand.ts'
-import type { GuardCalls } from './what_the_hosts_guards_call.ts'
+import { fileModeGuardCallsIn, type GuardCalls } from './what_the_hosts_guards_call.ts'
 import { CLAUDE_MEMORY_OFF } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
@@ -555,4 +555,35 @@ test('a host that reads the memory off switch twice, or outside a function, cann
     assert.equal(run.status, 0, run.stdout)
     assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\n`)
   }
+})
+
+/**
+ * A host whose guard declares a helper before it reads the off switch, as a release does when it lifts a piece of the
+ * guard into a function of its own (martha#564): the nearest declaration before the read is the helper's, which ends
+ * before the read, so it is walked past and the guard that holds the read is the one found.
+ */
+const withHelperFirst = (memory: string): string => memory.replace('{', '{function aHelper(){return 1};')
+
+test('a guard that declares a helper before it reads the off switch is read, not refused (martha#564)', (t) => {
+  const memory = withHelperFirst(MEMORY_TEXT)
+  assert.notEqual(memory, MEMORY_TEXT, 'the helper is planted inside the guard')
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, guards: guardModules(GUARD, FILE_GUARD, memory) }), RECORDED_HOST.host_version)
+  // The guard's own text changed, which memory_off restates by hand, so the release differs there and nowhere else:
+  // what the guard calls gained the helper it now declares, and no part is unreadable.
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: file_mode_guard_calls, memory_off\n`)
+})
+
+/**
+ * A host that reads the switch inside a function nested in its guard (martha#564's reverse case): the guard's own
+ * callees decide, so the guard is found, not the nested function that happens to hold the read.
+ */
+const withReadNestedInTheGuard = (memory: string): string =>
+  memory.replace(`let e=${OFF_SWITCH_READ};`, `function aReader(){return ${OFF_SWITCH_READ}}let e=aReader();`)
+
+test("a read inside a function nested in the guard is the guard's, not the nested function's (martha#564)", () => {
+  const memory = withReadNestedInTheGuard(MEMORY_TEXT)
+  assert.notEqual(memory, MEMORY_TEXT, 'the read is planted inside a function nested in the guard')
+  const { guard_calls } = fileModeGuardCallsIn(guardModules(GUARD, FILE_GUARD, memory))
+  assert.deepEqual(Object.keys(guard_calls).sort(), [...Object.keys(FILE_GUARD.guard_calls), 'aReader'].sort())
 })
