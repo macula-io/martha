@@ -106,6 +106,7 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
   channel_read_seconds: 30,
   handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
   backlog: null,
+  volatile_paths: [],
 })
 
 /** A real git, so a test sees what git does rather than what a stand-in is told to say. */
