@@ -29,9 +29,15 @@
 //
 // Events are answered one at a time, in the order they arrive: a host runs tool
 // calls in parallel, and each answer reads the record the one before it wrote.
+// That order, the sessions it is kept for and the record of each are the entry's
+// (../answer_what_a_host_reports, martha#541): this adapter translates what the host
+// says into the entry's words, and reads nothing from the host's shapes that the
+// entry would need to. The handlers still answered here are the ones the packages
+// after 1a move, and they ask the entry for the same state they used to hold.
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
+import { answersOver, type TheAnswersOfOneLaunch, type ThePlacesAHostReportsOver } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, THE_REFRESH_THE_MOD_RUNS, startSession, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import {
   CLAUDE_CODE_READ_ATTACHES_NOTHING,
@@ -53,8 +59,8 @@ import { hearingEveryTurn, theCommandNamed, type HearingEveryTurn } from '../hea
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
-import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
+import type { StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
@@ -208,13 +214,14 @@ type Body = Readonly<Record<string, unknown>>
 const isBody = (value: unknown): value is Body => typeof value === 'object' && value !== null && !Array.isArray(value)
 const isText = (value: unknown): value is string => typeof value === 'string' && value !== ''
 
-/** What one member's answers share: its place, and every session it has taken a start of or refused. */
+/** What one member's answers share: its place, and the entry that holds the sessions and the order they are answered in. */
 interface RelayState {
   readonly place: MemberRelayPlace
-  /** The checkout's tree when this relay was made, before the host started, if the owner approved that state: what a read is exempt against (martha#127). */
-  readonly approved_start: string | null
-  readonly sessions: Map<string, HostSession>
-  readonly broken: Map<string, string>
+  /**
+   * What this launch answers from: its sessions, the record of each, one order its events are answered in, and the tree
+   * the owner approved (../answer_what_a_host_reports). A handler that has not moved yet asks it here.
+   */
+  readonly answers: TheAnswersOfOneLaunch
   /** The agents this host has started under a session, by the id the host stamps (martha#170). */
   readonly agents: Map<string, AgentRun>
   /** What this launch hears of its turns, every main turn start the mod reports included (martha#440). */
@@ -309,21 +316,16 @@ function agentOfAResult(
 export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostSession> = new Map<string, HostSession>()): MemberRelay {
   const state: RelayState = {
     place,
-    approved_start: approvedStartTree(place.launch),
-    sessions,
-    broken: new Map<string, string>(),
+    answers: answersOver(placesOfTheEntry(place), sessions),
     agents: new Map<string, AgentRun>(),
     everyTurn: hearingEveryTurn({ keep: async (id, arrival) => keepATurn(state, id, arrival), ...place, now }),
     reviews: reviewSpawnsRemembered(),
   }
-  let queue: Promise<unknown> = Promise.resolve()
-
-  /** Runs `work` after every event already queued, so it reads the record the one before it wrote. */
-  const inOrder = <T>(work: () => Promise<T>): Promise<T> => {
-    const next = queue.then(work)
-    queue = next.catch(() => undefined)
-    return next
-  }
+  /**
+   * Runs `work` after every piece of work already asked for, so it reads the record the one before it wrote. One queue
+   * per launch, held by the entry: a handler that has not moved yet and one that has are answered in the same order.
+   */
+  const inOrder = state.answers.inOrder
 
   const stop = (why: string): RelayReply => stopMember(place, why)
 
@@ -438,8 +440,8 @@ async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrd
 
 /** Takes a turn the host never raised as a prompt into its session's record (martha#440); false when it was not kept. */
 async function keepATurn(state: RelayState, session_id: string, arrival: Arrival): Promise<boolean> {
-  const session = sessionNamed(state, session_id)
-  return typeof session !== 'string' && (await keep(state, takeInTurn(session, arrival, state.place.binder))) === undefined
+  const session = state.answers.named(session_id)
+  return typeof session !== 'string' && (await state.answers.keep(takeInTurn(session, arrival, state.place.binder))) === undefined
 }
 
 /** A tool call's three fields, or undefined when the body is not one. */
@@ -459,77 +461,32 @@ function arrivalOfAMeshToolResult(own_name: string, input: unknown, answer: unkn
 }
 
 /**
- * The checkout's tree as it is now, before the host starts, when the owner
- * approved this start state; `null` otherwise. A checkout with no config is
- * launched whatever it holds and approves nothing, so it gets `null`, and
- * every read in it counts (decided 2026-11-07, martha#127).
+ * The entry's places for this launch: the record, the launch the owner approved, and the machine the launch gate reads
+ * the checkout through. The same values this relay answers with, so the entry reads nothing the adapter does not.
  */
-function approvedStartTree(launch: ApprovedLaunch): string | null {
-  const state = readLaunchState(launch, thisMachine, launch.approved_tree)
-  return launch.approved_fingerprints.includes(fingerprintOf(state)) ? state.tree : null
-}
+const placesOfTheEntry = (place: MemberRelayPlace): ThePlacesAHostReportsOver => ({
+  records: place.records,
+  launch: place.launch,
+  machine: thisMachine,
+})
 
 function stopMember(place: MemberRelayPlace, why: string): RelayReply {
   place.stopMember(why)
   return { answered: false, stopping: why }
 }
 
-/** The session an event names, or why the launcher cannot vouch for it. */
-function sessionNamed(state: RelayState, session_id: unknown): HostSession | string {
-  if (!isText(session_id)) return 'the event names no session'
-  const lost = state.broken.get(session_id)
-  if (lost !== undefined) return lost
-  return state.sessions.get(session_id) ?? `no start of session ${session_id} was taken, so nothing it takes in can be recorded`
-}
-
-/** Marks the session broken for the rest of this process, and says why. */
-function breakSession(state: RelayState, session: HostSession, why: string): string {
-  state.sessions.delete(session.id)
-  state.broken.set(session.id, why)
-  return why
-}
-
-/** Keeps the session's record, or marks the session broken and says why. */
-async function keep(state: RelayState, session: HostSession): Promise<string | undefined> {
-  rememberSession(state.place.records.store, session)
-  try {
-    await state.place.records.flush(session.id)
-    state.sessions.set(session.id, session)
-    return undefined
-  } catch (error) {
-    const code = (error as { code?: unknown }).code
-    const why = `the record of session ${session.id} could not be kept (${typeof code === 'string' ? code : String(error)}), so nothing in it is answered for again`
-    return breakSession(state, session, why)
-  }
-}
-
-/**
- * Checks the session's stored record is still the one kept, or marks it broken and says why; and answers with the
- * session as the gate now reads it, because the owner may have released it since the last call (martha#321).
- */
-async function vouchFor(state: RelayState, session: HostSession): Promise<HostSession | string> {
-  try {
-    await state.place.records.check(session.id)
-    const record = state.place.records.store.read(session.id)
-    return record === undefined ? session : { ...session, gate: record }
-  } catch (error) {
-    const code = (error as { code?: unknown }).code
-    const why = `the record of session ${session.id} can no longer be vouched for (${typeof code === 'string' ? code : error instanceof Error ? error.message : String(error)}), so nothing in it is answered for again`
-    return breakSession(state, session, why)
-  }
-}
-
 async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply> {
   if (!isText(body.session_id) || !isText(body.source)) return refused('the session start names no session or no source')
-  if (state.broken.has(body.session_id)) return refused(state.broken.get(body.session_id) ?? '')
+  const lost = state.answers.brokenBecause(body.session_id)
+  if (lost !== undefined) return refused(lost)
   // A second start of a session this launch already holds changes nothing: re-beginning it would wipe the record the
   // first one kept, which is exactly the wipe a `clear` after a refresh would be (martha#255).
-  if (state.sessions.has(body.session_id)) return answered(TAKEN)
+  if (state.answers.holds(body.session_id)) return answered(TAKEN)
   const reported = sessionStartOf(body as SessionStartHookInput)
-  await state.place.records.load(reported.session_id)
-  const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, await asTheCrewsRefresh(state, reported))
+  await state.answers.records.load(reported.session_id)
+  const started = startSession(state.answers.records.store, CLAUDE_CODE_SESSION_EVENTS, await asTheCrewsRefresh(state, reported))
   const lineToStartOn = await theLineThisSessionStartsOn(state.place.crew)
-  const why = await keep(state, takenInAtStart(state, started, lineToStartOn))
+  const why = await state.answers.keep(takenInAtStart(state, started, lineToStartOn))
   if (why !== undefined) return refused(why)
   return answerTheStart(state.place.crew_text, lineToStartOn)
 }
@@ -574,7 +531,7 @@ async function asTheCrewsRefresh(state: RelayState, reported: SessionStart): Pro
 
 /** The session a clear was told in, when this id is the one the crew is waiting for: the crew's own answer, or none. */
 async function theRefreshTheSessionInherits(state: RelayState, session_id: string): Promise<string | null> {
-  if (state.place.crew === undefined || state.sessions.has(session_id) || state.broken.has(session_id)) return null
+  if (state.place.crew === undefined || state.answers.holds(session_id) || state.answers.brokenBecause(session_id) !== undefined) return null
   try {
     return await state.place.crew.thePredecessorOf(session_id)
   } catch {
@@ -588,17 +545,17 @@ async function theRefreshTheSessionInherits(state: RelayState, session_id: strin
  * in is refused. It is made here exactly as the host's start would make it — inheriting the predecessor's record.
  */
 async function takeInARefreshedSession(state: RelayState, session_id: string): Promise<string | undefined> {
-  if (state.sessions.has(session_id) || state.broken.has(session_id)) return undefined
+  if (state.answers.holds(session_id) || state.answers.brokenBecause(session_id) !== undefined) return undefined
   const predecessor = await theRefreshTheSessionInherits(state, session_id)
   if (predecessor === null) return undefined
-  await state.place.records.load(session_id)
-  const started = startSession(state.place.records.store, CLAUDE_CODE_SESSION_EVENTS, {
+  await state.answers.records.load(session_id)
+  const started = startSession(state.answers.records.store, CLAUDE_CODE_SESSION_EVENTS, {
     event: THE_REFRESH_THE_MOD_RUNS,
     session_id,
     predecessor_id: predecessor,
   })
   const handed = state.place.handed_at_start.reduce((session, source) => takeInTurn(session, { source }, state.place.binder), started)
-  return keep(state, handed)
+  return state.answers.keep(handed)
 }
 
 /**
@@ -624,7 +581,7 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
     return refused('the prompt carries no text or no origin the engine stamped')
   }
   const arrival = arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, origin.kind, whatAPromptCarries(body))
-  const why = await keep(state, takeInTurn(session, arrival, state.place.binder))
+  const why = await state.answers.keep(takeInTurn(session, arrival, state.place.binder))
   if (why !== undefined) return refused(why)
   // Heard, so the turn it starts (or the running turn it is folded into) is in the record already (martha#440).
   state.everyTurn.heard(session.id, { text: body.text, command: theCommandNamed(body.command) })
@@ -640,8 +597,8 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
 
 /** The session a prompt is for, or why this launcher refuses it: a refreshed session is taken in before it is named. */
 async function theSessionOfAPrompt(state: RelayState, body: Body): Promise<HostSession | string> {
-  if (!isText(body.session_id)) return sessionNamed(state, body.session_id)
-  return (await takeInARefreshedSession(state, body.session_id)) ?? sessionNamed(state, body.session_id)
+  if (!isText(body.session_id)) return state.answers.named(body.session_id)
+  return (await takeInARefreshedSession(state, body.session_id)) ?? state.answers.named(body.session_id)
 }
 
 function callOf(body: Body): { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined; readonly id: string | undefined } | undefined {
@@ -724,7 +681,7 @@ function agentsToHold(state: RelayState, session: HostSession, agent_id: string 
 
 /** The host says an agent started under this session (martha#170): only this makes an agent one it saw start. */
 async function subagentStarted(state: RelayState, body: Body): Promise<RelayReply> {
-  const session = sessionNamed(state, body.session_id)
+  const session = state.answers.named(body.session_id)
   if (typeof session === 'string') return refused(session)
   if (!isText(body.agent_id)) return refused('the agent start names no agent')
   runOf(state, session, body.agent_id).started = true
@@ -739,13 +696,13 @@ async function subagentStarted(state: RelayState, body: Body): Promise<RelayRepl
  * recorded on B7 here, so the shell closes from this moment on, whichever call the member makes next.
  */
 async function subagentStopped(state: RelayState, body: Body): Promise<RelayReply> {
-  const session = sessionNamed(state, body.session_id)
+  const session = state.answers.named(body.session_id)
   if (typeof session === 'string') return refused(session)
   if (!isText(body.agent_id)) return refused('the agent stop names no agent')
   const run = runOf(state, session, body.agent_id)
   run.stopped = true
   if (vouchedRun(run)) return answered(TAKEN)
-  const why = await keep(state, takeInTurn(session, { source: 'subagent' }, state.place.binder))
+  const why = await state.answers.keep(takeInTurn(session, { source: 'subagent' }, state.place.binder))
   return why === undefined ? answered(TAKEN) : refused(why)
 }
 
@@ -786,11 +743,11 @@ async function nameTheReviewTheHostReportsFailed(state: RelayState, text: string
 
 async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   const { place } = state
-  const named = sessionNamed(state, body.session_id)
+  const named = state.answers.named(body.session_id)
   if (typeof named === 'string') return denied(named)
   const call = callOf(body)
   if (call === undefined) return denied('the tool call names no tool')
-  const session = await vouchFor(state, named)
+  const session = await state.answers.vouchFor(named)
   if (typeof session === 'string') return denied(session)
   const agent_id = noteTheAgentsCall(state, session, body)
   const denial = await theDenialOfACall(state, session, call, agent_id)
@@ -855,7 +812,7 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
 
 async function theReportOfARanTool(state: RelayState, body: Body): Promise<RelayReply> {
   const { place } = state
-  const session = sessionNamed(state, body.session_id)
+  const session = state.answers.named(body.session_id)
   if (typeof session === 'string') return stopMember(place, session)
   const call = callOf(body)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
@@ -925,7 +882,7 @@ async function recordToolResult(
           input: call.input,
           rows: CLAUDE_CODE_TOOL_RESULT_ROWS,
           launch: place.launch,
-          approved_start: state.approved_start,
+          approved_start: state.answers.approved_start,
           started_with: place.started_with,
           read_attaches_nothing: CLAUDE_CODE_READ_ATTACHES_NOTHING,
           host: thisMachine,
@@ -938,6 +895,6 @@ async function recordToolResult(
       )
   const recorded = taken.gate.ingested.slice(session.gate.ingested.length).map((ingestion) => ingestion.path)
   if (recorded.length === 0) return { reply: answered(TAKEN), recorded }
-  const why = await keep(state, taken)
+  const why = await state.answers.keep(taken)
   return { reply: why === undefined ? answered(TAKEN) : stopMember(place, why), recorded }
 }
