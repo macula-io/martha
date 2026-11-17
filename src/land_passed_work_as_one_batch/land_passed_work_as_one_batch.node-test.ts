@@ -22,7 +22,9 @@ import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts
 import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { DASHBOARD } from '../declare_crew/declare_crew.ts'
+import { APPROVE_LANDING, DASHBOARD, OWNER } from '../declare_crew/declare_crew.ts'
+import { ASK_QUEUED, ASKS_SETTLED, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { theLandingQuestion } from './the_owners_yes_to_a_landing.ts'
 import { forecastWhatABatchLands } from '../forecast_what_a_batch_lands/forecast_what_a_batch_lands.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree } from '../check_a_host_directory_stays_under_its_ceiling/a_tree_whose_ceilings_a_test_reads.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, RowStore, StoredRow } from '../host_contract/host_contract.ts'
@@ -65,6 +67,13 @@ const refusedBy = (asked: { readonly ok?: unknown; readonly refused?: string }):
 const THE_DAY = Date.UTC(2026, 10, 12)
 
 const MEMBER = 'Ceres'
+
+/** The role these tests land as, and a table that grants it approve_landing: the member's own call is the yes (martha#605). */
+const A_LANDING_ROLE = 'lander'
+const MEMBER_APPROVES = { members: [{ name: MEMBER, role: A_LANDING_ROLE }], mode: { may: { [APPROVE_LANDING]: [A_LANDING_ROLE] } } }
+
+/** A solo crew's table: approve_landing is the owner's alone, so a landing stands on an ask the owner said yes to. */
+const THE_OWNER_APPROVES = { members: [{ name: MEMBER, role: A_LANDING_ROLE }], mode: { may: { [APPROVE_LANDING]: [OWNER] } } }
 
 interface Fixture {
   readonly root: string
@@ -551,7 +560,7 @@ test('#256: the fast-forward puts the passed tip on the default branch, and its 
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
   await aPassedVerdict(tests, work_package, base, tip)
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, MEMBER_APPROVES)
   assert.ok('told' in forwarded, `a fast-forward the owner said yes to was refused: ${wordsOf(forwarded)}`)
   assert.equal(theOriginMain(fixture), tip, 'the default branch was not fast-forwarded onto the passed tip')
   const rows = await readLedger(tests.host, work_package)
@@ -563,6 +572,50 @@ test('#256: the fast-forward puts the passed tip on the default branch, and its 
   assert.equal(concluded[0]?.kind === 'act_concluded' ? concluded[0].outcome.succeeded : false, true, 'the push was kept as failed')
 })
 
+test('#605: a fast-forward with no yes, under a table granting approve_landing to the owner, is refused before its push is announced, and nothing moves', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#605`
+  const tip = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
+  await aPassedVerdict(tests, work_package, base, tip)
+  const before = await readLedger(tests.host, work_package)
+
+  const unasked = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, THE_OWNER_APPROVES)
+  assert.match(wordsOf(unasked), /a landing needs the owner's yes/)
+  const ask = await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: `may I land ${tip}?`, asked_by: MEMBER, since: 0 })
+  await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [ask] })
+  const elsewhere = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package], owner_yes: ask }, THE_OWNER_APPROVES)
+  assert.match(wordsOf(elsewhere), /a yes counts only for the landing it was asked about/)
+
+  assert.equal(theOriginMain(fixture), base, 'the default branch moved on a landing nobody said yes to')
+  assert.deepEqual(await readLedger(tests.host, work_package), before, 'a refused landing wrote to the package\'s ledger')
+})
+
+test('#605: verify_range hands over the question, the owner says yes to it, and the landing stands on that yes and records it', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#606`
+  const head = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  const pulls = new Map<string, unknown>([[`repos/${fixture.repo}/commits/${head}/pulls`, anOpenPullRequest(606, head)]])
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, pulls)))
+  await aPassedVerdict(tests, work_package, base, head)
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: [work_package] })
+  assert.ok('told' in landed, `the batch did not land: ${wordsOf(landed)}`)
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${theLandBranchesOnOrigin(fixture)[0] ?? ''}`)
+  const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: [work_package] })
+  const question = theLandingQuestion({ repo: fixture.repo, default_branch: 'origin/main', tip, packages: [work_package] })
+  assert.ok('told' in checked && checked.told.split('\n').includes(question), `verify_range did not hand over the landing's question: ${wordsOf(checked)}`)
+
+  const ask = await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question, asked_by: MEMBER, since: 0 })
+  await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [ask] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package], owner_yes: ask }, THE_OWNER_APPROVES)
+  assert.ok('told' in forwarded, `the landing the owner said yes to was refused: ${wordsOf(forwarded)}`)
+  assert.equal(theOriginMain(fixture), tip, 'the default branch was not fast-forwarded onto the tip the owner said yes to')
+  const landings = (await readLedger(tests.host, work_package)).filter((row) => row.kind === 'package_landed')
+  assert.deepEqual(landings.map((row) => (row.kind === 'package_landed' ? row.note : '')), [`${base}..${tip} on the owner's yes to ask ${String(ask)}`])
+})
+
 test('#320: a package that reached the default branch is noted as landed, and read back as landed', async (t) => {
   const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
@@ -572,13 +625,13 @@ test('#320: a package that reached the default branch is noted as landed, and re
   await aPassedVerdict(tests, landed_package, base, tip)
 
   assert.deepEqual(await landingsOf(tests.host, [landed_package]), [], 'a package that has not landed holds no landing row')
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [landed_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [landed_package] }, MEMBER_APPROVES)
   assert.ok('told' in forwarded, `a fast-forward the owner said yes to was refused: ${wordsOf(forwarded)}`)
 
   const rows = await readLedger(tests.host, landed_package)
   const landings = rows.filter((row) => row.kind === 'package_landed')
   assert.equal(landings.length, 1, 'the landing was not noted once in the ledger')
-  assert.deepEqual(landings[0]?.kind === 'package_landed' ? landings[0].note : '', `${base}..${tip}`, 'the note holds the range that landed, as the two shas')
+  assert.deepEqual(landings[0]?.kind === 'package_landed' ? landings[0].note : '', `${base}..${tip} on ${MEMBER}'s own yes, as a ${A_LANDING_ROLE}: the declaration grants ${APPROVE_LANDING} to that role`, 'the note holds the range that landed, as the two shas, and the yes it stood on')
   const read_back = await landingsOf(tests.host, [landed_package])
   assert.deepEqual(read_back, [{ package: landed_package, at: landings[0]?.kind === 'package_landed' ? landings[0].at : -1 }], 'the package did not read back as landed, with the moment its own row carries')
 })
@@ -635,7 +688,7 @@ test('#256: the fast-forward is refused when the default branch moved after the 
   gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
   const moved_to = gitIn(fixture.seed, 'rev-parse', 'HEAD')
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, MEMBER_APPROVES)
   assert.match(wordsOf(forwarded), /moved after the range was checked/)
   assert.ok(wordsOf(forwarded).includes(base), 'the answer did not name the base the check was made against')
   assert.ok(wordsOf(forwarded).includes(moved_to), 'the answer did not name where the default branch stands')
@@ -659,7 +712,7 @@ test('#256: a push git refuses is answered with what git said, and kept in the l
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
   await aPassedVerdict(tests, work_package, base, tip)
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, MEMBER_APPROVES)
   assert.match(wordsOf(forwarded), /failed as command_failed/)
   assert.match(wordsOf(forwarded), /the act was sent and refused/)
   assert.match(wordsOf(forwarded), /the branch is protected/, 'the answer did not keep what git said')
@@ -683,7 +736,7 @@ test('#512 slice 2: a fast-forward whose row one package will not keep is sent o
   // The first package's announcement is the first row this store keeps, and the second package's is the one it refuses:
   // nothing ran, so the one attempt the packages are given sends it again, and it lands.
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())), aStoreThatRefusesTheAppendAt(2))
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages }, MEMBER_APPROVES)
   assert.ok('told' in forwarded, `a fast-forward that was never sent was not sent once more: ${wordsOf(forwarded)}`)
   assert.equal(theOriginMain(fixture), tip, 'the retry did not land the tip')
   const first = await readLedger(tests.host, at(packages, 0))
@@ -981,7 +1034,7 @@ test('#364: the fast-forward of a held package is refused before its push is ann
   const { tests, ran } = aHostThatMayRunNothing()
   await aHoldOn(tests.host, 'hold-martha-364', work_package)
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: '/no/clone/is/read', base: 'a'.repeat(40), tip: 'b'.repeat(40), packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: '/no/clone/is/read', base: 'a'.repeat(40), tip: 'b'.repeat(40), packages: [work_package] }, MEMBER_APPROVES)
   assert.ok('refused' in forwarded, `the fast-forward of a held package ran: ${wordsOf(forwarded)}`)
   assert.match(forwarded.refused, /nothing was pushed/)
   assert.ok(forwarded.refused.includes('hold-martha-364') && forwarded.refused.includes(work_package))
@@ -1407,7 +1460,7 @@ test('#512 slice 2: a fast-forward whose outcome was not kept is read on origin,
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())), aStoreThatRefusesTheAppendAt(3))
   await aPassedVerdict(tests, work_package, base, tip)
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, MEMBER_APPROVES)
   assert.ok('told' in forwarded, `a fast-forward origin shows landed was refused: ${wordsOf(forwarded)}`)
   assert.equal(theOriginMain(fixture), tip)
   const rows = await readLedger(tests.host, work_package)
@@ -1430,7 +1483,7 @@ test('#512 slice 2: a fast-forward origin has already moved past is read as land
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())), aStoreThatRefusesTheAppendAt(3, later))
   await aPassedVerdict(tests, work_package, base, tip)
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, MEMBER_APPROVES)
   assert.ok('told' in forwarded, `a fast-forward origin's main contains was refused: ${wordsOf(forwarded)}`)
   assert.notEqual(theOriginMain(fixture), tip, 'origin did not move past the tip, so this test reads nothing')
   const rows = await readLedger(tests.host, work_package)
@@ -1444,7 +1497,7 @@ test('#512 slice 2: a paused package holds the fast-forward: nothing is announce
   const before = (await readLedger(tests.host, work_package)).length
 
   const others = ['macula-io/martha#1', 'macula-io/martha#2']
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: '/no/clone/is/read', base: 'a'.repeat(40), tip: 'b'.repeat(40), packages: [at(others, 0), work_package, at(others, 1)] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: '/no/clone/is/read', base: 'a'.repeat(40), tip: 'b'.repeat(40), packages: [at(others, 0), work_package, at(others, 1)] }, MEMBER_APPROVES)
   assert.ok('refused' in forwarded, `the fast-forward of a paused package ran: ${wordsOf(forwarded)}`)
   assert.match(forwarded.refused, /paused/)
   assert.ok(forwarded.refused.includes(work_package), 'the refusal did not name the paused package')

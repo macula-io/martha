@@ -38,6 +38,7 @@ import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clo
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { mergedInMemory, whatEachPathClashesWith, type AFirstParent, type AStep } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
 import { GIT, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { OWNER_YES, branchOf, theYesALandingStandsOn, type TheApprovingDeclaration, type ALandingAskedAbout } from './the_owners_yes_to_a_landing.ts'
 
 /**
  * The programs a landing runs over the tree it is merging, and that tree's own scripts: a slice reaches the machine
@@ -78,8 +79,6 @@ export const SHORT_SHA = 7
 const NOTHING_LANDED = 'nothing was landed'
 const NOTHING_PUSHED = 'nothing was pushed'
 
-/** The ref an origin's default branch has in the clone, before it is asked for the branch's own name. */
-const THE_ORIGIN_PREFIX = 'origin/'
 
 /** The batch the Supervisor lands: the clone it is landed in, and the work packages it holds. */
 export interface TheBatch {
@@ -87,12 +86,14 @@ export interface TheBatch {
   readonly packages: readonly string[]
 }
 
-/** The range the owner said yes to, as the fast-forward finds it again: its ends, and the packages it lands. */
+/** The range the owner said yes to, as the fast-forward finds it again: its ends, the packages it lands, and the ask the
+ *  owner said yes to, when the call names one (martha#605). */
 export interface TheFastForward {
   readonly path: string
   readonly base: string
   readonly tip: string
   readonly packages: readonly string[]
+  readonly owner_yes?: number
 }
 
 /** What a landing answered: what it did, with the range for the check; or why it did nothing. */
@@ -157,12 +158,20 @@ export async function landPassedWorkAsOneBatch(host: LandingHost, member: string
 }
 
 /**
- * Fast-forwards the default branch onto the tip the owner said yes to. Refused when the default branch moved after the
- * range was checked, and when git will not push; the push itself is an outward act, announced in every package's ledger
- * before it runs.
+ * Fast-forwards the default branch onto the tip the owner said yes to. Refused, before any ledger is written, when the
+ * landing has no yes from someone the declaration lets approve it (martha#605, ./the_owners_yes_to_a_landing); refused
+ * when the default branch moved after the range was checked, and when git will not push. The push itself is an outward
+ * act, announced in every package's ledger before it runs.
  */
-export async function fastForwardAfterTheOwnersYes(host: LandingHost, member: string, forward: TheFastForward): Promise<Landing> {
+export async function fastForwardAfterTheOwnersYes(
+  host: LandingHost,
+  member: string,
+  forward: TheFastForward,
+  declaration: TheApprovingDeclaration,
+): Promise<Landing> {
   if (forward.packages.length === 0) return no('the fast-forward names no package it lands.')
+  const yes = await theYesALandingStandsOn(host, { member, declaration, owner_yes: forward.owner_yes, landing: () => theLandingOf(host, forward) })
+  if ('refused' in yes) return yes
   const held = await noneOfTheseIsHeld(host, forward.packages, NOTHING_PUSHED)
   if ('refused' in held) return held
   // A package that stands paused is refused by the recovery itself, before any ledger is written or git runs.
@@ -173,18 +182,25 @@ export async function fastForwardAfterTheOwnersYes(host: LandingHost, member: st
   // ledger is told, by the act that landed it, with the range that landed. Nothing is written before the push is sent or
   // when its outcome is not kept — a push left awaiting is one the member checks, and the wait stays open until then.
   // The integration branch's own push is no landing: the default branch has not moved and the owner has not said yes.
-  const not_told = await noteTheLanding(host, member, forward)
+  const not_told = await noteTheLanding(host, member, forward, yes.stood_on)
   const told = `${sent.sent}; ${forward.packages.join(', ')} are on it.`
   return { told: not_told === undefined ? told : `${told} The ledger was not told they landed (${not_told}), so a review wait on them ends only when someone reads the branch.` }
 }
 
-/** Records that each package landed, with the range that landed; answers why one could not be recorded, or undefined when
- * they all were. One package the store will not take is named and does not stop the rest. */
-async function noteTheLanding(host: LandingHost, member: string, forward: TheFastForward): Promise<string | undefined> {
+/** The landing a fast-forward asks the owner about: what its clone's origin says, its tip and its packages. */
+async function theLandingOf(host: LandingHost, forward: TheFastForward): Promise<Step<ALandingAskedAbout>> {
+  const origin = await readTheOriginACloneHas(host, forward.path)
+  if ('refused' in origin) return origin
+  return { ok: { repo: origin.origin.repo, default_branch: origin.origin.default_branch, tip: forward.tip, packages: forward.packages } }
+}
+
+/** Records that each package landed, with the range that landed and the yes it stood on (martha#605); answers why one could
+ * not be recorded, or undefined when they all were. One package the store will not take is named and does not stop the rest. */
+async function noteTheLanding(host: LandingHost, member: string, forward: TheFastForward, stood_on: string): Promise<string | undefined> {
   let first_not_kept: string | undefined
   for (const package_name of forward.packages) {
     try {
-      await noteMilestone(host, { package: package_name, member, milestone: 'package_landed', note: `${forward.base}..${forward.tip}` })
+      await noteMilestone(host, { package: package_name, member, milestone: 'package_landed', note: `${forward.base}..${forward.tip} on ${stood_on}` })
     } catch (error) {
       first_not_kept ??= detailOf(error)
     }
@@ -255,7 +271,7 @@ export function theLandingACallNames(args: Readonly<Record<string, unknown>>): S
 
 /** What `fast_forward_after_the_owners_yes` says it is for (martha#256). */
 export const FAST_FORWARD_DESCRIPTION =
-  `Fast-forwards the default branch onto the tip the owner said yes to. Refused when the default branch moved after the range was checked. ${A_HOLD_REFUSES}`
+  `Fast-forwards the default branch onto the tip the owner said yes to. When the declaration grants approve_landing to the owner, name as ${OWNER_YES} the id of the ask they said yes to: its question must be, word for word, the one verify_range gave for this landing. Refused when there is no such yes, and when the default branch moved after the range was checked. ${A_HOLD_REFUSES}`
 
 /** The batch a call of `land_batch` names, or why it names none. */
 export function theBatchACallNames(args: Readonly<Record<string, unknown>>): Step<TheBatch> {
@@ -276,7 +292,17 @@ export function theFastForwardACallNames(args: Readonly<Record<string, unknown>>
   const tip = args['tip']
   if (typeof base !== 'string' || base === '') return no('a fast-forward names the base the range was checked against, as base.')
   if (typeof tip !== 'string' || tip === '') return no('a fast-forward names the tip the owner said yes to, as tip.')
-  return { ok: { path: batch.ok.path, packages: batch.ok.packages, base, tip } }
+  const owner_yes = theAskACallNames(args[OWNER_YES])
+  if (typeof owner_yes === 'string') return no(owner_yes)
+  const forward = { path: batch.ok.path, packages: batch.ok.packages, base, tip }
+  return { ok: owner_yes === undefined ? forward : { ...forward, owner_yes } }
+}
+
+/** The ask a fast-forward names as the owner's yes (martha#605): its id, none when the call names none, or why it is not one. */
+function theAskACallNames(value: unknown): number | undefined | string {
+  if (value === undefined) return undefined
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) return value
+  return `${OWNER_YES} is the id of the ask the owner said yes to, a whole number.`
 }
 
 /** A landing lands in a clone with nothing of its own in it, or the merges would carry that change too. */
@@ -613,9 +639,6 @@ async function fastForward(host: LandingHost, forward: TheFastForward): Promise<
   return `${branch} fast-forwarded from ${at_the_head} to ${forward.tip}`
 }
 
-/** A branch's own name, with the origin's ref taken off: `origin/main` is `main`. */
-const branchOf = (default_branch: string): string =>
-  default_branch.startsWith(THE_ORIGIN_PREFIX) ? default_branch.slice(THE_ORIGIN_PREFIX.length) : default_branch
 
 /**
  * Runs one outward act that lands several packages, through the recovery (martha#512 slice 2): every package's ledger

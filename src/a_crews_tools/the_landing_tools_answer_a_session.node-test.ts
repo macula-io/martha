@@ -190,12 +190,11 @@ test('a place that holds no processes, or no declaration, refuses the tools it c
   // the declaration's own places (clones and worktrees) are refused, because a worktree is opened where the
   // declaration says and nowhere else.
   const withoutDeclaration = aPlaceOf(t, runReal, { processes: true, settings: false })
-  for (const name of [WORKTREE_OPEN, WORKTREE_FINISH]) {
+  // verify_range and the fast-forward read who may act from the declaration (martha#605), so they need one too.
+  for (const name of [WORKTREE_OPEN, WORKTREE_FINISH, VERIFY_RANGE, FAST_FORWARD_AFTER_THE_OWNERS_YES]) {
     assert.equal((await answerTo(withoutDeclaration, name, calls[name] ?? {})).refused, NO_ACTING_PLACE, `${name} is refused: this place holds no declaration`)
   }
-  for (const name of [VERIFY_RANGE, LAND_BATCH, FAST_FORWARD_AFTER_THE_OWNERS_YES]) {
-    assert.notEqual((await answerTo(withoutDeclaration, name, calls[name] ?? {})).refused, NO_ACTING_PLACE, `${name} reads a range and needs no declaration`)
-  }
+  assert.notEqual((await answerTo(withoutDeclaration, LAND_BATCH, calls[LAND_BATCH] ?? {})).refused, NO_ACTING_PLACE, `${LAND_BATCH} reads a range and needs no declaration`)
 })
 
 /** The five calls this file drives, each shaped the way its slice reads one, on a folder that is no clone. */
@@ -221,7 +220,7 @@ async function theThreeSlicesAnswer(place: Place, calls: Readonly<Record<string,
   return {
     [VERIFY_RANGE]: wordsOf(await verifyRange(host, range)),
     [LAND_BATCH]: wordsOf(await landPassedWorkAsOneBatch(host, MEMBER, batch)),
-    [FAST_FORWARD_AFTER_THE_OWNERS_YES]: wordsOf(await fastForwardAfterTheOwnersYes(host, MEMBER, forward)),
+    [FAST_FORWARD_AFTER_THE_OWNERS_YES]: wordsOf(await fastForwardAfterTheOwnersYes(host, MEMBER, forward, place.settings)),
   }
 }
 

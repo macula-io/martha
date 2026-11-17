@@ -74,8 +74,14 @@ export const HANDOVER_CEILING_MINUTES_MOST = 60
  */
 export const RESTART_MEMBER = 'restart_member'
 
+/**
+ * The act whose yes a landing on a default branch stands on (martha#605): granted to the owner, the landing needs an ask
+ * the owner said yes to; granted to a role, a member of that role says it by landing.
+ */
+export const APPROVE_LANDING = 'approve_landing'
+
 /** The acts a mode's table assigns, in business words. */
-export const ACTS = ['assign_work', 'approve_landing', 'resume_parked_work', OFFER_OWNER_ASKS, RESTART_MEMBER] as const
+export const ACTS = ['assign_work', APPROVE_LANDING, 'resume_parked_work', OFFER_OWNER_ASKS, RESTART_MEMBER] as const
 export type Act = (typeof ACTS)[number]
 
 /**
