@@ -1,5 +1,6 @@
 // `martha ls`, `martha stop [<member>]` and `martha restart <member> [--fresh]` (martha#312): the owner's view of which
-// members run, the owner's stop and restart, and the hold that lets a launcher start its member again.
+// members run, the owner's stop and restart, and the hold that lets a launcher start its member again. `martha crew`
+// (martha#572) draws the crew strip over the same rows.
 //
 // Host adapter, and no decision of its own. The places are this machine's directories, read through the stores the
 // launcher writes; what a member is, and how a stop or a restart is asked and carried out, are
@@ -7,6 +8,7 @@
 // ceiling and composes slices, so this wiring has a directory of its own, declared in package.json as an adapter.
 
 import { randomUUID } from 'node:crypto'
+import { setTimeout as after } from 'node:timers/promises'
 
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
@@ -14,6 +16,7 @@ import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { OWNER } from '../declare_crew/declare_crew.ts'
 import { readingOnly, type CrewPlace, type Refused } from '../host_contract/host_contract.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
+import { drawTheStrip } from '../draw_the_crew_strip/draw_the_crew_strip.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { parkedPlace, theParkOf, type ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
@@ -75,6 +78,15 @@ export function theCrewListed(places: TheCrewsPlaces, now: number): readonly str
     now,
   })
   return listed.map(theListLine)
+}
+
+/** `martha crew` (martha#572): the strip over the launchers' rows, drawn through `draw` until `stopped` is aborted. */
+export function drawTheCrewStrip(places: TheCrewsPlaces, draw: (frame: readonly string[]) => void, stopped: AbortSignal): Promise<void> {
+  const rows = dashboardRowsIn(places.launcher.dashboard)
+  const wait = (ms: number): Promise<void> => after(ms, undefined, { signal: stopped }).catch((error: unknown) => {
+    if (!stopped.aborted) throw error
+  })
+  return drawTheStrip({ crew: places.settings, beats: () => rows.all(), clock: { now: () => Date.now() }, draw, wait }, stopped)
 }
 
 
