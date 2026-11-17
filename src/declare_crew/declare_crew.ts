@@ -146,6 +146,15 @@ export const BACKLOG_KEYS = ['places', 'idle_minutes'] as const
 /** A place a backlog names: an organisation, or one repository of it. */
 export const A_BACKLOG_PLACE = /^[A-Za-z0-9][A-Za-z0-9-]*(\/[A-Za-z0-9._-]+)?$/
 
+/**
+ * The roots a reboot deletes (martha#314): the top-level key naming them, as absolute paths. A declaration that names
+ * none reads as an empty list, and the launch's own machine roots apply (../tell_a_citer_of_a_volatile_path), so a
+ * crew declared before this key existed still declares after an upgrade. An explicit empty list is refused rather than
+ * read as "none of mine": the key declares roots, it does not switch the note off, so a crew that wants the machine's
+ * roots leaves the key out.
+ */
+export const VOLATILE_PATHS = 'volatile_paths'
+
 /** A declared backlog: the places to look in, and how long a member may sit idle beside unheld work before a nudge. */
 export interface Backlog {
   readonly places: readonly string[]
@@ -238,6 +247,11 @@ export interface CrewSettings {
   readonly handover_ceiling_minutes: number
   /** Where to look for work nobody holds, and the idle window (martha#319); null when the declaration names none. */
   readonly backlog: Backlog | null
+  /**
+   * The roots a reboot deletes (martha#314), as the declaration names them; empty when it names none, and the launch's
+   * own machine roots apply there. Read by ../tell_a_citer_of_a_volatile_path, which never writes a root of its own.
+   */
+  readonly volatile_paths: readonly string[]
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -253,7 +267,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 const OPTIONAL_MEMBER_KEYS = ['model'] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
@@ -360,7 +374,26 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
     backlog: backlogOf(refuse, value[BACKLOG]),
+    volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
   }
+}
+
+/**
+ * The roots a reboot deletes (martha#314): absolute paths, each once. A declaration that names none reads as an empty
+ * list, since the launch's machine roots then apply; a value someone wrote that is not one is refused by name, never
+ * read as that empty list, because a root that is not absolute would put every path under it in the note.
+ */
+function volatilePathsOf(refuse: Refuse, value: unknown): string[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.length === 0) return refuse.at(VOLATILE_PATHS, 'is not a list of absolute paths')
+  const roots: string[] = []
+  value.forEach((root: unknown, i: number) => {
+    if (typeof root !== 'string' || !isAbsolute(root)) refuse.at(`${VOLATILE_PATHS}[${i}]`, 'is not an absolute path')
+    const trimmed = root.replace(/\/+$/, '')
+    if (roots.includes(trimmed)) refuse.at(`${VOLATILE_PATHS}[${i}]`, 'is named twice')
+    roots.push(trimmed)
+  })
+  return roots
 }
 
 /** The declared backlog, or null when there is none: every place a name GitHub could hold, and the window named. */

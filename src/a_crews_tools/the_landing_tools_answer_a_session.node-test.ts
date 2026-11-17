@@ -133,6 +133,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     channel_read_seconds: 30,
     handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
     backlog: null,
+    volatile_paths: [],
   }
 }
 
