@@ -21,6 +21,12 @@ export interface AnOwnersScreen {
   readonly member: string
   /** Whether this member's bells ring at all, as the declaration and the owner's own mute leave it. */
   readonly bells: TheBellsSwitch
+  /**
+   * Whether the owner has muted this member's bells, asked every time a bell is about to be rung (martha#371): a flip
+   * typed at the owner's terminal reaches a member that is running, so a mute is never something the owner has to
+   * restart a member for.
+   */
+  readonly muted: () => boolean
   /** Whether the launcher has the owner's terminal at all: a member started without one rings nothing. */
   readonly onTheOwnersTerminal: boolean
   /** Writes the bell's bytes where the owner is looking. */
@@ -68,7 +74,7 @@ function applyTheEvent(place: AnOwnersScreen, session_id: string, event: OwnerDi
   if (!answer.kept || seen.next === null) return
   // The bell is the row's own change, read from the row that was kept: a write the store refused is a change the owner
   // does not see, and a bell for it would say something happened that did not. No bytes is no write at all.
-  const bytes = theBellsFor(seen.before, seen.next, place.bells, place.onTheOwnersTerminal)
+  const bytes = theBellsFor(seen.before, seen.next, place.bells, place.onTheOwnersTerminal, place.muted())
   if (bytes !== '') place.write(bytes)
 }
 

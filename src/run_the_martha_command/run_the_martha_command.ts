@@ -28,10 +28,10 @@ import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../appro
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
-import { declareCrew } from '../declare_crew/declare_crew.ts'
+import { declareCrew, OWNER_BELL } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, crewSubdirectory, openState, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -46,6 +46,7 @@ import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_laun
 import { drawTheCrewStrip, holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { showingSafely } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
+import { bellsOf, THE_BELLS_PLACE, theBellsTheOwnerKeeps, theFlipNamed } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
@@ -63,7 +64,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha gate [--member <name>] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -343,7 +344,32 @@ async function release(io: CommandIo, places: Places, member: string): Promise<n
 }
 
 /**
- * `martha gate [--member <name>]` (martha#321): what the gate does to each declared member, or one member's lines.
+ * `martha bells [<member> muted|heard]` (martha#371): every declared member's bells, or the owner's own silence for one
+ * member's, typed at the owner's terminal. The act is ../ring_the_owner's; this hands it the crew's own place and tells
+ * the owner its answer.
+ */
+async function bells(io: CommandIo, places: Places, asked: Asked): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  const flip = theFlipNamed(asked.member, asked.args[0])
+  if (asked.member !== undefined && flip === undefined) return refused(io, USAGE)
+  const place = crewSubdirectory(places.state.state_root, places.root, THE_BELLS_PLACE)
+  if ('refusal' in place) return refused(io, place.refusal)
+  const kept = theBellsTheOwnerKeeps({
+    members: crew.settings.members.map((one) => one.name),
+    declared: crew.settings.house_rules[OWNER_BELL],
+    place: { directory: place.path, lines: { append: appendStateLine, read: readStateFile } },
+    owner: crew.settings.owner,
+    onATerminal: io.terminal.is_terminal,
+    ...(flip === undefined ? {} : { flip }),
+  })
+  if (!kept.shown) return refused(io, kept.refusal)
+  kept.lines.forEach((line) => io.out(line))
+  return EXIT_DONE
+}
+
+/**
+ * `gate [--member <name>]` (martha#321): what the gate does to each declared member, or one member's lines.
  * The reading is ../say_what_the_gate_does's; this only hands it the crew's own place and prints what it answers.
  */
 async function theGate(io: CommandIo, places: Places, member: string | undefined): Promise<number> {
@@ -433,6 +459,7 @@ const installOf = (act: string, argv: readonly string[]): Asked | undefined => (
 export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: readonly string[]) => Asked | undefined>> = {
   install: installOf,
   gate: gateOf,
+  bells: bellsOf,
   [STOP]: stopOf,
   [RESTART]: restartOf,
   start: startOf,
@@ -525,6 +552,7 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   wake: (io, places, asked) => wake(io, places, asked.args[0]!),
   release: (io, places, asked) => release(io, places, asked.args[0]!),
   gate: (io, places, asked) => theGate(io, places, asked.member),
+  bells: (io, places, asked) => bells(io, places, asked),
   ls: (io, places) => ls(io, places),
   crew: (io, places) => crew(io, places),
   [STOP]: (io, places, asked) => stop(io, places, asked.member),

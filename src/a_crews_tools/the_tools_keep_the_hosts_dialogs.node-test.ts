@@ -91,6 +91,7 @@ function aMemberOnDisk(t: { after(fn: () => void): void }): AMemberOnDisk {
     beats,
     member: BUILDER,
     bells: { bell: false, notify: false },
+    muted: () => false,
     onTheOwnersTerminal: false,
     write: () => {},
   })
