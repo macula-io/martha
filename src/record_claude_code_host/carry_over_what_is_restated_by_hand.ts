@@ -8,10 +8,11 @@
 // fails the re-recorded version until then. --check does not compare them with a
 // derived value, since none is derived; it holds memory_off to the host's code
 // instead: every text it quotes must still be there, or --check names it
-// (martha#412).
+// (martha#412). What the file-mode guard it quotes calls is derived, and
+// recorded for drift alone (martha#438).
 
 import type { MemoryOff, RecordedHost } from '../claude_code_host/recorded_claude_code_host.ts'
-import type { ManagedFolderGuardCalls } from './what_the_managed_folder_guard_calls.ts'
+import type { GuardCalls } from './what_the_hosts_guards_call.ts'
 
 /** The recording's own note on where it comes from. */
 export const NOTE = '_why'
@@ -21,11 +22,13 @@ export const MEMORY_OFF = 'memory_off'
 export const CARRIED: readonly string[] = [NOTE, MEMORY_OFF]
 
 /**
- * What the recording holds for host drift alone, which no gate reads (martha#412): the functions the markdown
- * loader's managed-folder guard reaches, so a change inside one of them fails --check by name.
+ * What the recording holds for host drift alone, which no gate reads: the functions the markdown loader's
+ * managed-folder guard reaches (martha#412) and those the file-mode memory guard reaches (martha#438), so a change
+ * inside one of them fails --check by name.
  */
 export interface RecordedForDriftAlone {
-  readonly managed_folder_guard_calls: ManagedFolderGuardCalls
+  readonly managed_folder_guard_calls: GuardCalls
+  readonly file_mode_guard_calls: GuardCalls
 }
 
 /** What the recorder derives from a host's binary: everything but the version and what is carried over. */

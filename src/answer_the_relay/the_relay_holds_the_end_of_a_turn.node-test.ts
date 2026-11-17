@@ -3,6 +3,10 @@
 // only turn a yes into a no; on a ran tool's report, the end rides only on a yes, after the own write was kept, the
 // recheck ran and the result was taken in; a no stays a no and the member is still stopped; and with no crew there is
 // no hold at all.
+//
+// The launcher also notes in its journal which call the end rode on, so a run can tell an end carried at the tool's
+// boundary from one ordered after the tool finished (martha#498). The last two cases are that record and its absence:
+// what the recorded-host case in ../drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts reads back.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -23,6 +27,8 @@ import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { A_TOOL_WHILE_THE_END_IS_HELD, holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
+import { THE_END_CAME_TOO_LATE, theEndRodeOn, whyTheOrderCannotBeJudged } from '../end_a_running_turn/the_end_rode_on_a_call.ts'
+import { readTheRelayJournalAt, relayJournalKeptIn, RELAY_JOURNAL_PLACE, RELAY_JOURNAL_SUFFIX, type RelayJournalRead } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -34,9 +40,14 @@ interface Places {
   readonly home: string
   readonly checkout: string
   readonly rows: string
+  /** Where the launcher's journal is kept (martha#498): a directory of the test's own, as a launch keeps one. */
+  readonly journal: string
 }
 
 const SESSION = 'the-session'
+
+/** The launch the test's journal belongs to: the file a run of it would read. */
+const THE_LAUNCH = 'the-launch-of-the-test'
 
 /** One member's places under a directory the test removes. */
 function placesOf(t: TestContext): Places {
@@ -47,8 +58,13 @@ function placesOf(t: TestContext): Places {
   execFileSync('git', ['init', '-q', '.'], { cwd: checkout })
   const rows = join(home, CREW_ROWS_PLACE)
   mkdirSync(rows, { mode: 0o700 })
-  return { home, checkout, rows }
+  const journal = join(home, RELAY_JOURNAL_PLACE)
+  mkdirSync(journal, { mode: 0o700 })
+  return { home, checkout, rows, journal }
 }
+
+/** The journal that launch wrote, as a run reads it after the launcher answered. */
+const theJournal = (places: Places): RelayJournalRead => readTheRelayJournalAt(join(places.journal, `${THE_LAUNCH}${RELAY_JOURNAL_SUFFIX}`))
 
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
@@ -109,6 +125,7 @@ function relayFor(places: Places, crew: CrewTools | undefined, signed_runs: Sign
       settings_files: [],
       user_scope: userScopeFor(places.home),
     }),
+    journal: relayJournalKeptIn(places.journal, THE_LAUNCH),
     ...(crew === undefined ? {} : { crew }),
     signed_runs,
     stopMember: (why) => void stops.push(why),
@@ -188,4 +205,62 @@ test('#311 placement ruling: with no crew there is no hold, and a call\'s report
   const { relay } = await aStartedRelay(t, undefined)
   assert.deepEqual(await relay.answer('tool_called', A_COMMAND), { answered: true, body: { allow: 1 } })
   assert.deepEqual(await relay.answer('tool_answered', A_COMMAND), { answered: true, body: { taken: 1 } })
+})
+
+// --- martha#498: the journal says which call the end rode on ---------------------------------------------------------
+
+/** The host's id for the call these cases run, as the journal names the call. */
+const THE_CALLS_ID = A_COMMAND.call.tool_use_id
+
+test('#498: the end carried on a call\'s answer is noted with that call, so a run can tell it from one ordered later (mutant: no note)', async (t) => {
+  const ends = holdingTheEnds()
+  const { places, relay } = await aStartedRelay(t, ends)
+  assert.deepEqual(await relay.answer('tool_called', A_COMMAND), { answered: true, body: { allow: 1 } })
+  assert.equal(ends.hold(SESSION, THE_TURN), 'held', 'the launcher did not count the allowed call in flight')
+  assert.deepEqual(await relay.answer('tool_answered', A_COMMAND), { answered: true, body: { taken: 1, end_turn: THE_TURN } }, 'the end did not ride on the last call\'s yes, so this case proved nothing')
+  const journal = theJournal(places)
+  assert.equal(
+    theEndRodeOn(journal, THE_CALLS_ID),
+    true,
+    'the launcher carried the end on a call\'s answer and wrote no line saying which call, so a run reading the order of its requests cannot tell this from an end ordered after the tool finished',
+  )
+  assert.equal(whyTheOrderCannotBeJudged(journal, THE_CALLS_ID), undefined, 'a run whose end rode the tool\'s own answer was told it cannot judge the order')
+})
+
+test('#498: an end carried on another call\'s answer names that call and not this one (mutant: the id compare dropped)', async (t) => {
+  const ends = holdingTheEnds()
+  const { places, relay } = await aStartedRelay(t, ends)
+  // Two calls in flight when the end is ordered (the turn the long tool runs in may have another call open): the first
+  // to report is not the last in flight, so nothing rides it, and the end rides the other one's answer.
+  const other = call(CLAUDE_CODE_SHELL_TOOL, { command: 'pwd', tool_use_id: 'toolu_the-other-call' })
+  assert.deepEqual(await relay.answer('tool_called', A_COMMAND), { answered: true, body: { allow: 1 } })
+  assert.deepEqual(await relay.answer('tool_called', other), { answered: true, body: { allow: 1 } })
+  assert.equal(ends.hold(SESSION, THE_TURN), 'held', 'the launcher counted fewer than both allowed calls in flight')
+  assert.deepEqual(await relay.answer('tool_answered', A_COMMAND), { answered: true, body: { taken: 1 } }, 'the end rode a call that was not the last in flight, so this case proved nothing')
+  assert.deepEqual(await relay.answer('tool_answered', other), { answered: true, body: { taken: 1, end_turn: THE_TURN } }, 'the end did not ride the last call in flight, so no line was written to read')
+  const journal = theJournal(places)
+  assert.equal(
+    theEndRodeOn(journal, THE_CALLS_ID),
+    false,
+    'the journal claimed the end rode this call\'s answer, when it rode the other call\'s: a run reading this call\'s order would judge it on an end that never reached it',
+  )
+  assert.equal(theEndRodeOn(journal, other.call.tool_use_id), true, 'the end rode the other call and the journal named neither, so the case above passed on a journal with no line at all')
+  assert.equal(whyTheOrderCannotBeJudged(journal, THE_CALLS_ID), THE_END_CAME_TOO_LATE, 'a run whose end rode another call\'s answer was allowed to judge this call\'s order')
+})
+
+test('#498: an end ordered after the tool finished rides no call, and the run is told it cannot judge the order (the planted slow end)', async (t) => {
+  const ends = holdingTheEnds()
+  const { places, relay } = await aStartedRelay(t, ends)
+  // The tool is over before the end is ordered: its report is answered with no end held, so the call is no longer in
+  // flight when the order comes — the delay #498 plants, without the clock.
+  assert.deepEqual(await relay.answer('tool_called', A_COMMAND), { answered: true, body: { allow: 1 } })
+  assert.deepEqual(await relay.answer('tool_answered', A_COMMAND), { answered: true, body: { taken: 1 } })
+  assert.equal(ends.hold(SESSION, THE_TURN), 'now', 'the launcher still had a call in flight, so the end rode one and this case planted nothing')
+  const journal = theJournal(places)
+  assert.equal(theEndRodeOn(journal, THE_CALLS_ID), false, 'the journal claimed the end rode a call that had already reported')
+  assert.equal(
+    whyTheOrderCannotBeJudged(journal, THE_CALLS_ID),
+    THE_END_CAME_TOO_LATE,
+    'a run whose end was ordered after the tool finished judged the order of its requests instead of saying it cannot',
+  )
 })

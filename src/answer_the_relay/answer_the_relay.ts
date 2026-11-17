@@ -849,7 +849,7 @@ function closeTheDialogTheCallRan(state: RelayState, session: HostSession, body:
  */
 async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> {
   const reply = await theReportOfARanTool(state, body)
-  const end = reply.answered && isText(body.session_id) ? state.place.crew?.ends.aCallAnswered(body.session_id, callOf(body)?.id ?? '') : undefined
+  const end = reply.answered && isText(body.session_id) ? state.place.crew?.ends.aCallAnswered(body.session_id, callOf(body)?.id ?? '', state.place.journal) : undefined
   return end === undefined ? reply : answered({ ...TAKEN, end_turn: end })
 }
 
