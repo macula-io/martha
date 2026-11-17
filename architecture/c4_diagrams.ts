@@ -618,6 +618,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'the harness the recorded-host tests drive: a recorded host stood up with a script, and the waits its runs need; no member ever loads it',
   },
   {
+    name: 'pin_what_a_read_carries',
+    why: 'the recorded-host case that pins which instruction text a host attaches to a session, run by node --test and ci.yml\'s relay job; no member ever loads it',
+  },
+  {
     name: 'record_mesh_answers',
     why: 'a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote, and never runs it',
   },
