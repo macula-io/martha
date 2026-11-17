@@ -10,7 +10,7 @@
 // It is pure: the caller hands in a reader over one checkout of the engine, and every part either reads or throws,
 // naming what it could not find. The recorder (src/record_the_goose_engine/) does the reading from disk.
 
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 /** One platform extension the engine declares, by the key its config switches it with (martha#541 trial, finding 4). */
 export interface PlatformExtension {
@@ -67,7 +67,7 @@ export const ENGINE_PLACES = {
 } as const
 
 /** The crate root the platform extension map's `crate::` paths start from. */
-const GOOSE_CRATE = 'crates/goose/src'
+export const GOOSE_CRATE = 'crates/goose/src'
 const RUST = '.rs'
 
 /** Each part the reader takes from the engine, by the name a failed read reports. */
@@ -149,6 +149,9 @@ function platformExtensionsIn(source: EngineSource): readonly PlatformExtension[
   const text = fileOf(source, path)
   const inserts = [...text.matchAll(/(#\[cfg\(feature = "([^"]+)"\)\]\s*)?map\.insert\(\s*([^,]+?),\s*PlatformExtensionDef\s*\{([\s\S]*?)\n\s*\},?\s*\);/g)]
   if (inserts.length === 0) throw new Error(`${path} inserts no platform extension`)
+  // An insert in any other shape would be dropped by the pattern above and the drift check would pass: count them all.
+  const written = text.split('map.insert(').length - 1
+  if (written !== inserts.length) throw new Error(`${path} inserts ${String(written)} platform extensions and ${String(inserts.length)} are in a shape this reader knows`)
   return inserts.map((insert) => {
     const fields = insert[4] ?? ''
     return {
@@ -166,7 +169,7 @@ function extensionKeyOf(source: EngineSource, key: string): string {
   const segments = key.split('::')
   if (segments.at(-1) !== 'EXTENSION_NAME') throw new Error(`a platform extension is keyed by ${key}, which is neither a string nor a module's EXTENSION_NAME`)
   const modules = segments.slice(0, -1)
-  const base = modules[0] === 'crate' ? GOOSE_CRATE : join(GOOSE_CRATE, 'agents', 'platform_extensions')
+  const base = modules[0] === 'crate' ? GOOSE_CRATE : dirname(ENGINE_PLACES.platform_extensions)
   const module = join(base, ...modules.filter((segment) => segment !== 'crate'))
   // A module is one file or a directory of them; the constant may sit in any file of the directory (skills keeps it in client.rs).
   const files = [`${module}${RUST}`, ...source.list(module).filter((entry) => entry.endsWith(RUST)).map((entry) => join(module, entry))]

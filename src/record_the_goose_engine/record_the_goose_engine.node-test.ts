@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test, type TestContext } from 'node:test'
 
+import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { engineFilesSaying } from '../know_the_goose_engines_facts/an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { ENGINE_PARTS, ENGINE_PLACES, type EngineFacts } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
@@ -18,7 +19,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 const RECORDER = fileURLToPath(new URL('./record_the_goose_engine.ts', import.meta.url))
 const CHECK = '--check'
-const { _why: _ignoredWhy, engine_commit: RECORDED_COMMIT, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
+const { [NOTE]: _ignoredWhy, engine_commit: RECORDED_COMMIT, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
 /** A commit that is not the recorded one: the commit is where facts were read, not a fact. */
 const ANOTHER_COMMIT = [...RECORDED_COMMIT].reverse().join('')
 

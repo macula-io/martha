@@ -79,5 +79,5 @@ if (parts.length > 0) {
   stderr.write(`record_the_goose_engine: not recorded, unreadable: ${parts.join(', ')}\n`)
   exit(1)
 }
-const recording: RecordedEngine = { _why: WHY, engine_commit: commit, ...(facts as EngineFacts) }
+const recording: RecordedEngine = { [NOTE]: WHY, engine_commit: commit, ...(facts as EngineFacts) }
 writeFileSync(RECORDING_OF_THE_ENGINE, `${JSON.stringify(recording, null, 2)}\n`)

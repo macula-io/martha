@@ -7,21 +7,20 @@
 // the reader looks at. Extension keys are written three ways, as the engine writes them: a string, a module file's
 // EXTENSION_NAME, and a constant kept in another file of a module directory.
 
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
-import { ENGINE_PLACES, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PLACES, GOOSE_CRATE, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
-const EXTENSIONS_DIR = 'crates/goose/src/agents/platform_extensions'
-const CRATE_DIR = 'crates/goose/src'
+const EXTENSIONS_DIR = dirname(ENGINE_PLACES.platform_extensions)
 
 /** How an extension's key is written in the map, and the module file that holds it when it is a module's constant. */
 function keyOf(extension: PlatformExtension, index: number): { readonly key: string; readonly files: Readonly<Record<string, string>> } {
   const constant = `pub static EXTENSION_NAME: &str = "${extension.key}";\n`
   if (index % 3 === 0) return { key: `"${extension.key}"`, files: {} }
   if (index % 3 === 1) return { key: `ext${index}::EXTENSION_NAME`, files: { [join(EXTENSIONS_DIR, `ext${index}.rs`)]: constant } }
-  const module = join(CRATE_DIR, `ext${index}`)
+  const module = join(GOOSE_CRATE,`ext${index}`)
   return { key: `crate::ext${index}::EXTENSION_NAME`, files: { [join(module, 'mod.rs')]: `pub use client::EXTENSION_NAME;\n`, [join(module, 'client.rs')]: constant } }
 }
 
