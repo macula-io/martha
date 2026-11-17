@@ -25,7 +25,6 @@ import { dirname, join } from 'node:path'
 
 import type { BinLink } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
-import { PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 import type { PackageFile } from './read_the_checkout_once.ts'
 
 /** Where the run sees its copy of the tree, and its home. */
@@ -164,7 +163,7 @@ export function sandboxArguments(run: { readonly tree: string; readonly home: st
     '--ro-bind-try', node.root, node.root,
     '--bind', run.tree, RUN_TREE,
     '--bind', run.home, RUN_HOME,
-    '--tmpfs', '/tmp', '--proc', PROC_ROOT, '--dev', '/dev',
+    '--tmpfs', '/tmp', '--proc', '/proc', '--dev', '/dev',
     '--chdir', RUN_TREE,
     ...Object.entries(env).flatMap(([name, value]) => ['--setenv', name, value]),
     '--', SHELL, '-c', MERGE_STDERR_INTO_STDOUT, SHELL, ...argv,

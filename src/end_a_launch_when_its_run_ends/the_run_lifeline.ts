@@ -22,6 +22,7 @@
 import { constants, closeSync, fstatSync, openSync, readSync } from 'node:fs'
 import { Socket } from 'node:net'
 import process from 'node:process'
+import { PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 
 /** The one variable a run names its lifeline in. */
 export const RUN_LIFELINE_VARIABLE = 'MARTHA_RUN_LIFELINE_FD'
@@ -64,7 +65,7 @@ function takenIn(named: string, notStarted: string): { readonly fd: number } | {
   if (!Number.isInteger(number) || number < 0) return { refusal: notALifeline(notStarted, named, 'which is not a descriptor number.') }
   let taken: number
   try {
-    taken = openSync(`/proc/self/fd/${number}`, constants.O_RDONLY | constants.O_NONBLOCK)
+    taken = openSync(`${PROC_ROOT}/self/fd/${number}`, constants.O_RDONLY | constants.O_NONBLOCK)
   } catch (error) {
     return { refusal: notALifeline(notStarted, named, `which is not a descriptor this launcher can read (${(error as NodeJS.ErrnoException).code ?? String(error)}).`) }
   }
@@ -148,10 +149,7 @@ export function refusedIfTheRunIsGone<A>(made: { readonly theRunIsGone?: () => b
  * directory, then the snapshot, then its launch record. The group goes first, before any of this, so the member is
  * not running for the instant the directories take to remove.
  */
-export function takeTheLaunchOffTheDisk(
-  made: { readonly relayDirectory: { remove(): void }; removeSnapshot(): void },
-  dropTheRecord: () => void,
-): void {
+export function takeTheLaunchOffTheDisk(made: { readonly relayDirectory: { remove(): void }; removeSnapshot(): void }, dropTheRecord: () => void): void {
   made.relayDirectory.remove()
   made.removeSnapshot()
   dropTheRecord()
