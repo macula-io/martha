@@ -763,6 +763,10 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
     { col: 0, kind: 'b-cmp', name: 'switch_a_members_model, put_the_owners_model_back', names: ['switch_a_members_model', 'put_the_owners_model_back', 'owners_settings_directory', 'run_reviews_on_the_review_model', 'name_a_review_the_host_reported_failed'], type: '[a model, the owner\'s, a review\'s]', code: true,
       desc: ['switch_a_members_model keeps the model a', 'member runs on for one package, in the', 'crew\'s own store, and the ways back;', 'put_the_owners_model_back undoes what a', 'switch does to the owner\'s own default:', 'the lock, the snapshot, the wait on the', 'file, the restore and the recovery a', 'killed launch leaves, over owners_', 'settings_directory, that file whole;', 'run_reviews_on_the_review_model refuses a', 'review spawn that names no reviewer model;', 'name_a_review_the_host_reported_failed', 'names a review the host reports failed,', 'from the report read_what_claude_code_s', 'ays_of_an_agent cuts', 'from the host\'s own text, on the model it', 'ran on and in the host\'s words', '(martha#390)'] },
   ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'guard_workspace, read_the_git_calls_in_a_shell_line', names: ['guard_workspace', 'read_the_git_calls_in_a_shell_line', 'ask_git_what_a_member_is_about_to_change', 'check_the_workspace_matches_its_layout'], type: '[the workspace guard]', code: true,
+      desc: ['What the workspace\'s layout refuses of', 'a git call: read_the_git_calls_in_a_', 'shell_line reads each call and the', 'directory it runs in, ask_git_what_a_', 'member_is_about_to_change asks git what', 'a call is about to move, and guard_', 'workspace refuses a call that leaves a', 'clone\'s branch or touches another', 'member\'s worktree or branch; check_the_', 'workspace_matches_its_layout names the', 'drift in a workspace. Declared here,', 'and nothing enforces it yet: the slices', 'are drawn, the launch does not call', 'them (martha#562)'] },
+  ],
 ]
 
 /**
