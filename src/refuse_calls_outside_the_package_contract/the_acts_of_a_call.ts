@@ -12,13 +12,14 @@
 // Writing a handover is deliberately not an act and is never refused: it is how a member outlives its context, and a
 // contract that could refuse it could trap a member whose context runs out (martha#513 slice 2, Mercurius's ruling).
 
-import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { CONTRACT_ACTIONS, type ContractAction } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
+import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 
-/** The acts a contract's `allowed` line may name, in the contract's own words (slice 1's CONTRACT_ACTIONS). */
-export const CONTRACT_ACTS = ['push', 'tag', 'handoff', 'land'] as const
-export type AContractAct = (typeof CONTRACT_ACTS)[number]
+/** The acts a contract's `allowed` line may name: slice 1's own list, so the two vocabularies cannot drift apart. */
+export const CONTRACT_ACTS = CONTRACT_ACTIONS
+export type AContractAct = ContractAction
 
 /** A call as the act table reads it: the tool it names, and the arguments it carries. */
 export interface AReadableCall {
@@ -86,7 +87,7 @@ function isAHandoffFor(call: AReadableCall, held_package: string): boolean {
 /** Every act this call is, in the contract's own words: deduplicated, and none for a call the table does not name. */
 export function theActsOfACall(call: AReadableCall, held_package: string): readonly AContractAct[] {
   const acts: AContractAct[] = [...theActsOfAShellCall(call)]
-  if (call.tool === LAND_BATCH || call.tool === FAST_FORWARD_AFTER_THE_OWNERS_YES) acts.push('land')
+  if (call.tool === LAND_BATCH || call.tool === FAST_FORWARD_AFTER_THE_OWNERS_YES) acts.push(LAND)
   if (isAHandoffFor(call, held_package)) acts.push('handoff')
   return [...new Set(acts)]
 }

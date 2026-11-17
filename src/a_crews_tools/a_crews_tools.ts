@@ -317,6 +317,14 @@ interface SessionState {
   readonly ends: TheEndsHold
 }
 
+/**
+ * The contract the package this member holds is run under, or none when the launch has no crew to ask (martha#513
+ * slice 2): the relay hands it to the gate, which refuses nothing without one.
+ */
+export async function theContractACrewHolds(crew: CrewTools | undefined): Promise<TheContractInForce | undefined> {
+  return crew === undefined ? undefined : crew.theContractInForce()
+}
+
 /** The tools a member can call, over the place its launcher gave it. */
 export function crewToolsOver(places: CrewToolPlaces): CrewTools {
   // The menus this launch's host closes, heard by its relay through noteTheCallsAnswer (martha#313): a settle of the

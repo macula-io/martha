@@ -32,7 +32,6 @@
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
-import type { TheContractInForce } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, THE_REFRESH_THE_MOD_RUNS, startSession, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import {
   CLAUDE_CODE_READ_ATTACHES_NOTHING,
@@ -58,7 +57,7 @@ import { fingerprintOf, readLaunchState, type StartedWith } from '../refuse_laun
 import { rememberSession, takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
+import { theContractACrewHolds, type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import type { TheScreenKeeper } from '../say_what_the_host_is_asking/the_owners_screen.ts'
@@ -827,19 +826,13 @@ async function theDenialOfACall(
     host: thisMachine,
     agents_running: agentsToHold(state, session, agent_id),
     ...(place.gate === undefined ? {} : { gate: place.gate }),
-    audit: place.audit,
-    contract: await theContractTheCrewHolds(place),
+    audit: place.audit, contract: await theContractACrewHolds(place.crew),
   })?.deny
   if (verdict !== undefined) return verdict
   // The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role
   // may not make is refused after the gate has allowed it, and never in place of the gate's own answer. A held end of
   // the turn (martha#311 ruling D) is asked last of all, so it only turns a yes into a no.
   return (await place.crew?.refusesTheSubagent({ tool: call.tool, input: call.input })) ?? place.crew?.ends.deniesACall(session.id)
-}
-
-/** The contract the package this member holds is run under (martha#513 slice 2), or none when its crew keeps none. */
-async function theContractTheCrewHolds(place: MemberRelayPlace): Promise<TheContractInForce | undefined> {
-  return place.crew === undefined ? undefined : place.crew.theContractInForce()
 }
 
 /**

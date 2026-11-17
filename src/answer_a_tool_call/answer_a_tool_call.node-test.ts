@@ -30,6 +30,8 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { LAND } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import type { ContractAction } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
 
 const names = claudeCodeToolNames
 
@@ -228,7 +230,7 @@ test('once the owner approves the new tree, the calls run again', (t) => {
 // --- the package's own contract, last (martha#513 slice 2) --------------------
 
 /** A contract on a package, allowing the acts it names. */
-const aContract = (allowed: readonly ('push' | 'tag' | 'handoff' | 'land')[]) => ({
+const aContract = (allowed: readonly ContractAction[]) => ({
   package: 'synthetic-owner/repo#7',
   version: 2,
   kind: 'bounded' as const,
@@ -238,7 +240,7 @@ const aContract = (allowed: readonly ('push' | 'tag' | 'handoff' | 'land')[]) =>
 test('a call that is an act the contract leaves out is refused, naming the act, the version and what it allows', () => {
   const session = beginSession(store(), 's-1')
   const answer = denied(
-    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push origin main' }, contract: aContract(['handoff', 'land']) }),
+    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push origin main' }, contract: aContract(['handoff', LAND]) }),
   )
   assert.match(answer, /this call pushes, and package synthetic-owner\/repo#7's contract \(version 2\) allows handoff, land only/)
   // A call that is no act runs whatever the contract says, and one the contract allows runs too.

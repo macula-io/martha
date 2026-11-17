@@ -14,6 +14,7 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OFFER_OWNER_ASKS } from '../declare_crew/declare_crew.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { LAND } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { keepThePackageContract } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import { ASK_QUEUED, ASKS_SETTLED, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
@@ -93,7 +94,7 @@ test('the crew answers the contract of the package its member holds: its newest 
 
   const first = await keepThePackageContract(ledger, { package: PACKAGE, member: SUPERVISOR, brief: aBriefAllowing('push, land') })
   assert.ok('answer' in first, 'refused' in first ? first.refused : '')
-  assert.deepEqual(await tools.theContractInForce(), { package: PACKAGE, version: 1, kind: 'bounded', allowed: ['push', 'land'] })
+  assert.deepEqual(await tools.theContractInForce(), { package: PACKAGE, version: 1, kind: 'bounded', allowed: ['push', LAND] })
 
   // A change is a new version, and the new version is the one in force.
   const second = await keepThePackageContract(ledger, { package: PACKAGE, member: SUPERVISOR, brief: aBriefAllowing('handoff') })

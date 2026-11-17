@@ -7,8 +7,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { CONTRACT_ACTIONS } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
-import { LAND_BATCH, FAST_FORWARD_AFTER_THE_OWNERS_YES } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { LAND, LAND_BATCH, FAST_FORWARD_AFTER_THE_OWNERS_YES } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { CONTRACT_ACTS, theActsOfACall, theWordsOfACommand } from './the_acts_of_a_call.ts'
 import { refuseACallOutsideTheContract, theActsNotAllowed, type TheContractInForce } from './refuse_a_call_outside_the_contract.ts'
 
@@ -26,7 +30,7 @@ const aContract = (allowed: readonly (typeof CONTRACT_ACTS)[number][], version =
 })
 
 /** The words of a shell call as the host hands it over. */
-const aShellCall = (command: string, tool = 'Bash') => ({ tool, input: { command } })
+const aShellCall = (command: string, tool: string = CLAUDE_CODE_SHELL_TOOL) => ({ tool, input: { command } })
 
 // --- the words a command is made of -------------------------------------------------
 
@@ -43,8 +47,8 @@ test('the acts a call is, in the contract\'s own words: the four, and none for a
   assert.deepEqual(theActsOfACall(aShellCall('cd /tmp && git push'), PACKAGE), ['push'])
   assert.deepEqual(theActsOfACall(aShellCall('git tag v1.2.3'), PACKAGE), ['tag'])
   assert.deepEqual(theActsOfACall(aShellCall('git push --tags'), PACKAGE), ['push', 'tag'])
-  assert.deepEqual(theActsOfACall({ tool: LAND_BATCH, input: {} }, PACKAGE), ['land'])
-  assert.deepEqual(theActsOfACall({ tool: FAST_FORWARD_AFTER_THE_OWNERS_YES, input: {} }, PACKAGE), ['land'])
+  assert.deepEqual(theActsOfACall({ tool: LAND_BATCH, input: {} }, PACKAGE), [LAND])
+  assert.deepEqual(theActsOfACall({ tool: FAST_FORWARD_AFTER_THE_OWNERS_YES, input: {} }, PACKAGE), [LAND])
   // A quoted run is one word, so nothing that merely talks about a push is one.
   assert.deepEqual(theActsOfACall(aShellCall('echo "git push"'), PACKAGE), [])
   assert.deepEqual(theActsOfACall(aShellCall('npm test'), PACKAGE), [])
@@ -59,27 +63,27 @@ test('the acts a call is, in the contract\'s own words: the four, and none for a
 
 test('a handoff is the review line, read as the crew reads it, and only for the package this member holds', () => {
   const line = `HANDOFF ${PACKAGE} ${BASE}..${TIP} r=1 ci=4`
-  assert.deepEqual(theActsOfACall({ tool: 'say_to_the_crew', input: { to: ['supervisor'], text: line } }, PACKAGE), ['handoff'])
+  assert.deepEqual(theActsOfACall({ tool: SAY_TO_THE_CREW, input: { to: [SUPERVISOR], text: line } }, PACKAGE), ['handoff'])
   // The same line naming another package is that package's act, not this one's.
-  assert.deepEqual(theActsOfACall({ tool: 'say_to_the_crew', input: { text: `HANDOFF synthetic-owner/other#9 ${BASE}..${TIP} r=1 ci=4` } }, PACKAGE), [])
+  assert.deepEqual(theActsOfACall({ tool: SAY_TO_THE_CREW, input: { text: `HANDOFF synthetic-owner/other#9 ${BASE}..${TIP} r=1 ci=4` } }, PACKAGE), [])
   // A message with no line is just a message.
-  assert.deepEqual(theActsOfACall({ tool: 'say_to_the_crew', input: { text: 'a remark about the weather' } }, PACKAGE), [])
+  assert.deepEqual(theActsOfACall({ tool: SAY_TO_THE_CREW, input: { text: 'a remark about the weather' } }, PACKAGE), [])
   // A VERDICT line is not a handoff: the ledger keeps them apart, so the contract does.
-  assert.deepEqual(theActsOfACall({ tool: 'say_to_the_crew', input: { text: `VERDICT ${PACKAGE} PASS ${BASE}..${TIP} r=1 ci=4` } }, PACKAGE), [])
+  assert.deepEqual(theActsOfACall({ tool: SAY_TO_THE_CREW, input: { text: `VERDICT ${PACKAGE} PASS ${BASE}..${TIP} r=1 ci=4` } }, PACKAGE), [])
 })
 
 test('writing a handover is never an act, even when the handover itself holds a handoff line', () => {
   const text = `HANDOFF ${PACKAGE} ${BASE}..${TIP} r=1 ci=4\n\nmy handover`
-  assert.deepEqual(theActsOfACall({ tool: 'write_my_handover', input: { content: text } }, PACKAGE), [])
-  const refused = refuseACallOutsideTheContract({ tool: 'write_my_handover', input: { content: text } }, aContract(['land']))
+  assert.deepEqual(theActsOfACall({ tool: WRITE_MY_HANDOVER_TOOL, input: { content: text } }, PACKAGE), [])
+  const refused = refuseACallOutsideTheContract({ tool: WRITE_MY_HANDOVER_TOOL, input: { content: text } }, aContract([LAND]))
   assert.equal(refused, undefined)
 })
 
 // --- what the contract refuses ------------------------------------------------------
 
 test('the acts a call is that the contract leaves out are the ones refused, and nothing else is', () => {
-  assert.deepEqual(theActsNotAllowed(aShellCall('git push'), aContract(['push', 'land'])), [])
-  assert.deepEqual(theActsNotAllowed(aShellCall('git push'), aContract(['land'])), ['push'])
+  assert.deepEqual(theActsNotAllowed(aShellCall('git push'), aContract(['push', LAND])), [])
+  assert.deepEqual(theActsNotAllowed(aShellCall('git push'), aContract([LAND])), ['push'])
   // `git push --tags` is both acts, so a contract holding one of them still refuses it.
   assert.deepEqual(theActsNotAllowed(aShellCall('git push --tags'), aContract(['push'])), ['tag'])
   assert.deepEqual(theActsNotAllowed(aShellCall('git push --tags'), aContract(['tag'])), ['push'])
@@ -92,7 +96,7 @@ test('a call the contract allows runs, and the answer is nothing at all', () => 
 })
 
 test('a refused call is told which act it is, the contract\'s version, and what the contract does allow', () => {
-  const refused = refuseACallOutsideTheContract(aShellCall('git push origin main'), aContract(['handoff', 'land'], 3))
+  const refused = refuseACallOutsideTheContract(aShellCall('git push origin main'), aContract(['handoff', LAND], 3))
   assert.ok(refused !== undefined)
   assert.match(refused, /this call pushes, and package synthetic-owner\/repo#7's contract \(version 3\) allows handoff, land only, so push is not in it and the call does not run/)
   // Both acts named when the command is both, and each of them missing is named.
