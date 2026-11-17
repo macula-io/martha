@@ -14,6 +14,7 @@
 // A resume does not give the package its attempt back (the gate's answer (b)): the attempt is the package's, so the same
 // act failing again after a resume pauses it again rather than sending it a third time.
 
+import { sameMemberName } from '../declare_crew/declare_crew.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { PACKAGE_RESUMED, WORK_PACKAGE, noteMilestone, readLedger, thePauseOn } from '../log_ledger/log_ledger.ts'
 import type { Nudge } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
@@ -29,7 +30,7 @@ export interface AResumeAsked {
 
 /** Lifts a package's pause, for whoever the crew's nudges go to and for nobody else; resolves to what the member is told. */
 export async function resumeAPausedPackage(host: LedgerHost, asked: AResumeAsked): Promise<{ readonly told: string }> {
-  if (!asked.may.some((name) => name.toLowerCase() === asked.member.toLowerCase())) {
+  if (!asked.may.some((name) => sameMemberName(name, asked.member))) {
     return { told: `Not recorded: ${asked.member} may not resume a paused package; only ${asked.may.join(', ') || 'nobody'}, who the crew's nudges go to, may.` }
   }
   const pause = thePauseOn(await readLedger(host, asked.package))
