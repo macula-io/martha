@@ -15,5 +15,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "architecture/**/*.ts", "prove_the_core/**/*.ts", "watch_a_live_launch/**/*.ts", "trial_the_goose_host/**/*.ts"]
+  "include": ["src/**/*.ts", "architecture/**/*.ts", "prove_the_core/**/*.ts", "watch_a_live_launch/**/*.ts", "trial_the_goose_host/**/*.ts", "carry_marthas_own_node/**/*.ts"]
 }
