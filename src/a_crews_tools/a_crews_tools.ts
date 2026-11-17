@@ -214,6 +214,12 @@ export interface CrewToolPlaces {
    * no machine root, so the note then names only what the declaration names.
    */
   readonly volatile_roots?: readonly string[]
+  /**
+   * What the workspace guard refuses of a git call a member's shell is about to run (martha#562, seam a): the adapter
+   * that asks git hands the refusal here, so the relay asks the crew once. A place given none refuses nothing, and a
+   * crew that declared no workspace layout hands none.
+   */
+  readonly refusesTheGitCall?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
 }
 
 /** The tools a crew's member can call. */
@@ -270,6 +276,13 @@ export interface CrewTools extends TheReviewRule {
    * the ledger cannot read back comes back as that, so the act is refused and every other call still runs.
    */
   theContractInForce(call: AReadableCall, names: ToolNames): Promise<TheContractHanded>
+  /**
+   * What the workspace guard refuses of this call, before it runs (martha#562): the member's shell line read into its
+   * git calls and judged against the crew's declared layout. Undefined when nothing refuses it — a call that is no git
+   * call, or a crew that declared no layout. The asking is the adapter's, handed in by the place; a place given none
+   * refuses nothing.
+   */
+  refusesTheGitIn(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined>
 }
 
 /** The tools, in the order the mod registers them, each as the slice that owns it defines it. */
@@ -410,6 +423,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
     ends: state.ends,
     theContractInForce: (call, names) => theContractTheMemberHolds(held, call, names),
+    refusesTheGitIn: async (call) => (held.refusesTheGitCall === undefined ? undefined : held.refusesTheGitCall(call)),
   }
 }
 

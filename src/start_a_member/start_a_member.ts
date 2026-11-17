@@ -33,7 +33,7 @@ import { dirname } from 'node:path'
 import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
-import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
+import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import { handoverStampsIn, keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { readingOnly, type CrewStore, type DocumentStore, type HandoverStampStore, type Refused, type RowStore } from '../host_contract/host_contract.ts'
 import { LIFECYCLE_PLACE, watchForAStop, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
@@ -87,6 +87,7 @@ import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { theApprovalInUse, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { refuseAGitCallInAMembersShell, theWorkspaceTheCrewDeclared } from '../refuse_a_git_call_in_a_members_shell/refuse_a_git_call_in_a_members_shell.ts'
 
 /** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
 export const NOT_A_TERMINAL =
@@ -264,6 +265,18 @@ export function stoppingHostOn(places: { readonly launcher: MemberPlaces; readon
   }
 }
 
+/**
+ * The workspace guard's first seam, for the crew's own tools (martha#562): a crew that declared a layout has every shell
+ * line a tool call carries read into its git calls, and each is judged before it runs. No layout declared, nothing is
+ * judged, and the crew's tools are handed no guard at all.
+ */
+function theGitGuardPlaceOf(settings: CrewSettings, member: string): Pick<CrewToolPlaces, 'refusesTheGitCall'> {
+  const workspace = theWorkspaceTheCrewDeclared(settings)
+  return workspace === undefined
+    ? {}
+    : { refusesTheGitCall: (call) => refuseAGitCallInAMembersShell({ host: thisMachine, workspace, member, ...call }) }
+}
+
 /** The place a member's restart tool asks through; none when the crew's directory is not this user's own. */
 function theRestartPlaceOf(request: MemberStartRequest): { readonly lifecycle?: StoppingHost } {
   const crew = crewStateDirectory(request.state.state_root, request.root)
@@ -314,6 +327,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     turns,
     crew_tools: (sessions, member) =>
       crewToolsOver({
+        ...theGitGuardPlaceOf(ready.settings, request.member),
         member: request.member,
         ledger: channel,
         beats: dashboardRowsIn(request.places.dashboard),

@@ -13,7 +13,7 @@
 // | session_started (the settings SessionStart hook's input) | `startSession(store, CLAUDE_CODE_SESSION_EVENTS, sessionStartOf(input))`, then `takeInTurn` of each source the launch hands the model by itself (`handed_at_start`, martha#121), then keeps the record |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `takeInTurn(session, arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body)), binder)`, then keeps the record |
 // | the mod's `a_turn_started` ask (a main turn's `turnId` and `text`; martha#440) | the crew's answer first, which is the carrier's decision on the crew message the turn took in; then `hearAMainTurnStart`: that message, if `prompt_submitted` never heard it, `takeInTurn` as a plugin's prompt; a turn with no message that no heard prompt started (its text, or a slash command's line), `takeInTurn` from an unknown origin and one journal line `A_TURN_OF_UNNAMED_SOURCE`; each then keeps the record and tells the screen a turn started |
-// | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })` |
+// | tool_called (the engine's call) | the session's stored record read back, a call naming the owner's user settings file denied (martha#122), then `answerToolCall({ tool, session, policy, input, launch, names })`, and beside the gate the crew's reviewer rule and the workspace guard's first seam (martha#562: the shell line read into its git calls) |
 // | tool_answered (the same call, after it ran, with the host's answer) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2 — except a `mesh_hello` or `mesh_goodbye` answer whose every leaf came from this launch (`wordsInAMeshAnswer`), which takes nothing in and keeps the member's shell (B9, martha#251); and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127), except a `martha run <name>` whose answer is exactly the one its receipt builds, which records nothing (martha#129) |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
@@ -618,6 +618,24 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
 }
 
 /**
+ * What the crew refuses of this call after the gate has allowed it, or undefined when it refuses nothing.
+ *
+ * The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role may
+ * not make is refused after the gate has allowed it, and never in place of the gate's own answer. The workspace guard's
+ * first seam is asked in the same place (martha#562), over the shell line the call carries, and a held end of the turn
+ * (martha#311 ruling D) is asked last of all, so it only turns a yes into a no.
+ */
+async function whatTheCrewRefuses(
+  place: MemberRelayPlace,
+  session: HostSession,
+  call: { readonly tool: string; readonly input: Body },
+): Promise<string | undefined> {
+  return (await place.crew?.refusesTheSubagent({ tool: call.tool, input: call.input }))
+    ?? (await place.crew?.refusesTheGitIn({ tool: call.tool, input: call.input }))
+    ?? place.crew?.ends.deniesACall(session.id)
+}
+
+/**
  * What the owner keeps from this call before the gate is asked (martha#122, #136): their own settings file, which no call
  * of a member's may name, and their memory, which no call may write. Undefined when the call may touch neither.
  */
@@ -651,10 +669,7 @@ async function theDenialOfACall(
     spend: await theSpendACrewHolds(place.crew, session.id),
   })?.deny
   if (verdict !== undefined) return verdict
-  // The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role
-  // may not make is refused after the gate has allowed it, and never in place of the gate's own answer. A held end of
-  // the turn (martha#311 ruling D) is asked last of all, so it only turns a yes into a no.
-  return (await place.crew?.refusesTheSubagent({ tool: call.tool, input: call.input })) ?? place.crew?.ends.deniesACall(session.id)
+  return whatTheCrewRefuses(place, session, call)
 }
 
 /**

@@ -16,7 +16,7 @@ import { test, type TestContext } from 'node:test'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { holdingTheEnds } from '../end_a_running_turn/hold_the_end.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SUBAGENT_SPAWN, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -46,6 +46,9 @@ const SESSION = 'the-session'
  */
 const A_REFUSED_REVIEW = 'Not run: this crew holds its reviews to the model its owner declared.'
 
+/** The reason this crew gives a shell line the workspace guard refuses (martha#562, seam a), in its own words. */
+const A_REFUSED_GIT_CALL = 'Not run: this call would move a clone off its default branch.'
+
 /** One member's places under a directory the test removes. */
 function placesOf(t: TestContext): Places {
   const home = mkdtempSync(join(tmpdir(), 'martha-315-review-relay-'))
@@ -68,7 +71,7 @@ const userScopeFor = (home: string): OwnerUserScope => ({
  * A crew that refuses every call it is asked about, so what a test reads is the relay's own order: a real crew refuses
  * only a review, and a call it would not refuse is one these tests do not need.
  */
-function aCrewRefusingEverything(asked: string[]): CrewTools {
+function aCrewRefusingEverything(asked: string[], git_asked: string[] = []): CrewTools {
   return {
     tools: [],
     answer: async () => ({ answer: '' }),
@@ -85,8 +88,14 @@ function aCrewRefusingEverything(asked: string[]): CrewTools {
     // This crew hears no menu close, which is what the ask queue reads a settle on (martha#313).
     noteTheCallsAnswer: () => undefined,
     refusesTheSubagent: async (call) => {
+      if (!CLAUDE_CODE_SUBAGENT_SPAWN.tools.includes(call.tool)) return undefined
       asked.push(call.tool)
       return A_REFUSED_REVIEW
+    },
+    refusesTheGitIn: async (call) => {
+      if (call.tool !== CLAUDE_CODE_SHELL_TOOL) return undefined
+      git_asked.push(String(call.input['command'] ?? ''))
+      return A_REFUSED_GIT_CALL
     },
   }
 }
@@ -152,6 +161,21 @@ test('#315: the relay denies a call the crew refuses, with the crew\'s own reaso
   const review = call(CLAUDE_CODE_SUBAGENT_SPAWN.tools[0]!, { [CLAUDE_CODE_SUBAGENT_SPAWN.type_field]: 'Explore', [CLAUDE_CODE_SUBAGENT_SPAWN.description_field]: 'review the patch' })
   assert.deepEqual(await relay.answer('tool_called', review), denied(A_REFUSED_REVIEW), 'the call the gate allows and the crew refuses was not denied with the crew\'s reason')
   assert.deepEqual(asked, [CLAUDE_CODE_SUBAGENT_SPAWN.tools[0]!], 'the relay never asked the crew about the call it judged')
+  assert.deepEqual(allowed, [], 'a receipt was taken for a call that never ran')
+})
+
+test('#562: the relay asks the crew what the workspace guard refuses of a shell call, and denies it with that reason', async (t) => {
+  const places = placesOf(t)
+  const asked: string[] = []
+  const git_asked: string[] = []
+  const allowed: string[] = []
+  const relay = relayFor(places, aCrewRefusingEverything(asked, git_asked), theReceiptsTaken(allowed))
+  await startedOn(relay)
+
+  const line = 'git checkout main'
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: line })), denied(A_REFUSED_GIT_CALL), 'a shell call the guard refuses was not denied with the guard\'s reason')
+  assert.deepEqual(git_asked, [line], 'the relay never handed the shell line to the crew\'s guard')
+  assert.deepEqual(asked, [], 'the reviewer rule answered for a call that is no review')
   assert.deepEqual(allowed, [], 'a receipt was taken for a call that never ran')
 })
 

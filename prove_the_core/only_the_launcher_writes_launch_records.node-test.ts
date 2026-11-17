@@ -67,6 +67,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'load_the_hosts_markdown',
     'place_the_hosts_settings',
     'read_a_kernel_and_a_home',
+    'refuse_a_git_call_in_a_members_shell',
     'refuse_a_member_writing_owner_memory',
     'refuse_settings_that_turn_hooks_off',
     'run_an_owner_signed_command',
