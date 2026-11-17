@@ -51,6 +51,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'drive_the_recorded_host',
     'end_a_launch',
     'end_a_launch_when_its_run_ends',
+    'give_a_member_its_own_config',
     'find_a_homes_state_root',
     'find_what_a_later_git_run_reads',
     'hear_the_hosts_dialogs',

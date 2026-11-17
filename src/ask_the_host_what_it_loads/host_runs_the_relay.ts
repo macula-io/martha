@@ -84,6 +84,12 @@ export const ownerCanAnswerTheHost = (stdio: StdioOptions): boolean => stdio ===
  */
 export const HOST_TRUST_RECORD_FILE = '.claude.json'
 
+/** The key under `projects[<folder>]` of the host's record that says the host trusts that folder. */
+export const TRUST_ACCEPTED_KEY = 'hasTrustDialogAccepted'
+
+/** The key of the host's record that says its first run is done, so it shows no first-run screens before a session. */
+export const FIRST_RUN_DONE_KEY = 'hasCompletedOnboarding'
+
 /**
  * Whether the host's own record says it trusts `folder` already, so it will not
  * ask. Read one way only: true only for the exact folder, by its path or its
@@ -134,7 +140,7 @@ const projectsIn = (record: unknown): Readonly<Record<string, unknown>> => (isRe
 /** Whether the record marks exactly this path trusted, with the value true. */
 function trustedIn(projects: Readonly<Record<string, unknown>>, path: string): boolean {
   const project = Object.hasOwn(projects, path) ? projects[path] : undefined
-  return isRecord(project) && project.hasTrustDialogAccepted === true
+  return isRecord(project) && project[TRUST_ACCEPTED_KEY] === true
 }
 
 /** The host's answers fit in this; a longer one is no answer the launcher reads. */

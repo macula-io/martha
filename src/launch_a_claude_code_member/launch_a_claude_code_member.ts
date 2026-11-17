@@ -9,14 +9,17 @@
 // for this launch alone. In order:
 //
 //   1. `prepareLaunch`, then the mesh server version the approved server config
-//      installs, which must be a recorded one (martha#49), then the settings
+//      installs, which must be a recorded one (martha#49), then a config folder
+//      of the member's own inside the snapshot, whose user settings are Martha's
+//      and whose sign-in is the owner's default store, uncopied (martha#602,
+//      ../give_a_member_its_own_config), then the settings
 //      the host reads, which may set no switch that turns the relay off, nor
 //      safe mode in the environment, a settings file's env or the owner's
 //      arguments (martha#122, ../claude_code_host/settings_that_turn_hooks_off),
 //      and, but for the approved copy, may declare no hook and enable no plugin,
 //      nor may the launcher's environment name a plugin folder (martha#121,
 //      ../claude_code_host/hooks_and_plugins_the_owner_declares), then the env of the
-//      settings files the host loads, the owner's user settings and the
+//      settings files the host loads, the member's own user settings and the
 //      approved --settings copy, which may name only what the mesh server may
 //      be given (martha#65 r=3, ../claude_code_host/settings_env_reaching_servers):
 //      on a refusal of any nothing starts, and the refusal goes to the owner.
@@ -154,6 +157,8 @@ import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_left
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
+import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
@@ -297,6 +302,21 @@ export interface LaunchMade extends ReadyLaunch, WhatTheRunWatches {
   readonly settingsArgs: readonly string[]
 }
 
+/**
+ * The host's environment, on a config folder of the member's own (martha#602): what the gate reads as the member's
+ * user settings is the file Martha wrote there, and the owner's own folder is never loaded into the member. The
+ * owner's folder must still be told, since the places a member may not write are read from it (ownerMemoryOf). Or why
+ * not.
+ */
+function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extract<PreparedLaunch, { readonly allow: true }>): Record<string, string> | string {
+  const owners = userSettingsPath(launch.inherited)
+  if ('refusal' in owners) return owners.refusal
+  const memberConfig = join(prepared.snapshot_dir, MEMBER_CONFIG_FOLDER)
+  const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir)
+  if (!made.made) return made.refusal
+  return { ...launchEnvironment(launch.inherited, prepared.switches, CLAUDE_CODE), ...theMembersConfigEnvironment(memberConfig) }
+}
+
 /** Step 1: the launch gate, the mesh server version, and the settings files' env; or the refusal. */
 function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   if (launch.place.host !== CLAUDE_CODE) return `${NOT_STARTED}: this launcher starts ${CLAUDE_CODE}, not ${launch.place.host}.`
@@ -318,7 +338,11 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     removeSnapshot()
     return `${NOT_STARTED}: ${unproved}`
   }
-  const hostEnv = launchEnvironment(launch.inherited, prepared.switches, CLAUDE_CODE)
+  const hostEnv = membersHostEnvironment(launch, prepared)
+  if (typeof hostEnv === 'string') {
+    removeSnapshot()
+    return `${NOT_STARTED}: ${hostEnv}`
+  }
   // Before the server environment rule: a switch is refused as a switch, whatever that rule allows.
   const hookSettings = hostSettingsOf(launch, hostEnv, prepared)
   if (typeof hookSettings === 'string') {

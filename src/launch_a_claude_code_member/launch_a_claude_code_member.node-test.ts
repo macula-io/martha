@@ -46,8 +46,9 @@ import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/si
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
 import { HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CONFIG_DIR_VARIABLE, PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { MEMBER_CONFIG_FOLDER, MEMBERS_OWN_SETTINGS, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
@@ -1962,13 +1963,6 @@ test('what the launcher\'s environment would load into the mesh server never rea
 const USER_SETTINGS = join(CLAUDE_FOLDER, USER_SETTINGS_FILE)
 const settingsWithEnv = (env: Record<string, string>) => JSON.stringify({ env })
 
-function ownerSettings(place: Place, env: Record<string, string>): string {
-  const path = join(place.home, USER_SETTINGS)
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, settingsWithEnv(env))
-  return path
-}
-
 async function refusedLeavingNothing(t: TestContext, place: Place, launch: Parameters<typeof launchClaudeCodeMember>[0], ranFile: string): Promise<string> {
   const lines: string[] = []
   const started = await aMemberStartedIn(t, place, { ...launch, tellOwner: (line) => void lines.push(line) })
@@ -1981,29 +1975,50 @@ async function refusedLeavingNothing(t: TestContext, place: Place, launch: Param
   return refusal
 }
 
-test("a name in the owner's user settings env nobody approved starts nothing, naming the file and the name", async (t) => {
-  const recorded = RECORDED_MESH_SERVERS[0]
-  assert.ok(recorded !== undefined)
-  const { recording } = await recordedTreeOf(t, recorded.server_version)
-  const place = placeFor(t, meshServerAt(recorded.server_version))
-  const fake = fakeClaude(place)
-  const file = ownerSettings(place, { FROM_SETTINGS: 'x' })
-  const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
-  assert.ok(refusal.includes(file) && refusal.includes('FROM_SETTINGS'), refusal)
-})
+// --- a config folder of the member's own (martha#602, T1) -----------------------
+// Everything the owner's user settings could carry, which the gate refused while the member's host read that file:
+// with a folder of its own the member starts, its host is pointed at that folder and at the owner's default sign-in
+// store, and the owner's file is neither read into it nor changed.
 
-for (const name of [...Object.keys(CLAUDE_MEMORY_OFF), ...CLAUDE_MEMORY_ELSEWHERE]) {
-  test(`${name} in the owner's user settings env starts nothing, so settings cannot turn a member's memory back on or move it (#136)`, async (t) => {
-    const recorded = RECORDED_MESH_SERVERS[0]
-    assert.ok(recorded !== undefined)
-    const { recording } = await recordedTreeOf(t, recorded.server_version)
-    const place = placeFor(t, meshServerAt(recorded.server_version))
-    const fake = fakeClaude(place)
-    const file = ownerSettings(place, { [name]: '0' })
-    const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
-    assert.ok(refusal.includes(file) && refusal.includes(name), refusal)
-  })
+/** The running member's own config folder: the one launch directory under the snapshot root, and its member folder. */
+function membersOwnConfig(place: Place): string {
+  const launches = readdirSync(place.snapshot_root)
+  assert.equal(launches.length, 1, `the snapshot root holds ${launches.join(', ')}`)
+  return join(place.snapshot_root, launches[0] ?? '', MEMBER_CONFIG_FOLDER)
 }
+
+test("whatever the owner's user settings carry, the member starts on a config folder of its own and the owner's default sign-in store (martha#602)", async (t) => {
+  assert.ok(HOOKS_OFF !== undefined)
+  const [SAFE_MODE_VARIABLE] = CLAUDE_CODE_HOOK_SWITCHES.safe_mode.variables
+  assert.ok(SAFE_MODE_VARIABLE !== undefined)
+  const place = placeFor(t)
+  const owners = writeSettings(join(place.home, USER_SETTINGS), {
+    hooks: { SessionStart: [OWNER_HOOK], PreToolUse: [OWNER_HOOK] },
+    enabledPlugins: { [OWNER_PLUGIN]: true },
+    [HOOKS_OFF]: true,
+    env: {
+      [PLUGIN_DIRS_VARIABLE]: join(place.home, 'plugins'),
+      [SAFE_MODE_VARIABLE]: '1',
+      FROM_SETTINGS: 'x',
+      ...Object.fromEntries([...Object.keys(CLAUDE_MEMORY_OFF), ...CLAUDE_MEMORY_ELSEWHERE].map((name) => [name, '0'])),
+    },
+  })
+  const before = readFileSync(owners, 'utf8')
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved))
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write what it was started with', () => existsSync(fake.envFile), t)
+  const env = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
+  const own = membersOwnConfig(place)
+  assert.equal(env[CONFIG_DIR_VARIABLE], own, "the member's host reads its config from its own folder")
+  assert.equal(env[CLAUDE_CODE_SIGN_IN_STORE_VARIABLE], '', "the member's host is signed in from the owner's default store, set and empty")
+  assert.ok(own.startsWith(`${place.snapshot_root}/`), `${own} is not inside the launch's own directory`)
+  assert.deepEqual(JSON.parse(readFileSync(join(own, USER_SETTINGS_FILE), 'utf8')), MEMBERS_OWN_SETTINGS)
+  assert.equal(readFileSync(owners, 'utf8'), before, "the owner's user settings are not changed")
+  started.stop('the test is over')
+  await started.stopped
+  assert.deepEqual(readdirSync(place.snapshot_root), [], "the member's folder goes with its launch")
+})
 
 test('a name in the approved --settings env nobody approved starts nothing, naming it', async (t) => {
   const recorded = RECORDED_MESH_SERVERS[0]
@@ -2027,33 +2042,9 @@ for (const [shape, configDir] of [
     const fake = fakeClaude(place)
     const launch = memberLaunch(place, fake.command, place.approved, [], recording)
     const refusal = await refusedLeavingNothing(t, place, { ...launch, inherited: { ...launch.inherited, CLAUDE_CONFIG_DIR: configDir } }, fake.ranFile)
-    assert.ok(refusal.includes('CLAUDE_CONFIG_DIR'), refusal)
+    assert.ok(refusal.includes(CONFIG_DIR_VARIABLE), refusal)
   })
 }
-
-// A folder in it would load a plugin, which is refused (martha#121); a blank one loads nothing, and still never reaches the server.
-test("a blank CLAUDE_CODE_PLUGIN_DIRS in the owner's user settings starts the member, and the mesh server is given it empty", async (t) => {
-  const recorded = RECORDED_MESH_SERVERS[0]
-  assert.ok(recorded !== undefined)
-  const { recording } = await recordedTreeOf(t, recorded.server_version)
-  const place = placeFor(t, meshServerAt(recorded.server_version))
-  const fake = fakeClaude(place)
-  const fromSettings = { [PLUGIN_DIRS_VARIABLE]: ' ' }
-  ownerSettings(place, fromSettings)
-  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved, [], recording))
-  assert.ok(started.started, started.started ? '' : started.refusal)
-  await until('the fake host to start', () => existsSync(fake.argsFile) && readFileSync(fake.argsFile, 'utf8').includes(MCP_CONFIG_SWITCH), t)
-  const entry = serverConfigIn(fake.argsFile).mcpServers.macula as { command: string; args: string[]; env?: Record<string, string> } | undefined
-  assert.ok(entry !== undefined)
-  // The host's environment, then the settings env, then the entry's: how Claude Code starts a server.
-  const run = spawnSync(entry.command, entry.args, { env: { ...process.env, ...fromSettings, ...entry.env }, encoding: 'utf8' })
-  assert.equal(run.status, 0, run.stderr)
-  assert.equal(run.stdout.trim(), RECORDED_MARK, run.stderr)
-  const seen = JSON.parse(run.stderr.trim().split('\n').at(-1) ?? '{}') as Record<string, string>
-  assert.equal(seen[PLUGIN_DIRS_VARIABLE], '', `it reached the server as ${String(seen[PLUGIN_DIRS_VARIABLE])}`)
-  started.stop('the test is over')
-  await started.stopped
-})
 
 // --- settings that turn Martha's relay off (martha#122) -------------------------
 
@@ -2076,11 +2067,6 @@ async function hookLaunchRefused(t: TestContext, plant: (place: Place) => string
   const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved, [], recording), fake.ranFile)
   assert.ok(refusal.includes(file) && refusal.includes(key), refusal)
 }
-
-test("a hook-killing key in the owner's user settings starts nothing, naming the file and the key", async (t) => {
-  assert.ok(HOOKS_OFF !== undefined)
-  await hookLaunchRefused(t, (place) => writeSettings(join(place.home, USER_SETTINGS), { [HOOKS_OFF]: true }), HOOKS_OFF)
-})
 
 test('a hook-killing key in the approved --settings copy starts nothing, naming it and the key', async (t) => {
   assert.ok(HOOKS_OFF !== undefined)
@@ -2155,7 +2141,13 @@ for (const [shape, carried, kept] of [
     const fake = fakeClaude(place)
     const launch = memberLaunch(place, fake.command, place.approved, [], recording)
     const settings = await settingsTheHostStartedWith(t, place, fake, launch)
-    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) })
+    // The member's environment names its own config folder (martha#602, T2): the rules cover that folder's places
+    // and the owner's alike, so nothing the member writes in its own folder runs as code either.
+    const member_env = { ...launch.inherited, ...theMembersConfigEnvironment(membersOwnConfig(place)) }
+    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) })
+    const ownersOnly = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) })
+    assert.ok(memoryDenyRules(places).length > memoryDenyRules(ownersOnly).length, "the member's own folder adds rules of its own")
+    for (const rule of memoryDenyRules(ownersOnly)) assert.ok(memoryDenyRules(places).includes(rule), `the owner's ${rule} is still denied`)
     const permissions = settings.permissions as { deny: string[]; allow?: string[] }
     assert.deepEqual(permissions.deny, [...kept, ...memoryDenyRules(places)])
     if (carried !== undefined) {
@@ -2196,7 +2188,7 @@ test("a call after which the owner's user settings carry a hook-killing key stop
   assert.ok(stops[0]?.includes(file) && stops[0].includes(HOOKS_OFF), stops[0] ?? 'no stop')
 })
 
-test("a hook-killing key written while the member runs stops it, with no tool call after the write", async (t) => {
+test("a hook-killing key written into the member's own settings while it runs stops it, with no tool call after the write (martha#602)", async (t) => {
   assert.ok(HOOKS_OFF !== undefined)
   const place = placeFor(t)
   const fake = fakeClaude(place)
@@ -2211,7 +2203,7 @@ test("a hook-killing key written while the member runs stops it, with no tool ca
   })
   assert.equal(posted.text, '{"taken":1}')
   // The host may drop its hooks once it reloads the file, so no hook asks again: the launcher must.
-  const file = writeSettings(join(place.home, USER_SETTINGS), { [HOOKS_OFF]: true })
+  const file = writeSettings(join(membersOwnConfig(place), USER_SETTINGS_FILE), { [HOOKS_OFF]: true })
   const stopped = await started.stopped
   const why = stopped.stopped_because ?? ''
   assert.ok(why.includes(file) && why.includes(HOOKS_OFF), why)
@@ -2236,16 +2228,6 @@ async function safeModeLaunchRefused(
   assert.ok(refusal.includes('turns off the hooks'), refusal)
 }
 
-test("safe mode in the owner's user settings env starts nothing, naming the file and the variable, whatever the server environment rule allows", async (t) => {
-  const [SAFE_MODE_VARIABLE] = safeMode().variables
-  assert.ok(SAFE_MODE_VARIABLE !== undefined)
-  await safeModeLaunchRefused(
-    t,
-    (launch, place) => (writeSettings(join(place.home, USER_SETTINGS), { env: { [SAFE_MODE_VARIABLE]: '1' } }), launch),
-    (place) => [join(place.home, USER_SETTINGS), SAFE_MODE_VARIABLE],
-  )
-})
-
 test("safe mode in the launcher's own environment starts nothing, naming the variable", async (t) => {
   const [SAFE_MODE_VARIABLE] = safeMode().variables
   assert.ok(SAFE_MODE_VARIABLE !== undefined)
@@ -2263,9 +2245,11 @@ test("safe mode among the owner's arguments starts nothing, naming the argument"
 const OWNER_HOOK = { matcher: '', hooks: [{ type: 'command', command: 'echo from-the-owner' }] }
 const OWNER_PLUGIN = 'formatter@tools'
 
-/** Each settings file the owner or the admin holds, by name, and where it lies under a test's place. */
+/**
+ * Each settings file the admin holds, by name, and where it lies under a test's place. The owner's user settings are
+ * no longer one: the member reads its own (martha#602), whose launch-time contents are Martha's.
+ */
 const OWNERS_FILES: readonly (readonly [string, (place: Place) => string])[] = [
-  ['the user settings', (place) => join(place.home, USER_SETTINGS)],
   ['the managed settings file', (place) => join(managedSettingsOf(place).dir, RECORDED_HOST.managed_settings.file)],
   ['a file of the managed drop-in folder', (place) => join(managedSettingsOf(place).dir, RECORDED_HOST.managed_settings.drop_in, '50-org.json')],
 ]
@@ -2282,6 +2266,13 @@ for (const [which, pathOf] of OWNERS_FILES) {
   test(`a plugin folder in the env of ${which} starts nothing, naming the file and the variable`, async (t) => {
     await hookLaunchRefused(t, (place) => writeSettings(pathOf(place), { env: { [PLUGIN_DIRS_VARIABLE]: join(place.home, 'plugins') } }), PLUGIN_DIRS_VARIABLE)
   })
+
+  // T4: the host applies a settings file's env, so this could point the member back at the owner's folder.
+  for (const name of [CONFIG_DIR_VARIABLE, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE]) {
+    test(`${name} in the env of ${which} starts nothing, naming the file and the variable (martha#602)`, async (t) => {
+      await hookLaunchRefused(t, (place) => writeSettings(pathOf(place), { env: { [name]: join(place.home, CLAUDE_FOLDER) } }), name)
+    })
+  }
 }
 
 test("a plugin folder in the launcher's own environment starts nothing, naming the variable", async (t) => {
@@ -2307,13 +2298,13 @@ test('an empty user settings file, or one whose hooks and plugins are empty or o
   }
 })
 
-test("a hook written into the owner's user settings while the member runs stops it, naming the file and the event", async (t) => {
+test("a hook written into the member's own settings while it runs stops it, naming the file and the event (martha#602)", async (t) => {
   const place = placeFor(t)
   const fake = fakeClaude(place)
   const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command))
   if (!started.started) assert.fail(started.refusal)
   await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
-  const file = writeSettings(join(place.home, USER_SETTINGS), { hooks: { UserPromptSubmit: [OWNER_HOOK] } })
+  const file = writeSettings(join(membersOwnConfig(place), USER_SETTINGS_FILE), { hooks: { UserPromptSubmit: [OWNER_HOOK] } })
   const stopped = await started.stopped
   const why = stopped.stopped_because ?? ''
   assert.ok(why.includes(file) && why.includes('UserPromptSubmit'), why)
@@ -3435,34 +3426,29 @@ test('a member on the owner\'s terminal that Ctrl-Z stops is resumed in the fore
   assert.equal(foregroundOf(member), member, 'the member\'s group has the terminal again')
 })
 
-test('a member on the owner\'s terminal is not held to the deadline of a member no owner can answer for: the host may first ask the owner whether to trust the folder (#104 r=2)', async (t) => {
-  const place = placeFor(t)
-  const session_start_deadline_ms = 300
-  const terminal = await ownersTerminal(t, place, { deadlines: { session_start_deadline_ms } })
-  const member = Number(textIn(terminal.fake.readyFile))
-  await new Promise((resolve) => setTimeout(resolve, 5 * session_start_deadline_ms))
-  assert.equal(isAlive(member), true, 'the member still runs')
-  assert.ok(!terminal.shown().includes('stopped'), terminal.shown())
-})
+/** The recording's own argument that tells the host to read no trust record, so it may ask the owner after all. */
+function ignoreTrustFlag(): string {
+  const flag = CLAUDE_CODE_HOOK_SWITCHES.outside_a_terminal.flags[0]
+  assert.ok(flag !== undefined, 'the recording names no argument for the exit')
+  return flag
+}
 
-test('a member on the owner\'s terminal whose relay never reports its session start is stopped at the trust answer deadline, saying the host may still have been asking (#104 r=2)', async (t) => {
+test('a member on the owner\'s terminal whose owner tells the host to ignore its trust record, and whose relay never reports its session start, is stopped at the trust answer deadline, saying the host may still have been asking (#104 r=2, martha#602)', async (t) => {
   const place = placeFor(t)
   const trust_answer_deadline_ms = 500
-  const terminal = await ownersTerminal(t, place, { deadlines: { session_start_deadline_ms: MINUTE_MS, trust_answer_deadline_ms } })
+  const terminal = await ownersTerminal(t, place, { args: [ignoreTrustFlag()], deadlines: { session_start_deadline_ms: MINUTE_MS, trust_answer_deadline_ms } })
   await until('the launcher to stop the member', () => terminal.shown().includes('because '), t, () => terminal.shown())
   const why = /because (.*)/.exec(terminal.shown())?.[1] ?? ''
   assert.ok(why.includes(`within ${trust_answer_deadline_ms / 1000} s`), why)
   assert.ok(why.includes('trust'), why)
 })
 
-/** The host's own record of the folders it trusts, as Claude Code keeps it in the config folder the member's HOME names. */
-function hostTrustRecord(place: Place, record: string | undefined): void {
-  if (record !== undefined) writeFileSync(join(place.home, HOST_TRUST_RECORD_FILE), record)
-}
-
-test('a member on the owner\'s terminal in a folder the host\'s record already trusts is held to the short deadline: the host asks nothing (#104 r=3)', async (t) => {
+// T8: the owner chose that the launcher marks the approved checkout trusted in the member's own record (martha#602), so
+// the host asks nothing and the member is held to the short deadline, whatever the owner's own record says.
+test('a member on the owner\'s terminal is held to the short deadline: its own record trusts the approved checkout, so the host asks nothing (#104 r=3, martha#602)', async (t) => {
   const place = placeFor(t)
-  hostTrustRecord(place, JSON.stringify({ projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
+  // The owner's own record trusts nothing: only the member's own folder can be what the host reads.
+  writeFileSync(join(place.home, HOST_TRUST_RECORD_FILE), JSON.stringify({ projects: {} }))
   const session_start_deadline_ms = 300
   const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS } })
   await until('the launcher to stop the member', () => terminal.shown().includes('because '), t, () => terminal.shown())
@@ -3476,35 +3462,13 @@ test('a member on the owner\'s terminal whose owner passes the host its ignore-p
   // deadline (the test above). The owner's own argument says the host reads no record, so the host may ask after all:
   // the member keeps the long deadline and runs. This is the call site, not the reader: the arguments must be passed.
   const place = placeFor(t)
-  hostTrustRecord(place, JSON.stringify({ projects: { [place.checkout]: { hasTrustDialogAccepted: true } } }))
   const session_start_deadline_ms = 300
-  const flag = CLAUDE_CODE_HOOK_SWITCHES.outside_a_terminal.flags[0]
-  assert.ok(flag !== undefined, 'the recording names no argument for the exit')
-  const terminal = await ownersTerminal(t, place, { args: [flag], inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS } })
+  const terminal = await ownersTerminal(t, place, { args: [ignoreTrustFlag()], inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS } })
   const member = Number(textIn(terminal.fake.readyFile))
   await new Promise((resolve) => setTimeout(resolve, 5 * session_start_deadline_ms))
   assert.equal(isAlive(member), true, 'the member still runs: the host was told to ignore its record, so it may ask')
   assert.ok(!terminal.shown().includes('stopped'), terminal.shown())
 })
-
-for (const [what, record] of [
-  ['no record at all', undefined],
-  ['a record that does not parse', '{"projects": {'],
-  ['a record where the folder is not trusted', (place: Place) => JSON.stringify({ projects: { [place.checkout]: { hasTrustDialogAccepted: false } } })],
-  ['a record that trusts only a folder above it', (place: Place) => JSON.stringify({ projects: { [dirname(place.checkout)]: { hasTrustDialogAccepted: true } } })],
-  ['a record whose trust is not the value true', (place: Place) => JSON.stringify({ projects: { [place.checkout]: { hasTrustDialogAccepted: 'true' } } })],
-] as const) {
-  test(`a member on the owner\'s terminal keeps the trust answer deadline on ${what} (#104 r=3)`, async (t) => {
-    const place = placeFor(t)
-    hostTrustRecord(place, typeof record === 'function' ? record(place) : record)
-    const session_start_deadline_ms = 300
-    const terminal = await ownersTerminal(t, place, { inherited: { HOME: place.home }, deadlines: { session_start_deadline_ms, trust_answer_deadline_ms: MINUTE_MS } })
-    const member = Number(textIn(terminal.fake.readyFile))
-    await new Promise((resolve) => setTimeout(resolve, 5 * session_start_deadline_ms))
-    assert.equal(isAlive(member), true, 'the member still runs')
-    assert.ok(!terminal.shown().includes('stopped'), terminal.shown())
-  })
-}
 
 test('a member on the owner\'s terminal that exits by itself leaves the terminal\'s settings as they were', async (t) => {
   const place = placeFor(t)
@@ -4209,12 +4173,12 @@ test('with one exact-pin mesh server, the launch hands the relay that server’s
   const recorded = RECORDED_MESH_SERVERS[0]
   assert.ok(recorded !== undefined)
   const { recording } = await recordedTreeOf(t, recorded.server_version)
-  const place = placeFor(t, meshServerAt(recorded.server_version))
   // A HOME the server is really given, and not the one its host runs with: only a reading of the server's own
-  // environment carries it, and the contact-policy default is walked from it.
-  const serverHome = join(place.home, 'the-server-home')
-  mkdirSync(serverHome)
-  ownerSettings(place, { HOME: serverHome })
+  // environment carries it, and the contact-policy default is walked from it. It comes in through the approved
+  // settings copy's env, the one settings file the member's host reads that a checkout can carry (martha#602).
+  const serverHome = mkdtempSync(join(tmpdir(), 'martha-the-server-home-'))
+  t.after(() => removeTheTree(serverHome))
+  const place = placeFor(t, meshServerAt(recorded.server_version), { [USER_SETTINGS]: settingsWithEnv({ HOME: serverHome }) })
   const fake = fakeClaude(place)
   const heard: MemberRelayPlace[] = []
   const started = await aMemberStartedIn(t, place, {

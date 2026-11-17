@@ -363,6 +363,7 @@
   "legacy_global_config_names": [
     ".config.json"
   ],
+  "sign_in_store_variable": "CLAUDE_SECURESTORAGE_CONFIG_DIR",
   "file_permission_rules": {
     "matcher": "let p=a.toolName===\"Write\"||a.toolName===\"NotebookEdit\"||a.toolName===\"MultiEdit\"?\"Edit\":a.toolName===\"Glob\"?\"Read\":void 0;"
   },
