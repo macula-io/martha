@@ -403,55 +403,55 @@
   },
   "file_mode_guard_calls": {
     "guard_calls": {
-      "ho": 0,
-      "AE": 1,
-      "K": 2,
-      "Pe": 3,
-      "ws": 4,
-      "Nb": 5
+      "Wo": 0,
+      "LT": 1,
+      "q": 2,
+      "Ce": 3,
+      "Ss": 4,
+      "Jb": 5
     },
     "functions": [
       {
-        "function": "function ho(){return Pe(process.env.CLAUDE_CODE_SAFE_MODE)||i(\"--safe-mode\")||!1}",
+        "function": "function Wo(){return Ce(process.env.CLAUDE_CODE_SAFE_MODE)||NHt(\"--safe-mode\")||!1}",
         "calls": {
-          "Pe": 3,
-          "i": 6
+          "Ce": 3,
+          "NHt": 6
         }
       },
       {
-        "function": "function AE(){return n().host.launchOptions.restrictedSession()}",
+        "function": "function LT(){return n().host.launchOptions.restrictedSession()}",
         "calls": {
           "n": 7
         }
       },
       {
-        "function": "function K(){return Gt()}",
+        "function": "function q(){return Et()}",
         "calls": {
-          "Gt": 8
+          "Et": 8
         }
       },
       {
-        "function": "function Pe(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}",
+        "function": "function Ce(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}",
         "calls": {}
       },
       {
-        "function": "function ws(e){if(e===void 0)return!1;if(typeof e===\"boolean\")return!e;let n=String(e).toLowerCase().trim();return[\"0\",\"false\",\"no\",\"off\"].includes(n)}",
+        "function": "function Ss(e){if(e===void 0)return!1;if(typeof e===\"boolean\")return!e;let n=String(e).toLowerCase().trim();return[\"0\",\"false\",\"no\",\"off\"].includes(n)}",
         "calls": {}
       },
       {
-        "function": "function Nb(){if(i.CLAUDE_CODE_SIMPLE)return!0;return Boolean(i.CLAUDE_CODE_REMOTE)&&!process.env.CLAUDE_CODE_REMOTE_MEMORY_DIR&&!i.CLAUDE_COWORK_MEMORY_PATH_OVERRIDE}",
+        "function": "function Jb(){if(s.CLAUDE_CODE_SIMPLE)return!0;return Boolean(s.CLAUDE_CODE_REMOTE)&&!process.env.CLAUDE_CODE_REMOTE_MEMORY_DIR&&!s.CLAUDE_COWORK_MEMORY_PATH_OVERRIDE}",
         "calls": {}
       },
       {
-        "function": "function i(e){let n=process.argv,r=n.indexOf(e);if(r===-1)return!1;let t=n.indexOf(\"--\");return t===-1||r<t}",
+        "function": "function NHt(e,n=process.argv){let r=n.indexOf(e);if(r===-1)return!1;let t=n.indexOf(\"--\");return t===-1||r<t}",
         "calls": {}
       },
       {
-        "function": "function n(){return b()?.session??y}",
+        "function": "function n(){return b()?.session??v}",
         "calls": {}
       },
       {
-        "function": "function Gt(){return n().host.launchOptions.diskless()}",
+        "function": "function Et(){return n().host.launchOptions.diskless()}",
         "calls": {
           "n": 7
         }
