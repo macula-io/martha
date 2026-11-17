@@ -19,6 +19,8 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
+
 const SANS = '"Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif'
 const MONO = '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace'
 
@@ -184,6 +186,13 @@ export interface Box {
    * A component box sets it, and the test beside this file holds every one of them to src/.
    */
   readonly names?: readonly string[]
+  /**
+   * The host this box says it is, when it claims to be one: a box drawn as a host's holds that host's
+   * adapters and nothing else. The test beside this file holds every slice such a box names to
+   * package.json's martha.hostAdapters (martha#492); a box that declares no host is never judged,
+   * because a capability box groups a slice with its adapter on purpose.
+   */
+  readonly host?: string
   readonly person?: true
   readonly code?: true
 }
@@ -192,6 +201,8 @@ export interface Box {
 export interface BoxCoverage {
   readonly name: string
   readonly names: readonly string[]
+  /** The host the box declared, when it declared one: what the test holds its names to. */
+  readonly host?: string
   /** The title, the type and every description line, joined, so a name split over two lines is still found. */
   readonly text: string
   /**
@@ -370,6 +381,7 @@ class Diagram {
     if (b.names) this.coverage.push({
       name: b.name,
       names: b.names,
+      ...(b.host === undefined ? {} : { host: b.host }),
       text: [b.name, b.type, ...b.desc].join(''),
       said: [b.name, b.type, ...b.desc].join(' '),
     })
@@ -718,7 +730,7 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
     { col: 0, kind: 'b-cmp', name: 'admit_a_room_message', names: ['admit_a_room_message', 'read_a_room_through_its_gate', 'refuse_widening_a_member_reach'], type: '[loaded; the room is not built]', code: true,
       desc: ['Every launch loads these, though the room', 'they serve is not built: the node id a', 'member has; read_a_room_through_its_gate', 'gives the mesh server\'s tools, and refuse_', 'widening_a_member_reach refuses the rest'] },
-    { col: 1, kind: 'b-cmp', name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'cut_the_rules_from_the_host_binary', 'refuse_settings_that_turn_hooks_off', 'load_the_hosts_markdown', 'install_the_mesh_server_for_claude_code', 'hear_the_hosts_dialogs', 'refuse_a_member_writing_owner_memory', 'find_what_a_later_git_run_reads', 'read_what_claude_code_says_of_an_agent'], type: '[the Claude Code host]', code: true,
+    { col: 1, kind: 'b-cmp', name: 'claude_code_host, claude_code_relay', names: ['claude_code_host', 'claude_code_relay', 'cut_the_rules_from_the_host_binary', 'refuse_settings_that_turn_hooks_off', 'load_the_hosts_markdown', 'install_the_mesh_server_for_claude_code', 'hear_the_hosts_dialogs', 'refuse_a_member_writing_owner_memory', 'find_what_a_later_git_run_reads', 'read_what_claude_code_says_of_an_agent'], host: CLAUDE_CODE, type: '[the Claude Code host]', code: true,
       desc: ['The host contract on Claude Code: the', 'plugin, its hooks, the relay on a socket', 'and the member\'s tools; cut_the_rules_', 'from_the_host_binary holds the rules cut', 'out of the host, and refuse_settings_', 'that_turn_hooks_off the refusal of a', 'launch that reads one; load_the_hosts_', 'markdown is the markdown it loads and', 'the settings env reaching servers, and', 'install_the_mesh_server_for_claude_code', 'the server a launch hands the model;', 'hear_the_hosts_dialogs reads in the', 'crew\'s words the dialogs the host', 'raises; refuse_a_member_writing_', 'owner_memory keeps a member\'s writes', 'out of the owner\'s memory, and find_', 'what_a_later_git_run_reads reads what a', 'later git run would read; read_what_', 'claude_code_says_of_an_agent reads what', 'the host says of an agent that failed'] },
     { col: 2, kind: 'b-cmp', name: 'check_nothing_private_gets_in, check_every_link_resolves', names: ['check_nothing_private_gets_in', 'check_every_link_resolves', 'check_the_logos_are_valid_svg', 'check_no_test_the_base_passed_goes_missing', 'check_posted_text_carries_nothing_private', 'check_no_literal_restates_a_value', 'check_a_host_directory_stays_under_its_ceiling', 'check_every_recorded_host_test_is_run', 'check_marthas_names_are_its_own', 'check_no_import_cycle'], type: '[this repository\'s own checks]', code: true,
       desc: ['A private issue link, an internal host', 'name or a private remote fails CI by', 'name; so does a home path in the text', 'members post on GitHub, which check_', 'posted_text_carries_nothing_private', 'reads daily. A badge host that answers', '408 is asked again before its link is', 'broken; check_the_logos_are_valid_svg', 'holds every logo to well-formed XML;', 'check_no_test_the_base_passed_goes_', 'missing names a dropped test, and', 'check_no_literal_restates_a_value', 'names a literal spelling out a value', 'an exported constant already holds;', 'check_a_host_directory_stays_under_', 'its_ceiling fails a host directory', 'one code line over its ceiling, by name;', 'check_every_recorded_host_test_is_run', 'names a recorded-host case no CI job runs;', 'check_marthas_names_are_its_own fails', 'a file, folder, tool, marker or', 'variable of Martha\'s that crew-code', 'names too, by name; and check_no_', 'import_cycle names the whole loop when', 'files of the core load each other'] },
