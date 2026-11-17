@@ -38,12 +38,15 @@ played by the driver:
 - **The mode is pinned to `approve`** in the config root, and a launch whose session reports any
   other mode is a failure before any line is read.
 - **The limits** are the owner's: two launches a check, ten minutes and twenty ACP requests each,
-  ninety minutes in all. The run the verdicts come from is one launch per check and took about
-  eighteen minutes. Getting the driver there took more launches than the cap allows on three checks,
-  and it is said here rather than hidden: line 1 was launched three times (the PATH and the launch
-  root), and lines 3 and 9 four times each (line 3 for a positive half the model would not enact,
-  line 9 for the extension switches). The whole session, including those runs, stayed inside ninety
-  minutes.
+  ninety minutes in all. **The driver enforces none of them and counts none of them**: its only cap
+  is a 240-second timeout on a turn, and it neither counts launches nor counts requests. What the run
+  itself shows is the evidence for the ten minutes: each launch, timed from the launcher's own config
+  being written to that line's `result.json` being written, ran 40 s, 39 s, 1 m 40 s, 1 m 45 s, 22 s,
+  22 s, 29 s, 1 m 59 s and 20 s, for 8 m 22 s over the nine — every launch well inside ten minutes,
+  though nothing stopped one from running longer. The two-launch cap did not hold, and that is said
+  rather than hidden: line 1 was launched three times (the PATH and the launch root) and lines 3 and
+  9 four times each (line 3 for a positive half the model would not enact, line 9 for the extension
+  switches). The whole session, including those runs, stayed inside ninety minutes.
 
 ## The nine lines
 
