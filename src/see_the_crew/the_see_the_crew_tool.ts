@@ -5,6 +5,7 @@
 // the launcher's own process, and nothing here acts on what it finds: a nudge says what it sees, and whoever reads it
 // decides. The tools slice (../a_crews_tools) keeps only the table that calls this.
 
+import { sameMemberName } from '../declare_crew/declare_crew.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { Processes, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
@@ -61,7 +62,7 @@ async function theNudgesFor(asked: SeeTheCrewAsked): Promise<readonly string[]> 
   const { settings } = asked
   if (!settings.house_rules.nudges) return []
   const receivers = theNudgesGoTo(settings)
-  if (!receivers.some((receiver) => receiver.toLowerCase() === asked.member.toLowerCase())) return []
+  if (!receivers.some((receiver) => sameMemberName(receiver, asked.member))) return []
   const channel = await readTheChannel(asked.ledger)
   const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
   const waits = await theWaitsTheClosesLeave(messages, receivers, await whatEndsAWaitIn(asked, messages))

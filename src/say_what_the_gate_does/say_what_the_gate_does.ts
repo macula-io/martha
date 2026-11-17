@@ -8,6 +8,7 @@
 // the same text back into a model's turn that the gate exists to keep out of one, so there is no tool for it and
 // ../audit_the_gate_for_a_member's folder is read here and nowhere a session can reach.
 
+import { sameMemberName } from '../declare_crew/declare_crew.ts'
 import { join } from 'node:path'
 
 import { GATE_AUDIT_PLACE, theLinesIn, type AnAuditLine, type StateLines } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
@@ -74,7 +75,7 @@ export function sayWhatTheGateDoes(asked: GateAsked): TheGate {
 }
 
 function theLinesOfOneMember(asked: GateAsked, asked_for: string): TheGate {
-  const member = asked.members.find((name) => name.toLowerCase() === asked_for.toLowerCase())
+  const member = asked.members.find((name) => sameMemberName(name, asked_for))
   if (member === undefined) {
     return { shown: false, refusal: `the declaration does not know ${asked_for} (its members are ${asked.members.join(', ')}).` }
   }
