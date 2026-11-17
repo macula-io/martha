@@ -129,13 +129,14 @@ import {
 import { hostThatRunsTheRelay, RELAY_PLUGIN_DIR, rulesTheHostMatches } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
 import {
   cleanUpIfTheLauncherEnds,
-  killGroup,
   NOT_STARTED,
   startedMember,
   whatTheHostStartsWith,
   whenTheMemberStops,
   type Starting,
 } from '../end_a_launch/end_a_launch.ts'
+import { killGroup, type TheRunsLifeline } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
+import { theLaunchItsRunAsks, told, watchItsRun, whatTheRunWatches, type WhatTheRunWatches } from '../end_a_launch_when_its_run_ends/watch_the_run_of_a_launch.ts'
 import {
   hostSettingsOf,
   meshServerUnproved,
@@ -282,7 +283,7 @@ export interface ReadyLaunch {
 }
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
-export interface LaunchMade extends ReadyLaunch {
+export interface LaunchMade extends ReadyLaunch, WhatTheRunWatches {
   /** The file the host's command resolved to: what the checks ran, and what the member runs (host_runs_the_relay.ts). */
   readonly binary: string
   readonly relayDirectory: Extract<RelayDirectory, { readonly made: true }>
@@ -638,8 +639,19 @@ function watchHookSettings(watch: HookSettingsWatch, ms: number, stop: (why: str
   return () => clearInterval(timer)
 }
 
-/** Starts one Claude Code member on its approved config, with its relay answered here. */
-export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
+/**
+ * Starts one Claude Code member on its approved config, with its relay answered here. The run that asked for it keeps
+ * one end of a pipe open for as long as the member may run (#472): no variable is an owner's own start, and its member
+ * keeps outliving their shell, while a variable naming no pipe this launcher can read refuses the launch by name,
+ * before anything is made.
+ */
+export async function launchClaudeCodeMember(asking: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
+  const { launch, lifeline } = theLaunchItsRunAsks(asking, NOT_STARTED)
+  return lifeline.kind === 'refused' ? { started: false, refusal: told(launch, lifeline.refusal) } : launching(launch, lifeline)
+}
+
+/** The launch itself, on a run that has said whether it is still there. */
+async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeline): Promise<MemberStarted> {
   const refuse = (refusal: string): MemberStarted => {
     launch.tellOwner(refusal)
     return { started: false, refusal }
@@ -683,17 +695,19 @@ export async function launchClaudeCodeMember(launch: ClaudeCodeMemberLaunch): Pr
     ready.removeSnapshot()
     return refuse(server)
   }
-  const made: LaunchMade = { ...ready, ...directories, ...places, server, binary: host.binary }
+  const made: LaunchMade = { ...ready, ...directories, ...places, server, binary: host.binary, ...whatTheRunWatches(lifeline) }
+  const itsRunWent = watchItsRun(lifeline, launch, made, () => group, stop)
 
   const started = await startedMember(launch, made, starting)
   if (typeof started === 'string') return refuse(started)
   group = started.pid
+  itsRunWent.theGroupIsKnown()
   const pid = started.pid
 
   const { launchRecords, recorded } = started
   const offLauncherEnd = cleanUpIfTheLauncherEnds(pid, made)
   const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop)
-  const ended = (): string | null => (backstop.disarm(), unwatch(), stoppedBecause)
+  const ended = (): string | null => (backstop.disarm(), unwatch(), itsRunWent.forgetTheRun(), stoppedBecause)
   const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd, ended)
   backstop.arm()
 
