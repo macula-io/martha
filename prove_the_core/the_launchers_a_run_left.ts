@@ -39,6 +39,41 @@ export interface ALauncherLeft {
   readonly command_line: string
 }
 
+/** The milliseconds in a second: what a kernel's clock ticks, and its boot time in seconds, are turned into here. */
+export const A_SECOND_MS = 1000
+
+/** Where field 22 sits among the fields after the command name, whose first is field 3 (state). */
+const START_TIME_AFTER_COMMAND = 22 - 3
+
+/**
+ * Field 22 of a stat line: when the process started, in clock ticks since boot; nothing for a line too short to hold
+ * it. The fields are counted from the last closing parenthesis, because the command name in the second field may hold
+ * spaces and parentheses of its own.
+ */
+export const startTicksIn = (stat_line: string): number | undefined => {
+  const ticks = Number(stat_line.slice(stat_line.lastIndexOf(')') + 2).split(' ')[START_TIME_AFTER_COMMAND])
+  return Number.isInteger(ticks) && ticks >= 0 ? ticks : undefined
+}
+
+/** The parent a stat line names, as field 4, counted the same way; nothing for one too short to hold it. */
+export const parentIn = (stat_line: string): number | undefined => {
+  const parent = Number(stat_line.slice(stat_line.lastIndexOf(')') + 2).split(' ')[1])
+  return Number.isInteger(parent) && parent >= 0 ? parent : undefined
+}
+
+/**
+ * When a process started, as an epoch in milliseconds, from the three things the kernel gives: its start in clock
+ * ticks since boot (field 22), the boot's own time in seconds (`btime`), and how many clock ticks the kernel counts to
+ * a second (`CLK_TCK`).
+ *
+ * It is never the timestamp of the process's /proc directory (review r=1, Jupiter): procfs stamps that when the
+ * directory is first looked at, not when the process started, so a chain that had stood for hours read as newborn, sat
+ * under the age this rule cuts at, and a real leftover passed for clean. The tests could not see it because they
+ * planted that timestamp themselves.
+ */
+export const startedAtOf = (start_ticks: number, boot_time_seconds: number, clock_ticks_per_second: number): number =>
+  boot_time_seconds * A_SECOND_MS + (start_ticks / clock_ticks_per_second) * A_SECOND_MS
+
 /** How many ancestors deep a runaway chain is followed before it is read as no runner: a tree is never this deep. */
 const ANCESTORS_FOLLOWED = 64
 

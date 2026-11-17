@@ -5,18 +5,22 @@
 // fails this gate by name, which is its job), so nothing here depends on what this machine happens to hold.
 
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
+import { PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 import {
   A_LAUNCH_HOME_PREFIX,
   A_LEFTOVER_STANDS_MS,
+  A_SECOND_MS,
+  startTicksIn,
+  startedAtOf,
   theHomesLeft,
   theLaunchersLeft,
   theLineOf,
@@ -29,6 +33,21 @@ const THE_CHECK = 'prove_the_core/no_launcher_outlives_its_run.ts'
 
 /** The moment the rule reads these as: a fixed one, so a test says nothing about how long it took to run. */
 const NOW = Date.UTC(2026, 10, 17, 6, 0, 0)
+
+/** The boot the planted kernel holds, in seconds since the epoch, as every real kernel holds its own. */
+const THE_BOOT_IN_SECONDS = 1_790_000_000
+
+/** Fields 3 and 4 are the state and the parent, so 5 to 21 come between the parent and the start, which is field 22. */
+const FIELDS_BETWEEN_PARENT_AND_START = 21 - 4
+
+/** How many clock ticks this kernel counts to a second, asked of the same source the check asks. */
+const A_CLOCK_TICKS_PER_SECOND = Number(spawnSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).stdout.trim())
+
+/** How long a real child is left standing before its age is read: longer than any drift in reading a start. */
+const A_CHILD_STANDS_MS = 3000
+
+/** How far the child's own word for its start and the kernel's numbers for it may differ. */
+const A_START_READING_DRIFT_MS = 1000
 
 /** A process as the kernel lists it: its pid, its parent, what it runs, and how long it has stood. */
 const aProc = (pid: number, ppid: number, command_line: string, started_at: number = NOW - 2 * A_LEFTOVER_STANDS_MS) =>
@@ -99,21 +118,60 @@ function aPlantedTemp(t: { after: (what: () => void) => void }): string {
 
 /**
  * A kernel the test plants: one directory per process, holding the two files the check reads — the command line and the
- * stat line — so the check is driven over a tree, never over the machine that runs the suite.
+ * stat line — and the kernel's own `stat` at the root, which holds the `btime` a start time is counted from. Never a
+ * directory timestamp: the check must not read a process's age from one (review r=1, Jupiter), and a kernel planted
+ * that way would keep the fault hidden.
+ *
+ * The start time is planted the kernel's way too: field 22, in the clock ticks the host kernel actually counts with.
  */
 function aPlantedKernel(t: { after: (what: () => void) => void }, chain: readonly AProcessSeen[]): string {
   const proc = mkdtempSync(join(tmpdir(), 'martha-planted-proc-'))
+  writeFileSync(join(proc, 'stat'), `cpu  0 0 0 0 0 0 0 0 0 0\nbtime ${THE_BOOT_IN_SECONDS}\nprocesses 1\n`)
   for (const one of chain) {
     const directory = join(proc, String(one.pid))
     mkdirSync(directory)
     writeFileSync(join(directory, 'cmdline'), `${one.command_line.split(' ').join('\0')}\0`)
-    writeFileSync(join(directory, 'stat'), `${one.pid} (a process) S ${one.ppid} 0 0 0\n`)
-    // The kernel's own directory for a process holds when it started, which is what the check reads it for.
-    utimesSync(directory, one.started_at / 1000, one.started_at / 1000)
+    writeFileSync(join(directory, 'stat'), `${aStatLine(one.pid, one.ppid, one.started_at)}\n`)
   }
   t.after(() => removeTheTree(proc))
   return proc
 }
+
+/** A kernel's stat line for one process: fields 5 to 21 as the kernel leaves them, with field 22 the planted start. */
+function aStatLine(pid: number, ppid: number, started_at: number): string {
+  const ticks = Math.round(((started_at - THE_BOOT_IN_SECONDS * A_SECOND_MS) / A_SECOND_MS) * A_CLOCK_TICKS_PER_SECOND)
+  // Fields 3 and 4, then 5 to 21 unfilled, then field 22: counted from the last closing parenthesis, index 19.
+  return `${pid} (a process) S ${ppid} ${Array.from({ length: FIELDS_BETWEEN_PARENT_AND_START }, () => '0').join(' ')} ${ticks}`
+}
+
+test('a process\'s age is read from the kernel\'s own start, never from the /proc directory\'s timestamp (#559 r=1)', async (t) => {
+  // A real child on the real kernel, because this is the fault a planted kernel could not show: procfs stamps a
+  // process's directory when the directory is first looked at, not when the process started, so a reader that took the
+  // age from that stamp answered "just now" for a chain that had stood for hours (Jupiter, on host00: a 6 s old sleep
+  // read 0.00 s). Here the child says when it started, it is left standing a while, and its age is read the way the
+  // check reads it — from field 22 over CLK_TCK, added to the boot's btime.
+  const child = spawn(process.execPath, ['-e', 'process.stdout.write(String(Date.now())); setInterval(() => undefined, 1 << 30)'], {
+    stdio: ['ignore', 'pipe', 'inherit'],
+  })
+  t.after(() => child.kill('SIGKILL'))
+  const saidItsStart = Number(
+    await new Promise<string>((resolve) => child.stdout?.once('data', (chunk: Buffer) => resolve(chunk.toString()))),
+  )
+  await new Promise((resolve) => setTimeout(resolve, A_CHILD_STANDS_MS))
+  const btime = readFileSync(join(PROC_ROOT, 'stat'), 'utf8')
+    .split('\n')
+    .find((one) => one.startsWith('btime '))
+    ?.split(' ')[1]
+  const ticks = startTicksIn(readFileSync(join(PROC_ROOT, String(child.pid), 'stat'), 'utf8'))
+  assert.ok(ticks !== undefined, 'the kernel gave no start for a process that is running')
+  const read = startedAtOf(ticks, Number(btime), A_CLOCK_TICKS_PER_SECOND)
+  assert.ok(
+    Math.abs(read - saidItsStart) < A_START_READING_DRIFT_MS,
+    `the child says it started at ${saidItsStart} and the kernel's numbers read ${read}, ${Math.abs(read - saidItsStart)} ms apart`,
+  )
+  // And the reading is not the directory's stamp: that one is set when this line first looks, which is now.
+  assert.ok(Math.abs(Date.now() - read) >= A_CHILD_STANDS_MS / 2, 'the age read is the age of a process that has stood')
+})
 
 test('the check fails by name over a kernel holding a killed run\'s chain, and answers 0 over the same chain still run (#559)', (t) => {
   const abandoned = aPlantedKernel(t, A_KILLED_RUNS_CHAIN)

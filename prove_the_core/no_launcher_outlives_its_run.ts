@@ -17,10 +17,17 @@
 // What it does not see, stated rather than left to be discovered: a home made under a temp dir other than this run's own
 // (a member whose TMPDIR points elsewhere). A process inside such a home is still named, wherever it was started from.
 //
+// How old a process is comes from the kernel's own two numbers — field 22 of its stat line, in clock ticks since boot,
+// over the kernel's CLK_TCK, added to the boot's `btime`. It is NOT the timestamp of the process's /proc directory,
+// which procfs sets when the directory is first looked at: a chain that had stood for hours read as newborn that way,
+// sat under the age this rule cuts at, and a real leftover passed as clean (review r=1, Jupiter, measured on host00).
+//
 // `--proc` reads another kernel's tree and `--temp` another temp dir, which is how a test drives this gate over a killed
-// run's chain and the home it made, without planting a process of its own in the machine's /proc.
+// run's chain and the home it made, without planting a process of its own in the machine's /proc. A tree read that way
+// must hold its own `stat` file with a `btime` line, as every real kernel's does.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -28,6 +35,9 @@ import process from 'node:process'
 import { PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
 import {
   A_LAUNCH_HOME_PREFIX,
+  parentIn,
+  startTicksIn,
+  startedAtOf,
   theHomeLineOf,
   theHomesLeft,
   theHomesNamed,
@@ -48,35 +58,61 @@ function commandLineOf(proc_root: string, pid: number): string | undefined {
   }
 }
 
-/** When a process started, as the kernel's own directory for it holds it, or 0 for one that has gone since it was listed. */
-function startedAt(proc_root: string, pid: number): number {
-  try {
-    return statSync(join(proc_root, String(pid))).mtimeMs
-  } catch {
-    return 0
-  }
+/** When a process started, as the kernel's own two numbers hold it, or undefined for one that went since it was listed. */
+function startTimeOf(proc_root: string, pid: number, boot_time_seconds: number, clock_ticks_per_second: number): number | undefined {
+  const stat = statLineOf(proc_root, pid)
+  const ticks = stat === undefined ? undefined : startTicksIn(stat)
+  return ticks === undefined ? undefined : startedAtOf(ticks, boot_time_seconds, clock_ticks_per_second)
 }
 
 /** The pid of the process's parent, as field 4 of its stat line counts from the last closing parenthesis. */
 function parentOf(proc_root: string, pid: number): number | undefined {
+  const stat = statLineOf(proc_root, pid)
+  return stat === undefined ? undefined : parentIn(stat)
+}
+
+/** A process's own stat line, or nothing when the kernel has no such process any more. */
+function statLineOf(proc_root: string, pid: number): string | undefined {
   try {
-    const stat = readFileSync(join(proc_root, String(pid), 'stat'), 'utf8')
-    return Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1])
+    return readFileSync(join(proc_root, String(pid), 'stat'), 'utf8')
   } catch {
     return undefined
   }
 }
 
-/** Every process this kernel lists that it will say a command line and a parent for: what the rule reads. */
-function theProcessesOf(proc_root: string): readonly AProcessSeen[] {
+/** The kernel's boot time in seconds since the epoch, as its own stat file holds it. */
+function bootTimeOf(proc_root: string): number | undefined {
+  try {
+    const line = readFileSync(join(proc_root, 'stat'), 'utf8').split('\n').find((one) => one.startsWith('btime '))
+    const at = Number(line?.split(' ')[1])
+    return Number.isFinite(at) && at > 0 ? at : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The kernel's clock ticks per second (`CLK_TCK`), asked of the C library that defines it rather than written down
+ * here: a kernel that counted differently would make every age wrong, and a wrong age either hides a leftover or
+ * names a live run. A machine whose getconf cannot answer is a check that could not be made, never a clean one.
+ */
+function clockTicksPerSecond(): number | undefined {
+  const asked = spawnSync('getconf', ['CLK_TCK'], { encoding: 'utf8' })
+  const ticks = Number(asked.stdout?.trim())
+  return asked.status === 0 && Number.isInteger(ticks) && ticks > 0 ? ticks : undefined
+}
+
+/** Every process this kernel lists that it will say a command line, a parent and a start for: what the rule reads. */
+function theProcessesOf(proc_root: string, boot_time_seconds: number, clock_ticks_per_second: number): readonly AProcessSeen[] {
   const seen: AProcessSeen[] = []
   for (const entry of readdirSync(proc_root)) {
     if (!/^\d+$/.test(entry)) continue
     const pid = Number(entry)
     const command_line = commandLineOf(proc_root, pid)
     const ppid = parentOf(proc_root, pid)
-    if (command_line === undefined || ppid === undefined) continue
-    seen.push({ pid, ppid, command_line, started_at: startedAt(proc_root, pid) })
+    const started_at = startTimeOf(proc_root, pid, boot_time_seconds, clock_ticks_per_second)
+    if (command_line === undefined || ppid === undefined || started_at === undefined) continue
+    seen.push({ pid, ppid, command_line, started_at })
   }
   return seen
 }
@@ -104,13 +140,19 @@ function theHomesIn(where: string): readonly AHomeSeen[] {
 
 /** The gate over a kernel and the temp dir it makes its homes in: every launcher and every home a run left behind. */
 function theGate(proc_root: string, temp: string): number {
+  // Both of these are the kernel's, and neither has a default that would be right on another kernel: a check that
+  // guessed either would read every age wrong. Not being able to read them is exit 2, never a pass.
+  const boot = bootTimeOf(proc_root)
+  const ticks = clockTicksPerSecond()
   let seen: readonly AProcessSeen[]
   let homes: readonly AHomeSeen[]
   try {
-    seen = theProcessesOf(proc_root)
+    if (boot === undefined) throw new Error(`${proc_root}/stat holds no btime line within it`)
+    if (ticks === undefined) throw new Error('getconf CLK_TCK answered nothing')
+    seen = theProcessesOf(proc_root, boot, ticks)
     homes = theHomesIn(temp)
-  } catch {
-    console.error(`${NAME}: could not be made: ${proc_root} is not a /proc this reader can read`)
+  } catch (error) {
+    console.error(`${NAME}: could not be made: ${(error as Error).message}`)
     return 2
   }
   const left = theLaunchersLeft(seen, Date.now())
