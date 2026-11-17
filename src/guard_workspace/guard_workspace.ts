@@ -6,7 +6,8 @@
 //
 // Three rules, and no more. A clone stays on its default branch, so where the work of a branch belongs is a worktree
 // (the first rule, and the second, which the first holds). And another member's worktree or branch is theirs: no member
-// removes or moves one, and no role is exempt, the Supervisor included.
+// removes or moves one, and no role is exempt, the Supervisor included. The branch a clone starts on is one of the facts
+// git hands in, so a call that puts a drifted clone back on it — the drift check's own advice — is not refused.
 //
 // The rule that the owner ruled on, 2026-11-17: **layout only**. This guard refuses a call that breaks where the work
 // goes and a call that touches another member's worktree or branch. It never refuses a member's own push, and it never
@@ -26,7 +27,7 @@
 
 import { sameMemberName } from '../declare_crew/declare_crew.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
-import { sep } from 'node:path'
+import { isAbsolute, resolve, sep } from 'node:path'
 
 /** The places a crew declared, and the member names it declares: the declaration's own `house_rules` and `members`. */
 export interface TheWorkspace {
@@ -47,6 +48,8 @@ export interface AListedWorktree {
 export interface TheFacts {
   /** The branches the clone the call lands in has: what tells `checkout main` from `checkout src/`. */
   readonly branches: readonly string[]
+  /** The branch the clone starts on as its origin names it, which a call may put it back on; null when git cannot say. */
+  readonly defaultBranch: string | null
   /** The worktrees git lists for the crew's worktree place, and for the clone a prune would sweep. */
   readonly worktrees: readonly AListedWorktree[]
 }
@@ -82,6 +85,7 @@ const PUSH = 'push'
 const UPDATE_REF = 'update-ref'
 const ADD = 'add'
 const REMOVE = 'remove'
+const MOVE = 'move'
 const WORKTREE_PRUNE = 'prune'
 
 /** What a call is told when it would make a clone stop being a clone of its default branch. */
@@ -101,8 +105,15 @@ const theWordsNotOptions = (words: readonly string[]): readonly string[] => word
 /** Whether a directory is a place or stands under it: the place itself, or a path past the separator that ends it. */
 const isUnder = (directory: string, place: string): boolean => directory === place || directory.startsWith(`${place}${sep}`)
 
-/** Where a word points from a directory: itself when absolute, past the directory when one is known. */
-const thePlaceOf = (word: string, from: string | null): string | null => (word.startsWith(sep) ? word : from === null ? null : `${from}${sep}${word}`)
+/**
+ * Where a word points from a directory: itself when absolute, past the directory when one is known.
+ *
+ * The answer is the path itself, normalised — `..` folded, a trailing separator dropped — because the words a call is
+ * written with spell a place many ways and only one of them is the string git lists. A rule that compared the spellings
+ * would let a worktree go by `worktree remove ../martha-ceres-1`, past the place it really names. `resolve` is what
+ * drops the separator: `normalize` and `join` both keep a trailing one.
+ */
+const thePlaceOf = (word: string, from: string | null): string | null => (isAbsolute(word) ? resolve(word) : from === null ? null : resolve(from, word))
 
 /** A branch's own name, without the ref prefix a call may write in front of it. */
 const theBranchOf = (ref: string): string => (ref.startsWith(A_BRANCH_REF) ? ref.slice(A_BRANCH_REF.length) : ref)
@@ -141,10 +152,13 @@ const refusalOfTheBranches = (branches: readonly string[], workspace: TheWorkspa
 
 /** A call that makes a branch where the work of a branch does not belong: a clone, whose place is no place to branch. */
 function refusalOfASwitchInAClone(command: string, args: readonly string[], facts: TheFacts, where: string): string | undefined {
-  const makes = command === CHECKOUT ? MAKE_A_BRANCH : SWITCH_TO_A_NEW_BRANCH
+  if (args.some((word) => (command === CHECKOUT ? MAKE_A_BRANCH : SWITCH_TO_A_NEW_BRANCH).has(word))) return `${where}: ${A_CLONE_IS_NO_PLACE_TO_BRANCH}`
+  // A switch back to the branch the clone starts on is the call that puts a drifted clone right, and is what the drift
+  // check asks for: it is not the rule's. One the rule cannot read the default branch for fires nothing, as it cannot
+  // tell a way off from a way back.
   const switching = theWordsNotOptions(args).find((word) => facts.branches.includes(word))
-  const made = args.find((word) => makes.has(word))
-  return switching === undefined && made === undefined ? undefined : `${where}: ${A_CLONE_IS_NO_PLACE_TO_BRANCH}`
+  const leavesTheDefault = facts.defaultBranch !== null && switching !== undefined && switching !== facts.defaultBranch
+  return leavesTheDefault ? `${where}: ${A_CLONE_IS_NO_PLACE_TO_BRANCH}` : undefined
 }
 
 /** The refusal a `branch` call in a clone is, when it makes a branch rather than reading one: `-a`, `--list` read. */
@@ -169,12 +183,12 @@ function refusalInsideAClone(call: AGitCall, facts: TheFacts, where: string): st
   return undefined
 }
 
-/** The refusal a `worktree remove` is, when the branch the worktree is on belongs to another member. */
-function refusalOfAWorktreeRemoval(args: readonly string[], call: AGitCall, request: AGuardedCall): string | undefined {
-  const path = args.find((word) => !isAnOption(word) && word !== REMOVE)
+/** The refusal a `worktree remove` or `worktree move` is, when the worktree it names is on another member's branch. */
+function refusalOfAWorktreeTaken(words: readonly string[], call: AGitCall, request: AGuardedCall): string | undefined {
+  const path = words.find((word) => !isAnOption(word))
   if (path === undefined) return undefined
   const place = thePlaceOf(path, call.directory)
-  const listed = request.facts.worktrees.find((worktree) => worktree.path === place || worktree.path === path)
+  const listed = request.facts.worktrees.find((worktree) => thePlaceOf(worktree.path, null) === place)
   return listed?.branch == null ? undefined : refusalOfAnothersBranch(listed.branch, request.workspace, request.member)
 }
 
@@ -207,10 +221,11 @@ function refusalOfABranchDeleteOrMove(args: readonly string[], request: AGuarded
   return touches ? refusalOfTheBranches(theWordsNotOptions(args), request.workspace, request.member) : undefined
 }
 
-/** What a `worktree` call does to another member's worktree: a removal named by path, or a prune that takes stale ones. */
+/** What a `worktree` call does to another member's worktree: a removal or a move named by path, or a prune of stale ones. */
 function refusalOfAWorktreeCall(call: AGitCall, request: AGuardedCall): string | undefined {
-  if (call.args[0] === REMOVE) return refusalOfAWorktreeRemoval(call.args, call, request)
-  return call.args[0] === WORKTREE_PRUNE ? refusalOfAWorktreePrune(request) : undefined
+  const [takes, ...words] = call.args
+  if (takes === REMOVE || takes === MOVE) return refusalOfAWorktreeTaken(words, call, request)
+  return takes === WORKTREE_PRUNE ? refusalOfAWorktreePrune(request) : undefined
 }
 
 /** What one call does to another member's worktree or branch, by its command word: none for anything else. */

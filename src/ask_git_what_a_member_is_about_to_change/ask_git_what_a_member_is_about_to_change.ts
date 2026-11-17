@@ -12,7 +12,8 @@
 // None of the three is wired yet: package 2 lands them, and nothing calls this slice until it does.
 //
 // Every run carries Martha's own settings (../run_marthas_own_git) and reads only: `for-each-ref` lists branches,
-// `worktree list` lists worktrees. Nothing here writes, fetches or prunes.
+// `symbolic-ref` names the branch a clone starts on, `worktree list` lists worktrees. Nothing here writes, fetches or
+// prunes.
 //
 // It fails open, as the shim does. A git that cannot be run, or a line this slice cannot read, leaves the fact empty,
 // and the rule that needed it does not fire: a member's shell must not be refused because Martha could not look. Each
@@ -24,7 +25,7 @@
 // rules that need a fact do not fire.
 
 import type { HostContract } from '../host_contract/host_contract.ts'
-import { refuseACallInTheWorkspace, type AGuardedCall, type AListedWorktree, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
+import { refuseACallInTheWorkspace, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { realpathSync } from 'node:fs'
@@ -49,6 +50,9 @@ const A_WORKTREE_LINE = 'worktree '
 
 /** The argument git takes to list a repository's branches by their own names. */
 const LIST_BRANCHES = ['for-each-ref', '--format=%(refname:short)', 'refs/heads/']
+
+/** The argument git takes to name the branch the clone starts on, as its origin has it: `origin/<name>`. */
+const THE_DEFAULT_BRANCH = ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']
 
 /** The argument git takes to list a repository's worktrees with the branch each is on. */
 const LIST_WORKTREES = ['worktree', 'list', '--porcelain']
@@ -103,6 +107,13 @@ async function linesGitPrinted(host: AQuestionAboutACall['host'], cwd: string, a
 const theBranchesOf = async (host: AQuestionAboutACall['host'], clone: string | null): Promise<readonly string[]> =>
   clone === null ? [] : (await linesGitPrinted(host, clone, LIST_BRANCHES)).map((line) => line.trim()).filter((line) => line !== '')
 
+/** The branch a clone starts on, as its own origin names it: `main` for `origin/main`, or null when git cannot say. */
+async function theDefaultBranchOf(host: AQuestionAboutACall['host'], clone: string | null): Promise<string | null> {
+  if (clone === null) return null
+  const named = (await linesGitPrinted(host, clone, THE_DEFAULT_BRANCH)).map((line) => line.trim()).find((line) => line !== '')
+  return named === undefined ? null : named.slice(named.indexOf('/') + 1)
+}
+
 /** One worktree of a porcelain block: where it is, the branch it is on, and whether only its record is left. */
 function theWorktreeOf(block: readonly string[]): AListedWorktree | null {
   const path = block.find((line) => line.startsWith(A_WORKTREE_LINE))?.slice(A_WORKTREE_LINE.length).trim()
@@ -123,6 +134,12 @@ async function theWorktreesOf(host: AQuestionAboutACall['host'], where: string |
   return blocks.flatMap((block) => theWorktreeOf(block) ?? [])
 }
 
+/** Every fact the rules need, asked of the clone the call lands in and the place its worktrees are listed: asked together. */
+async function theFactsOf(host: AQuestionAboutACall['host'], clone: string | null, where: string | null): Promise<TheFacts> {
+  const [branches, defaultBranch, worktrees] = await Promise.all([theBranchesOf(host, clone), theDefaultBranchOf(host, clone), theWorktreesOf(host, where)])
+  return { branches, defaultBranch, worktrees }
+}
+
 /** The refusal a call meets, asking git what it needs to know: undefined when the layout holds, or cannot be looked at. */
 export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutACall): Promise<string | undefined> {
   const { host, member } = request
@@ -136,7 +153,6 @@ export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutAC
   const calls = request.calls.map(theCallResolved)
   const clone = calls.map((call) => theCloneOf(call.directory, workspace.clones)).find((found) => found !== null) ?? null
   const where = calls.map(theWorktreeListedAt).find((found) => found !== null) ?? clone
-  const [branches, worktrees] = await Promise.all([theBranchesOf(host, clone), theWorktreesOf(host, where)])
-  const guarded: AGuardedCall = { calls, workspace, member, facts: { branches, worktrees } }
+  const guarded: AGuardedCall = { calls, workspace, member, facts: await theFactsOf(host, clone, where) }
   return refuseACallInTheWorkspace(guarded)
 }
