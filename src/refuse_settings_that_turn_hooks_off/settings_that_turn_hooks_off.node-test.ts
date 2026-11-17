@@ -12,10 +12,10 @@ import type { HookSwitches } from '../cut_the_rules_from_the_host_binary/the_rul
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { hookSettingsWatch, namesTheOwnersSettings, settingsTurningHooksOff } from './settings_that_turn_hooks_off.ts'
-import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
-const USER = '/owner/.claude/settings.json'
-const MANAGED = '/etc/claude-code/managed-settings.json'
+const USER = `/owner/${CLAUDE_FOLDER}/${USER_SETTINGS_FILE}`
+const MANAGED = `/etc/${CLAUDE_CODE}/managed-settings.json`
 
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-122-'))
@@ -108,7 +108,7 @@ test("a file tool call naming the owner's user settings file is named, directly,
   assert.ok(namesTheOwnersSettings({ file_path: owners }, owners, cwd, root))
   assert.ok(namesTheOwnersSettings({ file_path: join(root, 'linked', USER_SETTINGS_FILE) }, owners, cwd, root))
   assert.ok(namesTheOwnersSettings({ notebook_path: join(root, 'linked', USER_SETTINGS_FILE) }, owners, cwd, root))
-  assert.ok(namesTheOwnersSettings({ file_path: '../conf-dir/settings.json' }, owners, cwd, root))
+  assert.ok(namesTheOwnersSettings({ file_path: `../conf-dir/${USER_SETTINGS_FILE}` }, owners, cwd, root))
   writeFileSync(owners, '{}')
   symlinkSync(owners, join(cwd, 'innocent.json'))
   assert.ok(namesTheOwnersSettings({ file_path: join(cwd, 'innocent.json') }, owners, cwd, root))
@@ -123,8 +123,8 @@ test("a file tool call naming the owner's file the way the host spells it is nam
   mkdirSync(dirname(owners), { recursive: true })
   const cwd = join(root, 'checkout')
   mkdirSync(cwd)
-  for (const spelling of ['~/.claude/settings.json', ` ${owners}`, `${owners} `, ` ~/.claude/settings.json\n`]) {
+  for (const spelling of [`~/${CLAUDE_FOLDER}/${USER_SETTINGS_FILE}`, ` ${owners}`, `${owners} `, ` ~/${CLAUDE_FOLDER}/${USER_SETTINGS_FILE}\n`]) {
     assert.ok(namesTheOwnersSettings({ file_path: spelling }, owners, cwd, home), JSON.stringify(spelling))
   }
-  assert.equal(namesTheOwnersSettings({ file_path: '~/.claude/other.json' }, owners, cwd, home), undefined)
+  assert.equal(namesTheOwnersSettings({ file_path: `~/${CLAUDE_FOLDER}/other.json` }, owners, cwd, home), undefined)
 })

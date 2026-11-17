@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { openState, OWN_WRITES_PLACE, OWN_WRITES_SUFFIX, ownWritesKeptForTheHistory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { INSTALLED_LOCK, LOCK, LOCKFILE_VERSION, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { DEPENDENCIES, INSTALLED_LOCK, LOCK, LOCKFILE_VERSION, MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { OWN_WRITE_MODES } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { runASignedShape, RUNS_DIRECTORY, type ShapeToRun } from './run_a_signed_shape.ts'
@@ -58,7 +58,7 @@ const TOOL = { version: '1.0.0', resolved: 'https://registry.example.invalid/too
 const lockOf = (packages: Record<string, unknown>) => JSON.stringify({ name: 'p', lockfileVersion: LOCKFILE_VERSION, packages })
 const BASE_FILES = {
   '.gitattributes': '* text=auto\n',
-  '.gitignore': 'node_modules/\n',
+  '.gitignore': `${DEPENDENCIES}/\n`,
   [MANIFEST]: JSON.stringify({ name: 'p', version: '1.0.0', scripts: { test: 'tool && tool-too && cat a.txt && ls -a' } }),
   [LOCK]: lockOf({ '': { name: 'p', version: '1.0.0' }, 'node_modules/tool': TOOL }),
   'a.txt': 'the owner wrote this\n',
@@ -76,9 +76,9 @@ function place(t: { after(fn: () => void): void }) {
   git(remote, 'commit', '--quiet', '-m', `base ${MARKER}`)
   const checkout = join(top, 'checkout')
   git(top, 'clone', '--quiet', remote, checkout)
-  mkdirSync(join(checkout, 'node_modules/tool'), { recursive: true })
-  writeFileSync(join(checkout, 'node_modules/tool/cli.sh'), '#!/bin/sh\necho "$(basename "$0")-ran"\n')
-  writeFileSync(join(checkout, 'node_modules/tool/package.json'), JSON.stringify({ name: 'tool', version: TOOL.version }))
+  mkdirSync(join(checkout, `${DEPENDENCIES}/tool`), { recursive: true })
+  writeFileSync(join(checkout, `${DEPENDENCIES}/tool/cli.sh`), '#!/bin/sh\necho "$(basename "$0")-ran"\n')
+  writeFileSync(join(checkout, `${DEPENDENCIES}/tool/${MANIFEST}`), JSON.stringify({ name: 'tool', version: TOOL.version }))
   writeFileSync(join(checkout, INSTALLED_LOCK), lockOf({ 'node_modules/tool': TOOL }))
   const state_root = join(top, 'state')
   mkdirSync(state_root, { mode: 0o700 })
@@ -224,8 +224,8 @@ test('a test script redefined in the checkout runs nothing, even written by the 
 
 test('a package directory the installed lock does not hold runs nothing, and is named', { skip: unavailable }, async (t) => {
   const p = place(t)
-  mkdirSync(join(p.checkout, 'node_modules/@types/marker'), { recursive: true })
-  writeFileSync(join(p.checkout, 'node_modules/@types/marker/index.d.ts'), MARKER)
+  mkdirSync(join(p.checkout, `${DEPENDENCIES}/@types/marker`), { recursive: true })
+  writeFileSync(join(p.checkout, `${DEPENDENCIES}/@types/marker/index.d.ts`), MARKER)
   assert.match(String(await runASignedShape(p.run)), /@types\/marker/)
 })
 

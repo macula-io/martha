@@ -26,6 +26,7 @@ import { CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_co
 import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { addressedTo, readTheChannel, type PlacedMessage } from '../keep_the_crew_channel/crew_channel.ts'
 import { crewStateDirectory, CREW_ROW_PLACE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -39,7 +40,7 @@ import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
  * The name Martha signs a line of its own with, read from the manifest that names the program rather than spelled here:
  * the sender is pinned exactly, so a line from another member or another word fails this case (martha#390 r=4).
  */
-const THE_PROGRAMS_NAME = (JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { readonly name: string }).name
+const THE_PROGRAMS_NAME = (JSON.parse(readFileSync(new URL(`../../${MANIFEST}`, import.meta.url), 'utf8')) as { readonly name: string }).name
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'

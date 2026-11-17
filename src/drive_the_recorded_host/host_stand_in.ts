@@ -10,10 +10,11 @@
 
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RELAY_MANIFEST } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 /** The folder a stand-in's session init reports for the owner's user output styles, unless a test gives another (#154). */
-export const STAND_IN_OUTPUT_STYLES_DIR = '/home/probe/.claude/output-styles'
+export const STAND_IN_OUTPUT_STYLES_DIR = `/home/probe/${CLAUDE_FOLDER}/output-styles`
 
 /**
  * A host's answer to the session init: the field the recorded host names, holding the folder it reports (#154). The
@@ -27,8 +28,7 @@ export const reportsOutputStyles = (dir: string): string =>
 export const LOADS_THE_RELAY = JSON.stringify({ success: true, manifest: { errors: [] }, contents: [] })
 
 /** The host's report for a plugin whose hooks module it refuses, with `why` as its error. */
-export const refusesTheRelay = (why: string): string =>
-  JSON.stringify({ success: false, manifest: { errors: [] }, contents: [{ type: 'hooks', errors: [{ path: 'modules', message: why }] }] })
+export const refusesTheRelay = (why: string): string => JSON.stringify({ success: false, manifest: { errors: [] }, contents: [{ type: 'hooks', errors: [{ path: 'modules', message: why }] }] })
 
 export interface HostAnswers {
   /** The report `plugin validate --json` prints; LOADS_THE_RELAY unless given. */

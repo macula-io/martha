@@ -11,8 +11,10 @@ import { test } from 'node:test'
 import {
   exceptionsNotHeld,
   GONE,
+  holdsAnAddress,
   lineOfAFinding,
   literalSitesJudged,
+  pathSegmentsOf,
   restatementsIn,
   type DefinedByTheChange,
   type Exception,
@@ -220,6 +222,77 @@ test('a move is unchanged: the constant leaves one module for another, and nothi
   const defined: DefinedByTheChange[] = [{ value: 'the-tool', module: 'a_new/a_new.ts', name: 'TOOL' }, { value: 'the-tool', module: 'a_tool/a_tool.ts', name: 'TOOL' }]
 
   assert.deepEqual(restatementsIn([movedTo], { judged: everyLine(movedTo), defined }), [])
+})
+
+// A value written out inside a longer path literal restates it as surely as the bare value (martha#437): the
+// recorded-host test of #390 wrote `'.git/config'` and the check found nothing.
+const CONFIG_HOLDER = source('a_config/a_config.ts', "export const CONFIG = 'config'\n")
+
+test('a constant written as a whole segment of a path literal is named, with the constant and its source (martha#437)', () => {
+  const user = source('a_user/a_user.ts', "const at = join(checkout, '.git/config')\n")
+
+  const found = restatementsIn([CONFIG_HOLDER, user], { judged: everyLine(user) })
+
+  assert.deepEqual(found.map(lineOfAFinding), ["a_user/a_user.ts:1: 'config' (a path segment) restates a_config/a_config.ts CONFIG"])
+  assert.equal(found[0]?.rule, 'restates_a_constant')
+  assert.equal(found[0]?.segment, true)
+})
+
+test('only a path separator splits a literal: a constant inside prose, or inside a longer segment, stays a word (martha#437)', () => {
+  const prose = source('a_user/a_user.ts', "say('read the config before the run')\nsay('a_config_file/other')\nsay('.git/configs')\n")
+
+  assert.deepEqual(restatementsIn([CONFIG_HOLDER, prose], { judged: null }), [])
+})
+
+test('the segments of a literal: split on the separator only, each distinct, never the literal itself, never shorter than a value', () => {
+  assert.deepEqual(pathSegmentsOf('.git/config'), ['.git', 'config'])
+  assert.deepEqual(pathSegmentsOf('node_modules/.bin/one && node_modules/.bin/two'), ['node_modules', '.bin', 'one && node_modules'], 'each segment once, the short ones dropped')
+  assert.deepEqual(pathSegmentsOf('read the config'), [], 'no separator, no segment')
+  assert.deepEqual(pathSegmentsOf('a/b/id'), [], 'every segment shorter than a value')
+})
+
+test('a definition holding another module\'s constant as a path segment is named too, and a declared coincidence excuses it in its own file (martha#437)', () => {
+  const definer = source('a_git/a_git.ts', "export const GIT_CONFIG = '.git/config'\n")
+  const coincidence: Exception = { value: 'config', file: 'a_git/a_git.ts', reason: 'git\'s own file, named by git' }
+
+  assert.deepEqual(restatementsIn([CONFIG_HOLDER, definer], { judged: null }).map(lineOfAFinding), ["a_git/a_git.ts:1: 'config' (a path segment) restates a_config/a_config.ts CONFIG"])
+  assert.deepEqual(restatementsIn([CONFIG_HOLDER, definer], { judged: null, exceptions: [coincidence] }), [])
+})
+
+test('a value the change takes away is judged over the whole tree inside path literals too (R1, martha#437)', () => {
+  const old = source('a_old/a_old.ts', "const at = '.git/config'\n")
+  const defined: DefinedByTheChange[] = [{ value: 'config', module: 'a_config/a_config.ts', name: 'CONFIG' }]
+
+  assert.deepEqual(restatementsIn([old], { judged: new Set(), defined }).map(lineOfAFinding), [`a_old/a_old.ts:1: 'config' (a path segment) restates a_config/a_config.ts CONFIG ${GONE}`])
+})
+
+test('a literal that is exactly the path of a source the check reads names that file, so its segments are not judged, and any other path still is (martha#437, r=1)', () => {
+  const tool = source('a_crews_tools/a_crews_tools.ts', "export const WAKE_IT = 'wake_it'\n")
+  const slice = source('wake_it/wake_it.ts', "export const run = () => 0\n")
+  const coincidences = source('wake_it/coincidences.ts', "export const COINCIDENCES = [{ value: 'x', file: 'wake_it/wake_it.ts', reason: 'r' }]\nconst notes = 'wake_it/notes.md'\n")
+
+  assert.deepEqual(restatementsIn([tool, slice, coincidences], { judged: null }).map(lineOfAFinding), [
+    "wake_it/coincidences.ts:2: 'wake_it' (a path segment) restates a_crews_tools/a_crews_tools.ts WAKE_IT",
+  ])
+})
+
+test('an address is judged whole, never split: a URL, or an owner/repo name whose owner has a hyphen (the owner\'s ruling on martha#437, r=3)', () => {
+  for (const address of ['macula-io/martha', 'gh secret set KEY -R macula-io/martha', 'macula-io/martha#253', 'repos/macula-io/martha/actions/runs', 'https://example.invalid/owner/project.git', 'file:///srv/git/martha']) {
+    assert.equal(holdsAnAddress(address), true, address)
+  }
+  for (const path of ['actions/runs', 'skills/deploy.md', 'refs/martha/base', '/crew-place/clones', 'skills/synced/acct-1/xlsx', '../conf-dir/settings.json', 'torvalds/linux', 'crew-place/clones/x', '-bad/martha']) {
+    assert.equal(holdsAnAddress(path), false, path)
+  }
+})
+
+test('a constant inside an address is not named, and the same constant in any other path still is (martha#437, r=3)', () => {
+  const repo = source('a_repo/a_repo.ts', "export const THE_REPO = 'the-repo'\n")
+  const user = source('a_user/a_user.ts', "call('an-org/the-repo')\ncall('https://example.invalid/anorg/the-repo')\ncall('repos/an-org/the-repo/actions')\ncall('refs/the-repo/base')\ncall('anorg/the-repo')\n")
+
+  assert.deepEqual(restatementsIn([repo, user], { judged: null }).map(lineOfAFinding), [
+    "a_user/a_user.ts:4: 'the-repo' (a path segment) restates a_repo/a_repo.ts THE_REPO",
+    "a_user/a_user.ts:5: 'the-repo' (a path segment) restates a_repo/a_repo.ts THE_REPO",
+  ])
 })
 
 test('two new exported definitions of one new value, in two new modules, are each named against the other', () => {
