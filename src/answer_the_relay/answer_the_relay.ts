@@ -51,7 +51,7 @@ import { namesTheOwnersSettings, type HookSettingsWatch } from '../refuse_settin
 import type { Arrival, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { nameTheFailedReviewIn, reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { keepWhatTheReviewResolvedTo } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
-import { theAgentInAToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { agentIdOf, agentOfAResult, agentsToHold, noteAnAgentsAnswer, noteTheAgentsCall, noteWhatItsCallsRead, runOf, vouchedRun, type AgentRun } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
 /** Whether a tool hands an agent's answer back: the host's own table places every one of these on the subagent row. */
 const isAnAgentsAnswerTool = (tool: string): boolean => CLAUDE_CODE_TOOL_RESULT_ROWS[tool]?.reads === 'an_agents_answer'
 import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
@@ -232,88 +232,6 @@ interface RelayState {
   readonly everyTurn: HearingEveryTurn
   /** The review calls this launcher allowed, by the host's id for the call, and what it resolved to (martha#390). */
   readonly reviews: TheReviewSpawns
-}
-
-/**
- * One agent the host started under a member's session (martha#170), and whether it may be vouched for.
- *
- * The host stamps `agent_id` on a SubagentStart and a SubagentStop, and on every tool call the agent makes under the
- * member's own session id; the member's own calls carry none. So the launcher can name an agent and can count what it
- * did, which is what "vouched" needs: seen to start, seen to stop, every call it made answered here, and nothing those
- * calls read that the gate counts.
- */
-interface AgentRun {
-  readonly session_id: string
-  /** The tool calls the agent made, by the host's own `tool_use_id`. */
-  readonly calls_seen: Set<string>
-  /** Those of them this launcher answered. */
-  readonly calls_answered: Set<string>
-  /** Whether this launcher saw the host say the agent started; a call with an id but no start is not vouched. */
-  started: boolean
-  stopped: boolean
-  /**
-   * The rows its own calls recorded: text it read that the gate counts, and so text its answer may quote. An agent that
-   * read outside the approved tree is not vouched for even with every call answered (martha#170, the design's case 7).
-   */
-  readonly calls_recorded: string[]
-}
-
-/**
- * Whether an agent may be vouched for: seen to start, seen to stop, every call it made answered here, and nothing those
- * calls read that the gate counts — an agent's answer is its own work on the member's own inputs only if it read no
- * text from outside them.
- */
-function vouchedRun(run: AgentRun | undefined): boolean {
-  return (
-    run !== undefined && run.started && run.stopped && run.calls_recorded.length === 0 && [...run.calls_seen].every((id) => run.calls_answered.has(id))
-  )
-}
-
-/** The agent a call names, if the host stamped one: absent for the member's own calls. */
-function agentIdOf(call: Body): string | undefined {
-  const id = call['agent_id']
-  return isText(id) ? id : undefined
-}
-
-/** How this launcher knows the agent a tool result hands back (martha#170). */
-function agentStateOf(state: RelayState, id: unknown): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } | undefined {
-  if (!isText(id)) return undefined
-  const run = state.agents.get(id)
-  if (run === undefined) return { id, state: 'unknown' }
-  if (vouchedRun(run)) return { id, state: 'vouched' }
-  return { id, state: run.stopped ? 'unknown' : 'running' }
-}
-
-/** The agents started under this session that have not stopped, by id: the shell is refused while any of them runs. */
-function agentsRunning(state: RelayState, session: HostSession): readonly string[] {
-  return [...state.agents.entries()]
-    .filter(([, run]) => run.session_id === session.id && !run.stopped)
-    .map(([id, run]) => (run.started ? id : `an agent this launcher never saw start (${id})`))
-}
-
-/**
- * The agent a tool result belongs to, however the host names it (martha#170).
- *
- * The host stamps the id on the answer for the member's own call (`tool_response.agentId`). When the *agent* makes
- * the call it stamps the id on the call instead and the answer carries none: a real `SubagentHandback` is the agent's
- * own report to its caller, its output is `{success, message}`, and the only id is the one on the call.
- *
- * The id on the call is looked up in the launcher's own run table, exactly as the answer's id is: whatever the call
- * carries, the answer is placed by what this launcher knows of that agent and never by the fact that a call named one.
- * A run it holds and has not seen stop places the answer as a running agent's, whatever brought the run into being:
- * it records nothing, and the `SubagentStop` decides. An id it has no run of, or one whose run stopped without being
- * vouched, is unknown and records on B7 at once.
- * So a handback cannot be used to hand text into the turn and be done with it: vouched, it is the agent's own work on
- * the member's own inputs; anything else, the shell closes on its text.
- */
-function agentOfAResult(
-  state: RelayState,
-  call: { readonly agent_id: string | undefined },
-  answer: unknown,
-): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } | undefined {
-  const fromTheAnswer = theAgentInAToolResult(answer)
-  if (fromTheAnswer !== undefined) return agentStateOf(state, fromTheAnswer)
-  return call.agent_id === undefined ? undefined : agentStateOf(state, call.agent_id)
 }
 
 /** The launcher's answers for one member. */
@@ -613,72 +531,12 @@ function callOf(body: Body): { readonly tool: string; readonly input: Body; read
   return { tool, input, agent_id: agentIdOf(call), id: isText(id) ? id : undefined }
 }
 
-/** The run this launcher keeps for an agent, made on first sight: a call with an id it never saw start is still one. */
-function runOf(state: RelayState, session: HostSession, agent_id: string): AgentRun {
-  const existing = state.agents.get(agent_id)
-  if (existing !== undefined) return existing
-  const run: AgentRun = { session_id: session.id, calls_seen: new Set(), calls_answered: new Set(), started: false, stopped: false, calls_recorded: [] }
-  state.agents.set(agent_id, run)
-  return run
-}
-
-/** A call the agent made, by the host's `tool_use_id`: one of the calls "every call it made" counts. */
-function noteCallSeen(state: RelayState, session: HostSession, agent_id: string, call: unknown): void {
-  const run = runOf(state, session, agent_id)
-  const id = isBody(call) && isText(call['tool_use_id']) ? call['tool_use_id'] : undefined
-  if (id !== undefined) run.calls_seen.add(id)
-}
-
-/** That same call, answered here. */
-function noteCallAnswered(state: RelayState, agent_id: string, call: unknown): void {
-  const run = state.agents.get(agent_id)
-  const id = isBody(call) && isText(call['tool_use_id']) ? call['tool_use_id'] : undefined
-  if (run !== undefined && id !== undefined) run.calls_answered.add(id)
-}
-
-/** The rows an agent's own call recorded: text it read from outside the member's own inputs (martha#170). */
-function noteItsCallsRecorded(state: RelayState, agent_id: string, recorded: readonly string[]): void {
-  state.agents.get(agent_id)?.calls_recorded.push(...recorded)
-}
-
-/** A call the agent made, noted as one of its calls; the member's own calls carry no id and note nothing (martha#170). */
-function noteTheAgentsCall(state: RelayState, session: HostSession, body: Body): string | undefined {
-  const agent_id = agentIdOf((body['call'] ?? {}) as Body)
-  if (agent_id !== undefined) noteCallSeen(state, session, agent_id, body['call'])
-  return agent_id
-}
-
-/** That same call, answered here, back with the agent it belonged to (martha#170). */
-function noteAnAgentsAnswer(state: RelayState, body: Body): string | undefined {
-  const agent_id = agentIdOf((body['call'] ?? {}) as Body)
-  if (agent_id !== undefined) noteCallAnswered(state, agent_id, body['call'])
-  return agent_id
-}
-
-/**
- * The rows an agent's answered call read, kept on its run: an agent that read text the gate counts is not vouched for,
- * and its answer records B7 when it stops (martha#170, the design's case 7). A call with no agent, or one that read
- * nothing, keeps nothing.
- */
-function noteWhatItsCallsRead(state: RelayState, agent_id: string | undefined, recorded: readonly string[]): void {
-  if (agent_id !== undefined && recorded.length > 0) noteItsCallsRecorded(state, agent_id, recorded)
-}
-
-/**
- * The agents whose run stands between a member and its shell (martha#170): the member's own calls only, because an
- * agent's own calls are the ones being recorded, and the shell a member loses while its agent runs is about the text
- * the agent hands back, not about the agent's own work.
- */
-function agentsToHold(state: RelayState, session: HostSession, agent_id: string | undefined): readonly string[] {
-  return agent_id === undefined ? agentsRunning(state, session) : []
-}
-
 /** The host says an agent started under this session (martha#170): only this makes an agent one it saw start. */
 async function subagentStarted(state: RelayState, body: Body): Promise<RelayReply> {
   const session = state.answers.named(body.session_id)
   if (typeof session === 'string') return refused(session)
   if (!isText(body.agent_id)) return refused('the agent start names no agent')
-  runOf(state, session, body.agent_id).started = true
+  runOf(state.agents, session.id, body.agent_id).started = true
   return answered(TAKEN)
 }
 
@@ -693,7 +551,7 @@ async function subagentStopped(state: RelayState, body: Body): Promise<RelayRepl
   const session = state.answers.named(body.session_id)
   if (typeof session === 'string') return refused(session)
   if (!isText(body.agent_id)) return refused('the agent stop names no agent')
-  const run = runOf(state, session, body.agent_id)
+  const run = runOf(state.agents, session.id, body.agent_id)
   run.stopped = true
   if (vouchedRun(run)) return answered(TAKEN)
   const why = await state.answers.keep(takeInTurn(session, { source: 'subagent' }, state.place.binder))
@@ -743,7 +601,7 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   if (call === undefined) return denied('the tool call names no tool')
   const session = await state.answers.vouchFor(named)
   if (typeof session === 'string') return denied(session)
-  const agent_id = noteTheAgentsCall(state, session, body)
+  const agent_id = noteTheAgentsCall(state.agents, session.id, body)
   const denial = await theDenialOfACall(state, session, call, agent_id)
   if (denial !== undefined) return denied(denial)
   // The call runs, so it is counted against the package's budget before it does (martha#513, slice 3): a call whose row
@@ -759,6 +617,16 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
   return answered(ALLOW)
 }
 
+/**
+ * What the owner keeps from this call before the gate is asked (martha#122, #136): their own settings file, which no call
+ * of a member's may name, and their memory, which no call may write. Undefined when the call may touch neither.
+ */
+function whatTheOwnerKeepsFromThisCall(place: MemberRelayPlace, call: { readonly tool: string; readonly input: Body }): string | undefined {
+  const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
+  if (settings !== undefined) return settings
+  return writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine)
+}
+
 /** Why this call is refused before it runs, or undefined when nothing does: the owner's settings, their memory, the gate, the crew's reviewer-model rule. */
 async function theDenialOfACall(
   state: RelayState,
@@ -767,10 +635,8 @@ async function theDenialOfACall(
   agent_id: string | undefined,
 ): Promise<string | undefined> {
   const { place } = state
-  const settings = namesTheOwnersSettings(call.input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home)
-  if (settings !== undefined) return settings
-  const memory = writesTheOwnersMemory(call.tool, call.input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine)
-  if (memory !== undefined) return memory
+  const theOwners = whatTheOwnerKeepsFromThisCall(place, call)
+  if (theOwners !== undefined) return theOwners
   const verdict = answerToolCall({
     tool: call.tool,
     session,
@@ -779,7 +645,7 @@ async function theDenialOfACall(
     launch: place.launch,
     names: place.names,
     host: thisMachine,
-    agents_running: agentsToHold(state, session, agent_id),
+    agents_running: agentsToHold(state.agents, session.id, agent_id),
     ...(place.gate === undefined ? {} : { gate: place.gate }),
     audit: place.audit, contract: await theContractACrewHolds(place.crew, { tool: call.tool, input: call.input }, place.names),
     spend: await theSpendACrewHolds(place.crew, session.id),
@@ -819,7 +685,7 @@ async function theReportOfARanTool(state: RelayState, body: Body): Promise<Relay
   // A menu's answer is what a settle of the owner's asks stands on (martha#313): the queue keeps the closings it hears.
   place.crew?.noteTheCallsAnswer({ tool: call.tool }, session.id)
   // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).
-  const answering = noteAnAgentsAnswer(state, body)
+  const answering = noteAnAgentsAnswer(state.agents, body)
   closeTheDialogsTheCallAnswered(place, session, body, call)
   // The receipt is single use: taken now, whatever the answer, so a later call takes none of it (martha#129).
   const kept = place.signed_runs?.callAnswered(call.tool, call.input, body.answer)
@@ -829,7 +695,7 @@ async function theReportOfARanTool(state: RelayState, body: Body): Promise<Relay
   // output is text the owner vouched for, so the shell stays. Every other result records, as #127 leaves it.
   if (kept !== undefined && kept.why === undefined) return answered(TAKEN)
   const { reply, recorded } = await recordToolResult(state, session, call, body.answer)
-  noteWhatItsCallsRead(state, answering, recorded)
+  noteWhatItsCallsRead(state.agents, answering, recorded)
   return reply
 }
 
@@ -864,7 +730,7 @@ async function recordToolResult(
   answer: unknown,
 ): Promise<{ readonly reply: RelayReply; readonly recorded: readonly string[] }> {
   const { place } = state
-  const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state, call, answer) : undefined
+  const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state.agents, call, answer) : undefined
   // A mesh tool's own session answer may carry nothing of anyone else's (martha#251): read first, so an answer whose
   // every leaf came from this launch takes nothing in and the member keeps the shell it needs for the ring it was
   // about to make. Every other answer, this tool's included when the launch cannot say what it supplied, records on

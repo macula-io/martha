@@ -88,6 +88,7 @@
       "src/start_a_member",
       "src/start_the_member_on_the_owners_terminal",
       "src/sweep_leftover_launch_directories",
+      "src/tell_the_member_a_line",
       "src/read_what_claude_code_says_of_an_agent"
     ],
     "decisionFiles": [
@@ -135,7 +136,8 @@
       "src/start_a_member": 241,
       "src/start_the_member_on_the_owners_terminal": 86,
       "src/sweep_leftover_launch_directories": 153,
-      "src/ask_git_what_a_member_is_about_to_change": 85
+      "src/ask_git_what_a_member_is_about_to_change": 85,
+      "src/tell_the_member_a_line": 42
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",
