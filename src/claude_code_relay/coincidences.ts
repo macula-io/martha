@@ -9,6 +9,7 @@ import { THE_NEXT_MESSAGE_ASK, THE_TURN_STARTED_ASK } from '../hand_a_crew_messa
 import { ELICITATION, ELICITATION_RESULT, NOTIFICATION, PERMISSION_REQUEST, TOOL_CHECK } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
 import { THE_CHANNEL_READ_ASK } from '../keep_the_crew_channel/the_channel_read.ts'
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
+import { KEEP_THE_PACKAGE_CONTRACT } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import { OWNER_TODO_ADD, OWNER_TODO_DONE, THE_OWNERS_TODO_ASK } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { STANDING, STANDING_ADD, STANDING_CLOSE } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
@@ -54,6 +55,9 @@ export const COINCIDENCES: readonly Exception[] = [
   // The five names the crew's own tools took (martha#343): the same reason as the landing tools above — the mod answers
   // each by a literal it cannot build, and the constant it would otherwise read lives in a slice it may not import.
   { value: LOG_A_MILESTONE, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  // The package contract's tool (martha#513): the Supervisor keeps a package's contract with it, and the mod answers it
+  // by a literal for the same reason as the entries above.
+  { value: KEEP_THE_PACKAGE_CONTRACT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: SAY_TO_THE_CREW, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: READ_THE_RECEIPTS, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   // The park, wake and restart tools took their names in slices of their own (#443 part 5), so each is read here from
