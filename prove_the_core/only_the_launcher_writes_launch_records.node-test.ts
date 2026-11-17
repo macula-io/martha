@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import {
   declaredHostGlue,
+  HOST_GLUE_ROOT,
   hostGlueImportedBySlices,
   hostGlueOf,
   launchRecordWritesOutsideTheLauncher,
   type PlantedSource,
 } from './only_the_launcher_writes_launch_records.ts'
 import { manifestOf, programsAndTheirPartsOf, testSuffixesOf } from './declared_in_package_json.ts'
+import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const repository = join(import.meta.dirname, '..')
 
@@ -101,6 +104,34 @@ test('a hostGlue entry that is not exactly src/<one directory> is refused, with 
   for (const declared of refused) {
     assert.throws(() => hostGlueOf(declared, real), /martha\.hostGlue/, JSON.stringify(declared))
     assert.throws(() => hostGlueOf(declared, real, 'hostAdapters'), /martha\.hostAdapters/, JSON.stringify(declared))
+  }
+})
+
+test('a bad hostAdapters entry read from package.json is reported as martha.hostAdapters, not martha.hostGlue (#544)', () => {
+  const tree = mkdtempSync(join(tmpdir(), 'martha-544-'))
+  try {
+    mkdirSync(join(tree, HOST_GLUE_ROOT, 'real_directory'), { recursive: true })
+    const plant = (hostAdapters: readonly unknown[]) =>
+      writeFileSync(
+        join(tree, 'package.json'),
+        JSON.stringify({ martha: { hostGlue: [`${HOST_GLUE_ROOT}/real_directory`], hostAdapters } }),
+      )
+
+    plant([`${HOST_GLUE_ROOT}/real_directory`])
+    assert.deepEqual(declaredHostGlue(tree, 'hostAdapters'), ['real_directory'])
+
+    const refused: readonly (readonly unknown[])[] = [
+      ['lib/real_directory'],
+      [`${HOST_GLUE_ROOT}/missing_directory`],
+      [`${HOST_GLUE_ROOT}/real_directory`, `${HOST_GLUE_ROOT}/real_directory`],
+    ]
+    for (const hostAdapters of refused) {
+      plant(hostAdapters)
+      assert.throws(() => declaredHostGlue(tree, 'hostAdapters'), /package\.json martha\.hostAdapters /, JSON.stringify(hostAdapters))
+      assert.deepEqual(declaredHostGlue(tree), ['real_directory'], JSON.stringify(hostAdapters))
+    }
+  } finally {
+    removeTheTree(tree)
   }
 })
 
