@@ -13,7 +13,9 @@
 // The order this run made after the long turn can only be judged when the journal shows the end rode that tool's own
 // answer (martha#498): an end ordered after the tool finished says nothing about the hold, and reading the request
 // numbers as a regression is what made run 43649753458 red on a tree that changed nothing about it. The case below
-// waits for that record and fails by name without it, and the last case plants the late end the record is missing for.
+// waits for that record and fails by name without it. The planted late end — an end ordered after the tool finished,
+// where the record is missing — needs no host, so it is the second `#498` case in
+// ../answer_the_relay/the_relay_holds_the_end_of_a_turn.node-test.ts rather than a case of this file.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -129,6 +131,28 @@ const whatTheModelSaw = (request: ModelRequest): string => JSON.stringify(reques
 const afterTheLongTurn = (requests: readonly ModelRequest[]): readonly ModelRequest[] => requests.filter((request) => request.number > THE_LONG_TOOLS_REQUEST)
 
 /**
+ * Which of the run's two queued requests a request number is, in the words a diagnostic says it: the handover, the
+ * channel message that waited for the member to be idle, or neither (martha#498).
+ */
+function whichAfterTheEnd(number: number | undefined, handover: number | undefined, message: number | undefined): string {
+  if (number === undefined) return 'no request at all'
+  if (number === handover) return 'the handover'
+  if (number === message) return 'the waiting message'
+  return `request ${number}, which is neither`
+}
+
+/**
+ * What the run's ordering shows once the journal says the end rode the long call's answer (martha#498): the turn the
+ * tool ran in asked the model nothing more, so the first request after it is one of the two the run queued behind it —
+ * the handover, or the channel message waiting for the member to be idle. Which of the two goes first is the host's to
+ * choose, so only their numbers are compared.
+ */
+function theTurnWentOnWith(number: number | undefined, handover: number | undefined, message: number | undefined, shown: string): void {
+  const nextIsOneOfTheTwo = number !== undefined && (number === handover || number === message)
+  assert.ok(nextIsOneOfTheTwo, `the long turn went on after its tool, or neither the handover nor the waiting message ran after it:\n${plainTextOf(shown).slice(-3000)}`)
+}
+
+/**
  * The journal's record that the end rode `call`'s own answer, without which the order of the requests this run made
  * after the long tool cannot be judged (martha#498). A run without it fails here, in the run's own words, rather than
  * on an ordering assertion that reads like a regression.
@@ -173,11 +197,12 @@ test('an end ordered while a long tool runs is carried after that tool\'s report
   const handover = after.find((request) => whatTheModelSaw(request).includes(THE_HANDOVER_ASK))?.number
   const message = after.find((request) => whatTheModelSaw(request).includes(THE_WAITING_MESSAGE))?.number
   // The ordering is recorded, not asserted: the design asks which runs first, and the answer is the host's.
-  t.diagnostic(`after the end: the handover ran in request ${handover ?? 'none'}, the waiting message in ${message ?? 'none'}`)
+  const firstAfter = after[0]?.number
+  t.diagnostic(`after the end: the handover ran in request ${handover ?? 'none'}, the waiting message in ${message ?? 'none'}; ${whichAfterTheEnd(firstAfter, handover, message)} ran first`)
   t.diagnostic(`the flow after the run: ${JSON.stringify(theFlowOf(theCrewsRefreshes(project), MEMBER))}`)
-  // The end was carried inside the long tool's after-hook: the turn the tool ran in asked the model nothing more, so
-  // the very next request is the handover. And the flow counted the end, which only an outcome of `ended` does.
-  assert.equal(after[0]?.number, handover, `the long turn went on after its tool, or the handover never ran:\n${plainTextOf(shown).slice(-3000)}`)
+  // The end was carried inside the long tool's after-hook, so the turn it ran in asked the model nothing more; and the
+  // flow counted the end, which only an outcome of `ended` does.
+  theTurnWentOnWith(firstAfter, handover, message, shown)
   assert.ok(handover !== undefined, 'the handover queued behind the long tool never ran')
   const flow = theFlowOf(theCrewsRefreshes(project), MEMBER)
   assert.ok(flow !== undefined && !('refusal' in flow), 'the member has no refresh flow to read')

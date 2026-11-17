@@ -226,6 +226,27 @@ test('#498: the end carried on a call\'s answer is noted with that call, so a ru
   assert.equal(whyTheOrderCannotBeJudged(journal, THE_CALLS_ID), undefined, 'a run whose end rode the tool\'s own answer was told it cannot judge the order')
 })
 
+test('#498: an end carried on another call\'s answer names that call and not this one (mutant: the id compare dropped)', async (t) => {
+  const ends = holdingTheEnds()
+  const { places, relay } = await aStartedRelay(t, ends)
+  // Two calls in flight when the end is ordered (the turn the long tool runs in may have another call open): the first
+  // to report is not the last in flight, so nothing rides it, and the end rides the other one's answer.
+  const other = call(CLAUDE_CODE_SHELL_TOOL, { command: 'pwd', tool_use_id: 'toolu_the-other-call' })
+  assert.deepEqual(await relay.answer('tool_called', A_COMMAND), { answered: true, body: { allow: 1 } })
+  assert.deepEqual(await relay.answer('tool_called', other), { answered: true, body: { allow: 1 } })
+  assert.equal(ends.hold(SESSION, THE_TURN), 'held', 'the launcher counted fewer than both allowed calls in flight')
+  assert.deepEqual(await relay.answer('tool_answered', A_COMMAND), { answered: true, body: { taken: 1 } }, 'the end rode a call that was not the last in flight, so this case proved nothing')
+  assert.deepEqual(await relay.answer('tool_answered', other), { answered: true, body: { taken: 1, end_turn: THE_TURN } }, 'the end did not ride the last call in flight, so no line was written to read')
+  const journal = theJournal(places)
+  assert.equal(
+    theEndRodeOn(journal, THE_CALLS_ID),
+    false,
+    'the journal claimed the end rode this call\'s answer, when it rode the other call\'s: a run reading this call\'s order would judge it on an end that never reached it',
+  )
+  assert.equal(theEndRodeOn(journal, other.call.tool_use_id), true, 'the end rode the other call and the journal named neither, so the case above passed on a journal with no line at all')
+  assert.equal(whyTheOrderCannotBeJudged(journal, THE_CALLS_ID), THE_END_CAME_TOO_LATE, 'a run whose end rode another call\'s answer was allowed to judge this call\'s order')
+})
+
 test('#498: an end ordered after the tool finished rides no call, and the run is told it cannot judge the order (the planted slow end)', async (t) => {
   const ends = holdingTheEnds()
   const { places, relay } = await aStartedRelay(t, ends)
