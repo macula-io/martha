@@ -14,6 +14,7 @@
 // line says which packages of a batch are held by a contract and which are not rather than refusing the batch.
 
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
+import { OWNER_YES } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { SHORT_SHA } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { ACriterion, APackageContract } from './the_contract_in_a_brief.ts'
 import { theNewestContractOf } from './keep_the_package_contract.ts'
@@ -47,13 +48,13 @@ async function theCriterionAt(criterion: ACriterion, at: TheEvidenceAt): Promise
       ? { criterion: criterion.criterion, evidence: criterion.evidence, met: true }
       : { criterion: criterion.criterion, evidence: criterion.evidence, met: false, why: `no CI job or run named ${JSON.stringify(of)} was green on ${at.revision}` }
   }
-  const there = kind === 'owner_yes' ? await at.ownerSaidYes(Number(of)) : await at.fileIsThere(of)
+  const there = kind === OWNER_YES ? await at.ownerSaidYes(Number(of)) : await at.fileIsThere(of)
   if (there) return { criterion: criterion.criterion, evidence: criterion.evidence, met: true }
   return {
     criterion: criterion.criterion,
     evidence: criterion.evidence,
     met: false,
-    why: kind === 'owner_yes' ? `the owner has not said yes to ask ${of}` : `${of} is not at ${at.revision}`,
+    why: kind === OWNER_YES ? `the owner has not said yes to ask ${of}` : `${of} is not at ${at.revision}`,
   }
 }
 

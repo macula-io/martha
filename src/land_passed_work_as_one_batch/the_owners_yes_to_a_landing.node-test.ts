@@ -8,6 +8,7 @@ import { test } from 'node:test'
 import { APPROVE_LANDING, OWNER } from '../declare_crew/declare_crew.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { ASK_QUEUED, ASKS_SETTLED, MAX_ASK, OWNER_ASKS_STREAM, QUEUE_ASK } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import {
   OWNER_YES,
@@ -23,7 +24,6 @@ import { theFastForwardACallNames } from './land_passed_work_as_one_batch.ts'
 
 const MEMBER = 'Ceres'
 const BUILDER = 'builder'
-const SUPERVISOR = 'supervisor'
 const REPO = 'synthetic-owner/widget'
 const TIP = 'c'.repeat(40)
 const OTHER_TIP = 'd'.repeat(40)

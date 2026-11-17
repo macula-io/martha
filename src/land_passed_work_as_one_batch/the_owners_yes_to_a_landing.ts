@@ -18,10 +18,10 @@
 
 import { APPROVE_LANDING, OWNER, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
-import { MAX_ASK, QUEUE_ASK, theAsksSaidYesToWithTheirWords, theQuestion } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { MAX_ASK, OWNER_YES, QUEUE_ASK, theAsksSaidYesToWithTheirWords, theQuestion } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 
-/** The argument the fast-forward names the owner's yes in: the id of the ask they said yes to. */
-export const OWNER_YES = 'owner_yes'
+/** The argument the fast-forward names the owner's yes in, the id of the ask they said yes to, as the queue names one. */
+export { OWNER_YES }
 
 /** The ref an origin's default branch has in a clone, before it is the branch's own name. */
 const THE_ORIGIN_PREFIX = 'origin/'
