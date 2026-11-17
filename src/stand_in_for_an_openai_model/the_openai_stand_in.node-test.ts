@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { A_SIDE_ANSWER, THE_PATH_THE_ENGINE_POSTS_TO, openAiStandInCallId, theOpenAiStandIn, type ModelRequest, type ModelScript } from './the_openai_stand_in.ts'
+import { A_SIDE_ANSWER, THE_FINISH_OF_A_TEXT_TURN, THE_FINISH_OF_A_TOOL_TURN, THE_PATH_THE_ENGINE_POSTS_TO, openAiStandInCallId, theOpenAiStandIn, type ModelRequest, type ModelScript } from './the_openai_stand_in.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 
 /** A tool the member's engine offers, by a name the test makes up: the stand-in answers whatever it is offered. */
@@ -53,7 +53,7 @@ test('a text turn streams as one delta, a stop, and the end', async () => {
     assert.match(answered.headers.get('content-type') ?? '', /^text\/event-stream/)
     const chunks = chunksOf(await answered.text())
     assert.deepEqual(chunks.map((chunk) => choiceOf(chunk).delta?.['content'] ?? null), ['Done.', null])
-    assert.equal(choiceOf(chunks.at(-1) ?? {}).finish_reason, 'stop')
+    assert.equal(choiceOf(chunks.at(-1) ?? {}).finish_reason, THE_FINISH_OF_A_TEXT_TURN)
   })
 })
 
@@ -66,7 +66,7 @@ test('a tool turn streams one call with its arguments as JSON text, its id from 
     assert.equal(calls[0]?.id, openAiStandInCallId(1))
     assert.equal(calls[0]?.function.name, 'a_tool')
     assert.deepEqual(JSON.parse(calls[0]?.function.arguments ?? ''), input)
-    assert.equal(choiceOf(chunks.at(-1) ?? {}).finish_reason, 'tool_calls')
+    assert.equal(choiceOf(chunks.at(-1) ?? {}).finish_reason, THE_FINISH_OF_A_TOOL_TURN)
   })
 })
 
@@ -75,7 +75,7 @@ test('a request that does not ask for a stream is answered whole', async () => {
     const answered = await post(url, { ...OFFERS_TOOLS, stream: false })
     const choice = choiceOf((await answered.json()) as Record<string, unknown>)
     assert.equal(choice.message?.['content'], 'Done.')
-    assert.equal(choice.finish_reason, 'stop')
+    assert.equal(choice.finish_reason, THE_FINISH_OF_A_TEXT_TURN)
   })
 })
 

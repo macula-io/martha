@@ -77,7 +77,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'acp command', read: (source) => ({ acp_command: acpCommandIn(source) }) },
   { part: 'path root variable', read: (source) => ({ path_root_variable: pathRootVariableIn(source) }) },
   { part: 'slash commands switch', read: (source) => ({ slash_commands: slashCommandsIn(source) }) },
-  { part: 'modes', read: (source) => ({ mode: modeIn(source) }) },
+  { part: 'mode setting', read: (source) => ({ mode: modeIn(source) }) },
   { part: 'platform extensions', read: (source) => ({ platform_extensions: platformExtensionsIn(source) }) },
   { part: 'permission options', read: (source) => ({ permission_options: permissionOptionsIn(source) }) },
   { part: 'openai provider', read: (source) => ({ openai_provider: openaiProviderIn(source) }) },

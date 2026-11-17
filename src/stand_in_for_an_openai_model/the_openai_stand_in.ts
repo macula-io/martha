@@ -46,7 +46,11 @@ function messageOf(turn: Exclude<ScriptedTurn, { refused: ARefusedRequest }>, nu
   return { role: 'assistant', content: null, tool_calls: [call] }
 }
 
-const finishOf = (turn: ScriptedTurn): string => ('tool' in turn ? 'tool_calls' : 'stop')
+/** How the chat completions API says a turn ended: with text, or with the tool calls it asks for. */
+export const THE_FINISH_OF_A_TEXT_TURN = 'stop'
+export const THE_FINISH_OF_A_TOOL_TURN = 'tool_calls'
+
+const finishOf = (turn: ScriptedTurn): string => ('tool' in turn ? THE_FINISH_OF_A_TOOL_TURN : THE_FINISH_OF_A_TEXT_TURN)
 const USAGE = { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
 
 /** A reply streamed as the chat completions API streams one: the message in one delta, then its finish, then the end. */
