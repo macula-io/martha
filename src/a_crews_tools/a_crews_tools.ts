@@ -63,6 +63,8 @@ import {
   type TheSessionsQuestion,
 } from '../refresh_a_member/the_refresh_flow.ts'
 import { REPORT_PROGRESS_TOOL, reportProgressOver } from '../report_where_the_work_stands/report_progress_tool.ts'
+import { theBudgetOver } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
+import type { ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
 import type { TheCrew } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { type ASpawnedAgent, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
@@ -223,6 +225,17 @@ export interface CrewTools extends TheReviewRule {
    */
   thePredecessorOf(session_id: string): Promise<string | null>
   /**
+   * What the package this member holds has spent of its budget (martha#513, slice 3): the units its newest contract
+   * names and what was spent of each, read once at a session's first call and then answered from memory. Undefined when
+   * the member holds no package, holds one with no bounded contract, or the crew could not read what it spent.
+   */
+  theSpendInForce(session_id: string): Promise<ASpendInForce | undefined>
+  /**
+   * One more call counted against that package's budget, before the call runs (martha#513, slice 3): undefined when it
+   * was kept, and the reason when it was not — a call nobody counted is a budget a member can walk around.
+   */
+  noteTheCallCounted(session_id: string, own_name: string): Promise<string | undefined>
+  /**
    * The launcher saw the host answer one of this session's calls (martha#313): the menu tool's answer is what a settle
    * of the owner's asks stands on, so the relay hands every answer here and the queue decides which one is a menu.
    */
@@ -323,6 +336,9 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     owner_needs: null,
   }
   const handlers = handlersOver(held, state)
+  // One budget over this launch's places (martha#513, slice 3): it reads a package's spend once per session and keeps
+  // the tally, so the relay's every call costs one append and no read.
+  const budget = theBudgetOver(held)
 
   return {
     tools: CREW_TOOLS,
@@ -351,6 +367,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     startSweeping: () => sweepTheOwnersList(held),
     theLineToHandAtStart: () => theStartLineOf(held, state),
     thePredecessorOf: (session_id) => thePredecessorOf(held, session_id),
+    theSpendInForce: (session_id) => budget.theSpendInForce(session_id),
+    noteTheCallCounted: (session_id, own_name) => budget.noteTheCallCounted(session_id, own_name),
     ...theReviewRuleOver({ declared: () => crewOrRefusal(held), spawn: held.spawn }),
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
     ends: state.ends,

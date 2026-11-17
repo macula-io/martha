@@ -224,3 +224,23 @@ test('once the owner approves the new tree, the calls run again', (t) => {
   const again = { ...approved, approved_fingerprints: [fingerprintOf(readLaunchState(approved, thisMachine))] }
   assert.equal(answerToolCall({ names, tool: 'Read', session, policy, launch: again, host: thisMachine }), undefined)
 })
+
+// --- the package's budget (martha#513, slice 3) -------------------------------
+
+/** A package with nothing left: what the gate is handed when a member has spent its budget whole. */
+const aSpentBudget = { package: 'synthetic-owner/repo#7', version: 1, units: [{ unit: 'tool calls' as const, spent: 5, limit: 5 }] }
+
+test('the budget is asked last of all, so a call the gate refuses keeps the gate\'s own reason', () => {
+  const tainted = takeInTurn(beginSession(store(), 's-budget-1'), { source: 'cross_session' }, bindNothing)
+
+  const said = denied(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: tainted, policy, launch, host: thisMachine, spend: aSpentBudget }))
+  assert.match(said, /nothing executes/i)
+})
+
+test('a call the gate allows is refused at the wall, and one that ends the package runs', () => {
+  const fresh = beginSession(store(), 's-budget-2')
+
+  const said = denied(answerToolCall({ names, tool: 'Read', session: fresh, policy, launch, host: thisMachine, spend: aSpentBudget }))
+  assert.match(said, /5 of 5 tool calls/)
+  assert.equal(answerToolCall({ names, tool: 'mcp__martha__write_my_handover', session: fresh, policy, launch, host: thisMachine, spend: aSpentBudget }), undefined)
+})

@@ -12,6 +12,7 @@ import { declareCrew, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declar
 import type { CrewPlace, DocumentStore, HandoverStampStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { keepTheMilestone, whatWasSent } from '../keep_the_ledger/keep_the_ledger.ts'
 import { theContractPartOf } from '../keep_the_package_contract/keep_the_package_contract.ts'
+import { theSpendPartOfTheStart } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import type { TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
@@ -370,8 +371,12 @@ async function resume(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh
   const held = places.beats.read(places.member)?.holds ?? ''
   const acts = held === '' ? [] : await theActsLeftOpen(places, held)
   const contract = await theContractPartOf(places.ledger, held)
+  // And what it has spent of the package's budget (martha#513, slice 3): the count is the package's, so a successor that
+  // starts at the wall is told before its first call rather than after it.
+  const spend = await theSpendPartOfTheStart(places.ledger, held, now)
+  const held_to = [contract, spend].filter((part) => part !== null && part !== undefined).join('\n\n')
   keepTheFlow(place, places.member, theFlowAbandoned(flow, 'resumed at a new session', now))
-  return { act: 'prompt', text: theResumePrompt({ member: places.member, file, acts, contract }), refresh: { phase: 'resumed', reason: `resumed from ${file}` } }
+  return { act: 'prompt', text: theResumePrompt({ member: places.member, file, acts, contract: held_to === '' ? undefined : held_to }), refresh: { phase: 'resumed', reason: `resumed from ${file}` } }
 }
 
 /** The acts of `package` that were sent and never concluded, as the ledger's own line names them. */
