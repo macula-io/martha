@@ -189,6 +189,10 @@ test('martha bells lists every declared member, and says the declaration\'s own 
   const silent = martha(place, 'bells')
   assert.equal(silent.status, EXIT_DONE, silent.said)
   for (const member of SOLO_MEMBERS) assert.match(silent.out, new RegExp(`^${member.name}: rings nothing \\(the declaration turns owner_bell off\\)$`, 'm'), silent.out)
+
+  const mutedWhileOff = marthaOnATerminal(place, {}, 'bells', 'builder', BELLS_MUTED)
+  assert.equal(mutedWhileOff.status, EXIT_DONE, mutedWhileOff.said)
+  assert.match(martha(place, 'bells').out, /^builder: rings nothing \(the declaration turns owner_bell off\); muted since .* by Ada Owner /m, 'a mute made while the declaration is off is still named')
 })
 
 test('martha bells with no terminal is refused, so a member\'s shell cannot silence the bell that warns the owner (martha#371)', (t) => {

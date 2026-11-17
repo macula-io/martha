@@ -188,11 +188,21 @@ export function flipTheBellsOf(place: TheBellsPlace, flipped: BellsFlipped): { r
   return refused === undefined ? { flipped: true } : { flipped: false, refusal: refused.refusal }
 }
 
-/** One line of `martha bells` for a member: what its bells do now, and how to change it. */
+/** What the declaration's own switch turning every bell off reads as, said the same in the list and the flip's answer. */
+const THE_DECLARATION_IS_OFF = 'the declaration turns owner_bell off'
+
+/** One flip, as the owner reads it: when, who, and how to lift it. */
+const theMuteShown = (member: string, mute: TheMute): string => `muted since ${mute.at} by ${mute.by} (${theWayBackToTheBell(member)})`
+
+/**
+ * One line of `martha bells` for a member: what its bells do now, and how to change it. A crew whose declaration turns
+ * every bell off is said so, with a mute the owner has already made still named: it is in force the moment the
+ * declaration's switch is turned back on, and hiding it would make the list read as though it never happened.
+ */
 function aLineOfTheBells(member: string, declared: boolean, mute: TheMute): string {
-  if (!declared) return `${member}: rings nothing (the declaration turns owner_bell off)`
-  if (!mute.muted) return `${member}: rings`
-  return `${member}: muted since ${mute.at} by ${mute.by} (${theWayBackToTheBell(member)})`
+  if (declared) return mute.muted ? `${member}: ${theMuteShown(member, mute)}` : `${member}: rings`
+  const off = `${member}: rings nothing (${THE_DECLARATION_IS_OFF})`
+  return mute.muted ? `${off}; ${theMuteShown(member, mute)}` : off
 }
 
 /** What the owner asked `martha bells`: the whole crew, or one member's flip. */
