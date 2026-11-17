@@ -938,7 +938,10 @@ where it came from. Three things stand on it:
   This rests on two code paths of the recorded host, restated under `memory_off`
   in `recorded_claude_code_host.json`: file mode returns early on the off switch,
   and hosted mode needs the dropped variable. A re-recorded host fails CI until
-  someone re-reads them for it.
+  someone re-reads them for it. Host drift fails too when a text `memory_off`
+  quotes leaves the host (martha#412), or when a function the file-mode guard
+  calls changes, at any depth, while the guard itself stays the same
+  (`file_mode_guard_calls`, martha#438).
 - **A member's file tool does not write the owner's memory, or the code the owner's
   sessions run (martha#187).** The relay refuses a
   `Write`, `Edit`, `MultiEdit` or `NotebookEdit` into every project's memory

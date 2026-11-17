@@ -9,6 +9,13 @@
 // submitted while that turn ran then runs. It also records, rather than asserts, which runs first once the turn is
 // ended: the queued handover, or a channel message that was waiting for the member to be idle — the ordering the
 // draft named as one way an end fails.
+//
+// The order this run made after the long turn can only be judged when the journal shows the end rode that tool's own
+// answer (martha#498): an end ordered after the tool finished says nothing about the hold, and reading the request
+// numbers as a regression is what made run 43649753458 red on a tree that changed nothing about it. The case below
+// waits for that record and fails by name without it. The planted late end — an end ordered after the tool finished,
+// where the record is missing — needs no host, so it is the second `#498` case in
+// ../answer_the_relay/the_relay_holds_the_end_of_a_turn.node-test.ts rather than a case of this file.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -21,13 +28,15 @@ import { REFRESH_THIS_SESSION } from '../a_crews_tools/a_crews_tools.ts'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, HANDOVER_CEILING_MINUTES_LEAST } from '../declare_crew/declare_crew.ts'
+import { whyTheOrderCannotBeJudged } from '../end_a_running_turn/the_end_rode_on_a_call.ts'
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { crewStateDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { readTheNewestRelayJournal, relayJournalDirectory } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { theHandoverPrompt } from '../write_my_handover/write_my_handover.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { crewRowsDirectoryOf, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, whatTheLaunchSaw, type ModelRequest } from './drive_the_recorded_host.ts'
+import { crewRowsDirectoryOf, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, standInCallId, whatTheLaunchSaw, type ModelRequest } from './drive_the_recorded_host.ts'
 import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
@@ -54,6 +63,13 @@ const THE_HANDOVER_ASK = theHandoverPrompt({ at_limit: false, percent: 0 }).spli
  */
 const END_SILENCE_MS = 240_000
 const END = { text: 'Done.' }
+/**
+ * The request whose turn runs the long tool (martha#498): the end has to ride that call's own answer for the order of
+ * the requests after it to say anything, and its host id is the one the journal's record names.
+ */
+const THE_LONG_TOOLS_REQUEST = 2
+/** The host's id for the long tool's call, as the stand-in offered it, which is how the journal names the call. */
+const THE_LONG_TOOLS_CALL = standInCallId(THE_LONG_TOOLS_REQUEST)
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', `user.name=${GIT_NAME}`, '-c', `user.email=${GIT_EMAIL}`, '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim()
@@ -112,7 +128,41 @@ function theCrewsRefreshes(project: Project) {
 const whatTheModelSaw = (request: ModelRequest): string => JSON.stringify(request.body['messages'] ?? null)
 
 /** The requests after the long turn's own, which are the turns that ran once it was ended. */
-const afterTheLongTurn = (requests: readonly ModelRequest[]): readonly ModelRequest[] => requests.filter((request) => request.number > 2)
+const afterTheLongTurn = (requests: readonly ModelRequest[]): readonly ModelRequest[] => requests.filter((request) => request.number > THE_LONG_TOOLS_REQUEST)
+
+/**
+ * Which of the run's two queued requests a request number is, in the words a diagnostic says it: the handover, the
+ * channel message that waited for the member to be idle, or neither (martha#498).
+ */
+function whichAfterTheEnd(number: number | undefined, handover: number | undefined, message: number | undefined): string {
+  if (number === undefined) return 'no request at all'
+  if (number === handover) return 'the handover'
+  if (number === message) return 'the waiting message'
+  return `request ${number}, which is neither`
+}
+
+/**
+ * What the run's ordering shows once the journal says the end rode the long call's answer (martha#498): the turn the
+ * tool ran in asked the model nothing more, so the first request after it is one of the two the run queued behind it —
+ * the handover, or the channel message waiting for the member to be idle. Which of the two goes first is the host's to
+ * choose, so only their numbers are compared.
+ */
+function theTurnWentOnWith(number: number | undefined, handover: number | undefined, message: number | undefined, shown: string): void {
+  const nextIsOneOfTheTwo = number !== undefined && (number === handover || number === message)
+  assert.ok(nextIsOneOfTheTwo, `the long turn went on after its tool, or neither the handover nor the waiting message ran after it:\n${plainTextOf(shown).slice(-3000)}`)
+}
+
+/**
+ * The journal's record that the end rode `call`'s own answer, without which the order of the requests this run made
+ * after the long tool cannot be judged (martha#498). A run without it fails here, in the run's own words, rather than
+ * on an ordering assertion that reads like a regression.
+ */
+function theEndRodeTheCallsAnswer(t: TestContext, run: Project, call: string): void {
+  const journal = readTheNewestRelayJournal(relayJournalDirectory(stateHomeUnder(run.home), run.checkout))
+  const cannot = whyTheOrderCannotBeJudged(journal, call)
+  if (cannot !== undefined) assert.fail(cannot)
+  t.diagnostic(`the journal shows the end rode the answer to ${call}, so this run can judge the order of its requests`)
+}
 
 test('an end ordered while a long tool runs is carried after that tool\'s report: the member is not stopped, and the handover runs next', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProjectWithTheLeastCeiling(t)
@@ -129,7 +179,7 @@ test('an end ordered while a long tool runs is carried after that tool\'s report
       script: async ({ number }) => {
         // First the member asks for its own refresh, which the next beat takes up; then a turn that will not end.
         if (number === 1) return { tool: `mcp__martha__${REFRESH_THIS_SESSION}`, input: { reason: 'the test moves this member off its context' } }
-        if (number !== 2) return END
+        if (number !== THE_LONG_TOOLS_REQUEST) return END
         await appendToTheChannel(streams, { from: 'the-owner', to: [MEMBER], text: THE_WAITING_MESSAGE, sent_at: Date.now() })
         return { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: THE_LONG_TOOL, description: 'a tool still running when the end is ordered', timeout: THE_SHELL_LIMIT_MS } }
       },
@@ -140,15 +190,19 @@ test('an end ordered while a long tool runs is carried after that tool\'s report
   const { requests, shown } = ran
   // A member the after-tool gate stopped ends on SIGKILL; one that was handed over ends on the owner's /exit.
   assert.equal(ran.exit_code, 0, `the member did not end as the owner ended it, so something stopped it:\n${plainTextOf(shown).slice(-3000)}`)
+  // Judged only once the journal says the end rode the long call's own answer (martha#498): an end ordered after that
+  // tool finished leaves the request numbers below measuring the runner, not the hold.
+  theEndRodeTheCallsAnswer(t, project, THE_LONG_TOOLS_CALL)
   const after = afterTheLongTurn(requests)
   const handover = after.find((request) => whatTheModelSaw(request).includes(THE_HANDOVER_ASK))?.number
   const message = after.find((request) => whatTheModelSaw(request).includes(THE_WAITING_MESSAGE))?.number
   // The ordering is recorded, not asserted: the design asks which runs first, and the answer is the host's.
-  t.diagnostic(`after the end: the handover ran in request ${handover ?? 'none'}, the waiting message in ${message ?? 'none'}`)
+  const firstAfter = after[0]?.number
+  t.diagnostic(`after the end: the handover ran in request ${handover ?? 'none'}, the waiting message in ${message ?? 'none'}; ${whichAfterTheEnd(firstAfter, handover, message)} ran first`)
   t.diagnostic(`the flow after the run: ${JSON.stringify(theFlowOf(theCrewsRefreshes(project), MEMBER))}`)
-  // The end was carried inside the long tool's after-hook: the turn the tool ran in asked the model nothing more, so
-  // the very next request is the handover. And the flow counted the end, which only an outcome of `ended` does.
-  assert.equal(after[0]?.number, handover, `the long turn went on after its tool, or the handover never ran:\n${plainTextOf(shown).slice(-3000)}`)
+  // The end was carried inside the long tool's after-hook, so the turn it ran in asked the model nothing more; and the
+  // flow counted the end, which only an outcome of `ended` does.
+  theTurnWentOnWith(firstAfter, handover, message, shown)
   assert.ok(handover !== undefined, 'the handover queued behind the long tool never ran')
   const flow = theFlowOf(theCrewsRefreshes(project), MEMBER)
   assert.ok(flow !== undefined && !('refusal' in flow), 'the member has no refresh flow to read')
