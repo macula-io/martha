@@ -709,6 +709,7 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   ledger: places.ledger,
   member: places.member,
   roster: settings.members.map((member) => member.name),
+  receivers: theNudgesGoTo(settings),
   held: state.held === null ? places.beats.read(places.member) : state.held,
   to: args['to'],
   text: args['text'],

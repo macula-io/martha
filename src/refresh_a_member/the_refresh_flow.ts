@@ -8,6 +8,7 @@
 // restarted carries on rather than starting again. Its phase is written onto the member's row as well, because the
 // owner watches the dashboard and should not have to ask whether a refresh is in flight.
 
+import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { declareCrew, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, DocumentStore, HandoverStampStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { keepTheMilestone, whatWasSent } from '../keep_the_ledger/keep_the_ledger.ts'
@@ -447,6 +448,7 @@ function sayToTheSupervisor(places: TheRefreshPlaces, settings: CrewSettings, li
   void sendACrewMessage(places.ledger, {
     member: places.member,
     roster: settings.members.map((one) => one.name),
+    receivers: theNudgesGoTo(settings),
     package: held === '' ? null : held,
     to: [supervisor.name],
     text: line,
