@@ -239,7 +239,7 @@ test('a file that does not parse is named, since nothing in it can be judged', (
 })
 
 test('the code folders are the ones the test script runs', () => {
-  assert.deepEqual(codeFoldersOf(manifest).sort(), ['architecture', 'prove_the_core', 'prove_the_relay_loads', 'rehearse_a_release', 'src'])
+  assert.deepEqual(codeFoldersOf(manifest).sort(), ['architecture', 'carry_marthas_own_node', 'prove_the_core', 'prove_the_relay_loads', 'rehearse_a_release', 'src'])
 })
 
 test('every glob form the test script uses is read, and one naming no folder fails by name', () => {

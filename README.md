@@ -25,7 +25,9 @@ plans, builds, reviews and releases software, with one method and one tool.
 > design is still open in
 > [issue #1](https://github.com/macula-io/martha/issues/1).
 > How the existing crew conductor moves in, slice by slice, is in
-> [the port map](docs/port-map.md). What Martha talks to and what it is made
+> [the port map](docs/port-map.md), and which of its steps are built, in
+> flight or planned is in [where we are](docs/port-map.md#where-we-are).
+> What Martha talks to and what it is made
 > of is drawn in [the architecture](architecture/README.md).
 
 ## What is Martha?
