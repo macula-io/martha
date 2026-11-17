@@ -19,7 +19,7 @@ reader where to look. A lab host name is a map of the network.
 | A shorthand link to another repository | `synthetic-repo#123` | the same; the owner is implied, so nothing outside the author's head says whether it is public |
 | A private remote or repository name | `git@github.com:synthetic-owner/private-repo.git`, a constant holding `synthetic-owner/private-repo` | a fallback, a default, an install script |
 | An internal host name | a `*.lab` name, a lab machine named by its family and number | a log line, a comment, a test fixture |
-| A home directory, a private address, a private email, a real node id or key | `/home/<user>`, RFC 1918 addresses, a 64-hex id | the same classes the crew's note check and release scan already refuse |
+| A home directory, a private address, a private email, a real node id or key | a path under a real user's home, RFC 1918 addresses, a 64-hex id | the same classes the crew's note check and release scan already refuse |
 
 Each of those can enter through four paths:
 
@@ -138,10 +138,15 @@ edits the text through the Supervisor. What proves it bites on every pull
 request is its `--self-test`, which plants a cited path on each surface in
 memory and needs no token.
 
-Legitimate text passes by its form, exactly as in the tree: a placeholder such as
-`/home/<user>`, the `allow_home` names, the synthetic forms, or a public
-repository. There is no exemption for a document, a fenced block or a table — an
-evidence citation and a code sample are the same bytes, and both instances
+Legitimate text passes by its form, exactly as in the tree, and the forms are the
+ones the check accepts: a home path as `/home/synthetic` or as one of the
+`allow_home` names, a repository under a `synthetic-` owner, or a public
+repository. An invented name is not a form. A home path under a made-up user, or
+a repository nobody declared, is refused exactly as a real one is, because nothing
+tells the two apart: angle brackets keep a path out of the class, but the invented
+name behind them is still not a form the check accepts, and the same name without
+them is refused. There is no exemption for a document, a fenced block or a table —
+an evidence citation and a code sample are the same bytes, and both instances
 leaked inside inline code.
 
 A run that could not look — a surface refused, a page unreadable, the families
@@ -158,8 +163,10 @@ Keep the reasoning, drop the link.
   machine.
 - A private remote or repository: take it from configuration, or name the public
   repository it should be.
-- A home directory, address or id: use the synthetic form, or a placeholder in
-  angle brackets.
+- A home directory, address or id: use the synthetic form — `/home/synthetic`, an
+  address in the `192.168.255.0/24` block, an id of one repeated hex digit. An
+  invented name is refused as a real one is, and brackets keep a path out of the
+  class without making that name a form.
 
 ## Running it
 
