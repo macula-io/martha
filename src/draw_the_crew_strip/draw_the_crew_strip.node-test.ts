@@ -44,7 +44,7 @@ function seamOver(beats: Readonly<Record<string, DashboardRow>>, now: () => numb
 }
 
 test('T1: the strip draws exactly the reader\'s header, then one line per member in the declaration\'s order', () => {
-  const seen = seeTheCrew(CREW, { Uranus: beat('Uranus', NOW - 1_000, { state: 'waiting', waits: { on: 'ci', for: 'a run' } }) }, NOW)
+  const seen = seeTheCrew(CREW, { Uranus: beat('Uranus', NOW - 1_000, { state: 'waiting', waits: { on: 'ci', for: 'a run', since: NOW - 1_000 } }) }, NOW)
   assert.deepEqual(theStripFrame(seen), [thePaneHeader(seen.counts), thePaneLine(seen.rows[0]!), thePaneLine(seen.rows[1]!)])
   assert.equal(theStripFrame(seen)[2], 'Uranus: waiting · Draw the strip 2/5 · macula-io/martha#572 · waits on ci for a run')
 })

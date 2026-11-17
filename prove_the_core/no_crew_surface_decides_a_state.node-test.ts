@@ -11,9 +11,9 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import ts from 'typescript'
 
-import { lineOf, nodesOf, parseSource } from '../../prove_the_core/parse_a_source.ts'
+import { lineOf, nodesOf, parseSource } from './parse_a_source.ts'
 
-const SRC = join(import.meta.dirname, '..')
+const SRC = join(import.meta.dirname, '..', 'src')
 
 /** The surfaces that draw the reader's answer. */
 const SURFACES: readonly string[] = ['draw_the_crew_strip', 'title_a_members_tab']
@@ -24,12 +24,17 @@ const DECIDERS: readonly string[] = ['show_dashboard_beat', 'tell_the_owner_a_se
 const TEST_FILE = /\.node-test\.ts$/
 
 /** Whether an import or export brings in a value: anything but a declaration that is wholly about types. */
-function bringsAValue(node: ts.ImportDeclaration | ts.ExportDeclaration): boolean {
-  if (ts.isExportDeclaration(node)) {
-    if (node.isTypeOnly) return false
-    const clause = node.exportClause
-    return clause === undefined || !ts.isNamedExports(clause) || clause.elements.some((element) => !element.isTypeOnly)
-  }
+const bringsAValue = (node: ts.ImportDeclaration | ts.ExportDeclaration): boolean => (ts.isExportDeclaration(node) ? exportsAValue(node) : importsAValue(node))
+
+/** Whether an export from another module passes on a value. */
+function exportsAValue(node: ts.ExportDeclaration): boolean {
+  if (node.isTypeOnly) return false
+  const clause = node.exportClause
+  return clause === undefined || !ts.isNamedExports(clause) || clause.elements.some((element) => !element.isTypeOnly)
+}
+
+/** Whether an import takes a value. */
+function importsAValue(node: ts.ImportDeclaration): boolean {
   const clause = node.importClause
   // An import with no clause runs the module, which is taking its values in all but name.
   if (clause === undefined) return true
