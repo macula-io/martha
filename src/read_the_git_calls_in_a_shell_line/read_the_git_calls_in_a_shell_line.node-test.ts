@@ -87,6 +87,22 @@ test('a cd the reader cannot follow leaves the directory unknown rather than gue
   }
 })
 
+test('a newline ends a command as a semicolon does, so the cd after it is the one in force', () => {
+  const calls = readTheGitCallsInAShellLine('cd /place/one/repo\ncd /place/two/repo\ngit status', { directory: '/place' })
+  assert.deepEqual(asAPlainCall(calls[0]!), { command: 'status', args: [], directory: '/place/two/repo' })
+})
+
+test('a cd with no path of its own, with an option, or behind a word that is no command, leaves the directory unknown', () => {
+  // A bare `cd` goes home, a `cd -P /x` names a directory this reader does not read, and a `cd` past `then`, `do`,
+  // `else` or `!` sits where the reader cannot see a command begin: none of them leaves the earlier directory in force.
+  for (const line of ['cd; git status', 'cd -P /place/two && git status', 'cd -L /place/two && git status']) {
+    assert.deepEqual(asAPlainCall(readTheGitCallsInAShellLine(line, { directory: '/place/one' })[0]!), { command: 'status', args: [], directory: null }, line)
+  }
+  for (const line of ['if true; then cd /place/two; fi; git status', '! cd /place/two; git status', 'while true; do cd /place/two; done; git status']) {
+    assert.deepEqual(asAPlainCall(readTheGitCallsInAShellLine(line, { directory: '/place/one' })[0]!), { command: 'status', args: [], directory: null }, line)
+  }
+})
+
 test("a cd inside a subshell stays inside it, and the shell's own directory comes back at the )", () => {
   const calls = readTheGitCallsInAShellLine('(cd /place/one/repo; git checkout -b mine); git status', { directory: '/place' })
   assert.deepEqual(asAPlainCall(calls[0]!), { command: 'checkout', args: ['-b', 'mine'], directory: '/place/one/repo' })

@@ -16,9 +16,14 @@
 //
 // The directory is the shell's own: the line's starting directory, moved by each `cd` and put back by each `)`, and
 // moved for one call by git's own `-C`. It is null when nothing names one: no starting directory, a `cd -` or `cd ~`,
-// or a word that is a variable or a glob rather than a path. A caller that cannot say where a call runs is told so
-// rather than handed a guess. A `cd` inside `( )` stays inside it, so a member's own work after the subshell is not
-// refused for a directory only the subshell was in.
+// a `cd` with no path of its own or with an option (`cd`, `cd -P /x`), or a word that is a variable or a glob rather
+// than a path. A caller that cannot say where a call runs is told so rather than handed a guess. A `cd` inside `( )`
+// stays inside it, so a member's own work after the subshell is not refused for a directory only the subshell was in.
+//
+// A newline ends a command exactly as a semicolon does, and a `cd` the reader does not see begin a command — behind
+// `then`, `do`, `else`, `!`, or the second word of some other command — leaves the directory unknown rather than
+// leaving the earlier one in force. Both are the same mistake otherwise: a call that really ran in another member's
+// worktree judged as if it ran in the member's own.
 
 import { isAbsolute, join } from 'node:path'
 
@@ -41,9 +46,13 @@ export interface TheStartingDirectory {
 
 /**
  * The words that end one command and begin the next, as the word splitter hands them back: `&&` and `||` are spoken of
- * as one word each, and a lone `&`, `|` or `;` as itself.
+ * as one word each, and a lone `&`, `|` or `;` as itself. A newline is handed back as the semicolon it is to a shell.
  */
-const A_SEPARATOR = new Set([';', '&', '&&', '|', '||'])
+const A_SEMICOLON = ';'
+const A_SEPARATOR = new Set([A_SEMICOLON, '&', '&&', '|', '||'])
+
+/** The character a shell reads as a command's end, exactly as it reads a semicolon. */
+const A_NEW_LINE = '\n'
 
 /** The marks a subshell opens and closes with: each a word of its own, and each moving the directory the way the shell does. */
 const A_SUBSHELL_OPENS = '('
@@ -52,8 +61,9 @@ const A_SUBSHELL_CLOSES = ')'
 /** The shell's own way of saying "go here": the command whose word moves the directory. */
 const A_CHANGE_OF_DIRECTORY = 'cd'
 
-/** The shell's own word for the directory it was in before: a `cd -` names one this reader does not follow. */
-const THE_DIRECTORY_BEFORE = '-'
+/** The shell's own words a `cd` may be given instead of a directory: `-P`, `-L`, `--`, and the `-` that names the one
+ * before. Each names a directory this reader does not follow. */
+const isAShellOption = (word: string): boolean => word.startsWith('-')
 
 /** The shell's own way of writing "my home": a `cd ~/x` names a directory this reader does not expand. Its code point, so
  * no rule that reads a path out of this file mistakes it for one. */
@@ -92,7 +102,10 @@ export function theWordsOfACommand(command: string): readonly string[] {
     if (inQuotes && character === quoted) quoted = undefined
     else if (inQuotes) word += character
     else if (character === '"' || character === "'") quoted = character
-    else if (/\s/.test(character)) keep()
+    else if (character === A_NEW_LINE) {
+      keep()
+      words.push(A_SEMICOLON)
+    } else if (/\s/.test(character)) keep()
     else word += character
   }
   keep()
@@ -119,9 +132,11 @@ function theDirectoryOf(word: string | undefined, from: string | null): string |
   return from === null ? null : join(from, word)
 }
 
-/** Where the shell's directory stands after a `cd`: the word it names, read past the directory it is run from. */
+/** Where the shell's directory stands after a `cd`: the word it names, read past the directory it is run from. A `cd`
+ * with no word of its own, with an option, or with a separator after it names no directory this reader can follow. */
 function theDirectoryAfterACd(word: string | undefined, from: string | null): string | null {
-  if (word === undefined || word === THE_DIRECTORY_BEFORE || word.codePointAt(0) === FROM_THE_OWNERS_HOME) return null
+  if (word === undefined || isAShellOption(word) || endsACommand(word)) return null
+  if (word.codePointAt(0) === FROM_THE_OWNERS_HOME) return null
   return theDirectoryOf(word, from)
 }
 
@@ -163,7 +178,8 @@ interface TheWalk {
 
 /**
  * Where the walk stands after one word: a subshell's mark moves the directory into or out of the subshell, a separator
- * begins a command, git begins a call, and any other word begins none — moving the directory when it is a `cd`.
+ * begins a command, git begins a call, and any other word begins none — moving the directory when it is a `cd`, and
+ * making it unknown when a `cd` sits where no command begins, since the reader cannot see where that one runs.
  */
 function theWalkAfterAWord(
   argv: readonly string[],
@@ -183,7 +199,8 @@ function theWalkAfterAWord(
     calls.push(theGitCallInTheWords(argv, at, walk.directory))
     return { directory: walk.directory, beginsACommand: false }
   }
-  const moved = walk.beginsACommand && word === A_CHANGE_OF_DIRECTORY ? theDirectoryAfterACd(argv[at + 1], walk.directory) : walk.directory
+  const moved =
+    word === A_CHANGE_OF_DIRECTORY ? (walk.beginsACommand ? theDirectoryAfterACd(argv[at + 1], walk.directory) : null) : walk.directory
   return { directory: moved, beginsACommand: false }
 }
 
