@@ -24,7 +24,7 @@ import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_direc
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { APPROVE_LANDING, DASHBOARD, OWNER } from '../declare_crew/declare_crew.ts'
 import { ASK_QUEUED, ASKS_SETTLED, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
-import { theLandingQuestion } from './the_owners_yes_to_a_landing.ts'
+import { THE_PACKAGES_JOINER, theLandingQuestion } from './the_owners_yes_to_a_landing.ts'
 import { forecastWhatABatchLands } from '../forecast_what_a_batch_lands/forecast_what_a_batch_lands.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree } from '../check_a_host_directory_stays_under_its_ceiling/a_tree_whose_ceilings_a_test_reads.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, RowStore, StoredRow } from '../host_contract/host_contract.ts'
@@ -590,6 +590,35 @@ test('#605: a fast-forward with no yes, under a table granting approve_landing t
 
   assert.equal(theOriginMain(fixture), base, 'the default branch moved on a landing nobody said yes to')
   assert.deepEqual(await readLedger(tests.host, work_package), before, 'a refused landing wrote to the package\'s ledger')
+})
+
+test('#605 r=2: an owner\'s yes to a landing at a branch name, or of a package whose name carries the joiner, is refused, and nothing moves or is written', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#605`
+  const tip = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
+  await aPassedVerdict(tests, work_package, base, tip)
+  const before = await readLedger(tests.host, work_package)
+  const yesTo = async (landing: { readonly tip: string; readonly packages: readonly string[] }): Promise<number> => {
+    const question = theLandingQuestion({ repo: fixture.repo, default_branch: 'origin/main', ...landing })
+    const ask = await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question, asked_by: MEMBER, since: 0 })
+    await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [ask] })
+    return ask
+  }
+
+  const by_name = { path: fixture.clone, base, tip: 'passed', packages: [work_package] }
+  const named = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { ...by_name, owner_yes: await yesTo(by_name) }, THE_OWNER_APPROVES)
+  assert.match(wordsOf(named), /a landing names its tip as a full commit id, forty hex digits/)
+  const other_package = `${fixture.repo}#606`
+  const joined_name = `${work_package}${THE_PACKAGES_JOINER}${other_package}`
+  const joined = { path: fixture.clone, base, tip, packages: [joined_name] }
+  const one_as_two = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { ...joined, owner_yes: await yesTo(joined) }, THE_OWNER_APPROVES)
+  assert.match(wordsOf(one_as_two), /a package name may not carry/)
+
+  assert.equal(theOriginMain(fixture), base, 'the default branch moved on a yes that named a ref or a joined package')
+  assert.deepEqual(await readLedger(tests.host, work_package), before, 'a refused landing wrote to the package\'s ledger')
+  assert.deepEqual(await readLedger(tests.host, other_package), [], 'a refused landing wrote a row for a package only a joined name named')
 })
 
 test('#605: verify_range hands over the question, the owner says yes to it, and the landing stands on that yes and records it', async (t) => {

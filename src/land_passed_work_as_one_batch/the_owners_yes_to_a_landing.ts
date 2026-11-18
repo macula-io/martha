@@ -13,11 +13,17 @@
 // landing. A yes used again for the same tip lands nothing new: the tip is on the default branch already, and the
 // fast-forward refuses a branch that moved.
 //
+// The question binds a yes to one landing only when every part of it names one thing. The tip is a full commit id, not a
+// ref: a yes to "at feature-branch" would land whatever the branch points to when the push runs. A package name carries
+// no joiner: one package whose name is two names joined would ask the question those two packages ask, and the landing's
+// ledger rows would name packages that did not land. Both are refused before the yes is looked for (theLandingNamesOneThingEach).
+//
 // Not closed here (martha#608): a settle records the ids the settling member says the owner ticked. The launcher sees
 // that a menu closed, not what was ticked, so an owner's yes in the queue is that member's word about the owner's menu.
 
 import { APPROVE_LANDING, OWNER, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
+import { A_COMMIT } from '../wait_for_ci/wait_for_ci.ts'
 import { MAX_ASK, OWNER_YES, QUEUE_ASK, theAsksSaidYesToWithTheirWords, theQuestion } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 
 /** The argument the fast-forward names the owner's yes in, the id of the ask they said yes to, as the queue names one. */
@@ -44,14 +50,34 @@ export interface ALandingAskedAbout {
  */
 export const theLandingQuestion = (landing: ALandingAskedAbout): string => theQuestion(theWholeQuestion(landing))
 
+/** What the landing question puts between two package names. */
+export const THE_PACKAGES_JOINER = ', '
+
+/**
+ * Why a landing's tip or packages do not each name one thing, or undefined when they do: the tip must be a full commit
+ * id, and no package name may carry the joiner the question puts between packages.
+ */
+export function theLandingNamesOneThingEach(landing: Pick<ALandingAskedAbout, 'tip' | 'packages'>): string | undefined {
+  if (!A_COMMIT.test(landing.tip)) {
+    return `a landing names its tip as a full commit id, forty hex digits, so a yes is to one commit and not to a ref that can move; read ${JSON.stringify(landing.tip)}.`
+  }
+  const joined = landing.packages.find((one) => one.includes(THE_PACKAGES_JOINER))
+  if (joined !== undefined) {
+    return `a package name may not carry ${JSON.stringify(THE_PACKAGES_JOINER)}, which the landing question puts between packages; read ${JSON.stringify(joined)}.`
+  }
+  return undefined
+}
+
 /** The question before the queue's rule is applied to it: what is measured against the length an ask keeps. */
 function theWholeQuestion(landing: ALandingAskedAbout): string {
-  const packages = [...landing.packages].sort().join(', ')
+  const packages = [...landing.packages].sort().join(THE_PACKAGES_JOINER)
   return `Land ${packages} on ${landing.repo} ${branchOf(landing.default_branch)} at ${landing.tip}?`
 }
 
 /** Why this landing's question cannot be asked whole, or undefined when it can: an ask longer than the queue keeps is cut. */
 export function aQuestionTooLong(landing: ALandingAskedAbout): string | undefined {
+  const not_one_thing = theLandingNamesOneThingEach(landing)
+  if (not_one_thing !== undefined) return not_one_thing
   const whole = theWholeQuestion(landing)
   if (whole.length <= MAX_ASK) return undefined
   return `the owner's question for this landing is ${String(whole.length)} characters, and an ask keeps ${String(MAX_ASK)}: land fewer packages at once.`

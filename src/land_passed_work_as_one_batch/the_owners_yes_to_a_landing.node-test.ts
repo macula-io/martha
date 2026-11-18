@@ -12,8 +12,10 @@ import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_wor
 import { ASK_QUEUED, ASKS_SETTLED, MAX_ASK, OWNER_ASKS_STREAM, QUEUE_ASK } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import {
   OWNER_YES,
+  THE_PACKAGES_JOINER,
   aQuestionTooLong,
   branchOf,
+  theLandingNamesOneThingEach,
   theLandingQuestion,
   theYesALandingStandsOn,
   type ALandingAskedAbout,
@@ -64,6 +66,21 @@ test('#605: a landing whose question is longer than an ask keeps is said so, and
   assert.equal(aQuestionTooLong(LANDING), undefined)
   const many = Array.from({ length: MAX_ASK }, (_, n) => `${REPO}#${String(n)}`)
   assert.match(aQuestionTooLong({ ...LANDING, packages: many }) ?? '', new RegExp(`an ask keeps ${String(MAX_ASK)}: land fewer packages at once`))
+})
+
+test('#605 r=2: a landing is asked about only at a full commit id and with package names that carry no joiner', () => {
+  assert.equal(theLandingNamesOneThingEach(LANDING), undefined)
+  for (const tip of ['feature-branch', TIP.slice(0, 7), `${TIP}~1`, TIP.toUpperCase()]) {
+    assert.equal(
+      theLandingNamesOneThingEach({ ...LANDING, tip }),
+      `a landing names its tip as a full commit id, forty hex digits, so a yes is to one commit and not to a ref that can move; read ${JSON.stringify(tip)}.`,
+      tip,
+    )
+  }
+  const joined = `${FIRST}${THE_PACKAGES_JOINER}${SECOND}`
+  const said = `a package name may not carry ${JSON.stringify(THE_PACKAGES_JOINER)}, which the landing question puts between packages; read ${JSON.stringify(joined)}.`
+  assert.equal(theLandingNamesOneThingEach({ ...LANDING, packages: [joined] }), said)
+  assert.equal(aQuestionTooLong({ ...LANDING, packages: [joined] }), said, 'verify_range would hand over a question the fast-forward refuses')
 })
 
 test('#605: under a table granting approve_landing to the owner, a landing with no ask named is refused, naming the question to queue', async () => {

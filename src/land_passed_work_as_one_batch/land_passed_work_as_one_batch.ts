@@ -38,7 +38,7 @@ import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clo
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { mergedInMemory, whatEachPathClashesWith, type AFirstParent, type AStep } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
 import { GIT, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { OWNER_YES, branchOf, theYesALandingStandsOn, type TheApprovingDeclaration, type ALandingAskedAbout } from './the_owners_yes_to_a_landing.ts'
+import { OWNER_YES, branchOf, theLandingNamesOneThingEach, theYesALandingStandsOn, type TheApprovingDeclaration, type ALandingAskedAbout } from './the_owners_yes_to_a_landing.ts'
 
 /**
  * The programs a landing runs over the tree it is merging, and that tree's own scripts: a slice reaches the machine
@@ -170,6 +170,8 @@ export async function fastForwardAfterTheOwnersYes(
   declaration: TheApprovingDeclaration,
 ): Promise<Landing> {
   if (forward.packages.length === 0) return no('the fast-forward names no package it lands.')
+  const not_one_thing = theLandingNamesOneThingEach(forward)
+  if (not_one_thing !== undefined) return no(`${not_one_thing} Nothing was pushed.`)
   const yes = await theYesALandingStandsOn(host, { member, declaration, owner_yes: forward.owner_yes, landing: () => theLandingOf(host, forward) })
   if ('refused' in yes) return yes
   const held = await noneOfTheseIsHeld(host, forward.packages, NOTHING_PUSHED)
