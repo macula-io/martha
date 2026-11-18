@@ -31,3 +31,19 @@ test('what a terminal draws with is taken out, and a screen with no moves reads 
   assert.equal(plain('two  words'), 'twowords')
   assert.ok(says('Enter to confirm', 'Enter to confirm'))
 })
+
+// A CSI's parameter bytes are 0x30-0x3F, `[0-9:;<=>?]`, not only the digits a move uses: a pattern of digits alone
+// takes out the escape and the `[` and leaves `>`, `<`, `=` and a colour's `:` on the screen as words.
+test('a sequence whose parameters are <, >, = or : is taken out with its payload, not left as a word', () => {
+  assert.equal(plain('\u001b[>0qtwo\u001b[<u'), 'two')
+  assert.equal(plain('\u001b[=1htwo\u001b[38:2::1:2:3m'), 'two')
+  assert.ok(says('Enter\u001b[>4m to\u001b[<u confirm', 'Enter to confirm'))
+})
+
+test('the sequences this host draws with <, >, = or : are taken out of the real screen, payload and all', () => {
+  const drawnPlainly = plain(DRAWN)
+  assert.ok(!drawnPlainly.includes('\u001b'), 'an escape survived, so a sequence was left on the screen as words')
+  for (const payload of ['[>0q', '[>4m', '[<u']) {
+    assert.ok(!drawnPlainly.includes(payload), `the ${payload} sequence's own bytes were left on the screen as words`)
+  }
+})

@@ -12,7 +12,8 @@
 // Run it when the host version changes, or when the refresh's clear changes, and read what it prints.
 //
 // Exit: 0 the background command was still alive after the clear (a refresh ends nothing), 1 it was not (a refresh ends
-// the member's commands, so a refresh must take a record too), 2 the host could not be set up or never ran the command.
+// the member's commands, so a refresh must take a record too), 2 the host could not be set up, never ran the command, or
+// never ran the clear -- each said by name, because a clear that never ran leaves the command alive too.
 
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, existsSync } from 'node:fs'
@@ -28,6 +29,8 @@ import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_fact
 // The host draws its screen a word at a time, moving the cursor where the spaces would be, so every screen this probe
 // matches is read plainly: the one reader both probes use (#693).
 import { AT_ITS_PROMPT, says } from '../prove_the_core/a_screen_drawn_in_pieces.ts'
+// Whether the clear actually ran: the host writes it down, and nothing the probe can see says so (#693).
+import { theClearRan } from '../prove_the_core/a_clear_the_host_recorded.ts'
 
 /** The host, at the version the adapter was recorded from: the same variable the recorded-host tests read. */
 const HOST = process.env.MARTHA_RECORDED_HOST
@@ -106,7 +109,8 @@ async function standInModel(command) {
   return server
 }
 
-/** Whether `held` becomes true within `ms`, asked again every fifth of a second. */const settles = async (held, ms) => {
+/** Whether `held` becomes true within `ms`, asked again every fifth of a second. */
+const settles = async (held, ms) => {
   const until = Date.now() + ms
   while (Date.now() < until) {
     if (held()) return true
@@ -174,11 +178,18 @@ const NEVER_DRAWN = Object.freeze({
   started: `the background command never wrote ${PID_FILE}: nothing was running for the clear to end`,
 })
 
-/** The screen this run needed and never saw, or undefined when it saw all three. */
-const theScreenItLacked = (warned, welcomed, started) => {
+/**
+ * The clear is not a screen and is not said by one: when it is missing, what is missing is the host's own record of it,
+ * so it is named by the record the host should have written rather than by a line it never drew.
+ */
+const THE_CLEAR_NEVER_RAN = 'the clear never ran: no session the host started holds the /clear'
+
+/** What this run needed and never got, or undefined when it got all four. */
+const whatTheRunLacked = (warned, welcomed, started, cleared) => {
   if (!warned) return NEVER_DRAWN.warning
   if (!welcomed) return NEVER_DRAWN.prompt
   if (!started) return NEVER_DRAWN.started
+  if (!cleared) return THE_CLEAR_NEVER_RAN
   return undefined
 }
 
@@ -207,16 +218,20 @@ const startTheTurn = async (child, screen) => {
 
 /**
  * The host's own clear, typed at a prompt and never into a turn -- this host keeps drawing while a turn runs and draws
- * nothing once it is back at its prompt, so the probe waits for it to go quiet -- and whether the command is still there
- * afterwards. Nothing this host draws says "cleared": the clear redraws the prompt and no banner, and the banner is
- * drawn once at the start (2.1.327, measured), so the clear is given a fixed time and the kernel is asked, which is the
- * only party that answers this probe's question.
+ * nothing once it is back at its prompt, so the probe waits for it to go quiet -- and what the clear left behind: whether
+ * the host's own record holds it, and whether the command is still there afterwards. Nothing this host draws says
+ * "cleared": the clear redraws the prompt and no banner (2.1.327, measured), so the answer comes from the record the host
+ * writes and from the kernel. A Return that lands before the prompt takes input is dropped, as the order probe finds, so
+ * the command is typed once and its Return given again before the clear is called one that never ran.
  */
-const clearAtThePrompt = async (child, screen, pid) => {
+const clearAtThePrompt = async (child, screen, pid, home) => {
   await quietFor(() => screen().length, QUIET_MS, IDLE_WAIT_MS)
-  child.stdin.write('/clear\r')
-  await new Promise((resolve) => setTimeout(resolve, CLEAR_SETTLES_MS))
-  return pid !== undefined && alive(pid)
+  child.stdin.write('/clear')
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    child.stdin.write('\r')
+    if (await settles(() => theClearRan(home), CLEAR_SETTLES_MS)) break
+  }
+  return { cleared: theClearRan(home), stillThere: pid !== undefined && alive(pid) }
 }
 
 /** The host, driven: one turn that starts a background command, then the host's own clear. */
@@ -248,17 +263,20 @@ async function driveTheHost(out, places, base_url) {
   mark(started ? 'background-started' : 'background-never-started')
   const pid = theBackgroundPid(out)
   const hostAliveBefore = theHostIsAlive(child)
+  let cleared = false
   let stillThere
   if (started) {
-    stillThere = await clearAtThePrompt(child, screen, pid)
-    mark('cleared')
+    const afterTheClear = await clearAtThePrompt(child, screen, pid, places.home)
+    cleared = afterTheClear.cleared
+    stillThere = afterTheClear.stillThere
+    mark(cleared ? 'cleared' : 'the-clear-never-ran')
   }
   const hostAliveAfter = theHostIsAlive(child)
   child.stdin.write('/exit\r')
   await new Promise((resolve) => setTimeout(resolve, 2000))
   child.kill('SIGKILL')
   writeFileSync(join(out, 'screen.log'), drawn)
-  return { command: BACKGROUND_COMMAND, pid, stillThere, hostAliveBefore, hostAliveAfter, marks, missing: theScreenItLacked(warned, welcomed, started) }
+  return { command: BACKGROUND_COMMAND, pid, cleared, stillThere, hostAliveBefore, hostAliveAfter, marks, missing: whatTheRunLacked(warned, welcomed, started, cleared) }
 }
 
 const main = async () => {
@@ -276,6 +294,7 @@ const main = async () => {
     out: OUT,
     command: drove.command,
     background_pid: drove.pid,
+    clear_ran: drove.cleared,
     alive_after_clear: drove.stillThere,
     host_process_alive_before_clear: drove.hostAliveBefore,
     host_process_alive_after_clear: drove.hostAliveAfter,
@@ -284,8 +303,9 @@ const main = async () => {
   }
   writeFileSync(join(OUT, 'probe.json'), `${JSON.stringify(said, null, 2)}\n`)
   process.stdout.write(`${JSON.stringify(said, null, 2)}\n`)
-  // A run that never reached the clear says which screen it lacked, never that the command was gone: the two are
-  // different answers, and only one of them is the probe's.
+  // A run that never reached the clear says which part it lacked, never that the command was gone: the two are
+  // different answers, and only one of them is the probe's. A clear the host's own record does not hold is one of them,
+  // because the background command outlives a clear that never ran exactly as it outlives one that did.
   if (drove.missing !== undefined) {
     process.stderr.write(`the probe could not run: ${drove.missing}\n`)
     return 2
