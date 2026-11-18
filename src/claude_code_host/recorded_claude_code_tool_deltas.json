@@ -1,0 +1,165 @@
+{
+  "_why": "Two transcript lines the pinned Claude Code host wrote into one crew member's session on this project's crew host, 2026-11-18, on 2.1.327 (martha#658): the delta that added the crew mod's 27 tools at the session's start, and the one that withdrew them 2 h 10 min later while the session worked on. The plugin API offers no call that withdraws a tool, so a withdrawal cannot be provoked on the recorded host; these were taken from a real loss. Kept as written, except: every name list is cut to the crew mod's own `mcp__crew__` names (the host listed 170 tools in the add), `surfacedDefinitions` is emptied (it carried other servers' tool descriptions), and only `type`, `timestamp` and `version` are kept of the line around the attachment (the rest names the session and its folder).",
+  "host_version": "2.1.327",
+  "records": [
+    {
+      "type": "attachment",
+      "timestamp": "2026-11-18T05:14:40.582Z",
+      "version": "2.1.327",
+      "attachment": {
+        "type": "deferred_tools_delta",
+        "addedNames": [
+          "mcp__crew__crew_backlog",
+          "mcp__crew__crew_friction",
+          "mcp__crew__crew_land_batch",
+          "mcp__crew__crew_log",
+          "mcp__crew__crew_mail_read",
+          "mcp__crew__crew_mail_send",
+          "mcp__crew__crew_model",
+          "mcp__crew__crew_park",
+          "mcp__crew__crew_recall",
+          "mcp__crew__crew_receipts",
+          "mcp__crew__crew_refresh",
+          "mcp__crew__crew_remember",
+          "mcp__crew__crew_restart",
+          "mcp__crew__crew_roster",
+          "mcp__crew__crew_standing",
+          "mcp__crew__crew_standing_add",
+          "mcp__crew__crew_standing_close",
+          "mcp__crew__crew_todo_add",
+          "mcp__crew__crew_todo_done",
+          "mcp__crew__crew_verify_range",
+          "mcp__crew__crew_worktree_create",
+          "mcp__crew__crew_worktree_finish",
+          "mcp__crew__list_asks",
+          "mcp__crew__queue_ask",
+          "mcp__crew__report_progress",
+          "mcp__crew__settle_asks",
+          "mcp__crew__take_asks"
+        ],
+        "addedLines": [
+          "mcp__crew__crew_backlog",
+          "mcp__crew__crew_friction",
+          "mcp__crew__crew_land_batch",
+          "mcp__crew__crew_log",
+          "mcp__crew__crew_mail_read",
+          "mcp__crew__crew_mail_send",
+          "mcp__crew__crew_model",
+          "mcp__crew__crew_park",
+          "mcp__crew__crew_recall",
+          "mcp__crew__crew_receipts",
+          "mcp__crew__crew_refresh",
+          "mcp__crew__crew_remember",
+          "mcp__crew__crew_restart",
+          "mcp__crew__crew_roster",
+          "mcp__crew__crew_standing",
+          "mcp__crew__crew_standing_add",
+          "mcp__crew__crew_standing_close",
+          "mcp__crew__crew_todo_add",
+          "mcp__crew__crew_todo_done",
+          "mcp__crew__crew_verify_range",
+          "mcp__crew__crew_worktree_create",
+          "mcp__crew__crew_worktree_finish",
+          "mcp__crew__list_asks",
+          "mcp__crew__queue_ask",
+          "mcp__crew__report_progress",
+          "mcp__crew__settle_asks",
+          "mcp__crew__take_asks"
+        ],
+        "removedNames": [],
+        "wireHiddenNames": [],
+        "readdedNames": [],
+        "pendingMcpServers": [],
+        "failedMcpServers": [],
+        "surfacedNames": [],
+        "surfacedDefinitions": []
+      }
+    },
+    {
+      "type": "attachment",
+      "timestamp": "2026-11-18T07:24:42.940Z",
+      "version": "2.1.327",
+      "attachment": {
+        "type": "deferred_tools_delta",
+        "addedNames": [],
+        "addedLines": [],
+        "removedNames": [
+          "mcp__crew__crew_backlog",
+          "mcp__crew__crew_friction",
+          "mcp__crew__crew_land_batch",
+          "mcp__crew__crew_log",
+          "mcp__crew__crew_mail_read",
+          "mcp__crew__crew_mail_send",
+          "mcp__crew__crew_model",
+          "mcp__crew__crew_park",
+          "mcp__crew__crew_recall",
+          "mcp__crew__crew_receipts",
+          "mcp__crew__crew_refresh",
+          "mcp__crew__crew_remember",
+          "mcp__crew__crew_restart",
+          "mcp__crew__crew_roster",
+          "mcp__crew__crew_standing",
+          "mcp__crew__crew_standing_add",
+          "mcp__crew__crew_standing_close",
+          "mcp__crew__crew_todo_add",
+          "mcp__crew__crew_todo_done",
+          "mcp__crew__crew_verify_range",
+          "mcp__crew__crew_worktree_create",
+          "mcp__crew__crew_worktree_finish",
+          "mcp__crew__list_asks",
+          "mcp__crew__queue_ask",
+          "mcp__crew__report_progress",
+          "mcp__crew__settle_asks",
+          "mcp__crew__take_asks"
+        ],
+        "causeNeutral": true,
+        "wireHiddenNames": [],
+        "readdedNames": [],
+        "pendingMcpServers": [],
+        "failedMcpServers": [],
+        "retractedTools": [
+          {
+            "name": "mcp__crew__crew_backlog",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__crew__crew_log",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__crew__crew_mail_read",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__crew__crew_park",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__crew__crew_roster",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__crew__crew_standing_add",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__crew__crew_standing_close",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__crew__crew_verify_range",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__crew__queue_ask",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__crew__report_progress",
+            "cause": "not_configured"
+          }
+        ]
+      }
+    }
+  ]
+}
