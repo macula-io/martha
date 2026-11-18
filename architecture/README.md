@@ -24,6 +24,8 @@ verification and state — is in
 
 ![Martha system context](../assets/c4-context.svg)
 
+*Drawn at release; between releases the Components table is the current word.*
+
 | | Solo mode | Team mode |
 |---|---|---|
 | People | the owner | the owner and teammates, under the roles the team names |
@@ -42,6 +44,8 @@ today it is installed from a checkout (#2, #21).
 ## Containers: what Martha is made of
 
 ![Martha containers](../assets/c4-container.svg)
+
+*Drawn at release; between releases the Components table is the current word.*
 
 | Container | What it does | Mode |
 |---|---|---|
@@ -76,6 +80,8 @@ refusal, and the Components table below names each of those slices.
 
 ![Martha components](../assets/c4-components.svg)
 
+*Drawn at release; between releases the Components table is the current word.*
+
 Every box is a directory in `src/`, and its test sits beside it. The names are
 the capabilities, not the layers. A test fails when a directory in `src/` is in
 none of the boxes and in none of those left out below, so the picture cannot
@@ -97,7 +103,7 @@ fall behind the code.
 | `name_the_source_of_a_prompt` | The origin a host attests, carried with the turn: with `attribute_a_cross_session_sender` and `carry_taint_across_a_refresh`. `hear_every_turn_the_model_runs` hears every main turn the member's model runs, whatever started it, a crew message the mod submitted from its own timer included, and records its source; `trust_only_signed_lists` opens every list a gate trusts, from the owner's signed bytes. |
 | `admit_a_room_message`, `read_a_room_through_its_gate` | The node id every member has, and the mesh server's tool list; `refuse_widening_a_member_reach` refuses the mesh tools that widen a member's reach. The room itself, which would admit a crew or shared message, is not built — yet every launch loads these parts of its slices, so the box is not dashed. |
 | `claude_code_host`, `claude_code_relay` | The host contract on Claude Code: the plugin and its hooks, and the relay that answers over a socket. `cut_the_rules_from_the_host_binary` holds the rules cut out of the host binary — the one function that builds a session's hook set, the functions its exits call, where it reads managed settings, and the config it protects — and `refuse_settings_that_turn_hooks_off` refuses a launch whose settings files set one of those keys, watches them for a member's whole life, and denies a member's file tools the owner's own settings file. `load_the_hosts_markdown` is the markdown the host loads from the owner's and the managed folders, and the settings env that reaches every server; `install_the_mesh_server_for_claude_code` is the server a launch hands the model, and what else the launch hands it. `hear_the_hosts_dialogs` holds the host's own field names for the dialogs it raises — a permission, an elicitation, a notification, and the check it runs about a call — and reads each one in the crew's words. `refuse_a_member_writing_owner_memory` keeps a member's writes out of the owner's memory, and `find_what_a_later_git_run_reads` reads what a later git run would read there: the checkout's own config, every file it includes, and the shell words that reach one. `read_what_claude_code_says_of_an_agent` reads the host's own envelope for an agent it started that failed, derived from the host's text rather than typed by hand, and what a review resolved to (martha#390). |
-| `check_nothing_private_gets_in`, `check_every_link_resolves` | This repository's own checks. A private issue link, an internal host name or a private remote fails CI by name. A link is called broken only when it really is: a host that answers 408, 429 or a 5xx, or times out, is asked again before its link fails, while a 404 or a missing file fails at once, by name. `check_posted_text_carries_nothing_private` reads the text members post on GitHub — issue titles and bodies, issue comments, pull-request titles and bodies, review bodies, inline review comments and commit comments — and refuses the same classes there, by name; it writes nothing, and a red run is the signal. `check_the_logos_are_valid_svg` holds every logo to well-formed XML, on this repository's own Node rather than through `xmllint` from the Ubuntu archive. `check_no_test_the_base_passed_goes_missing` names every test title the merge base holds that the branch's tip no longer does, by file and title; a deliberate removal passes only when a commit in the range says which title (or file) it drops, and a claim that excuses nothing fails too. `check_marthas_names_are_its_own` fails a file, folder, tool, marker or variable of Martha's that crew-code names too (martha#468), reading what the code says and never a comment, with every rename still to come held as a declared exception that fails when it excuses nothing. `check_no_literal_restates_a_value` fails a literal that restates a value its own module defines, over the whole tree or over the lines a change adds; `check_a_host_directory_stays_under_its_ceiling` holds each host directory to exactly the ceiling recorded for it, and every core slice to what it may hold; `check_every_recorded_host_test_is_run` fails a case that drives the recorded host when CI's relay job does not run and count it; and `check_no_import_cycle` fails a loop of value imports in the core, naming the whole path. |
+| `check_nothing_private_gets_in`, `check_every_link_resolves` | This repository's own checks. A private issue link, an internal host name or a private remote fails CI by name. A link is called broken only when it really is: a host that answers 408, 429 or a 5xx, or times out, is asked again before its link fails, while a 404 or a missing file fails at once, by name. `check_posted_text_carries_nothing_private` reads the text members post on GitHub — issue titles and bodies, issue comments, pull-request titles and bodies, review bodies, inline review comments and commit comments — and refuses the same classes there, by name; it writes nothing, and a red run is the signal. `check_the_logos_are_valid_svg` holds every logo to well-formed XML, on this repository's own Node rather than through `xmllint` from the Ubuntu archive. `check_no_test_the_base_passed_goes_missing` names every test title the merge base holds that the branch's tip no longer does, by file and title; a deliberate removal passes only when a commit in the range says which title (or file) it drops, and a claim that excuses nothing fails too. `check_marthas_names_are_its_own` fails a file, folder, tool, marker or variable of Martha's that crew-code names too (martha#468), reading what the code says and never a comment, with every rename still to come held as a declared exception that fails when it excuses nothing. `check_no_literal_restates_a_value` fails a literal that restates a value its own module defines, over the whole tree or over the lines a change adds; `check_a_host_directory_stays_under_its_ceiling` holds each host directory to exactly the ceiling recorded for it, and every core slice to what it may hold; `check_every_recorded_host_test_is_run` fails a case that drives the recorded host when CI's relay job does not run and count it; `check_the_pictures_change_with_the_version` lets a C4 picture change only where the root version does — the version-bump pull request is the one that redraws it, and the release reads the tree alone as its backstop (martha#627); and `check_no_import_cycle` fails a loop of value imports in the core, naming the whole path. |
 | `install_the_pinned_installer` | `martha install`: the installer the running release pins, and no other — the pin read from the release's own tree, the exact version fetched, other bytes refused by name, and the installer run with the words unchanged. `read_the_words_of_martha_install` says which words `martha install` takes; `hold_the_launch_to_the_version_floor` refuses every act but `--version` and `install` of a placed release below the version floor this machine holds, found from the launcher's own real path (martha#21). |
 | `run_the_nodes_own_npm_alone` | npm, and nothing of the machine's: the npm beside this node, empty user and global config, one named registry, `--ignore-scripts`, and an environment built from `HOME` and `PATH` alone. The mesh server's install and the pin's install share it, so they cannot drift apart. |
 | `show_dashboard_beat`, `keep_the_ledger` | The crew's rows and its ledger. `show_dashboard_beat` holds a member's row and the rule that the newest beat wins; `report_where_the_work_stands` moves a row and `see_the_crew` lays every row out; `draw_the_crew_strip` draws that answer in any terminal (`martha crew`), and `title_a_members_tab` makes a member's tab title from its row alone (martha#572). `tell_the_owner_a_session_waits` keeps the dialogs the host has open on the owner's screen — a permission, an elicitation, a notification, a menu — so a row reads "needs you" when the host itself is asking, keyed by what raised each one; `say_what_the_host_is_asking` decides which of the host's own events opens a dialog and which one closes it, so a row's dialogs are changed by the host and nothing else; `ring_the_owner` rings the owner's own terminal once on the change into that state, with a base64 notification beside it. `a_crews_tools` answers every tool the crew registers in a member's session; each tool's name, its schema and its decision belong to the slice that owns it, and the launcher keeps the table that calls them and the one writer of a member's row. `keep_the_ledger` loads `log_ledger`, whose streams sit in the crew's own state. `keep_the_crew_channel` is where a message lives, `send_a_crew_message` writes one, `tell_a_citer_of_a_volatile_path` says so to the member whose text cites a path a reboot deletes (martha#314), and `show_what_a_message_became` reads back what became of it, and `read_a_crew_line` reads the HANDOFF and VERDICT lines a message carries, and `hand_a_member_its_crew_text` composes the crew text every session of a member is handed as it starts: who it is, the crew's practice when the crew switched it on, its role's text, the mode's text, the lines it sends, and the crew's conventions. `nudge_the_supervisor` and `watch_waits` find what has stalled from those rows and lines: a quiet member, a HANDOFF nobody answered, a wait on a person, a cycle of waits, a PR head that moved off the tip its HANDOFF named, and a package a failed act paused. `spend_the_github_budget` is the crew's one GitHub allowance — the floor, the backoff, the shared counter, the head last seen and the green kept per sha — and `wait_for_ci` reads the CI on a sha through it. `see_who_is_free` says which member of the crew can take a package now and, when one cannot, who can instead (martha#319), and `hold_a_package_to_its_budget` holds a member's session to the package's budget, reading the count once and charging each call one append (martha#513). `find_the_unheld_work` reads the open issues in the places the crew's backlog names and lists those no member of the crew holds, and `nudge_an_idle_crew` names a member that has sat idle beside them past the declared window. `recover_a_failed_act` names a failed outward act in the tree's own classes, reads what is really there through the sender's own look, and decides: one attempt at most, recorded on the package, and an `unknown`, or a failure the inspection could not settle — the retry's own failure included — pauses the package: the package's next act sent through the recovery is refused until the Supervisor or the owner resumes it (`log_a_milestone`, event `resume`), and the pause reaches them as a `paused` nudge. Every announced act the tree sends goes through it except a forced refresh, which `end_a_running_turn` already bounds: a worktree's branch on origin, a crew message (a HANDOFF rides in one), and a batch's push and fast-forward, which recover across every package they land and are refused at the front when one of them already stands paused. The tree sends no tag; a tag is the owner's. The one act a pause lets through is a message only to those the crew's nudges go to. A pause the store would not keep holds nothing and nudges nobody, so the member is told to stop and tell the Supervisor itself. |
@@ -155,11 +161,14 @@ box:
 
 ## Keeping the pictures true
 
-The three SVGs are drawn by [`c4_diagrams.ts`](c4_diagrams.ts), and a test fails
-when an SVG in `assets/` is not what that file draws. That test holds the picture to
-its own geometry too, and names what is wrong: a text a box prints below its bottom
-edge or past its right edge, a legend drawn across a box, a boundary's label drawn on
-a box, two boxes drawn on each other, and anything drawn off the canvas. A box may also
+The three SVGs are drawn by [`c4_diagrams.ts`](c4_diagrams.ts), and since martha#627
+they are drawn at release rather than carried by every change: a pull request may touch
+a picture only when it also bumps the root `package.json`'s version, and the version-bump
+pull request is the one that redraws them, so two changes about different work never
+clash in a generated file. CI holds *the model*, from the generator: what the picture
+says about its own geometry (a text a box prints below its bottom edge or past its right
+edge, a legend drawn across a box, a boundary's label drawn on a box, two boxes drawn on
+each other, and anything drawn off the canvas), and the page. A box may also
 say it is a host's, as the Claude Code host's box does: that is a promise to hold that
 host's code alone, so every slice such a box names must be one of `martha.hostAdapters`
 in `package.json`, and a picture that draws a core slice as the host's fails, naming the
@@ -170,14 +179,23 @@ rather than at a height each one was given by hand; the Container page's boundar
 its height from the boxes it holds, so the label under them keeps its own ground. The
 foot of the Component page is drawn from the left-out list rather than beside it, and a
 check holds it there: the count, and each directory's name and the reason its own entry
-gives. After changing a box:
+gives.
+
+So a change to a box touches the model and the tables, and nothing else:
 
 ```sh
-node architecture/c4_diagrams.ts
 npm test
 ```
 
-Then render each one and look at it, and keep the tables on this page in step:
+The picture is redrawn in the version-bump pull request, with the release's own review:
+
+```sh
+node architecture/c4_diagrams.ts
+```
+
+The release refuses a tagged tree whose pictures are not what the generator draws, and
+says so by name with that command, as the backstop for a version-bump pull request whose
+check was bypassed. When you do redraw, render each one and look at it:
 
 ```sh
 rsvg-convert -w 1400 assets/c4-components.svg -o /tmp/c4.png
