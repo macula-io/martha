@@ -2,7 +2,8 @@
 // and the window's own steps, never by writing a window's JSON by hand: a member whose session lost its crew tools and
 // worked on is named and fails the gate; the same member once a later session holds the tools again passes it; a file
 // that holds no window fails it as a place it could not tell about; a place the store refuses, and a state root it
-// cannot read, are checks that could not be made; and a machine with no state root is a clean reading that makes nothing.
+// cannot read, are checks that could not be made; a relative XDG_STATE_HOME is read as the martha command reads it; and a
+// machine with no state root is a clean reading that makes nothing.
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -189,6 +190,27 @@ for (const words of [['--state-root'], ['--state-root', ''], ['--state-root', '-
     }
   })
 }
+
+// A relative XDG_STATE_HOME names no place, as the martha command that keeps the windows reads it: the gate must then read
+// the home's own state root, where the window is. Read as given, it would look under the working directory, find no
+// state root there, and pass over the member: a false pass, so only 1 is the fix.
+test('a relative XDG_STATE_HOME is read as the martha command reads it, so the member under the home is still named (martha#658)', () => {
+  const run = scratch()
+  try {
+    const relative_state_home = 'a-relative-state-home'
+    aLostMembersWindow(theWindowsPlace(stateRootOf(run.checkout, undefined), run.checkout))
+    const gate = spawnSync(process.execPath, [GATE], {
+      cwd: run.checkout,
+      encoding: 'utf8',
+      env: { ...process.env, HOME: run.checkout, XDG_STATE_HOME: relative_state_home },
+    })
+    assert.equal(gate.status, 1, gate.stderr)
+    assert.match(gate.stderr, new RegExp(`^${NAME}: ${MEMBER} has worked without its crew tools since `))
+    assert.equal(existsSync(join(run.checkout, relative_state_home)), false, 'the gate made a place under the working directory')
+  } finally {
+    run.remove()
+  }
+})
 
 test('a machine with no state root is a clean reading, and the gate makes nothing there (martha#658)', () => {
   const run = scratch()

@@ -8,7 +8,7 @@
 // make every test's scratch directory named 'launches' a restated value, in folders that may not rise, while the
 // launcher and the leftovers' reader both take the place from the one record below.
 
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 
 import { STATE_DIRECTORY_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
@@ -17,9 +17,10 @@ import { STATE_DIRECTORY_MODE, STATE_ROOT_NAME } from '../keep_martha_state_outs
 export const stateHomeUnder = (home: string): string => join(home, '.local', 'state')
 
 /** The state root a home's own environment names: `$XDG_STATE_HOME/martha`, else `$HOME/.local/state/martha`. An
- * XDG_STATE_HOME that is set but empty names no place, as an unset one does. */
+ * XDG_STATE_HOME that is set but empty or relative names no place, as an unset one does: the XDG spec holds a relative
+ * one invalid, and every reader of the environment takes it here, so none reads a root another would not. */
 export const stateRootOf = (home: string, xdg_state_home: string | undefined): string =>
-  join(xdg_state_home === undefined || xdg_state_home === '' ? stateHomeUnder(home) : xdg_state_home, STATE_ROOT_NAME)
+  join(xdg_state_home !== undefined && isAbsolute(xdg_state_home) ? xdg_state_home : stateHomeUnder(home), STATE_ROOT_NAME)
 
 /** What a reader of a home's state root keeps to: where that state root is, the place inside a project that holds the
  * launcher's launch records, and the mode of a directory only its owner may enter. The launcher takes the same three,
