@@ -75,8 +75,8 @@
 <text class="t-type" x="364" y="116">[the declaration]</text>
 <text class="t-desc" x="364" y="140">Reads .martha/martha.json once into typed</text>
 <text class="t-desc" x="364" y="156">settings; writes it only when none exists.</text>
-<text class="t-desc" x="364" y="172">who_may_act holds the mode's table of</text>
-<text class="t-desc" x="364" y="188">who may assign, approve and resume</text>
+<text class="t-desc" x="364" y="172">The mode's table says who may assign,</text>
+<text class="t-desc" x="364" y="188">approve, resume, take asks and restart</text>
 <rect class="b-cmp" x="664" y="70" width="300" height="132" rx="10"/>
 <text class="t-code" x="680" y="98">approve_a_checkouts_config</text>
 <text class="t-type" x="680" y="116">[the owner's yes]</text>
@@ -452,7 +452,7 @@
 <text class="t-desc" x="364" y="3826">crew's store, so a clear, a restart or a</text>
 <text class="t-desc" x="364" y="3842">refresh cannot lose it; who may park</text>
 <text class="t-desc" x="364" y="3858">another member is the declaration's</text>
-<text class="t-desc" x="364" y="3874">table, not who_may_act (martha#255 r=3).</text>
+<text class="t-desc" x="364" y="3874">table, not a node id (martha#255 r=3).</text>
 <text class="t-desc" x="364" y="3890">wake_a_member is martha wake: the park</text>
 <text class="t-desc" x="364" y="3906">cleared and the member started on its</text>
 <text class="t-desc" x="364" y="3922">newest handover (part 2).</text>
