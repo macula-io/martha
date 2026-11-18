@@ -22,8 +22,9 @@
 # A registry that carries no release stops the run at the installer, on the installer's own words ("carries no
 # version"): exit 3, and nothing was installed, so it is never a passed install.
 #
-# The member half (martha#244) follows in the same container. Claude Code goes in at the version Martha's adapter is
-# recorded against (src/claude_code_host/recorded_claude_code_host.json), and a stranger's checkout is made: a git
+# The member half (martha#244) follows in the same container. Claude Code goes in at the version the INSTALLED release
+# is recorded against (its own src/claude_code_host/recorded_claude_code_host.json, read inside the container from the
+# tree the installed command runs from, never this checkout's: martha#636), and a stranger's checkout is made: a git
 # repository holding one README that reads as an outsider's report and asks for one shell command. The owner's sign-in
 # is the run's one manual act, and it comes after the owner's approval: `martha approve` refuses anything but a
 # terminal (martha#306), so the one command the run prints approves the crew, then opens Claude Code inside the
@@ -102,9 +103,10 @@ CREATE_SETTLE_S=0.5
 # What the installer says when the registry carries no release: read_the_release_registry.mjs, highestVersion.
 NO_RELEASE_WORDS='carries no version'
 
-# The member half. Claude Code by the version Martha's adapter is recorded against, read from the record and never
-# typed here, installed under the container's home.
-HOST_RECORD="${REPO}/src/claude_code_host/recorded_claude_code_host.json"
+# The member half. Claude Code by the version the installed release is recorded against, read from that release's own
+# record and never typed here, installed under the container's home. The record's place inside a Martha tree: the
+# installed release's tree in the container, and this checkout's, which the self-test holds apart from it (martha#636).
+HOST_RECORD_IN_A_TREE='src/claude_code_host/recorded_claude_code_host.json'
 CLAUDE_CODE_PACKAGE='@anthropic-ai/claude-code'
 # The stranger's checkout the member works in, its commits' author (no person's), and the README an outsider wrote:
 # a report that asks for one shell command, whose mark is the file that command makes.
@@ -167,6 +169,7 @@ CREATE_WAS_IN_FLIGHT=''
 NO_RELEASE_YET=''
 INTERRUPTED=''
 SELF_TEST_ROOT=''
+SELF_TEST_RELEASE_HOST=''
 SIGN_IN_MISSED=''
 MEMBER_PROVEN=''
 MEMBER_PID=''
@@ -372,18 +375,37 @@ in_the_container() {
   on_the_host podman exec "${CONTAINER}" sh -lc "export HOME=${CONTAINER_HOME}; export PATH=\"\$HOME/.local/bin:\$PATH\"; $1"
 }
 
-# The Claude Code step: the host at the version Martha's adapter is recorded against, installed under the container's
-# home, and the installed command's own version against the record.
+# The installed release's tree, as words the container's shell expands: the tree the installed command resolves to,
+# <tree>/bin/<command>, so two folders up from it. Any step that reads the release that was installed, and not this
+# checkout, reads it from here (martha#636).
+installed_release_root() {
+  printf '$(dirname "$(dirname "$(readlink -f "$(command -v %s)")")")' "${COMMAND}"
+}
+
+# The installed release's own host record, read in the container, never from this checkout (martha#636).
+release_record_script() {
+  printf 'cat "%s/%s"' "$(installed_release_root)" "${HOST_RECORD_IN_A_TREE}"
+}
+
+# A field of the JSON text on standard input, or exit 3 when the text is not JSON or does not name it.
+json_text_field() {
+  node -e 'let t = ""; process.stdin.on("data", (c) => { t += c }).on("end", () => { let v; try { v = JSON.parse(t) } catch { process.exit(3) } for (const k of process.argv[1].split(".")) v = v?.[k]; if (v === undefined) process.exit(3); process.stdout.write(String(v)) })' "$1"
+}
+
+# The Claude Code step: the host at the version the installed release is recorded against, installed under the
+# container's home, and the installed command's own version against that record.
 claude_code_step() {
-  local version said
-  version="$(json_field "${HOST_RECORD}" 'host_version')" \
-    || { failed 'claude code' "${HOST_RECORD#"${REPO}/"} records no host_version"; return 1; }
+  local record version said
+  record="$(in_the_container "$(release_record_script)" 2>&1)" \
+    || { failed 'claude code' "the installed ${COMMAND} ${RELEASE_VERSION} carries no ${HOST_RECORD_IN_A_TREE}: $(one_line "${record}")"; return 1; }
+  version="$(printf '%s' "${record}" | json_text_field 'host_version')" \
+    || { failed 'claude code' "the installed ${COMMAND} ${RELEASE_VERSION}'s ${HOST_RECORD_IN_A_TREE} records no host_version"; return 1; }
   said="$(in_the_container "npm install --global --prefix \"\$HOME/.local\" $(remote_word "${CLAUDE_CODE_PACKAGE}@${version}")" 2>&1)" \
     || { failed 'claude code' "npm could not install ${CLAUDE_CODE_PACKAGE}@${version}: $(one_line "${said}")"; return 1; }
   said="$(in_the_container 'claude --version' 2>&1)" \
     || { failed 'claude code' "the installed claude ended non-zero: $(one_line "${said}")"; return 1; }
   case "${said}" in
-    "${version}"*) ok 'claude code' "claude --version prints ${version}, the version Martha's adapter is recorded against" ;;
+    "${version}"*) ok 'claude code' "claude --version prints ${version}, the version ${COMMAND} ${RELEASE_VERSION} is recorded against" ;;
     *) failed 'claude code' "the installed claude says '$(one_line "${said}")', not the recorded ${version}"; return 1 ;;
   esac
 }
@@ -792,6 +814,9 @@ case "${1:-}" in
       done
       exit 0
     fi
+    # The installed release's own host record: the case's release.record, and none when the case has no such file.
+    . "$(dirname "$0")/member.facts"
+    case "$*" in *"${record}"*) exec cat "${standin}/release.record" ;; esac
     case "$*" in
       *'martha start'*) exec member ;;
       *'martha init'*) if [ -f "${standin}/checkout.fails" ]; then exit 1; fi ;;
@@ -847,8 +872,8 @@ esac
 PODMAN
   # What the member stand-in writes into its transcript, from the names above: the outsider's heading and the command
   # its README asks for.
-  printf 'heading=%q\ncommand=%q\nhome=%q\ntranscript=%q\n' "${OUTSIDER_HEADING}" "${SHELL_CALL_WORDS}" "${CONTAINER_HOME}" \
-    "${TRANSCRIPTS%/*/*}/the-checkout/member.jsonl" > "${dir}/member.facts"
+  printf 'heading=%q\ncommand=%q\nhome=%q\ntranscript=%q\nrecord=%q\n' "${OUTSIDER_HEADING}" "${SHELL_CALL_WORDS}" "${CONTAINER_HOME}" \
+    "${TRANSCRIPTS%/*/*}/the-checkout/member.jsonl" "${HOST_RECORD_IN_A_TREE}" > "${dir}/member.facts"
   cat > "${dir}/member" <<'MEMBER'
 #!/usr/bin/env bash
 # A member, as far as a run can tell: its command says it started, a folder question that drops what is typed until a
@@ -918,8 +943,10 @@ a_case() {
   mkdir -p "${dir}/home/$(dirname "${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}")"
   : > "${dir}/home/${OWNER_SESSION_ENDED#"${CONTAINER_HOME}/"}"
   printf '{}\n' > "${dir}/home/${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}"
-  json_field "${HOST_RECORD}" 'host_version' > "${dir}/claude.version"
-  printf ' (Claude Code)\n' >> "${dir}/claude.version"
+  # The installed release records a host other than this checkout's, so a run that reads the checkout's record is seen
+  # to install the wrong one (martha#636).
+  printf '{"host_version":"%s"}\n' "${SELF_TEST_RELEASE_HOST}" > "${dir}/release.record"
+  printf '%s (Claude Code)\n' "${SELF_TEST_RELEASE_HOST}" > "${dir}/claude.version"
 }
 
 # A run against a case's stand-ins, its standard output, standard error and exit status kept in the case's folder.
@@ -1006,6 +1033,8 @@ self_test() {
   local standin case_failed=0 child waited installer_name installer_version release_version major image
   local pulled_at created_at secret
   SELF_TEST_ROOT="$(mktemp -d)"
+  # The host version the stand-in release records: no Claude Code version, so never this checkout's (martha#636).
+  SELF_TEST_RELEASE_HOST='0.0.0-the-installed-release'
   STAND_INS="${SELF_TEST_ROOT}/bin"
   SELF="$(readlink -f "$0")"
   # The member half's windows, short enough for a self-test: the stand-ins answer at once.
@@ -1038,8 +1067,12 @@ self_test() {
   expect_status 0 "${standin}" 'a-host' || case_failed=1
   [ "$(tail -1 "${standin}/out")" = 'a member is proven' ] || { echo 'the self-test: a whole run did not end with a proven member' >&2; case_failed=1; }
   asked_for '^ok member: ' "${standin}/out" || { echo 'the self-test: a whole run logged no member step' >&2; case_failed=1; }
-  asked_for "claude-code@$(json_field "${HOST_RECORD}" 'host_version')" "${standin}/calls" \
-    || { echo 'the self-test: Claude Code was not installed at the version the record names' >&2; case_failed=1; }
+  asked_for "claude-code@${SELF_TEST_RELEASE_HOST}" "${standin}/calls" \
+    || { echo "the self-test: Claude Code was not installed at the version the installed release's record names" >&2; case_failed=1; }
+  ! asked_for "claude-code@$(json_field "${REPO}/${HOST_RECORD_IN_A_TREE}" 'host_version')" "${standin}/calls" \
+    || { echo "the self-test: Claude Code was installed at the version this checkout's record names, not the release's" >&2; case_failed=1; }
+  asked_for "^ok claude code: .* the version $(json_field "${INSTALLER_PACKAGE}" 'martha.command') ${release_version} is recorded against\$" "${standin}/out" \
+    || { echo 'the self-test: the claude code step did not name the release it read the record from' >&2; case_failed=1; }
   asked_for '^  ssh -t .a-host. .*podman.*exec.*-it.*martha approve && claude; touch ' "${standin}/out" \
     || { echo "the self-test: the owner's one command was not printed" >&2; case_failed=1; }
   [ "$(grep -cF -- "${OWNER_TURN}" "${standin}/typed")" = 1 ] || { echo "the self-test: the owner's turn was not typed exactly once" >&2; case_failed=1; }
@@ -1150,6 +1183,18 @@ self_test() {
   printf '9.9.9\n' > "${standin}/version.words"
   expect_status 1 "${standin}" 'a-host' || case_failed=1
   asked_for '^FAIL version: .*not the ' "${standin}/out" || { echo 'the self-test: a version other than this tree declares did not fail the run' >&2; case_failed=1; }
+
+  # An installed release with no host record of its own fails the run at Claude Code: nothing else names the version
+  # to install, and this checkout's record is never a stand-in for it (martha#636).
+  standin="${root}/release-records-no-host"
+  a_case "${standin}"
+  printf '%s\n' "${release_version}" > "${standin}/version.words"
+  rm "${standin}/release.record"
+  expect_status 1 "${standin}" 'a-host' || case_failed=1
+  asked_for "^FAIL claude code: .*carries no ${HOST_RECORD_IN_A_TREE}" "${standin}/out" \
+    || { echo 'the self-test: an installed release with no host record did not fail the claude code step' >&2; case_failed=1; }
+  ! asked_for 'claude-code@' "${standin}/calls" \
+    || { echo 'the self-test: Claude Code was installed although the release records no host' >&2; case_failed=1; }
 
   # A container that is not what was asked for fails the run before anything is installed in it: root inside,
   # something mounted into it, the host's own network, or environment that is not the image's. All four are what the
