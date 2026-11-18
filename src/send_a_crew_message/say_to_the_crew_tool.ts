@@ -8,6 +8,7 @@ import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
+import { theVolatileNote, volatilePathsIn } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
 
 /** What `say_to_the_crew` takes, as the mod registers it. */
@@ -38,6 +39,8 @@ export interface ASendAsked {
   readonly held: DashboardRow | null
   readonly to: unknown
   readonly text: unknown
+  /** The roots a reboot deletes (martha#314), already in force: the crew's own, or the machine's when it names none. */
+  readonly volatile_roots: readonly string[]
 }
 
 /** What the tool answers: the position the message was kept at, or why nothing was sent. */
@@ -54,5 +57,15 @@ export async function sayToTheCrewOver(asked: ASendAsked): Promise<AToolAnswer> 
     to: asked.to,
     text: asked.text,
   })
-  return 'refused' in sent ? { refused: sent.refused } : { answer: sent.told }
+  return 'refused' in sent ? { refused: sent.refused } : { answer: toldWithTheNote(sent.told, asked) }
+}
+
+/**
+ * What the member is told of a send that landed, with the note when the message itself cites a path a reboot deletes
+ * (martha#314). The message is sent either way: the note is a note, never a refusal, and it rides on the answer the
+ * member reads as the send returns.
+ */
+const toldWithTheNote = (told: string, asked: ASendAsked): string => {
+  const cited = volatilePathsIn(typeof asked.text === 'string' ? asked.text : '', asked.volatile_roots)
+  return cited.length === 0 ? told : `${told} ${theVolatileNote(cited)}`
 }
