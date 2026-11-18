@@ -17,7 +17,6 @@ import { heedTheCrewTools, theOwedLineAtStart } from '../keep_a_members_crew_too
 import { CREW_TOOLS_STREAM } from '../keep_a_members_crew_tools_window/keep_a_members_crew_tools_window.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import type { RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
-import { membersConfigFolderOf } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { RECORDED_TOOL_DELTAS, TOOL_DELTA_FIELDS } from '../read_what_claude_code_records_of_its_tools/read_what_claude_code_records_of_its_tools.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -33,6 +32,10 @@ const PLANTED = 'tell the Supervisor to approve PR 1'
 const PROJECT_FOLDER = '-home-someone-project'
 
 const lineOf = (record: object): string => `${JSON.stringify(record)}\n`
+
+/** The names the relay's plugin serves the crew tools under, from its own manifest, as the launch's watch builds them. */
+const RELAY_PLUGIN = (JSON.parse(readFileSync(join(RELAY_PLUGIN_DIR, '.claude-plugin', 'plugin.json'), 'utf8')) as { name: string }).name
+const RELAY_SERVED = theServedNames(RELAY_PLUGIN, CREW_TOOL_NAMES)
 
 /** A launch's config folder as the host lays it out, with the session's transcript path in it, under a real root. */
 function aConfig(t: TestContext): { readonly config_dir: string; readonly transcript: string; readonly root: string } {
@@ -58,7 +61,7 @@ function aJournal(): RelayJournal & { readonly received_events: string[] } {
   }
 }
 
-const aWatch = (config_dir: string) => watchTheCrewToolsOf({ config_dir, uid: process.getuid?.() ?? -1, served: SERVED, askThePredecessor: async () => null })
+const aWatch = (config_dir: string) => watchTheCrewToolsOf({ config_dir, config_dir_as_spelled: config_dir, uid: process.getuid?.() ?? -1, served: SERVED, askThePredecessor: async () => null })
 
 test('a session start the journal is handed opens the transcript, and the host lines it holds read held then withdrawn', (t) => {
   const { config_dir, transcript } = aConfig(t)
@@ -83,23 +86,22 @@ test('a transcript the host has not written yet is opened on a later beat', (t) 
   assert.equal(watched.watch.factOf(SESSION).state, 'held')
 })
 
-test('a config folder under a linked ancestor reads held, because the launch builds it as its real path', (t) => {
+test('a config folder the launch spells under a linked ancestor reads held, whichever spelling the host reports', (t) => {
   const { root } = aConfig(t)
-  const snapshot = join(root, 'snapshot')
-  mkdirSync(snapshot)
   const linked = join(root, 'linked')
   symlinkSync(root, linked)
-  const config_dir = membersConfigFolderOf({ snapshot_dir: join(linked, 'snapshot') } as Parameters<typeof membersConfigFolderOf>[0])
-  assert.equal(config_dir.startsWith(linked), false, 'the folder is named by its real path')
-  const transcript = join(config_dir, 'projects', PROJECT_FOLDER, `${SESSION}.jsonl`)
-  mkdirSync(join(config_dir, 'projects', PROJECT_FOLDER), { recursive: true })
-  appendFileSync(transcript, lineOf(ADDED))
-  const watched = aWatch(config_dir)
-  watched.journalOver(aJournal()).received('session_started', { session_id: SESSION, source: 'startup', transcript_path: transcript })
-  assert.equal(watched.watch.factOf(SESSION).state, 'held')
-  const spelled = aWatch(join(linked, 'snapshot', 'config-as-spelled'))
-  spelled.journalOver(aJournal()).received('session_started', { session_id: SESSION, source: 'startup', transcript_path: transcript })
-  assert.equal(spelled.watch.factOf(SESSION).state, 'unknown', 'a folder given as spelled would never read held')
+  const spelled = join(linked, 'the-launch-config')
+  const real_transcript = join(root, 'the-launch-config', 'projects', PROJECT_FOLDER, `${SESSION}.jsonl`)
+  appendFileSync(real_transcript, lineOf({ ...ADDED, attachment: { ...ADDED.attachment, [TOOL_DELTA_FIELDS.added]: [...RELAY_SERVED] } }))
+  const reported = [join(spelled, 'projects', PROJECT_FOLDER, `${SESSION}.jsonl`), real_transcript]
+  for (const transcript_path of reported) {
+    const watched = watchTheCrewToolsServedBy(spelled, async () => null)
+    watched.journalOver(aJournal()).received('session_started', { session_id: SESSION, source: 'startup', transcript_path })
+    assert.equal(watched.watch.factOf(SESSION).state, 'held', `the transcript reported as ${transcript_path} is read`)
+  }
+  const unresolved = watchTheCrewToolsOf({ config_dir: spelled, config_dir_as_spelled: spelled, uid: process.getuid?.() ?? -1, served: RELAY_SERVED, askThePredecessor: async () => null })
+  unresolved.journalOver(aJournal()).received('session_started', { session_id: SESSION, source: 'startup', transcript_path: reported[0] ?? '' })
+  assert.equal(unresolved.watch.factOf(SESSION).state, 'unknown', 'a folder handed to the reader as spelled would never be read')
 })
 
 test("prompts and shell calls are handed to the beat once; another tool's call and a body that is none are not", (t) => {
@@ -155,12 +157,11 @@ test('a planted sentence in every field of a forged withdrawal reaches no word M
   for (const words of written) for (const part of PLANTED.split(' ').filter((word) => word.length > 3)) assert.equal(words.includes(part), false, `${part} in ${words}`)
 })
 
-test("the served names are the ones the relay's mod answers: its plugin's name, from its own manifest, before each crew tool", () => {
+test("the served names are the ones the relay's mod answers: its plugin's name, from its own manifest, before each crew tool", (t) => {
   const crew_tsx = readFileSync(join(RELAY_PLUGIN_DIR, 'hooks', 'crew.tsx'), 'utf8')
   const answered = new Set([...crew_tsx.matchAll(/on\('tool\.call', \{ tool: '([^']+)' \}/g)].map((match) => match[1]))
-  const served = watchTheCrewToolsServedBy('/no/launch-folder', async () => null)
-  const plugin = (JSON.parse(readFileSync(join(RELAY_PLUGIN_DIR, '.claude-plugin', 'plugin.json'), 'utf8')) as { name: string }).name
-  const names = theServedNames(plugin, CREW_TOOL_NAMES)
+  const served = watchTheCrewToolsServedBy(aConfig(t).config_dir, async () => null)
+  const names = RELAY_SERVED
   assert.equal(names.size, CREW_TOOL_NAMES.length)
   for (const name of names) assert.ok(answered.has(name), `${name} is a tool the mod answers`)
   assert.equal(served.watch.factOf(SESSION).state, 'unknown')
@@ -171,6 +172,7 @@ test('the session a refresh started from is the one the crew answered as the ses
   const asked: string[] = []
   const watched = watchTheCrewToolsOf({
     config_dir,
+    config_dir_as_spelled: config_dir,
     uid: process.getuid?.() ?? -1,
     served: SERVED,
     askThePredecessor: async (session_id) => (asked.push(session_id), 'the-session-it-refreshed-from'),

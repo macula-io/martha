@@ -91,7 +91,7 @@
 // them, until the crew's declaration (port map step 2) holds them.
 
 import { randomUUID } from 'node:crypto'
-import { realpathSync, rmSync } from 'node:fs'
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
@@ -346,8 +346,8 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
   return env
 }
 
-/** The member's own config folder for a launch: decided once, from the launch's snapshot directory as its real path (the kernel's name for it, martha#658), and read by its users. */
-export const membersConfigFolderOf = (prepared: Extract<PreparedLaunch, { readonly allow: true }>): string => join(realpathSync(prepared.snapshot_dir), MEMBER_CONFIG_FOLDER)
+/** The member's own config folder for a launch: decided once, from the launch's snapshot directory, and read by both its users. */
+const membersConfigFolderOf = (prepared: Extract<PreparedLaunch, { readonly allow: true }>): string => join(prepared.snapshot_dir, MEMBER_CONFIG_FOLDER)
 
 /** Step 1: the launch gate, the mesh server version, and the settings files' env; or the refusal. */
 function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {

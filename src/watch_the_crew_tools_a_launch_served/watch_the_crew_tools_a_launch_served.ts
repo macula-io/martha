@@ -19,17 +19,21 @@ import type { ACallInASession, TheServedToolsWatch } from '../keep_a_members_cre
 import type { RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { letTheTranscriptGo, readTheNewLines, type AHeldTranscript } from '../read_one_file_held_by_its_descriptor/read_one_file_held_by_its_descriptor.ts'
 import { openTheClaudeCodeTranscript, servedToolsHeldAfterTheLine } from '../read_what_claude_code_records_of_its_tools/read_what_claude_code_records_of_its_tools.ts'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, realpathSync } from 'node:fs'
+import { isAbsolute, join, relative } from 'node:path'
 
 import { CREW_TOOL_NAMES } from '../a_crews_tools/a_crews_tools.ts'
 import { RELAY_PLUGIN_DIR } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
 import { CLAUDE_CODE_SHELL_TOOL, MCP_NAME_PREFIX, MCP_NAME_SEPARATOR } from '../claude_code_host/claude_code_host.ts'
 import { RELAY_MANIFEST } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
-/** What the watch is given by the launch: the member's own config folder as its real path, the launch's user, and the crew. */
+/**
+ * What the watch is given by the launch: the member's own config folder as its real path and as the launch spells it
+ * (the host reports its transcript under the spelled one), the launch's user, and the crew.
+ */
 export interface TheWatchedLaunch {
   readonly config_dir: string
+  readonly config_dir_as_spelled: string
   readonly uid: number
   /** The names the host gives the tools this launch served, in the host's own form. */
   readonly served: ReadonlySet<string>
@@ -88,9 +92,16 @@ export function watchTheCrewToolsOf(launch: TheWatchedLaunch) {
     return session.fact
   }
 
+  // A transcript reported under the folder as spelled is read under its real path; any other path is left to the reader's bounds.
+  const onTheRealPath = (reported: string): string => {
+    const below = relative(launch.config_dir_as_spelled, reported)
+    return below === '' || below.startsWith('..') || isAbsolute(below) ? reported : join(launch.config_dir, below)
+  }
+
   const started = (body: unknown): void => {
     const session_id = textIn(body, 'session_id')
-    const transcript_path = textIn(body, 'transcript_path')
+    const reported = textIn(body, 'transcript_path')
+    const transcript_path = reported === undefined ? undefined : onTheRealPath(reported)
     if (session_id === undefined || transcript_path === undefined || sessions.has(session_id)) return
     const session: AWatchedSession = { transcript_path, held: undefined, gone: false, fact: NOTHING_RECORDED, predecessor: null }
     sessions.set(session_id, session)
@@ -133,5 +144,6 @@ export function watchTheCrewToolsOf(launch: TheWatchedLaunch) {
  */
 export function watchTheCrewToolsServedBy(config_dir: string, askThePredecessor: TheWatchedLaunch['askThePredecessor']) {
   const plugin = (JSON.parse(readFileSync(join(RELAY_PLUGIN_DIR, RELAY_MANIFEST), 'utf8')) as { readonly name: string }).name
-  return watchTheCrewToolsOf({ config_dir, uid: process.getuid?.() ?? -1, served: theServedNames(plugin, CREW_TOOL_NAMES), askThePredecessor })
+  // The kernel names an opened file with every link resolved, so the reader is handed the folder's real path (martha#658).
+  return watchTheCrewToolsOf({ config_dir: realpathSync(config_dir), config_dir_as_spelled: config_dir, uid: process.getuid?.() ?? -1, served: theServedNames(plugin, CREW_TOOL_NAMES), askThePredecessor })
 }

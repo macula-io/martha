@@ -249,6 +249,8 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
     }
     const member = join(place.home, 'claude')
     const done = join(place.home, 'done')
+    // The launch hands the member no terminal, so what its commands print on failure is kept here and shown by the assertion below.
+    const errors = join(place.home, 'member-errors')
     const empty = join(place.home, 'empty')
     writeFileSync(
       member,
@@ -256,6 +258,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
         '#!/bin/sh',
         ...hostAnswers(),
         `printf '%s\\n%s\\n' "$${DIRENV_CONFIG_VARIABLE}" "$(stat -c %a "$${DIRENV_CONFIG_VARIABLE}") $(ls -A "$${DIRENV_CONFIG_VARIABLE}" | wc -l)" > '${empty}'`,
+        `exec 2> '${errors}'`,
         `${place.member_commands}status=$?`,
         `printf '%s' "$status" > '${done}'`,
         '',
@@ -281,7 +284,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
     if (!started.started) return
     await started.stopped
 
-    assert.equal(existsSync(done), true, 'the member ran its commands to the end')
+    assert.equal(existsSync(done), true, `the member ran its commands to the end; it printed: ${existsSync(errors) ? readFileSync(errors, 'utf8') : '(nothing)'}`)
     assert.equal(readFileSync(done, 'utf8'), '0', 'and every one of them succeeded')
     assert.deepEqual(readdirSync(place.markers), [], 'no door the checkout planted ran')
 
