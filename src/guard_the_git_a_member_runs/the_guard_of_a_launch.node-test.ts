@@ -8,12 +8,12 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { createServer, type Server } from 'node:http'
-import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { GIT_CALL_PATH, REF_TRANSACTION_PATH } from './guard_protocol.ts'
+import { GIT_CALL_PATH, PREPARED, REF_TRANSACTION_PATH } from './guard_protocol.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
@@ -182,10 +182,16 @@ interface APlacedGuard {
   readonly env: Record<string, string>
 }
 
-/** Places the guard in `directory`, as a launch does, with a real git that says it ran. */
-function aGuardIn(directory: string, socket: string): APlacedGuard {
-  const realGit = aRealGitIn(directory)
-  const placed = putTheGuardIn(join(directory, 'launch'), process.execPath, realGit)
+/** The node a guard starts its judge on, and the real git it hands an allowed call to. */
+interface TheGuardsPrograms {
+  readonly node: string
+  readonly realGit: string
+}
+
+/** Places the guard in `directory`, as a launch does: by default on this node, with a real git that says it ran. */
+function aGuardIn(directory: string, socket: string, programs?: TheGuardsPrograms): APlacedGuard {
+  const { node, realGit } = programs ?? { node: process.execPath, realGit: aRealGitIn(directory) }
+  const placed = putTheGuardIn(join(directory, 'launch'), node, realGit)
   assert.ok('directory' in placed, `the guard could not be placed: ${'refusal' in placed ? placed.refusal : ''}`)
   const env = thePathWithTheGuardFirst({ PATH: `${join(directory, 'real-bin')}:/usr/bin:/bin`, [RELAY_SOCKET_VARIABLE]: socket }, placed.directory) as Record<string, string>
   return { directory, guard: placed, env }
@@ -302,8 +308,8 @@ interface ACloneUnderTheGuard {
 const gitIn = (cwd: string, ...args: readonly string[]): string => execFileSync('/usr/bin/git', [...args], { cwd, encoding: 'utf8' }).trim()
 
 /** A clone cut from nothing, with `uranus/9` on a branch, run under the settings a launch gives a member's git. */
-function aCloneUnderTheGuard(directory: string, socket: string): ACloneUnderTheGuard {
-  const placed = aGuardIn(directory, socket)
+function aCloneUnderTheGuard(directory: string, socket: string, programs?: TheGuardsPrograms): ACloneUnderTheGuard {
+  const placed = aGuardIn(directory, socket, programs)
   const clone = join(directory, 'acme', 'widget')
   mkdirSync(join(directory, 'acme'))
   gitIn(directory, 'init', '--quiet', '--initial-branch=main', clone)
@@ -465,4 +471,40 @@ test("the real git, and everything it starts, still gets the member's own NODE_O
     const added = [...seen.keys()].filter((name) => !(name in given) && !WHAT_A_SHELL_ADDS.has(name))
     assert.deepEqual(added, [], `${one.said}: the real git was handed names the member never set`)
   }
+})
+
+// How often a guarded git call starts node (martha#755): git calls the `reference-transaction` hook for every state of
+// every transaction, and the judge judges only the one that can still stop it. A start for any other state judges
+// nothing and costs a whole node start, which a loaded machine pays several times over on every commit.
+
+/** A node that writes the judge's mode and its first word to `starts`, one start a line, then runs the real node. */
+function aNodeThatCountsItsStartsIn(directory: string): { readonly node: string; readonly starts: string } {
+  const starts = join(directory, 'the-judges-starts')
+  const node = join(directory, 'a-counting-node')
+  writeFileSync(node, `#!/bin/sh\nprintf '%s %s\\n' "$2" "$3" >> ${JSON.stringify(starts)}\nexec ${JSON.stringify(process.execPath)} "$@"\n`)
+  chmodSync(node, 0o755)
+  return { node, starts }
+}
+
+test('a guarded commit starts the judge once for the call and once for each transaction it can still stop (martha#755)', async (t) => {
+  const directory = aDirectory(t, 'martha-755-starts-')
+  mkdirSync(join(directory, 'launch'), { recursive: true })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ allow: 1 }) })
+  t.after(() => launcher.close())
+  const counting = aNodeThatCountsItsStartsIn(directory)
+  const under = aCloneUnderTheGuard(directory, launcher.socket, { node: counting.node, realGit: '/usr/bin/git' })
+  // Placing the guard and making the clone start no judge of their own; only what the member's commit starts counts.
+  rmSync(counting.starts, { force: true })
+
+  const ann = { GIT_AUTHOR_NAME: 'Ann', GIT_AUTHOR_EMAIL: 'ann@example.invalid', GIT_COMMITTER_NAME: 'Ann', GIT_COMMITTER_EMAIL: 'ann@example.invalid' }
+  const ran = await theRunOf('/bin/sh', ['-c', 'git commit --quiet --allow-empty -m "a commit the guard judges"'], { cwd: under.clone, env: { ...under.env, ...ann } })
+
+  assert.equal(ran.status, 0, `the commit did not run: ${ran.stderr}`)
+  const started = existsSync(counting.starts) ? readFileSync(counting.starts, 'utf8').trim().split('\n') : []
+  const forTheHook = started.filter((start) => !start.startsWith(`${THE_SHIM_NAME} `)).map((start) => start.slice(start.indexOf(' ') + 1))
+  const forNothing = forTheHook.filter((state) => state !== PREPARED)
+  assert.deepEqual(forNothing, [], forNothing.map((state) => `the hook started node for \`${state}\``).join('\n'))
+  assert.deepEqual(started.filter((start) => start.startsWith(`${THE_SHIM_NAME} `)), [`${THE_SHIM_NAME} commit`], `the shim did not start the judge once for the call: ${started.join('; ')}`)
+  assert.equal(forTheHook.length, 2, `the hook started the judge ${forTheHook.length} times for the commit's two transactions: ${started.join('; ')}`)
+  assert.deepEqual(launcher.asked.map((question) => question.path), [GIT_CALL_PATH, REF_TRANSACTION_PATH, REF_TRANSACTION_PATH], 'the launcher was not asked once for the call and once for each transaction')
 })
