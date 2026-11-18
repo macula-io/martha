@@ -9,10 +9,10 @@ import process from 'node:process'
 import { test } from 'node:test'
 
 import { AcpClient, METHOD_NOT_FOUND, type ATurn, type Decide } from './the_acp_client.ts'
-import { STAND_IN_SESSION, THE_ENGINES_OPTIONS, whatTheEngineMakesOf, type AnAgentScript } from './the_stand_in_agents_script.ts'
+import { STAND_IN_SESSION, THE_ENGINES_OPTIONS, whatTheEngineMakesOf, type AnAgentScript } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 import { ALLOW_ONCE, REJECT_ONCE } from './answer_a_permission_once.ts'
 
-const STAND_IN = join(import.meta.dirname, 'an_acp_agent_stand_in.ts')
+const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
 const A_CALL = { id: 'call-1', title: 'shell: echo hi', input: { command: 'echo hi' } }
 const allow: Decide = () => 'allow'
 const reject: Decide = () => 'reject'

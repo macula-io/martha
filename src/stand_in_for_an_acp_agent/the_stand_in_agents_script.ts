@@ -1,5 +1,5 @@
 // The words an ACP agent stand-in's script is written in, and the answers it gives, shared by the stand-in
-// (an_acp_agent_stand_in.ts, run as a child) and the tests that write its scripts. Kept apart from the stand-in so a
+// (main.ts, run as a child) and the tests that write its scripts. Kept apart from the stand-in so a
 // test that imports them does not start reading its own stdin.
 //
 // It speaks as the recorded Goose engine does (src/know_the_goose_engines_facts/): a permission request offers the

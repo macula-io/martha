@@ -650,6 +650,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a model behind an OpenAI-compatible URL, answered from a script, for runs of the Goose engine with no model (martha#541); tests and npm run stand-in:openai-model load it, and no member ever does',
   },
   {
+    name: 'stand_in_for_an_acp_agent',
+    why: 'an ACP agent on stdio answered from a script, offering the recorded Goose engine\'s permission answers, for the tests of speak_acp_to_an_agent (martha#541); tests and npm run stand-in:acp-agent load it, and no member ever does',
+  },
+  {
     name: 'check_no_member_outlives_its_run',
     why: 'a script run by hand, npm run check:no-member-outlives-its-run, over this machine\'s /proc; find_a_member_a_run_left_behind is what it reads with, and martha ls shows the same lines without loading the program',
   },

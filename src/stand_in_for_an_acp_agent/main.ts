@@ -1,6 +1,7 @@
-// node an_acp_agent_stand_in.ts '<script as JSON>'
+// npm run stand-in:acp-agent -- '<script as JSON>'
 //
-// An ACP agent on stdio, answered from a script, for the client's tests (macula-io/martha#541, packages 7-8, part B).
+// An ACP agent on stdio, answered from a script, for the tests of speak_acp_to_an_agent (macula-io/martha#541, packages 7-8, part B)
+// and for a client driven by hand.
 // It is run as a child over real pipes, the way the launcher runs the engine.
 //
 // It speaks as the recorded Goose engine does (src/know_the_goose_engines_facts/): a permission request offers the

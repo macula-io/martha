@@ -12,7 +12,6 @@ const ACPS_TOOL_CALL_STATUS = "ACP's own status of a tool call that did not run,
 const ACPS_TOOL_CALL_FIELD = "the field of an ACP tool-call update that carries what the call produced; Claude Code's word is the field its file-write tool takes the whole file in"
 
 export const COINCIDENCES: readonly Exception[] = [
-  { value: THE_FAILED_TASK_STATUS, file: 'speak_acp_to_an_agent/an_acp_agent_stand_in.ts', reason: ACPS_TOOL_CALL_STATUS },
   { value: THE_FAILED_TASK_STATUS, file: 'speak_acp_to_an_agent/the_acp_client.node-test.ts', reason: ACPS_TOOL_CALL_STATUS },
   { value: WHOLE_FILE_CONTENT, file: 'speak_acp_to_an_agent/the_acp_client.ts', reason: ACPS_TOOL_CALL_FIELD },
 ]

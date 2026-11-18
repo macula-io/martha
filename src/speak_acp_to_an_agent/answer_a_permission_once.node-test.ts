@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { ALLOW_ONCE, REJECT_ONCE, answerOnce, type AnOfferedOption, type ADecision, type TheOutcome } from './answer_a_permission_once.ts'
-import { THE_ENGINES_OPTIONS, whatTheEngineMakesOf } from './the_stand_in_agents_script.ts'
+import { THE_ENGINES_OPTIONS, whatTheEngineMakesOf } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 
 const KINDS = RECORDED_GOOSE_ENGINE.permission_options
