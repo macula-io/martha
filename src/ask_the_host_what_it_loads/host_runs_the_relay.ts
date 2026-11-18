@@ -90,6 +90,20 @@ export const TRUST_ACCEPTED_KEY = 'hasTrustDialogAccepted'
 /** The key of the host's record that says its first run is done, so it shows no first-run screens before a session. */
 export const FIRST_RUN_DONE_KEY = 'hasCompletedOnboarding'
 
+/** The variable that hands the host an API key, which it asks about once before using it. */
+export const API_KEY_VARIABLE = 'ANTHROPIC_API_KEY'
+
+/** The key of the host's record that holds its answers to that question, as {approved, rejected} lists of key tails. */
+export const API_KEY_ANSWERS_KEY = 'customApiKeyResponses'
+
+/** The host keeps the last characters of a key it was told about, and compares those. */
+export const KEY_TAIL_LENGTH = 20
+
+/** The host's record of a key answered yes: its tail approved, nothing rejected. */
+export function apiKeyAnsweredYes(key: string): { readonly approved: readonly string[]; readonly rejected: readonly string[] } {
+  return { approved: [key.slice(-KEY_TAIL_LENGTH)], rejected: [] }
+}
+
 /**
  * Whether the host's own record says it trusts `folder` already, so it will not
  * ask. Read one way only: true only for the exact folder, by its path or its

@@ -124,6 +124,7 @@ import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { memberRelay, type MemberRelay, type MemberRelayPlace, type TheMembersTelling } from '../answer_the_relay/answer_the_relay.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
+  API_KEY_VARIABLE,
   hostTrustsTheFolder,
   ownerCanAnswerTheHost,
   SESSION_START_DEADLINE_MS,
@@ -312,9 +313,11 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
   const owners = userSettingsPath(launch.inherited)
   if ('refusal' in owners) return owners.refusal
   const memberConfig = join(prepared.snapshot_dir, MEMBER_CONFIG_FOLDER)
-  const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir)
+  const env = { ...launchEnvironment(launch.inherited, prepared.switches, CLAUDE_CODE), ...theMembersConfigEnvironment(memberConfig) }
+  // The key answered yes is the one the member is handed, read from the environment it starts with.
+  const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir, env[API_KEY_VARIABLE])
   if (!made.made) return made.refusal
-  return { ...launchEnvironment(launch.inherited, prepared.switches, CLAUDE_CODE), ...theMembersConfigEnvironment(memberConfig) }
+  return env
 }
 
 /** Step 1: the launch gate, the mesh server version, and the settings files' env; or the refusal. */

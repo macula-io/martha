@@ -14,7 +14,9 @@
 //     reaches a member through its sign-in;
 //   - .claude.json: the approved checkout, and only that folder, marked trusted, so the host does not ask again at
 //     every start; and the host's first run marked done, so a fresh folder shows no first-run screens (the theme
-//     picker, the security notice) before the session starts, and the theme is the host's own default.
+//     picker, the security notice) before the session starts, and the theme is the host's own default; and, when
+//     the member's environment hands the host an API key, that key answered yes, so the host does not stop the
+//     member to ask whether to use it (decided 2026-11-18). These are first-run answers Martha gives for the owner.
 //
 // Sign-in is pointed at, never copied: the recorded host's sign-in store variable, set and empty, names the owner's own
 // default store (../cut_the_rules_from_the_host_binary/the_sign_in_store.ts). Both variables go on the member's
@@ -24,7 +26,7 @@
 import { lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, TRUST_ACCEPTED_KEY } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { API_KEY_ANSWERS_KEY, apiKeyAnsweredYes, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, TRUST_ACCEPTED_KEY } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -43,13 +45,15 @@ const FILE_MODE = 0o600
 export const MEMBERS_OWN_SETTINGS: Readonly<Record<string, boolean>> = { [CONNECTORS_OFF_SETTING]: true, [SYNC_OFF_SETTING]: false }
 
 /**
- * The host's record for the member: its first run done, and the approved checkout trusted, by its path and its real
- * path, and nothing else. Without the first, a fresh folder shows the host's first-run screens before any session
- * starts, and the launcher, holding a member in a trusted folder to the short deadline, stops it (seen live, martha#602).
+ * The host's record for the member: its first run done, the API key the member is handed (if any) answered yes, and
+ * the approved checkout trusted, by its path and its real path, and nothing else. Without the first two, a fresh
+ * folder shows the host's screens before any session starts, and the launcher, holding a member in a trusted folder to
+ * the short deadline, stops it (seen live and in the recorded host, martha#602).
  */
-export function theMembersHostRecord(checkout: string): Readonly<Record<string, unknown>> {
+export function theMembersHostRecord(checkout: string, apiKey: string | undefined): Readonly<Record<string, unknown>> {
   const trusted = { [TRUST_ACCEPTED_KEY]: true }
-  return { [FIRST_RUN_DONE_KEY]: true, projects: Object.fromEntries([...new Set([checkout, realpathSync(checkout)])].map((path) => [path, trusted])) }
+  const answered = apiKey === undefined || apiKey === '' ? {} : { [API_KEY_ANSWERS_KEY]: apiKeyAnsweredYes(apiKey) }
+  return { [FIRST_RUN_DONE_KEY]: true, ...answered, projects: Object.fromEntries([...new Set([checkout, realpathSync(checkout)])].map((path) => [path, trusted])) }
 }
 
 /** The member's environment over everything inherited: its own config folder, and the owner's default sign-in store. */
@@ -57,8 +61,11 @@ export function theMembersConfigEnvironment(folder: string): Readonly<Record<str
   return { [CONFIG_DIR_VARIABLE]: folder, [CLAUDE_CODE_SIGN_IN_STORE_VARIABLE]: '' }
 }
 
-/** Makes the member's config folder at `folder` for a member of `checkout`; or why it could not be made. */
-export function makeTheMembersConfig(folder: string, checkout: string): { readonly made: true } | { readonly made: false; readonly refusal: string } {
+/**
+ * Makes the member's config folder at `folder` for a member of `checkout` whose environment hands the host
+ * `apiKey`, or none; or why it could not be made.
+ */
+export function makeTheMembersConfig(folder: string, checkout: string, apiKey: string | undefined): { readonly made: true } | { readonly made: false; readonly refusal: string } {
   try {
     lstatSync(folder)
     return { made: false, refusal: `${folder} already exists, and a member's config folder is only ever made new` }
@@ -68,7 +75,7 @@ export function makeTheMembersConfig(folder: string, checkout: string): { readon
   try {
     mkdirSync(folder, { mode: MEMBER_CONFIG_MODE })
     writeFileSync(join(folder, USER_SETTINGS_FILE), `${JSON.stringify(MEMBERS_OWN_SETTINGS)}\n`, { mode: FILE_MODE, flag: 'wx' })
-    writeFileSync(join(folder, HOST_TRUST_RECORD_FILE), `${JSON.stringify(theMembersHostRecord(checkout))}\n`, { mode: FILE_MODE, flag: 'wx' })
+    writeFileSync(join(folder, HOST_TRUST_RECORD_FILE), `${JSON.stringify(theMembersHostRecord(checkout, apiKey))}\n`, { mode: FILE_MODE, flag: 'wx' })
     return { made: true }
   } catch (error) {
     return { made: false, refusal: `the member's config folder ${folder} could not be made: ${error instanceof Error ? error.message : String(error)}` }
