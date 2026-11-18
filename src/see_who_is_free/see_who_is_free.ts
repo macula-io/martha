@@ -18,7 +18,7 @@
 
 import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import type { CrewRow } from '../see_the_crew/see_the_crew.ts'
+import { theCrewToolsFlag, type CrewRow } from '../see_the_crew/see_the_crew.ts'
 import { IDLE, OFFLINE, type ShownState } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
@@ -86,7 +86,7 @@ function freeRowOf(row: CrewRow, crew: WhatTheCrewSays): FreeRow {
   }
 }
 
-/** The flags a row raises, in a fixed order: the park, offline, needs-you, the context, and stale progress. */
+/** The flags a row raises, in a fixed order: the park, offline, needs-you, the context, stale progress, and lost crew tools. */
 function flagsOf(row: CrewRow, park: ThePark, reported_ago: number | null): readonly string[] {
   const flags: (string | null)[] = [
     parkFlagOf(park),
@@ -94,6 +94,7 @@ function flagsOf(row: CrewRow, park: ThePark, reported_ago: number | null): read
     row.state === 'needs-you' ? 'needs-you' : null,
     atTheLimit(row) ? `context ${String(row.host.contextPercent)}%` : null,
     staleProgress(row, reported_ago) ? `progress ${minutesOf(reported_ago ?? 0)} old` : null,
+    theCrewToolsFlag(row),
   ]
   return flags.filter((flag): flag is string => flag !== null)
 }

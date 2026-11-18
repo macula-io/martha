@@ -38,6 +38,7 @@ import {
 import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
 import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's `review_model` is read against. */
 const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['sonnet', 'opus', 'fable'] }
@@ -95,7 +96,7 @@ async function aCrewOfTools(memberModel: string | null = OWN_MODEL): Promise<ACr
   mkdirSync(join(home, CREW_ROWS_PLACE), { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   declareTheModels(root, memberModel)
   const beats = dashboardRowsIn(join(home, 'row'))

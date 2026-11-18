@@ -23,7 +23,7 @@ import {
 } from './host_runs_the_relay.ts'
 import { hostAnswers, LOADS_THE_RELAY, refusesTheRelay } from '../drive_the_recorded_host/host_stand_in.ts'
 import { RELAY_COPY_NAME, removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 function placeFor(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-host-'))
@@ -31,7 +31,7 @@ function placeFor(t: TestContext): string {
   return dir
 }
 
-function standIn(dir: string, lines: readonly string[], name = 'claude'): string {
+function standIn(dir: string, lines: readonly string[], name = CLAUDE): string {
   const file = join(dir, name)
   writeFileSync(file, ['#!/bin/sh', ...lines, 'exit 9', ''].join('\n'), { mode: 0o700 })
   return file
@@ -66,29 +66,29 @@ test('a command resolves once, to the file its link names: first runnable on PAT
   const real = standIn(dir, [], 'real-claude')
   const notRunnable = join(dir, 'a')
   mkdirSync(notRunnable)
-  writeFileSync(join(notRunnable, 'claude'), '#!/bin/sh\n', { mode: 0o600 })
+  writeFileSync(join(notRunnable, CLAUDE), '#!/bin/sh\n', { mode: 0o600 })
   const linked = join(dir, 'b')
   mkdirSync(linked)
-  symlinkSync(real, join(linked, 'claude'))
-  assert.deepEqual(resolvedHostCommand('claude', `${notRunnable}:${linked}`, dir), { binary: realpathSync(real) })
+  symlinkSync(real, join(linked, CLAUDE))
+  assert.deepEqual(resolvedHostCommand(CLAUDE, `${notRunnable}:${linked}`, dir), { binary: realpathSync(real) })
   assert.deepEqual(resolvedHostCommand('./real-claude', undefined, dir), { binary: realpathSync(real) })
-  assert.deepEqual(resolvedHostCommand('claude', notRunnable, dir), { refusal: notACommandThisLauncherCanRun('claude') })
-  assert.deepEqual(resolvedHostCommand('claude', undefined, dir), { refusal: notACommandThisLauncherCanRun('claude') })
+  assert.deepEqual(resolvedHostCommand(CLAUDE, notRunnable, dir), { refusal: notACommandThisLauncherCanRun(CLAUDE) })
+  assert.deepEqual(resolvedHostCommand(CLAUDE, undefined, dir), { refusal: notACommandThisLauncherCanRun(CLAUDE) })
   assert.deepEqual(resolvedHostCommand(notRunnable, undefined, dir), { refusal: notACommandThisLauncherCanRun(notRunnable) })
 })
 
 test('a PATH entry that is empty or relative names a folder under the checkout, and is skipped: a planted claude is never what runs', (t) => {
   const checkout = placeFor(t)
-  standIn(checkout, [], 'claude')
+  standIn(checkout, [], CLAUDE)
   const planted = join(checkout, 'bin')
   mkdirSync(planted)
-  standIn(planted, [], 'claude')
+  standIn(planted, [], CLAUDE)
   const owners = join(checkout, 'owners')
   mkdirSync(owners)
-  const real = standIn(owners, [], 'claude')
+  const real = standIn(owners, [], CLAUDE)
   for (const path of ['', ':', '.', 'bin', './bin', `:${owners}`, `.:${owners}`, `bin:${owners}`, `${owners}:`]) {
-    const resolved = resolvedHostCommand('claude', path, checkout)
-    const expected = path.includes(owners) ? { binary: realpathSync(real) } : { refusal: notACommandThisLauncherCanRun('claude') }
+    const resolved = resolvedHostCommand(CLAUDE, path, checkout)
+    const expected = path.includes(owners) ? { binary: realpathSync(real) } : { refusal: notACommandThisLauncherCanRun(CLAUDE) }
     assert.deepEqual(resolved, expected, `PATH=${JSON.stringify(path)}`)
   }
 })

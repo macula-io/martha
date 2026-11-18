@@ -15,8 +15,8 @@ import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
 import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
 
-/** Why a tool call has no answer: the member was started by hand, or the launcher could not be heard. */
-const NOT_OURS = 'Martha is not running this session, so it answers no tool'
+/** Why a tool call has no answer: Martha did not launch this session (it was started by hand), or the launcher could not be heard. */
+const NOT_OURS = 'Martha did not launch this session, so it answers no tool here'
 
 /** The engine calls this module makes, typed by shape as the relay's own module types them. */
 interface CrewEngine {

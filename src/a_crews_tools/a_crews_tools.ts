@@ -98,6 +98,7 @@ import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
+import { theBeatOverTheCrewTools, withTheOwedLine, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
@@ -149,8 +150,11 @@ export type CoreToolAnswer = { readonly answer: string } | { readonly refused: s
 /** What a tool's call named, read by the slice that owns the tool: what it names, or why the call is refused. */
 type AnAsked<Asked> = { readonly ok: Asked } | { readonly refused: string }
 
-/** What the tools are given: whose row it is, where the crew's place is, and how the declaration is read. */
-export interface CrewToolPlaces {
+/**
+ * What the tools are given: whose row it is, where the crew's place is, and how the declaration is read; and what the
+ * host adapter reads of its sessions' crew tools (martha#658), so a launch given none keeps no window.
+ */
+export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
   readonly member: string
   /** The crew's streams: the ledger and the session records. */
   readonly ledger: LedgerHost
@@ -427,10 +431,11 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
       return handle(args)
     },
     startBeating(): () => void {
+      // A heartbeat says nothing of its own but the crew tools (martha#658): it is the row as this session last left it.
+      const beat = theBeatOverTheCrewTools(held, () => state.session, (change) => writeRow(held, state, change))
       const timer = setInterval(() => {
         try {
-          // A heartbeat says nothing of its own: it is the row as this session last left it, at this moment's beat.
-          writeRow(held, state, (row) => row)
+          beat()
         } catch {
           // A beat the disk would not take is the next beat's business: the row it could not write stays readable.
         }
@@ -586,13 +591,14 @@ function theNeedsAfter(state: SessionState, row: DashboardRow): string {
  * that was sent with no outcome recorded (martha#254 design line 53, test 10). Null when nothing is handed.
  */
 async function theStartLineOf(places: CrewToolPlaces, state: SessionState): Promise<TheStartLine | null> {
-  return theLineToHandAtStart({
+  // What a successor owes for its member's open window follows the line (martha#658).
+  return withTheOwedLine(places, await theLineToHandAtStart({
     ledger: places.ledger,
     member: places.member,
     settings: await theSettingsOrRefusal(places),
     held: state.held ?? places.beats.read(places.member),
     now: places.ledger.clock.now(),
-  })
+  }))
 }
 
 /**

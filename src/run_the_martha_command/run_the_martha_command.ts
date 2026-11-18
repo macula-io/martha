@@ -30,6 +30,7 @@ import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_th
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
 import { declareCrew, OWNER_BELL } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readApprovals, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
@@ -70,9 +71,6 @@ export const USAGE =
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
-
-/** The host the owner has installed, found on their PATH. */
-const CLAUDE = 'claude'
 
 const documents = { read: (path: string) => readFile(path, 'utf8') }
 
@@ -132,7 +130,7 @@ const version = (): string => releaseVersionOf(releaseTree(), (path) => readFile
 async function init(io: CommandIo, places: Places): Promise<number> {
   // The owner and the origin are both read here, where Martha's own git runs: the origin is what says whether the
   // checkout's path can prove a workspace layout (martha#611), and the declaration slice reads it as a value.
-  const declared = await declareSoloCrew({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, origin: gitSays(places.root, 'remote', 'get-url', 'origin') ?? null, state: places.state, documents, models: CLAUDE_CODE_MODELS })
+  const declared = await declareSoloCrew({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, origin: gitSays(places.root, 'remote', 'get-url', 'origin') ?? null, state: places.state, documents, models: CLAUDE_CODE_MODELS, host: CLAUDE_CODE })
   if (!declared.declared) return refused(io, declared.refusal)
   io.out(`Declared a solo crew in ${declared.declaration}: ${declared.settings.members.map((member) => member.name).join(', ')}.`)
   io.out(declared.workspace)
@@ -252,7 +250,6 @@ async function startingTheMember(
     args,
     is_terminal: io.terminal.is_terminal,
     places: launcher,
-    command: CLAUDE,
     inherited: io.env,
     stdio: io.stdio,
     documents,

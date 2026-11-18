@@ -66,6 +66,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'keep_the_relays_journal',
     'keep_what_the_owner_signed',
     'launch_a_claude_code_member',
+    'launch_a_goose_member',
     'list_stop_and_restart_the_crew',
     'load_the_hosts_markdown',
     'place_the_hosts_settings',
@@ -78,11 +79,13 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'run_the_nodes_own_npm_alone',
     'serve_the_relay_to_a_launch',
     'start_a_member',
+    'start_the_member_on_its_host',
     'start_the_member_on_the_owners_terminal',
     'sweep_leftover_launch_directories',
     'tell_the_member_a_line',
     'read_what_claude_code_says_of_an_agent',
     'read_what_claude_code_records_of_its_tools',
+    'watch_the_crew_tools_a_launch_served',
   ])
 })
 
