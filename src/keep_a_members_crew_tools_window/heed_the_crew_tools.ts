@@ -31,12 +31,20 @@ import {
 } from './keep_a_members_crew_tools_window.ts'
 
 /**
- * What a host adapter that watches its sessions' tools gives the launcher: the fact for a session, and the session a
- * refresh started from, as the crew answered it when that session started (never a hook input's, T8).
+ * What a host adapter that watches its sessions' tools gives the launcher: the fact for a session, the session a
+ * refresh started from as the crew answered it when that session started (never a hook input's, T8), and the calls it
+ * answered since it was last asked, which the beat counts into an open window.
  */
 export interface TheServedToolsWatch {
   factOf(session_id: string): ServedToolsHeld
   predecessorOf(session_id: string): string | null
+  takeTheCalls(): readonly ACallInASession[]
+}
+
+/** One call the host adapter answered, and the session it was made in. */
+export interface ACallInASession {
+  readonly session: string
+  readonly call: ACallForTheWindow
 }
 
 /** The places a member's window is kept and told over: a structural part of the crew's tool places. */
@@ -73,6 +81,7 @@ export async function heedTheCrewTools(places: TheWindowPlaces, session: string)
   const watch = places.served_tools
   const place = placeOf(places)
   if (watch === undefined || place === undefined) return undefined
+  for (const one of watch.takeTheCalls()) countForTheWindow(places, one.session, one.call)
   const fact = watch.factOf(session)
   const open = theWindowOf(place, places.member)
   const step = theWindowStep(open, fact, places.member, session, watch.predecessorOf(session))

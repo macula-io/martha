@@ -9,7 +9,7 @@ import type { CrewPlace, ServedToolsHeld } from '../host_contract/host_contract.
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
-import { countForTheWindow, heedTheCrewTools, theOwedLineAtStart, type TheWindowPlaces } from './heed_the_crew_tools.ts'
+import { countForTheWindow, heedTheCrewTools, theOwedLineAtStart, type ACallInASession, type TheWindowPlaces } from './heed_the_crew_tools.ts'
 import { COUNTED_GIT_COMMANDS, CREW_TOOLS_BACK, CREW_TOOLS_LOST, CREW_TOOLS_STREAM, REFRESH, theBackLineOf, theNoticeOf, type ACrewToolsWindow } from './keep_a_members_crew_tools_window.ts'
 
 const MEMBER = 'Terra'
@@ -56,16 +56,17 @@ function aLaunch() {
   const place = aPlace()
   const facts = new Map<string, ServedToolsHeld>()
   const predecessors = new Map<string, string>()
+  const calls: ACallInASession[] = []
   const places: TheWindowPlaces = {
     member: MEMBER,
     ledger: host,
     stores: { crew: { place: () => place } },
     settings: SETTINGS,
-    served_tools: { factOf: (id) => facts.get(id) ?? { state: 'unknown' }, predecessorOf: (id) => predecessors.get(id) ?? null },
+    served_tools: { factOf: (id) => facts.get(id) ?? { state: 'unknown' }, predecessorOf: (id) => predecessors.get(id) ?? null, takeTheCalls: () => calls.splice(0) },
   }
   const told = async () => (await readTheChannel(host)).map(({ message }) => ({ to: message.to, text: message.text }))
   const rows = async () => (await host.stores.rows.read(CREW_TOOLS_STREAM)).map(({ row }) => row as unknown as ACrewToolsWindow & { event: string })
-  return { places, place, facts, predecessors, told, rows }
+  return { places, place, facts, predecessors, calls, told, rows }
 }
 
 test('a loss is told to the Supervisor once, however many beats read it, and the row says lost since then', async () => {
@@ -129,4 +130,17 @@ test('a launch that watches no tools leaves the row as it was and keeps nothing'
   const { served_tools: _, ...without } = launch.places
   assert.equal(await heedTheCrewTools(without, LOST_IN), undefined)
   assert.deepEqual(launch.place.names(), [])
+})
+
+test("the calls the watch answered are counted on the next beat, each into its own session's window, and taken once", async () => {
+  const launch = aLaunch()
+  launch.facts.set(LOST_IN, WITHDRAWN)
+  await heedTheCrewTools(launch.places, LOST_IN)
+  const [push] = Object.keys(COUNTED_GIT_COMMANDS)
+  launch.calls.push({ session: LOST_IN, call: { turn: true } }, { session: LOST_IN, call: { shell: `git ${push} origin x` } }, { session: SUCCESSOR, call: { turn: true } })
+  await heedTheCrewTools(launch.places, LOST_IN)
+  await heedTheCrewTools(launch.places, LOST_IN)
+  const owed = theOwedLineAtStart(launch.places) ?? ''
+  for (const part of ['1 turn(s)', '1 push(es)']) assert.ok(owed.includes(part), `${part} in ${owed}`)
+  assert.deepEqual(launch.calls, [])
 })
