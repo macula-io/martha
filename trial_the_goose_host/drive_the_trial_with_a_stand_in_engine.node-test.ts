@@ -260,7 +260,10 @@ test('a turn the launch\'s end cuts reads not-observed, with the arithmetic, so 
   }
 })
 
-test('a launch whose handshake fails keeps the message the kill cut off, as every other kill path does (PR 733, martha#694)', async () => {
+// What this pins is the outcome on the handshake-failure path, not the explicit close in startARun's catch: the pipe's
+// `end` normally flushes the cut-off message first, and the close is the fallback for when it has not, as in endARun.
+// No case against the real spawned engine can stop `end` from running first, so the call site is not pinned from here.
+test('a launch whose handshake fails keeps what crossed before the kill (PR 733, martha#694)', async () => {
   const { evidence } = await theDriverFor(1, aLaunchLeaving(HANDSHAKE_LEFT_MS), 'http://127.0.0.1:9', AN_ENGINE_CUT_OFF_MID_MESSAGE)
   const kept = readFileSync(join(evidence, 'line-1', THE_TRANSCRIPT), 'utf8').split('\n').filter((line) => line !== '')
     .map((line) => JSON.parse(line) as { direction: string; message: unknown })
