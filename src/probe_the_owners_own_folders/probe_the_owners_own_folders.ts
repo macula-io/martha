@@ -140,8 +140,11 @@ const userScopePlaces = (place: Place) => {
   })
 }
 
-/** Every folder under the config dir the host loads the owner's text from, by the recording's names and the field's. */
-const OWNER_SCOPE_FOLDERS: readonly string[] = [...RECORDED_HOST.markdown_kinds, CLAUDE_CODE_OUTPUT_STYLES_FOLDER]
+/**
+ * Every folder under the config dir the host loads the owner's text from, by the recording's names and the field's,
+ * each once: from 2.1.327 the loader's kinds name the output-styles folder too (martha#624).
+ */
+const OWNER_SCOPE_FOLDERS: readonly string[] = [...new Set([...RECORDED_HOST.markdown_kinds, CLAUDE_CODE_OUTPUT_STYLES_FOLDER])]
 
 export const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap((folder) =>
   [false, true].map((gated): Probe => {

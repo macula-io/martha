@@ -27,3 +27,22 @@ export const showingSafely = <Shown extends LinesShownToTheOwner>(io: Shown): Sh
   out: (line: string) => io.out(shownSafely(line)),
   err: (line: string) => io.err(shownSafely(line)),
 })
+
+/** The command ended as asked. */
+export const EXIT_DONE = 0
+/** The command refused, and said why. */
+export const EXIT_REFUSED = 1
+/** The command was not used in a way it knows. */
+export const EXIT_USAGE = 2
+
+/** What starts every line Martha shows the owner on stderr. */
+export const SAID_BY = 'martha:'
+
+/** How a line of Martha's own is told on the owner's stderr. */
+export const tellOwnerOn = (io: LinesShownToTheOwner) => (line: string): void => io.err(`${SAID_BY} ${line}`)
+
+/** The refusal, its words told on stderr, and the status a command that refused ends with. */
+export function refused(io: LinesShownToTheOwner, why: string): number {
+  tellOwnerOn(io)(why)
+  return EXIT_REFUSED
+}
