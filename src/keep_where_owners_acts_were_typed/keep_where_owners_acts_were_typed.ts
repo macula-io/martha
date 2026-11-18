@@ -122,16 +122,3 @@ export function whatTheOwnerReadsOf(place: TheOwnersActsPlace, act: string, firs
   return [...(late === undefined ? [] : [late]), ...unreadable, ...read]
 }
 
-/**
- * What the owner reads of the log once an act's own entry is kept (martha#765): the approvals and the pinned keys, each
- * with its heading and its lines. Read after the entry is kept, never inside the act, or the line the act just wrote
- * would be shown as one no act of theirs recorded writing.
- */
-export function theListingsAfterTheEntryIsKept(place: TheOwnersActsPlace, first_approved_at: string | undefined): readonly string[] {
-  const pairs = [['Your approvals, and where each was typed (martha#619):', 'approve'], ['Your pinned keys, and where each was typed:', 'pin-key']] as const
-  return pairs.flatMap(([what, act]) => {
-    const lines = whatTheOwnerReadsOf(place, act, first_approved_at)
-    return lines.length === 0 ? [] : [what, ...lines]
-  })
-}
-

@@ -29,6 +29,7 @@ import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREWS_PLACE, CREW_ROWS_PLACE, crewStateDirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { OWNER_ACTS_FILE } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
 import { THE_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 import { notRunningToRestart } from '../stop_and_restart_a_member/restart_a_member.ts'
@@ -315,6 +316,19 @@ test('#765: martha approve shows the approval it just made as typed at the owner
   assert.equal(run.status, EXIT_DONE, run.said)
   assert.match(run.said, /line 1: typed at \/dev\/pts\/\d+ \(session \d+\)/, run.said)
   assert.ok(!run.said.includes('WRITTEN WITHOUT THE MARTHA COMMAND'), `the owner's own yes was shown as forged: ${run.said}`)
+})
+
+test('#765: a log that cannot keep where the act was typed is said, and no listing is shown over it', (t) => {
+  const place = placeFor(t)
+  writeFileSync(join(place.root, '.mcp.json'), JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } }))
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
+  // A directory where the log's file belongs: nothing can be appended to it, so the act is made and never named.
+  mkdirSync(join(state.directory, OWNER_ACTS_FILE))
+  const run = marthaOnATerminalTyping('yes\n', place, {}, 'approve')
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.match(run.said, /The act is made, but where it was typed is not kept: /, run.said)
+  assert.ok(!run.said.includes('Your approvals'), `the owner was shown a listing over an act the log does not name: ${run.said}`)
 })
 
 test('martha --version prints the version package.json carries, and nothing else', (t) => {

@@ -60,7 +60,7 @@ import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cros
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { keepWhereItWasTyped, linesOf, seenFromThisProcess, theCutoverTakenOnce, theListingsAfterTheEntryIsKept, theRecordFilesOf, whatTheOwnerReadsOf } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
+import { keepWhereItWasTyped, linesOf, seenFromThisProcess, theCutoverTakenOnce, theRecordFilesOf, whatTheOwnerReadsOf } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
 
 /** The line `martha start` prints once the member is up: its name and its pid. */
 export const startedLine = (member: string, pid: number | string): string => `${member} started, pid ${pid}`
@@ -553,7 +553,10 @@ async function recordedWhereItWasTyped(io: CommandIo, places: Places, asked: Ask
   const unkept = keepWhereItWasTyped(places, asked.act, before, at, seenFromThisProcess())
   if (unkept !== undefined) io.err(`The act is made, but where it was typed is not kept: ${unkept}`)
   // Kept, so the listing can be read: an entry that could not be kept would show the owner's own act as forged.
-  else if (asked.act === 'approve') for (const line of theListingsAfterTheEntryIsKept(places, theFirstApprovalAt(places))) io.out(line)
+  else if (asked.act === 'approve') ([['Your approvals, and where each was typed (martha#619):', 'approve'], ['Your pinned keys, and where each was typed:', 'pin-key']] as const).forEach(([what, act]) => {
+    const lines = whatTheOwnerReadsOf(places, act, theFirstApprovalAt(places))
+    if (lines.length > 0) [what, ...lines].forEach((line) => io.out(line))
+  })
   return done
 }
 
