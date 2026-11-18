@@ -79,6 +79,13 @@ async function untilTheLookSettles(places: ReturnType<typeof aWatchedMember>['pl
   for (let turn = 0; turn < 10; turn += 1) await new Promise((settled) => setImmediate(settled))
 }
 
+test('crew tools built over places that hold a watch hold that same watch, as a launch\'s builder must return them (martha#710)', (t) => {
+  // Typed by the overload as WatchedCrewTools: places with a watch are answered by the first overload, which a builder
+  // that left the watch out could not return. At run time the field is the watch the places carried, not another.
+  const member = aWatchedMember(t)
+  assert.equal(member.tools.served_tools, member.places.served_tools, 'the tools carry a watch other than the one their places held')
+})
+
 test('a beat of a watched launch writes on the row that the member has lost its crew tools, since the host withdrew them', async (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] })
   const member = aWatchedMember(t)
