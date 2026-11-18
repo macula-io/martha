@@ -138,13 +138,19 @@ const theStepsIn = (workflow: string): readonly (readonly string[])[] => {
   return steps
 }
 
-/** The `run:` lines of the step immediately before the one that packs, in this workflow. */
+/** The whole step immediately before the one that packs, in this workflow: every line of it, not its `run:` alone. */
 const theStepBeforeThePackIn = (workflow: string): readonly string[] => {
   const steps = theStepsIn(workflow)
   const pack = steps.findIndex((step) => theRunsOf(step).some((run) => run.includes(THE_PACKER)))
   assert.ok(pack > 0, `${workflow} has no pack step to judge the order by`)
-  return theRunsOf(steps[pack - 1] ?? [])
+  return steps[pack - 1] ?? []
 }
+
+/**
+ * The keys a tree read's step may carry: its name and the read. Any other key can skip the read (`if:`) or void its
+ * refusal (`continue-on-error:`) while its `run:` line still reads the same (martha#601 r=2).
+ */
+const A_READS_KEYS: readonly string[] = ['name', 'run']
 
 /**
  * The dry run rehearses a tree the release would then refuse if it packed it: the rehearsal proves nothing about the
@@ -156,7 +162,10 @@ const theStepBeforeThePackIn = (workflow: string): readonly string[] => {
 test('the dry run reads the pictures as the release does, and immediately before it packs', () => {
   const release = theStepBeforeThePackIn('release.yml')
   const dryRun = theStepBeforeThePackIn('release-dry-run.yml')
-  assert.equal(release.length, 1, 'release.yml does not read the tree once, in the step before its pack')
-  assert.match(release[0] ?? '', /^run: node \S+ --tree --repository \.$/, 'release.yml packs without reading the tree first')
-  assert.deepEqual(dryRun, release, 'the dry run does not run the release\'s own tree read immediately before its pack')
+  const reads = theRunsOf(release)
+  assert.equal(reads.length, 1, 'release.yml does not read the tree once, in the step before its pack')
+  assert.match(reads[0] ?? '', /^run: node \S+ --tree --repository \.$/, 'release.yml packs without reading the tree first')
+  const stray = release.filter((line) => !A_READS_KEYS.includes(/^([\w-]+): /.exec(line)?.[1] ?? line))
+  assert.deepEqual(stray, [], 'release.yml\'s tree read carries a line that can skip it or void its refusal')
+  assert.deepEqual(dryRun, release, 'the dry run\'s step before its pack is not the release\'s own tree read, line for line')
 })
