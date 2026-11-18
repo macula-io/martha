@@ -121,7 +121,7 @@ function relayFor(places: Places, store: DashboardStore, wrote: string[]): Membe
       user_scope: userScopeFor(places.home),
     }),
     turns: turnsRaised(),
-    screen: theOwnersScreen({ beats: store, member: MEMBER, bells: { bell: true, notify: false }, onTheOwnersTerminal: true, write: (bytes) => void wrote.push(bytes) }),
+    screen: theOwnersScreen({ beats: store, member: MEMBER, bells: { bell: true, notify: false }, muted: () => false, onTheOwnersTerminal: true, write: (bytes) => void wrote.push(bytes) }),
     stopMember: () => {},
   })
 }

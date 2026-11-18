@@ -40,6 +40,12 @@ import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { A_COMMIT_ID, type ABranchItRemoves, theTipsItRemoves } from '../read_the_tips_a_removal_covers/read_the_tips_a_removal_covers.ts'
 import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 
+/**
+ * What names an ask the owner said yes to, wherever a yes is stood on: an unbounded contract's line and a criterion's
+ * evidence (martha#513), and the fast-forward's argument (martha#605).
+ */
+export const OWNER_YES = 'owner_yes'
+
 /** The stream the owner's asks live in, in the crew's row streams. */
 export const OWNER_ASKS_STREAM = 'owner_asks'
 
