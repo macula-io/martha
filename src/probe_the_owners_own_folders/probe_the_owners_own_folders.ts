@@ -10,6 +10,7 @@ import { deniedWriteIn } from './the_write_the_host_was_refused.ts'
 import { skillsListedIn } from './the_skills_the_host_listed.ts'
 import { SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
 // --- the trash, and the skills the host syncs from the owner's account (martha#243) ---
 //
@@ -30,7 +31,7 @@ export const TRASH_PROBE: Probe = {
   host: CLAUDE_CODE,
   command: (switches) => ({
     command: CLAUDE,
-    args: ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose', PROMPT, ...switches.args],
+    args: ['-p', THE_MODELS_SWITCH, 'haiku', '--output-format', 'stream-json', '--verbose', PROMPT, ...switches.args],
   }),
   approved: () => {},
   planted: () => {},
@@ -161,7 +162,7 @@ export const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap(
           // launch having failed rather than as the write never being tried.
           '--max-turns',
           '4',
-          '--model',
+          THE_MODELS_SWITCH,
           'haiku',
           '--permission-mode',
           'acceptEdits',

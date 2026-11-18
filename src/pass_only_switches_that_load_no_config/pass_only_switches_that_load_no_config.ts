@@ -12,11 +12,34 @@
 // adds, until someone reads what it does. A switch that takes a value refuses a missing value or one that starts
 // with `-`, so `--model --settings x` cannot carry the second switch through.
 
+/**
+ * The host's switch that names the model a session runs on (martha#541 package 6b): one spelling, used by the table
+ * below and by a start that has to know whether the owner asked for a model of their own.
+ */
+export const THE_MODELS_SWITCH = '--model'
+
 /** The host switches an owner may pass, and whether each takes one value: none loads config, starts code or changes a permission. */
 export const SWITCHES_THAT_LOAD_NO_CONFIG: Readonly<Record<string, 'flag' | 'value'>> = {
-  '--model': 'value',
+  [THE_MODELS_SWITCH]: 'value',
   '--effort': 'value',
   '--verbose': 'flag',
+}
+
+/**
+ * The values the owner gave one switch, in order: none for a switch this table does not hold or one that takes no
+ * value. One reading of what a switch means, so the gate above and a start that must know the owner's model ask it
+ * here rather than each parsing the words again (martha#541 package 6b).
+ */
+export function theValuesGivenTo(switch_name: string, args: readonly string[]): readonly string[] {
+  if (SWITCHES_THAT_LOAD_NO_CONFIG[switch_name] !== 'value') return []
+  const values: string[] = []
+  for (let at = 0; at < args.length; at += 1) {
+    if (args[at] !== switch_name) continue
+    const value = args[at + 1]
+    if (value !== undefined) values.push(value)
+    at += 1
+  }
+  return values
 }
 
 /** An argument gate: may these words reach the host? */

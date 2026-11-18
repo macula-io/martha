@@ -52,6 +52,12 @@
 //     exported or not: three private `const X = 'node_modules'` beside
 //     `DEPENDENCIES` are three restatements, and `const T = 'Bash'` is the same
 //     bypass (martha#289, Uranus's R2);
+//   - a *private* definition whose value equals an exported constant of its OWN
+//     module: `const T = 'Edit'` beside `EDIT_TOOL` is a copy of it, whether the
+//     change added the holder or found it there. Both runs judge it by this one
+//     rule, so a coincidence declared for it is held by the whole-tree run that
+//     holds the list, and the range run never names a site the list cannot
+//     excuse (martha#682);
 //   - a literal equal to a value the range DEFINES, REVALUES or REMOVES, judged
 //     over the whole tree and not only on its own lines (R1): an added constant
 //     makes every old copy of its value stale at once, and a revalued, renamed or
@@ -76,7 +82,8 @@
 //     restate, and a change that adds, keeps or drops one defines nothing. Turning
 //     a holder into an alias still takes its value away (R1), so the annotation
 //     is no way to silence its copies (part b, rule 3);
-//   - the initializer of the constant's own definition in its own module;
+//   - the initializer of the constant's own definition in its own module, and an
+//     exported definition beside another exported holder of its value there;
 //   - a value shorter than SHORTEST_VALUE, which is a word before it is a value;
 //   - a (value, file) the tree declares as a coincidence, with its reason. An
 //     exception that excuses no finding, carries no reason, or repeats another is
@@ -463,7 +470,10 @@ function findingsForADefinition(definition: Definition, line: number, declared: 
     const { constant, gone } = namedFor(holders.find((each) => isACopyAgainst(each.path)) ?? everyHolder.find((each) => isACopyAgainst(each.path)), fromTheChange)
     return [findingAt(definition.path, line, definition.value, constant, 'restates_a_value_the_change_defines', gone)]
   }
-  return namedAgainst(definition, line, heldBefore[0])
+  // Another module's holder first; a private copy of its own module's holder is named by the same rule the change's
+  // values are judged by above, so the whole-tree run that holds the coincidences names every site the range run can
+  // (martha#682).
+  return namedAgainst(definition, line, heldBefore[0] ?? holders.find((each) => each.path === definition.path && isACopyAgainst(each.path)))
 }
 
 /**
@@ -605,7 +615,10 @@ export function literalSitesJudged(sources: readonly CoreSource[], judged: Reado
  * The exceptions that excuse no finding in this tree, carry no reason, or repeat
  * another. An entry is held only while the rule, run over the whole tree without
  * the list, names its value in its file: a word the rule no longer judges there
- * (a type, a property name, an alias's member) needs no excuse.
+ * (a type, a property name, an alias's member) needs no excuse. Every copy the
+ * range run names is one this run names too (martha#682), so an entry for it is
+ * held here; the one finding this run cannot make, a value the change took away,
+ * is fixed by keeping a holder or dropping the value, never excused.
  */
 export function exceptionsNotHeld<Entry extends Exception>(sources: readonly CoreSource[], exceptions: readonly Entry[]): Entry[] {
   const excused = new Set(restatementsIn(sources, { judged: null }).map((finding) => `${finding.literal}\u0000${finding.path}`))
@@ -614,6 +627,10 @@ export function exceptionsNotHeld<Entry extends Exception>(sources: readonly Cor
   return exceptions.filter((exception, index) =>
     exception.reason.trim() === '' || repeated(exception, index) || !excused.has(`${theValueTheCheckHolds(exception.value)}\u0000${exception.file}`))
 }
+
+/** An exception the check cannot hold, as the gate names it after the place that declares it (martha#682). */
+export const lineOfAnExceptionNotHeld = (exception: Exception): string =>
+  `'${exception.value}' in ${exception.file} is declared a coincidence but matches nothing there, or carries no reason, or repeats another entry.`
 
 /** What a finding whose value the change took away tells its author to do. */
 export const GONE = '(gone in this change: keep a constant that holds this value and import it here, or write this line without the value)'

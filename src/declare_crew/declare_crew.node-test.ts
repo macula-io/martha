@@ -20,6 +20,7 @@ import {
   DECLARATION_DIRECTORY,
   PERSON_MINUTES,
   REVIEW_MINUTES,
+  REVIEW_MODEL,
   STALLED_MINUTES,
   DECLARATION_FILE,
   DECLARATION_VERSION,
@@ -36,7 +37,13 @@ import {
   WORKSPACE_LAYOUT,
   WORKTREES_BESIDE_CLONES,
   LAYOUT_TO_ADD,
+  HOLD_REVIEWS,
+  THE_HOST_A_MEMBER_RAN_ON,
   declareCrew,
+  declareCrewOnHosts,
+  holdsReviews,
+  reviewerMembersOf,
+  soloDeclaration,
   workspaceLayoutOf,
   type CrewSettings,
   type WorkspaceLayout,
@@ -454,11 +461,12 @@ test('#374: the declaration v0.1.0 wrote declares, and its channel_read_seconds 
 // --- the host each member runs on (martha#541 package 5) --------------------------------------------------------
 
 test('#541: a member runs on the host it names, else the crew\'s, and the crew\'s is where a member names none (mutant: the member\'s host read as the crew\'s)', async () => {
-  const settings = await declare({
-    ...team,
-    host: THE_ENGINES_HOST,
-    members: [{ name: 'Lead', role: 'supervisor', host: CLAUDE_CODE }, { name: 'Builder1', role: 'builder' }],
-  }).settings
+  // This crew names both hosts, so it is read with both hosts' models (martha#541 package 6b): its `review_model` is
+  // held against every member's host, and the crew's own host is the engine, where a member names none.
+  const settings = await declareOnHosts(
+    { ...team, host: THE_ENGINES_HOST, members: [{ name: 'Lead', role: 'supervisor', host: CLAUDE_CODE }, { name: 'Builder1', role: 'builder' }] },
+    new Map([[CLAUDE_CODE, HOST_MODELS], [THE_ENGINES_HOST, HOST_MODELS]]),
+  )
   assert.equal(settings.members[0]!.host, CLAUDE_CODE)
   assert.equal(theHostOfMember(settings, settings.members[0]!), CLAUDE_CODE, 'the member\'s own host did not win over the crew\'s')
   assert.equal(settings.members[1]!.host, null)
@@ -492,6 +500,141 @@ test('#541: a host Martha does not know is refused by its field, naming the host
   }
 })
 
+
+// --- the reviewer model read across the crew's hosts (martha#541 package 6b) -----------------------------------
+//
+// A crew whose members name two hosts is read with one vocabulary per host, and `review_model` must be one every
+// member's host runs, because any member can spawn a subagent. Each test names the mutant that must fail it:
+//   1 one host's list read for both      a model the other host cannot spell is accepted
+//   2 only the reviewer's host checked   a member that is no reviewer spawns under a host the rule never reads
+//   3 an unrecorded host read as open    a host this release records no models for accepts any name
+
+/** The engine's vocabulary as a closed list: a host that names its models, held to exactly these. */
+const ENGINE_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['engine-model'] }
+
+/** The two hosts, each able to spell `model-r`: read as the crew's reviewer model is held against both. */
+const BOTH_SPELL_IT = new Map<string, ModelVocabulary>([
+  [CLAUDE_CODE, HOST_MODELS],
+  [THE_ENGINES_HOST, { kind: CLOSED_VOCABULARY, names: ['model-r'] }],
+])
+
+/** Claude Code can spell `model-r` and the engine cannot: the case one host's list read for both would accept. */
+const CLAUDE_SPELLS_IT_ONLY = new Map<string, ModelVocabulary>([[CLAUDE_CODE, HOST_MODELS], [THE_ENGINES_HOST, ENGINE_MODELS]])
+
+/** Claude Code as this fixture's host, and the engine taking any name its provider serves. */
+const CLAUDE_AND_AN_OPEN_ENGINE = new Map<string, ModelVocabulary>([[CLAUDE_CODE, HOST_MODELS], [THE_ENGINES_HOST, OPEN_HOST]])
+
+/** The declaration a two-host crew writes: a builder and a reviewer, each on a host the test names. */
+const acrossTwoHosts = (review_model: string | undefined, hosts: { readonly builder: string; readonly reviewer: string }) => ({
+  ...team,
+  members: [
+    { name: 'Builder1', role: 'builder', host: hosts.builder },
+    { name: 'Reviewer1', role: 'reviewer', host: hosts.reviewer, model: review_model ?? null },
+  ],
+  mode: { ...team.mode, may: { ...allActsTo([OWNER]), [HOLD_REVIEWS]: ['reviewer'] } },
+  house_rules: { ...without(REVIEW_MODEL, team.house_rules), ...(review_model === undefined ? {} : { [REVIEW_MODEL]: review_model }) },
+})
+
+const declareOnHosts = (declaration: unknown, vocabularies: ReadonlyMap<string, ModelVocabulary>) =>
+  declareCrewOnHosts(storeOf({ [declaration_path]: JSON.stringify(declaration) }).store, root, vocabularies)
+
+test('#541 6b: a crew whose members name two hosts reads, and the roles that hold hold_reviews are its reviewers', async () => {
+  const settings = await declareOnHosts(acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST }), CLAUDE_AND_AN_OPEN_ENGINE)
+  assert.equal(settings.house_rules.review_model, 'model-r')
+  assert.deepEqual(settings.members.map((member) => theHostOfMember(settings, member)), [CLAUDE_CODE, THE_ENGINES_HOST])
+  assert.deepEqual(reviewerMembersOf(settings).map((member) => member.name), ['Reviewer1'])
+  assert.equal(holdsReviews(settings, settings.members[0]!), false, 'a member whose role holds no reviews was read as a reviewer member')
+})
+
+test('#541 6b: a crew whose two closed hosts both list the reviewer model reads it', async () => {
+  const settings = await declareOnHosts(acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST }), BOTH_SPELL_IT)
+  assert.equal(settings.house_rules.review_model, 'model-r')
+})
+
+test('#541 6b: the reviewer model one of the crew\'s hosts cannot spell is refused, naming that host (mutant: one host\'s list for both)', async () => {
+  await assert.rejects(
+    declareOnHosts(acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST }), CLAUDE_SPELLS_IT_ONLY),
+    (error: unknown) => {
+      assert.ok(error instanceof DeclarationRefused, `expected a DeclarationRefused, got ${String(error)}`)
+      assert.equal(error.field, 'house_rules.review_model')
+      assert.ok(error.message.includes(THE_ENGINES_HOST), error.message)
+      assert.ok(error.message.includes('engine-model'), error.message)
+      return true
+    },
+  )
+})
+
+test('#541 6b: every member\'s host is held to the reviewer model, not only the reviewer member\'s (mutant: only the reviewer\'s host checked)', async () => {
+  // The reviewer sits on the host that can spell the model; the builder's host cannot. A rule that reads only the
+  // reviewer's host accepts this crew, and every review the builder spawns on the engine would then be held to a name
+  // the engine never runs.
+  await assert.rejects(
+    declareOnHosts(acrossTwoHosts('model-r', { builder: THE_ENGINES_HOST, reviewer: CLAUDE_CODE }), CLAUDE_SPELLS_IT_ONLY),
+    (error: unknown) => {
+      assert.ok(error instanceof DeclarationRefused, `expected a DeclarationRefused, got ${String(error)}`)
+      assert.equal(error.field, 'house_rules.review_model')
+      assert.ok(error.message.includes(THE_ENGINES_HOST), error.message)
+      return true
+    },
+  )
+})
+
+test('#541 6b: a member\'s host this release records no models for is refused by name (mutant: an unrecorded host read as open)', async () => {
+  await assert.rejects(
+    declareOnHosts(acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST }), new Map([[CLAUDE_CODE, HOST_MODELS]])),
+    (error: unknown) => {
+      assert.ok(error instanceof DeclarationRefused, `expected a DeclarationRefused, got ${String(error)}`)
+      assert.equal(error.field, 'house_rules.review_model')
+      assert.ok(error.message.includes('records no models'), error.message)
+      assert.ok(error.message.includes(THE_ENGINES_HOST), error.message)
+      return true
+    },
+  )
+})
+
+test('#541 6b: a crew that names no reviewer model reads on a host this release records none for', async () => {
+  const settings = await declareOnHosts(acrossTwoHosts(undefined, { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST }), new Map([[CLAUDE_CODE, HOST_MODELS]]))
+  assert.equal(settings.house_rules.review_model, null)
+  assert.deepEqual(settings.members.map((member) => theHostOfMember(settings, member)), [CLAUDE_CODE, THE_ENGINES_HOST])
+})
+
+test('#541 6b: declareCrew is the one-host wrapper, and a one-host crew reads through it as through declareCrewOnHosts', async () => {
+  const viaWrapper = await declare(team).settings
+  const viaHosts = await declareOnHosts(team, new Map([[CLAUDE_CODE, HOST_MODELS]]))
+  assert.deepEqual(viaWrapper.house_rules, viaHosts.house_rules)
+  assert.deepEqual(viaWrapper.members, viaHosts.members)
+  assert.deepEqual(viaWrapper.mode.may, viaHosts.mode.may)
+})
+
+test('#541 6b r=2: declareCrew keeps its reading, so a two-host crew its callers read is held to the one vocabulary they hand it (mutant: the one-host map put back)', async () => {
+  // Every caller but `martha start` reads the crew with declareCrew: `martha approve`, the launcher, the crew tools, the
+  // refresh flow, the crew text and init. A two-host crew (package 5) that names a review_model the vocabulary they hand
+  // over spells must read for all of them, as it did before 6b; holding each member's own host is declareCrewOnHosts'.
+  const twoHosts = acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST })
+  const settings = await declare(twoHosts).settings
+  assert.equal(settings.house_rules.review_model, 'model-r')
+  assert.deepEqual(settings.members.map((member) => theHostOfMember(settings, member)), [CLAUDE_CODE, THE_ENGINES_HOST])
+  // A name that vocabulary cannot spell is refused as it always was, naming what the host runs.
+  await assert.rejects(declare({ ...twoHosts, house_rules: { ...twoHosts.house_rules, [REVIEW_MODEL]: 'engine-model' } }).settings, (error: unknown) => {
+    assert.ok(error instanceof DeclarationRefused, `expected a DeclarationRefused, got ${String(error)}`)
+    assert.equal(error.field, 'house_rules.review_model')
+    assert.ok(error.message.includes(`it runs ${HOST_MODELS.names.join(', ')}`), error.message)
+    return true
+  })
+})
+
+test('#541 6b: hold_reviews names the reviewer members by the act, and a role merely called reviewer holds nothing', async () => {
+  const fromInit = await declare(soloDeclaration('Ann')).settings
+  assert.deepEqual(reviewerMembersOf(fromInit).map((member) => member.name), ['reviewer'], 'init\'s solo crew holds no reviewer member')
+  assert.equal(holdsReviews(fromInit, fromInit.members.find((member) => member.name === 'builder')!), false)
+  assert.equal(THE_HOST_A_MEMBER_RAN_ON, CLAUDE_CODE)
+
+  // A file an earlier release's init wrote names the act nowhere: it is the owner's alone, even though its member is
+  // in a role called reviewer, so no member is held to a rule its declaration never named.
+  const old = await declareCrew(storeOf({ [declaration_path]: DECLARED_BY_V0_1_0_TEXT }).store, root, HOST_MODELS)
+  assert.deepEqual(old.mode.may[HOLD_REVIEWS], [OWNER], 'an act a declaration does not name was not read as the owner\'s alone')
+  assert.deepEqual(reviewerMembersOf(old), [], 'a member in the role "reviewer" was made a reviewer member without the act')
+})
 
 test('#253: the interval a crew declares is the one its settings carry', async () => {
   assert.equal((await declare({ ...solo, channel_read_seconds: 7 }).settings).channel_read_seconds, 7)

@@ -14,7 +14,8 @@
 // Which tool spawns a subagent, and which of its arguments carry the type, the description and the model, are the
 // adapter's to say; the core compares the names the adapter has resolved and never splits a model id itself.
 
-import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import { holdsReviews, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
+import { THE_MODELS_SWITCH, theValuesGivenTo } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
 // Which tool spawns a subagent, and which of its arguments carry the type, the description and the model, are the
 // adapter's to say. The two names are compared as they are written: the host publishes no mapping from an alias to a
@@ -97,6 +98,51 @@ function wordsOf(text: string): readonly string[] {
 /** A field of a call as text, trimmed; '' when the member named none. */
 function textOf(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * Why a reviewer member may not run a session with this model, or undefined when it may (martha#541 package 6b).
+ *
+ * A member whose role holds `hold_reviews` has its own session held to the crew's reviewer model: nothing then spawns a
+ * review, the session IS one. So its declared `model` must be that model, and `null` (the host's own) is refused the
+ * same way, because nothing then says it runs the review model.
+ *
+ * It reads the model the declaration names, never one a host reports: a host's report is an id the crew's alias resolves
+ * to, and no recording yet maps one to the other (see ../declare_crew and macula-io/martha#541 package 6b r=3). Taking a
+ * reported id here would compare an alias with a full id and stop every correct review. The owner's own arguments are a
+ * second way to move a session off its model, and `theOwnersModelSwitchRefusal` below refuses those.
+ *
+ * It is a house rule and not a security boundary, as the spawn rule is: a member that changes its own model mid-session
+ * defeats it, which is why a switch is refused for a reviewer member too (../switch_a_members_model).
+ *
+ * The rule is off when the crew names no `review_model`: there is no model to hold a reviewer to, and a crew that names
+ * none — every crew written before this act existed included — starts as it did.
+ */
+export function aReviewerMembersModelRefusal(member: Member, settings: CrewSettings): string | undefined {
+  if (settings.house_rules.review_model === null) return undefined
+  if (!holdsReviews(settings, member)) return undefined
+  const review_model = settings.house_rules.review_model
+  if (member.model === review_model) return undefined
+  const its_model = member.model === null ? "the host's own" : member.model
+  return `${member.name} holds reviews (role ${member.role}), and this crew holds reviews to ${review_model}; its model is ${its_model}.`
+}
+
+/**
+ * Why a reviewer member may not start when the owner's own arguments carry the host's model switch, or undefined
+ * (martha#541 package 6b, r=3). A start hands the host the member's declared model first and the owner's arguments
+ * after it, so the owner's `--model` is a second value for one switch, and nothing reads back which value a host takes.
+ * So it is refused, never reordered: a start does not depend on which of two values wins.
+ *
+ * The value is not judged. The declared model is the only one a reviewer member may start on, so the reviewer model
+ * itself is refused too, and there is no second reading of what a correct value would be. A member whose role holds no
+ * reviews keeps the owner's arguments exactly as it did.
+ */
+export function theOwnersModelSwitchRefusal(member: Member, settings: CrewSettings, args: readonly string[]): string | undefined {
+  const review_model = settings.house_rules.review_model
+  if (review_model === null || !holdsReviews(settings, member)) return undefined
+  const given = theValuesGivenTo(THE_MODELS_SWITCH, args)
+  if (given.length === 0) return undefined
+  return `${member.name} holds reviews (role ${member.role}), and this crew holds reviews to ${review_model}; the owner's ${THE_MODELS_SWITCH} names ${given.join(', ')}, so this member cannot be started on the model it is held to.`
 }
 
 /** What the crew's declaration said, or why it could not be read: what the rule is decided over here. */
