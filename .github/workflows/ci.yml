@@ -462,6 +462,9 @@ jobs:
         with:
           node-version: '24'
       - run: prove_a_clean_install_in_a_throwaway_container/prove_a_clean_install_in_a_throwaway_container.sh --self-test
+      # The nightly live run's throwaway repository (martha#639): stand-in gh and git answer, so no GitHub call is
+      # made here, and each guard that keeps the bot's token to the bot is a case that fails by name.
+      - run: prove_a_clean_install_in_a_throwaway_container/keep_a_throwaway_repository.sh --self-test
 
   # Every workflow is one GitHub accepts (martha#21 r=3): a workflow GitHub rejects
   # never runs, and the only sign is a failed run with no jobs, which nobody reads.
