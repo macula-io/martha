@@ -42,6 +42,11 @@ export interface MemoryOff {
 export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlaces {
   readonly host_version: string
   /**
+   * The variable that, set and empty, points the host at the owner's default sign-in store, cut from the binary
+   * (martha#602): a member starts with a config folder of its own and reaches the owner's sign-in through it, uncopied.
+   */
+  readonly sign_in_store_variable: string
+  /**
    * Which of a file tool's rules the host's file permission checks match, cut from the binary (martha#226). It is a
    * field of its own rather than a mix-in: what is recorded is the host's statement, and the mapping is derived.
    */
@@ -95,6 +100,14 @@ export const RECORDED_HOST: RecordedHost = recordedHostFrom(readFileSync(new URL
  * and a recording without it cannot say where a member must not write (martha#154). The recorder cuts the same field,
  * and a recording that cannot be cut is a failed recording; this is the other half, a text that loads.
  */
+/** The recorded sign-in store variable, or a refusal when the recording holds none (martha#602). */
+function signInStoreVariableOf(recording: RecordedHost): string {
+  if (typeof recording.sign_in_store_variable !== 'string' || recording.sign_in_store_variable === '') {
+    throw new Error("The recording does not hold the variable the host picks its sign-in store by, so how a member reaches the owner's sign-in cannot be told (martha#602).")
+  }
+  return recording.sign_in_store_variable
+}
+
 export function recordedHostFrom(text: string): RecordedHost {
   const recording = JSON.parse(text) as RecordedHost
   if (!Array.isArray(recording.classic_hook_events) || recording.classic_hook_events.length === 0) {
@@ -111,6 +124,7 @@ export function recordedHostFrom(text: string): RecordedHost {
   if (!Array.isArray(recording.legacy_global_config_names) || recording.legacy_global_config_names.length === 0) {
     throw new Error("The recording does not hold the global config file the host prefers over .claude.json, so the file the owner's user MCP servers are read from cannot be told (martha#187).")
   }
+  signInStoreVariableOf(recording)
   ruleMatchersIn(filePermissionRulesOf(recording).matcher)
   failedAgentsReportOf(recording)
   return recording
@@ -194,3 +208,9 @@ export const CLAUDE_CODE_FILE_RULE_TOOL: string = theToolItsChecksMatch(
   ruleMatchersIn(filePermissionRulesOf(RECORDED_HOST).matcher),
   WHOLE_FILE_TOOL,
 )
+
+/**
+ * The variable the recorded host picks its sign-in store by, apart from its config folder (martha#602): set and empty,
+ * the store is the owner's default one, so a member with a config folder of its own is signed in without a copy.
+ */
+export const CLAUDE_CODE_SIGN_IN_STORE_VARIABLE: string = RECORDED_HOST.sign_in_store_variable

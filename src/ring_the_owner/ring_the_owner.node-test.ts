@@ -13,7 +13,7 @@ import { OWNER } from '../declare_crew/declare_crew.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { takeAnOwnerDialog, type RaisingADialog } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
-import { NO_BELLS, NOTIFICATION_ENDING, NOTIFICATION_ESCAPE, notificationIdOf, theBellsFor, THE_BELL, type TheBellsSwitch } from './ring_the_owner.ts'
+import { NO_BELLS, NOTIFICATION_ENDING, NOTIFICATION_ESCAPE, notificationIdOf, theBellsFor, theCloseOf, THE_BELL, type TheBellsSwitch } from './ring_the_owner.ts'
 import { EDIT_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 const BOTH: TheBellsSwitch = { bell: true, notify: true }
@@ -67,12 +67,12 @@ const metadataOf = (chunks: readonly Chunk[], key: string): (string | undefined)
 
 test('ten beats while the host is asking ring the bell once (test 6)', () => {
   const first = asking(200)
-  assert.notEqual(theBellsFor(row(), first, BOTH, true), '', 'the change into needs you rings')
+  assert.notEqual(theBellsFor(row(), first, BOTH, true, false), '', 'the change into needs you rings')
   const rang: string[] = []
   let held = first
   for (let beat = 0; beat < 10; beat += 1) {
     const next = takeAnOwnerDialog(held, { change: 'opened', at: first.at + BEAT_INTERVAL_MS * (beat + 1), raised: A_PERMISSION })
-    const bytes = theBellsFor(held, next, BOTH, true)
+    const bytes = theBellsFor(held, next, BOTH, true, false)
     if (bytes !== '') rang.push(bytes)
     held = next
   }
@@ -82,34 +82,34 @@ test('ten beats while the host is asking ring the bell once (test 6)', () => {
 test('the bell rings again on the next change into needs you, and never on the way out (test 6)', () => {
   const first = asking(200)
   const answered = takeAnOwnerDialog(first, { change: 'closed', at: 300, key: theKeyOfThePermission() })
-  const onTheWayOut = theBellsFor(first, answered, BOTH, true)
+  const onTheWayOut = theBellsFor(first, answered, BOTH, true, false)
   assert.equal(onTheWayOut.includes(THE_BELL), false, 'a dialog closing rings no bell')
   assert.equal(onTheWayOut, `${NOTIFICATION_ESCAPE}i=${notificationIdOf('Vesta')}:p=close;${NOTIFICATION_ENDING}`, 'and takes the notification it showed down instead (martha#574, T5)')
   const again = takeAnOwnerDialog(answered, { change: 'opened', at: 400, raised: A_PERMISSION })
-  assert.notEqual(theBellsFor(answered, again, BOTH, true), '', 'being asked a second time rings again')
+  assert.notEqual(theBellsFor(answered, again, BOTH, true, false), '', 'being asked a second time rings again')
 })
 
 test('a member\'s own report that it waits on the owner rings nothing (test 6)', () => {
   const waiting = { ...row(200), state: 'waiting' as const, waits: { on: OWNER, for: 'a yes', since: 200 } }
-  assert.equal(theBellsFor(row(), waiting, BOTH, true), '', 'the bell is the host\'s word, not a member\'s report')
+  assert.equal(theBellsFor(row(), waiting, BOTH, true, false), '', 'the bell is the host\'s word, not a member\'s report')
 })
 
 test('with both bells off, or no terminal of the owner\'s, nothing is written (test 7)', () => {
   const first = asking(200)
-  assert.equal(theBellsFor(row(), first, NO_BELLS, true), '', 'both off writes nothing')
-  assert.equal(theBellsFor(row(), first, BOTH, false), '', 'a member started without the owner\'s terminal rings nothing')
+  assert.equal(theBellsFor(row(), first, NO_BELLS, true, false), '', 'both off writes nothing')
+  assert.equal(theBellsFor(row(), first, BOTH, false, false), '', 'a member started without the owner\'s terminal rings nothing')
 })
 
 test('each bell can be had without the other (test 7)', () => {
   const first = asking(200)
-  assert.equal(theBellsFor(row(), first, { bell: true, notify: false }, true), THE_BELL, 'the bell alone is the one byte')
-  const notify = theBellsFor(row(), first, { bell: false, notify: true }, true)
+  assert.equal(theBellsFor(row(), first, { bell: true, notify: false }, true, false), THE_BELL, 'the bell alone is the one byte')
+  const notify = theBellsFor(row(), first, { bell: false, notify: true }, true, false)
   assert.equal(notify.startsWith(NOTIFICATION_ESCAPE), true, 'the notification alone opens the sequence')
   assert.equal(notify.endsWith(NOTIFICATION_ENDING), true, 'and ends it')
 })
 
 test('the notification is a title chunk and a body chunk that completes it, with the keys kitty reads (martha#574)', () => {
-  const chunks = chunksOf(theBellsFor(row(), asking(200), { bell: false, notify: true }, true))
+  const chunks = chunksOf(theBellsFor(row(), asking(200), { bell: false, notify: true }, true, false))
 
   assert.equal(chunks.length, 2, 'a title, then the body that completes it')
   assert.deepEqual(metadataOf(chunks, 'p'), ['title', 'body'], 'each chunk says which of the two it carries')
@@ -119,9 +119,9 @@ test('the notification is a title chunk and a body chunk that completes it, with
 })
 
 test('one id per member, so a second member does not take the first member\'s notification away (martha#574)', () => {
-  const first = chunksOf(theBellsFor(row(), asking(200), { bell: false, notify: true }, true))
+  const first = chunksOf(theBellsFor(row(), asking(200), { bell: false, notify: true }, true, false))
   const other = { ...row(), member: 'Juno' }
-  const second = chunksOf(theBellsFor(row(), takeAnOwnerDialog(other, { change: 'opened', at: 200, raised: A_PERMISSION }), { bell: false, notify: true }, true))
+  const second = chunksOf(theBellsFor(row(), takeAnOwnerDialog(other, { change: 'opened', at: 200, raised: A_PERMISSION }), { bell: false, notify: true }, true, false))
   const idOf = (chunks: readonly Chunk[]): (string | undefined)[] => metadataOf(chunks, 'i')
 
   assert.match(idOf(first)[0] ?? '', /^[A-Za-z0-9_+.-]+$/, 'an id kitty\'s protocol accepts')
@@ -133,7 +133,7 @@ test('one id per member, so a second member does not take the first member\'s no
 test('the notification is taken down when the row stops needing the owner, and the bell does not ring again (martha#574, T5)', () => {
   const first = asking(200)
   const answered = takeAnOwnerDialog(first, { change: 'closed', at: 300, key: theKeyOfThePermission() })
-  const close = theBellsFor(first, answered, { bell: true, notify: true }, true)
+  const close = theBellsFor(first, answered, { bell: true, notify: true }, true, false)
 
   assert.equal(close, `${NOTIFICATION_ESCAPE}i=${notificationIdOf('Vesta')}:p=close;${NOTIFICATION_ENDING}`, 'exactly kitty\'s close, for the id the notification was shown under, and no bell')
   const chunks = chunksOf(close)
@@ -146,7 +146,7 @@ test('the close names the member that was asking, so an answered question takes 
   const mine = asking(200)
   const others = takeAnOwnerDialog({ ...row(), member: 'Juno' }, { change: 'opened', at: 200, raised: A_PERMISSION })
   const closed = (holding: DashboardRow): Chunk[] =>
-    chunksOf(theBellsFor(holding, takeAnOwnerDialog(holding, { change: 'closed', at: 300, key: theKeyOfThePermission() }), { bell: false, notify: true }, true))
+    chunksOf(theBellsFor(holding, takeAnOwnerDialog(holding, { change: 'closed', at: 300, key: theKeyOfThePermission() }), { bell: false, notify: true }, true, false))
   const closeOfMine = metadataOf(closed(mine), 'i')
   const closeOfOthers = metadataOf(closed(others), 'i')
 
@@ -159,16 +159,29 @@ test('nothing is taken down when nothing was shown (martha#574, T5)', () => {
   const first = asking(200)
   const answered = takeAnOwnerDialog(first, { change: 'closed', at: 300, key: theKeyOfThePermission() })
 
-  assert.equal(theBellsFor(first, answered, { bell: true, notify: false }, true), '', 'no notification was shown, so none comes down')
-  assert.equal(theBellsFor(first, answered, { bell: false, notify: true }, false), '', 'no terminal of the owner\'s, so nothing was shown or closed there')
-  assert.equal(theBellsFor(first, first, { bell: false, notify: true }, true), '', 'a beat that stays in needs-you closes nothing')
-  assert.equal(theBellsFor(null, answered, { bell: false, notify: true }, true), '', 'with no row before, this terminal showed nothing to take down')
+  assert.equal(theBellsFor(first, answered, { bell: true, notify: false }, true, false), '', 'no notification was shown, so none comes down')
+  assert.equal(theBellsFor(first, answered, { bell: false, notify: true }, false, false), '', 'no terminal of the owner\'s, so nothing was shown or closed there')
+  assert.equal(theBellsFor(first, first, { bell: false, notify: true }, true, false), '', 'a beat that stays in needs-you closes nothing')
+  assert.equal(theBellsFor(null, answered, { bell: false, notify: true }, true, false), '', 'with no row before, this terminal showed nothing to take down')
+})
+
+test('the owner\'s mute silences the way in and never the way out (martha#371)', () => {
+  const first = asking(200)
+  const answered = takeAnOwnerDialog(first, { change: 'closed', at: 300, key: theKeyOfThePermission() })
+
+  assert.equal(theBellsFor(row(), first, BOTH, true, true), '', 'a muted member rings nothing into needs you, bell and notification both')
+  assert.notEqual(theBellsFor(row(), first, BOTH, true, false), '', 'and the same beat rings with the mute lifted')
+  assert.equal(
+    theBellsFor(first, answered, { bell: true, notify: true }, true, true),
+    theCloseOf('Vesta'),
+    'a member muted while its ask was open still has its notification taken down when the ask is answered',
+  )
 })
 
 test('what the notification carries is base64, so no server\'s text can end the sequence early (test 4)', () => {
   const question = 'a\u001b]0;x\u0007b'
   const asked = takeAnOwnerDialog(row(200), { change: 'opened', at: 200, raised: { kind: 'elicitation', server: 'mesh', question, id: 'e-1' } })
-  const chunks = chunksOf(theBellsFor(row(), asked, { bell: false, notify: true }, true))
+  const chunks = chunksOf(theBellsFor(row(), asked, { bell: false, notify: true }, true, false))
 
   for (const chunk of chunks) assert.equal(/^[A-Za-z0-9+/]*={0,2}$/.test(chunk.payload), true, 'the payload is base64 and nothing else')
   assert.equal(Buffer.from(chunks[1]?.payload ?? '', 'base64').toString('utf8'), 'mesh asks: a]0;xb', 'and the body says what the row says, with what a terminal acts on gone')

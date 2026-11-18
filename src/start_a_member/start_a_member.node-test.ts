@@ -57,6 +57,7 @@ import { hostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
 import { canonicalHashWithoutModel, sha256Of } from '../put_the_owners_model_back/the_owners_settings_file.ts'
 import { MODEL_PLACE, theModelMarker, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
 import { crewSubdirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
@@ -941,4 +942,14 @@ test('#359: a switch a killed launch left unfinished is finished before the memb
   const kept = JSON.parse(readFileSync(join(crew.path, theModelMarker(BUILDER!.name)), 'utf8')) as ModelMarker
   assert.equal(kept.settings, undefined, 'the record of a switch this launch finished outlived it')
   assert.equal(kept.switched, true, 'the member\'s own switch was taken away by the recovery, which is about the owner\'s file')
+})
+
+test('the crew\'s bells are kept in the crew\'s own place, and every launch is given it (martha#371)', (t) => {
+  const place = placeFor(t, {})
+  const places = launcherPlacesOf(place.state, place.relay_root, place.root)
+  assert.ok('bells' in places, 'refusal' in places ? places.refusal : '')
+  const crew = crewSubdirectory(place.state.state_root, place.root, THE_BELLS_PLACE)
+  assert.ok('path' in crew)
+  assert.equal(places.bells, crew.path, 'the launcher reads the owner\'s mutes from the crew\'s own place')
+  assert.ok(places.bells.startsWith(join(place.home, 'state')), 'in Martha\'s state, never in the checkout')
 })

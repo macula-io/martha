@@ -23,7 +23,7 @@ import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { StringDecoder } from 'node:string_decoder'
 
-import { HOST_TRUST_RECORD_FILE, isRunnableFile } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { API_KEY_ANSWERS_KEY, API_KEY_VARIABLE, apiKeyAnsweredYes, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, isRunnableFile, TRUST_ACCEPTED_KEY } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { ranOnAPtyHoldingALifeline, spawnOnAPtyHoldingALifeline } from '../end_a_launch_when_its_run_ends/keep_the_lifeline_in.ts'
 import { anyJournalHasALine, readTheNewestRelayJournal, relayJournalDirectory } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -57,9 +57,8 @@ export const HOST_TERMINAL = 'xterm-256color'
 /** The host's own command that ends its session. */
 export const HOST_EXIT_COMMAND = '/exit'
 
-/** The stand-in's key. The host keeps the last characters of a key it was told to use, and compares those. */
+/** The stand-in's key. */
 const STAND_IN_KEY = `sk-ant-api03-${'0'.repeat(80)}`
-const KEY_TAIL_LENGTH = 20
 
 /** Whether the terminal shows what martha start prints once `member` is up, as its startedLine writes it. */
 const memberIsUp = (member: string, shown: string): boolean => plainTextOf(shown).includes(startedLine(member, ''))
@@ -228,7 +227,7 @@ export function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, bas
     XDG_STATE_HOME: stateHomeUnder(run.home),
     XDG_RUNTIME_DIR: runtime,
     ANTHROPIC_BASE_URL: base_url,
-    ANTHROPIC_API_KEY: STAND_IN_KEY,
+    [API_KEY_VARIABLE]: STAND_IN_KEY,
     // Last, from Claude Code's own row, as every launch environment spreads it (refuse_launch_of_unapproved_config):
     // nothing above it can turn the auto-updater back on inside a run (martha#460 r=1, martha#474).
     ...HOSTS[CLAUDE_CODE].env_last,
@@ -241,9 +240,9 @@ export function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, bas
  */
 export function firstRunDone(home: string, checkout: string): void {
   const record = {
-    hasCompletedOnboarding: true,
-    customApiKeyResponses: { approved: [STAND_IN_KEY.slice(-KEY_TAIL_LENGTH)], rejected: [] },
-    projects: { [checkout]: { hasTrustDialogAccepted: true } },
+    [FIRST_RUN_DONE_KEY]: true,
+    [API_KEY_ANSWERS_KEY]: apiKeyAnsweredYes(STAND_IN_KEY),
+    projects: { [checkout]: { [TRUST_ACCEPTED_KEY]: true } },
   }
   writeFileSync(join(home, HOST_TRUST_RECORD_FILE), `${JSON.stringify(record)}\n`, { mode: 0o600 })
 }

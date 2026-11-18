@@ -34,6 +34,8 @@
 
 import { createHash } from 'node:crypto'
 
+import { OWNER_YES } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+
 /** The write fence that opens the block, and the one that closes it. */
 export const CONTRACT_BLOCK = 'package-contract'
 const A_FENCE = '```'
@@ -50,7 +52,7 @@ export type ContractAction = (typeof CONTRACT_ACTIONS)[number]
  * owner answered yes to. Each is read at the revision the package's work would land on, so evidence of another revision
  * is no evidence for this one.
  */
-export const EVIDENCE_KINDS = ['test', 'document', 'ci', 'owner_yes'] as const
+export const EVIDENCE_KINDS = ['test', 'document', 'ci', OWNER_YES] as const
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number]
 
 /**
@@ -149,7 +151,7 @@ interface AContractDraft {
   owner_yes?: number
 }
 
-const THE_PARTS = ['goal', 'acceptance', 'allowed', 'budget', 'done', 'unbounded', 'owner_yes'] as const
+const THE_PARTS = ['goal', 'acceptance', 'allowed', 'budget', 'done', 'unbounded', OWNER_YES] as const
 const ACCEPTANCE = 'acceptance'
 
 /** The criterion and the evidence an `a criterion | kind: what` line gives, or why the line is not one. */
@@ -172,7 +174,7 @@ function theEvidenceIn(said: string, criterion: string): Step<ACriterion['eviden
     return no(`${JSON.stringify(kind)} is not evidence this tree reads (${EVIDENCE_KINDS.join(', ')}): ${JSON.stringify(criterion)}.`)
   }
   if (of === '') return no(`the criterion ${JSON.stringify(criterion)} names no ${kind} to evidence it.`)
-  if (kind === 'owner_yes' && !isAnAsk(of)) return no(`the criterion ${JSON.stringify(criterion)} is evidenced by an ask, and ${JSON.stringify(of)} is not one.`)
+  if (kind === OWNER_YES && !isAnAsk(of)) return no(`the criterion ${JSON.stringify(criterion)} is evidenced by an ask, and ${JSON.stringify(of)} is not one.`)
   return { ok: { kind: kind as EvidenceKind, of } }
 }
 

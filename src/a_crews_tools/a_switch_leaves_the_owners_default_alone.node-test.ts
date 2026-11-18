@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -21,6 +21,7 @@ import { after, test } from 'node:test'
 
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
+import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
@@ -563,7 +564,31 @@ test('a record a launch cannot finish puts its line in the member\'s own row, no
     host: { stores: { crew: keepTheCrewsFilesAsDirectories(crew.crew) } },
     owners: crew.owners,
     beats: crew.beats,
+    stillThere: existsSync,
   })
   assert.equal(said.length, 1, `the launch finished the record it should have left to the owner: ${JSON.stringify(said)}`)
   assert.equal(crew.theRow()?.['needs'], said[0], 'the row does not say what needs the owner about the record the launch could not finish')
+})
+
+test('a record a killed launch left on a member\'s own config folder, now gone, is closed at the next launch and puts nothing back (martha#602, mutant: the gone folder not closed)', async () => {
+  const crew = await aCrew()
+  await switched(crew.tools)
+  await reported(crew)
+  const marker = theRecordOf(crew.crew)
+  assert.ok(marker !== null, 'the test could not read the record of the member\'s switch')
+  const record = await aRecordTheWaitNeverSaw(crew)
+  // The folder the switch was guarded in went with its launch's snapshot: it is named, and it is not there.
+  const gone = { ...record, config_dir: join(homeOfAll, 'a-launch-that-was-killed', MEMBER_CONFIG_FOLDER) }
+  theOwnersDefaultKept({ stores: { crew: keepTheCrewsFilesAsDirectories(crew.crew) } }, MEMBER, marker, gone)
+  const before = readFileSync(crew.settings_file, 'utf8')
+  const said = await finishTheOwnersDefaultAtLaunch({
+    member: MEMBER,
+    host: { stores: { crew: keepTheCrewsFilesAsDirectories(crew.crew) } },
+    owners: crew.owners,
+    beats: crew.beats,
+    stillThere: existsSync,
+  })
+  assert.deepEqual(said, [], 'the launch told the owner about a switch whose folder is gone, which nothing can finish')
+  assert.equal(theRecordOf(crew.crew)?.settings, undefined, 'the record of a switch on a folder that is gone was kept, so every launch would repeat it')
+  assert.equal(readFileSync(crew.settings_file, 'utf8'), before, 'closing a gone folder\'s record wrote into the owner\'s file')
 })

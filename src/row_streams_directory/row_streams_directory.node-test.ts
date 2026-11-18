@@ -13,7 +13,10 @@ import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contrac
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { ACT_NOT_SENT, ActNotSent, ledgerStreamOf, sendOutwardAct, type LedgerHost } from '../log_ledger/log_ledger.ts'
-import { ROW_FILE_MODE, rowFileNameOf, rowStreamsDirectory, streamDirectoryNameOf } from './row_streams_directory.ts'
+import { ROW_FILE_MODE, rowFileNameOf, rowStreamsDirectory, streamDirectoryNameOf, streamOfDirectoryName } from './row_streams_directory.ts'
+
+/** A name under the rows directory that no stream is kept under: it does not start with a stream's mark. */
+const STAGING_NAME_NO_STREAM_HAS = '.not-a-stream'
 
 const scratch = (t: TestContext): string => {
   const root = mkdtempSync(join(tmpdir(), 'martha-rows-'))
@@ -56,6 +59,9 @@ test('stream names holding .., /, NUL or a leading dot never leave the stream di
   const entries = readdirSync(directory)
   assert.equal(entries.length, names.length)
   assert.equal(new Set(names.map(streamDirectoryNameOf)).size, names.length)
+  // Each directory names its stream back, so the streams a directory holds can be listed (martha#602).
+  assert.deepEqual(entries.map(streamOfDirectoryName).sort(), [...names].sort())
+  assert.equal(streamOfDirectoryName(STAGING_NAME_NO_STREAM_HAS), undefined)
   for (const entry of entries) {
     assert.match(entry, /^[A-Za-z0-9_-]+$/)
     assert.equal(relative(directory, join(directory, entry)), entry)

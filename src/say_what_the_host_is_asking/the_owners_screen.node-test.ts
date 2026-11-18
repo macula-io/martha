@@ -15,7 +15,7 @@ import { after, test } from 'node:test'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { theBellsFor } from '../ring_the_owner/ring_the_owner.ts'
+import { notificationIdOf, theBellsFor, theCloseOf, THE_BELL } from '../ring_the_owner/ring_the_owner.ts'
 import { IDLE, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { MENU_TOOL } from './say_what_the_host_is_asking.ts'
@@ -41,8 +41,8 @@ function aStore(held: DashboardRow | null = null, refusing = false): DashboardSt
 }
 
 /** A screen over `store`, writing the bell's bytes into `wrote`, with the switches as given. */
-function aScreen(store: DashboardStore, wrote: string[], bells = { bell: true, notify: false }, onTheOwnersTerminal = true): AnOwnersScreen {
-  return { beats: store, member: 'Vesta', bells, onTheOwnersTerminal, write: (bytes) => void wrote.push(bytes) }
+function aScreen(store: DashboardStore, wrote: string[], bells = { bell: true, notify: false }, onTheOwnersTerminal = true, muted: () => boolean = () => false): AnOwnersScreen {
+  return { beats: store, member: 'Vesta', bells, muted, onTheOwnersTerminal, write: (bytes) => void wrote.push(bytes) }
 }
 
 /** The row a member reported before the host asked anything. */
@@ -75,7 +75,7 @@ test('a dialog leaves the member\'s own report alone, and the row reads needs yo
   assert.equal(row.dialogs?.length, 1)
   assert.deepEqual(whatTheOwnerIsShown(row), { state: 'needs-you', needs: 'permission for Bash' })
   assert.equal(wrote.length, 1, 'the bell rings once, on the change into needs you')
-  assert.equal(wrote[0], theBellsFor(aReportedRow(), row, { bell: true, notify: false }, true))
+  assert.equal(wrote[0], theBellsFor(aReportedRow(), row, { bell: true, notify: false }, true, false))
 })
 
 test('the call\'s answer clears the row back to exactly what the member said, and rings nothing (test 1, test 6)', () => {
@@ -144,6 +144,52 @@ test('a turn\'s start drops a dialog an earlier turn left open, and the row read
   const row = store.read('Vesta')
   assert.ok(row !== null)
   assert.deepEqual(whatTheOwnerIsShown(row), { state: 'working', needs: 'my own words' })
+})
+
+test('a muted member\'s ask does not ring, and another member\'s still does (martha#371)', () => {
+  const mutedStore = aStore(aReportedRow())
+  const ringingStore = aStore({ ...aReportedRow(), member: 'Uranus' })
+  const wrote: string[] = []
+  const muted = theOwnersScreen({ beats: mutedStore, member: 'Vesta', bells: { bell: true, notify: true }, muted: () => true, onTheOwnersTerminal: true, write: (bytes) => void wrote.push(bytes) })
+  const ringing = theOwnersScreen({ beats: ringingStore, member: 'Uranus', bells: { bell: true, notify: true }, muted: () => false, onTheOwnersTerminal: true, write: (bytes) => void wrote.push(bytes) })
+
+  muted.heard('a-session', { said: 'permission', call: A_PERMISSION }, 20)
+  assert.deepEqual(wrote, [], 'the muted member\'s ask writes no bell and no notification')
+  assert.equal(mutedStore.read('Vesta')?.dialogs?.length, 1, 'and its row still says the owner is needed')
+
+  ringing.heard('a-session', { said: 'permission', call: A_PERMISSION }, 20)
+  assert.equal(wrote.length, 1, 'another member\'s ask rings in the same run')
+  assert.ok(wrote.some((bytes: string) => bytes.includes(notificationIdOf('Uranus'))), 'for the member that asked')
+})
+
+test('a mute typed while the ask is open takes the notification down and rings nothing (martha#371)', () => {
+  const store = aStore(aReportedRow())
+  const wrote: string[] = []
+  let muted = false
+  const screen = theOwnersScreen(aScreen(store, wrote, { bell: true, notify: true }, true, () => muted))
+
+  screen.heard('a-session', { said: 'permission', call: A_PERMISSION }, 20)
+  assert.equal(wrote.length, 1, 'the ask rings while the bell is the owner\'s')
+  muted = true
+  screen.heard('a-session', { said: 'answered', call: A_PERMISSION }, 30)
+  assert.equal(wrote.length, 2, 'the mute did not take the notification down, so the answer does')
+  assert.equal(wrote[1], theCloseOf('Vesta'), 'the close, and never a second bell')
+})
+
+test('a mute lifted between two asks rings the second, on the same screen (martha#371)', () => {
+  const store = aStore(aReportedRow())
+  const wrote: string[] = []
+  let muted = true
+  const screen = theOwnersScreen(aScreen(store, wrote, { bell: true, notify: true }, true, () => muted))
+
+  screen.heard('a-session', { said: 'permission', call: A_PERMISSION }, 20)
+  assert.deepEqual(wrote, [], 'muted, so the first ask is silent')
+  screen.heard('a-session', { said: 'answered', call: A_PERMISSION }, 30)
+  muted = false
+  screen.heard('a-session', { said: 'permission', call: A_PERMISSION }, 40)
+  assert.equal(wrote.length, 2, 'the close of the silent ask, then the ring of the one the owner asked for')
+  assert.equal(wrote[0], theCloseOf('Vesta'), 'a silent ask leaves nothing for the owner to dismiss on the way out')
+  assert.ok(wrote.some((bytes: string) => bytes.includes(THE_BELL)), 'the second ask rings once the mute is lifted, with no restart')
 })
 
 /** The store the launcher writes into, where it lives on disk: one answer closing two dialogs is a refusal this pins. */
