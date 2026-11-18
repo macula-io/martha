@@ -25,7 +25,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 
-import { SOLO_MEMBERS } from '../src/declare_a_solo_crew/declare_a_solo_crew.ts'
+import { SOLO_MEMBERS } from '../src/declare_crew/declare_crew.ts'
 import { FRAME_OPENING, framed } from '../src/hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import type { ModelRequest, ModelScript, ScriptedTurn } from '../src/drive_the_recorded_host/drive_the_recorded_host.ts'
 import { crewRowsDirectoryOf, driveTheRecordedHost, plainTextOf } from '../src/drive_the_recorded_host/drive_the_recorded_host.ts'

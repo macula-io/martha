@@ -120,7 +120,7 @@ export function launcherPlacesOf(state: MarthaState, relay_root: string, root: s
   const [dashboard, gate_audit, bells, launch_records, snapshot_root, mesh_servers, relay_journal] = made.map((place) => ('path' in place ? place.path : ''))
   const unsafe = closedRelayRoot(relay_root)
   if (unsafe !== undefined) return { refusal: unsafe }
-  return { rows: rows.path, dashboard: dashboard!, gate_audit: gate_audit!, bells: bells!, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
+  return { rows: rows.path, dashboard: dashboard!, gate_audit: gate_audit!, bells: bells!, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root, state_root: state.state_root }
 }
 
 export interface MemberStartRequest {

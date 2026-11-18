@@ -270,7 +270,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
       node_id: 'ab'.repeat(32),
       place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: [], snapshot_root: closed('snapshots') },
       policy: { may_send_executable_text: [] },
-      places: { rows: closed('row-streams'), dashboard: closed('dashboard-rows'), launch_records: closed('launches'), relay_root, mesh_servers: closed('mesh-servers'), relay_journal: closed('the-relay-journal') },
+      places: { rows: closed('row-streams'), dashboard: closed('dashboard-rows'), launch_records: closed('launches'), relay_root, mesh_servers: closed('mesh-servers'), relay_journal: closed('the-relay-journal'), state_root: closed('martha-state') },
       command: member,
       args: [],
       ...ownersSettings(place),

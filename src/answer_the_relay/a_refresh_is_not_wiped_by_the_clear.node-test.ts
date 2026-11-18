@@ -25,6 +25,7 @@ import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reac
 import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
 import { ownerMemoryPlaces, type OwnerUserScope } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { startedWithOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -80,7 +81,7 @@ function aCrewClearingFrom(predecessor: string | null): CrewTools {
 }
 
 /** The relay for one member, over a crew's own tools. */
-function relayFor(places: Places, crew: CrewTools, sessions?: Map<string, never>): MemberRelay {
+function relayFor(places: Places, crew: CrewTools, sessions?: Map<string, HostSession>): MemberRelay {
   return memberRelay(
     {
       records: sessionRecordsIn(rowStreamsDirectory(places.rows)),
@@ -109,7 +110,7 @@ function relayFor(places: Places, crew: CrewTools, sessions?: Map<string, never>
       crew,
       stopMember: () => {},
     },
-    sessions as Map<string, never> | undefined,
+    sessions,
   )
 }
 
@@ -185,4 +186,28 @@ test('#255: a prompt from the successor is taken in even when it arrives before 
   assert.equal(taken.answered, true, 'the resume prompt was refused for a session the crew had just made')
   const after = await theRecordOf(places, SUCCESSOR)
   assert.equal(after?.ingested.length, 2, 'the successor kept neither its predecessor’s record nor its own first prompt')
+})
+
+test('#255: a tool call the mod posts for the successor takes it in, inheriting, before the crew answers it', async (t) => {
+  const places = placesOf(t)
+  const relay = relayFor(places, aCrewClearingFrom(SESSION))
+  await relay.answer('session_started', { session_id: SESSION, source: 'startup' })
+  await relay.answer('prompt_submitted', { session_id: SESSION, text: 'a ring from a stranger', origin: { kind: 'plugin' } })
+  const before = await theRecordOf(places, SESSION)
+
+  // The mod’s question at the successor’s start is a tool call, and it can come before the host’s own start.
+  const answered = await relay.answerTool({ session_id: SUCCESSOR, tool: 'a-crew-tool', args: {} })
+
+  assert.ok('answer' in answered, 'the tool call was refused for a session the crew had just made')
+  assert.deepEqual((await theRecordOf(places, SUCCESSOR))?.ingested, before?.ingested, 'the successor was not taken in by the tool call, so its first answer read a session with no record')
+})
+
+test('#593: the relay keeps its sessions in the map the launcher hands it, which the crew’s tools read too', async (t) => {
+  const places = placesOf(t)
+  const sessions = new Map<string, HostSession>()
+  const relay = relayFor(places, aCrewClearingFrom(null), sessions)
+
+  await relay.answer('session_started', { session_id: SESSION, source: 'startup' })
+
+  assert.equal(sessions.get(SESSION)?.id, SESSION, 'the relay kept the session in a map of its own, so the crew’s tools see no session to stamp a handover with')
 })

@@ -66,13 +66,13 @@ import {
   type SessionRecordStore,
 } from '../take_in_a_turn/take_in_a_turn.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import type { HandoverStamp, HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
+import type { AStartingSession, HandoverStamp, HandoverStampStore, Refused, SessionStartOutcome } from '../host_contract/host_contract.ts'
 import { recordIngestion, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { recordDigestOf, releasedRecordOf, type ReleaseMark } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
-/** What an event that starts a session does to the record. */
-export type SessionStartOutcome = 'same_id' | 'inherits' | 'fresh'
+/** What an event that starts a session does to the record: the contract's word since martha#541. */
+export type { SessionStartOutcome }
 
 export const SESSION_START_OUTCOMES: readonly SessionStartOutcome[] = ['same_id', 'inherits', 'fresh']
 
@@ -125,14 +125,28 @@ export function startSession(
   declared: HostSessionEvents,
   start: SessionStart,
 ): HostSession {
-  const outcome = Object.hasOwn(declared.events, start.event) ? declared.events[start.event] : undefined
-  if (outcome === 'fresh') return beginSession(store, start.session_id)
-  if (outcome === 'same_id') return resumeSession(store, start.session_id)
-  if (outcome === 'inherits') return inherit(store, start)
+  const outcome = outcomeOfAStart(declared, start.event)
+  return startSessionAs(store, start.predecessor_id === undefined ? { session_id: start.session_id, outcome } : { session_id: start.session_id, outcome, predecessor_id: start.predecessor_id })
+}
+
+/** What one host's start event does to the record, from its declaration; undefined for an event it does not declare. */
+export function outcomeOfAStart(declared: HostSessionEvents, event: string): SessionStartOutcome | undefined {
+  return Object.hasOwn(declared.events, event) ? declared.events[event] : undefined
+}
+
+/**
+ * The session a start produces, from the outcome its host's event has (martha#541): the half of `startSession` that reads
+ * no host's table, so the entry every host reaches starts a session in the contract's words. An undeclared event has
+ * lost its record.
+ */
+export function startSessionAs(store: SessionRecordStore, start: AStartingSession): HostSession {
+  if (start.outcome === 'fresh') return beginSession(store, start.session_id)
+  if (start.outcome === 'same_id') return resumeSession(store, start.session_id)
+  if (start.outcome === 'inherits') return inherit(store, start)
   return sessionWithLostRecord(start.session_id)
 }
 
-function inherit(store: SessionRecordStore, start: SessionStart): HostSession {
+function inherit(store: SessionRecordStore, start: AStartingSession): HostSession {
   const predecessor = start.predecessor_id === undefined ? undefined : store.read(start.predecessor_id)
   const successor = sessionFromRecord(start.session_id, predecessor)
   rememberSession(store, successor)

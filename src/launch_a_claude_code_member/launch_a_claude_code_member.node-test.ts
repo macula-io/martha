@@ -49,7 +49,7 @@ import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } f
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { MEMBER_CONFIG_FOLDER, MEMBERS_OWN_SETTINGS, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { hookSettingsWatch, realPathOf } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import { keepTheLifelineIn, RUN_LIFELINE_FD } from '../end_a_launch_when_its_run_ends/keep_the_lifeline_in.ts'
@@ -127,6 +127,8 @@ interface Place {
   readonly mesh_servers: string
   /** Where the launcher keeps what it is doing, one file per launch (martha#240). */
   readonly relay_journal: string
+  /** Martha's own state root, which a member's file tools may not write (martha#619). */
+  readonly state_root: string
   readonly approved: readonly string[]
   /**
    * Told by the helper that starts a member here. The place's own hook then leaves the removal to that member's hook,
@@ -202,6 +204,7 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
     snapshot_root: closed('snapshots'),
     mesh_servers: closed('mesh-servers'),
     relay_journal: closed('the-relay-journal'),
+    state_root: closed('martha-state'),
     approved,
     aMemberStartsHere: () => {
       aMemberStarts = true
@@ -1432,7 +1435,7 @@ function memberLaunch(place: Place, command: string, approved = place.approved, 
     node_id: NODE_ID,
     place: { ...launchOf(place), approved_fingerprints: approved, snapshot_root: place.snapshot_root },
     policy: { may_send_executable_text: [] },
-    places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },
+    places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal, state_root: place.state_root },
     ...(mesh_trees === undefined ? {} : { mesh_trees }),
     // The managed settings the host would read, under the place: never the machine's own.
     managed_settings: managedSettingsOf(place),
@@ -2167,11 +2170,13 @@ for (const [shape, carried, kept] of [
     // The member's environment names its own config folder (martha#602, T2): the rules cover that folder's places
     // and the owner's alike, so nothing the member writes in its own folder runs as code either.
     const member_env = { ...launch.inherited, ...theMembersConfigEnvironment(membersOwnConfig(place)) }
-    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) })
+    // And Martha's own state root, whole (martha#619): the records of the owner's acts are no member's to write.
+    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home), martha_state_root: place.state_root })
     const ownersOnly = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) })
     assert.ok(memoryDenyRules(places).length > memoryDenyRules(ownersOnly).length, "the member's own folder adds rules of its own")
     for (const rule of memoryDenyRules(ownersOnly)) assert.ok(memoryDenyRules(places).includes(rule), `the owner's ${rule} is still denied`)
     const permissions = settings.permissions as { deny: string[]; allow?: string[] }
+    assert.ok(permissions.deny.includes(`Edit(/${realPathOf(place.state_root)}/**)`), "the host starts with no rule denying Martha's state root")
     assert.deepEqual(permissions.deny, [...kept, ...memoryDenyRules(places)])
     if (carried !== undefined) {
       assert.equal(settings.model, 'x')
@@ -2689,7 +2694,7 @@ function launcherProcess(
       `  node_id: ${JSON.stringify(NODE_ID)},`,
       `  place: { host: ${JSON.stringify(CLAUDE_CODE)}, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },`,
       '  policy: { may_send_executable_text: [] },',
-      '  places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },',
+      '  places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal, state_root: place.state_root },',
       ...(mesh_trees === undefined ? [] : [`  mesh_trees: ${JSON.stringify(mesh_trees)},`]),
       ...Object.entries(deadlines).map(([name, ms]) => `  ${name}: ${ms},`),
       `  command: ${JSON.stringify(command)},`,

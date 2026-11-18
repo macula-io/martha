@@ -247,6 +247,6 @@ export async function whatTheCrewRefusesOfACall(
   session_id: string,
 ): Promise<string | undefined> {
   return (await crew?.refusesTheSubagent({ tool: call.tool, input: call.input }))
-    ?? (await crew?.refusesTheGitIn({ tool: call.tool, input: call.input }))
+    ?? (await crew?.refusesTheGitIn?.({ tool: call.tool, input: call.input }))
     ?? crew?.ends.deniesACall(session_id)
 }

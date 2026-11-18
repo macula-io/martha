@@ -1539,9 +1539,12 @@ crew with a shell:
   ([#129](https://github.com/macula-io/martha/issues/129)).** The pinned key,
   the epochs, the kept list, the receipts' launcher, the signed base's
   repository and the live `node_modules` are all writable by the member's OS
-  user, as `approvals.jsonl` is; `martha pin-key`'s terminal check is the same
-  speed bump as `martha approve`'s, so a member's shell given a terminal could
-  pin a key it made in software and sign its own list. The boundary is #24.
+  user, as `approvals.jsonl` is. A member's file tools are refused there, and
+  `martha pin-key` typed from inside a member is refused
+  ([#619](https://github.com/macula-io/martha/issues/619)), but a member's shell
+  that sets out to could still pin a key it made in software and sign its own
+  list. Martha draws no wall here: see "The owner's own acts are guarded by
+  speed bumps" below.
 - **Signed runs and their limits
   ([#129](https://github.com/macula-io/martha/issues/129)).** A push to the
   signed branch moves the base, so keeping that branch to the owner's own merges
@@ -1555,8 +1558,14 @@ crew with a shell:
   needs git finds no repository, and git history is B5.
 - **T13**: a process of the same OS user can connect to a launch's relay socket
   and claim any origin, `composer` included (above).
-- **The terminal check is a speed bump.** `martha approve` and `martha start`
-  ask only when their input is a terminal, so a member's shell tool, whose input
-  never is one, is refused. A member's shell can still give a command a terminal
-  of its own, with `script(1)` or `unbuffer`, and answer for the owner. Only a
-  boundary between the member and the owner's terminal closes it (#24).
+- **The owner's own acts are guarded by speed bumps, not a wall
+  ([#619](https://github.com/macula-io/martha/issues/619)).** A member runs as
+  the owner's own OS user. `martha approve`, `release`, `bells`, `pin-key`,
+  `keep-shapes` and `start` ask for a terminal, and each is refused when it is
+  typed from inside a member: with a member's relay socket or own config folder
+  in its environment, or with a member's host among the processes above it.
+  Martha's state root is denied to a member's file tools. But a member that sets
+  out to could still fake the owner's yes: by making a terminal of its own
+  outside its process tree (`setsid`, `script(1)`, `unbuffer`) or by writing
+  Martha's state files directly with its shell. The owner decided there is no
+  OS wall (2026-11-18), so no check here is called a boundary.

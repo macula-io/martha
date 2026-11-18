@@ -96,7 +96,7 @@ async function aCrew(owners: Record<string, unknown> | null = OWNERS_SETTINGS): 
   for (const made of [root, join(home, 'row'), join(home, CREW_ROWS_PLACE), config_dir]) mkdirSync(made, { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   declareTheModels(root)
   const settings_file = join(config_dir, USER_SETTINGS_FILE)
