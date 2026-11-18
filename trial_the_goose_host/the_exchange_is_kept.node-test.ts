@@ -104,3 +104,35 @@ test('a trial that hands the client no keeper still runs: keeping the exchange i
   child.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, result: { protocolVersion: 1 } })}\n`)
   assert.deepEqual(await asked, { protocolVersion: 1 })
 })
+
+test('a message cut off by the kill is kept: the pipe end flushes what arrived without a newline (martha#694)', async () => {
+  const { child } = aPipe()
+  const kept: Exchange[] = []
+  new GooseOverAcp(child as never, (exchange) => kept.push(exchange))
+
+  // The engine wrote a message the kill cut before its newline: it sits in the client's buffer.
+  child.stdout.write('{"jsonrpc":"2.0","method":"session/update","params":{"update":{"agent_message_chunk"')
+  await delivered()
+  child.stdout.end()
+  await delivered()
+
+  assert.equal(kept.length, 1, 'the partial message was kept when the pipe ended')
+  assert.equal(kept[0]?.direction, 'received')
+  assert.match(JSON.stringify(kept[0]?.message), /agent_message_chunk/, 'it is kept as the text that crossed, not dropped')
+})
+
+test('the flush keeps the partial message once, however many times it is asked (martha#694)', async () => {
+  const { child } = aPipe()
+  const kept: Exchange[] = []
+  const acp = new GooseOverAcp(child as never, (exchange) => kept.push(exchange))
+
+  child.stdout.write('{"jsonrpc":"2.0","method":"session/update"')
+  await delivered()
+  acp.closeTheExchange()
+  acp.closeTheExchange()
+  child.stdout.end()
+  await delivered()
+
+  assert.equal(kept.length, 1, 'the end event after an explicit flush keeps nothing twice')
+})
+
