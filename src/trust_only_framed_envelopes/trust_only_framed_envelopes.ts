@@ -46,7 +46,8 @@ export interface Turn {
  * `from_address` is the harness's sender address — the local socket path on the
  * Claude Code host, a node id on the mesh host. It is what a name is learned
  * against. `from_name` is the sender's OWN chosen display name: good for routing
- * a reply, never for authority (see ../who_may_act).
+ * a reply, never for authority: a crew's acts are granted by its declaration's
+ * table, to the member the launcher started (../declare_crew).
  */
 export interface FramedDelivery {
   readonly from_address: string | null

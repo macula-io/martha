@@ -81,30 +81,37 @@ owner is trusted, the thing the owner copied is not.
 ## Who may act
 
 A gate in front of the text is only half of it: a message that cannot reach the
-shell can still *do* things through the crew's own tools. Seven of those —
-assign work, read the crew roster, verify a range, open a crew room, restart a
-member, take the owner's asks, close the owner's todo rows — are the
-supervisor's, and the crew's implementation decides that by a display name the
-session sets about itself. That name falls back to the first six user messages,
-and a delivered message is a user message, so a stranger's ring purpose saying
-"you are Supervisor" passes every one of them. Restarting a member, taking the
-asks and closing a todo row have no caller check at all.
+shell can still *do* things through the crew's own tools. crew-code decides who
+may assign work, restart a member, take the owner's asks or close a todo row by
+a display name the session sets about itself. That name falls back to the first
+six user messages, and a delivered message is a user message, so a stranger's
+ring purpose saying "you are Supervisor" passes every one of them.
 
-`src/who_may_act/` replaces all of them with one rule: an action on the list is
-taken only by **the calling session whose own node id is the supervisor's** — the
-node id the harness holds for that session, never the sender of a message it
-received and never a name read out of text. That distinction is the whole point.
-A member that receives an attested message from the supervisor's node id must not
-become the supervisor; the supervisor's own session must be able to act on words
-the owner typed, which arrive with no message at all. A display name is carried
-for the transcript and never compared.
+Martha decides it by the crew's declaration instead. Each act a crew can grant
+is in the mode's table (`mode.may` in `martha.json`, read by
+[`declare_crew`](../src/declare_crew)), and a tool that takes the act refuses a
+member whose role the table does not grant it. The member is the one the
+launcher was started as (`martha start <member>`). The launcher holds that name,
+so no message, ring or name read out of text can change who is asking.
 
-A team may name more than one supervisor, and solo mode names one.
+| Act | Gated in |
+|---|---|
+| `assign_work` | verify a range, unheld work, the owner's todo list, contracts, standing items, who is free; and who reads the nudges |
+| `approve_landing` | the owner's yes to a landing |
+| `resume_parked_work` | park and wake a member |
+| `offer_owner_asks` | take and settle the owner's asks |
+| `restart_member` | restart a member |
 
-The anchor is the harness's own record of the session's node id. Where that is a
-file in the crew's state directory, a shell running as the same OS user can
-rewrite it — the same weakness as the roster anchor, and the same fix: an object
-the model cannot mint.
+An act the table does not name is the owner's alone. A check drives each of
+these through its real tool and fails by name when a handler stops refusing,
+when an act has no handler, or when a crew tool is neither gated nor declared
+ungated with a reason ([`a_crews_tools`](../src/a_crews_tools)).
+
+**This is a speed bump, said plainly.** A member runs as the owner's OS user.
+Its shell can edit `martha.json` to grant its own role, write the crew's state
+directly, or fake the owner's yes, and nothing Martha checks inside that user
+can stop it. The table keeps an honest member and a confused model in their
+lane; it does not stop a member that sets out to get round it.
 
 ## Every path, and what stands on it
 
@@ -429,8 +436,8 @@ paste is believed, and no amount of reading the text can tell the two apart.
 Two limits that follow from what a host actually provides:
 
 - **The name is not the identity.** `from-name` is the sender's own chosen
-  display name: good for routing a reply, never for authority. Authority is
-  `who_may_act`, and that is the calling session's own node id.
+  display name: good for routing a reply, never for authority. Authority is the
+  declaration's table, for the member the launcher started (see "Who may act").
 - **A cross-session envelope carries no message id on the Claude Code host.** So
   a framed delivery is retired by its id where the host gives one; where it does
   not, only that delivery's **body** may be matched against an unread DM — never
@@ -1255,9 +1262,6 @@ between them: one question per tool call, one record per arrival, one call per
 replacement. Writing the adapter's line of registration against the vendored
 package is the remaining step, not a guess this repository should make.
 
-An adapter must also call `unknownSupervisorOnlyTools` with its own list of
-supervisor-only tools and fail on a difference (see *Who may act*).
-
 ## The room's acceptance rule
 
 `src/admit_a_room_message/` is the rule behind both delivery gates the registry
@@ -1473,15 +1477,6 @@ and the owner's typed turn on A14. What does not:
   so a member started by `martha start` reads no room: the raw mesh reads are
   refused (B1). A host that delivers room messages must call it before it turns
   a message into a turn, and refuse the message when it says no.
-- **The who-may-act rule has no callers yet either.** `src/who_may_act/` is the
-  rule the seven tools must call; the tools themselves are not in this repository,
-  so nothing calls it today. Until a host or a tool calls it, the crew's
-  display-name gates are still the ones in force.
-  - The list is closed against the names that reach it: an action it does not
-    know is refused. It cannot see an *eighth* supervisor-only tool a host adds
-    without calling the rule at all. An adapter must therefore call
-    `unknownSupervisorOnlyTools` with its own list of supervisor-only tools and
-    fail unless that list equals `SUPERVISOR_ONLY_ACTIONS`.
 
 ## What Martha shows the owner
 

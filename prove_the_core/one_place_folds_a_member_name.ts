@@ -47,7 +47,6 @@ export const FOLDS_THAT_ARE_NOT_NAMES: readonly AFoldThatIsNotAName[] = [
   { path: 'refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts', folds: 2, reason: A_NODE_ID },
   { path: 'run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts', folds: 1, reason: 'the words of a prompt, read for a review word' },
   { path: 'trust_only_signed_lists/trust_only_signed_lists.ts', folds: 2, reason: A_NODE_ID },
-  { path: 'who_may_act/who_may_act.ts', folds: 2, reason: A_NODE_ID },
 ]
 
 /** One fold the rule names: where it stands, and why it is named. */
