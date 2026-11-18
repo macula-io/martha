@@ -58,14 +58,9 @@ export const THE_PACKAGES_JOINER = ', '
  * id, and no package name may carry the joiner the question puts between packages.
  */
 export function theLandingNamesOneThingEach(landing: Pick<ALandingAskedAbout, 'tip' | 'packages'>): string | undefined {
-  if (!A_COMMIT.test(landing.tip)) {
-    return `a landing names its tip as a full commit id, forty hex digits, so a yes is to one commit and not to a ref that can move; read ${JSON.stringify(landing.tip)}.`
-  }
+  if (!A_COMMIT.test(landing.tip)) return `a landing names its tip as a full commit id, forty hex digits, so a yes is to one commit and not to a ref that can move; read ${JSON.stringify(landing.tip)}.`
   const joined = landing.packages.find((one) => one.includes(THE_PACKAGES_JOINER))
-  if (joined !== undefined) {
-    return `a package name may not carry ${JSON.stringify(THE_PACKAGES_JOINER)}, which the landing question puts between packages; read ${JSON.stringify(joined)}.`
-  }
-  return undefined
+  return joined === undefined ? undefined : `a package name may not carry ${JSON.stringify(THE_PACKAGES_JOINER)}, which the landing question puts between packages; read ${JSON.stringify(joined)}.`
 }
 
 /** The question before the queue's rule is applied to it: what is measured against the length an ask keeps. */
@@ -113,12 +108,8 @@ export async function theYesALandingStandsOn(host: LedgerHost, asked: TheYesAske
   if (role !== undefined && granted.includes(role)) {
     return { stood_on: `${asked.member}'s own yes, as a ${role}: the declaration grants ${APPROVE_LANDING} to that role` }
   }
-  if (!granted.includes(OWNER)) {
-    return {
-      refused: `${asked.member} may not land: the declaration grants ${APPROVE_LANDING} to ${granted.join(', ') || 'nobody'}, and ${asked.member}'s role is ${role ?? 'none on this crew'}. Nothing was pushed.`,
-    }
-  }
-  return theOwnersYes(host, asked)
+  if (granted.includes(OWNER)) return theOwnersYes(host, asked)
+  return { refused: `${asked.member} may not land: the declaration grants ${APPROVE_LANDING} to ${granted.join(', ') || 'nobody'}, and ${asked.member}'s role is ${role ?? 'none on this crew'}. Nothing was pushed.` }
 }
 
 /** The owner's yes to this landing's question, found in the ask queue by the id the call names, or why it is not there. */
@@ -127,11 +118,7 @@ async function theOwnersYes(host: LedgerHost, asked: TheYesAsked): Promise<TheYe
   if ('refused' in landing) return { refused: `${landing.refused} Nothing was pushed.` }
   const question = theLandingQuestion(landing.ok)
   if (asked.owner_yes === undefined) {
-    return {
-      refused:
-        `a landing needs the owner's yes, because the declaration grants ${APPROVE_LANDING} to the owner: queue ${JSON.stringify(question)} ` +
-        `with ${QUEUE_ASK}, word for word, have it offered and settled, then name that ask's id as ${OWNER_YES}. Nothing was pushed.`,
-    }
+    return { refused: `a landing needs the owner's yes, because the declaration grants ${APPROVE_LANDING} to the owner: queue ${JSON.stringify(question)} with ${QUEUE_ASK}, word for word, have it offered and settled, then name that ask's id as ${OWNER_YES}. Nothing was pushed.` }
   }
   let said_yes: Awaited<ReturnType<typeof theAsksSaidYesToWithTheirWords>>
   try {
@@ -144,11 +131,7 @@ async function theOwnersYes(host: LedgerHost, asked: TheYesAsked): Promise<TheYe
     return { refused: `the owner has not said yes to ask ${String(asked.owner_yes)}, and only the owner's yes lands on this crew. Nothing was pushed.` }
   }
   if (answered.question !== question) {
-    return {
-      refused:
-        `the owner said yes to ask ${String(asked.owner_yes)}, which asked ${JSON.stringify(answered.question)}; this landing asks ` +
-        `${JSON.stringify(question)}, and a yes counts only for the landing it was asked about. Nothing was pushed.`,
-    }
+    return { refused: `the owner said yes to ask ${String(asked.owner_yes)}, which asked ${JSON.stringify(answered.question)}; this landing asks ${JSON.stringify(question)}, and a yes counts only for the landing it was asked about. Nothing was pushed.` }
   }
   return { stood_on: `the owner's yes to ask ${String(asked.owner_yes)}` }
 }
