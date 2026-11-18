@@ -281,6 +281,12 @@ export interface TheCrewFilesStores {
   readonly crew: CrewStore
 }
 
+/**
+ * What a slice that judges a call against the bytes on disk asks of the host: the files on disk and the processes,
+ * and nothing else (martha#693's commit judgement reads the working tree's own bytes beside git's answer).
+ */
+export type TheFilesAndProcesses = Pick<HostContract, 'processes'> & { readonly stores: Pick<Stores, 'files'> }
+
 
 /**
  * The owner's own settings file — `<config dir>/settings.json` — and the one lock that guards it (martha#359).

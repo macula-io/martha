@@ -15,14 +15,14 @@
 // slice may not name it (../claude_code_host imports are an adapter's business).
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import type { CrewStore, HostContract } from '../host_contract/host_contract.ts'
+import type { CrewStore, TheFilesAndProcesses } from '../host_contract/host_contract.ts'
 import { askGitWhatAMemberIsAboutToChange } from '../ask_git_what_a_member_is_about_to_change/ask_git_what_a_member_is_about_to_change.ts'
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import { readTheGitCallsInAShellLine } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 
 /** The call to judge: the host's tool and its input, the member making it, the crew's places, and a host to ask git. */
 export interface AToolCallToGuard {
-  readonly host: Pick<HostContract, 'processes'>
+  readonly host: TheFilesAndProcesses
   readonly workspace: TheWorkspace
   readonly member: string
   /** The name the host gives the tool it is reporting, and the arguments the member's model was given for it. */

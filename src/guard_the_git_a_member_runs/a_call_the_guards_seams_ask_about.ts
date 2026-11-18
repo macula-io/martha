@@ -8,7 +8,7 @@
 // Neither asks a fact the one before it already asked, and neither asks git for anything it alone can say except the
 // branch facts seam (b) needs: a transaction's refs are the whole of seam (c)'s question.
 
-import type { CrewStore, HostContract } from '../host_contract/host_contract.ts'
+import type { CrewStore, TheFilesAndProcesses } from '../host_contract/host_contract.ts'
 import { askGitWhatAMemberIsAboutToChange } from '../ask_git_what_a_member_is_about_to_change/ask_git_what_a_member_is_about_to_change.ts'
 import { refuseARefUpdate, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import { isAbsolute } from 'node:path'
@@ -16,7 +16,7 @@ import { theGitCallsOfAShim } from '../read_the_git_calls_in_a_shell_line/read_t
 
 /** A call a `git` on the member's PATH was handed (martha#562, seam b): the words a shell gave it, and where it runs. */
 export interface ACallTheShimsGitWasHanded {
-  readonly host: Pick<HostContract, 'processes'>
+  readonly host: TheFilesAndProcesses
   readonly workspace: TheWorkspace
   readonly member: string
   /** The directory the shell runs the call in, as the shim saw it; a shell that names none asks about nothing. */

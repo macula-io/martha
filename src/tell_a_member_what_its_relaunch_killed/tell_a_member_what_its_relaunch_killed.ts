@@ -247,7 +247,7 @@ export const shownAsData = (line: string): string => {
 }
 
 /** `n` data as one list, then how many the telling did not name and could not keep, or nothing when it named them all. */
-const namedThenTheRest = (all: readonly string[], alsoDropped = 0): string => {
+export const namedThenTheRest = (all: readonly string[], alsoDropped = 0): string => {
   const data = all.map(shownAsData)
   const named = data.slice(0, NAMED_IN_A_TELLING)
   const rest = data.length - named.length + alsoDropped
@@ -269,7 +269,9 @@ const theRunningSaid = (record: WhatAKilledRunLeft): readonly string[] => {
 const theFilesSaid = (record: WhatAKilledRunLeft, released: readonly IReleasedPath[]): readonly string[] => {
   const leftovers = theStandingLeftoversOf(record, released)
   const standingKeys = new Set(leftovers.map(keyOf))
-  const dirty = theDirtyOf(record).filter((one) => !standingKeys.has(keyOf(one)))
+  // A released path is the member's own answer: it is left out of both sentences, never moved back into the wider one.
+  const letGo = new Set(released.map(keyOf))
+  const dirty = theDirtyOf(record).filter((one) => !standingKeys.has(keyOf(one)) && !letGo.has(keyOf(one)))
   const leftSaid =
     leftovers.length === 0
       ? []

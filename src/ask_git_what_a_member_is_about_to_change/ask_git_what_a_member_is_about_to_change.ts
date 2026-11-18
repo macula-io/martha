@@ -26,17 +26,17 @@
 // directory the call runs in or the worktree it names. A call with no directory it can name is asked nowhere, and its
 // rules that need a fact do not fire.
 
-import type { CrewStore, HostContract } from '../host_contract/host_contract.ts'
+import type { CrewStore, TheFilesAndProcesses } from '../host_contract/host_contract.ts'
 import { refuseACallInTheWorkspace, theCloneOf, theWorktreeListedAt, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
-import { theLeftoversRefusal } from '../tell_a_member_what_its_relaunch_killed/the_commit_that_carries_what_a_killed_run_left.ts'
+import { theLeftoversRefusal } from '../judge_the_commit_a_member_is_about_to_make/judge_the_commit_a_member_is_about_to_make.ts'
 import { realpathSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 
 /** A call to judge: the git calls it makes, the member making it, the crew's places, and the host that runs git. */
 export interface AQuestionAboutACall {
-  readonly host: Pick<HostContract, 'processes'>
+  readonly host: TheFilesAndProcesses
   readonly calls: readonly AGitCall[]
   readonly workspace: TheWorkspace
   readonly member: string
@@ -147,5 +147,5 @@ export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutAC
   const guarded: AGuardedCall = { calls, workspace, member, facts: await theFactsOf(host, clone, where) }
   const refused = refuseACallInTheWorkspace(guarded)
   if (refused !== undefined) return refused
-  return theLeftoversRefusal({ calls, processes: host.processes, ...(request.leftovers === undefined ? {} : { leftovers: request.leftovers }), member })
+  return theLeftoversRefusal({ calls, processes: host.processes, files: host.stores.files, ...(request.leftovers === undefined ? {} : { leftovers: request.leftovers }), member })
 }

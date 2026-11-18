@@ -6,7 +6,7 @@
 // the clone's own reference-transaction hook (seam c). A crew that declared no layout hands none of the three.
 
 import type { CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
-import type { CrewStore, HostContract } from '../host_contract/host_contract.ts'
+import type { CrewStore, TheFilesAndProcesses } from '../host_contract/host_contract.ts'
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import { refuseAGitCallInAMembersShell } from '../refuse_a_git_call_in_a_members_shell/refuse_a_git_call_in_a_members_shell.ts'
 import { refuseAGitCallFromThePath, refuseTheRefUpdates } from './a_call_the_guards_seams_ask_about.ts'
@@ -22,7 +22,7 @@ export type TheGitGuardPlaces = Pick<CrewToolPlaces, 'refusesTheGitCall' | 'refu
 export function theGitGuardPlacesOf(
   workspace: TheWorkspace | undefined,
   member: string,
-  host: Pick<HostContract, 'processes'>,
+  host: TheFilesAndProcesses,
   leftovers?: CrewStore,
 ): TheGitGuardPlaces | undefined {
   if (workspace === undefined) return undefined

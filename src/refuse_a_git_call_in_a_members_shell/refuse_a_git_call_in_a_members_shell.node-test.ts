@@ -12,7 +12,8 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import type { HostContract } from '../host_contract/host_contract.ts'
+import type { TheFilesAndProcesses } from '../host_contract/host_contract.ts'
+import { filesOnThisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -53,8 +54,9 @@ function aWorkspace(t: TestContext): Fixture {
   return { clones, worktrees, clone: join(clones, 'acme', 'widget') }
 }
 
-/** A host whose processes.run really runs the command, in the directory it is given. */
-const aHostThatRunsGit = (): Pick<HostContract, 'processes'> => ({
+/** A host whose processes.run really runs the command, in the directory it is given, and which reads the files disk holds. */
+const aHostThatRunsGit = (): TheFilesAndProcesses => ({
+  stores: { files: filesOnThisMachine },
   processes: hostForTests({
     run: async (request) => {
       const outcome = spawnSync(request.command, [...request.args], { cwd: request.cwd, encoding: 'utf8' })
