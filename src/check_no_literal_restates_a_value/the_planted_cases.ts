@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { GONE, lineOfAFinding, lineOfAMarkerNotHeld, THE_MARKER } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import { GONE, lineOfAFinding, lineOfAMarkerNotHeld, lineOfAnExceptionNotHeld, THE_MARKER, type Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { verdictOf } from './judge_a_change.ts'
 import { CORE } from './the_core_the_check_reads.ts'
@@ -27,7 +27,9 @@ export interface PlantedCase {
   readonly base: Files
   /** What the head commit writes over the base; an empty text deletes the file. */
   readonly head: Files
-  /** Every line the gate prints for the range, markers first, in order. */
+  /** The coincidences the tree declares, judged as a slice's coincidences.ts is (martha#682); none when absent. */
+  readonly declares?: readonly Exception[]
+  /** Every line the gate prints for the range: the coincidences it cannot hold, then markers, then findings, in order. */
   readonly prints: readonly string[]
 }
 
@@ -36,6 +38,15 @@ const MARKED = { 'a_tool/tools.ts': "export const TOOLS = Object.freeze({ Edit: 
 const UNMARKED = { 'a_tool/tools.ts': "export const TOOLS = Object.freeze({ Edit: 'file_path' })\n" }
 const MARKER = `is marked ${THE_MARKER} but`
 const MISPLACED = `${THE_MARKER} ${MARKER} stands where no record is marked: it must be the outermost \`satisfies\` of a top-level exported const`
+/**
+ * A module holding one word twice (martha#682): exported as the folder a store sits in, and privately as the key an
+ * engine saves under, which is another thing spelled the same way.
+ */
+const A_STORE = 'a_store/a_store.ts'
+const THE_FOLDER = "export const THE_FOLDER = 'the-saved-word'\n"
+const BOTH = `${THE_FOLDER}const THE_KEY = 'the-saved-word'\n`
+const THE_KEY_IS_A_COPY = `${A_STORE}:2: 'the-saved-word' restates ${A_STORE} THE_FOLDER`
+const THE_KEY_IS_A_COINCIDENCE: Exception = { value: 'the-saved-word', file: A_STORE, reason: "the engine saves under this key; the folder is the store's own" }
 /** Twelve constants that stay, so git would pair a file moved with one constant changed as a rename. */
 const FILLER = Array.from({ length: 12 }, (_, index) => `export const FILLER_${index} = 'filler-number-${index}'\n`).join('')
 
@@ -141,6 +152,35 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     base: {},
     head: { 'a_new/a_new.ts': "export const FRESH = 'a-fresh-value'\nconst COPY = 'a-fresh-value'\n" },
     prints: ["a_new/a_new.ts:2: 'a-fresh-value' restates a_new/a_new.ts FRESH"],
+  },
+  {
+    // The issue's own case (martha#682): the range names the private copy, so the coincidence its message offers must be
+    // held, and the whole-tree pass that holds the list names the same site.
+    what: 'a private copy, in the same file, of a constant the change adds, declared a coincidence (martha#682)',
+    base: {},
+    head: { [A_STORE]: BOTH },
+    declares: [THE_KEY_IS_A_COINCIDENCE],
+    prints: [],
+  },
+  {
+    what: 'a private copy the change adds beside a holder its own file already has (martha#682)',
+    base: { [A_STORE]: THE_FOLDER },
+    head: { [A_STORE]: BOTH },
+    prints: [THE_KEY_IS_A_COPY],
+  },
+  {
+    what: "a private copy beside its own file's holder, declared a coincidence, in a change that touches neither (martha#682)",
+    base: { [A_STORE]: BOTH },
+    head: { 'a_user/a_user.ts': "call('elsewhere')\n" },
+    declares: [THE_KEY_IS_A_COINCIDENCE],
+    prints: [],
+  },
+  {
+    what: "a coincidence declared where only the holder's own initializer stands, which no run names (martha#682)",
+    base: { [A_STORE]: THE_FOLDER },
+    head: { 'a_user/a_user.ts': "call('elsewhere')\n" },
+    declares: [THE_KEY_IS_A_COINCIDENCE],
+    prints: ["'the-saved-word' in a_store/a_store.ts is declared a coincidence but matches nothing there, or carries no reason, or repeats another entry."],
   },
   {
     what: 'a private copy, in the same file, of a key the change marks',
@@ -388,8 +428,8 @@ export function printedFor(planted: PlantedCase): string[] {
     mkdirSync(join(root, CORE), { recursive: true })
     const base = commitOn(root, planted.base)
     const head = commitOn(root, planted.head)
-    const verdict = verdictOf(root, `${base}..${head}`, [])
-    return [...verdict.markers.map(lineOfAMarkerNotHeld), ...verdict.findings.map(lineOfAFinding)]
+    const verdict = verdictOf(root, `${base}..${head}`, planted.declares ?? [])
+    return [...verdict.stale.map(lineOfAnExceptionNotHeld), ...verdict.markers.map(lineOfAMarkerNotHeld), ...verdict.findings.map(lineOfAFinding)]
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
