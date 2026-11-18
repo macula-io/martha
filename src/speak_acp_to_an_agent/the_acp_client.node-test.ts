@@ -16,6 +16,8 @@ const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'm
 const A_CALL = { id: 'call-1', title: 'shell: echo hi', input: { command: 'echo hi' } }
 const allow: Decide = () => 'allow'
 const reject: Decide = () => 'reject'
+/** A mode id of the stand-in's own: no engine names it, so a client that read or typed a mode of its own instead of passing the agent's through cannot pass. */
+const THE_STAND_INS_MODE = 'the-stand-ins-own-mode'
 
 /** What the agent made of the answer to the turn's one call, from the call's own update. */
 const heardFor = (turn: ATurn): unknown => turn.toolCalls[0]?.rawOutput
@@ -47,8 +49,8 @@ async function oneTurn(script: AnAgentScript, decide: Decide, text = 'go'): Prom
 }
 
 test('a session names its id and the mode the agent says it runs', async () => {
-  await withTheAgent({ turns: [], currentModeId: 'approve' }, allow, async (client) => {
-    assert.deepEqual(await client.newSession('/'), { sessionId: STAND_IN_SESSION, currentModeId: 'approve' })
+  await withTheAgent({ turns: [], currentModeId: THE_STAND_INS_MODE }, allow, async (client) => {
+    assert.deepEqual(await client.newSession('/'), { sessionId: STAND_IN_SESSION, currentModeId: THE_STAND_INS_MODE })
   })
   await withTheAgent({ turns: [] }, allow, async (client) => {
     assert.equal((await client.newSession('/')).currentModeId, undefined)
