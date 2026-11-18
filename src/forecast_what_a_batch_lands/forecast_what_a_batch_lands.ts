@@ -97,17 +97,17 @@ export async function forecastWhatABatchLands(host: LandingHost, batch: TheBatch
   // The landing runs the checks the tree holds, and the dry run says which of them will run (martha#604).
   const checks = await theChecksTheTreeHolds(host, batch.path, base)
   const clone: TheClone = { path: batch.path, default_branch: origin.origin.default_branch }
-  const forecasts = await everyForecast(host, clone, base, work.work)
+  const forecasts = await everyForecast(host, clone, base, work.work, checks)
   if ('refused' in forecasts) return forecasts
   return theAnswer(clone, base, forecasts.ok, checks)
 }
 
 /** Each pull request's forecast, in the batch's order, each merged onto the chain the ones before it left. */
-async function everyForecast(host: LandingHost, clone: TheClone, base: string, work: readonly LandedWork[]): Promise<Step<readonly AForecast[]>> {
+async function everyForecast(host: LandingHost, clone: TheClone, base: string, work: readonly LandedWork[], checks: TheRepositorysChecks): Promise<Step<readonly AForecast[]>> {
   let chain: TheChain = { tip: base, steps: [{ commit: base, label: `${clone.default_branch} at ${short(base)}` }], left_out: [] }
   const forecasts: AForecast[] = []
   for (const one of work) {
-    const next = await theForecastOf(host, clone, chain, one)
+    const next = await theForecastOf(host, clone, chain, one, checks)
     if ('refused' in next) return next
     forecasts.push(next.ok.forecast)
     chain = next.ok.chain
@@ -116,12 +116,12 @@ async function everyForecast(host: LandingHost, clone: TheClone, base: string, w
 }
 
 /** One pull request merged onto the chain in memory: its forecast, and the chain it leaves for the next. */
-async function theForecastOf(host: LandingHost, clone: TheClone, chain: TheChain, one: LandedWork): Promise<Step<{ readonly forecast: AForecast; readonly chain: TheChain }>> {
+async function theForecastOf(host: LandingHost, clone: TheClone, chain: TheChain, one: LandedWork, checks: TheRepositorysChecks): Promise<Step<{ readonly forecast: AForecast; readonly chain: TheChain }>> {
   const inside = await theLeftOutHeadItHolds(host, clone.path, chain.left_out, one)
   if (inside !== undefined) return { ok: { forecast: { left_out: one, inside }, chain } }
   const merged = await mergedInMemory(host, clone.path, chain.tip, one.head)
   if ('refused' in merged) return merged
-  const sorted = await theClashSorted(host, clone.path, merged.ok)
+  const sorted = await theClashSorted(host, clone.path, merged.ok, checks.redo)
   if ('refused' in sorted) return sorted
   if (sorted.ok.by_hand.length === 0) return theChainGrown(host, clone.path, chain, one, merged.ok, sorted.ok.redone)
   const traced = await whatEachPathClashesWith(host, clone.path, one.head, chain.steps, sorted.ok.by_hand, aFirstParentNamed)
@@ -129,8 +129,14 @@ async function theForecastOf(host: LandingHost, clone: TheClone, chain: TheChain
   return { ok: { forecast: { clashes: one, with: traced.ok, redone: sorted.ok.redone }, chain: { ...chain, left_out: [...chain.left_out, one] } } }
 }
 
-/** The paths a merge clashed in, split by the redo program: its words for each it redoes, and those it does not. */
-async function theClashSorted(host: LandingHost, path: string, merged: AMergeInMemory): Promise<Step<{ readonly redone: readonly string[]; readonly by_hand: readonly string[] }>> {
+/**
+ * The paths a merge clashed in, split by the redo program: its words for each it redoes, and those it does not. A tree
+ * that holds no redo settles no clash, so every path is the builders' own and nothing of that repository is run — not
+ * even to classify one, or the dry run would both run a stranger's own script here and forecast a redo the landing
+ * will not make (martha#604 r=2).
+ */
+async function theClashSorted(host: LandingHost, path: string, merged: AMergeInMemory, redo: boolean): Promise<Step<{ readonly redone: readonly string[]; readonly by_hand: readonly string[] }>> {
+  if (!redo) return { ok: { redone: [], by_hand: [...merged.clashed.keys()] } }
   const redone: string[] = []
   const by_hand: string[] = []
   for (const [clashed, stages] of merged.clashed) {

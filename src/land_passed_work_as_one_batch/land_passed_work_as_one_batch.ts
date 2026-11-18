@@ -69,9 +69,11 @@ export interface TheRepositorysChecks {
 }
 
 /**
- * The checks the tree holds, read once from the commit the batch was cut from, so no head can take one away from
- * the landing that lands it: the ceilings check and the redo of generated files are programs the tree holds, and a tree
- * holding neither is held to nothing, with the answer saying so. What a tree is held to is its own repository's to say.
+ * The checks the tree holds, read once from the commit the batch was cut from, so a head's own manifest decides nothing
+ * about them: the ceilings check and the redo of generated files are programs the tree holds, and a tree holding neither
+ * is held to nothing, with the answer saying so. What a tree is held to is its own repository's to say. A head that
+ * deletes one of these programs is left out by name; one that edits it is held to the program the merged tree holds,
+ * which the review of that head is what stands against.
  */
 export async function theChecksTheTreeHolds(host: Pick<HostContract, 'processes'>, path: string, base: string): Promise<TheRepositorysChecks> {
   return { ceilings: await theTreeHolds(host, path, base, THE_CHECK_PROGRAM), redo: await theTreeHolds(host, path, base, THE_REDO_PROGRAM) }

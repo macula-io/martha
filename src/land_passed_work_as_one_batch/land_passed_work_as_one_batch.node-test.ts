@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -303,6 +303,24 @@ const codeLines = (name: string, n: number): string =>
 
 /** The manifest of a repository that is not Martha's: its own scripts, and nothing of Martha's declared in it. */
 const A_STRANGERS_MANIFEST = `${JSON.stringify({ name: 'demo', private: true, type: 'module', scripts: { test: 'node --test' } }, null, 2)}\n`
+
+/** The file a stranger's own `redo:generated` writes when anything runs it: a test reads that nothing did (martha#604 r=2). */
+const THE_MARKER_A_STRANGERS_REDO_WRITES = 'the-redo-ran'
+
+/** The manifest of a stranger's repository that defines a `redo:generated` of its own, which exits 0 and leaves a marker. */
+const A_STRANGERS_MANIFEST_THAT_REDOES = `${JSON.stringify(
+  {
+    name: 'demo',
+    private: true,
+    type: 'module',
+    scripts: {
+      test: 'node --test',
+      [THE_REDO_SCRIPT]: `sh -c 'echo ran > ${THE_MARKER_A_STRANGERS_REDO_WRITES}'`,
+    },
+  },
+  null,
+  2,
+)}\n`
 
 /**
  * The tree a batch's heads are cut from in a repository that is not Martha's: committed on the default branch and pushed,
@@ -926,6 +944,27 @@ test('#604: a batch lands in a repository that holds none of Martha’s files: n
   assert.ok(words.includes(NO_CEILINGS_CHECKED), `the answer does not say that no ceilings were checked: ${words}`)
   const dry = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
   assert.ok(wordsOf(dry).includes(NO_CEILINGS_AHEAD), `the dry run does not say that no ceilings will be checked: ${wordsOf(dry)}`)
+})
+
+test('#604 r=2: the dry run puts no clash to a redo the tree does not hold, so nothing of that repository’s own is run', async (t) => {
+  // The stranger's manifest defines a `redo:generated` of its own that exits 0 and leaves a marker. A dry run that asked
+  // it to classify a clash would both run that script here and forecast a redo the real landing will not make.
+  const fixture = aRepository(t)
+  const base = aTreeOnTheDefaultBranch(fixture, { 'package.json': A_STRANGERS_MANIFEST_THAT_REDOES, 'README.md': '# demo\n' })
+  const packages = [`${fixture.repo}#604`, `${fixture.repo}#605`]
+  const heads = [
+    aBranchWithOneCommit(fixture, 'passed', base, 'greet.txt', 'Hello, Ann!\n'),
+    aBranchWithOneCommit(fixture, 'passed-too', base, 'greet.txt', 'Hello, Bea!\n'),
+  ]
+  const answers = theAnswersFor(fixture.repo, new Map())
+  heads.forEach((head, entry) => answers.set(`repos/${fixture.repo}/commits/${head}/pulls`, anOpenPullRequest(281 + entry, head)))
+  const tests = hostForTests({ run: aGithub(answers), now: THE_DAY })
+  for (const [entry, work_package] of packages.entries()) await aPassedVerdict(tests, work_package, base, at(heads, entry))
+
+  const dry = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
+  assert.match(wordsOf(dry), /- clashes by hand: .*greet\.txt with PR 281/, `the clash is not forecast as the builders' own: ${wordsOf(dry)}`)
+  assert.doesNotMatch(wordsOf(dry), /redone/, `a clash the landing will leave out is forecast as redone: ${wordsOf(dry)}`)
+  assert.equal(existsSync(join(fixture.clone, THE_MARKER_A_STRANGERS_REDO_WRITES)), false, 'the dry run ran the target repository’s own redo:generated')
 })
 
 test('#381: the programs the landing runs are the ones package.json runs them by, in the scripts it names', () => {
