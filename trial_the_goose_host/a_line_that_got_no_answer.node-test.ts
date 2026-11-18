@@ -4,10 +4,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { NoAnswerInTime, withTimeout } from './a_turn_with_goose.ts'
+import { NoAnswerInTime, withTimeout } from './the_engine_over_acp/a_turn_with_goose.ts'
 import { conduct, theObservationOfALineThatThrew, type Running } from './drive_the_trial.ts'
 import { lineFour, type Trial } from './the_nine_lines.ts'
-import type { GooseOverAcp } from './speak_acp_to_goose.ts'
+import type { GooseOverAcp } from './the_engine_over_acp/speak_acp_to_goose.ts'
 
 /** A cap far under any turn the test waits for, so a work that never settles runs it out at once. */
 const A_SHORT_CAP_MS = 5
