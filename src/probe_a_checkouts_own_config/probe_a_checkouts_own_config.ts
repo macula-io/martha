@@ -18,6 +18,7 @@ import {
   type Probe,
 } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
 import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
@@ -68,7 +69,7 @@ const claudeInItsOwnGroup = (...extra: readonly string[]): Command => (switches)
 /** A prompt that makes one tool call before the reply. */
 const ONE_CALL_PROMPT = 'Run the shell command `true` with the Bash tool, then reply with the single word ok.'
 // The prompt goes before `--allowedTools`, which takes every argument up to the next option.
-const ONE_CALL_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', ONE_CALL_PROMPT, '--allowedTools', 'Bash(true)']
+const ONE_CALL_CLAUDE = ['-p', '--max-turns', '3', THE_MODELS_SWITCH, 'haiku', ONE_CALL_PROMPT, '--allowedTools', 'Bash(true)']
 
 // --- a checkout's fixed text: CLAUDE.md files and agents (A16, martha#121) ------
 
@@ -77,7 +78,7 @@ const NESTED_FILE = join(NESTED_DIR, 'notes.txt')
 const AGENT = 'probe-agent'
 /** A prompt that reads a file below the top, which is when the host loads that directory's CLAUDE.md. */
 const READ_BELOW_PROMPT = `Use the Read tool on ${NESTED_FILE}, then reply with the single word ok.`
-const READ_BELOW_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku', READ_BELOW_PROMPT, '--allowedTools', 'Read']
+const READ_BELOW_CLAUDE = ['-p', '--max-turns', '3', THE_MODELS_SWITCH, 'haiku', READ_BELOW_PROMPT, '--allowedTools', 'Read']
 
 /** The checkout's fixed text: a CLAUDE.md at the top, one below it, and an agent. */
 function plantFixedText(place: Place): void {

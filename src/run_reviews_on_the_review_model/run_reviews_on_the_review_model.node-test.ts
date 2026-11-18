@@ -207,9 +207,9 @@ test('#541 6b r=3: the owner\'s own model switch is refused on a reviewer member
 
 test('#541 6b r=3: the switch the owner\'s model is read from is the table\'s own, and a flag yields no value', async () => {
   assert.equal(SWITCHES_THAT_LOAD_NO_CONFIG[THE_MODELS_SWITCH], 'value', 'the models switch is no longer the value-taking switch the gate already knows')
-  assert.deepEqual(theValuesGivenTo(THE_MODELS_SWITCH, ['--model', 'opus', '--verbose']), ['opus'])
-  assert.deepEqual(theValuesGivenTo(THE_MODELS_SWITCH, ['--model', 'opus', '--model', 'fable']), ['opus', 'fable'], 'a second value for one switch was lost')
-  assert.deepEqual(theValuesGivenTo(THE_MODELS_SWITCH, ['--model']), [], 'a switch with no value after it yielded one')
+  assert.deepEqual(theValuesGivenTo(THE_MODELS_SWITCH, [THE_MODELS_SWITCH, 'opus', '--verbose']), ['opus'])
+  assert.deepEqual(theValuesGivenTo(THE_MODELS_SWITCH, [THE_MODELS_SWITCH, 'opus', THE_MODELS_SWITCH, 'fable']), ['opus', 'fable'], 'a second value for one switch was lost')
+  assert.deepEqual(theValuesGivenTo(THE_MODELS_SWITCH, [THE_MODELS_SWITCH]), [], 'a switch with no value after it yielded one')
   assert.deepEqual(theValuesGivenTo('--verbose', ['--verbose', 'opus']), [], 'a switch that takes no value was read as taking one')
   assert.deepEqual(theValuesGivenTo('--settings', ['--settings', 'opus']), [], 'a switch the gate does not pass was read as one it does')
 })

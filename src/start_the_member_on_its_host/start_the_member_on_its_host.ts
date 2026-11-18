@@ -40,6 +40,7 @@ import {
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { CLAUDE, CLAUDE_CODE, CLAUDE_INSTALL } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { aReviewerMembersModelRefusal, theOwnersModelSwitchRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { launchClaudeCodeMember, type LauncherPlaces, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
@@ -279,7 +280,7 @@ async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted>
     owner_bell: start.settings.house_rules[OWNER_BELL],
     places: start.places,
     command: start.command,
-    args: [...(start.model === null ? [] : ['--model', start.model]), ...start.args, ...(start.prompt === undefined ? [] : [start.prompt])],
+    args: [...(start.model === null ? [] : [THE_MODELS_SWITCH, start.model]), ...start.args, ...(start.prompt === undefined ? [] : [start.prompt])],
     inherited: start.inherited,
     stdio: start.stdio,
     tellOwner: (line) => start.tellOwner(line),

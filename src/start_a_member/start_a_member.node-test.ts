@@ -46,7 +46,7 @@ import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { POLL_MS, until } from '../drive_the_recorded_host/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { SWITCHES_THAT_LOAD_NO_CONFIG, THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { approvedPlace } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
@@ -447,10 +447,10 @@ test('a switch that takes a value refuses one that is missing or is itself a swi
   const place = placeFor(t, {})
   await declared(place)
   const fake = fakeClaude(place)
-  for (const args of [['--model'], ['--model', '--settings', '{}']]) {
+  for (const args of [[THE_MODELS_SWITCH], [THE_MODELS_SWITCH, '--settings', '{}']]) {
     const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args })
     assert.equal(started.started, false, args.join(' '))
-    assert.ok(!started.started && started.refusal.includes('--model'), started.started ? '' : started.refusal)
+    assert.ok(!started.started && started.refusal.includes(THE_MODELS_SWITCH), started.started ? '' : started.refusal)
   }
   assert.equal(existsSync(fake.ran), false)
 })
@@ -459,7 +459,7 @@ test('the switches that load no config reach the host as the owner gave them', a
   const place = placeFor(t, {})
   await declared(place)
   const fake = fakeClaude(place)
-  const args = ['--model', 'an-owner-model', '--effort', 'high', '--verbose']
+  const args = [THE_MODELS_SWITCH, 'an-owner-model', '--effort', 'high', '--verbose']
   const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args })
   assert.ok(started.started, started.started ? '' : started.refusal)
   await until('the fake host to write its arguments', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
