@@ -152,7 +152,7 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
   // The host the declaration names for this member (martha#541): its launcher, or the refusal naming what this release
   // has, comes before anything else is read, so a crew naming a host this release cannot start learns that first.
   const host = theHostOfMember(settings, member)
-  const start = theStartOfAMember(host, request.inherited, member, settings)
+  const start = theStartOfAMember(host, request.inherited, member, settings, request.args)
   if (typeof start === 'string') return start
   const ids = nodeIdsFor(request.state, names)
   if ('refusal' in ids) return `${NOT_STARTED}: ${ids.refusal}`

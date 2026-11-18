@@ -28,6 +28,7 @@ import {
 } from '../declare_crew/declare_crew.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   THE_LAUNCHERS_OF_HOST,
@@ -158,4 +159,26 @@ test('#541 6b: a start asks the crew\'s reviewer rule over the host it found (mu
   const started = theStartOfAMember(CLAUDE_CODE, { PATH: path }, itsReviewer, onItsModel)
   assert.ok(typeof started !== 'string', `a reviewer member on the crew's reviewer model was refused a start: ${started}`)
   assert.equal(started.command, join(path, CLAUDE), 'the start did not run the command it found on the path')
+
+  // The owner's own model switch never reaches a reviewer member (package 6b r=3): it is a second value for the switch
+  // the declared model already gave, and nothing reads back which one a host took.
+  const withTheOwnersSwitch = theStartOfAMember(CLAUDE_CODE, { PATH: path }, itsReviewer, onItsModel, [THE_MODELS_SWITCH, 'opus'])
+  assert.match(String(withTheOwnersSwitch), /the owner's --model names opus/, `a reviewer member was started with the owner's own ${THE_MODELS_SWITCH}: ${withTheOwnersSwitch}`)
+  assert.ok(
+    typeof theStartOfAMember(CLAUDE_CODE, { PATH: path }, builder!, offItsModel, [THE_MODELS_SWITCH, 'opus']) !== 'string',
+    'a member that holds no reviews was refused the owner\'s model switch',
+  )
+})
+
+test('#541 6b r=3: a reviewer member on the engine is refused to start by name, until its launcher reads the model back', async () => {
+  // This is the pin on the engine's read-back (package 6b design r=3, item B): when a launcher for `martha-engine`
+  // arrives it must read the model its own config root names back, and this test is updated with it. A launcher that
+  // lifts this refusal without that read-back turns this test red rather than passing quietly.
+  const settings = await settingsOf(aCrewWhoseReviewerRuns('fable'))
+  const reviewer = settings.members[1]!
+  assert.equal(
+    theStartOfAMember(THE_ENGINES_HOST, { PATH: '/nowhere' }, reviewer, settings),
+    noLauncherFor(THE_ENGINES_HOST),
+    'a reviewer member on martha-engine is no longer refused by the missing launcher, and nothing in this release reads its model back yet',
+  )
 })

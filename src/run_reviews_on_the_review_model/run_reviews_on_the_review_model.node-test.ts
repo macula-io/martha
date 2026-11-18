@@ -94,15 +94,20 @@ test('#315: a review is what the type or the description says it is, and an adve
 // reviewer model or not at all. Each test names the mutant that must fail it:
 //   5 the reviewer member's check skipped   a reviewer member starts on any model
 //   6 null read as "the host's own, fine"   a reviewer member with no declared model starts
-//   7 the reported model not compared       a session the host says runs another model is let run
+//   7 the owner's-switch refusal skipped    a reviewer member starts with the owner's own --model after its model
 //   8 the act read as a role name           a role called reviewer without the act is held, or the reverse
+//
+// A model a host *reports* is not read here at all (package 6b r=3): no recording maps the aliases a crew declares to
+// the full ids a session reports, so a comparison would stop every correct reviewer. The owner's own arguments are the
+// other way to move a session off its model, and those are refused.
 
 import { join } from 'node:path'
 
 import { APPROVE_LANDING, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, declareCrewOnHosts, HOLD_REVIEWS, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, THE_HOST_A_MEMBER_RAN_ON, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { OPEN_VOCABULARY, vocabularyOf, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { aReviewerMembersModelRefusal } from './run_reviews_on_the_review_model.ts'
+import { aReviewerMembersModelRefusal, theOwnersModelSwitchRefusal } from './run_reviews_on_the_review_model.ts'
+import { SWITCHES_THAT_LOAD_NO_CONFIG, THE_MODELS_SWITCH, theValuesGivenTo } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
 /** A project root that needs no files on disk: the declaration arrives through the host's document store. */
 const ROOT = '/a-crew-project'
@@ -173,9 +178,38 @@ test('#541 6b: a crew that names no reviewer model starts its reviewer as it did
   assert.equal(aReviewerMembersModelRefusal(memberNamed(settings, 'Reviewer'), settings), undefined, 'a crew with no reviewer model held its reviewer to a rule it never declared')
 })
 
-test('#541 6b: a session the host says runs another model is stopped, naming what it ran (mutant: the reported model not compared)', async () => {
+test('#541 6b r=3: the owner\'s own model switch is refused on a reviewer member, whatever value it names (mutant: the owner\'s-switch refusal skipped)', async () => {
   const settings = await aDeclaredCrew({ review_model: 'fable', reviewer_model: 'fable' })
-  const stopped = aReviewerMembersModelRefusal(memberNamed(settings, 'Reviewer'), settings, 'opus')
-  assert.match(stopped ?? '', /Reviewer holds reviews .* the host reported this session runs opus\./, 'the model the host reported was not compared with the crew\'s reviewer model')
-  assert.equal(aReviewerMembersModelRefusal(memberNamed(settings, 'Reviewer'), settings, 'fable'), undefined, 'a session the host reports on the reviewer model was stopped')
+  const reviewer = memberNamed(settings, 'Reviewer')
+  // The value is not judged: even the reviewer model itself is refused, because the start cannot know which of two
+  // values for one switch the host would take, and nothing reads the result back.
+  for (const value of ['opus', 'fable']) {
+    const refused = theOwnersModelSwitchRefusal(reviewer, settings, [THE_MODELS_SWITCH, value])
+    assert.match(
+      String(refused),
+      /^Reviewer holds reviews \(role reviewer\), and this crew holds reviews to fable; the owner's --model names /,
+      `the owner's ${THE_MODELS_SWITCH} ${value} on a reviewer member was let through`,
+    )
+    assert.ok(String(refused).includes(value), `the refusal does not name the value the owner gave: ${refused}`)
+  }
+  assert.equal(theOwnersModelSwitchRefusal(reviewer, settings, []), undefined, 'a start with no owner arguments was refused')
+  assert.equal(
+    theOwnersModelSwitchRefusal(memberNamed(settings, 'Builder'), settings, [THE_MODELS_SWITCH, 'opus']),
+    undefined,
+    'a member that holds no reviews was refused the owner\'s model switch',
+  )
+  // A switch that takes no value is not the model switch: the words after it are the owner's business as before.
+  assert.equal(theOwnersModelSwitchRefusal(reviewer, settings, ['--verbose', 'opus']), undefined)
+  // A crew that names no reviewer model holds nobody to anything, so the owner's arguments pass as they did.
+  const noRule = await aDeclaredCrew({ reviewer_model: 'opus' })
+  assert.equal(theOwnersModelSwitchRefusal(memberNamed(noRule, 'Reviewer'), noRule, [THE_MODELS_SWITCH, 'opus']), undefined)
+})
+
+test('#541 6b r=3: the switch the owner\'s model is read from is the table\'s own, and a flag yields no value', async () => {
+  assert.equal(SWITCHES_THAT_LOAD_NO_CONFIG[THE_MODELS_SWITCH], 'value', 'the models switch is no longer the value-taking switch the gate already knows')
+  assert.deepEqual(theValuesGivenTo(THE_MODELS_SWITCH, ['--model', 'opus', '--verbose']), ['opus'])
+  assert.deepEqual(theValuesGivenTo(THE_MODELS_SWITCH, ['--model', 'opus', '--model', 'fable']), ['opus', 'fable'], 'a second value for one switch was lost')
+  assert.deepEqual(theValuesGivenTo(THE_MODELS_SWITCH, ['--model']), [], 'a switch with no value after it yielded one')
+  assert.deepEqual(theValuesGivenTo('--verbose', ['--verbose', 'opus']), [], 'a switch that takes no value was read as taking one')
+  assert.deepEqual(theValuesGivenTo('--settings', ['--settings', 'opus']), [], 'a switch the gate does not pass was read as one it does')
 })

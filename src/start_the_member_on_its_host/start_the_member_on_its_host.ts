@@ -41,7 +41,7 @@ import {
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { CLAUDE, CLAUDE_CODE, CLAUDE_INSTALL } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { aReviewerMembersModelRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
+import { aReviewerMembersModelRefusal, theOwnersModelSwitchRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { launchClaudeCodeMember, type LauncherPlaces, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -155,19 +155,21 @@ export const noLauncherFor = (host: string, table: TheLaunchersOfHost = THE_LAUN
 
 /**
  * The start this member makes on `host`, or why it may not start (martha#541 package 6b): the host's launcher and the
- * command it starts, and then the crew's reviewer rule over this member, whose own session is a review when its role
- * holds `hold_reviews`. The one reading a start asks, so a host this release cannot start and a reviewer member off the
- * crew's reviewer model are refused in the same place, before anything about the checkout is read.
+ * command it starts, and then the crew's reviewer rules over this member, whose own session is a review when its role
+ * holds `hold_reviews` — its declared model, and the owner's own model switch in `args`. The one reading a start asks,
+ * so a host this release cannot start and a reviewer member that would run off the crew's reviewer model are refused in
+ * the same place, before anything about the checkout is read.
  */
 export function theStartOfAMember(
   host: string,
   inherited: Readonly<Record<string, string | undefined>>,
   member: Member,
   settings: CrewSettings,
+  args: readonly string[] = [],
 ): TheStartOfAHost | string {
   const start = theStartOfAHost(host, inherited)
   if (typeof start === 'string') return start
-  const heldToTheReviewModel = aReviewerMembersModelRefusal(member, settings)
+  const heldToTheReviewModel = aReviewerMembersModelRefusal(member, settings) ?? theOwnersModelSwitchRefusal(member, settings, args)
   return heldToTheReviewModel === undefined ? start : `${NOT_STARTED}: ${heldToTheReviewModel}`
 }
 
