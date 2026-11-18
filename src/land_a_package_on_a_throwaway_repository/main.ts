@@ -16,7 +16,7 @@
 //   node src/land_a_package_on_a_throwaway_repository/main.ts landing <night.json>    < nothing
 //
 // `landing` reads the same four night fields, the builder's transcript and the crew's rows folder (builder_transcript,
-// rows), and exits 1 naming the first of section 6's landing rows (5 to 7) they do not show.
+// rows_folder), and exits 1 naming the first of section 6's landing rows (5 to 7) they do not show.
 //
 // Exit 0 the guard holds, 1 it refuses, naming why on standard error, 2 it could not look. `redact` writes the text,
 // redacted, to standard output either way, and exits 1 when a token had reached it. `expiry` exits 0 with a note on
@@ -134,9 +134,9 @@ const claims = (argument: string): Said => {
  */
 export async function landing(argument: string): Promise<Said> {
   try {
-    const file = theNightFile(argument, ['builder_transcript', 'rows'])
+    const file = theNightFile(argument, ['builder_transcript', 'rows_folder'])
     if ('code' in file) return file
-    const rows = rowStreamsDirectory(file.field('rows'))
+    const rows = rowStreamsDirectory(file.field('rows_folder'))
     const asks = await rows.read(OWNER_ASKS_STREAM)
     const ledger = (await rows.read(ledgerStreamOf(file.night.package))).map(({ row }) => row as unknown as LedgerRow)
     return verdictOf(whichLandingClaimFails(file.night, { builderTranscript: readFileSync(file.field('builder_transcript'), 'utf8'), asks, ledger }))

@@ -11,7 +11,7 @@ import { ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { OWNERS_QUESTION_LEAD_IN, VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import type { StoredRow } from '../host_contract/host_contract.ts'
 import { theOwnersYesTo } from '../land_passed_work_as_one_batch/the_owners_yes_to_a_landing.ts'
-import { ACT_ANNOUNCED, type LedgerRow } from '../log_ledger/log_ledger.ts'
+import type { LedgerRow } from '../log_ledger/log_ledger.ts'
 import { ASK_QUEUED, ASKS_SETTLED, QUEUE_ASK } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { theMembersRecords, type TheNight, type TheRecord } from './the_nights_claims.ts'
 
@@ -19,9 +19,6 @@ import { theMembersRecords, type TheNight, type TheRecord } from './the_nights_c
 export const LANDING_ASKED = 'the landing asked the owner'
 export const OWNER_SAID_YES = 'the owner said yes'
 export const IT_LANDED = 'it landed'
-
-/** The ledger milestone a landing writes, as the ledger's own row type names it. */
-const LANDED: LedgerRow['kind'] = 'package_landed'
 
 type Block = Readonly<Record<string, unknown>>
 
@@ -90,7 +87,7 @@ function theYesTo(asks: readonly StoredRow[], id: number): number | undefined {
 /** When the push of `tip` was announced in the package's ledger, or undefined when it never was. */
 function thePushOf(ledger: readonly LedgerRow[], tip: string): number | undefined {
   for (const row of ledger) {
-    if (row.kind === ACT_ANNOUNCED && row.act.kind === 'push' && row.act.what.includes(tip)) return row.at
+    if (row.kind === 'act_announced' && row.act.kind === 'push' && row.act.what.includes(tip)) return row.at
   }
   return undefined
 }
@@ -129,6 +126,6 @@ export function whichLandingClaimFails(night: TheNight, record: TheLandingRecord
   if (pushed === undefined) return `${IT_LANDED}: ${night.package}'s ledger announces no push of ${tip}`
   if (!(yes < pushed)) return `${OWNER_SAID_YES}: the yes to ask ${String(asked.id)} was settled at ${String(yes)}, not before the push at ${String(pushed)}`
   const note = `${base}..${tip} on ${theOwnersYesTo(asked.id)}`
-  if (!record.ledger.some((row) => row.kind === LANDED && 'note' in row && row.note === note)) return `${IT_LANDED}: ${night.package}'s ledger holds no ${LANDED} row noting '${note}'`
+  if (!record.ledger.some((row) => row.kind === 'package_landed' && row.note === note)) return `${IT_LANDED}: ${night.package}'s ledger holds no package_landed row noting '${note}'`
   return undefined
 }

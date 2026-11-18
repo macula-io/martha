@@ -12,7 +12,7 @@ import { test } from 'node:test'
 import { OWNERS_QUESTION_LEAD_IN } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import type { StoredRow } from '../host_contract/host_contract.ts'
 import { ledgerStreamOf, type LedgerRow } from '../log_ledger/log_ledger.ts'
-import { OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { ASK_QUEUED, ASKS_SETTLED, ASKS_TAKEN, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { landing } from './main.ts'
@@ -53,9 +53,9 @@ const PUSHED_AT = SETTLED_AT + 5_000
 
 /** The owner_asks stream: ask 0 queued, taken, and settled with `yes`. */
 const theAsks = (yes: readonly number[] = [0], at = SETTLED_AT, question = QUESTION): readonly StoredRow[] => [
-  { position: 0, row: { kind: 'ask_queued', question, asked_by: 'ada', since: SETTLED_AT - 60_000 } },
-  { position: 1, row: { kind: 'asks_taken', asks: [0], at: at - 1_000, by: 'owner', session: 's' } },
-  { position: 2, row: { kind: 'asks_settled', batch: 1, yes, at, by: 'owner' } },
+  { position: 0, row: { kind: ASK_QUEUED, question, asked_by: 'ada', since: SETTLED_AT - 90_000 } },
+  { position: 1, row: { kind: ASKS_TAKEN, asks: [0], at: at - 1_000, by: 'owner', session: 's' } },
+  { position: 2, row: { kind: ASKS_SETTLED, batch: 1, yes, at, by: 'owner' } },
 ]
 
 /** The package's ledger: the push announced, then the landing noted on the owner's yes to ask `ask`. */
@@ -114,7 +114,7 @@ test('a ledger with no push of the tip, or a landing noted on another ask or ran
 test('the landing verb reads the rows folder through the store and holds (0), refuses (1), or could not look (2)', async (t) => {
   const folder = mkdtempSync(join(tmpdir(), 'martha-639-landing-'))
   t.after(() => removeTheTree(folder))
-  const rows = join(folder, 'rows')
+  const rows = join(folder, 'the-crews-rows')
   mkdirSync(rows, { mode: 0o700 })
   const store = rowStreamsDirectory(rows)
   for (const { row } of theAsks()) await store.append(OWNER_ASKS_STREAM, row)
@@ -122,7 +122,7 @@ test('the landing verb reads the rows folder through the store and holds (0), re
   writeFileSync(join(folder, 'builder.jsonl'), GOOD_TRANSCRIPT)
   const night = (change: Record<string, unknown> = {}): string => {
     const file = join(folder, 'night.json')
-    writeFileSync(file, JSON.stringify({ ...NIGHT, builder_transcript: join(folder, 'builder.jsonl'), rows, ...change }))
+    writeFileSync(file, JSON.stringify({ ...NIGHT, builder_transcript: join(folder, 'builder.jsonl'), rows_folder: rows, ...change }))
     return file
   }
   assert.deepEqual(await landing(night()), { code: 0 })
@@ -130,6 +130,6 @@ test('the landing verb reads the rows folder through the store and holds (0), re
   const refused = await landing(night({ builder_transcript: join(folder, 'other.jsonl') }))
   assert.equal(refused.code, 1)
   assert.match(refused.err ?? '', new RegExp(`^${LANDING_ASKED}: `))
-  assert.equal((await landing(night({ rows: '' }))).code, 2)
+  assert.equal((await landing(night({ rows_folder: '' }))).code, 2)
   assert.equal((await landing(night({ builder_transcript: join(folder, 'missing.jsonl') }))).code, 2)
 })
