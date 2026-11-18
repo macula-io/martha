@@ -10,6 +10,7 @@ import { PassThrough } from 'node:stream'
 import { test } from 'node:test'
 
 import { GooseOverAcp, type Exchange } from './speak_acp_to_goose.ts'
+import { ALLOW_ONCE, REJECT_ONCE } from '../src/speak_acp_to_an_agent/answer_a_permission_once.ts'
 
 /** A child-shaped pair of pipes: what the trial writes lands on `written`, what the test pushes is read. */
 function aPipe(): { child: { stdin: PassThrough; stdout: PassThrough }; written: () => string[] } {
@@ -81,13 +82,13 @@ test('the answer to a permission request is kept as it is sent, with the once-an
   const { child, written } = aPipe()
   const kept: Exchange[] = []
   const acp = new GooseOverAcp(child as never, (exchange) => kept.push(exchange))
-  acp.answers.next = 'reject_once'
+  acp.answers.next = REJECT_ONCE
 
   child.stdout.write(`${JSON.stringify({
     jsonrpc: '2.0',
     id: 7,
     method: 'session/request_permission',
-    params: { toolCall: { toolCallId: 'call-1', title: 'shell' }, options: [{ optionId: 'allow_once' }, { optionId: 'reject_once' }, { optionId: 'allow_always' }] },
+    params: { toolCall: { toolCallId: 'call-1', title: 'shell' }, options: [{ optionId: ALLOW_ONCE, kind: ALLOW_ONCE }, { optionId: REJECT_ONCE, kind: REJECT_ONCE }, { optionId: 'allow_always', kind: 'allow_always' }] },
   })}\n`)
   await delivered()
 
