@@ -14,7 +14,7 @@
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body))`, handed to the entry's `aTurnArrived`, which takes it in and keeps the record; a kept turn is then heard, raised, and handed back as `aReviewTheHostSawFail` with the origin the engine stamped (martha#390, martha#541) |
 // | the mod's `a_turn_started` ask (a main turn's `turnId` and `text`; martha#440) | the crew's answer first, which is the carrier's decision on the crew message the turn took in; then `hearAMainTurnStart`: that message, if `prompt_submitted` never heard it, `takeInTurn` as a plugin's prompt; a turn with no message that no heard prompt started (its text, or a slash command's line), `takeInTurn` from an unknown origin and one journal line `A_TURN_OF_UNNAMED_SOURCE`; each then keeps the record and tells the screen a turn started |
 // | tool_called (the engine's call) | the call in the contract's words (`ACalledTool`), handed to the entry's `aToolCalled`, which reads the session's stored record back, asks the two refusals this adapter closes over its own files (the owner's settings, martha#122; their memory, martha#136), then `answerToolCall`, then beside the gate the crew's reviewer rule and the workspace guard's first seam (martha#562: the shell line read into its git calls), and counts an allowed call (martha#513, martha#541); an allowed call is answered `{allow: 1}` and closes the dialog it raised (martha#313) |
-// | tool_answered (the same call, after it ran, with the host's answer) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2 — except a `mesh_hello` or `mesh_goodbye` answer whose every leaf came from this launch (`wordsInAMeshAnswer`), which takes nothing in and keeps the member's shell (B9, martha#251); and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127), except a `martha run <name>` whose answer is exactly the one its receipt builds, which records nothing (martha#129) |
+// | tool_answered (the same call, after it ran, with the host's answer) | the dialogs the call raised closed (martha#313), then the result in the contract's words (`AResultOfACall`: whether the name is an MCP server's, the agent `tool_response.agentId` names, the model a spawned agent resolved to), handed to the entry's `aResultCame` (martha#541, PR 3), which does what follows and answers taken or stop: the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2 — except a `mesh_hello` or `mesh_goodbye` answer whose every leaf came from this launch (`wordsInAMeshAnswer`), which takes nothing in and keeps the member's shell (B9, martha#251); and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127), except a `martha run <name>` whose answer is exactly the one its receipt builds, which records nothing (martha#129) |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
 //
@@ -32,12 +32,13 @@
 // That order, the sessions it is kept for and the record of each are the entry's
 // (../answer_what_a_host_reports, martha#541): this adapter translates what the host
 // says into the entry's words, and reads nothing from the host's shapes that the
-// entry would need to. The handlers still answered here are the ones the packages
-// after 1a move, and they ask the entry for the same state they used to hold.
+// entry would need to. Since PR 3 every report is answered there, an agent's start
+// and stop and the crew's tool ask included; what stays here is the translation,
+// the owner's screen, the signed runs' `run` and the guard's two git judgements.
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
-import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch, type ThePlacesAHostReportsOver } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
+import { agentRunsKept, answersOver, NO_CREW_TOOLS, type TheAnswersOfOneLaunch, type ThePlacesAHostReportsOver } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 /** What a session is handed as it starts: the entry's since martha#541, and named here still for the tests that import it. */
 export { handedAtThisStart } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, outcomeOfAStart, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
@@ -49,24 +50,19 @@ import {
   type SessionStartHookInput,
 } from '../claude_code_host/claude_code_host.ts'
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
-import type { ACalledTool, Arrival, AStartingSession, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
+import type { ACalledTool, AnAgentOfASession, AResultOfACall, AStartingSession, TheAnswerToAnAgent, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
-import { keepWhatTheReviewResolvedTo } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
-import { agentIdOf, agentOfAResult, noteAnAgentsAnswer, noteWhatItsCallsRead, runOf, vouchedRun, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
-/** Whether a tool hands an agent's answer back: the host's own table places every one of these on the subagent row. */
-const isAnAgentsAnswerTool = (tool: string): boolean => CLAUDE_CODE_TOOL_RESULT_ROWS[tool]?.reads === 'an_agents_answer'
+import { resolvedModelIn } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
+import { agentIdOf, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
 import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
-import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
-import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
-import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
+import type { WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { arrivalOfPrompt, CLAUDE_CODE_PROMPT_ORIGINS, whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { hearingEveryTurn, theCommandNamed, type HearingEveryTurn } from '../hear_every_turn_the_model_runs/hear_every_turn_the_model_runs.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
 import type { StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { takeInTurn, type HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
-import { takeInToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
+import { theAgentInAToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { ALLOW, TAKEN, type Answered, type Ran, type RelayEvent, type Refused, type Taken, type TakenWithAHandedLine, type Verdict } from '../claude_code_relay/hooks/relay_protocol.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
@@ -259,7 +255,7 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     place,
     answers: answersOver(placesOfTheEntry(place, reviews, agents), sessions),
     agents,
-    everyTurn: hearingEveryTurn({ keep: async (id, arrival) => keepATurn(state, id, arrival), ...place, now }),
+    everyTurn: hearingEveryTurn({ keep: async (id, arrival) => state.answers.aTurnTheHostNeverRaised(id, arrival), ...place, now }),
     reviews,
   }
   /**
@@ -350,24 +346,20 @@ function toolChecked(state: RelayState, body: Body): RelayReply {
   return answered(TAKEN)
 }
 
-/** What a launch with no crew place answers a tool call: nothing, by name (martha#254). */
-export const NO_CREW_TOOLS = 'this launch was given no crew place, so it answers no tool'
+/** What a launch with no crew place answers a tool call: the entry's since martha#541 PR 3, named here still for the tests that import it. */
+export { NO_CREW_TOOLS } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 
 /**
- * A tool call the crew's mod posted (martha#254): its session, the tool's own name, and its arguments. The core's
- * slice decides the answer, and the launcher hands it back unchanged; a name the crew registers nothing for is
- * refused by name, never answered as though it had been.
+ * A tool call the crew's mod posted (martha#254): its session, the tool's own name, and its arguments, handed to the
+ * entry, which takes a refreshed session in first and lets the crew's slice decide (martha#541, PR 3). The launcher
+ * hands the answer back unchanged; a name the crew registers nothing for is refused by name, never answered as though
+ * it had been.
  */
 async function answerACoreTool(state: RelayState, body: unknown): Promise<Answered | Refused> {
-  const place = state.place
-  if (place.crew === undefined) return { refused: NO_CREW_TOOLS }
+  if (state.place.crew === undefined) return { refused: NO_CREW_TOOLS }
   const call = bodyOfAToolCall(body)
   if (call === undefined) return { refused: 'the tool call is not one this launcher reads: it wants a session, a tool and its arguments' }
-  // The mod's question at a refreshed session's start is a tool call, and it can arrive before the host's own `clear`
-  // start: taking the session in here is what makes the order of the host's two events not matter (martha#255).
-  const why = await state.answers.takeInARefreshedSession(call.session_id)
-  if (why !== undefined) return { refused: why }
-  return place.crew.answer(call.tool, call.args, call.session_id)
+  return state.answers.aCrewToolAsked(call)
 }
 
 /**
@@ -381,12 +373,6 @@ async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrd
   return answer
 }
 
-/** Takes a turn the host never raised as a prompt into its session's record (martha#440); false when it was not kept. */
-async function keepATurn(state: RelayState, session_id: string, arrival: Arrival): Promise<boolean> {
-  const session = state.answers.named(session_id)
-  return typeof session !== 'string' && (await state.answers.keep(takeInTurn(session, arrival, state.place.binder))) === undefined
-}
-
 /** A tool call's three fields, or undefined when the body is not one. */
 function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>> } | undefined {
   if (typeof body !== 'object' || body === null) return undefined
@@ -394,13 +380,6 @@ function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly
   if (typeof session_id !== 'string' || typeof tool !== 'string') return undefined
   if (typeof args !== 'object' || args === null || Array.isArray(args)) return undefined
   return { session_id, tool, args: args as Readonly<Record<string, unknown>> }
-}
-
-/** What a mesh tool's result is taken in as: its row, and the node id the result itself attests where the row's station attestation is really there (martha#247). */
-function arrivalOfAMeshToolResult(own_name: string, input: unknown, answer: unknown): Arrival {
-  const source = sourceOfAMeshToolResult(own_name)
-  const sender = senderOfARingResult(own_name, input, answer)
-  return sender === undefined ? { source: source as Exclude<TurnSource, 'cross_session'> } : { source: source as Exclude<TurnSource, 'cross_session'>, ...sender }
 }
 
 /**
@@ -428,6 +407,17 @@ const placesOfTheEntry = (place: MemberRelayPlace, reviews: TheReviewSpawns, age
   // machine (packages 2-4's design, row "2"): they stay here until each host has its own recorded fact set (#257 row 5).
   refusesAWriteToTheOwnersSettings: (input) => namesTheOwnersSettings(input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home),
   refusesAWriteToTheOwnersMemory: (tool, input) => writesTheOwnersMemory(tool, input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine),
+  // What recording a result needs (PR 3): this host's own table and switches as values, and its two decisions over its
+  // own files closed here, so the entry reads no Claude Code table and holds no path.
+  results: {
+    tool_result_rows: CLAUDE_CODE_TOOL_RESULT_ROWS,
+    read_attaches_nothing: CLAUDE_CODE_READ_ATTACHES_NOTHING,
+    started_with: place.started_with,
+    wordless_answers: place.wordless_answers,
+    noteWhatThisCallWrote: (call) => rememberOwnWriteOfCall(place.launch, { ...call, home: place.hookSettings.home }, thisMachine),
+    checkTheSettingsStillHold: () => place.hookSettings.check(),
+  },
+  journal: place.journal,
 })
 
 function stopMember(place: MemberRelayPlace, why: string): RelayReply {
@@ -483,31 +473,27 @@ function callOf(body: Body): { readonly tool: string; readonly input: Body; read
   return { tool, input, agent_id: agentIdOf(call), id: isText(id) ? id : undefined }
 }
 
-/** The host says an agent started under this session (martha#170): only this makes an agent one it saw start. */
+/** The host says an agent started under this session (martha#170), handed to the entry in the contract's words. */
 async function subagentStarted(state: RelayState, body: Body): Promise<RelayReply> {
-  const session = state.answers.named(body.session_id)
-  if (typeof session === 'string') return refused(session)
-  if (!isText(body.agent_id)) return refused('the agent start names no agent')
-  runOf(state.agents, session.id, body.agent_id).started = true
-  return answered(TAKEN)
+  return theAgentsAnswer(state, body, 'the agent start names no agent', async (agent) => state.answers.anAgentStarted(agent))
 }
 
 /**
- * The host says an agent stopped (martha#170), which is the only report of a background agent's answer: the host
- * delivers that text into the member's turn with no tool result to place it on.
- *
- * A vouched agent's answer is nothing new and the shell stays. Any other agent's answer is a subagent's text: it is
- * recorded on B7 here, so the shell closes from this moment on, whichever call the member makes next.
+ * The host says an agent stopped (martha#170), which is the only report of a background agent's answer; the entry
+ * decides whether that answer is a subagent's text to record.
  */
 async function subagentStopped(state: RelayState, body: Body): Promise<RelayReply> {
-  const session = state.answers.named(body.session_id)
-  if (typeof session === 'string') return refused(session)
-  if (!isText(body.agent_id)) return refused('the agent stop names no agent')
-  const run = runOf(state.agents, session.id, body.agent_id)
-  run.stopped = true
-  if (vouchedRun(run)) return answered(TAKEN)
-  const why = await state.answers.keep(takeInTurn(session, { source: 'subagent' }, state.place.binder))
-  return why === undefined ? answered(TAKEN) : refused(why)
+  return theAgentsAnswer(state, body, 'the agent stop names no agent', async (agent) => state.answers.anAgentStopped(agent))
+}
+
+/** An agent's start or stop, answered: a body that names no agent is refused, after why its session cannot be answered for when it cannot be. */
+async function theAgentsAnswer(state: RelayState, body: Body, no_agent: string, ask: (agent: AnAgentOfASession) => Promise<TheAnswerToAnAgent>): Promise<RelayReply> {
+  if (!isText(body.agent_id)) {
+    const named = state.answers.named(body.session_id)
+    return refused(typeof named === 'string' ? named : no_agent)
+  }
+  const answer = await ask({ session_id: isText(body.session_id) ? body.session_id : '', agent_id: body.agent_id })
+  return 'refused' in answer ? refused(answer.refused) : answered(TAKEN)
 }
 
 /**
@@ -551,38 +537,39 @@ function closeTheDialogTheCallRan(state: RelayState, session_id: string, body: B
 }
 
 /**
- * A ran tool's report, answered (#132, #121, #122, the lanes); then, on a yes and only on one, the end of the turn the
- * launcher holds rides on it when this was the last call in flight (martha#311 ruling D). A no stays a no.
+ * A ran tool's report, in the contract's words, handed to the entry (martha#541, PR 3): the entry records it or says why
+ * the member stops, and a taken result carries the end of the turn the launcher holds when it rides on this answer
+ * (martha#311 ruling D). Only this adapter writes Claude Code's own answer. The dialogs the call raised are closed
+ * first, under the same two conditions as before the move (the session is named, the call is named): the screen is no
+ * gate, and no step of the entry reads it.
  */
 async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> {
-  const reply = await theReportOfARanTool(state, body)
-  const end = reply.answered && isText(body.session_id) ? state.place.crew?.ends.aCallAnswered(body.session_id, callOf(body)?.id ?? '', state.place.journal) : undefined
-  return end === undefined ? reply : answered({ ...TAKEN, end_turn: end })
-}
-
-async function theReportOfARanTool(state: RelayState, body: Body): Promise<RelayReply> {
   const { place } = state
   const session = state.answers.named(body.session_id)
-  if (typeof session === 'string') return stopMember(place, session)
   const call = callOf(body)
+  if (typeof session === 'string') return stopMember(place, session)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
-  keepWhatTheReviewResolvedTo(state.reviews, call.id, body.answer)
-  // A menu's answer is what a settle of the owner's asks stands on (martha#313): the queue keeps the closings it hears,
-  // with the posted options and the host's own answer, which say what the owner picked (martha#608).
-  place.crew?.noteTheCallsAnswer({ tool: call.tool, input: call.input, answer: body.answer }, session.id)
-  // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).
-  const answering = noteAnAgentsAnswer(state.agents, body)
-  closeTheDialogsTheCallAnswered(place, session, body, call)
-  // The receipt is single use: taken now, whatever the answer, so a later call takes none of it (martha#129).
-  const kept = place.signed_runs?.callAnswered(call.tool, call.input, body.answer)
-  const unvouched = recheckBeforeRecording(place, session, call)
-  if (unvouched !== undefined) return stopMember(place, unvouched)
-  // A `martha run <name>` whose answer is exactly the one its receipt builds records nothing (martha#129): the run's
-  // output is text the owner vouched for, so the shell stays. Every other result records, as #127 leaves it.
-  if (kept !== undefined && kept.why === undefined) return answered(TAKEN)
-  const { reply, recorded } = await recordToolResult(state, session, call, body.answer)
-  noteWhatItsCallsRead(state.agents, answering, recorded)
-  return reply
+  closeTheDialogsTheCallAnswered(place, session.id, body, call)
+  const answer = await state.answers.aResultCame(aResultOfACallOf(body, call))
+  if ('stop' in answer) return stopMember(place, answer.stop)
+  return answered(answer.end_turn === undefined ? TAKEN : { ...TAKEN, end_turn: answer.end_turn })
+}
+
+/**
+ * The host's result in the contract's words: the call as `aCalledToolOf` reads it, the answer untouched, and the three
+ * facts the core needs read out of Claude Code's own answer here: whether the name is an MCP server's, the agent the
+ * answer names (`tool_response.agentId`), and the model a spawned agent resolved to.
+ */
+function aResultOfACallOf(body: Body, call: NonNullable<ReturnType<typeof callOf>>): AResultOfACall {
+  const names_agent = theAgentInAToolResult(body.answer)
+  const resolved_model = resolvedModelIn(body.answer)
+  return {
+    ...aCalledToolOf(body, call),
+    answer: body.answer,
+    from_a_tool_server: isMcpToolCall(call.tool),
+    ...(names_agent === undefined ? {} : { answer_names_agent: names_agent }),
+    ...(resolved_model === undefined ? {} : { resolved_model }),
+  }
 }
 
 /**
@@ -595,57 +582,6 @@ async function theReportOfARanTool(state: RelayState, body: Body): Promise<Relay
  * long command that is the run's own length. That is the one limit this design accepts, and the row is otherwise the
  * truth.
  */
-function closeTheDialogsTheCallAnswered(place: MemberRelayPlace, session: HostSession, body: Body, call: { readonly tool: string; readonly input: Body }): void {
-  place.screen?.heard(session.id, { said: 'answered', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
-}
-
-/** The own write kept and every recheck, or why the member is stopped (#132, #121, #122). */
-function recheckBeforeRecording(place: MemberRelayPlace, session: HostSession, call: { readonly tool: string; readonly input: Body }): string | undefined {
-  // Kept before the recheck, so the write this call made is not taken for an outsider's (martha#132).
-  const unkept = rememberOwnWriteOfCall(place.launch, { tool: call.tool, input: call.input, session: session.id, home: place.hookSettings.home }, thisMachine)
-  if (unkept !== undefined) return unkept
-  const launched = recheckLaunchPassingOwnWrites(place.launch, thisMachine)
-  return launched.allow ? place.hookSettings.check() : launched.refusal
-}
-
-/** What the call's result records: a mesh tool's answer, or the host's own result by #127's table, and the rows it added. */
-async function recordToolResult(
-  state: RelayState,
-  session: HostSession,
-  call: { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined },
-  answer: unknown,
-): Promise<{ readonly reply: RelayReply; readonly recorded: readonly string[] }> {
-  const { place } = state
-  const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state.agents, call, answer) : undefined
-  // A mesh tool's own session answer may carry nothing of anyone else's (martha#251): read first, so an answer whose
-  // every leaf came from this launch takes nothing in and the member keeps the shell it needs for the ring it was
-  // about to make. Every other answer, this tool's included when the launch cannot say what it supplied, records on
-  // B2 exactly as before.
-  const own_name = place.names.ownNameOf(call.tool)
-  const wordless = place.wordless_answers === undefined ? undefined : wordsInAMeshAnswer(own_name, answer, { ...place.wordless_answers, input: call.input })
-  if (wordless?.reads_nothing === true) return { reply: answered(TAKEN), recorded: [] }
-  const taken = isMcpToolCall(call.tool)
-    ? takeInTurn(session, arrivalOfAMeshToolResult(own_name, call.input, answer), place.binder)
-    : takeInToolResult(
-        session,
-        {
-          tool: call.tool,
-          input: call.input,
-          rows: CLAUDE_CODE_TOOL_RESULT_ROWS,
-          launch: place.launch,
-          approved_start: state.answers.approved_start,
-          started_with: place.started_with,
-          read_attaches_nothing: CLAUDE_CODE_READ_ATTACHES_NOTHING,
-          host: thisMachine,
-          // An agent's answer is placed by the agent, not by the tool's name alone (martha#170): the id is the one the
-          // host stamps on the answer (`tool_response.agentId`) for the member's own Agent call, and the one on the
-          // call itself when the agent hands its report back.
-          ...(agent === undefined ? {} : { agent }),
-        },
-        place.binder,
-      )
-  const recorded = taken.gate.ingested.slice(session.gate.ingested.length).map((ingestion) => ingestion.path)
-  if (recorded.length === 0) return { reply: answered(TAKEN), recorded }
-  const why = await state.answers.keep(taken)
-  return { reply: why === undefined ? answered(TAKEN) : stopMember(place, why), recorded }
+function closeTheDialogsTheCallAnswered(place: MemberRelayPlace, session_id: string, body: Body, call: { readonly tool: string; readonly input: Body }): void {
+  place.screen?.heard(session_id, { said: 'answered', call: theCallIn(body.call) ?? { tool: call.tool, input: call.input } }, now())
 }

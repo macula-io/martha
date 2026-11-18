@@ -24,7 +24,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import type { ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { agentRunsKept, answersOver, NO_CREW_TOOLS, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
+import { agentRunsKept, answersOver, NO_CREW_TOOLS, NOWHERE_TO_RECORD, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
 import { runOf, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
 
 /** The made-up host's names: a called tool is its own name. */
@@ -53,6 +53,7 @@ interface TheLaunchDoes {
   readonly end_held_for?: string
   readonly refreshed?: string
   readonly no_crew?: boolean
+  readonly nowhere_to_record?: boolean
 }
 
 function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
@@ -111,9 +112,6 @@ function anEntry(t: TestContext, does: TheLaunchDoes = {}): AnEntry {
     agents,
     policy: { may_send_executable_text: [] },
     names: A_MADE_UP_HOSTS_NAMES,
-    tool_result_rows: ITS_ROWS,
-    read_attaches_nothing: undefined,
-    started_with: undefined,
     signed_runs: {
       callAllowed: () => {},
       callAnswered: (tool) => {
@@ -123,13 +121,18 @@ function anEntry(t: TestContext, does: TheLaunchDoes = {}): AnEntry {
     },
     refusesAWriteToTheOwnersSettings: () => undefined,
     refusesAWriteToTheOwnersMemory: () => undefined,
-    noteWhatThisCallWrote: (call) => {
-      seen.steps.push(`own write kept ${call.tool} in ${call.session}`)
-      return does.write_unkept === true ? THE_WRITE_UNKEPT : undefined
-    },
-    checkTheSettingsStillHold: () => {
-      seen.steps.push('settings checked')
-      return does.settings_fail === true ? THE_SETTINGS_TURNED_OFF : undefined
+    results: does.nowhere_to_record === true ? undefined : {
+      tool_result_rows: ITS_ROWS,
+      read_attaches_nothing: undefined,
+      started_with: undefined,
+      noteWhatThisCallWrote: (call) => {
+        seen.steps.push(`own write kept ${call.tool} in ${call.session}`)
+        return does.write_unkept === true ? THE_WRITE_UNKEPT : undefined
+      },
+      checkTheSettingsStillHold: () => {
+        seen.steps.push('settings checked')
+        return does.settings_fail === true ? THE_SETTINGS_TURNED_OFF : undefined
+      },
     },
   })
   return { answers, seen, reviews, agents }
@@ -182,6 +185,15 @@ test('#541 3: settings that no longer hold stop the member with their reason, an
   const before = recordedIn(answers, 'session-a')
 
   assert.deepEqual(await answers.aResultCame(aResult()), { stop: THE_SETTINGS_TURNED_OFF })
+  assert.deepEqual(recordedIn(answers, 'session-a'), before)
+})
+
+test('#541 3: a launch given nowhere to record a result stops the member, and records nothing', async (t) => {
+  const { answers } = anEntry(t, { nowhere_to_record: true })
+  await started(answers)
+  const before = recordedIn(answers, 'session-a')
+
+  assert.deepEqual(await answers.aResultCame(aResult()), { stop: NOWHERE_TO_RECORD })
   assert.deepEqual(recordedIn(answers, 'session-a'), before)
 })
 

@@ -9,27 +9,45 @@
 //
 // What it answers (1b) is the delivery family, in the contract's words: a session's start (`AStartingSession`), a turn
 // (`ArrivingTurn`), and a review the host saw fail (`AReviewTheHostSawFail`). And (2) a called tool (`ACalledTool`),
-// allowed or denied before it runs. A tool result is added by the pull request that moves it (3). Until then the
-// handlers still in the adapter ask this file for the state, and for a refreshed session's take-in; each of those
-// members goes when its last caller moves.
+// allowed or denied before it runs. And (3) a ran tool's result (`AResultOfACall`), recorded or the member stopped;
+// an agent's start and stop (`AnAgentOfASession`); the crew's tool ask (`ACrewToolAsked`); and a turn the host never
+// raised as a prompt. The adapter keeps only its translation, the owner's screen, the signed runs' `run` and the
+// guard's git judgements, and still asks this file for the order, the record and a session by name.
 //
 // It names no host: the types it takes are the slices' and the contract's own, and a host's facts arrive already
 // translated by the adapter (packages 2-4's design, comment 6941097792): a start as the outcome its host's table gives
 // it, a turn with the arrival the host's origins give it, and the envelope a host writes for a failed agent as a value
 // the launcher hands in.
 
-import { theContractACrewHolds, type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
+import { theContractACrewHolds, type CoreToolAnswer, type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
 import { answerToolCall, whatTheCrewRefusesOfACall, type ApprovedLaunch, type ToolCall } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { startSessionAs } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import { agentsToHold, runOf, type AgentRun, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
+import {
+  agentOfANamedResult,
+  agentsToHold,
+  anAgentSeenToStart,
+  anAgentSeenToStop,
+  noteTheAgentsAnsweredCall,
+  noteWhatItsCallsRead,
+  runOf,
+  type AgentRun,
+  type TheRunTable,
+} from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
+import type { TheJournalsRecordOfACall } from '../end_a_running_turn/hold_the_end.ts'
 import { noteTheCallCounted, theSpendACrewHolds } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
 import type {
   ACalledTool,
+  ACrewToolAsked,
+  AnAgentOfASession,
+  AResultOfACall,
   AReviewTheHostSawFail,
+  Arrival,
   ArrivingTurn,
   AStartingSession,
   TheAnswerToACall,
+  TheAnswerToAnAgent,
+  TheAnswerToAResult,
   TheAnswerToAStart,
   TheAnswerToATurn,
   ToolNames,
@@ -44,7 +62,12 @@ import {
 } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { approvedStartTreeOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { approvedStartTreeOf, type HostSwitches, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
+import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
+import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
+import { takeInToolResult, type ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { type HostSession, rememberSession, takeInTurn } from '../take_in_a_turn/take_in_a_turn.ts'
 
@@ -99,7 +122,20 @@ export interface ThePlacesAHostReportsOver {
    * The member's signed runs (martha#129); a member without them runs no shape. Only the half the entry calls is named
    * here: the signed runs are host glue, which no slice imports, and the adapter hands its own table in.
    */
-  readonly signed_runs?: { callAllowed(tool: string, input: Readonly<Record<string, unknown>>): void } | undefined
+  readonly signed_runs?:
+    | {
+        callAllowed(tool: string, input: Readonly<Record<string, unknown>>): void
+        /** The receipt a call's answer takes (martha#129): single use, and `why` undefined when the answer is exactly the one it builds. */
+        callAnswered?(tool: string, input: Readonly<Record<string, unknown>>, answer: unknown): { readonly why: string | undefined } | undefined
+      }
+    | undefined
+  /**
+   * What recording a ran tool's result needs (martha#541, PR 3); absent, a result this launch cannot record stops the
+   * member, as any result whose record cannot be kept does.
+   */
+  readonly results?: WhereAResultIsRecorded | undefined
+  /** Where the journal says a call's own answer carried a held end of its turn (martha#498); absent, nothing is said. */
+  readonly journal?: TheJournalsRecordOfACall | undefined
   /**
    * Why a call's input writes the owner's settings files (martha#122), or undefined: the adapter's own decision, closed
    * over the files its host reads, the launch's directory and the owner's home. Asked first of all.
@@ -111,6 +147,38 @@ export interface ThePlacesAHostReportsOver {
    */
   refusesAWriteToTheOwnersMemory(tool: string, input: Readonly<Record<string, unknown>>): string | undefined
 }
+
+/**
+ * What recording a ran tool's result needs (martha#541, PR 3): the host's own tools by what a result of each reads, the
+ * state the launch started in, what it supplies to a mesh answer, and the adapter's two decisions over its own files.
+ * Each is a value or a closure the launcher makes, so the entry reads no host's table and holds no path.
+ */
+export interface WhereAResultIsRecorded {
+  /** The host's own tools, by what a result of each reads (martha#127): the adapter's table, handed in as a value. */
+  readonly tool_result_rows: ToolResultRows
+  /** The host's switches under which a read attaches nothing (martha#127); absent, a read is judged by the tree alone. */
+  readonly read_attaches_nothing: HostSwitches | undefined
+  /** What the launch was started with (martha#127). */
+  readonly started_with: StartedWith | undefined
+  /** What this launch supplies to a mesh answer, so one carrying nothing of anyone else's takes nothing in (martha#251). */
+  readonly wordless_answers?: Omit<WhatTheLaunchSupplies, 'input'> | undefined
+  /**
+   * Keeps what this call wrote, so the recheck after it does not take the member's own write for an outsider's
+   * (martha#132); why it could not, or undefined. The adapter's decision, closed over its files, home and machine.
+   */
+  noteWhatThisCallWrote(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>>; readonly session: string }): string | undefined
+  /**
+   * Why the owner's settings no longer hold (a key that turns the relay off, martha#122, or a hook or plugin they now
+   * declare, martha#121), or undefined. The adapter's watch over its own files; asked after the launch's recheck passed.
+   */
+  checkTheSettingsStillHold(): string | undefined
+}
+
+/** What a launch with no crew place answers the crew's tool ask: nothing, by name (martha#254). */
+export const NO_CREW_TOOLS = 'this launch was given no crew place, so it answers no tool'
+
+/** Why a result stops the member when the launch was given nowhere to record one. */
+export const NOWHERE_TO_RECORD = 'this launch was given nowhere to record a ran tool’s result, so nothing it ran can be answered for'
 
 /** The table of one launch's agents, made once by the launcher: the entry's call writes it, the adapter's agent handlers read it. */
 export const agentRunsKept = (): TheRunTable => new Map<string, AgentRun>()
@@ -152,16 +220,29 @@ export interface TheAnswersOfOneLaunch {
   /** A review the host saw fail (martha#390), named on the row and to the member, for a session this launch holds. */
   aReviewTheHostSawFail(report: AReviewTheHostSawFail): Promise<void>
   /**
-   * Takes in a session the crew refreshed before the host's own start of it was answered, or says why its record could
-   * not be kept. The mod's tool call still asks it here until it moves (martha#541, PR 3).
-   */
-  takeInARefreshedSession(session_id: string): Promise<string | undefined>
-  /**
    * A called tool, before it runs: allowed, or denied and why. Each refusal is asked in its order (the owner's settings,
    * their memory, the gate, the crew's reviewer-model rule, a held end), and an allowed call is counted against the
    * package's spend before it is allowed (martha#513).
    */
   aToolCalled(call: ACalledTool): Promise<TheAnswerToACall>
+  /**
+   * A ran tool's result (martha#541, PR 3): the review it resolved, the menu it answered and the agent's call noted, the
+   * signed receipt taken, the own write kept and the launch rechecked, then the result recorded. Anything but a clean
+   * recheck and a kept record stops the member; a taken result carries the end of its turn when it was the last call
+   * in flight under a held end (martha#311 ruling D).
+   */
+  aResultCame(result: AResultOfACall): Promise<TheAnswerToAResult>
+  /** The host says an agent started under a session (martha#170). */
+  anAgentStarted(agent: AnAgentOfASession): Promise<TheAnswerToAnAgent>
+  /** The host says an agent stopped (martha#170): an unvouched agent's answer is recorded as a subagent's text. */
+  anAgentStopped(agent: AnAgentOfASession): Promise<TheAnswerToAnAgent>
+  /**
+   * A tool the crew's mod asks the launcher to answer (martha#254), its session taken in first when the crew refreshed
+   * it before the host's own start arrived (martha#255): the mod's question can come first.
+   */
+  aCrewToolAsked(ask: ACrewToolAsked): Promise<CoreToolAnswer>
+  /** A turn the host never raised as a prompt, kept in its session's record (martha#440); false when it was not kept. */
+  aTurnTheHostNeverRaised(session_id: string, arrival: Arrival): Promise<boolean>
 }
 
 /** The answers one launch gives, over the sessions it has taken a start of. */
@@ -211,7 +292,7 @@ export function answersOver(
     }
   }
 
-  const held: TheSessionsHeld = { places, sessions, broken, keep, vouchFor }
+  const held: TheSessionsHeld = { places, sessions, broken, keep, vouchFor, approved_start }
 
   return {
     records: places.records,
@@ -229,8 +310,12 @@ export function answersOver(
     aSessionStarted: async (start) => aSessionStartedIn(held, start),
     aTurnArrived: async (session_id, turn) => aTurnArrivedIn(held, session_id, turn),
     aReviewTheHostSawFail: async (report) => aReviewTheHostSawFailIn(held, report),
-    takeInARefreshedSession: async (session_id) => takeInARefreshedSessionIn(held, session_id),
     aToolCalled: async (call) => aToolCalledIn(held, call),
+    aResultCame: async (result) => aResultCameIn(held, result),
+    anAgentStarted: async (agent) => anAgentStartedIn(held, agent),
+    anAgentStopped: async (agent) => anAgentStoppedIn(held, agent),
+    aCrewToolAsked: async (ask) => aCrewToolAskedIn(held, ask),
+    aTurnTheHostNeverRaised: async (session_id, arrival) => aTurnTheHostNeverRaisedIn(held, session_id, arrival),
   }
 }
 
@@ -241,6 +326,8 @@ interface TheSessionsHeld {
   readonly broken: ReadonlyMap<string, string>
   keep(session: HostSession): Promise<string | undefined>
   vouchFor(session: HostSession): Promise<HostSession | string>
+  /** The checkout's tree when the owner approved this start state, or `null` (martha#127): what a read is exempt against. */
+  readonly approved_start: string | null
 }
 
 /** The session a clear was told in, when this id is the one the crew is waiting for: the crew's own answer, or none. */
@@ -380,6 +467,155 @@ async function noteTheReviewThisLaunchLetThrough(places: ThePlacesAHostReportsOv
   if (review_model === null) return
   places.reviews.remember(call.call_id, review_model)
   places.told?.takeTheLineBack()
+}
+
+/**
+ * A ran tool's result (martha#541, PR 3): recorded, or the member stopped; then, on a taken result and only on one, the
+ * end of the turn the launch holds rides on it when this was the last call in flight (martha#311 ruling D).
+ */
+async function aResultCameIn(held: TheSessionsHeld, result: AResultOfACall): Promise<TheAnswerToAResult> {
+  const stop = await theStopAfterARanTool(held, result)
+  if (stop !== undefined) return { stop }
+  const end = held.places.crew?.ends.aCallAnswered(result.session_id, result.call_id ?? '', held.places.journal)
+  return end === undefined ? { taken: 1 } : { taken: 1, end_turn: end }
+}
+
+/**
+ * Every step a ran tool's result takes, in the order the adapter took them before PR 3 (#132, #121, #122, the lanes):
+ * the review it resolved, the menu it answered and the agent's call noted; the signed receipt taken, whatever the
+ * answer, so a later call takes none of it (martha#129); the own write kept and the launch rechecked; then, unless the
+ * answer is exactly the one a signed run builds, the result recorded. Why the member stops, or undefined.
+ */
+async function theStopAfterARanTool(held: TheSessionsHeld, result: AResultOfACall): Promise<string | undefined> {
+  const { places } = held
+  const session = sessionNamed(result.session_id, held.sessions, held.broken)
+  if (typeof session === 'string') return session
+  const { answering, kept } = noteWhatTheResultAnswered(places, session.id, result)
+  const where = places.results
+  if (where === undefined) return NOWHERE_TO_RECORD
+  const unvouched = recheckBeforeRecording(places, where, session.id, result)
+  if (unvouched !== undefined) return unvouched
+  // A `martha run <name>` whose answer is exactly the one its receipt builds records nothing (martha#129): the run's
+  // output is text the owner vouched for, so the shell stays. Every other result records, as #127 leaves it.
+  if (kept !== undefined && kept.why === undefined) return undefined
+  const { stop, recorded } = await recordTheResult(held, where, session, result)
+  noteWhatItsCallsRead(places.agents, answering, recorded)
+  return stop
+}
+
+/**
+ * What a result answers, noted before anything is rechecked: the model a review this launch allowed resolved to
+ * (martha#390), the menu it answered (martha#313, martha#608: what a settle of the owner's asks stands on), and an
+ * agent's own call, answered here (martha#170: what "every call it made was answered" counts). Then the signed receipt
+ * is taken, back with the agent and the receipt's decision.
+ */
+function noteWhatTheResultAnswered(
+  places: ThePlacesAHostReportsOver,
+  session_id: string,
+  result: AResultOfACall,
+): { readonly answering: string | undefined; readonly kept: { readonly why: string | undefined } | undefined } {
+  if (result.call_id !== undefined && result.resolved_model !== undefined && places.reviews.theSpawn(result.call_id) !== undefined) {
+    places.reviews.resolved(result.call_id, result.resolved_model)
+  }
+  places.crew?.noteTheCallsAnswer({ tool: result.tool, input: result.input, answer: result.answer }, session_id)
+  const answering = noteTheAgentsAnsweredCall(places.agents, result)
+  return { answering, kept: places.signed_runs?.callAnswered?.(result.tool, result.input, result.answer) }
+}
+
+/** A turn the host never raised as a prompt, kept in its session's record (martha#440); false when it was not kept. */
+async function aTurnTheHostNeverRaisedIn(held: TheSessionsHeld, session_id: string, arrival: Arrival): Promise<boolean> {
+  const session = sessionNamed(session_id, held.sessions, held.broken)
+  return typeof session !== 'string' && (await held.keep(takeInTurn(session, arrival, held.places.binder))) === undefined
+}
+
+/** The own write kept and every recheck, or why the member is stopped (#132, #121, #122). */
+function recheckBeforeRecording(places: ThePlacesAHostReportsOver, where: WhereAResultIsRecorded, session_id: string, call: ACalledTool): string | undefined {
+  // Kept before the recheck, so the write this call made is not taken for an outsider's (martha#132).
+  const unkept = where.noteWhatThisCallWrote({ tool: call.tool, input: call.input, session: session_id })
+  if (unkept !== undefined) return unkept
+  const launched = recheckLaunchPassingOwnWrites(places.launch, places.machine)
+  return launched.allow ? where.checkTheSettingsStillHold() : launched.refusal
+}
+
+/** What the call's result records: a tool server's answer, or the host's own result by #127's table, and the rows it added. */
+async function recordTheResult(
+  held: TheSessionsHeld,
+  where: WhereAResultIsRecorded,
+  session: HostSession,
+  result: AResultOfACall,
+): Promise<{ readonly stop: string | undefined; readonly recorded: readonly string[] }> {
+  const { places } = held
+  // An agent's answer is placed by the agent, not by the tool's name alone (martha#170): the id the host's answer names,
+  // else the one on the call itself when the agent hands its report back.
+  const agent = where.tool_result_rows[result.tool]?.reads === 'an_agents_answer' ? agentOfANamedResult(places.agents, result, result.answer_names_agent) : undefined
+  // A mesh tool's own session answer may carry nothing of anyone else's (martha#251): read first, so an answer whose
+  // every leaf came from this launch takes nothing in and the member keeps the shell it needs for the ring it was about
+  // to make. Every other answer records on B2 exactly as before.
+  const own_name = places.names.ownNameOf(result.tool)
+  const wordless = where.wordless_answers === undefined ? undefined : wordsInAMeshAnswer(own_name, result.answer, { ...where.wordless_answers, input: result.input })
+  if (wordless?.reads_nothing === true) return { stop: undefined, recorded: [] }
+  const taken = result.from_a_tool_server
+    ? takeInTurn(session, arrivalOfAMeshToolResult(own_name, result.input, result.answer), places.binder)
+    : takeInToolResult(
+        session,
+        {
+          tool: result.tool,
+          input: result.input,
+          rows: where.tool_result_rows,
+          launch: places.launch,
+          approved_start: held.approved_start,
+          started_with: where.started_with,
+          read_attaches_nothing: where.read_attaches_nothing,
+          host: places.machine,
+          ...(agent === undefined ? {} : { agent }),
+        },
+        places.binder,
+      )
+  const recorded = taken.gate.ingested.slice(session.gate.ingested.length).map((ingestion) => ingestion.path)
+  if (recorded.length === 0) return { stop: undefined, recorded }
+  return { stop: await held.keep(taken), recorded }
+}
+
+/** What a mesh tool's result is taken in as: its row, and the node id the result itself attests where the row's station attestation is really there (martha#247). */
+function arrivalOfAMeshToolResult(own_name: string, input: unknown, answer: unknown): Arrival {
+  const source = sourceOfAMeshToolResult(own_name) as Exclude<TurnSource, 'cross_session'>
+  const sender = senderOfARingResult(own_name, input, answer)
+  return sender === undefined ? { source } : { source, ...sender }
+}
+
+/** The host says an agent started under this session (martha#170): only this makes an agent one it saw start. */
+async function anAgentStartedIn(held: TheSessionsHeld, agent: AnAgentOfASession): Promise<TheAnswerToAnAgent> {
+  const session = sessionNamed(agent.session_id, held.sessions, held.broken)
+  if (typeof session === 'string') return { refused: session }
+  anAgentSeenToStart(held.places.agents, session.id, agent.agent_id)
+  return { taken: 1 }
+}
+
+/**
+ * The host says an agent stopped (martha#170), which is the only report of a background agent's answer: the host
+ * delivers that text into the member's turn with no tool result to place it on. A vouched agent's answer is nothing
+ * new and the shell stays; any other agent's answer is a subagent's text, recorded on B7 here, so the shell closes from
+ * this moment on, whichever call the member makes next.
+ */
+async function anAgentStoppedIn(held: TheSessionsHeld, agent: AnAgentOfASession): Promise<TheAnswerToAnAgent> {
+  const session = sessionNamed(agent.session_id, held.sessions, held.broken)
+  if (typeof session === 'string') return { refused: session }
+  if (anAgentSeenToStop(held.places.agents, session.id, agent.agent_id)) return { taken: 1 }
+  const why = await held.keep(takeInTurn(session, { source: 'subagent' }, held.places.binder))
+  return why === undefined ? { taken: 1 } : { refused: why }
+}
+
+/**
+ * A tool the crew's mod asks for (martha#254): the crew's slice decides the answer. The mod's question at a refreshed
+ * session's start can arrive before the host's own `clear` start, so the session is taken in here first: that is what
+ * makes the order of the host's two events not matter (martha#255).
+ */
+async function aCrewToolAskedIn(held: TheSessionsHeld, ask: ACrewToolAsked): Promise<CoreToolAnswer> {
+  const crew = held.places.crew
+  if (crew === undefined) return { refused: NO_CREW_TOOLS }
+  const why = await takeInARefreshedSessionIn(held, ask.session_id)
+  if (why !== undefined) return { refused: why }
+  return crew.answer(ask.tool, ask.args, ask.session_id)
 }
 
 /**
