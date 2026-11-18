@@ -601,7 +601,11 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),
 }
 
-/** The owner's terminal on this process's standard input; questions are asked on stderr. */
+/**
+ * Whether this process's standard input is a terminal; questions are asked on stderr. A speed bump, not proof that the
+ * owner typed this: a member's shell can make a terminal of its own (martha#619), so an owner-only act also asks
+ * ../refuse_an_owner_act_from_inside_a_member, and that is a speed bump too.
+ */
 export const terminalOfThisProcess: OwnersTerminal = {
   is_terminal: isatty(0),
   ask: async (question) => {
