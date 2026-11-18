@@ -4,7 +4,7 @@
 // and runs the gate over the real /proc.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -71,11 +71,15 @@ test('a member under the owner\'s own home is the owner\'s crew and is never nam
   assert.deepEqual(slash, [])
   // And the same home reached through a link is the same home.
   const home = mkdtempSync(join(tmpdir(), 'martha-472-home-'))
+  const link = join(tmpdir(), `martha-472-link-${process.pid}`)
   try {
-    const link = join(tmpdir(), `martha-472-link-${process.pid}`)
     symlinkSync(home, link)
     assert.deepEqual(whatARunLeft(theKernel({ env: { HOME: link }, owners_home: home })), [])
   } finally {
+    // Both of them, the link too: its name is this run's pid, so a run that left it would leave a dangling symlink no
+    // later run can know is its own or remove (martha#724). The suite's guard fails a test file that leaves one behind,
+    // by name (prove_the_core/every_test_file_cleans_up.ts).
+    rmSync(link, { force: true })
     removeTheTree(home)
   }
 })
