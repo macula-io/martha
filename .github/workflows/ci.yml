@@ -311,6 +311,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run --silent check:workspace-layout -- --self-test
+      # The plain run too, and not only the self-test: this repository declares no layout, so here it answers the
+      # nothing-declared line and exits 0. It proves the script reaches the entry it names, which the self-test alone
+      # would not (martha#741 counts a step that runs only a --self-test as no run of the check).
+      - run: npm run --silent check:workspace-layout
 
   # No launcher outlives its run (martha#559): a launch test's `script -qec ... launcher.ts` pair is a terminal held
   # open, and a run killed hard leaves them piled up until the next launch test stops reporting. The job is a run over a

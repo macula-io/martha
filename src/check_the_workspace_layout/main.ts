@@ -17,8 +17,8 @@ import process from 'node:process'
 
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew } from '../declare_crew/declare_crew.ts'
-import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
+import { CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, WORKTREES } from '../declare_crew/declare_crew.ts'
+import { theWorkspaceTheCrewDeclared, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
@@ -61,10 +61,10 @@ const gitIn = (cwd: string, ...args: readonly string[]): string =>
 
 /** A bare origin with one commit on `main`, a clone of it under `<root>/clones/acme/widget`, and the worktree place
  * beside them: the shape a crew's places hold, planted from nothing so the self-test reads plantings of its own. */
-function plantAWorkspace(root: string): { readonly workspace: { clones: string; worktrees: string; members: readonly string[] }; readonly clone: string } {
+function plantAWorkspace(root: string): { readonly workspace: TheWorkspace; readonly clone: string } {
   const origin = join(root, 'origin.git')
-  const clones = join(root, 'clones')
-  const worktrees = join(root, 'worktrees')
+  const clones = join(root, CLONES)
+  const worktrees = join(root, WORKTREES)
   const seed = join(root, 'seed')
   mkdirSync(join(clones, 'acme'), { recursive: true })
   mkdirSync(worktrees)

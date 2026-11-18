@@ -52,7 +52,7 @@
 //      switches and the relay's copy. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
 //      environment is `theEnvironmentAMemberIsGiven(inherited, switches, crew, config, host)`
-//      (./the_environment_a_member_is_given.ts): what it inherits without the crew's
+//      (../give_a_member_its_environment/the_environment_a_member_is_given.ts): what it inherits without the crew's
 //      state, the switches, the member's own config folder and the launcher's own
 //      state home, then the settings that keep a checkout from running its hooks,
 //      install scripts and .envrc through the member's own commands (martha#24),
@@ -125,7 +125,6 @@ import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_serv
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TheLeftoversALaunchKeeps } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
-import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
@@ -167,9 +166,10 @@ import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_left
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
-import { aFolderOfTheMisses, aFolderOfTheScan, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
+import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
+import { aFolderOfTheScan, aTickOfTheRowsWork } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
+import { theEnvironmentAMemberIsGiven } from '../give_a_member_its_environment/the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -651,10 +651,14 @@ export async function launchClaudeCodeMember(asking: ClaudeCodeMemberLaunch): Pr
   return lifeline.kind === 'refused' ? { started: false, refusal: told(launch, lifeline.refusal) } : launching(launch, lifeline)
 }
 
-/** The layout this launch's workspace scan reads, or none when it was given none (a test's launch, or a crew that
- * declared no layout): a launch with no layout has nothing to check, and the row is written by nobody for it. */
-function theWorkspaceOf(launch: ClaudeCodeMemberLaunch): TheWorkspace | undefined {
-  return launch.leftovers?.workspace
+/**
+ * The tick the launcher keeps (martha#562 package 2): the misses a member's git guard left, and the scan of the workspace
+ * this launch was given, which starts here and is never awaited. It sits beside the launch rather than inside it so that
+ * what it decides — including a launch given no layout — costs the launch's own reading nothing.
+ */
+function aTickOfWorkFor(launch: ClaudeCodeMemberLaunch, misses: string): () => void {
+  const beats = dashboardRowsIn(launch.places.dashboard)
+  return aTickOfTheRowsWork(aFolderOfTheMisses(misses, launch.member_name, beats), aFolderOfTheScan(launch.leftovers?.workspace, launch.member_name, beats))
 }
 
 /** The launch itself, on a run that has said whether it is still there. */
@@ -715,11 +719,7 @@ async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeli
   const offLauncherEnd = cleanUpIfTheLauncherEnds(pid, made)
   // The row's one line is written here, and here only: the misses a guard left, and the scan of the workspace this
   // launch was given, which starts now that its host is up and is never awaited (martha#562 package 2).
-  const beats = dashboardRowsIn(launch.places.dashboard)
-  const foldTheMisses = aFolderOfTheMisses(made.guard.misses, launch.member_name, beats)
-  const foldTheScan = aFolderOfTheScan(theWorkspaceOf(launch), launch.member_name, beats)
-  const aTickOfWork = (): void => (foldTheMisses(), foldTheScan())
-  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop, aTickOfWork)
+  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop, aTickOfWorkFor(launch, made.guard.misses))
   const ended = (): string | null => (backstop.disarm(), unwatch(), itsRunWent.forgetTheRun(), stoppedBecause)
   const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd, ended)
   backstop.arm()

@@ -11,7 +11,8 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { soloDeclaration } from '../declare_crew/declare_crew.ts'
+import { CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, soloDeclaration, WORKTREES } from '../declare_crew/declare_crew.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 const ENTRY = join(import.meta.dirname, 'main.ts')
@@ -30,8 +31,8 @@ const gitIn = (cwd: string, ...args: readonly string[]): string =>
 
 /** The declaration a crew writes, in the shape the reader accepts: `soloDeclaration` is the writer's own. */
 const declareTheLayout = (root: string, clones: string, worktrees: string): void => {
-  mkdirSync(join(root, '.martha'), { recursive: true })
-  writeFileSync(join(root, '.martha', 'martha.json'), JSON.stringify(soloDeclaration('the owner', { clones, worktrees }), null, 2))
+  mkdirSync(join(root, DECLARATION_DIRECTORY), { recursive: true })
+  writeFileSync(join(root, DECLARATION_DIRECTORY, DECLARATION_FILE), JSON.stringify(soloDeclaration('the owner', { clones, worktrees }), null, 2))
 }
 
 /** A clean clone of one repository, on the default branch its origin starts on, with the layout declared around it. */
@@ -39,8 +40,8 @@ function aPlantedWorkspace(t: TestContext): APlantedWorkspace {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'martha-562-entry-')))
   t.after(() => removeTheTree(root))
   const origin = join(root, 'origin.git')
-  const clones = join(root, 'clones')
-  const worktrees = join(root, 'worktrees')
+  const clones = join(root, CLONES)
+  const worktrees = join(root, WORKTREES)
   const seed = join(root, 'seed')
   mkdirSync(join(clones, 'acme'), { recursive: true })
   mkdirSync(worktrees)
@@ -109,7 +110,7 @@ test('a directory that declares no layout answers 0 with the nothing-declared li
 
 test('a crew that turned the layout off answers the same nothing-declared line', (t) => {
   const planted = aPlantedWorkspace(t)
-  writeFileSync(join(planted.root, '.martha', 'martha.json'), JSON.stringify(soloDeclaration('the owner'), null, 2))
+  writeFileSync(join(planted.root, DECLARATION_DIRECTORY, DECLARATION_FILE), JSON.stringify(soloDeclaration('the owner'), null, 2))
   const { status, err } = running(planted.root)
   assert.equal(err, `${NAME}: no crew declared a workspace layout, so there is nothing to check\n`)
   assert.equal(status, 0)
@@ -117,7 +118,7 @@ test('a crew that turned the layout off answers the same nothing-declared line',
 
 test('a declaration that cannot be read answers 2, and says it could not be made', (t) => {
   const planted = aPlantedWorkspace(t)
-  writeFileSync(join(planted.root, '.martha', 'martha.json'), '{ not json')
+  writeFileSync(join(planted.root, DECLARATION_DIRECTORY, DECLARATION_FILE), '{ not json')
   const { status, err } = running(planted.root)
   assert.match(err, new RegExp(`^${NAME}: could not be made: .*martha\\.json`), `the words a reader sees: ${err}`)
   assert.equal(err.trimEnd().split('\n').length, 1, `one line, not a stack: ${err}`)
@@ -125,6 +126,6 @@ test('a declaration that cannot be read answers 2, and says it could not be made
 })
 
 test('the script the job runs names this entry, so a script pointed elsewhere fails here and not only in CI', () => {
-  const manifest = JSON.parse(readFileSync(join(dirname(import.meta.dirname), '..', 'package.json'), 'utf8')) as { scripts: Record<string, string> }
+  const manifest = JSON.parse(readFileSync(join(dirname(import.meta.dirname), '..', MANIFEST), 'utf8')) as { scripts: Record<string, string> }
   assert.match(manifest.scripts['check:workspace-layout'] ?? '', /src\/check_the_workspace_layout\/main\.ts$/)
 })
