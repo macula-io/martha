@@ -8,13 +8,13 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readlinkSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import type { FileTree, Processes } from '../host_contract/host_contract.ts'
+import type { FileKind, FileTree, Processes } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theDriftInTheWorkspace } from './check_the_workspace_matches_its_layout.ts'
 
@@ -57,12 +57,39 @@ function aCleanWorkspace(t: TestContext): Fixture {
   return { root, clones, worktrees, clone }
 }
 
+/** A second repository's bare origin and a clone of it at `at`, for a case that needs a repository the fixture's own. */
+function aSecondClone(root: string, at: string): void {
+  const name = basename(at)
+  const origin = join(root, `origin-${name}.git`)
+  const seed = join(root, `seed-${name}`)
+  execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch=main', origin])
+  mkdirSync(seed)
+  gitIn(seed, 'init', '--quiet', '--initial-branch=main')
+  writeFileSync(join(seed, 'README.md'), '# widget\n')
+  commitIn(seed, 'the first commit')
+  gitIn(seed, 'remote', 'add', 'origin', origin)
+  gitIn(seed, 'push', '--quiet', '-u', 'origin', 'main')
+  mkdirSync(dirname(at), { recursive: true })
+  gitIn(dirname(at), 'clone', '--quiet', origin, name)
+  gitIn(at, 'remote', 'set-head', 'origin', '--auto')
+}
+
 /** The places as a check reads them: names from the disk, the path itself from the disk, git from the disk. */
 const anInspectionOf = (fixture: Fixture) => ({
   files: {
     childrenOf: (path: string): readonly string[] => { try { return readdirSync(path) } catch { return [] } },
     realPathOf: (path: string): string | null => { try { return realpathSync(path) } catch { return null } },
-  } as Pick<FileTree, 'childrenOf' | 'realPathOf'>,
+    kindOf: (path: string): FileKind => {
+      try {
+        const stat = lstatSync(path)
+        if (stat.isSymbolicLink()) return { kind: 'symlink', target: readlinkSync(path) }
+        if (stat.isDirectory()) return { kind: 'directory' }
+        return stat.isFile() ? { kind: 'file', ownerExecutes: (stat.mode & 0o100) !== 0 } : { kind: 'other' }
+      } catch {
+        return { kind: 'absent' }
+      }
+    },
+  } as Pick<FileTree, 'childrenOf' | 'realPathOf' | 'kindOf'>,
   processes: {
     run: async (request) => {
       const ended = spawnSync(request.command, [...request.args], { cwd: request.cwd, encoding: 'utf8' })
@@ -177,4 +204,56 @@ test('a place with no clones in it drifts by nothing, and a git that cannot answ
   // A clone git cannot read: every question goes unanswered, and no line is invented for it.
   const silent = { ...anInspectionOf(fixture), processes: { run: async () => ({ exit_code: null, stdout: '', stderr: '' }) } as Pick<Processes, 'run'> }
   assert.deepEqual(await theDriftInTheWorkspace(silent), [])
+})
+
+test('a file beside the organisations is named, and the clones are still read past it', async (t) => {
+  const fixture = aCleanWorkspace(t)
+  gitIn(fixture.clone, 'checkout', '--quiet', '-b', 'hygiea/562')
+  const note = join(fixture.clones, 'a-note.md')
+  writeFileSync(note, 'left here by someone\n')
+  // The walk takes every child of the clones place for an organisation, so a file there killed it with ENOTDIR before
+  // this case: what it must do instead is say what it found and carry on to the clone beside it.
+  assert.deepEqual(await theDriftInTheWorkspace(anInspectionOf(fixture)), [
+    `${note} is not a directory: the crew's clones are laid out <clones>/<org>/<repo>, and every place between them is one.`,
+    `${fixture.clone} is on hygiea/562, and a clone stays on main: a branch's work belongs in a worktree.`,
+  ])
+})
+
+test('a symlinked organisation is followed: the clone under it is read, not skipped', async (t) => {
+  const fixture = aCleanWorkspace(t)
+  const elsewhere = join(fixture.root, 'elsewhere', 'acme-two')
+  aSecondClone(fixture.root, join(elsewhere, 'widget'))
+  symlinkSync(elsewhere, join(fixture.clones, 'acme-two'))
+  gitIn(join(fixture.clones, 'acme-two', 'widget'), 'checkout', '--quiet', '-b', 'hygiea/562')
+  const lines = await theDriftInTheWorkspace(anInspectionOf(fixture))
+  // `kindOf` does not follow a link: the walk resolves it first, so a crew that reaches an organisation through one
+  // still has its clones read, and the link itself is no drift.
+  assert.deepEqual(lines, [`${join(fixture.clones, 'acme-two', 'widget')} is on hygiea/562, and a clone stays on main: a branch's work belongs in a worktree.`])
+})
+
+test('a symlinked clone is followed: the clone it points at is read, not skipped', async (t) => {
+  const fixture = aCleanWorkspace(t)
+  const outside = join(fixture.root, 'outside', 'widget-two')
+  aSecondClone(fixture.root, outside)
+  gitIn(outside, 'checkout', '--quiet', '-b', 'uranus/563')
+  symlinkSync(outside, join(fixture.clones, 'acme', 'widget-two'))
+  const lines = await theDriftInTheWorkspace(anInspectionOf(fixture))
+  assert.deepEqual(lines, [`${join(fixture.clones, 'acme', 'widget-two')} is on uranus/563, and a clone stays on main: a branch's work belongs in a worktree.`])
+})
+
+test('a child the tree will not read is one named line, not a crash', async (t) => {
+  const fixture = aCleanWorkspace(t)
+  const blind = join(fixture.clones, 'blind-org')
+  mkdirSync(blind)
+  const clean = anInspectionOf(fixture)
+  const files = {
+    ...clean.files,
+    kindOf: (path: string): FileKind => {
+      if (path === blind) throw new Error('EACCES: permission denied')
+      return clean.files.kindOf(path)
+    },
+  }
+  assert.deepEqual(await theDriftInTheWorkspace({ ...clean, files }), [
+    `${blind} could not be read (EACCES: permission denied), so what the crew put there is not known.`,
+  ])
 })

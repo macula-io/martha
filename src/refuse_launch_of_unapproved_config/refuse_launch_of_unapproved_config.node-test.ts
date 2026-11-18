@@ -353,16 +353,70 @@ test("the record of the engine's hint text refuses when a directory on the way c
 
 // --- where it looks -------------------------------------------------------------
 
-test('a config one directory above the checkout counts; one in the stop directory does not', (t) => {
+test('a config above a checkout whose stop is not an ancestor is neither listed nor fingerprinted (martha#766)', (t) => {
+  const place = scratch(t)
+  const stop = join(place.home, 'elsewhere')
+  mkdirSync(stop)
+  // The owner's own file, one directory above the checkout, and below the stop's sibling: #574's look.
+  put(place.home, join(CLAUDE_FOLDER, USER_SETTINGS_FILE), '{"the owner": "keeps this"}')
+  put(place.checkout, SERVERS, server('echo one'))
+  commitAll(place.checkout, 'a server')
+  const at = { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: stop }
+
+  const before = readLaunchState(at, thisMachine)
+  const above = before.entries.filter((entry) => entry.path.startsWith('../') && entry.kind !== 'absent')
+  assert.deepEqual(above, [], 'the approval names a file above the checkout')
+  assert.ok(before.entries.some((entry) => entry.path === SERVERS && entry.kind === 'file'), "the checkout's own config is not read")
+
+  const approved = fingerprintOf(before)
+  put(place.home, join(CLAUDE_FOLDER, USER_SETTINGS_FILE), '{"the owner": "kept that instead"}')
+  const after = readLaunchState(at, thisMachine)
+  assert.equal(fingerprintOf(after), approved, "the owner editing their own settings changed this checkout's approval")
+  assert.equal(
+    decideLaunch({ host: CLAUDE_CODE, ...after, approved_fingerprints: [approved] }).allow,
+    true,
+    'the approval stopped matching after an edit above the checkout',
+  )
+
+  const prepared = prepareLaunch({ ...at, snapshot_root: join(place.home, 'scratch'), approved_fingerprints: [approved] }, thisMachine)
+  assert.ok('not_carried' in prepared, prepared.allow ? 'the launch kept no list of what it does not load' : prepared.refusal)
+  const notLoaded = 'not_carried' in prepared ? prepared.not_carried.filter((path) => path.startsWith('../')) : []
+  assert.deepEqual(notLoaded, [], 'the launch reports a file above the checkout as not loaded')
+})
+
+test("a config above the checkout's top is no part of the approval, and the stop is still never read (martha#766)", (t) => {
   const place = scratch(t)
   put(place.home, SERVERS, server('the owner keeps this'))
   assert.equal(decide(CLAUDE_CODE, place).decision.allow, true)
 
+  const before = readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine)
+  assert.ok(!before.entries.some((entry) => entry.path === `../../${SERVERS}`), 'the stop directory was read')
+
   put(dirname(place.checkout), SERVERS, server('a parent directory ships this'))
-  const { state, decision } = decide(CLAUDE_CODE, place)
-  assert.equal(decision.allow, false)
-  assert.ok(state.entries.some((entry) => entry.path === `../${SERVERS}` && entry.kind === 'file'))
-  assert.ok(!state.entries.some((entry) => entry.path === `../../${SERVERS}`))
+  const after = readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine)
+  assert.ok(!after.entries.some((entry) => entry.path === `../${SERVERS}`), "a config above the checkout's top is in the approval")
+  assert.equal(fingerprintOf(after), fingerprintOf(before), "a config above the checkout's top changed the fingerprint")
+  assert.equal(decide(CLAUDE_CODE, place).decision.allow, true, 'a config above the checkout refused the launch')
+})
+
+test("the checkout's own config above a start inside it counts, and a stop inside it ends the walk first (martha#766)", (t) => {
+  const place = scratch(t)
+  const tools = join(place.checkout, 'tools')
+  mkdirSync(tools)
+  put(place.checkout, SERVERS, server('the checkout ships this'))
+  commitAll(place.checkout, 'a server')
+  const at = { host: CLAUDE_CODE, launch_dir: tools, stop_dir: place.home }
+
+  const first = readLaunchState(at, thisMachine)
+  assert.ok(first.entries.some((entry) => entry.path === `../${SERVERS}` && entry.kind === 'file'), "the checkout's own config above the start is not read")
+  put(place.checkout, SERVERS, server('the checkout ships that instead'))
+  assert.notEqual(fingerprintOf(readLaunchState(at, thisMachine)), fingerprintOf(first), "a change to the checkout's own config above the start did not change the fingerprint")
+
+  // A stop between the start and the top ends the walk before the top does: nothing at or above it is read.
+  put(tools, SERVERS, server('the stop keeps this'))
+  mkdirSync(join(tools, 'deeper'))
+  const inside = readLaunchConfig({ host: CLAUDE_CODE, launch_dir: join(tools, 'deeper'), stop_dir: tools }, thisMachine)
+  assert.ok(inside.every((entry) => !entry.path.startsWith('../')), 'a config at or above the stop inside the checkout was read')
 })
 
 test('the start and the stop are resolved through symlinks before the walk up', (t) => {
@@ -385,8 +439,8 @@ test('starting in the stop directory itself reads only that directory', (t) => {
   assert.ok(entries.every((entry) => !entry.path.startsWith('..')))
 })
 
-test('a start outside the stop directory is read all the way up', (t) => {
-  const { home, checkout } = scratch(t)
+test('a start outside the stop, in no git checkout, is still read all the way up (martha#766)', (t) => {
+  const { home, checkout } = scratch(t, { repository: false })
   const elsewhere = join(home, 'elsewhere')
   mkdirSync(elsewhere)
   const entries = readLaunchConfig({ host: CLAUDE_CODE, launch_dir: checkout, stop_dir: elsewhere }, thisMachine)

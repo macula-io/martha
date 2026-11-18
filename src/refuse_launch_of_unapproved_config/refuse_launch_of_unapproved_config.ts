@@ -24,10 +24,12 @@
 //      Claude Code's own approval is a list of server names, which is why it
 //      cannot be this control.
 //
-//   3. THE DIRECTORIES ABOVE COUNT. A config above the checkout is fingerprinted
-//      with it, up to (not including) the directory the launcher names as the
-//      stop, the owner's home. This is for a host started by hand, which walks up
-//      (OpenCode with no stop at all); a planned launch reads none of them.
+//   3. THE CHECKOUT IS THE BOUND. A config inside the checkout is fingerprinted
+//      with it, from the directory the host starts in up to the checkout's top, and
+//      never above it. Nothing above the top is read: it is not the checkout
+//      author's, the launch never carries it, and a planned launch loads none of it
+//      (martha#766). The stop bounds the walk when the start is in no checkout, or
+//      in one whose top is the stop or above it.
 //
 //   4. WHAT THE GATE CANNOT PIN DOWN IS REFUSED: a symlink, even an approved one;
 //      a path that is not a plain file or directory; config in a directory that
@@ -50,7 +52,7 @@
 import { createHash } from 'node:crypto'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 
-import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
+import { checkoutTheGateReads, readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -569,7 +571,7 @@ export const admitsLaunch: LaunchGate = (request) => decideLaunch(request).allow
 export interface LaunchPlace {
   readonly host: string
   readonly launch_dir: string
-  /** Not read, nor anything above it: the owner's home. */
+  /** Read only when the host starts in it: the owner's home. The whole bound when the start is in no checkout the gate reads (martha#766). */
   readonly stop_dir: string
   /**
    * The tree the owner approved, whose attributes the checkout is read under (martha#167). Omitted, the checkout's
@@ -587,16 +589,23 @@ export interface LaunchPlace {
 
 /**
  * Every file the host would read to start something, from the directory it
- * starts in and each directory above it, up to but not including `stop_dir`.
- * Both are resolved through symlinks first. A start outside `stop_dir` is read
- * all the way up to the filesystem root. A host with no entry reads nothing.
+ * starts in and each directory above it: up to the checkout's top when the start
+ * is in a checkout whose top is not the stop or above it, and otherwise up to but
+ * not including `stop_dir`, or as far as the filesystem root when the stop is no
+ * ancestor of the start. Both the start and the stop are resolved through symlinks
+ * first. A host with no entry reads nothing.
+ *
+ * The top is the bound because the checkout's own config is the only config its
+ * author ships, and the launch carries none above it (martha#766).
  */
 export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, machine: LaunchHost): readonly ConfigEntry[] {
   const names = LAUNCH_FILES_OF_HOST[host]
   if (names === undefined) return []
 
   const start = realOrResolved(machine, launch_dir)
-  const found = directoriesUpFrom(start, realOrResolved(machine, stop_dir)).flatMap((dir) =>
+  const stop = realOrResolved(machine, stop_dir)
+  const top = checkoutTheGateReads(start, stop, machine)?.top
+  const found = directoriesUpFrom(start, stop, top).flatMap((dir) =>
     names.flatMap((name) => entriesAt(machine, start, dir, name)),
   )
   // Two listed names share a parent (.claude/…): a parent that is not a
@@ -830,12 +839,19 @@ function envOf(carried: readonly HostSwitches[]): Record<string, string> | strin
   return env
 }
 
-/** The start, then each directory above it, stopping below `stop` or at the root. */
-function directoriesUpFrom(start: string, stop: string): readonly string[] {
+/**
+ * The start, then each directory above it, ending at whichever comes first: the
+ * directory before `stop`, or `top` itself once it has been pushed. `top` is the
+ * checkout's top when the gate reads that checkout (martha#766). Without one the
+ * walk is the stop's alone, and it runs to the root when the stop is no ancestor
+ * of the start.
+ */
+function directoriesUpFrom(start: string, stop: string, top: string | undefined): readonly string[] {
   const dirs: string[] = [start]
-  if (start === stop) return dirs
+  if (start === stop || start === top) return dirs
   for (let dir = dirname(start); dir !== stop && dir !== dirs[dirs.length - 1]; dir = dirname(dir)) {
     dirs.push(dir)
+    if (dir === top) break
   }
   return dirs
 }
