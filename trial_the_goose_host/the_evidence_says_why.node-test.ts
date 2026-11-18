@@ -49,7 +49,7 @@ test('a not-observed line with no transcript fails by name, naming the line (mar
   const line = join(evidence, 'line-4')
   aVerdict(line, NOT_OBSERVED)
 
-  const refusal = theRefusalOf(4, line)
+  const refusal = theRefusalOf(4, NOT_OBSERVED, line)
   assert.match(refusal ?? '', /^line 4: not-observed, and no ACP transcript was kept/)
   assert.deepEqual(refusalsIn(evidence), [`${refusal} (line-4)`])
 })
@@ -61,7 +61,22 @@ test('an empty transcript is no transcript: a launch killed before its first mes
   writeFileSync(join(line, THE_TRANSCRIPT), '')
 
   assert.equal(messagesIn(line), 0)
-  assert.notEqual(theRefusalOf(4, line), undefined)
+  assert.notEqual(theRefusalOf(4, NOT_OBSERVED, line), undefined)
+})
+
+test('a not-observed verdict is judged on the verdict handed in, before any result.json exists (martha#694)', () => {
+  const evidence = anEvidenceDirectory()
+  const line = join(evidence, 'line-4')
+  mkdirSync(line, { recursive: true })
+  const observation: Observation = { verdict: NOT_OBSERVED, say: 'the line observed nothing: no answer within 240000 ms', evidence: {} }
+
+  // Exactly as runLine calls it: result.json is written AFTER this call, so there is nothing on disk to read.
+  const refused = theVerdictKeptWithItsExchange(4, observation, line)
+  assert.equal(refused.verdict, 'fail', 'a not-observed verdict with no transcript is never handed on as not-observed')
+  assert.match(refused.say, /line 4: not-observed, and no ACP transcript was kept/)
+
+  anExchange(line, 1)
+  assert.deepEqual(theVerdictKeptWithItsExchange(4, observation, line), observation, 'the twin: with a transcript beside it, a not-observed verdict stands')
 })
 
 test('a not-observed line that kept its exchange is exactly what the rule wants (martha#694)', () => {
@@ -71,7 +86,7 @@ test('a not-observed line that kept its exchange is exactly what the rule wants 
   anExchange(line, 3)
 
   assert.equal(messagesIn(line), 3)
-  assert.equal(theRefusalOf(4, line), undefined)
+  assert.equal(theRefusalOf(4, NOT_OBSERVED, line), undefined)
   assert.deepEqual(refusalsIn(evidence), [])
 })
 

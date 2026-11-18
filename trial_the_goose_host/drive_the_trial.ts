@@ -133,10 +133,12 @@ async function startARun(line: number, options: Options): Promise<Running> {
   const keep = (exchange: Exchange): void => {
     appendFileSync(transcriptPath, `${JSON.stringify(exchange)}\n`)
   }
-  // Recorded before the engine starts, so a launch killed during the handshake still has its logs kept.
+  // Recorded before the engine starts, so a launch killed during the handshake still has its logs kept; the
+  // exchange joins it once it exists, so the SIGTERM path can keep what arrived before the kill (martha#694).
   theLaunchInHand = { root: place.root, into: evidenceForLine }
   const child = startGoose(place, options, line, tracePath)
   const acp = new GooseOverAcp(child, keep)
+  theLaunchInHand = { ...theLaunchInHand, close: () => acp.closeTheExchange() }
   const { sessionId, currentMode } = await shakeHands(acp, place)
   return { line, options, place, proxy, acp, child, tracePath, sessionId, currentMode }
 }
@@ -213,22 +215,32 @@ export function keepTheEngineLogs(root: string, into: string): number {
 }
 
 /** Where the launch in hand keeps its evidence, and the root its engine writes its own logs under. */
-let theLaunchInHand: { readonly root: string; readonly into: string } | undefined
+let theLaunchInHand: { readonly root: string; readonly into: string; readonly close?: () => void } | undefined
 
 /**
  * The one case the copy has to happen outside the run's own code: the runner's ten-minute `timeout` sends
  * SIGTERM while a line is still running — during the handshake as readily as during a turn — and the engine's
  * logs have to be kept before the process dies. The signal is raised again with the handler gone, so the
  * launch still ends the way it did before: killed, with the status the runner prints.
+ *
+ * The exchange is closed first, for the same reason (martha#694): a message that crossed without its newline is
+ * still in the client's buffer, and it is the last thing the reader of the run needs. A launch killed before the
+ * exchange exists has nothing to close.
  */
 function keepTheEndsOnSignal(): void {
-  if (theLaunchInHand !== undefined) keepTheEngineLogs(theLaunchInHand.root, theLaunchInHand.into)
+  if (theLaunchInHand !== undefined) {
+    theLaunchInHand.close?.()
+    keepTheEngineLogs(theLaunchInHand.root, theLaunchInHand.into)
+  }
   process.removeListener('SIGTERM', keepTheEndsOnSignal)
   process.kill(process.pid, 'SIGTERM')
 }
 
 async function endARun(running: Running): Promise<{ trace: TraceFindings; groupLeft: string[]; engineLogs: number }> {
   const groupLeft = await killTheGroup(running.child)
+  // The fallback for the pipe's own `end` event, which normally has flushed the last partial message already: a
+  // launch whose stdout ended before any listener could run still keeps what crossed (martha#694). Keeps nothing twice.
+  running.acp.closeTheExchange()
   await running.proxy.stop()
   const engineLogs = keepTheEngineLogs(running.place.root, join(running.options.evidence, `line-${running.line}`))
   theLaunchInHand = undefined
