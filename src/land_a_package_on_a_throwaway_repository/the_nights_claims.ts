@@ -69,7 +69,7 @@ export function theNightsLine(verb: string, night: TheNight): string {
 }
 
 /** One record of a transcript, as far as these claims read it. */
-interface TheRecord {
+export interface TheRecord {
   readonly type?: unknown
   readonly isSidechain?: unknown
   readonly timestamp?: unknown

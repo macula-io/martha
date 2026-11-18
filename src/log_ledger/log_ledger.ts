@@ -69,7 +69,7 @@ export const REFRESH_FORCED = 'refresh_forced'
 export const OUTWARD_ACTS = ['push', 'handoff', 'room_message', 'tag', REFRESH_FORCED] as const
 export type OutwardActKind = (typeof OUTWARD_ACTS)[number]
 
-const ACT_ANNOUNCED = 'act_announced'
+export const ACT_ANNOUNCED = 'act_announced'
 const ACT_CONCLUDED = 'act_concluded'
 const RECOVERY_DECIDED = 'recovery_decided'
 

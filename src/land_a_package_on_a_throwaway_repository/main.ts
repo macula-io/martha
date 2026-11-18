@@ -13,6 +13,11 @@
 // night file (package, range, builder, reviewer, builder_transcript, reviewer_transcript), and exits 1 naming the first
 // of section 6's four crew rows the transcripts do not show.
 //
+//   node src/land_a_package_on_a_throwaway_repository/main.ts landing <night.json>    < nothing
+//
+// `landing` reads the same four night fields, the builder's transcript and the crew's rows folder (builder_transcript,
+// rows), and exits 1 naming the first of section 6's landing rows (5 to 7) they do not show.
+//
 // Exit 0 the guard holds, 1 it refuses, naming why on standard error, 2 it could not look. `redact` writes the text,
 // redacted, to standard output either way, and exits 1 when a token had reached it. `expiry` exits 0 with a note on
 // standard output for a token with no expiry, a warning when it is near its expiry, and 1 when it has expired. The token is never an argument:
@@ -27,6 +32,10 @@ import { whatTheStartWouldLoad, type TheStart } from './a_clean_start.ts'
 import { whatTheRunMadeIn, whyNotDelete } from './the_delete_guard.ts'
 import { keepAScreen, redactTheToken, THE_TOKEN_REACHED_THE_RECORD, TOKEN_NOT_PLACED, TOKEN_PLACED } from './the_kept_record.ts'
 import { whichCrewClaimFails, type TheNight } from './the_nights_claims.ts'
+import { whichLandingClaimFails } from './the_nights_landing.ts'
+import { ledgerStreamOf, type LedgerRow } from '../log_ledger/log_ledger.ts'
+import { OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { theTokensExpiry } from './the_tokens_expiry.ts'
 import { whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 
@@ -98,28 +107,53 @@ const screen = (argument: string, input: string): Said => {
   return { code: 0, out: keepAScreen(input, argument === TOKEN_PLACED).text }
 }
 
-/** The fields a night file must carry, each a non-empty string. */
-const NIGHT_FIELDS = ['package', 'range', 'builder', 'reviewer', 'builder_transcript', 'reviewer_transcript'] as const
+/** The fields every night file carries, each a non-empty string. */
+const NIGHT_FIELDS = ['package', 'range', 'builder', 'reviewer'] as const
+
+/** A night file read: the night, and each further field the verb named, or the could-not-look that says why not. */
+function theNightFile(argument: string, more: readonly string[]): { readonly night: TheNight; readonly field: (name: string) => string } | Said {
+  const read = readJson(readFileSync(argument, 'utf8'))
+  if (typeof read !== 'object' || read === null) return couldNotLook(`${argument} is not a night's JSON object`)
+  const value = (name: string): unknown => (read as Record<string, unknown>)[name]
+  const missing = [...NIGHT_FIELDS, ...more].filter((name) => typeof value(name) !== 'string' || value(name) === '')
+  if (missing.length > 0) return couldNotLook(`${argument} names no ${missing.join(', ')}`)
+  const field = (name: string): string => value(name) as string
+  return { night: { package: field('package'), range: field('range'), builder: field('builder'), reviewer: field('reviewer') }, field }
+}
 
 /** Section 6's four crew rows, read from the two transcripts the night file names. Nothing on standard input is read. */
 const claims = (argument: string): Said => {
-  const night = readJson(readFileSync(argument, 'utf8'))
-  if (typeof night !== 'object' || night === null) return couldNotLook(`${argument} is not a night's JSON object`)
-  const field = (name: (typeof NIGHT_FIELDS)[number]): unknown => (night as Record<string, unknown>)[name]
-  const missing = NIGHT_FIELDS.filter((name) => typeof field(name) !== 'string' || field(name) === '')
-  if (missing.length > 0) return couldNotLook(`${argument} names no ${missing.join(', ')}`)
-  const said = (name: (typeof NIGHT_FIELDS)[number]): string => field(name) as string
-  const theNight: TheNight = { package: said('package'), range: said('range'), builder: said('builder'), reviewer: said('reviewer') }
-  return verdictOf(whichCrewClaimFails(theNight, readFileSync(said('builder_transcript'), 'utf8'), readFileSync(said('reviewer_transcript'), 'utf8')))
+  const file = theNightFile(argument, ['builder_transcript', 'reviewer_transcript'])
+  if ('code' in file) return file
+  return verdictOf(whichCrewClaimFails(file.night, readFileSync(file.field('builder_transcript'), 'utf8'), readFileSync(file.field('reviewer_transcript'), 'utf8')))
+}
+
+/**
+ * Section 6's landing rows (5 to 7), read from the builder's transcript and the crew's rows folder the night file names,
+ * through the rows store's own reader. Nothing on standard input is read.
+ */
+export async function landing(argument: string): Promise<Said> {
+  try {
+    const file = theNightFile(argument, ['builder_transcript', 'rows'])
+    if ('code' in file) return file
+    const rows = rowStreamsDirectory(file.field('rows'))
+    const asks = await rows.read(OWNER_ASKS_STREAM)
+    const ledger = (await rows.read(ledgerStreamOf(file.night.package))).map(({ row }) => row as unknown as LedgerRow)
+    return verdictOf(whichLandingClaimFails(file.night, { builderTranscript: readFileSync(file.field('builder_transcript'), 'utf8'), asks, ledger }))
+  } catch (error) {
+    return couldNotLook(error instanceof Error ? error.message : String(error))
+  }
 }
 
 const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact, screen, claims }
+/** The one guard that reads a store, and so answers later. */
+const LANDING = 'landing'
 
 /** What the guard named by `args` says of `input`. Anything it cannot read is exit 2, never a pass. */
 export function runTheGuard(args: readonly string[], input: string): Said {
   const [name, argument] = args
   const guard = name === undefined ? undefined : GUARDS[name]
-  if (guard === undefined || argument === undefined || args.length !== 2) return couldNotLook(`usage: main.ts <${Object.keys(GUARDS).join('|')}> <argument>`)
+  if (guard === undefined || argument === undefined || args.length !== 2) return couldNotLook(`usage: main.ts <${[...Object.keys(GUARDS), LANDING].join('|')}> <argument>`)
   try {
     return guard(argument, input)
   } catch (error) {
@@ -128,7 +162,8 @@ export function runTheGuard(args: readonly string[], input: string): Said {
 }
 
 if (import.meta.main) {
-  const said = runTheGuard(process.argv.slice(2), readFileSync(0, 'utf8'))
+  const args = process.argv.slice(2)
+  const said = args[0] === LANDING && args.length === 2 && args[1] !== undefined ? await landing(args[1]) : runTheGuard(args, readFileSync(0, 'utf8'))
   if (said.out !== undefined) process.stdout.write(said.out)
   if (said.err !== undefined) process.stderr.write(`${NAME}: ${said.err}\n`)
   process.exitCode = said.code

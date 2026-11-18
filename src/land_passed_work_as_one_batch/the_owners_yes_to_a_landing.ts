@@ -103,6 +103,9 @@ export interface TheYesAsked {
 /** What the yes came to: what the landing stands on, as its ledger rows say it; or why there is none. */
 export type TheYes = { readonly stood_on: string } | { readonly refused: string }
 
+/** What a landing on the owner's yes to ask `ask` says it stood on: its ledger note ends with these words (martha#639). */
+export const theOwnersYesTo = (ask: number): string => `the owner's yes to ask ${String(ask)}`
+
 /**
  * The yes this landing stands on, or why it has none. Reads the owner's asks only when the table grants the act to the
  * owner and not to the caller's role; writes nothing.
@@ -138,5 +141,5 @@ async function theOwnersYes(host: LedgerHost, asked: TheYesAsked): Promise<TheYe
   if (answered.question !== question) {
     return { refused: `the owner said yes to ask ${String(asked.owner_yes)}, which asked ${JSON.stringify(answered.question)}; this landing asks ${JSON.stringify(question)}, and a yes counts only for the landing it was asked about. Nothing was pushed.` }
   }
-  return { stood_on: `the owner's yes to ask ${String(asked.owner_yes)}` }
+  return { stood_on: theOwnersYesTo(asked.owner_yes) }
 }
