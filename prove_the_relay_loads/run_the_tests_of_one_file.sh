@@ -28,9 +28,13 @@ cd "${REPO}"
 
 refuse() { echo "${NAME}: ${1}" >&2; exit 2; }
 
-# The three things that bound a run, each read from the one place that defines it, and a read that comes back empty
-# refuses rather than running anything unbounded.
-mapfile -t THE_BOUNDS < <(node --input-type=module -e "import { FORCE_EXIT_FLAG, GUARD_FLAG, TIMEOUT_FLAG } from './prove_the_core/every_test_run_ends.ts'; console.log(TIMEOUT_FLAG); console.log(FORCE_EXIT_FLAG); console.log(GUARD_FLAG)")
+# Every read below is taken with `|| refuse` before it is split: `set -e` does not see a process substitution, so a read
+# that failed there would hand back no words and the run would go on without what they say. The three things that bound a
+# run come from the one place that defines them, and a read that comes back empty refuses too, rather than running
+# anything unbounded.
+the_bounds="$(node --input-type=module -e "import { FORCE_EXIT_FLAG, GUARD_FLAG, TIMEOUT_FLAG } from './prove_the_core/every_test_run_ends.ts'; console.log(TIMEOUT_FLAG); console.log(FORCE_EXIT_FLAG); console.log(GUARD_FLAG)")" \
+  || refuse "every_test_run_ends.ts could not be read for the flags that bound a run"
+mapfile -t THE_BOUNDS <<<"${the_bounds}"
 TIMEOUT_FLAG="${THE_BOUNDS[0]:-}"
 FORCE_EXIT_FLAG="${THE_BOUNDS[1]:-}"
 GUARD_FLAG="${THE_BOUNDS[2]:-}"
@@ -38,9 +42,14 @@ GUARD_FLAG="${THE_BOUNDS[2]:-}"
   || refuse "every_test_run_ends.ts gave no ${TIMEOUT_FLAG:-timeout}/${FORCE_EXIT_FLAG:-force-exit}/${GUARD_FLAG:-guard} to read"
 
 # Stage 3 of the test script as it stands there, so no word of this run is written anywhere a second time.
-mapfile -t STAGE < <(node "${THE_READER}" stage)
-mapfile -t UNSETS < <(node "${THE_READER}" unsets)
-[[ ${#STAGE[@]} -gt 0 ]] || refuse "${THE_READER} read no command of the tests from the test script"
+stage_words="$(node "${THE_READER}" stage)" || refuse "${THE_READER} could not be asked for the command the tests run with"
+[[ -n "${stage_words}" ]] || refuse "${THE_READER} read no command of the tests from the test script"
+mapfile -t STAGE <<<"${stage_words}"
+
+# The names that command unsets. None is legitimate, so an empty answer is not a failure; a read that failed is.
+UNSETS=()
+unsets_words="$(node "${THE_READER}" unsets)" || refuse "${THE_READER} could not be asked for the names the tests run without"
+if [[ -n "${unsets_words}" ]]; then mapfile -t UNSETS <<<"${unsets_words}"; fi
 
 PREFIX=()
 FLAGS=()
@@ -89,8 +98,11 @@ holds "${FORCE_EXIT_FLAG}" "the run's arguments carry no ${FORCE_EXIT_FLAG}, so 
 holds "${GUARD_FLAG}" "the run's arguments carry no ${GUARD_FLAG}, so a file leaving something running would pass silently (martha#56)"
 
 printf '%s: %s\n' "${NAME}" "${ARGS[*]}" >&2
-if (( ${#UNSETS[@]} > 0 )); then
-  env -u "${UNSETS[@]}" "${ARGS[@]}"
+# One `-u <name>` pair per name: `env -u A B` takes B for the command, so the pairs are built here rather than spread.
+UNSET_ARGS=()
+for name in "${UNSETS[@]}"; do UNSET_ARGS+=(-u "${name}"); done
+if (( ${#UNSET_ARGS[@]} > 0 )); then
+  env "${UNSET_ARGS[@]}" "${ARGS[@]}"
 else
   "${ARGS[@]}"
 fi
