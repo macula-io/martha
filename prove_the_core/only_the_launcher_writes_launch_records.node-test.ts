@@ -64,6 +64,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'keep_the_relays_journal',
     'keep_what_the_owner_signed',
     'launch_a_claude_code_member',
+    'launch_a_goose_member',
     'list_stop_and_restart_the_crew',
     'load_the_hosts_markdown',
     'place_the_hosts_settings',

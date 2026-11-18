@@ -2,8 +2,8 @@
 // engine runs in, the engine in a process group of its own, and the permission store checked empty at the
 // end (launch_a_goose_member.ts, martha#541 packages 7-8 part A).
 //
-// Every expectation here is read from the recording the launcher reads, never typed beside it: the
-// extension keys, the mode values and the two settings are `RECORDED_GOOSE_ENGINE`'s own. Everything a
+// Every expectation about the engine here is read from the recording the launcher reads, never typed beside
+// it: the extension keys, the mode values and the settings are `RECORDED_GOOSE_ENGINE`'s own. Everything a
 // test makes is removed after it.
 
 import assert from 'node:assert/strict'
