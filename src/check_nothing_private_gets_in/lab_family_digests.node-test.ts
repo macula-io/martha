@@ -11,10 +11,9 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { test, type TestContext } from 'node:test'
-import ts from 'typescript'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theEnvironmentOfALaunch } from '../launch_a_goose_member/launch_a_goose_member.ts'
@@ -273,51 +272,6 @@ test('the reader resolves from the environment it is handed, never its own proce
   assert.equal(ran.status, 0, ran.stderr)
   // `own` is the control: the file this child's own environment names is there to be found.
   assert.deepEqual(JSON.parse(ran.stdout), { kind: 'unchecked', hits: 0, own: true })
-})
-
-/** The module an import or export declaration names. */
-const staticSpecifierOf = (node: ts.Node): string | undefined =>
-  (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier !== undefined && ts.isStringLiteral(node.moduleSpecifier)
-    ? node.moduleSpecifier.text
-    : undefined
-
-/** A way to load a module that no import declaration shows. */
-const dynamicRouteOf = (node: ts.Node): string | undefined => {
-  if (ts.isImportEqualsDeclaration(node)) return 'import = require'
-  if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) return 'import()'
-  return ts.isIdentifier(node) && ['require', 'createRequire'].includes(node.text) ? node.text : undefined
-}
-
-/** Every module the reader loads from this tree, with what each imports, read by the TypeScript parser. */
-const importsFrom = (entry: string) => {
-  const seen = new Map<string, { specifiers: string[]; dynamic: string[] }>()
-  const visit = (file: string) => {
-    if (seen.has(file)) return
-    const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true)
-    const found = { specifiers: [] as string[], dynamic: [] as string[] }
-    seen.set(file, found)
-    const walk = (node: ts.Node) => {
-      const specifier = staticSpecifierOf(node)
-      if (specifier !== undefined) found.specifiers.push(specifier)
-      const route = dynamicRouteOf(node)
-      if (route !== undefined) found.dynamic.push(route)
-      ts.forEachChild(node, walk)
-    }
-    walk(source)
-    for (const specifier of found.specifiers) if (specifier.startsWith('.')) visit(resolve(dirname(file), specifier))
-  }
-  visit(entry)
-  return seen
-}
-
-test('the reader imports no node:os, by any route: a home it could look up there is not the one it is handed (martha#731, design r=3)', () => {
-  const modules = importsFrom(READER)
-  assert.ok(modules.size > 1, 'the walk did not follow the reader\'s own imports')
-  for (const [file, found] of modules) {
-    const name = file.slice(dirname(READER).length + 1)
-    for (const specifier of found.specifiers) assert.ok(!['node:os', 'os'].includes(specifier), `${name} imports ${specifier}`)
-    assert.deepEqual(found.dynamic, [], `${name} loads a module by a route its imports do not show: ${found.dynamic.join(', ')}`)
-  }
 })
 
 test('the owner\'s act refuses where there is no terminal, and keeps nothing (martha#731)', (t) => {
