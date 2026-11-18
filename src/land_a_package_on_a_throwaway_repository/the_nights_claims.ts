@@ -30,7 +30,12 @@ export const VERDICT_ARRIVED = 'the verdict arrived'
 export const NO_CI_RUN = 'none:paths'
 /** The one round a night runs, the verdict it expects, and the changes that verdict requires. */
 export const THE_ROUND = '1'
-export const THE_VERDICT = 'PASS'
+/**
+ * The verdict word is the crew's own, never spelled here: the passing word, which the VERDICT shape lists first
+ * (crew_lines.ts). The claims tests write the night's lines out with it, so a shape that reordered its words fails them.
+ */
+const VERDICT_WORDS = shapeOf('VERDICT')?.parts.find((part) => 'oneOf' in part)
+export const THE_VERDICT: string = VERDICT_WORDS !== undefined && 'oneOf' in VERDICT_WORDS ? (VERDICT_WORDS.oneOf[0] ?? '') : ''
 export const NONE_REQUIRED = '0'
 
 /** The values the night's lines carry, by key. */
