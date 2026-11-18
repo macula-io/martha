@@ -46,7 +46,7 @@
 // `reject_always`, and a later call then skips the client, so a launch that ends with anything saved is a
 // launch Martha did not gate. A store in a shape this launcher does not know is not read as an empty one.
 //
-// Two gaps are named here rather than closed, and neither is silent:
+// Three gaps are named here rather than closed, and none is silent:
 //   - Skills. On the pinned build `load_skill` is offered to every session and is not a platform
 //     extension, so no switch in this config root reaches it (trial line 9 failed on exactly this).
 //     Saturnus's port of the fork's skills switch (#614) closes it, and until it lands a session is
@@ -54,6 +54,10 @@
 //   - The member's own tool servers. The design puts them in this config root too, but the shape of an
 //     entry is the engine's own and is not in the recording yet, so the launcher writes the built-in
 //     switches only and writes no server until the package that installs one for Goose records it.
+//   - The mode a session reports back. The launcher pins the mode that asks in the config root, but the
+//     engine also reports the mode a session actually runs in, over ACP, and there is no client here to
+//     ask it: a session that reports any other mode must be refused when the client that opens it (part
+//     B) hands the mode back, and that refusal lands with the wiring (martha#541, the gaps table).
 // The launch gate's rows for Goose's own files, and the inbound-path rows, are the rest of packages 7-8.
 
 import { spawn, type ChildProcess } from 'node:child_process'
@@ -93,7 +97,7 @@ export const THE_PERMISSION_FOLDER = 'permissions'
 export const THE_PERMISSION_STORE = 'tool_permissions.json'
 
 /** The one key the store's saved permissions sit under: the thing a store holding a rule has, and an empty one lacks. */
-const THE_STORES_PERMISSIONS_KEY = 'permissions'
+export const THE_STORES_PERMISSIONS_KEY = 'permissions'
 
 /** The folder under the launch root a launch's own root is made as, and the one its home is. */
 export const THE_ROOT_OF_A_LAUNCH = 'goose-root'
@@ -289,30 +293,60 @@ export type ThePermissionStoreRead = { readonly empty: true } | { readonly empty
  */
 export function thePermissionStoreIsStillEmpty(root: string): ThePermissionStoreRead {
   const store = thePermissionStoreOf(root)
-  let written: string
+  const written = theStoresText(store)
+  if (written === undefined) return { empty: true }
+  const value = theStoresValue(written)
+  if ('why' in value) return aStoreRefusal(store, value.why)
+  const saved = theSavedRulesIn(value.held)
+  if ('why' in saved) return aStoreRefusal(store, saved.why)
+  return saved.rules === 0 ? { empty: true } : aStoreRefusal(store, 'holds a saved permission')
+}
+
+/** The store's text, or undefined when the engine never wrote a store at all. */
+function theStoresText(store: string): string | undefined {
   try {
-    written = readFileSync(store, 'utf8')
+    return readFileSync(store, 'utf8')
   } catch {
-    return { empty: true }
+    return undefined
   }
-  const refused = (why: string): ThePermissionStoreRead => ({
+}
+
+/** What the store's text parses to, or why it cannot be read. */
+function theStoresValue(written: string): { readonly held: unknown } | { readonly why: string } {
+  try {
+    return { held: JSON.parse(written) as unknown }
+  } catch (error) {
+    return { why: `cannot be read (${error instanceof Error ? error.message : String(error)})` }
+  }
+}
+
+/**
+ * How many saved rules the store's value holds, or why it is not a store this reader knows: a rule saved
+ * under the engine's own key, in whatever lists the engine keeps it in, is a count; a value with no rules
+ * is zero; anything else is not read as empty.
+ */
+function theSavedRulesIn(held: unknown): { readonly rules: number } | { readonly why: string } {
+  if (!isAJsonObject(held)) return { why: 'is not an object' }
+  const keys = Object.keys(held)
+  if (keys.length === 0) return { rules: 0 }
+  if (keys.length !== 1 || keys[0] !== THE_STORES_PERMISSIONS_KEY) return { why: 'holds what this reader does not know' }
+  const saved = held[THE_STORES_PERMISSIONS_KEY]
+  if (!isAJsonObject(saved)) return { why: 'holds what this reader does not know' }
+  const counted = Object.values(saved).reduce<number>((count, entries) => count + (Array.isArray(entries) ? entries.length : 1), 0)
+  return { rules: counted }
+}
+
+/** A JSON object, as parsed: an array and null are not one. */
+function isAJsonObject(held: unknown): held is Record<string, unknown> {
+  return held !== null && typeof held === 'object' && !Array.isArray(held)
+}
+
+/** A store that is not empty, and why, naming the store. */
+function aStoreRefusal(store: string, why: string): ThePermissionStoreRead {
+  return {
     empty: false,
     refusal: `The member's launch ended with a permission store that ${why} at ${store}, and a saved permission lets a later tool call skip the gate.`,
-  })
-  let held: unknown
-  try {
-    held = JSON.parse(written)
-  } catch (error) {
-    return refused(`cannot be read (${error instanceof Error ? error.message : String(error)})`)
   }
-  if (held === null || typeof held !== 'object' || Array.isArray(held)) return refused('is not an object')
-  const keys = Object.keys(held)
-  if (keys.length === 0) return { empty: true }
-  if (keys.length !== 1 || keys[0] !== THE_STORES_PERMISSIONS_KEY) return refused(`holds what this reader does not know`)
-  const saved = (held as Record<string, unknown>)[THE_STORES_PERMISSIONS_KEY]
-  if (saved === null || typeof saved !== 'object' || Array.isArray(saved)) return refused(`holds what this reader does not know`)
-  const rules = Object.values(saved as Record<string, unknown>).flatMap((entries) => (Array.isArray(entries) ? entries : [entries]))
-  return rules.length === 0 ? { empty: true } : refused(`holds a saved permission`)
 }
 
 /** The store of the launch whose path root is `root`: under the engine's config folder, beside its config file. */
