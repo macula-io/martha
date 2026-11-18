@@ -16,8 +16,12 @@
 # by name.
 #
 # Nothing is signed and nothing is pushed: this layer is placed by the dry harness, never installed as a release.
-# Exit: 0 packed, 1 the packer refused, 2 it could not run, 3 not packable: installer/ is ahead of its tag.
+# Exit: 0 packed, 1 the packer refused, 2 it could not run, NOT_PACKABLE (below) not packable: installer/ is ahead of its
+# tag. NOT_PACKABLE is one line of its own, read by the nightly driver beside this script and by this script's tests,
+# so no reader spells the number (martha#696).
 set -euo pipefail
+
+NOT_PACKABLE=3
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
@@ -47,7 +51,7 @@ if git -C "${TREE}" rev-parse --verify --quiet "${INSTALLER_TAG}^{commit}" > /de
     || { echo "dry: git could not compare installer/ at ${SHA} with ${INSTALLER_TAG}" >&2; exit 2; }
   if [[ -n "${DRIFT}" ]]; then
     echo "dry: not packable: installer ahead of its tag: installer/ at ${SHA} is not what ${INSTALLER_TAG} published ($(wc -l <<< "${DRIFT}") file(s)); nothing was packed" >&2
-    exit 3
+    exit "${NOT_PACKABLE}"
   fi
 fi
 

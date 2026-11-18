@@ -8,6 +8,7 @@ import { test } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
+  FAMILIES_UNCHECKED,
   familiesFrom,
   privateHitsIn,
   SYNTHETIC,
@@ -230,18 +231,24 @@ test('a github.com page that is not a repository is not looked up', async () => 
   assert.deepEqual(await hitsOf('https://github.com/sponsors/synthetic-person', strict, unreachable), [])
 })
 
-test('the lab families come from the environment, and a missing list stops the check outside a fork', () => {
-  assert.deepEqual(familiesFrom('["synth"]', false), { kind: 'declared', labHosts: ['synth'] })
-  assert.throws(() => familiesFrom(undefined, false), /MARTHA_LAB_HOSTS is not set/)
-  assert.throws(() => familiesFrom('', false), /MARTHA_LAB_HOSTS is not set/)
-  assert.equal(familiesFrom(undefined, true).kind, 'skipped')
-  assert.throws(() => familiesFrom('["a|b"]', false), /plain lowercase names/)
-  assert.throws(() => familiesFrom('"synth"', false), /plain lowercase names/)
+// No file kept, and a file that must not be read: the variable, when set, is all that is read.
+const noFile = () => undefined
+const neverRead = () => {
+  throw new Error('the lab families file was read although MARTHA_LAB_HOSTS is set')
+}
+
+test('the lab families come from the environment, and a missing list leaves them unchecked outside a fork', () => {
+  assert.deepEqual(familiesFrom('["synth"]', false, neverRead), { kind: 'declared', labHosts: ['synth'] })
+  assert.deepEqual(familiesFrom(undefined, false, noFile), { kind: 'unchecked', why: FAMILIES_UNCHECKED })
+  assert.deepEqual(familiesFrom('', false, noFile), { kind: 'unchecked', why: FAMILIES_UNCHECKED })
+  assert.equal(familiesFrom(undefined, true, noFile).kind, 'skipped')
+  assert.throws(() => familiesFrom('["a|b"]', false, neverRead), /plain lowercase names/)
+  assert.throws(() => familiesFrom('"synth"', false, neverRead), /plain lowercase names/)
 })
 
 test('a malformed secret is refused without its text in the message', () => {
   for (const raw of ['[synth, other]', "['synth']", '["synth",]', '{"synth"']) {
-    assert.throws(() => familiesFrom(raw, false), (error: Error) => {
+    assert.throws(() => familiesFrom(raw, false, neverRead), (error: Error) => {
       assert.equal(error.message, 'MARTHA_LAB_HOSTS must be a JSON array of plain lowercase names', raw)
       assert.ok(!error.message.includes('synth'), raw)
       return true
