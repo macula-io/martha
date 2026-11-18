@@ -461,6 +461,9 @@ function findingsForADefinition(definition: Definition, line: number, declared: 
   const fromTheChange = declared.find((entry) => entry.value === definition.value && isACopyAgainst(entry.module) && !(isAHolder && holdsANewDefinition(entry)))
   if (fromTheChange !== undefined) {
     const { constant, gone } = namedFor(holders.find((each) => isACopyAgainst(each.path)) ?? everyHolder.find((each) => isACopyAgainst(each.path)), fromTheChange)
+    // A value the change takes away, still held here by an exported holder of its own, is not copied by it: this is the
+    // constant a use of that value is told to import, as an exported holder of a value the change adds is (martha#632).
+    if (gone && isAHolder) return namedAgainst(definition, line, heldBefore[0])
     return [findingAt(definition.path, line, definition.value, constant, 'restates_a_value_the_change_defines', gone)]
   }
   return namedAgainst(definition, line, heldBefore[0])

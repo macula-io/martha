@@ -8,8 +8,8 @@ import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_
 import { ANSWER_MILLISECONDS } from '../record_mesh_answers/ask_a_mesh_server_a_tool.ts'
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
 import { LONGEST_MESSAGE } from '../send_a_crew_message/send_a_crew_message.ts'
-import { THE_SAVE_WAIT_MS } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
+import { STOP_GRACE_MS } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { TRUST_ANSWER_DEADLINE_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 
 /**
@@ -22,13 +22,14 @@ const A_CASES_OWN_BOUND_ON_A_RUN = 'a recorded-host case\'s own bound on what it
 /** Why an age a case makes up for a journal entry is not a budget (martha#441): the figure is arithmetic on the test's clock, not a duration anything waits. */
 const AN_AGE_THE_CASE_MAKES_UP = 'an age a case makes up for a journal entry, subtracted from its own clock; the tree\'s figure is a duration something waits, and this one nothing waits'
 
-/** Why a case's ten seconds past a tool's return is not a save wait (martha#441): it stands further past a return than the call was held open, and saves no file. */
-const A_STAND_PAST_A_RETURN = 'how far past a tool\'s return a case stands to be sure it was seen; the launcher\'s wait for the host\'s save is the same ten seconds and saves nothing here'
+/** Why a case's ten seconds past a tool's return is not a stop grace (martha#441): it stands further past a return than the call was held open, and stops no member. */
+const A_STAND_PAST_A_RETURN = 'how far past a tool\'s return a case stands to be sure it was seen; a member\'s grace to end once asked is the same ten seconds and stops nothing here'
 
 /** Why the shell tool's limit a recorded case asks of the host is not a trust deadline (martha#441): it lets a long call finish, and no host asks its owner to trust anything here. */
 const THE_HOSTS_OWN_CALL_LIMIT = 'the shell tool\'s own limit a recorded case asks the host for, so a long call finishes; the owner\'s deadline to answer a trust question is the same ten minutes and is never spent here'
 
 export const COINCIDENCES: readonly Exception[] = [
+  { value: STOP_GRACE_MS, file: 'drive_the_recorded_host/a_silent_host_fails_by_name.node-test.ts', reason: A_STAND_PAST_A_RETURN },
   // A git subcommand, in a test that makes a throwaway repository (martha#315). The constant of that name is the file a
   // git directory keeps its configuration in, which this test neither reads nor writes.
   { value: CONFIG, file: 'drive_the_recorded_host/a_switch_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
@@ -50,6 +51,5 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: LONGEST_MESSAGE, file: 'drive_the_recorded_host/a_switch_on_the_recorded_host.node-test.ts', reason: A_CASES_OWN_BOUND_ON_A_RUN },
   { value: LONGEST_MESSAGE, file: 'drive_the_recorded_host/a_silent_host_fails_by_name.node-test.ts', reason: AN_AGE_THE_CASE_MAKES_UP },
   { value: ANSWER_MILLISECONDS, file: 'drive_the_recorded_host/a_silent_host_fails_by_name.node-test.ts', reason: AN_AGE_THE_CASE_MAKES_UP },
-  { value: THE_SAVE_WAIT_MS, file: 'drive_the_recorded_host/a_silent_host_fails_by_name.node-test.ts', reason: A_STAND_PAST_A_RETURN },
   { value: TRUST_ANSWER_DEADLINE_MS, file: 'drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts', reason: THE_HOSTS_OWN_CALL_LIMIT },
 ]

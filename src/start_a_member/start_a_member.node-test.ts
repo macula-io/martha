@@ -46,19 +46,16 @@ import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { POLL_MS, until } from '../drive_the_recorded_host/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
-import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { stopTheCrew } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { crewRowsDirectoryOf } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
 import { hostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
-import { canonicalHashWithoutModel, sha256Of } from '../put_the_owners_model_back/the_owners_settings_file.ts'
-import { MODEL_PLACE, theModelMarker, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
 import { crewSubdirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import { CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
 const HOST_MODELS = ['opus', 'fable']
@@ -896,53 +893,6 @@ test('#312: a member Martha started is stopped by its own launcher when the owne
  * before the member's host starts. The hash the record kept is what makes that safe: it wrote only `model`, and only
  * because nothing else in the file had moved.
  */
-test('#359: a switch a killed launch left unfinished is finished before the member\'s host starts', async (t) => {
-  const place = placeFor(t, {})
-  await declared(place)
-  const config = join(place.home, CLAUDE_FOLDER)
-  mkdirSync(config, { recursive: true })
-  const settings_file = join(config, USER_SETTINGS_FILE)
-  const theOwnersModel = 'opus'
-  const theSavedModel = 'sonnet'
-  const anOwnersSetting = { includeCoAuthoredBy: false }
-  const before = `${JSON.stringify({ ...anOwnersSetting, model: theOwnersModel }, null, 2)}\n`
-  // The host's save, as it left the file when the launch died: the same file, with the model it was told to save.
-  const after = `${JSON.stringify({ ...anOwnersSetting, model: theSavedModel }, null, 2)}\n`
-  writeFileSync(settings_file, after)
-  const crew = crewSubdirectory(place.state.state_root, place.root, MODEL_PLACE)
-  assert.ok('path' in crew, 'refusal' in crew ? crew.refusal : '')
-  mkdirSync(crew.path, { recursive: true, mode: 0o700 })
-  const record = {
-    config_dir: config,
-    before: sha256Of(Buffer.from(before)),
-    after: sha256Of(Buffer.from(after)),
-    without_model: canonicalHashWithoutModel({ ...anOwnersSetting, model: theSavedModel }),
-    had_file: true,
-    had_model: true,
-    owner_model: theOwnersModel,
-    wrote: theSavedModel,
-    why: '',
-  }
-  writeFileSync(
-    join(crew.path, theModelMarker(BUILDER!.name)),
-    `${JSON.stringify({ switched: true, model: theSavedModel, home: theOwnersModel, package: '#359', why: 'the review needs it', since: new Date(1_000).toISOString(), directed: true, settings: record })}\n`,
-    { mode: 0o600 },
-  )
-  const fake = fakeClaude(place)
-  const lines: string[] = []
-  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, lines))
-  assert.ok(started.started, started.started ? '' : started.refusal)
-  assert.ok(lines.every((line) => !line.includes('could not')), `the owner was told: ${lines.join(' | ')}`)
-  assert.deepEqual(
-    JSON.parse(readFileSync(settings_file, 'utf8')) as unknown,
-    { ...anOwnersSetting, model: theOwnersModel },
-    'the launch did not put the owner\'s model back before it started the member',
-  )
-  const kept = JSON.parse(readFileSync(join(crew.path, theModelMarker(BUILDER!.name)), 'utf8')) as ModelMarker
-  assert.equal(kept.settings, undefined, 'the record of a switch this launch finished outlived it')
-  assert.equal(kept.switched, true, 'the member\'s own switch was taken away by the recovery, which is about the owner\'s file')
-})
-
 test('the crew\'s bells are kept in the crew\'s own place, and every launch is given it (martha#371)', (t) => {
   const place = placeFor(t, {})
   const places = launcherPlacesOf(place.state, place.relay_root, place.root)

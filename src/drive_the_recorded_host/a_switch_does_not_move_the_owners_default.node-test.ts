@@ -8,9 +8,9 @@
 // (./drive_the_recorded_host.ts). Without the recorded host these tests are skipped, as the rest of this file's
 // neighbours are.
 //
-// What only this test can prove: the file the host really writes is not the owner's. The mechanism's own tests
-// (../a_crews_tools/a_switch_leaves_the_owners_default_alone) write the host's save themselves, and could agree with a
-// mistake about what the host writes; here the bytes before and after are the host's own work.
+// What only this test can prove: the file the host really writes is not the owner's. Nothing in Martha guards the
+// owner's file any more (martha#632), so these cases are the pin that keeps it so: the bytes before and after are the
+// host's own work.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -23,10 +23,7 @@ import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
-import { theModelMarker, MODEL_PLACE, type ModelMarker } from '../switch_a_members_model/switch_a_members_model.ts'
-import { crewSubdirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, whatTheLaunchSaw, type RecordedHostRan } from './drive_the_recorded_host.ts'
-import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -109,13 +106,6 @@ function declareTheModels(checkout: string): void {
   writeFileSync(declaration, `${JSON.stringify(held, null, 2)}\n`)
 }
 
-/** This member's model record, as a later session reads it. */
-function theRecordOf(project: Project): ModelMarker {
-  const place = crewSubdirectory(join(stateHomeUnder(project.home), STATE_ROOT_NAME), project.checkout, MODEL_PLACE)
-  if ('refusal' in place) throw new Error(place.refusal)
-  return JSON.parse(readFileSync(join(place.path, theModelMarker(MEMBER)), 'utf8')) as ModelMarker
-}
-
 /**
  * What the host drew, with every space taken out: the terminal stream carries only the cells that changed, so a line the
  * host draws over itself arrives as the words it redrew, glued.
@@ -167,7 +157,6 @@ test('on the recorded host a switch leaves a settings file that held a model byt
   // wording is the host's to change and Martha's answer must not depend on it.
   assert.match(drawnWithoutGaps(seen.shown), /SetmodeltoOpus/i, `the host never answered the model command:\n${plainTextOf(seen.shown).slice(-3000)}`)
   assert.equal(theOwnersSettingsNow(project), before, `the owner's default moved: ${join(project.home, CLAUDE_FOLDER, USER_SETTINGS_FILE)} no longer holds what the owner wrote`)
-  assert.equal(theRecordOf(project).settings, undefined, 'the record of what the switch did to the owner\'s default outlived the restore')
 })
 
 test('on the recorded host a switch leaves an owner with no model where they were: no file key appears (martha#359)', { skip: RECORDED_HOST_SKIP }, async (t) => {
@@ -185,7 +174,6 @@ test('on the recorded host a switch leaves an owner with no model where they wer
     }),
   )
   assert.equal(theOwnersSettingsNow(project), before, `the owner's default moved: ${join(project.home, CLAUDE_FOLDER, USER_SETTINGS_FILE)} gained a model the owner never chose`)
-  assert.equal(theRecordOf(project).settings, undefined, 'the record of what the switch did to the owner\'s default outlived the restore')
 })
 
 test('on the recorded host a switch by a member whose owner has no config folder leaves none: the switch is made and no owner file appears (martha#602)', { skip: RECORDED_HOST_SKIP }, async (t) => {
@@ -206,5 +194,4 @@ test('on the recorded host a switch by a member whose owner has no config folder
   // The switch is made: the host answers its own model command, which a guard that needed the owner's folder refused.
   assert.match(drawnWithoutGaps(seen.shown), /SetmodeltoOpus/i, `the host never answered the model command:\n${plainTextOf(seen.shown).slice(-3000)}`)
   assert.equal(existsSync(join(owners, USER_SETTINGS_FILE)), false, `the owner's default moved: ${join(owners, USER_SETTINGS_FILE)} appeared, holding a model the owner never chose`)
-  assert.equal(theRecordOf(project).settings, undefined, 'the record of what the switch did outlived the restore')
 })

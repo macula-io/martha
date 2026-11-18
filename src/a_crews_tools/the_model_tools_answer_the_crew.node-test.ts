@@ -16,8 +16,6 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
-import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -98,11 +96,6 @@ async function aCrewOfTools(memberModel: string | null = OWN_MODEL): Promise<ACr
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   declareTheModels(root, memberModel)
   const beats = dashboardRowsIn(join(home, 'row'))
-  // The owner's own settings file, which a switch now guards before the host's command runs and puts back after it
-  // (martha#359). The owner of this crew has none: the realistic owner, and the file the host makes to save a model
-  // into is one the restore removes again.
-  const config_dir = join(home, 'claude')
-  mkdirSync(config_dir, { recursive: true })
   const tools = crewToolsOver({
     member: MEMBER,
     ledger: { clock: { now: () => clock.at }, stores: { rows: rowStreamsDirectory(join(home, CREW_ROWS_PLACE)) } },
@@ -112,7 +105,6 @@ async function aCrewOfTools(memberModel: string | null = OWN_MODEL): Promise<ACr
     stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
     models: HOST_MODELS,
     launched_on: OWN_MODEL,
-    owners_settings: { config_dir, file: join(config_dir, USER_SETTINGS_FILE), store: ownersSettingsIn(join(config_dir, USER_SETTINGS_FILE), state.state_root) },
   })
   return { tools, crew, theRow: () => beats.read(MEMBER) as Record<string, unknown> | null, aTurnLater: () => (clock.at += MINUTE_MS) }
 }
@@ -312,4 +304,18 @@ test('#315: both model tools are among the crew\'s tools, and each is the single
   assert.deepEqual(registered.find((one) => one.name === SWITCH_YOUR_MODEL)?.inputSchema.required, ['model', 'package', 'reason'], 'the switch does not ask for the model, the package and why')
   assert.deepEqual(registered.find((one) => one.name === RETURN_TO_YOUR_OWN_MODEL)?.inputSchema.required, ['reason'], 'the return asks for more than why it comes home')
   assert.equal(theModelMarker(MEMBER), `${MEMBER}.model.json`, 'the record is named something other than the member')
+})
+
+test('#632: a record written while the owner\'s default was guarded still reads as its switch, and is directed once (mutant: a record carrying settings made unreadable)', async () => {
+  const crew = await aCrewOfTools()
+  await switched(crew.tools)
+  // A record a launch from before martha#632 left: the switch, and beside it what the guard kept of the owner's file.
+  const place = modelPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew.crew) } })
+  assert.ok(!('refusal' in place), `the crew's store refused its model place: ${'refusal' in place ? place.refusal : ''}`)
+  const file = join(place.path, theModelMarker(MEMBER))
+  const kept = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+  writeFileSync(file, `${JSON.stringify({ ...kept, settings: { config_dir: homeOfAll, before: 'a-hash', after: null, without_model: 'a-hash', had_file: true, had_model: false, owner_model: '', wrote: null, why: '' } })}\n`)
+  assert.equal(theRecordOf(crew.crew).kind, 'switched', 'a record that still carries the guard\'s field no longer reads as the switch it is')
+  assert.deepEqual(await theOrderTheModGets(crew), { carry: CARRY_A_MODEL, model: THE_REVIEWER_MODEL }, 'the older record\'s switch was not directed')
+  assert.notEqual((await theOrderTheModGets(crew)).carry, CARRY_A_MODEL, 'the older record\'s switch was directed twice')
 })

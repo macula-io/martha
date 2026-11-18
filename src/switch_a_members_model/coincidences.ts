@@ -2,9 +2,12 @@
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
-import { THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE } from '../put_the_owners_model_back/coincidences.ts'
-import { THE_MODEL_KEY } from '../put_the_owners_model_back/the_owners_settings_file.ts'
+import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
+
+/** Why the crew's model place and an order's model key stay apart (martha#289). */
+export const TWO_MODEL_WORDS = 'the folder a crew keeps its model records in and the key an order carries a model under are two meanings spelled alike, each defined once in its own slice'
 
 export const COINCIDENCES: readonly Exception[] = [
-  { value: THE_MODEL_KEY, file: 'switch_a_members_model/switch_a_members_model.ts', reason: `the name of the place a crew keeps its model records in, which this file holds as MODEL_PLACE; ${THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE}` },
+  { value: CARRY_A_MODEL, file: 'switch_a_members_model/switch_a_members_model.ts', reason: TWO_MODEL_WORDS },
+  { value: CARRY_A_MODEL, file: 'switch_a_members_model/the_switch_tools.ts', reason: `the argument the switch tool takes the model in, as its own schema declares it; ${TWO_MODEL_WORDS}` },
 ]
