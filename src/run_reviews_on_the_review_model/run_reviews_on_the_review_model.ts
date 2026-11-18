@@ -14,7 +14,7 @@
 // Which tool spawns a subagent, and which of its arguments carry the type, the description and the model, are the
 // adapter's to say; the core compares the names the adapter has resolved and never splits a model id itself.
 
-import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import { holdsReviews, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
 
 // Which tool spawns a subagent, and which of its arguments carry the type, the description and the model, are the
 // adapter's to say. The two names are compared as they are written: the host publishes no mapping from an alias to a
@@ -97,6 +97,35 @@ function wordsOf(text: string): readonly string[] {
 /** A field of a call as text, trimmed; '' when the member named none. */
 function textOf(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * Why a reviewer member may not run a session with this model, or undefined when it may (martha#541 package 6b).
+ *
+ * A member whose role holds `hold_reviews` has its own session held to the crew's reviewer model: nothing then spawns a
+ * review, the session IS one. So its declared `model` must be that model, and `null` (the host's own) is refused the
+ * same way, because nothing then says it runs the review model.
+ *
+ * `reported` is the model the host says the session resolved to, when the host says one: a session that runs another
+ * model is stopped rather than only noted, because a house rule nothing enforces is a wish. It is a house rule and not
+ * a security boundary, as the spawn rule is: a member that changes its own model mid-session defeats it, which is why a
+ * switch is refused for a reviewer member too (../switch_a_members_model).
+ *
+ * The rule is off when the crew names no `review_model`: there is no model to hold a reviewer to, and a crew that names
+ * none — every crew written before this act existed included — starts as it did.
+ */
+export function aReviewerMembersModelRefusal(member: Member, settings: CrewSettings, reported?: string): string | undefined {
+  if (settings.house_rules.review_model === null) return undefined
+  if (!holdsReviews(settings, member)) return undefined
+  const review_model = settings.house_rules.review_model
+  const its_model = member.model === null ? "the host's own" : member.model
+  if (member.model !== review_model) {
+    return `${member.name} holds reviews (role ${member.role}), and this crew holds reviews to ${review_model}; its model is ${its_model}.`
+  }
+  if (reported !== undefined && reported !== review_model) {
+    return `${member.name} holds reviews (role ${member.role}), and this crew holds reviews to ${review_model}; the host reported this session runs ${reported}.`
+  }
+  return undefined
 }
 
 /** What the crew's declaration said, or why it could not be read: what the rule is decided over here. */

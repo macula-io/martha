@@ -87,3 +87,94 @@ test('#315: a review is what the type or the description says it is, and an adve
   assert.equal(isAReview({ description: 'review the logs' }, CLAUDE_CODE_AGENT), true, 'the false positive the design accepts is not taken')
   assert.equal(isAReview({ description: 'preview the site' }, CLAUDE_CODE_AGENT), false, 'a word that merely contains the letters was read as a review')
 })
+
+// --- package 6b: a reviewer member's own session is a review (martha#541) -------------------------------
+//
+// A member whose role holds `hold_reviews` spawns nothing to hold: its session IS the review, so it runs on the crew's
+// reviewer model or not at all. Each test names the mutant that must fail it:
+//   5 the reviewer member's check skipped   a reviewer member starts on any model
+//   6 null read as "the host's own, fine"   a reviewer member with no declared model starts
+//   7 the reported model not compared       a session the host says runs another model is let run
+//   8 the act read as a role name           a role called reviewer without the act is held, or the reverse
+
+import { join } from 'node:path'
+
+import { APPROVE_LANDING, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, declareCrewOnHosts, HOLD_REVIEWS, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, THE_HOST_A_MEMBER_RAN_ON, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { OPEN_VOCABULARY, vocabularyOf, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { hostForTests } from '../host_contract/host_for_tests.ts'
+import { aReviewerMembersModelRefusal } from './run_reviews_on_the_review_model.ts'
+
+/** A project root that needs no files on disk: the declaration arrives through the host's document store. */
+const ROOT = '/a-crew-project'
+
+/** A host that takes any model name, as the engine's delegate tool does: nothing here is refused for its spelling. */
+const ANY_MODEL: ModelVocabulary = vocabularyOf(OPEN_VOCABULARY, [])
+
+/** The declaration as a crew writes it, with the reviewer's model and the act's grant set by the test. */
+const aDeclaredCrew = async (options: { readonly review_model?: string; readonly reviewer_model?: string | null; readonly grants?: readonly string[]; readonly members?: readonly { name: string; role: string; model: string | null }[] } = {}): Promise<CrewSettings> => {
+  const declaration = {
+    version: DECLARATION_VERSION,
+    owner: 'Ann',
+    members: options.members ?? [
+      { name: 'Builder', role: 'builder', model: null, host: null },
+      { name: 'Reviewer', role: 'reviewer', model: options.reviewer_model ?? null, host: null },
+    ],
+    mode: {
+      name: 'team',
+      roles: ['builder', 'reviewer'],
+      may: {
+        assign_work: [OWNER],
+        [APPROVE_LANDING]: [OWNER],
+        resume_parked_work: [OWNER],
+        [OFFER_OWNER_ASKS]: [OWNER],
+        [RESTART_MEMBER]: [OWNER],
+        [HOLD_REVIEWS]: options.grants ?? ['reviewer'],
+      },
+    },
+    ...(options.review_model === undefined ? {} : { house_rules: { review_model: options.review_model } }),
+  }
+  const path = join(ROOT, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  const { host } = hostForTests({ documents: { [path]: JSON.stringify(declaration) } })
+  return declareCrewOnHosts(host.stores.documents, ROOT, new Map([[THE_HOST_A_MEMBER_RAN_ON, ANY_MODEL]]))
+}
+
+const memberNamed = (settings: CrewSettings, name: string) => settings.members.find((one) => one.name === name)!
+
+test('#541 6b: a reviewer member whose declared model is not the reviewer model is refused, by name', async () => {
+  const settings = await aDeclaredCrew({ review_model: 'fable', reviewer_model: 'opus' })
+  const refused = aReviewerMembersModelRefusal(memberNamed(settings, 'Reviewer'), settings)
+  assert.equal(
+    refused,
+    'Reviewer holds reviews (role reviewer), and this crew holds reviews to fable; its model is opus.',
+    'the refusal does not name the member, its role, the crew\'s reviewer model and the model it declares',
+  )
+})
+
+test('#541 6b: a reviewer member that declares no model of its own is refused too (mutant: null read as fine)', async () => {
+  const settings = await aDeclaredCrew({ review_model: 'fable' })
+  const refused = aReviewerMembersModelRefusal(memberNamed(settings, 'Reviewer'), settings)
+  assert.match(refused ?? '', /holds reviews .* holds reviews to fable; its model is the host's own\./, 'a reviewer member with no declared model was let start')
+})
+
+test('#541 6b: a reviewer member on the reviewer model starts, and a member without the act is held to nothing', async () => {
+  const settings = await aDeclaredCrew({ review_model: 'fable', reviewer_model: 'fable' })
+  assert.equal(aReviewerMembersModelRefusal(memberNamed(settings, 'Reviewer'), settings), undefined, 'a reviewer member on the crew\'s reviewer model was refused')
+  assert.equal(aReviewerMembersModelRefusal(memberNamed(settings, 'Builder'), settings), undefined, 'a member whose role holds no reviews was held to the reviewer model (mutant: the act read as a role name)')
+})
+
+test('#541 6b: a crew that grants hold_reviews to no role holds no reviewer member to anything', async () => {
+  const settings = await aDeclaredCrew({ review_model: 'fable', reviewer_model: 'opus', grants: [OWNER] })
+  assert.equal(aReviewerMembersModelRefusal(memberNamed(settings, 'Reviewer'), settings), undefined, 'a crew that granted the act to no role still held its reviewer to the reviewer model')
+})
+
+test('#541 6b: a crew that names no reviewer model starts its reviewer as it did before the act existed', async () => {
+  const settings = await aDeclaredCrew({ reviewer_model: 'opus' })
+  assert.equal(aReviewerMembersModelRefusal(memberNamed(settings, 'Reviewer'), settings), undefined, 'a crew with no reviewer model held its reviewer to a rule it never declared')
+})
+
+test('#541 6b: a session the host says runs another model is stopped, naming what it ran (mutant: the reported model not compared)', async () => {
+  const settings = await aDeclaredCrew({ review_model: 'fable', reviewer_model: 'fable' })
+  const stopped = aReviewerMembersModelRefusal(memberNamed(settings, 'Reviewer'), settings, 'opus')
+  assert.match(stopped ?? '', /Reviewer holds reviews .* the host reported this session runs opus\./, 'the model the host reported was not compared with the crew\'s reviewer model')
+  assert.equal(aReviewerMembersModelRefusal(memberNamed(settings, 'Reviewer'), settings, 'fable'), undefined, 'a session the host reports on the reviewer model was stopped')
+})

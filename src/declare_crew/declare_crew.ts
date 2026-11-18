@@ -110,8 +110,16 @@ export const RESTART_MEMBER = 'restart_member'
  */
 export const APPROVE_LANDING = 'approve_landing'
 
+/**
+ * The act whose holders are the crew's reviewers (martha#541 package 6b): a member whose role holds it has its own
+ * session held to `house_rules.review_model`, and a crew that grants it to no role has no reviewer members. An act and
+ * not a role name, because roles are the crew's own words (`reviewer`, `critic`, `second_pair_of_eyes`) and Martha never
+ * reads meaning into a name.
+ */
+export const HOLD_REVIEWS = 'hold_reviews'
+
 /** The acts a mode's table assigns, in business words. */
-export const ACTS = ['assign_work', APPROVE_LANDING, 'resume_parked_work', OFFER_OWNER_ASKS, RESTART_MEMBER] as const
+export const ACTS = ['assign_work', APPROVE_LANDING, 'resume_parked_work', OFFER_OWNER_ASKS, RESTART_MEMBER, HOLD_REVIEWS] as const
 export type Act = (typeof ACTS)[number]
 
 /**
@@ -256,10 +264,17 @@ export function workspaceLayoutOf(root: string, repo: string | undefined, origin
 /** The mode a solo crew is declared in: a name for people to read. */
 export const SOLO_MODE = 'solo'
 
+/**
+ * The role a solo crew's reviewer is in (martha#541 package 6b): the one role that holds `hold_reviews`, so a solo
+ * crew's reviewer is a reviewer member and its own session is held to the crew's reviewer model. Not exported: the
+ * word is this declaration's own, and a published constant would make every crew's spelling of its reviewer a finding.
+ */
+const SOLO_REVIEWER_ROLE = 'reviewer'
+
 /** The members of a solo crew, each in the role it is named after. */
 export const SOLO_MEMBERS = [
   { name: 'builder', role: 'builder' },
-  { name: 'reviewer', role: 'reviewer' },
+  { name: SOLO_REVIEWER_ROLE, role: SOLO_REVIEWER_ROLE },
 ] as const
 
 /**
@@ -268,6 +283,10 @@ export const SOLO_MEMBERS = [
  * its checkout proves (martha#611) is declared when one was given. The shape lives beside the reader so that what a
  * writer emits and what this slice accepts cannot drift; `martha init` writes it (../declare_a_solo_crew), and the
  * two places of a layout are written together or not at all, as a layout naming one without the other is refused here.
+ *
+ * A solo crew's reviewer role holds `hold_reviews` (martha#541 package 6b), so its own session is a review; every
+ * other act is the owner's alone. A declaration written before the act existed names it nowhere, which reads as the
+ * owner's alone, so an older crew is unchanged.
  */
 export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = null, host: string = THE_HOST_A_MEMBER_RAN_ON) {
   return {
@@ -278,7 +297,7 @@ export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = 
     mode: {
       name: SOLO_MODE,
       roles: SOLO_MEMBERS.map((member) => member.role),
-      may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])),
+      may: { ...Object.fromEntries(ACTS.map((act) => [act, [OWNER]])), [HOLD_REVIEWS]: [OWNER, SOLO_REVIEWER_ROLE] },
     },
     ...(layout === null ? {} : { house_rules: { [WORKSPACE_LAYOUT]: true, [CLONES]: layout.clones, [WORKTREES]: layout.worktrees } }),
     channel_read_seconds: CHANNEL_READ_SECONDS_WHEN_UNNAMED,
@@ -414,14 +433,32 @@ const isText = (value: unknown): value is string => typeof value === 'string' &&
  * `models` is the vocabulary the host runs, as its adapter records it (martha#315, martha#541): when the host names
  * its models, a `review_model` must be one of them, because a crew that named one Martha cannot spell would hold every
  * review to a model nothing ever matches; when the host takes any name its provider serves, any name is read.
+ *
+ * This is the one-host case of ../declareCrewOnHosts: a crew whose members all run on the host this release starts a
+ * member on. A crew whose members name two hosts is read with `declareCrewOnHosts`, which has a vocabulary for each.
  */
 export async function declareCrew(documents: DocumentStore, root: string, models: ModelVocabulary): Promise<CrewSettings> {
+  return declareCrewOnHosts(documents, root, new Map([[THE_HOST_A_MEMBER_RAN_ON, models]]))
+}
+
+/**
+ * The models each host the crew's members name runs, keyed by the name a declaration writes (martha#541 package 6b):
+ * `claude-code` and `martha-engine` each answer with the vocabulary its own adapter recorded, and a host with no entry
+ * is a host this release records none for.
+ */
+export type TheVocabulariesOfHost = ReadonlyMap<string, ModelVocabulary>
+
+/**
+ * Read the crew's declaration under `root` once, with a vocabulary per host (martha#541 package 6b): a crew whose
+ * members run on different hosts is held to what each member's own host runs, not to one host's list.
+ */
+export async function declareCrewOnHosts(documents: DocumentStore, root: string, vocabularies: TheVocabulariesOfHost): Promise<CrewSettings> {
   const crew = join(root, DECLARATION_DIRECTORY)
   const declaration = join(crew, DECLARATION_FILE)
   if (!isAbsolute(root)) throw new DeclarationRefused(declaration, null, 'is not under an absolute project root')
   const text = await readDeclaration(documents, declaration, join(root, CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE))
   const parsed = parseDeclaration(declaration, text)
-  return deepFreeze(settingsOf(new Refuse(declaration), parsed, { root, crew, declaration }, models))
+  return deepFreeze(settingsOf(new Refuse(declaration), parsed, { root, crew, declaration }, vocabularies))
 }
 
 /**
@@ -471,20 +508,21 @@ class Refuse {
   }
 }
 
-function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conventions'>, models: ModelVocabulary): CrewSettings {
+function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conventions'>, vocabularies: TheVocabulariesOfHost): CrewSettings {
   if (!isObject(value)) return refuse.at(null, 'is not a JSON object')
   refuse.unknownKeys(value, TOP_LEVEL_KEYS, '')
   if (value['version'] !== DECLARATION_VERSION) refuse.at('version', `is not ${DECLARATION_VERSION}`)
   if (!isText(value['owner'])) refuse.at('owner', 'is not a name')
   const mode = modeOf(refuse, value['mode'])
   const members = membersOf(refuse, value['members'], mode.roles)
+  const host = crewHostOf(refuse, value[HOST])
   return {
     paths: { ...paths, conventions: conventionsOf(refuse, value['conventions'], paths.crew) },
     owner: value['owner'].trim(),
-    host: crewHostOf(refuse, value[HOST]),
+    host,
     members,
     mode,
-    house_rules: houseRulesOf(refuse, value['house_rules'], models),
+    house_rules: houseRulesOf(refuse, value['house_rules'], vocabularies, { members, mode, crew_host: host }),
     gate: gateOf(refuse, value['house_rules'], members),
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
@@ -647,6 +685,22 @@ export function theHostOfMember(settings: CrewSettings, member: Member): string 
   return member.host ?? settings.host
 }
 
+/** The same reading, before the crew's settings exist: the member's own host, else the crew's. */
+const theHostOfResolved = (member: Member, crew_host: string): string => member.host ?? crew_host
+
+/**
+ * Whether a member's role holds `hold_reviews` (martha#541 package 6b): the member's own session is a review, so it is
+ * held to the crew's reviewer model. A crew that grants the act to no role has no reviewer members.
+ */
+export function holdsReviews(settings: CrewSettings, member: Member): boolean {
+  return settings.mode.may[HOLD_REVIEWS].includes(member.role)
+}
+
+/** The members whose own sessions are reviews (martha#541 package 6b): those whose role holds `hold_reviews`. */
+export function reviewerMembersOf(settings: CrewSettings): readonly Member[] {
+  return settings.members.filter((member) => holdsReviews(settings, member))
+}
+
 function memberNameOf(refuse: Refuse, name: unknown, at: string, seen: Set<string>): string {
   if (typeof name !== 'string' || !MEMBER_NAME.test(name)) refuse.at(`${at}.name`, `is not a name matching ${MEMBER_NAME}`)
   // Names are compared by the one rule (memberNameKey): Terra and terra would share branches and a mailbox.
@@ -668,33 +722,58 @@ function gateOf(refuse: Refuse, value: unknown, members: readonly Member[]): Gat
   return read
 }
 
-function houseRulesOf(refuse: Refuse, value: unknown, models: ModelVocabulary): HouseRules {
+function houseRulesOf(refuse: Refuse, value: unknown, vocabularies: TheVocabulariesOfHost, crew: TheCrewRead): HouseRules {
   if (value === undefined) return houseRulesFrom({})
   if (!isObject(value)) return refuse.at('house_rules', `is not ${shapeOf(HOUSE_RULE_KEYS)}`)
   refuse.unknownKeys(value, HOUSE_RULE_KEYS, 'house_rules.')
-  refuseSwitches(refuse, value, models)
+  refuseSwitches(refuse, value)
+  refuseTheReviewModel(refuse, value[REVIEW_MODEL], vocabularies, crew)
   refusePlaces(refuse, value)
   refuseMinutes(refuse, value)
   return houseRulesFrom(value)
 }
 
-function refuseSwitches(refuse: Refuse, value: Json, models: ModelVocabulary): void {
+function refuseSwitches(refuse: Refuse, value: Json): void {
   for (const name of HOUSE_RULE_SWITCHES) {
     if (value[name] !== undefined && typeof value[name] !== 'boolean') refuse.at(`house_rules.${name}`, 'is not true or false')
   }
-  refuseTheReviewModel(refuse, value[REVIEW_MODEL], models)
+}
+
+/** What the reviewer-model rule is read over: the crew's members, its mode, and the host it starts a member on. */
+interface TheCrewRead {
+  readonly members: readonly Member[]
+  readonly mode: Mode
+  readonly crew_host: string
 }
 
 /**
- * The reviewer model, read against the models the host runs (martha#315): a name the host cannot spell is refused here,
- * where the owner sees which model it does run, rather than left as a rule nothing could ever match.
+ * The reviewer model, read against the models each host a member runs on takes (martha#315, martha#541 package 6b): a
+ * name a member's own host cannot spell is refused here, where the owner sees which model that host does run, rather
+ * than left as a rule nothing could ever match.
+ *
+ * Every member's host is held to the name, not only the reviewer members': any member can spawn a subagent, so a name
+ * one of the crew's hosts can never spell would refuse every review spawned there forever. A host this release records
+ * no vocabulary for is refused by name too, never read as runnable.
  */
-function refuseTheReviewModel(refuse: Refuse, model: unknown, models: ModelVocabulary): void {
+function refuseTheReviewModel(refuse: Refuse, model: unknown, vocabularies: TheVocabulariesOfHost, crew: TheCrewRead): void {
   if (model === undefined) return
   if (!isText(model)) return refuse.at(`house_rules.${REVIEW_MODEL}`, 'is not a model name')
-  if (hostRuns(models, model.trim())) return
-  const runs = models.names.length === 0 ? 'none Martha can name' : models.names.join(', ')
-  refuse.at(`house_rules.${REVIEW_MODEL}`, `is not a model this host runs (it runs ${runs}), so a review could never be held to it`)
+  const name = model.trim()
+  const held = new Set<string>()
+  for (const member of crew.members) {
+    const host = theHostOfResolved(member, crew.crew_host)
+    if (held.has(host)) continue
+    held.add(host)
+    const vocabulary = vocabularies.get(host)
+    const where = `house_rules.${REVIEW_MODEL}`
+    if (vocabulary === undefined) {
+      const known = [...vocabularies.keys()].join(', ')
+      refuse.at(where, `cannot be held on ${host}, a host this release records no models for (it records ${known}), so a review could never be held to it`)
+    }
+    if (hostRuns(vocabulary, name)) continue
+    const runs = vocabulary.names.length === 0 ? 'none Martha can name' : vocabulary.names.join(', ')
+    refuse.at(where, `is not a model ${host} runs (it runs ${runs}), so a review could never be held to it`)
+  }
 }
 
 /**
