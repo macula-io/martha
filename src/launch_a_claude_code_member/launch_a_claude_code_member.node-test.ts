@@ -4505,7 +4505,7 @@ test('the crew tools a launch hands over read the sessions map its relay keeps, 
     ...memberLaunch(place, fake.command, place.approved),
     // Exactly the shape the launcher's own wiring uses: the crew tools are built over the accessor the launcher
     // hands over, and that accessor is the thing under test.
-    crew_tools: (sessions) => {
+    crew_tools: (sessions, member) => {
       const crew = crewToolsOver({
         member: 'Mercury',
         ledger: { clock: { now: () => 5_000 }, stores: { rows: rowStreamsDirectory(place.rows) } },
@@ -4515,6 +4515,8 @@ test('the crew tools a launch hands over read the sessions map its relay keeps, 
         stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')) },
         stamps,
         sessions,
+        // The watch the launch hands over, which a launch's crew tools must hold (martha#710).
+        served_tools: member.served_tools,
       })
       handed.push(crew)
       return crew

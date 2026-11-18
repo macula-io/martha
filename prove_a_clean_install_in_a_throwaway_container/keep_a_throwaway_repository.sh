@@ -55,23 +55,18 @@ README_TEXT='# A throwaway repository
 
 Made by one night of the nightly live run, and deleted at its end.
 '
-# The test runner's own flag, kept in a variable and joined where the fixture text below needs it. The bytes this
-# script makes are the same either way; written out, the two fixture strings below read to the bounded-runs check
-# (prove_the_core/every_run_of_the_tests_is_bounded.ts, #683) as a run of OUR tests that states none of the three
-# things that bound it, and the check is line-based, so it cannot tell a fixture's prose from a command here.
-TEST_FLAG='--test'
 PACKAGE_JSON='{
   "name": "greet",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node '"${TEST_FLAG}"'" }
+  "scripts": { "test": "node --test" }
 }
 '
 # Issue #1: the night's package, the one the builder is given.
 ISSUE_NUMBER=1
 ISSUE_TITLE='Add greet(name)'
-ISSUE_BODY='Add `greet(name)` in `greet.js`, returning `Hello, <name>!`, with a `node '"${TEST_FLAG}"'` test that pins the exact string, a name with a space included.'
+ISSUE_BODY='Add `greet(name)` in `greet.js`, returning `Hello, <name>!`, with a `node --test` test that pins the exact string, a name with a space included.'
 # GitHub's answer to the same id once the repository is gone, as gh prints its status line.
 GONE_STATUS='404'
 # The run folder's parts: the run's own GitHub login (never kept), the record the delete guard reads, and what the

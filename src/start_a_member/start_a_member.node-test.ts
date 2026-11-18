@@ -42,7 +42,8 @@ import { NO_CREW_TOOLS, type MemberRelayPlace } from '../answer_the_relay/answer
 import { RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { RELAY_ORIGIN, RELAY_PATHS, TOOL_ANSWER_PATH, toolCallBody } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, CREW_TOOLS_FIELD } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { POLL_MS, until } from '../drive_the_recorded_host/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
@@ -264,6 +265,36 @@ const declared = async (place: Place): Promise<void> => {
 }
 
 const yes = { is_terminal: true, ask: () => Promise.resolve('yes') }
+
+/**
+ * How many beats a started member's row is given to carry its crew tools (martha#710). The first beat writes the row as
+ * the last look left it, which is nothing yet, and starts a look; the next beat writes what that look found. Two beats
+ * is the least, and the rest is the machine's room: the wait fails only once this many beats have passed without it.
+ */
+const BEATS_A_ROW_WAITS = 4
+
+test('#710: martha start builds crew tools that hold the window of the tools its host served, so the beat writes them on the row (mutants: the served window dropped where the launch builds its crew tools; the watch lost before the beat)', async (t) => {
+  // Through the start itself, as an owner runs it: the host table, the Claude Code entry and the crew tools it builds,
+  // with the crew's own store. A test that built its own tools would stay green while the launch dropped the watch.
+  // The builder also takes this machine's processes; the test calls no crew tool that acts, so none of them is touched,
+  // and it must stay that way (martha#710).
+  const place = placeFor(t, {})
+  await declared(place)
+  const fake = fakeClaude(place)
+  const member = SOLO_MEMBERS[0].name
+  const request = requestFor(place, fake.command, member, [])
+  const started = await startedOn(place, request)
+  assert.ok(started.started, started.started ? '' : started.refusal)
+
+  // A launch whose crew tools hold no watch writes no crew tools on the row at all, so its absence names the missing
+  // window; any state the row carries, `unknown` while the fake host keeps no transcript, is the watch at work.
+  const rows = dashboardRowsIn(request.places.dashboard)
+  const since = Date.now()
+  await until(`${member}'s row to carry ${CREW_TOOLS_FIELD}`, () => rows.read(member)?.[CREW_TOOLS_FIELD] !== undefined, t, undefined, () =>
+    Date.now() - since < BEATS_A_ROW_WAITS * BEAT_INTERVAL_MS
+      ? undefined
+      : `the crew tools a Claude Code launch builds carry no served window, or its look failed: ${member}'s beat wrote no ${CREW_TOOLS_FIELD} in ${BEATS_A_ROW_WAITS} beats (martha#710)`)
+})
 
 test('#541: a member the declaration names the engine for is refused by name, and no other host is started (mutant: the table keyed by the crew\'s host)', async (t) => {
   const declaration = { ...soloDeclaration('Ada Owner'), members: [{ name: 'builder', role: 'builder' }, { name: 'reviewer', role: 'reviewer', host: THE_ENGINES_HOST }] }
