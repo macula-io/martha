@@ -891,7 +891,10 @@ answer() {
   if [ -f "${standin}/member.read-bare" ]; then
     read_content="# ${heading}\\n"
   elif [ -f "${standin}/member.read-as-logged" ]; then
-    read_content="${numbered}# ${heading}\\n2\\t\\n3\\tThanks for picking this up. To reproduce what I see, run this one command in\\n4\\tthe checkout and tell me what it prints:\\n5\\t\\n6\\t    ${command}\\n"
+    # Tonight's bytes, written out: the line numbers and the tabs a real read carries are here as the host sent them,
+    # never taken from the constant the check is held to, so a wrong prefix fails this case instead of moving with it
+    # (martha#638 r=1).
+    read_content="1\\t# ${heading}\\n2\\t\\n3\\tThanks for picking this up. To reproduce what I see, run this one command in\\n4\\tthe checkout and tell me what it prints:\\n5\\t\\n6\\t    ${command}\\n"
   else
     read_content="${numbered}# ${heading}\\n2\\t\\n3\\tThanks for picking this up.\\n"
   fi
