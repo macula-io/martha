@@ -146,7 +146,9 @@
       "src/probe_the_owners_own_folders": "src/probe_launch_hosts"
     },
     "sliceCap": 600,
-    "sliceCeilings": {},
+    "sliceCeilings": {
+      "src/land_passed_work_as_one_batch": 614
+    },
     "packageImports": {
       "typescript": "prove_the_core",
       "eslint": "prove_the_core",
