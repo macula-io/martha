@@ -23,7 +23,7 @@ import { reviewSpawnsRemembered, type TheReportTheHostWrites, type TheReviewSpaw
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { sessionRecordsIn, type SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
-import { answersOver, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
+import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
 
 /** A host this file makes up: its own names for the envelope it writes when an agent fails. */
 const A_MADE_UP_REPORT: TheReportTheHostWrites = {
@@ -134,7 +134,13 @@ function anEntry(t: TestContext, says: TheCrewSays = {}): AnEntry {
     crew_text: THE_CREW_TEXT,
     reviews,
     failed_review_report: A_MADE_UP_REPORT,
-    told: { theRow: (line) => void told.rows.push(line), theMember: async (line) => void told.member.push(line) },
+    told: { theRow: (line) => void told.rows.push(line), theMember: async (line) => void told.member.push(line), takeTheLineBack: () => {} },
+    // The tool call's places (PR 2), which no case here calls: no agent, a policy that sends nothing, names as called.
+    agents: agentRunsKept(),
+    policy: { may_send_executable_text: [] },
+    names: { ownNameOf: (called) => called },
+    refusesAWriteToTheOwnersSettings: () => undefined,
+    refusesAWriteToTheOwnersMemory: () => undefined,
   })
   return { answers, told, reviews, failing }
 }

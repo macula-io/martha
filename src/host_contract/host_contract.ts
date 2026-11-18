@@ -490,6 +490,23 @@ export interface AReviewTheHostSawFail {
   readonly origin_kind: string
 }
 
+/**
+ * A tool the member's model called, before it runs (martha#541): the session, the tool by the name the host called it,
+ * and its input. `call_id` is the host's id for the call, when it gives one; `agent_id` is the agent that made the call,
+ * when an agent of the session made it, read by the adapter out of its own host's body. The member's own calls carry
+ * none.
+ */
+export interface ACalledTool {
+  readonly session_id: string
+  readonly tool: string
+  readonly input: Readonly<Record<string, unknown>>
+  readonly call_id?: string
+  readonly agent_id?: string
+}
+
+/** What a call is answered with: allowed to run, or denied and why. Only the adapter writes its host's own yes. */
+export type TheAnswerToACall = { readonly allowed: 1 } | { readonly denied: string }
+
 export interface Delivery {
   /** Hands a turn to the model of this member's session. */
   handToModel(text: string): Promise<void>
