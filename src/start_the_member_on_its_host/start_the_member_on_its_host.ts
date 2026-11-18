@@ -263,6 +263,9 @@ async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted>
         stores: { crew: start.crew_stores.crew },
         carrier: carryingTo({ member: start.member, host: channel }),
         sessions,
+        // What the launch watches of the crew tools it served (martha#658): 697 handed the member's
+        // served window here, where the tools are built now that the launch body moved (#703).
+        served_tools: member.served_tools,
         // The stamps the host keeps its handovers with (martha#255), under the same crew directory: a handover one
         // session writes is the one its successor inherits.
         stamps: start.crew_stores.stamps,
