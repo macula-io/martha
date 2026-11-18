@@ -34,7 +34,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 
-import { coreSources } from '../../prove_the_core/core_sources.ts'
+import { coreSources } from '../../prove_the_core/read_the_manifest_and_the_linter/core_sources.ts'
 import {
   constantsIn,
   exceptionsNotHeld,
@@ -47,7 +47,7 @@ import {
   type Exception,
   type Finding,
   type MarkerNotHeld,
-} from '../../prove_the_core/no_literal_restates_a_value.ts'
+} from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { isScannedSource, type CoreSource } from '../host_contract/core_source.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { CORE } from './the_core_the_check_reads.ts'

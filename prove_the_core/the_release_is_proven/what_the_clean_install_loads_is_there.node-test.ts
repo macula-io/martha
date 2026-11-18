@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { test } from 'node:test'
 
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 import {
   describe,
@@ -23,7 +23,7 @@ import {
   SOURCE_FOLDER,
 } from './what_the_clean_install_loads_is_there.ts'
 
-const REPOSITORY = join(import.meta.dirname, '..')
+const REPOSITORY = join(import.meta.dirname, '../..')
 const INSTALLER = 'installer'
 
 /** Every installer source a load could stand in: its .mjs files, its own dependencies left out. */

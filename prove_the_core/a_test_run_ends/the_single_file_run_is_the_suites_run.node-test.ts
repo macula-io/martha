@@ -28,14 +28,14 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { FORCE_EXIT_FLAG, GUARD_FLAG, TIMEOUT_FLAG, testRunFlagsOf, withoutTheTestContext } from './every_test_run_ends.ts'
-import { manifestOf } from './declared_in_package_json.ts'
+import { manifestOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 
 const NAME = 'the_single_file_run_is_the_suites_run'
 
 /** The repository this check reads and runs, where the entry point runs from. */
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 
 /** The file the plant goes in: the folder the suite's globs pick, under a name no second run can want. */
 const PLANTED = join(import.meta.dirname, `planted_for_the_single_file_run_${process.pid}_${randomBytes(4).toString('hex')}.node-test.ts`)
@@ -130,7 +130,7 @@ function theDeclaredName(file: string, declaration: RegExp): string {
 function neitherStageRan(output: string): void {
   const stages = [
     theDeclaredName('prove_the_relay_loads/run_the_recorded_host_runs.sh', /^NAME="([^"]+)"/m),
-    theDeclaredName('prove_the_core/run_the_installer_job.ts', /^const NAME = '([^']+)'/m),
+    theDeclaredName('prove_the_core/the_release_is_proven/run_the_installer_job.ts', /^const NAME = '([^']+)'/m),
   ]
   for (const stage of stages) {
     assert.doesNotMatch(output, new RegExp(`^${stage}:`, 'm'), `${NAME}: ${stage} ran inside a single-file run:\n${output}`)
@@ -162,7 +162,7 @@ const A_PLANTED_NAME_TO_UNSET = 'A_PLANTED_NAME_TO_UNSET'
 const ANOTHER_PLANTED_NAME_TO_UNSET = 'ANOTHER_PLANTED_NAME_TO_UNSET'
 
 /** Where the run asks for the test script's words, and where a throwaway's reader that fails is planted instead. */
-const THE_READER_PATH = 'prove_the_core/the_words_one_run_gets.ts'
+const THE_READER_PATH = 'prove_the_core/a_test_run_ends/the_words_one_run_gets.ts'
 
 /** The reader's own answers, kept beside a failing one so the one a throwaway plants still says the command. */
 const THE_ANSWERING_READER = 'prove_the_core/the_words_one_run_gets_that_answers.ts'
@@ -190,10 +190,10 @@ test('the one case a throwaway script selects', () => {
 const THE_FILES_THE_RUN_READS = [
   THE_RUNNER,
   THE_READER_PATH,
-  'prove_the_core/declared_in_package_json.ts',
-  'prove_the_core/every_test_run_ends.ts',
-  'prove_the_core/fail_a_test_file_that_leaves_something_running.ts',
-  'prove_the_core/every_test_file_cleans_up.ts',
+  'prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts',
+  'prove_the_core/a_test_run_ends/every_test_run_ends.ts',
+  'prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts',
+  'prove_the_core/a_test_run_ends/every_test_file_cleans_up.ts',
 ] as const
 
 /**
@@ -311,7 +311,7 @@ test('#723: a reader that cannot say what the test script unsets refuses the run
 test('#723: a test script whose command cannot be read is refused by name, never run (mutant: the read fails open)', (t) => {
   const where = mkdtempSync(join(tmpdir(), 'martha-single-file-no-command-'))
   t.after(() => removeTheTree(where))
-  const planted = theThrowawayRepository(where, { testScript: 'node ./prove_the_core/every_test_file_cleans_up.ts' })
+  const planted = theThrowawayRepository(where, { testScript: 'node ./prove_the_core/a_test_run_ends/every_test_file_cleans_up.ts' })
   const ran = theRunIn(where, [planted], process.env)
   assert.equal(ran.status, 2, `${NAME}: a test script with no command to read was not refused:\n${ran.output}`)
   assert.match(ran.output, /the test script runs no command with --test/, `${NAME}: the refusal did not say why the read failed:\n${ran.output}`)
@@ -321,7 +321,7 @@ test('#723: every refusal the single-file run can make is made, with its own wor
   const refusals = [
     { args: [] as readonly string[], says: /name at least one test file; npm test is the whole suite/ },
     { args: ['CONTRIBUTING.md'], says: /the suite runs no CONTRIBUTING\.md; its globs are .*src\/\*\*\/\*\.node-test\.ts/ },
-    { args: [`${TIMEOUT_FLAG}=1000`, 'prove_the_core/parse_a_source.node-test.ts'], says: /is not this runner's to pass/ },
+    { args: [`${TIMEOUT_FLAG}=1000`, 'prove_the_core/read_a_source/parse_a_source.node-test.ts'], says: /is not this runner's to pass/ },
     { args: ['no-such-file-or-flag'], says: /is not a file/ },
   ]
   for (const one of refusals) {

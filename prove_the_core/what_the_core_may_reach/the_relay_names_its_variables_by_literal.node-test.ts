@@ -3,10 +3,10 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
-import { RELAY_SOCKET_VARIABLE } from '../src/claude_code_relay/hooks/relay_protocol.ts'
+import { RELAY_SOCKET_VARIABLE } from '../../src/claude_code_relay/hooks/relay_protocol.ts'
 import { environmentReadsOf } from './the_relay_names_its_variables_by_literal.ts'
 
-const HOOKS = dirname(new URL('../src/claude_code_relay/hooks/hooks.json', import.meta.url).pathname)
+const HOOKS = dirname(new URL('../../src/claude_code_relay/hooks/hooks.json', import.meta.url).pathname)
 
 /**
  * Every module of the relay this repository compiles itself: the `.ts` files of its hooks folder, whichever of them

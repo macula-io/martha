@@ -1,5 +1,5 @@
 {
-  "_why": "Planted sources for prove_the_core/parse_a_source's module references, in JSON so no walk of the core's code reads them as imports.",
+  "_why": "Planted sources for prove_the_core/read_a_source/parse_a_source's module references, in JSON so no walk of the core's code reads them as imports.",
   "references": [
     {
       "text": "import { a } from './a.ts'\n",

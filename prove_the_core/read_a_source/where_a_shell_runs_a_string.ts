@@ -6,7 +6,7 @@
 // a one-word change with a planted case beside it. A program on no list reads as data: this is a bound on the
 // repository's own scripts, not a sandbox (the known limits are on martha#727).
 
-import type { ACommand, AWord } from './read_a_shell_script.ts'
+import type { ACommand, AWord } from '../read_a_shell_script/read_a_shell_script.ts'
 
 /** The shells, by the last part of the word that names them. */
 export const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash'])

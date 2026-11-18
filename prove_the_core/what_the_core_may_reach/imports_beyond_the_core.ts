@@ -36,8 +36,8 @@ import { sep } from 'node:path'
 
 import ts from 'typescript'
 
-import type { CoreSource } from '../src/host_contract/core_source.ts'
-import { isUsedAsAValue, lineOf, moduleReferencesIn, nodesOf, parseSource, type ModuleReference } from './parse_a_source.ts'
+import type { CoreSource } from '../../src/host_contract/core_source.ts'
+import { isUsedAsAValue, lineOf, moduleReferencesIn, nodesOf, parseSource, type ModuleReference } from '../read_a_source/parse_a_source.ts'
 
 export interface ImportBeyondTheCore {
   /** Path relative to the repository. */

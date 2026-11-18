@@ -1,7 +1,7 @@
 // The coincidences of answer_the_relay: words its own files spell like a constant held elsewhere, meaning something
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { THE_HOSTS_WORD_FOR_A_CLEAR } from '../claude_code_host/coincidences.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CARRY_THE_CLEAR } from '../refresh_a_member/the_refresh_flow.ts'

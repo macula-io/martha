@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { coreSources } from './core_sources.ts'
-import { codeFoldersOf, loaderImportsOf, manifestOf, packageImportsOf, type Manifest } from './declared_in_package_json.ts'
+import { coreSources } from '../read_the_manifest_and_the_linter/core_sources.ts'
+import { codeFoldersOf, loaderImportsOf, manifestOf, packageImportsOf, type Manifest } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { importsBeyondTheCore, LOADS_BY_NAME, RUNS_TEXT, CALLS_REQUIRE_INDIRECTLY, COMPUTED } from './imports_beyond_the_core.ts'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 const manifest = manifestOf(repository)
 const packages = packageImportsOf(manifest)
 const loaders = loaderImportsOf(manifest)
@@ -49,7 +49,7 @@ test('a loader module allowed for one file is still named in any other file, and
   ])
 })
 
-// eslint joined in martha#87: prove_the_core/structure_stays_flat.node-test.ts reads the structural floor's caps
+// eslint joined in martha#87: prove_the_core/read_the_manifest_and_the_linter/structure_stays_flat.node-test.ts reads the structural floor's caps
 // from eslint's resolved config and lints planted functions with them.
 test('tripwire: package.json allows exactly typescript and eslint in prove_the_core, and saxes for the SVG parse in src (martha#271); a new package is a decision, not a drift', () => {
   assert.deepEqual(packages, { typescript: 'prove_the_core', eslint: 'prove_the_core', saxes: 'src' })

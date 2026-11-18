@@ -11,7 +11,7 @@ import { test } from 'node:test'
 
 import { ESLint, type Linter } from 'eslint'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 const eslint = new ESLint({ cwd: repository })
 // A path inside the core, so the planted code is judged by the config the core is judged by.
 const PLANTED = 'src/planted_by_the_floor_test/planted.ts'

@@ -31,13 +31,13 @@
 import { posix } from 'node:path'
 import process from 'node:process'
 
-import type { Manifest } from './declared_in_package_json.ts'
+import type { Manifest } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 
 export const TEST_SCRIPT = 'test'
 export const TIMEOUT_FLAG = '--test-timeout'
 export const FORCE_EXIT_FLAG = '--test-force-exit'
 /** The module every test file's process loads first, to fail the file for what it leaves running, from the repository. */
-export const GUARD = 'prove_the_core/fail_a_test_file_that_leaves_something_running.ts'
+export const GUARD = 'prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts'
 /**
  * The flag that loads GUARD in the test script of the package in `folder` (a
  * folder of the repository, '.' for the repository itself): each package's

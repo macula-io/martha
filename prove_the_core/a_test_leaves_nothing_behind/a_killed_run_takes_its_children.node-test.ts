@@ -22,14 +22,14 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { PROC_ROOT } from '../../src/linux_process_identity/process_identity_from_proc.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
-import { GUARD_FLAG, withoutTheTestContext } from './every_test_run_ends.ts'
+import { GUARD_FLAG, withoutTheTestContext } from '../a_test_run_ends/every_test_run_ends.ts'
 import { parentIn } from './the_launchers_a_run_left.ts'
 
 /** The repository this check reads, which is where the test script runs its files and holds the guard's path. */
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 
 /** The guard's path from the repository, as the flag that loads it states it. */
 const GUARD_PATH = GUARD_FLAG.slice('--import='.length)

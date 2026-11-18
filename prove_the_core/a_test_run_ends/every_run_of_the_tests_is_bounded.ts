@@ -23,7 +23,7 @@
 // nothing and is not counted.
 
 import { FORCE_EXIT_FLAG, TIMEOUT_FLAG } from './every_test_run_ends.ts'
-import { AnUnclosedPart, commandsOf, tokensOf, type ACommand, type AToken, type AWord } from './read_a_shell_script.ts'
+import { AnUnclosedPart, commandsOf, tokensOf, type ACommand, type AToken, type AWord } from '../read_a_shell_script/read_a_shell_script.ts'
 import {
   DECLARATIONS,
   theForwarders,
@@ -32,7 +32,7 @@ import {
   whatThePipesFeed,
   wherePlacesRun,
   type AString,
-} from './where_a_shell_runs_a_string.ts'
+} from '../read_a_source/where_a_shell_runs_a_string.ts'
 
 export type AKindOfShippedFile = 'a shell script' | 'a workflow' | 'a package script' | 'a page of prose'
 

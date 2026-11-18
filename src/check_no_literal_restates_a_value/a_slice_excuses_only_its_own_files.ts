@@ -4,7 +4,7 @@
 // slice's coincidence file may name only files inside that slice: an entry about another slice's file is the list
 // growing back into one slice that knows every other slice's words, and it is named.
 
-import type { DeclaredCoincidence } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
+import type { DeclaredCoincidence } from '../../prove_the_core/a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts'
 
 /** The slice a path under the core belongs to: its first folder. */
 const sliceOf = (path: string): string => path.split(/[\\/]/)[0] ?? ''

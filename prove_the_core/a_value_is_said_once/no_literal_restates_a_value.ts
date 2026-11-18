@@ -98,8 +98,8 @@
 
 import ts from 'typescript'
 
-import type { CoreSource } from '../src/host_contract/core_source.ts'
-import { isInAType, lineOf, nodesOf, parseSource } from './parse_a_source.ts'
+import type { CoreSource } from '../../src/host_contract/core_source.ts'
+import { isInAType, lineOf, nodesOf, parseSource } from '../read_a_source/parse_a_source.ts'
 
 /** The shortest value this check reads: `env` and `id` are words before they are values. */
 export const SHORTEST_VALUE = 4

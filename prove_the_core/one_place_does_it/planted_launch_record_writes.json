@@ -1,5 +1,5 @@
 {
-  "_why": "Planted slice sources for prove_the_core/only_the_launcher_writes_launch_records. Each caught source lists the lines a finding must name, and may name the file kind it is planted as (.ts when it names none). They live in JSON so that no walk of the core's code reads them as code.",
+  "_why": "Planted slice sources for prove_the_core/one_place_does_it/only_the_launcher_writes_launch_records. Each caught source lists the lines a finding must name, and may name the file kind it is planted as (.ts when it names none). They live in JSON so that no walk of the core's code reads them as code.",
   "caught": {
     "a direct keep": {
       "text": "import type { HostContract } from '../host_contract/host_contract.ts'\nexport const forge = (host: HostContract) =>\n  host.stores.launches.keep('Pluto', { member_name: 'Pluto' })\n",

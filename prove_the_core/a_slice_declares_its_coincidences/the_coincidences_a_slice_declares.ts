@@ -19,9 +19,9 @@ import { dirname, join, normalize } from 'node:path'
 
 import ts from 'typescript'
 
-import type { CoreSource } from '../src/host_contract/core_source.ts'
-import { constantsIn, type Exception } from './no_literal_restates_a_value.ts'
-import { lineOf, parseSource } from './parse_a_source.ts'
+import type { CoreSource } from '../../src/host_contract/core_source.ts'
+import { constantsIn, type Exception } from '../a_value_is_said_once/no_literal_restates_a_value.ts'
+import { lineOf, parseSource } from '../read_a_source/parse_a_source.ts'
 
 /** The one name a slice's coincidence file has. */
 export const COINCIDENCE_FILE = 'coincidences.ts'

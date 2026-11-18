@@ -21,8 +21,8 @@ import { dirname, join, normalize } from 'node:path'
 
 import ts from 'typescript'
 
-import type { CoreSource } from '../src/host_contract/core_source.ts'
-import { lineOf, nodesOf, parseSource } from './parse_a_source.ts'
+import type { CoreSource } from '../../src/host_contract/core_source.ts'
+import { lineOf, nodesOf, parseSource } from '../read_a_source/parse_a_source.ts'
 
 /** The one removal a test file may use: it opens up a read-only folder and retries while a writer is still there. */
 export const THE_REMOVAL_THAT_RETRIES = 'removeTheTree'

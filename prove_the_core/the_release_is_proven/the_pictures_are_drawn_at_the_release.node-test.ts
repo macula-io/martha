@@ -14,10 +14,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { DIAGRAMS, THE_C4_DIAGRAMS_PROGRAM } from '../architecture/c4_diagrams.ts'
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { DIAGRAMS, THE_C4_DIAGRAMS_PROGRAM } from '../../architecture/c4_diagrams.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
-const PROGRAM = join(import.meta.dirname, '../src/check_the_pictures_change_with_the_version/main.ts')
+const PROGRAM = join(import.meta.dirname, '../../src/check_the_pictures_change_with_the_version/main.ts')
 
 /** A tree holding only the pictures the generator draws, written as `draws` says of each. */
 const aTreeOfPictures = (draws: (file: string) => string): string => {
@@ -108,7 +108,7 @@ test('a change cut before the release bump is read from its merge base, never fr
   }
 })
 
-const WORKFLOWS = join(import.meta.dirname, '..', '.github', 'workflows')
+const WORKFLOWS = join(import.meta.dirname, '../..', '.github', 'workflows')
 
 /** The packer, whose own step is one no step may stand between a tree read and it. */
 const THE_PACKER = 'pack_a_release/pack_a_release.sh'

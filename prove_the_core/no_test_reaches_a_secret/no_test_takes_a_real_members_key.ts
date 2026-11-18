@@ -15,8 +15,8 @@
 import { homedir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
 
-import { CLAUDE_FOLDER } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
-import { STATE_ROOT_NAME } from '../src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CLAUDE_FOLDER } from '../../src/know_claude_codes_own_facts/claude_code_facts.ts'
+import { STATE_ROOT_NAME } from '../../src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** The crew's folder, under Claude Code's own folder in a home. */
 const THE_CREWS_FOLDER = 'crew'

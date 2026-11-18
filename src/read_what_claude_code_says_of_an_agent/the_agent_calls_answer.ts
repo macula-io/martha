@@ -2,7 +2,7 @@
 //
 // The answer's shape is the host's: a second host answers its own way, so the read lives here, in a host folder of its own
 // (martha#463), and the slice that names a failed review (../name_a_review_the_host_reported_failed) is handed the model as
-// a string. The fields read are declared once, so the core's check (prove_the_core/no_host_bundle_read_in_the_core.ts)
+// a string. The fields read are declared once, so the core's check (prove_the_core/what_the_core_may_reach/no_host_bundle_read_in_the_core.ts)
 // names a core slice that reads one of them itself.
 
 import { keepTheModelAReviewResolvedTo, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'

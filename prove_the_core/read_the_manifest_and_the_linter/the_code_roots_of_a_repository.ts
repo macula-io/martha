@@ -16,7 +16,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
-import { isScannedSource, type CoreSource } from '../src/host_contract/core_source.ts'
+import { isScannedSource, type CoreSource } from '../../src/host_contract/core_source.ts'
 import { coreSources, insideASkippedDirectory, isASkippedDirectory } from './core_sources.ts'
 
 /** Whether a script sits under `directory` at any depth, skipping the directories coreSources skips. */

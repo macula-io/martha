@@ -12,12 +12,12 @@ import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
-import { manifestOf, testCommandsOf } from './declared_in_package_json.ts'
+import { manifestOf, testCommandsOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { FOLDER, isTheInstall, JOB, theJobsRunLines, WORKFLOW } from './the_installer_jobs_steps.ts'
 
-const REPOSITORY = join(import.meta.dirname, '..')
+const REPOSITORY = join(import.meta.dirname, '../..')
 const RUNNER = relative(REPOSITORY, join(import.meta.dirname, 'run_the_installer_job.ts'))
 
 test('the test script runs the installer job before its parallel run, which comes last', () => {

@@ -1,5 +1,5 @@
 {
-  "_why": "Planted slice sources for prove_the_core/no_host_bundle_read_in_the_core (martha#463). Each caught text is named on line 1 when it sits in a core slice, and left alone where the core's rules do not judge it. They live in JSON so that no walk of the core's code reads them as code.",
+  "_why": "Planted slice sources for prove_the_core/what_the_core_may_reach/no_host_bundle_read_in_the_core (martha#463). Each caught text is named on line 1 when it sits in a core slice, and left alone where the core's rules do not judge it. They live in JSON so that no walk of the core's code reads them as code.",
   "caught": {
     "a regular expression over a minifier's names": "const BUILDER = /function ([\\w$]+)\\(/g\n",
     "the dollar first in the class": "const BUILDER = /let [$\\w]+=/\n",

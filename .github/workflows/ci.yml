@@ -297,7 +297,7 @@ jobs:
   # open, and a run killed hard leaves them piled up until the next launch test stops reporting. The job is a run over a
   # machine that holds none, and answers 0. That it BITES is a test's, and so is every line of the rule: a kernel the
   # test plants holds a killed run's chain and must be named, and the same chain under a live runner must not be —
-  # prove_the_core/the_launchers_a_run_left.node-test.ts, which the suite runs.
+  # prove_the_core/a_test_leaves_nothing_behind/the_launchers_a_run_left.node-test.ts, which the suite runs.
   no-launcher-outlives-its-run:
     name: no launcher outlives its run
     runs-on: ubuntu-latest

@@ -10,8 +10,8 @@ import { join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
-import { escaped, manifestOf, PACKAGES, type Manifest } from './declared_in_package_json.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { escaped, manifestOf, PACKAGES, type Manifest } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { leakReportOf, leftBehind, leftoverReportOf, leftRunning, NEVER_LEFT_IN_THE_TEMP_DIRECTORY } from './every_test_file_cleans_up.ts'
 import {
   FORCE_EXIT_FLAG,
@@ -25,7 +25,7 @@ import {
   withoutTheTestContext,
 } from './every_test_run_ends.ts'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 
 /** A manifest whose test script is `script`. */
 const scripted = (script: string): Manifest => ({ scripts: { [TEST_SCRIPT]: script } })
@@ -39,8 +39,8 @@ for (const folder of PACKAGES) {
 
 test('the guard is imported by its path from the package that runs it', () => {
   assert.equal(GUARD_FLAG, guardFlagFrom('.'))
-  assert.equal(guardFlagFrom('.'), '--import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts')
-  assert.equal(guardFlagFrom('installer'), '--import=../prove_the_core/fail_a_test_file_that_leaves_something_running.ts')
+  assert.equal(guardFlagFrom('.'), '--import=./prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts')
+  assert.equal(guardFlagFrom('installer'), '--import=../prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts')
   const elsewhere = `node --test ${TIMEOUT_FLAG}=60000 ${FORCE_EXIT_FLAG} ${GUARD_FLAG} 'x'`
   const bound = testRunBoundOf(scripted(elsewhere), 'installer')
   assert.equal(bound.bounded, false, 'the root path does not load the guard from the installer')

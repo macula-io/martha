@@ -8,7 +8,7 @@
 
 import { dirname, join, normalize, sep } from 'node:path'
 
-import { moduleReferencesIn, parseSource } from './parse_a_source.ts'
+import { moduleReferencesIn, parseSource } from '../read_a_source/parse_a_source.ts'
 import type { Finding, Source } from './no_setting_outside_the_declaration.ts'
 
 /** Each part's directory under src/, mapped to the directory of the program it belongs to. */

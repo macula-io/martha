@@ -14,7 +14,7 @@
 // no part of this repository's code and are never read, at any depth.
 //
 // What it cannot see, stated: a module a file loads by a name built at run time (the check that every import is a
-// plain one, prove_the_core/imports_beyond_the_core, refuses those by name), and a loop that runs through a file
+// plain one, prove_the_core/what_the_core_may_reach/imports_beyond_the_core, refuses those by name), and a loop that runs through a file
 // outside the repository, which no walk here reads.
 //
 // The exception list (./the_exceptions.ts) names the groups allowed to keep a loop, one entry per group of files, each

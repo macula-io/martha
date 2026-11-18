@@ -3,13 +3,13 @@
 #
 # Sourced, never run. A caller has already changed to the repository's top, where the guard's path holds, and gets three
 # variables: RUN_TIMEOUT_MS, FORCE_EXIT_FLAG and GUARD_FLAG. The time limit is defined here and nowhere else; the last
-# two are read from prove_the_core/every_test_run_ends.ts, never restated. A bounds read that comes back empty exits 2
+# two are read from prove_the_core/a_test_run_ends/every_test_run_ends.ts, never restated. A bounds read that comes back empty exits 2
 # with a line naming it, before the caller runs anything unbounded.
 #
 # Exit: a caller that gets this far has all three.
 set -euo pipefail
 
-THE_BOUNDS="./prove_the_core/every_test_run_ends.ts"
+THE_BOUNDS="./prove_the_core/a_test_run_ends/every_test_run_ends.ts"
 
 # A time limit per test, above the recorded hosts' own silence budgets, so their words come first.
 RUN_TIMEOUT_MS=300000

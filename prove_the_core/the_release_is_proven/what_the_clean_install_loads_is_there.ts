@@ -18,7 +18,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from 'typescript'
 
-import { lineOf, nodesOf, parseSource } from './parse_a_source.ts'
+import { lineOf, nodesOf, parseSource } from '../read_a_source/parse_a_source.ts'
 
 /** The proof's loader of a module out of the installed release, as its call is spelled. */
 export const LOADER = 'fromTheRelease'

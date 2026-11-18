@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { GONE, lineOfAFinding, lineOfAMarkerNotHeld, lineOfAnExceptionNotHeld, THE_MARKER, type Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import { GONE, lineOfAFinding, lineOfAMarkerNotHeld, lineOfAnExceptionNotHeld, THE_MARKER, type Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { verdictOf } from './judge_a_change.ts'
 import { CORE } from './the_core_the_check_reads.ts'

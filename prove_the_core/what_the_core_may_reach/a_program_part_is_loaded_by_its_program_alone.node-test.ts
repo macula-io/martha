@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { join, sep } from 'node:path'
 import { test } from 'node:test'
 
-import { coreSources } from './core_sources.ts'
-import { CORE, manifestOf, programPartsOf, programsRunByScriptsOf } from './declared_in_package_json.ts'
+import { coreSources } from '../read_the_manifest_and_the_linter/core_sources.ts'
+import { CORE, manifestOf, programPartsOf, programsRunByScriptsOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { programPartsImportedFromOutside, type ProgramParts } from './a_program_part_is_loaded_by_its_program_alone.ts'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 const manifest = manifestOf(repository)
 const declared = programPartsOf(manifest)
 

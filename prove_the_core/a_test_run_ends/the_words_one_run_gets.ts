@@ -10,16 +10,16 @@
 // second time: the program, the output check, the names that command unsets, its bounds, and the globs that decide which
 // files the suite runs at all.
 //
-//   node prove_the_core/the_words_one_run_gets.ts stage          every word of the command that runs `node --test`
-//   node prove_the_core/the_words_one_run_gets.ts unsets         the names that command unsets, one per line
-//   node prove_the_core/the_words_one_run_gets.ts picks <path>   the glob that picks the path
+//   node prove_the_core/a_test_run_ends/the_words_one_run_gets.ts stage          every word of the command that runs `node --test`
+//   node prove_the_core/a_test_run_ends/the_words_one_run_gets.ts unsets         the names that command unsets, one per line
+//   node prove_the_core/a_test_run_ends/the_words_one_run_gets.ts picks <path>   the glob that picks the path
 //
 // Exit 0 answered; 1 the path is one the suite does not run, named with the globs read; 2 the answer could not be read.
 
 import { matchesGlob, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 
-import { manifestOf, testCommandsOf, testGlobsOf } from './declared_in_package_json.ts'
+import { manifestOf, testCommandsOf, testGlobsOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 
 const NAME = 'the_words_one_run_gets'
 
@@ -27,7 +27,7 @@ const NAME = 'the_words_one_run_gets'
 const THE_RUNNER_WORD = '--test'
 
 /** The repository this module sits in, whose package.json is what is read. */
-const THE_REPOSITORY = resolve(import.meta.dirname, '..')
+const THE_REPOSITORY = resolve(import.meta.dirname, '../..')
 
 /** A command of the test script: the names it unsets, and its words. */
 export interface ACommand {

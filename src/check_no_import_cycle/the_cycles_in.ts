@@ -18,7 +18,7 @@
 import { posix } from 'node:path'
 
 import type { CoreSource } from '../host_contract/core_source.ts'
-import { moduleReferencesIn, parseSource, type ModuleReference } from '../../prove_the_core/parse_a_source.ts'
+import { moduleReferencesIn, parseSource, type ModuleReference } from '../../prove_the_core/read_a_source/parse_a_source.ts'
 
 /** One loop of imports: the files of one group, and a loop that runs through all of it. */
 export interface Loop {

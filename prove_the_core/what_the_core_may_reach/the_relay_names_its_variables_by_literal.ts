@@ -8,7 +8,7 @@
 
 import ts from 'typescript'
 
-import { lineOf, nodesOf, parseSource } from './parse_a_source.ts'
+import { lineOf, nodesOf, parseSource } from '../read_a_source/parse_a_source.ts'
 
 /** One `$.env.<call>(...)`: its line, and its first argument when that is a literal name, else null. */
 export interface EnvironmentRead {

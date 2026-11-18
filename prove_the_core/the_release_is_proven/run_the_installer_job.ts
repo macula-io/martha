@@ -1,4 +1,4 @@
-// Run CI's installer job here, step for step (martha#496): node prove_the_core/run_the_installer_job.ts [--repository <path>]
+// Run CI's installer job here, step for step (martha#496): node prove_the_core/the_release_is_proven/run_the_installer_job.ts [--repository <path>]
 //
 // This exists so a branch cannot be green locally while CI's installer job is red.
 //
