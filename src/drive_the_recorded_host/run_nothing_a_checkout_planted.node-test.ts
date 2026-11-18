@@ -3,12 +3,20 @@
 // scripts, the program its .npmrc names as git, and its .envrc
 // (../refuse_code_a_checkout_runs_itself).
 //
-// Each planted file only writes a marker. The same member commands run twice on
-// two fresh copies of the same checkout: once with the owner's environment as
-// the launcher inherits it (the control: every marker must appear, or the plant
-// proves nothing), and once as a member the launcher started (no marker may
-// appear). The owner's environment here is a hostile one: it already tries to
-// switch each door back on, so the launcher's settings must win over it.
+// Each planted file only writes a marker. The doors are split into groups
+// (DOOR_GROUPS), each with the commands that open them, and each group's commands
+// run twice on two fresh copies of the same checkout: once with the owner's
+// environment as the launcher inherits it (the control: exactly that group's
+// markers must appear, or the plant proves nothing), and once as a member the
+// launcher started (no marker at all may appear). The owner's environment here is
+// a hostile one: it already tries to switch each door back on, so the launcher's
+// settings must win over it.
+//
+// Why groups (martha#700): a launched member's git runs through the launch's git
+// guard, which starts node for every call, so on a loaded machine one launch that
+// ran every door's commands outlasted the suite's per-test limit. One launch per
+// group keeps each test's work a part of that; a test the limit still cancels says
+// which command its member was in.
 //
 // Real git, real npm and real direnv. The .envrc door follows the tool: each
 // direnv the tests prove (direnvs_under_test.ts)
@@ -30,7 +38,7 @@ import { direnvsUnderTest, type Direnv } from './direnvs_under_test.ts'
 import { DIRENV_CONFIG_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { EMPTY_DIRECTORY_MODE } from '../empty_directory_of_a_launch/empty_directory.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { EMPTY_DIRECTORY_NAME, launchClaudeCodeMember } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { EMPTY_DIRECTORY_NAME, launchClaudeCodeMember, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { hostAnswers } from './host_stand_in.ts'
@@ -83,8 +91,6 @@ interface Fixture {
   readonly markers: string
   /** The owner's environment, already trying to switch every door back on. */
   readonly owner_env: Record<string, string | undefined>
-  /** What a member types, as one sh script. */
-  readonly member_commands: string
   /** Where a launched member's stderr is kept: the launch hands it no terminal, so a member that stops early says why here. */
   readonly member_errors: string
 }
@@ -108,9 +114,8 @@ function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
   const checkout = plantedCheckout(home, marker)
   const husky = huskyCheckout(home, marker)
   const owner_env = ownerEnvironment(home, checkout, direnv)
-  const member_commands = memberCommands(home, checkout, husky, direnv)
 
-  return { home, checkout, husky, markers, owner_env, member_commands, member_errors: join(home, 'member-errors') }
+  return { home, checkout, husky, markers, owner_env, member_errors: join(home, 'member-errors') }
 }
 
 function repo(dir: string): void {
@@ -198,42 +203,84 @@ function ownerEnvironment(home: string, checkout: string, direnv: Direnv | undef
   }
 }
 
-/** What a member types, as one sh script. */
-function memberCommands(home: string, checkout: string, husky: string, direnv: Direnv | undefined): string {
-  return [
-    'set -eu',
-    `cd '${checkout}'`,
-    'git commit -q --allow-empty -m "a member commits"',
-    'git status --porcelain > /dev/null',
-    'npm install --offline --no-audit --no-fund > /dev/null 2>&1',
-    `test -e ${DEPENDENCIES}/dependency/${MANIFEST}`,
-    // What direnv's shell hook runs on entering a directory, as a command of its
-    // own so a missing direnv fails here. A blocked .envrc is direnv's answer to
-    // an .envrc it was not told to trust: it exits 1 and says so.
-    ...(direnv === undefined
-      ? []
-      : [
-          `direnv export bash > '${home}/direnv.out' 2> '${home}/direnv.err' || grep -q 'is blocked' '${home}/direnv.err'`,
-          `bash -c ". '${home}/direnv.out'"`,
-        ]),
-    `cd '${husky}'`,
-    'git commit -q --allow-empty -m "a member commits"',
-    '',
-  ].join('\n')
+/** What a group's commands are typed in: the planted checkout, the husky one, and the home a direnv writes beside. */
+type Places = Pick<Fixture, 'home' | 'checkout' | 'husky'>
+
+/** One group of doors and the commands a member types that open them, one command a line. */
+interface DoorGroup {
+  /** The doors this group is there to prove: every door is in exactly one group (the partition test below). */
+  readonly doors: readonly Door[]
+  /**
+   * Doors of other groups the same commands also open in the owner's environment, whose command-scope git settings name
+   * the checkout's fsmonitor for every git run (ownerEnvironment): the control expects them too, never fewer.
+   */
+  readonly also: readonly Door[]
+  readonly commands: (places: Places, direnv: Direnv | undefined) => readonly string[]
 }
 
-const expectedInControl = (direnv: Direnv | undefined): Door[] =>
-  (Object.keys(DOORS) as Door[])
+/** Every door, by the group whose commands open it (martha#700 r=1, A). */
+const DOOR_GROUPS: Readonly<Record<string, DoorGroup>> = {
+  'the checkout\'s git and its direnv': {
+    doors: ['hook', 'config_hook', 'fsmonitor', 'envrc'],
+    also: [],
+    commands: ({ home, checkout }, direnv) => [
+      `cd '${checkout}'`,
+      'git commit -q --allow-empty -m "a member commits"',
+      'git status --porcelain > /dev/null',
+      // What direnv's shell hook runs on entering a directory, as a command of its
+      // own so a missing direnv fails here. A blocked .envrc is direnv's answer to
+      // an .envrc it was not told to trust: it exits 1 and says so.
+      ...(direnv === undefined
+        ? []
+        : [
+            `direnv export bash > '${home}/direnv.out' 2> '${home}/direnv.err' || grep -q 'is blocked' '${home}/direnv.err'`,
+            `bash -c ". '${home}/direnv.out'"`,
+          ]),
+    ],
+  },
+  'npm': {
+    doors: ['npm_git', 'postinstall'],
+    also: ['fsmonitor'],
+    commands: ({ checkout }) => [
+      `cd '${checkout}'`,
+      'npm install --offline --no-audit --no-fund > /dev/null 2>&1',
+      `test -e ${DEPENDENCIES}/dependency/${MANIFEST}`,
+    ],
+  },
+  'the husky checkout': {
+    doors: ['hooks_path'],
+    also: ['fsmonitor'],
+    commands: ({ husky }) => [`cd '${husky}'`, 'git commit -q --allow-empty -m "a member commits"'],
+  },
+}
+
+/** A group's commands as one sh script that stops at the first that fails. */
+const asOneScript = (commands: readonly string[]): string => ['set -eu', ...commands, ''].join('\n')
+
+const expectedInControl = (group: DoorGroup, direnv: Direnv | undefined): Door[] =>
+  [...group.doors, ...group.also]
     .filter((door) => door !== 'config_hook' || gitRunsConfigHooks())
     .filter((door) => door !== 'envrc' || direnv !== undefined)
     .sort()
+
+test('the door groups hold every door, each in exactly one group (martha#700 r=1, B)', () => {
+  const grouped = Object.values(DOOR_GROUPS).flatMap((group) => group.doors)
+  const inNoGroup = (Object.keys(DOORS) as Door[]).filter((door) => !grouped.includes(door))
+  const twice = grouped.filter((door, at) => grouped.indexOf(door) !== at)
+  assert.deepEqual(inNoGroup, [], `doors no group proves: ${inNoGroup.join(', ')}`)
+  assert.deepEqual(twice, [], `doors in more than one group: ${twice.join(', ')}`)
+  assert.deepEqual([...grouped].sort(), (Object.keys(DOORS) as Door[]).sort())
+})
 
 const { direnvs } = direnvsUnderTest(process.env)
 
 for (const direnv of direnvs.length === 0 ? [undefined] : direnvs) {
   const which = direnv === undefined ? 'no direnv installed, so no .envrc door' : `direnv ${direnv.version}`
-  checkoutTests(direnv, which)
+  for (const [name, group] of Object.entries(DOOR_GROUPS)) checkoutTests(direnv, `${name}; ${which}`, group)
 }
+
+/** How a launched member ended, as the launcher tells it. */
+type StopOf = Awaited<(MemberStarted & { started: true })['stopped']>
 
 /** The body a stand-in posts for its session's start: the shape the launcher's own tests answer with. */
 const THE_STAND_INS_SESSION_START = { session_id: 'the-stand-ins', source: 'startup', hook_event_name: 'SessionStart', transcript_path: '/nowhere' }
@@ -248,7 +295,7 @@ const THE_STAND_INS_SESSION_START = { session_id: 'the-stand-ins', source: 'star
  * test waits on the member's own end. A report the launcher does not take ends the member at that line, and the
  * stderr kept from it says which one did.
  */
-function aStandInThatReportsItsStart(place: Fixture, member: string, done: string, empty: string): void {
+function aStandInThatReportsItsStart(place: Fixture, member: string, run: TheMembersRun, commands: readonly string[]): void {
   const report_start = join(place.home, 'report-start.mjs')
   writeFileSync(
     report_start,
@@ -271,24 +318,77 @@ function aStandInThatReportsItsStart(place: Fixture, member: string, done: strin
       ...hostAnswers(),
       `exec 2> '${place.member_errors}'`,
       `'${process.execPath}' '${report_start}' || { printf '%s\\n' 'the stand-in could not report its session start' >&2; exit 1; }`,
-      `printf '%s\\n%s\\n' "$${DIRENV_CONFIG_VARIABLE}" "$(stat -c %a "$${DIRENV_CONFIG_VARIABLE}") $(ls -A "$${DIRENV_CONFIG_VARIABLE}" | wc -l)" > '${empty}'`,
-      `${place.member_commands}status=$?`,
-      `printf '%s' "$status" > '${done}'`,
+      `printf '%s\\n%s\\n' "$${DIRENV_CONFIG_VARIABLE}" "$(stat -c %a "$${DIRENV_CONFIG_VARIABLE}") $(ls -A "$${DIRENV_CONFIG_VARIABLE}" | wc -l)" > '${run.empty}'`,
+      `${asOneScript(withTheirSteps(commands, run.steps))}status=$?`,
+      `printf '%s' "$status" > '${run.done}'`,
       '',
     ].join('\n'),
   )
   chmodSync(member, 0o700)
 }
 
-function checkoutTests(direnv: Direnv | undefined, which: string): void {
+/** Where a launched member leaves what it did: its exit status, what it saw of the empty directory, and its steps. */
+interface TheMembersRun {
+  readonly done: string
+  readonly empty: string
+  /** One line as the member starts, then one per command it finished: the command's number and the second it ended. */
+  readonly steps: string
+}
+
+/** The commands, each followed by the line that says it finished, and the start line before them. */
+const withTheirSteps = (commands: readonly string[], steps: string): readonly string[] => [
+  `printf 'start %s\\n' "$(date +%s)" >> '${steps}'`,
+  ...commands.flatMap((command, at) => [command, `printf '%s %s\\n' ${at} "$(date +%s)" >> '${steps}'`]),
+]
+
+/** Which commands the member finished, how long each took, and the one it was in when it stopped, if any. */
+function whereTheMemberWas(commands: readonly string[], steps: string): string {
+  const lines = existsSync(steps) ? readFileSync(steps, 'utf8').trimEnd().split('\n') : []
+  const seconds = lines.map((line) => Number(line.split(' ')[1]))
+  const finished = Math.max(0, lines.length - 1)
+  const took = commands.slice(0, finished).map((command, at) => `\`${command}\` ${String((seconds[at + 1] ?? 0) - (seconds[at] ?? 0))} s`)
+  const now = Math.floor(Date.now() / 1000)
+  const was =
+    lines.length === 0
+      ? 'it never started its commands'
+      : finished >= commands.length
+        ? 'it finished every command'
+        : `it was in \`${commands[finished] ?? ''}\` for ${String(now - (seconds[finished] ?? now))} s`
+  return `${was}; finished ${String(finished)} of ${String(commands.length)}${took.length === 0 ? '' : `: ${took.join(', ')}`}`
+}
+
+/**
+ * The member's end, or, when the suite's per-test limit cancels the test first, the member stopped and the command it
+ * was in written where the run shows it (martha#700): a cancelled test asserts nothing, so this is the one place the
+ * cancel can say what it caught, and the member never outlives its test. All of it happens inside the abort listener,
+ * which node:test calls before the test's after hooks: one turn later, the fixture holding the member's steps is gone.
+ */
+async function theEndOrTheCancel(t: TestContext, started: MemberStarted & { started: true }, where: () => string): Promise<StopOf | undefined> {
+  let cancel = (): void => undefined
+  const cancelled = new Promise<undefined>((resolve) => {
+    cancel = () => {
+      process.stderr.write(`${t.fullName}: cancelled; the launched member ${where()}\n`)
+      started.stop('its test was cancelled')
+      resolve(undefined)
+    }
+    t.signal.addEventListener('abort', cancel, { once: true })
+  })
+  // node:test aborts the signal of every test that ends, not only of one its limit cancels: a member that ended first
+  // takes the listener with it, so a passing test never reports a cancel.
+  const ended = await Promise.race([started.stopped, cancelled])
+  t.signal.removeEventListener('abort', cancel)
+  return ended
+}
+
+function checkoutTests(direnv: Direnv | undefined, which: string, group: DoorGroup): void {
   test(`every planted door runs with the owner's own environment (the control; ${which})`, (t) => {
     const place = fixture(t, direnv)
-    const ran = spawnSync('sh', ['-c', place.member_commands], { cwd: place.checkout, env: place.owner_env, encoding: 'utf8' })
+    const ran = spawnSync('sh', ['-c', asOneScript(group.commands(place, direnv))], { cwd: place.checkout, env: place.owner_env, encoding: 'utf8' })
     assert.equal(ran.status, 0, `the member's commands failed: ${ran.stderr}`)
     assert.deepEqual(
       readdirSync(place.markers).sort(),
-      expectedInControl(direnv),
-      'each door must bite without the launcher, or the test below proves nothing',
+      expectedInControl(group, direnv),
+      'each door of the group must bite without the launcher, and no other, or the test below proves nothing',
     )
   })
 
@@ -300,9 +400,10 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
       return dir
     }
     const member = join(place.home, CLAUDE)
-    const done = join(place.home, 'done')
-    const empty = join(place.home, 'empty')
-    aStandInThatReportsItsStart(place, member, done, empty)
+    const run: TheMembersRun = { done: join(place.home, 'done'), empty: join(place.home, 'empty'), steps: join(place.home, 'steps') }
+    const commands = group.commands(place, direnv)
+    aStandInThatReportsItsStart(place, member, run, commands)
+    const how = (ended: StopOf): string => `it ended ${JSON.stringify(ended)}, ${whereTheMemberWas(commands, run.steps)}, and printed: ${whatTheMemberPrinted(place)}`
 
     const lines: string[] = []
     const relay_root = shortRelayRoot(t)
@@ -321,21 +422,22 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
     })
     assert.equal(started.started, true, lines.join('\n'))
     if (!started.started) return
-    const ended = await started.stopped
+    const ended = await theEndOrTheCancel(t, started, () => whereTheMemberWas(commands, run.steps))
+    if (ended === undefined) return
 
-    assert.equal(existsSync(done), true, `the member ran its commands to the end; it ended ${JSON.stringify(ended)} and printed: ${whatTheMemberPrinted(place)}`)
-    assert.equal(readFileSync(done, 'utf8'), '0', 'and every one of them succeeded')
+    assert.equal(existsSync(run.done), true, `the member ran its commands to the end; ${how(ended)}`)
+    assert.equal(readFileSync(run.done, 'utf8'), '0', `and every one of them succeeded; ${how(ended)}`)
     // What keeps the test above a race: the launcher met its start gate, and the member ended by itself. A report that
     // stopped reaching the launcher fails here at once, on an idle machine, instead of surfacing only under load.
     const heard = readTheNewestRelayJournal(relay_journal)
     assert.ok(
       heard.events.some((line) => line.event === 'session_started' && line.phase === 'received'),
-      `the launcher heard the stand-in's session start; it ended ${JSON.stringify(ended)} and printed: ${whatTheMemberPrinted(place)}`,
+      `the launcher heard the stand-in's session start; ${how(ended)}`,
     )
-    assert.equal(ended.stopped_because, null, `the member ended by itself; it ended ${JSON.stringify(ended)} and printed: ${whatTheMemberPrinted(place)}`)
-    assert.deepEqual(readdirSync(place.markers), [], 'no door the checkout planted ran')
+    assert.equal(ended.stopped_because, null, `the member ended by itself; ${how(ended)}`)
+    assert.deepEqual(readdirSync(place.markers), [], 'no door the checkout planted ran, of this group or any other')
 
-    const [emptyPath, modeAndCount] = readFileSync(empty, 'utf8').trimEnd().split('\n')
+    const [emptyPath, modeAndCount] = readFileSync(run.empty, 'utf8').trimEnd().split('\n')
     assert.equal(basename(emptyPath ?? ''), EMPTY_DIRECTORY_NAME)
     assert.equal(dirname(dirname(emptyPath ?? '')), relay_root, 'inside this launch\'s own relay directory')
     assert.equal(modeAndCount, `${EMPTY_DIRECTORY_MODE.toString(8)} 0`, 'the member saw it empty, mode 0500')
