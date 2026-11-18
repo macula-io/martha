@@ -10,6 +10,8 @@ import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/
 import { LONGEST_MESSAGE } from '../send_a_crew_message/send_a_crew_message.ts'
 import { THE_SAVE_WAIT_MS } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
+import { THE_ACT_THE_OWNER_TYPES } from '../launch_a_goose_member/coincidences.ts'
+import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../launch_a_goose_member/launch_a_goose_member.ts'
 import { TRUST_ANSWER_DEADLINE_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 
 /**
@@ -54,4 +56,13 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: ANSWER_MILLISECONDS, file: 'drive_the_recorded_host/a_silent_host_fails_by_name.node-test.ts', reason: AN_AGE_THE_CASE_MAKES_UP },
   { value: THE_SAVE_WAIT_MS, file: 'drive_the_recorded_host/a_silent_host_fails_by_name.node-test.ts', reason: A_STAND_PAST_A_RETURN },
   { value: TRUST_ANSWER_DEADLINE_MS, file: 'drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts', reason: THE_HOSTS_OWN_CALL_LIMIT },
+  // The act the owner types, spelled like the Goose engine's mode that asks its client (martha#541).
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_menu_answer_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_muted_bell_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_permission_prompt_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_review_at_its_limit_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_switch_does_not_move_the_owners_default.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_switch_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/own_writes_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
 ]

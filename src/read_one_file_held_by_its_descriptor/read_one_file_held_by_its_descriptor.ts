@@ -27,7 +27,7 @@ import { basename, dirname, join, relative, sep } from 'node:path'
 export interface WhereTheTranscriptIs {
   /**
    * The host config folder the launch gave the member (its CLAUDE_CONFIG_DIR), as its REAL path: resolved once by the
-   * launch where it made the folder. The kernel names the opened file with every link resolved, so a config folder
+   * launch's watch of that folder. The kernel names the opened file with every link resolved, so a config folder
    * under a linked ancestor (a linked home) given as spelled would never match, and the session would read unknown for
    * good.
    */

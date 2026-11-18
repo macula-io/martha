@@ -97,7 +97,7 @@ so no message, ring or name read out of text can change who is asking.
 | Act | Gated in |
 |---|---|
 | `assign_work` | verify a range, unheld work, the owner's todo list, contracts, standing items, who is free; and who reads the nudges |
-| `approve_landing` | the owner's yes to a landing |
+| `approve_landing` | a landing: the owner's yes, as an ask in their queue whose question is exactly the landing's (the repository, its branch, the full tip and every package), or, where the table grants the act to the caller's role, the calling member's own yes |
 | `resume_parked_work` | park and wake a member |
 | `offer_owner_asks` | take and settle the owner's asks |
 | `restart_member` | restart a member |

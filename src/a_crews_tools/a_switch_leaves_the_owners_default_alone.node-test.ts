@@ -49,6 +49,7 @@ import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { THE_MODEL_REPORT_ASK, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The models a crew names: this member's own, and the one every review runs on. */
 const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['sonnet', 'fable'] }
@@ -97,7 +98,7 @@ async function aCrew(owners: Record<string, unknown> | null = OWNERS_SETTINGS): 
   for (const made of [root, join(home, 'row'), join(home, CREW_ROWS_PLACE), config_dir]) mkdirSync(made, { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   declareTheModels(root)
   const settings_file = join(config_dir, USER_SETTINGS_FILE)

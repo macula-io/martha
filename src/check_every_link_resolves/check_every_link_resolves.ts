@@ -13,6 +13,12 @@
 // recover from: 408, 429, any 5xx, or a timeout. One failure that cannot
 // recover -- a 404, a file that is not there -- fails the check at once and by
 // name, so this can never become "accept everything".
+//
+// A site that REFUSES the checker (403, or a 429 that never clears) is asked
+// again like a slow host, but when the scans are spent it does not fail the
+// check: it is reported by name and the check passes (martha#714). Such a site
+// refused a bot; it did not say the page is gone, and a PR that never touched
+// the link cannot fix it. A missing file, a 404 or any other status still fails.
 
 export type Failure = {
   file: string
@@ -27,9 +33,10 @@ export type Failure = {
 /** One run of the checker: what it exited with, and the report it left. */
 export type Scan = { exitCode: number; report: string }
 
+/** `refused`: the links a site refused the checker for, reported but never failing the check (martha#714). */
 export type Verdict =
-  | { verdict: 'resolved'; failures: []; scans: number }
-  | { verdict: 'unresolved'; failures: Failure[]; scans: number }
+  | { verdict: 'resolved'; failures: []; refused: Failure[]; scans: number }
+  | { verdict: 'unresolved'; failures: Failure[]; refused: Failure[]; scans: number }
   | { verdict: 'unknown'; reason: string }
 
 export type Options = {
@@ -40,11 +47,35 @@ export type Options = {
   sleep: (ms: number) => Promise<void>
 }
 
-/** A status a host is telling us to come back for, rather than a missing link. */
-const RETRYABLE_STATUSES = new Set([408, 429])
+/** The HTTP statuses this check names, each defined once. */
+export const HTTP_STATUS = {
+  /** The site refused the request: for a link checker, most often a bot rule. */
+  forbidden: 403,
+  /** The site gave up waiting for the request. */
+  request_timeout: 408,
+  /** The site asks the checker to slow down. */
+  too_many_requests: 429,
+  /** The first and last of the server errors. */
+  first_server_error: 500,
+  last_server_error: 599,
+} as const
+
+/**
+ * A status a host is telling us to come back for, rather than a missing link. A 429 is not here: it is retried as a
+ * refusal (REFUSING_STATUSES below), the one set that decides it.
+ */
+const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([HTTP_STATUS.request_timeout])
+
+/** A status by which a site refuses the checker rather than says the page is gone (martha#714). */
+const REFUSING_STATUSES: ReadonlySet<number> = new Set([HTTP_STATUS.forbidden, HTTP_STATUS.too_many_requests])
+
+const serverError = (code: number): boolean => code >= HTTP_STATUS.first_server_error && code <= HTTP_STATUS.last_server_error
+
+/** A link a site refused the checker for: reported, never failing the check. */
+export const refused = (failure: Failure): boolean => failure.code !== undefined && REFUSING_STATUSES.has(failure.code)
 
 export const retryable = (failure: Failure): boolean =>
-  failure.timeout || (failure.code !== undefined && (RETRYABLE_STATUSES.has(failure.code) || (failure.code >= 500 && failure.code <= 599)))
+  failure.timeout || refused(failure) || (failure.code !== undefined && (RETRYABLE_STATUSES.has(failure.code) || serverError(failure.code)))
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -95,6 +126,14 @@ export const failuresIn = (report: string): Failure[] | undefined => {
 /** The links a scan named that a host cannot recover from. */
 export const stuckAmong = (failures: readonly Failure[]): Failure[] => failures.filter((failure) => !retryable(failure))
 
+/** What the last scan named, split into what fails the check and what a site refused. */
+const verdictOf = (named: readonly Failure[], scans: number): Verdict => {
+  const failures = named.filter((failure) => !refused(failure))
+  const refusedLinks = named.filter(refused)
+  if (failures.length === 0) return { verdict: 'resolved', failures: [], refused: refusedLinks, scans }
+  return { verdict: 'unresolved', failures, refused: refusedLinks, scans }
+}
+
 /**
  * Run the checker until every link resolves, a failure that cannot recover
  * appears, or the scans are spent. A run that named only "not now" failures is
@@ -106,7 +145,7 @@ export const checkEveryLinkResolves = async (scan: () => Promise<Scan>, options:
   while (attempt < options.scans) {
     attempt += 1
     const { exitCode, report } = await scan()
-    if (exitCode === 0) return { verdict: 'resolved', failures: [], scans: attempt }
+    if (exitCode === 0) return { verdict: 'resolved', failures: [], refused: [], scans: attempt }
     const failures = failuresIn(report)
     if (failures === undefined) return { verdict: 'unknown', reason: 'the checker left no report this check could read' }
     if (failures.length === 0) return { verdict: 'unknown', reason: `the checker exited ${exitCode} and named no link` }
@@ -114,5 +153,5 @@ export const checkEveryLinkResolves = async (scan: () => Promise<Scan>, options:
     if (stuckAmong(failures).length > 0) break
     if (attempt < options.scans) await options.sleep(options.waits_ms[attempt - 1] ?? 0)
   }
-  return { verdict: 'unresolved', failures: named, scans: attempt }
+  return verdictOf(named, attempt)
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--night <run folder>]
+# prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--dry-layer <layer .tar.gz> <sha>] [--night <run folder>]
 #                                                    --self-test
 #
 # The clean-install proof (martha#69). A stranger's machine carries nothing of ours, so this starts a container that
@@ -58,7 +58,18 @@
 # Exit: 0 the install half passed and every member of the crew is proven; 1 a step failed, the tear-down did, the run
 # was interrupted, or the steps ended short of every member proven; 2 the arguments were refused and nothing ran; 3 the
 # registry carries no release, so the installer stopped on its own words; 4 the install half passed and the owner did
-# not sign in within the window, so no member is claimed.
+# not sign in within the window, so no member is claimed; 5 a dry run (below) in which every member is proven, which is
+# main's proof and never a release's.
+#
+# The dry run (martha#639): before a release carries what main holds, `--dry-layer <layer> <sha>` places main's layer
+# over the published release, after the install step and before the version step, so every step after it reads main.
+# The layer is the one rehearse_a_release/place_main_as_a_dry_release/pack_main_as_a_dry_layer.sh packed from <sha>;
+# the harness beside it does the placing, with the installer's own exported steps, and never its registry, downgrade,
+# signature or digest steps (see its dry_release.mjs). The harness's modules and the layer reach the container on ssh's
+# and podman's standard input, never as an argument or a mount, so the container's mounts stay 0. The published
+# installer goes in beside the harness by npm, never run, as the `installer` its imports name. The harness's own last
+# line is the run's result line, in place of the release's, and a dry pass exits 5, never 0: a dry pass is never read
+# as a release's proof.
 set -euo pipefail
 
 # The run's own output, on a descriptor of its own: a signal that arrives while a command's output is being thrown away
@@ -107,6 +118,17 @@ CREATE_SETTLE_ATTEMPTS=20
 CREATE_SETTLE_S=0.5
 # What the installer says when the registry carries no release: read_the_release_registry.mjs, highestVersion.
 NO_RELEASE_WORDS='carries no version'
+
+# The dry run (martha#639). The harness folder in this checkout, whose modules (never its tests) go into the container
+# at the same path under DRY_ROOT, so its `../../installer` imports name DRY_ROOT's `installer`; the module it is run
+# by; where the published installer is installed with npm and never run; and a dry pass's exit status, which is never 0.
+DRY_HARNESS='rehearse_a_release/place_main_as_a_dry_release'
+DRY_ENTRY='main.mjs'
+DRY_TEST_SUFFIX='.node-test.mjs'
+DRY_ROOT='/tmp/martha-dry'
+DRY_LAYER="${DRY_ROOT}/layer.tar.gz"
+DRY_PUBLISHED="${DRY_ROOT}/published"
+DRY_PASSED=5
 
 # The member half. Claude Code by the version the installed release is recorded against, read from that release's own
 # record and never typed here, installed under the container's home. The record's place inside a Martha tree: the
@@ -193,13 +215,15 @@ STARTED_WINDOW_S="${MARTHA_CLEAN_INSTALL_STARTED_WINDOW_S:-120}"
 POLL_S="${MARTHA_CLEAN_INSTALL_POLL_S:-5}"
 KEY_PAUSE_S="${MARTHA_CLEAN_INSTALL_KEY_PAUSE_S:-2}"
 
-USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--night <run folder>] | --self-test'
+USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--dry-layer <layer .tar.gz> <sha>] [--night <run folder>] | --self-test'
 
 # The nightly live run's container side (martha#639), taken with --night: its steps, its stand-ins and its cases.
 # shellcheck source=prove_a_clean_install_in_a_throwaway_container/the_night_in_the_container.sh
 . "${HERE}/the_night_in_the_container.sh"
 
 LOG_FILE=''
+# The dry run's layer and the sha it was packed from, when one is asked for; and the harness's own result line.
+DRY_LAYER_FILE='' DRY_SHA='' DRY_RESULT=''
 CONTAINER=''
 CREATE_WAS_IN_FLIGHT=''
 NO_RELEASE_YET=''
@@ -416,6 +440,63 @@ version_step() {
 # A script the container's own shell runs with the container's home and the installed commands on its PATH.
 in_the_container() {
   on_the_host podman exec "${CONTAINER}" sh -lc "export HOME=${CONTAINER_HOME}; export PATH=\"\$HOME/.local/bin:\$PATH\"; $1"
+}
+
+# A script the container's shell runs with this run's standard input as its own: how a file reaches the container, on
+# ssh's and podman's standard input at every hop, never as an argument or a mount (martha#639).
+into_the_container() {
+  ssh "${HOST}" "$(remote_words podman exec -i "${CONTAINER}" sh -c "$1")"
+}
+
+# The dry harness's own modules in this checkout, one a line, never its tests: what a dry run puts in the container.
+dry_harness_modules() {
+  local file
+  while IFS= read -r file; do
+    case "${file}" in *"${DRY_TEST_SUFFIX}") continue ;; esac
+    printf '%s\n' "${file}"
+  done < <(git -C "${REPO}" ls-files -- "${DRY_HARNESS}/*.mjs")
+}
+
+# The dry step (martha#639): the harness's modules and main's layer into the container, the published installer beside
+# them by npm and never run, then the harness, which places the layer over the installed release with the installer's
+# own steps. Every line it says goes into the log, and its last is kept as the run's result line.
+dry_step() {
+  local said errors errors_file status=0 modules=() line
+  mapfile -t modules < <(dry_harness_modules)
+  if ! printf '%s\n' "${modules[@]}" | grep -qxF -- "${DRY_HARNESS}/${DRY_ENTRY}"; then
+    failed dry "this checkout holds no ${DRY_HARNESS}/${DRY_ENTRY} to run"
+    return 1
+  fi
+  said="$(tar -C "${REPO}" -cf - -- "${modules[@]}" | into_the_container "mkdir -p ${DRY_ROOT} && tar -xf - -C ${DRY_ROOT}" 2>&1)" \
+    || { failed dry "the harness did not reach the container: $(one_line "${said}")"; return 1; }
+  said="$(into_the_container "cat > ${DRY_LAYER}" < "${DRY_LAYER_FILE}" 2>&1)" \
+    || { failed dry "the layer did not reach the container: $(one_line "${said}")"; return 1; }
+  said="$(in_the_container "npm install --prefix ${DRY_PUBLISHED} --ignore-scripts --no-audit --no-fund ${INSTALLER_NAME}@${INSTALLER_VERSION} && ln -s ${DRY_PUBLISHED}/node_modules/${INSTALLER_NAME} ${DRY_ROOT}/installer" 2>&1)" \
+    || { failed dry "the published installer was not put beside the harness: $(one_line "${said}")"; return 1; }
+  # The harness's standard output and its errors are kept apart: they reach this run on two pipes through podman and
+  # ssh, so their order is not kept, and a warning node or the installer's code writes on stderr must never become the
+  # run's result line. The result line is the harness's own last line on standard output; its errors go into the log,
+  # and they are the words of a refusal.
+  errors_file="$(mktemp)"
+  said="$(in_the_container "node ${DRY_ROOT}/${DRY_HARNESS}/${DRY_ENTRY} ${DRY_LAYER} ${RELEASE_VERSION} ${DRY_SHA}" 2> "${errors_file}")" \
+    || status=$?
+  errors="$(cat "${errors_file}")"
+  rm -f "${errors_file}"
+  if [ "${status}" -ne 0 ]; then
+    failed dry "main's layer was not placed, the harness ended ${status}: $(one_line "${errors}${errors:+ }${said}")"
+    return 1
+  fi
+  while IFS= read -r line; do
+    if [ -n "${line}" ]; then log "${line}"; fi
+  done <<< "${errors}"
+  while IFS= read -r line; do
+    if [ -n "${line}" ]; then log "${line}"; DRY_RESULT="${line}"; fi
+  done <<< "${said}"
+  if [ -z "${DRY_RESULT}" ]; then
+    failed dry 'the harness ended 0 and said nothing, so there is no result line to give'
+    return 1
+  fi
+  ok dry "main at ${DRY_SHA} placed over the published ${INSTALLER_NAME}@${INSTALLER_VERSION} by the installer's own steps"
 }
 
 # The installed release's tree, as words the container's shell expands: the tree the installed command resolves to,
@@ -883,6 +964,7 @@ run_the_steps() {
   inside_step || return 1
   install_step || return 1
   if [ -n "${NO_RELEASE_YET}" ]; then return 0; fi
+  if [ -n "${DRY_LAYER_FILE}" ]; then dry_step || return 1; fi
   version_step || return 1
   claude_code_step || return 1
   if a_night; then night_tools_step || return 1; fi
@@ -937,6 +1019,11 @@ finish() {
     failed run 'the night did not get ready'
     log failed
     exit 1
+  fi
+  # A dry run proved main, never a release: its result line is the harness's own, and its exit is never 0 (martha#639).
+  if [ -n "${DRY_RESULT}" ]; then
+    log "${DRY_RESULT}"
+    exit "${DRY_PASSED}"
   fi
   log "${ALL_PROVEN_WORDS}: ${MEMBERS[*]}"
   exit 0
@@ -1054,6 +1141,20 @@ case "${1:-}" in
     # The installed release's own host record: the case's release.record, and none when the case has no such file. Its
     # solo crew: the case's release.crew, the names one a line, as the run's script prints them.
     . "$(dirname "$0")/member.facts"
+    # The dry run's four calls: what reaches the container on its standard input is kept in the case's folder, the
+    # harness's modules as the names the archive holds and the layer byte for byte; the published installer goes in
+    # unanswered; and the harness answers the case's dry.words on standard output, then its dry.errors (when the case
+    # has them) on stderr, with its dry.status.
+    case "$*" in
+      *"tar -xf - -C ${dry}"*) tar -tf - > "${standin}/dry.modules"; exit 0 ;;
+      *"cat > ${dry}/"*) cat > "${standin}/dry.layer"; exit 0 ;;
+      *"npm install --prefix ${dry}/"*) exit 0 ;;
+      *"node ${dry}/"*)
+        cat "${standin}/dry.words"
+        if [ -f "${standin}/dry.errors" ]; then cat "${standin}/dry.errors" >&2; fi
+        exit "$(cat "${standin}/dry.status")"
+        ;;
+    esac
     case "$*" in *"${record}"*) exec cat "${standin}/release.record" ;; esac
     case "$*" in *"${crew}"*) exec cat "${standin}/release.crew" ;; esac
     case "$*" in
@@ -1111,9 +1212,9 @@ esac
 PODMAN
   # What the member stand-in writes into its transcript, from the names above: the outsider's heading as the host
   # numbers it, and the command its README asks for.
-  printf 'heading=%q\nnumbered=%q\ncommand=%q\nhome=%q\ntranscripts=%q\nrecord=%q\ncrew=%q\nstarted=%q\nended=%q\n' \
+  printf 'heading=%q\nnumbered=%q\ncommand=%q\nhome=%q\ntranscripts=%q\nrecord=%q\ncrew=%q\nstarted=%q\nended=%q\ndry=%q\n' \
     "${OUTSIDER_HEADING}" "${READ_NUMBERED}" "${SHELL_CALL_WORDS}" "${CONTAINER_HOME}" "${TRANSCRIPTS%/*/*}/the-checkout" \
-    "${HOST_RECORD_IN_A_TREE}" "${SOLO_CREW_IN_A_TREE}" "${STARTED_WORDS}" "${ENDED_WORDS}" > "${dir}/member.facts"
+    "${HOST_RECORD_IN_A_TREE}" "${SOLO_CREW_IN_A_TREE}" "${STARTED_WORDS}" "${ENDED_WORDS}" "${DRY_ROOT}" > "${dir}/member.facts"
   cat > "${dir}/member" <<'MEMBER'
 #!/usr/bin/env bash
 # A member, as far as a run can tell: its command says it started, a folder question that drops what is typed until a
@@ -1645,6 +1746,65 @@ self_test() {
     case_failed=1
   fi
 
+  # A run with no dry layer asked for is the release's run: nothing of the dry run reaches the container.
+  ! asked_for "${DRY_ROOT}" "${root}/passes/calls" || { echo 'the self-test: a release run reached the dry harness' >&2; case_failed=1; }
+
+  # The dry run (martha#639): the harness's modules and main's layer reach the container on standard input, the
+  # published installer goes in beside them, the harness runs after the install and before the version step, every
+  # member is proven, and the run ends on the harness's own result line with a dry pass's exit: never the release's
+  # words, never 0.
+  local dry_sha dry_layer dry_result installed_at dry_at version_at the_command
+  dry_sha="$(git -C "${REPO}" rev-parse HEAD)"
+  dry_layer="${root}/a-dry-layer.tar.gz"
+  printf 'bytes only this case holds\n' > "${dry_layer}"
+  the_command="$(json_field "${INSTALLER_PACKAGE}" 'martha.command')"
+  standin="${root}/dry-passes"
+  a_case "${standin}"
+  printf '%s\n' "${release_version}" > "${standin}/version.words"
+  dry_result="dry: the stand-in harness's own last line, for ${dry_sha}"
+  printf 'dry: a line the stand-in harness says first\n%s\n' "${dry_result}" > "${standin}/dry.words"
+  # A warning on stderr after the result line, as node or the installer's code may write one: never the result line.
+  printf '(node:1) Warning: a line the stand-in writes on stderr, after its result\n' > "${standin}/dry.errors"
+  printf '0\n' > "${standin}/dry.status"
+  expect_status "${DRY_PASSED}" "${standin}" 'a-host' --dry-layer "${dry_layer}" "${dry_sha}" || case_failed=1
+  [ "$(tail -1 "${standin}/out")" = "${dry_result}" ] || { echo "the self-test: a dry pass did not end on the harness's own result line" >&2; case_failed=1; }
+  grep -qF -- '(node:1) Warning: a line the stand-in writes on stderr' "${standin}/out" || { echo "the self-test: the harness's stderr did not reach the log" >&2; case_failed=1; }
+  if grep -qF -- "${ALL_PROVEN_WORDS}" "${standin}/out"; then echo "the self-test: a dry pass said the release's words" >&2; case_failed=1; fi
+  for name in "${SELF_TEST_MEMBERS[@]}"; do
+    asked_for "^ok member ${name}: " "${standin}/out" || { echo "the self-test: a dry pass did not prove ${name}" >&2; case_failed=1; }
+  done
+  asked_for "^ok dry: main at ${dry_sha} placed " "${standin}/out" || { echo 'the self-test: a dry pass logged no dry step' >&2; case_failed=1; }
+  cmp -s "${dry_layer}" "${standin}/dry.layer" || { echo 'the self-test: the layer did not reach the container byte for byte' >&2; case_failed=1; }
+  [ "$(cat "${standin}/dry.modules" 2> /dev/null)" = "$(dry_harness_modules)" ] \
+    || { echo "the self-test: the container was not given the harness's modules, and only those" >&2; case_failed=1; }
+  if grep -qF -- "${DRY_TEST_SUFFIX}" "${standin}/dry.modules" 2> /dev/null; then echo "the self-test: the harness's tests went into the container" >&2; case_failed=1; fi
+  grep -qxF -- "${DRY_HARNESS}/${DRY_ENTRY}" "${standin}/dry.modules" 2> /dev/null || { echo "the self-test: the harness's ${DRY_ENTRY} did not go in" >&2; case_failed=1; }
+  asked_for "npm install --prefix ${DRY_PUBLISHED} .*${installer_name}@${installer_version} && ln -s ${DRY_PUBLISHED}/node_modules/${installer_name} ${DRY_ROOT}/installer" "${standin}/calls" \
+    || { echo 'the self-test: the published installer was not put beside the harness by its exact version' >&2; case_failed=1; }
+  asked_for "node ${DRY_ROOT}/${DRY_HARNESS}/${DRY_ENTRY} ${DRY_LAYER} ${release_version} ${dry_sha}" "${standin}/calls" \
+    || { echo "the self-test: the harness was not run on the layer, this tree's version and the sha" >&2; case_failed=1; }
+  installed_at="$(grep -n -m1 -e 'npx' "${standin}/calls" | cut -d: -f1)"
+  dry_at="$(grep -n -m1 -e "node ${DRY_ROOT}/" "${standin}/calls" | cut -d: -f1)"
+  version_at="$(grep -n -m1 -e " ${the_command} --version" "${standin}/calls" | cut -d: -f1)"
+  [ -n "${installed_at}" ] && [ -n "${dry_at}" ] && [ -n "${version_at}" ] && [ "${installed_at}" -lt "${dry_at}" ] && [ "${dry_at}" -lt "${version_at}" ] \
+    || { echo "the self-test: the harness did not run after the install and before the version step (${installed_at:-none}, ${dry_at:-none}, ${version_at:-none})" >&2; case_failed=1; }
+  asked_for '^ok tear down: ' "${standin}/out" || { echo 'the self-test: a dry pass left its container' >&2; case_failed=1; }
+
+  # A harness that refuses the layer fails the run in its own words, before any member, and the container still goes.
+  standin="${root}/dry-refused"
+  a_case "${standin}"
+  printf '%s\n' "${release_version}" > "${standin}/version.words"
+  # The harness says a refusal on stderr (main.mjs: console.error), and those are the words the run fails in.
+  : > "${standin}/dry.words"
+  printf 'dry: not placed: the stand-in harness refuses this layer\n' > "${standin}/dry.errors"
+  printf '1\n' > "${standin}/dry.status"
+  expect_status 1 "${standin}" 'a-host' --dry-layer "${dry_layer}" "${dry_sha}" || case_failed=1
+  asked_for "^FAIL dry: main's layer was not placed, the harness ended 1: dry: not placed: the stand-in harness refuses this layer\$" "${standin}/out" \
+    || { echo "the self-test: a refused layer did not fail the run in the harness's own words" >&2; case_failed=1; }
+  ! asked_for '^ok member ' "${standin}/out" || { echo 'the self-test: a refused layer still proved a member' >&2; case_failed=1; }
+  ! asked_for " ${the_command} --version" "${standin}/calls" || { echo 'the self-test: a refused layer still reached the version step' >&2; case_failed=1; }
+  asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: a refused layer did not remove its container' >&2; case_failed=1; }
+
   # No release: the installer's own words are the run's outcome, and the container still goes.
   standin="${root}/no-release"
   a_case "${standin}"
@@ -1879,6 +2039,10 @@ self_test() {
   expect_status 2 "${root}" --no-such-option || case_failed=1
   expect_status 2 "${root}" 'a-host' 'another-host' || case_failed=1
   expect_status 2 "${root}" --host 'a-host' --log "${root}/no-such-folder/a.log" || case_failed=1
+  # A dry layer that is not there, or a sha that is not a full one, is refused with the arguments (martha#639).
+  expect_status 2 "${root}" 'a-host' --dry-layer "${root}/no-such-layer.tar.gz" "${dry_sha}" || case_failed=1
+  expect_status 2 "${root}" 'a-host' --dry-layer "${dry_layer}" "${dry_sha:0:12}" || case_failed=1
+  expect_status 2 "${root}" 'a-host' --dry-layer "${dry_layer}" || case_failed=1
   no_such_file "${root}/calls" || { echo 'the self-test: a refused run still reached podman' >&2; case_failed=1; }
 
   # Every run that was not one that could not confirm its container gone, or whose host stopped answering, ended with
@@ -1893,7 +2057,7 @@ self_test() {
     a-later-member-that-never-answers a-later-member-that-never-starts a-later-members-lines-in-the-earlier-ones-file \
     a-later-member-only-in-the-earlier-ones-file an-earlier-member-that-ends an-earlier-member-whose-screen-says-it-ended \
     a-release-naming-a-member-with-no-turn a-release-that-drops-a-member interrupted-with-both-members-up \
-    a-later-member-that-asks-no-shell-call; do
+    a-later-member-that-asks-no-shell-call dry-passes dry-refused; do
     if [ -e "${root}/${standin}/container.present" ]; then
       echo "the self-test: the ${standin} run left its container behind" >&2
       case_failed=1
@@ -1929,6 +2093,17 @@ main() {
         if [ -z "${2:-}" ]; then printf '%s\n' "${USAGE}" >&2; exit 2; fi
         NIGHT_DIR="$2"
         shift 2
+        ;;
+      --dry-layer)
+        # The layer must be a file this run can read, and the sha the full one it was packed from: the harness is
+        # handed both, and refuses a short sha only after the container is made.
+        if [ ! -f "${2:-}" ] || [ ! -r "${2:-}" ] || ! [[ "${3:-}" =~ ^[0-9a-f]{40}$ ]]; then
+          printf 'prove_a_clean_install_in_a_throwaway_container: --dry-layer takes a readable layer file and the 40-character sha it was packed from (%s)\n' "${USAGE}" >&2
+          exit 2
+        fi
+        DRY_LAYER_FILE="$2"
+        DRY_SHA="$3"
+        shift 3
         ;;
       -*)
         printf 'prove_a_clean_install_in_a_throwaway_container: unknown option %s (%s)\n' "$1" "${USAGE}" >&2

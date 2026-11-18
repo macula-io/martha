@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
+import { seeTheCrew, theCrewToolsFlag } from '../see_the_crew/see_the_crew.ts'
 import { IDLE, OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import {
@@ -167,4 +167,13 @@ test('an offline member whose last report finished its package is refused as off
 test('a member that needs the owner is flagged needs-you on its row (Uranus r=1)', () => {
   const crew = theCrewWith({ ...everyoneFree(), Vesta: freeBeat('Vesta', { state: 'needs-you', needs: 'a yes on the tag' }) })
   assert.deepEqual(seeWhoIsFree(crew).find((row) => row.member === 'Vesta')?.flags, ['needs-you'], 'a row needing the owner raises no needs-you flag')
+})
+
+test('a member working without its crew tools is flagged with the time they went; held or unknown raises nothing (martha#658)', () => {
+  const since = Date.parse('2026-11-18T05:48:00.000Z')
+  const crew = theCrewWith({ ...everyoneFree(), Vesta: freeBeat('Vesta', { served_tools: { state: 'lost', since } }), Uranus: freeBeat('Uranus', { served_tools: { state: 'held' } }) })
+  const rows = seeWhoIsFree(crew)
+  assert.deepEqual(rows.find((row) => row.member === 'Vesta')?.flags, [theCrewToolsFlag({ served_tools: { state: 'lost', since } })])
+  assert.deepEqual(rows.find((row) => row.member === 'Uranus')?.flags, [])
+  assert.deepEqual(rows.find((row) => row.member === 'Terra')?.flags, [])
 })

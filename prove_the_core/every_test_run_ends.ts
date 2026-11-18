@@ -29,6 +29,7 @@
 // it: what needs it reads it from there (testRunBoundOf).
 
 import { posix } from 'node:path'
+import process from 'node:process'
 
 import type { Manifest } from './declared_in_package_json.ts'
 
@@ -104,3 +105,40 @@ const exitAndGuardProblemsOf = (words: readonly string[], guard_flag: string): s
     ? []
     : [`the test script has no ${guard_flag}, so a test file that leaves something running passes silently`]),
 ]
+
+/** How often a test file's process asks whether the run that started it is still there, in ms. */
+export const RUNNER_CHECK_MS = 250
+
+/**
+ * The variable node --test sets in each test file's process. A run started from inside a test file that still carries it
+ * refuses to run its files ("run() is being called recursively"), so a test that plants a run strips it.
+ */
+export const TEST_CONTEXT_VARIABLE = 'NODE_TEST_CONTEXT'
+
+/** The environment `env` without what marks it as a test file's own: what a planted run is started with. */
+export const withoutTheTestContext = (env: NodeJS.ProcessEnv): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined && entry[0] !== TEST_CONTEXT_VARIABLE),
+  )
+
+/**
+ * End this process once the run that started it is gone (martha#683).
+ *
+ * `--test-timeout` and `--test-force-exit` bound a run that is left to finish. They do nothing for a runner killed from
+ * outside — a tool's command timeout, a session ending, a bare `kill` — and node runs every test file in a child of its
+ * own, tied to the runner by nothing: the child is reparented to the user's systemd and runs for hours, holding every
+ * descriptor it inherited. On 2026-11-18 five such children did, and one held a member's crew session key, so that
+ * member could not be relaunched until they were stopped by hand.
+ *
+ * The child can see the runner go: the kernel reparents it, so `process.ppid` stops being the runner's pid. `exit` is
+ * the caller's own exit, taken before any replacement of `process.exit`, so ending this way writes no report nobody
+ * will read. The check rides an unref'd timer, so it neither holds the process up nor counts as a handle a test left
+ * running (every_test_file_cleans_up.ts).
+ */
+export function endWithTheRun(exit: (code: number) => void): void {
+  const runner = process.ppid
+  const watching = setInterval(() => {
+    if (process.ppid !== runner) exit(1)
+  }, RUNNER_CHECK_MS)
+  watching.unref()
+}

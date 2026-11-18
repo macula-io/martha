@@ -13,10 +13,10 @@
 # none failed. It is proved on three planted summaries before any run, one for each condition, so a guard that stopped
 # checking one of them fails here by name rather than passing every run.
 #
-# Each run is bounded the way the suite's are (martha#56): a time limit per test (RUN_TIMEOUT_MS, defined here and
-# nowhere else, above the cases' own silence budgets so their words come first), force-exit, and the guard that fails a
-# file leaving something running. The last two are read from prove_the_core/every_test_run_ends.ts, never restated, and
-# the runs start from the repository's top, where the guard's path holds. testRunBoundOf reads only the test script's
+# Each run is bounded the way the suite's are (martha#56, martha#683): a time limit per test (RUN_TIMEOUT_MS, above
+# the cases' own silence budgets so their words come first), force-exit, and the guard that fails a file leaving
+# something running. All three come from their one definition, the_runs_bounds.sh, which is sourced below from the
+# repository's top, where the guard's path holds. testRunBoundOf reads only the test script's
 # words and cannot see these, so the runner holds its own argument list to all four (with --test-concurrency=1) before
 # it runs anything, and refuses by name a list that lacks one. Each run goes through
 # no_test_output_carries_the_environment.ts, so its output is held to the suite's two rules: no planted secret in it
@@ -34,10 +34,10 @@ REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
 NAME="prove_the_relay_loads"
 HARNESS="src/drive_the_recorded_host/drive_the_recorded_host.ts"
 MARKER_FILE="src/check_every_recorded_host_test_is_run/recorded_host_skip.ts"
-BOUNDS="./prove_the_core/every_test_run_ends.ts"
 OUTPUT_CHECK="./prove_the_core/no_test_output_carries_the_environment.ts"
-RUN_TIMEOUT_MS=300000
 cd "${REPO}"
+# The time limit, force-exit and the guard, from their one definition (the_runs_bounds.sh).
+source "${REPO}/prove_the_relay_loads/the_runs_bounds.sh"
 
 HOST_VARIABLE="$(sed -n "s/^export const RECORDED_HOST_VARIABLE = '\([^']*\)'$/\1/p" "${HARNESS}")"
 [[ -n "${HOST_VARIABLE}" ]] || { echo "${NAME}: ${HARNESS} defines no RECORDED_HOST_VARIABLE" >&2; exit 2; }
@@ -45,11 +45,6 @@ RUNS="$(sed -n "s/^export const RECORDED_HOST_RUNS = '\([^']*\)'$/\1/p" "${MARKE
 [[ -f "${RUNS}" ]] || { echo "${NAME}: ${MARKER_FILE} names no RECORDED_HOST_RUNS list there is" >&2; exit 2; }
 jq -e 'type == "array" and length > 0 and all(.[]; (.file | type == "string") and (.cases | type == "number" and . >= 1 and floor == .) and (.proves | type == "string"))' "${RUNS}" > /dev/null \
   || { echo "${NAME}: ${RUNS} is not a list of {file, name_pattern?, cases >= 1, proves}" >&2; exit 2; }
-mapfile -t bounds < <(node --input-type=module -e "import { FORCE_EXIT_FLAG, GUARD_FLAG } from '${BOUNDS}'; console.log(FORCE_EXIT_FLAG); console.log(GUARD_FLAG)")
-FORCE_EXIT_FLAG="${bounds[0]:-}"
-GUARD_FLAG="${bounds[1]:-}"
-[[ -n "${FORCE_EXIT_FLAG}" && -n "${GUARD_FLAG}" ]] || { echo "${NAME}: ${BOUNDS} gave no FORCE_EXIT_FLAG and GUARD_FLAG" >&2; exit 2; }
-
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 

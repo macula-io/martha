@@ -9,7 +9,7 @@ import { claude, HEADLESS_CLAUDE, ownerSettingsPath, PROMPT, type OwnerMarkdownF
 import { deniedWriteIn } from './the_write_the_host_was_refused.ts'
 import { skillsListedIn } from './the_skills_the_host_listed.ts'
 import { SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
-import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // --- the trash, and the skills the host syncs from the owner's account (martha#243) ---
 //
@@ -29,7 +29,7 @@ export const TRASH_PROBE: Probe = {
   what: 'Claude Code as martha start starts it: the skill files under the owner skills folder, the one the host loads at the top of the trash and the one below an entry it does not',
   host: CLAUDE_CODE,
   command: (switches) => ({
-    command: 'claude',
+    command: CLAUDE,
     args: ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose', PROMPT, ...switches.args],
   }),
   approved: () => {},
@@ -153,7 +153,7 @@ export const OWNER_SCOPE_PROBES: readonly Probe[] = OWNER_SCOPE_FOLDERS.flatMap(
       what: `Claude Code ${gated ? 'as martha start starts it, the permission rules the launch carries in the settings it reads' : 'by hand, with none of the launch\'s rules'}: a write into the ${folder} folder of the owner's config dir (martha#154)`,
       host: CLAUDE_CODE,
       command: (switches, place) => ({
-        command: 'claude',
+        command: CLAUDE,
         args: [
           '-p',
           // Room for a turn that does not reach the Write (martha#223): a model that spends
