@@ -653,6 +653,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     name: 'check_no_member_outlives_its_run',
     why: 'a script run by hand, npm run check:no-member-outlives-its-run, over this machine\'s /proc; find_a_member_a_run_left_behind is what it reads with, and martha ls shows the same lines without loading the program',
   },
+  {
+    name: 'check_no_member_works_without_its_crew_tools',
+    why: "a script run by hand and as a CI job, npm run check:no-member-works-without-its-crew-tools, over this machine's Martha state; it reads the windows keep_a_members_crew_tools_window keeps, and no member ever loads it",
+  },
 ]
 
 /**
