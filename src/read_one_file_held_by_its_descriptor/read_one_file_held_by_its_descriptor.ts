@@ -1,15 +1,18 @@
-// The one transcript a launch reads, held by its descriptor (martha#658).
+// The one transcript a launch reads, held by its descriptor (martha#658). Host glue: this machine's file access, declared
+// in martha.hostGlue beside linux_process_identity. The host adapter names the folder under its config folder that
+// holds the transcripts, and nothing here knows which host wrote them.
 //
-// The path is the host's SessionStart input, so it is the host's to name, but the file is the member's user's to
-// write. It is used only when it names `<session id>.jsonl` one folder down in the launch's own host config `projects`
-// tree, and every bound is checked on what was opened, never on the name before the open:
+// The path is the host's session start input, so it is the host's to name, but the file is the member's user's to
+// write. It is used only when it names `<session id>.jsonl` one folder down in the folder the host adapter names under
+// the launch's own host config folder, and every bound is checked on what was opened, never on the name before the
+// open:
 //   - each folder from the config folder down is opened with O_DIRECTORY|O_NOFOLLOW and fstat'ed as a folder of the
 //     launch's uid. Node has no openat, so each one is reopened by its full path, and O_NOFOLLOW covers only a path's
 //     last part: a folder swapped for a link between the walk and the file's open would be followed;
 //   - the file is opened O_RDONLY|O_NOFOLLOW|O_NONBLOCK (a symlink fails the open; a FIFO cannot hang the beat) and
 //     fstat'ed as a regular file of the launch's uid;
 //   - what closes the race is the kernel's own word for the opened descriptor: /proc/self/fd/<fd> must read back as
-//     exactly `<config>/projects/<folder>/<session id>.jsonl`, so a descriptor reached through a swapped folder is
+//     exactly `<config>/<held in>/<folder>/<session id>.jsonl`, so a descriptor reached through a swapped folder is
 //     closed and refused. With that and the typed-only read, a won race gains nothing beyond forging one's own
 //     transcript, which a shell call does anyway;
 //   - the descriptor is kept, and every later read goes through it by offset, so the name is never opened again. The
@@ -29,7 +32,7 @@ export interface WhereTheTranscriptIs {
    * good.
    */
   readonly config_dir: string
-  /** The session id the host reported in the same SessionStart input. */
+  /** The session id the host reported in the same session start input. */
   readonly session_id: string
   /** The host's `transcript_path` from that input. */
   readonly transcript_path: string
@@ -49,13 +52,6 @@ export interface AHeldTranscript {
   skipping: boolean
 }
 
-/**
- * The folder under the host config folder that holds every project's session transcripts: the same folder
- * ../refuse_a_member_writing_owner_memory denies a member's writes in. Not exported: the tree's tests spell the host's
- * layout out as they build it.
- */
-const PROJECTS_FOLDER = 'projects'
-
 /** The longest line kept whole; a longer one is skipped, never buffered (martha#658's size bound). */
 export const LONGEST_TRANSCRIPT_LINE = 1024 * 1024
 
@@ -69,13 +65,16 @@ export type Refused = { readonly refused: string }
 
 const REFUSED = (why: string): Refused => ({ refused: `transcript path refused: ${why}` })
 
-/** The folders from the config folder down to the file, or why the path is not one this launch may read. */
-function foldersTo(where: WhereTheTranscriptIs): readonly string[] | Refused {
-  const projects = join(where.config_dir, PROJECTS_FOLDER)
-  const below = relative(projects, where.transcript_path).split(sep)
-  if (below.length !== 2 || below[0] === '' || below[0] === '..' || below[0] === '.') return REFUSED('it is not one folder below the launch config folder\'s projects folder')
+/**
+ * The folders from the config folder down to the file, or why the path is not one this launch may read. `held_in` is
+ * the folder under the config folder that holds every session's transcript, as the host adapter names it.
+ */
+function foldersTo(where: WhereTheTranscriptIs, held_in: string): readonly string[] | Refused {
+  const holding = join(where.config_dir, held_in)
+  const below = relative(holding, where.transcript_path).split(sep)
+  if (below.length !== 2 || below[0] === '' || below[0] === '..' || below[0] === '.') return REFUSED(`it is not one folder below the launch config folder's ${held_in} folder`)
   if (basename(where.transcript_path) !== `${where.session_id}.jsonl`) return REFUSED('it does not name the session the host reported')
-  return [where.config_dir, projects, dirname(join(projects, ...below))]
+  return [where.config_dir, holding, dirname(join(holding, ...below))]
 }
 
 /** Opens one path with `flags`, fstat's it, and closes it unless `keep`; or why it is not what it must be. */
@@ -96,9 +95,9 @@ function openedAs(path: string, flags: number, kind: 'folder' | 'file', uid: num
 const FOLDER_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
 const FILE_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
 
-/** Opens the transcript under every bound, or refuses it by name. */
-export function openTheTranscript(where: WhereTheTranscriptIs): AHeldTranscript | Refused {
-  const folders = foldersTo(where)
+/** Opens the transcript under every bound, or refuses it by name; `held_in` as foldersTo takes it. */
+export function openTheTranscript(where: WhereTheTranscriptIs, held_in: string): AHeldTranscript | Refused {
+  const folders = foldersTo(where, held_in)
   if ('refused' in folders) return folders
   for (const folder of folders) {
     const opened = openedAs(folder, FOLDER_FLAGS, 'folder', where.uid)

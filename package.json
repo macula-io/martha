@@ -50,7 +50,8 @@
       "src/empty_directory_of_a_launch",
       "src/linux_process_identity",
       "src/owners_settings_directory",
-      "src/row_streams_directory"
+      "src/row_streams_directory",
+      "src/read_one_file_held_by_its_descriptor"
     ],
     "hostAdapters": [
       "src/answer_the_relay",
@@ -89,7 +90,8 @@
       "src/start_a_member",
       "src/start_the_member_on_the_owners_terminal",
       "src/sweep_leftover_launch_directories",
-      "src/read_what_claude_code_says_of_an_agent"
+      "src/read_what_claude_code_says_of_an_agent",
+      "src/read_what_claude_code_records_of_its_tools"
     ],
     "decisionFiles": [
       "src/launch_a_claude_code_member/remember_own_write_of_a_call.ts"
@@ -100,6 +102,8 @@
       "src/ask_the_host_what_it_loads": 292,
       "src/claude_code_host": 483,
       "src/read_what_claude_code_says_of_an_agent": 117,
+      "src/read_what_claude_code_records_of_its_tools": 64,
+      "src/read_one_file_held_by_its_descriptor": 111,
       "src/claude_code_relay": 717,
       "src/cut_the_rules_from_the_host_binary": 395,
       "src/dashboard_rows_directory": 103,
