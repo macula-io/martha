@@ -7,6 +7,9 @@
 // The launcher also notes in its journal which call the end rode on, so a run can tell an end carried at the tool's
 // boundary from one ordered after the tool finished (martha#498). The last two cases are that record and its absence:
 // what the recorded-host case in ../drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts reads back.
+//
+// The last case shares this file's relay and crew stand-in: a ran tool's report hands the crew the call's posted input
+// and the host's own answer, which is what the owner's ask queue reads a menu's picks from (martha#608).
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -33,6 +36,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { memberRelay, type MemberRelay } from './answer_the_relay.ts'
+import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
@@ -265,4 +269,19 @@ test('#498: an end ordered after the tool finished rides no call, and the run is
     THE_END_CAME_TOO_LATE,
     'a run whose end was ordered after the tool finished judged the order of its requests instead of saying it cannot',
   )
+})
+
+test('#608: a ran tool\'s report hands the crew the posted input and the host\'s own answer (mutant: only the tool handed over)', async (t) => {
+  const places = placesOf(t)
+  mkdirSync(join(places.home, CLAUDE_FOLDER), { recursive: true })
+  writeFileSync(ownersSettingsOf(places), '{}\n')
+  const heard: Parameters<CrewTools['noteTheCallsAnswer']>[0][] = []
+  const crew: CrewTools = { ...aCrewHolding(holdingTheEnds()), noteTheCallsAnswer: (answered) => void heard.push(answered) }
+  const relay = relayFor(places, crew, theReceiptsTaken([]))
+  await startedOn(relay)
+  const questions = [{ question: 'Which?', header: 'Asks', multiSelect: true, options: [{ label: '0. Go?', description: '- 0 (from b): Go?' }] }]
+  const menu = call(MENU_TOOL, { questions })
+  const answer = { ref: 1, result: { questions, answers: { 'Which?': '0. Go?' }, annotations: {} }, text: 'The user answered.', isReadOnly: true }
+  await relay.answer('tool_answered', { ...menu, answer })
+  assert.deepEqual(heard, [{ tool: MENU_TOOL, input: { tool_use_id: `toolu_${MENU_TOOL}`, questions }, answer }])
 })
