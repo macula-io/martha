@@ -3,6 +3,9 @@
 // tree whose committed picture is not what architecture/c4_diagrams.ts draws, naming the file and the command that
 // redraws it, and passes a tree where they agree. The tree here is a temporary one holding only assets/, so nothing
 // this file writes can be read by the tree scan or left behind.
+//
+// The release's and the dry run's workflows are read too, and never run: the dry run must read the tree in the step
+// immediately before it packs, as the release does, or a rehearsal proves a tree the release refuses (martha#601).
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -107,32 +110,53 @@ test('a change cut before the release bump is read from its merge base, never fr
 
 const WORKFLOWS = join(import.meta.dirname, '..', '.github', 'workflows')
 
+/** The packer, whose own step is one no step may stand between a tree read and it. */
+const THE_PACKER = 'pack_a_release/pack_a_release.sh'
+
+/** A step's `run:` lines, as that step writes them. */
+const theRunsOf = (step: readonly string[]): readonly string[] => step.filter((line) => /^-? ?run: /.test(line))
+
 /**
- * The `run:` steps a workflow holds, in the order it runs them, each as its own line says it and without the `- ` an
- * inline step opens with: a step written beside its `run:` and a step written under it are the same step here, so
- * nothing slips between two steps unread.
+ * The steps of a workflow, in the order it runs them, each with the lines that belong to it.
+ *
+ * They are read as the `- ` items at the indentation a step of that workflow opens at, taken from the packer's own
+ * step, and not as the `run:` lines alone: a step that runs nothing is still a step, and the one that matters here is
+ * a checkout, which replaces the tree a read just judged without running anything the read would see (martha#601 r=1).
  */
-const theRunsIn = (workflow: string): readonly string[] =>
-  readFileSync(join(WORKFLOWS, workflow), 'utf8')
-    .split('\n')
-    .filter((line) => /^\s*(- )?run: \S/.test(line))
-    .map((line) => line.trim().replace(/^- /, ''))
+const theStepsIn = (workflow: string): readonly (readonly string[])[] => {
+  const lines = readFileSync(join(WORKFLOWS, workflow), 'utf8').split('\n')
+  const packed = lines.findIndex((line) => line.includes(THE_PACKER))
+  assert.ok(packed > 0, `${workflow} runs no ${THE_PACKER}`)
+  const opener = /^\s*- /.exec(lines.slice(0, packed + 1).reverse().find((line) => /^\s*- /.test(line)) ?? '')
+  assert.ok(opener, `${workflow} opens the packer's step nowhere`)
+  const content = ' '.repeat(opener[0].length)
+  const steps: string[][] = []
+  for (const line of lines) {
+    if (line.startsWith(opener[0])) steps.push([line.slice(opener[0].length)])
+    else if (steps.length > 0 && line.startsWith(content)) steps[steps.length - 1]?.push(line.trim())
+  }
+  return steps
+}
+
+/** The `run:` lines of the step immediately before the one that packs, in this workflow. */
+const theStepBeforeThePackIn = (workflow: string): readonly string[] => {
+  const steps = theStepsIn(workflow)
+  const pack = steps.findIndex((step) => theRunsOf(step).some((run) => run.includes(THE_PACKER)))
+  assert.ok(pack > 0, `${workflow} has no pack step to judge the order by`)
+  return theRunsOf(steps[pack - 1] ?? [])
+}
 
 /**
  * The dry run rehearses a tree the release would then refuse if it packed it: the rehearsal proves nothing about the
  * release when the picture it packs is stale (martha#601). So the dry run reads the tree as the release does, and the
  * two commands are held to each other rather than to a spelling here: whatever the release runs immediately before it
- * packs, the rehearsal runs immediately before it packs.
+ * packs, the rehearsal runs immediately before it packs — and it is the step immediately before, not merely a step
+ * somewhere above, because any step between them can put another tree in the pack.
  */
 test('the dry run reads the pictures as the release does, and immediately before it packs', () => {
-  const doesWhat = (workflow: string): { before: string; pack: string } => {
-    const runs = theRunsIn(workflow)
-    const pack = runs.findIndex((run) => run.includes('pack_a_release/pack_a_release.sh'))
-    assert.ok(pack > 0, `${workflow} has no pack step to judge the order by`)
-    return { before: runs[pack - 1] ?? '', pack: runs[pack] ?? '' }
-  }
-  const release = doesWhat('release.yml')
-  const dryRun = doesWhat('release-dry-run.yml')
-  assert.match(release.before, /^run: node \S+ --tree --repository \.$/, 'release.yml packs without reading the tree first')
-  assert.equal(dryRun.before, release.before, 'the dry run packs without the tree read the release runs before its own pack')
+  const release = theStepBeforeThePackIn('release.yml')
+  const dryRun = theStepBeforeThePackIn('release-dry-run.yml')
+  assert.equal(release.length, 1, 'release.yml does not read the tree once, in the step before its pack')
+  assert.match(release[0] ?? '', /^run: node \S+ --tree --repository \.$/, 'release.yml packs without reading the tree first')
+  assert.deepEqual(dryRun, release, 'the dry run does not run the release\'s own tree read immediately before its pack')
 })
