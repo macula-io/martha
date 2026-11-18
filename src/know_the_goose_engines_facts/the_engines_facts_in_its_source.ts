@@ -97,6 +97,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'permission options', read: (source) => ({ permission_options: permissionOptionsIn(source) }) },
   { part: 'openai provider', read: (source) => ({ openai_provider: openaiProviderIn(source) }) },
   { part: 'subagent models', read: (source) => ({ subagent_models: subagentModelsIn(source) }) },
+  { part: 'hint files', read: (source) => ({ hint_files: hintFilesIn(source) }) },
 ]
 
 /** A file the part needs, or a throw that names it. */
@@ -228,6 +229,33 @@ function subagentModelsIn(source: EngineSource): ModelVocabulary {
   if (listed !== undefined) return vocabularyOf(CLOSED_VOCABULARY, [...listed.matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? ''))
   if (/"type":\s*"string"/.test(model)) return vocabularyOf(OPEN_VOCABULARY, [])
   throw new Error(`${path} gives the delegate tool's model neither a list nor a string`)
+}
+
+/**
+ * The files the engine reads into every prompt (martha#785), from `get_context_filenames`: the setting whose value
+ * replaces the list, and the list built from the two constants when it is unset. Every entry of that list is one of the
+ * file's declared constants, or the list is unreadable: a name in another shape would be dropped from it unseen.
+ */
+function hintFilesIn(source: EngineSource): EngineFacts['hint_files'] {
+  const path = ENGINE_PLACES.hint_files
+  const text = fileOf(source, path)
+  const declared = new Map([...text.matchAll(/pub const (\w+): &str = "([^"]+)";/g)].map((found) => [found[1] ?? '', found[2] ?? '']))
+  const valueOf = (constant: string): string => {
+    const value = declared.get(constant)
+    if (value === undefined) throw new Error(`${path} declares no ${constant}`)
+    return value
+  }
+  const chosen = captured(text, /fn get_context_filenames\(\)[^{]*\{([\s\S]*?)\n\}/, 'how the hint files are chosen', path)
+  const listed = captured(chosen, /vec!\[([^\]]*)\]/, 'the hint files loaded when the setting is unset', path)
+  const constants = [...listed.matchAll(/(\w+)\.to_string\(\)/g)].map((found) => found[1] ?? '')
+  const written = listed.split(',').filter((entry) => entry.trim() !== '').length
+  if (written !== constants.length) throw new Error(`${path} lists ${String(written)} hint files and ${String(constants.length)} are in a shape this reader knows`)
+  return {
+    setting: captured(chosen, /get_param::<Vec<String>>\("([^"]+)"\)/, 'the hint files setting', path),
+    goose_hints: valueOf(HINT_FILE_CONSTANTS.goose_hints),
+    agents_md: valueOf(HINT_FILE_CONSTANTS.agents_md),
+    when_unset: constants.map(valueOf),
+  }
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */
