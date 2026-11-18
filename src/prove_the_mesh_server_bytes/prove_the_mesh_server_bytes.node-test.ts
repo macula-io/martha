@@ -27,8 +27,8 @@ import {
 
 const VERSION = '1.2.3'
 const DEPENDENCY = 'some-dependency'
-const SERVER_KEY = `node_modules/${MESH_SERVER_PACKAGE}`
-const DEPENDENCY_KEY = `node_modules/${DEPENDENCY}`
+const SERVER_KEY = `${DEPENDENCIES}/${MESH_SERVER_PACKAGE}`
+const DEPENDENCY_KEY = `${DEPENDENCIES}/${DEPENDENCY}`
 const SERVER_INTEGRITY = sriOf(new TextEncoder().encode('the server tarball'))
 const DEPENDENCY_INTEGRITY = sriOf(new TextEncoder().encode('the dependency tarball'))
 const tarballAt = (name: string) => `${MESH_SERVER_REGISTRY}${name}/-/${name.replace(/^@[^/]+\//, '')}-${VERSION}.tgz`
@@ -129,7 +129,7 @@ test('the known settings are the prefix\'s own, sorted, and cover what every rec
 // --- what every package of the tree reads (martha#72) --------------------------
 
 const NESTED = 'nested-dependency'
-const NESTED_KEY = `${DEPENDENCY_KEY}/node_modules/${NESTED}`
+const NESTED_KEY = `${DEPENDENCY_KEY}/${DEPENDENCIES}/${NESTED}`
 const lockWithNested = (): NpmLock => ({ ...lockWith(), packages: { ...lockWith().packages, [NESTED_KEY]: { version: VERSION } } })
 const KEPT = 'HOME'
 const APPROVED = 'MACULA_A'
@@ -169,7 +169,7 @@ test('a file in no package of the lock is refused, naming it', () => {
   assert.throws(() => environmentReadsInTree([source(`process.env.${KEPT}`, `${DEPENDENCIES}/stray/index.js`)], lockWith()), /node_modules\/stray\/index\.js/)
 })
 
-const readsOf = (name: string, read: string, file = `node_modules/${name}/index.js`) => ({ [name]: { reads: { [read]: [file] }, computed: [] } })
+const readsOf = (name: string, read: string, file = `${DEPENDENCIES}/${name}/index.js`) => ({ [name]: { reads: { [read]: [file] }, computed: [] } })
 
 for (const [what, read] of [['a name it keeps from the host', KEPT], ['an approved setting', APPROVED]] as const) {
   test(`a dependency reading ${what} that nobody reviewed is refused, naming the package, the name and the file`, () => {

@@ -30,12 +30,24 @@
 //     judged: `file: 'wake_a_member/wake_a_member.ts'` in a slice's coincidences
 //     is the slice's directory, not the WAKE_A_MEMBER tool. A literal holding
 //     an address is judged whole too, never split (the owner's ruling on
-//     martha#437, r=3): a URL, anything with `://`, and a GitHub owner/repo
-//     name whose owner has a hyphen, as the whole literal or one word of it, or
-//     after `repos/` in an API route — `macula-io/martha`, `-R macula-io/martha`,
-//     `macula-io/martha#253`, `repos/macula-io/martha/actions/runs`. A
-//     hyphen-free `owner/repo` is spelled like a relative path (`actions/runs`)
-//     and stays split;
+//     martha#437, r=3): a URL, anything with `://`, a GitHub owner/repo name
+//     whose owner has a hyphen, as the whole literal or one word of it, or a
+//     GitHub API route — `macula-io/martha`, `-R macula-io/martha`,
+//     `macula-io/martha#253`, `repos/macula-io/martha/actions/runs`. A route is
+//     an address whatever stands before it and whether its owner has a hyphen or
+//     is built by a substitution (`/repos/macula-io/martha/issues`,
+//     `repos/rgfaber/wordcraft/actions/runs`, `repos/${repo}/commits`). A
+//     hyphen-free `owner/repo` outside a route is spelled like a relative path
+//     (`actions/runs`, `torvalds/linux`) and stays split, so a copy inside it is
+//     still named;
+//   - the literal text of a template with a substitution, judged piece by piece
+//     and never as a whole, since what it builds at run time is unknown
+//     (martha#437): each substitution stands as one mark, the text splits on the
+//     same `/`, and a piece holding a mark is the run time's rather than the
+//     tree's, so it is never judged. `${dir}/settings.json` names
+//     `settings.json`; `${dir}settings.json` and `${dir}/settings.${flavour}`
+//     name nothing. A dynamic `import()`'s specifier and a tag's template are
+//     left out, as a module's path is;
 //   - a *definition* whose value equals an exported constant of ANOTHER module,
 //     exported or not: three private `const X = 'node_modules'` beside
 //     `DEPENDENCIES` are three restatements, and `const T = 'Bash'` is the same
@@ -71,11 +83,11 @@
 //     itself an error: the list can only shrink by an edit a reviewer reads.
 //
 // Out of reach, and left to review: a value built at run time (`'Ba' + 'sh'`, a
-// template with a substitution, a value read from a fixture), and a literal that
-// CONTAINS a value other than as a whole path segment — the sixteen
-// `mcp__<server>__<tool>` names in the relay's hooks contain the plugin's name from
-// its manifest, and never equal it (martha#289; the manifest, not a constant, since
-// #343) — or a value that itself spans more than one segment.
+// template piece a substitution stands inside, a value read from a fixture), and
+// a literal that CONTAINS a value other than as a whole path segment — the
+// sixteen `mcp__<server>__<tool>` names in the relay's hooks contain the plugin's
+// name from its manifest, and never equal it (martha#289; the manifest, not a
+// constant, since #343) — or a value that itself spans more than one segment.
 
 import ts from 'typescript'
 
@@ -317,6 +329,23 @@ const isALiteral = (node: ts.Node): node is ts.StringLiteral | ts.NoSubstitution
 const isAValueLiteral = (node: ts.Node): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral =>
   isALiteral(node) || ts.isNumericLiteral(node)
 
+/** The expression a call applies, where a dynamic `import()` names a module rather than a value (martha#437). */
+const isADynamicImport = (node: ts.Node): boolean => ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+
+/**
+ * Whether a template with a substitution is one this check reads: not a dynamic
+ * `import()`'s specifier, and not a tag's template, both of which name a module
+ * or a format rather than carrying a value (martha#437).
+ */
+const isAJudgedTemplate = (node: ts.Node): node is ts.TemplateExpression =>
+  ts.isTemplateExpression(node) &&
+  !isADynamicImport(node.parent) &&
+  !(ts.isTaggedTemplateExpression(node.parent) && node.parent.template === node)
+
+/** Any node this check reads: a value literal, or a template with a substitution. */
+const isRead = (node: ts.Node): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral | ts.TemplateExpression =>
+  isAValueLiteral(node) || isAJudgedTemplate(node)
+
 /** The value a value literal carries, as the definitions hold it. */
 const valueOfALiteral = (node: ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral): string =>
   ts.isNumericLiteral(node) ? `${NUMBER}${Number(node.text.replaceAll('_', ''))}` : node.text
@@ -474,32 +503,67 @@ const URL_MARK = '://'
 /** A GitHub owner with a hyphen, then a repository: what tells a slug from a relative path such as `actions/runs`. */
 const SLUG = '[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+/[A-Za-z0-9._-]+'
 
-/** An owner/repo name as a word of its own, or after `repos/` in a GitHub API route. */
-const OWNER_REPO = new RegExp(`(?:^|\\s)(?:${SLUG}(?=$|\\s|#)|repos/${SLUG}(?=$|\\s|#|/))`)
+/** An owner/repo name as a word of its own, whose owner has a hyphen: `macula-io/martha`, `-R macula-io/martha`, `macula-io/martha#253`. */
+const OWNER_REPO = new RegExp(`(?:^|\\s)${SLUG}(?=$|\\s|#)`)
+
+/**
+ * Where a substitution stands in a template's text, so a piece the run time builds
+ * is never judged as a value the tree holds (martha#437).
+ */
+export const SUBSTITUTION_MARK = '\u0000'
+
+/** One name in a GitHub API route: a word of name characters, or the mark of a substitution where an owner is built at run time. */
+const ROUTE_WORD = '(?:[A-Za-z0-9._-]|\\u0000)'
+
+/**
+ * A GitHub API route: `repos/` and the owner that follows it, whatever stands
+ * before it (start, a space, a leading `/`), whether the owner has a hyphen or is
+ * a substitution's mark. It takes a repository after the owner, so a directory
+ * that happens to be named `repos` is still a path (martha#437, Jupiter's note on
+ * PR 469).
+ */
+const REPOS_ROUTE = new RegExp(`(?:^|[\\s/])repos/(?:\\u0000|[A-Za-z0-9._-]+/${ROUTE_WORD})`)
 
 /**
  * Whether a literal holds an address, which is judged whole and never split: a
- * URL, or a GitHub owner/repo name (the owner's ruling on martha#437, r=3).
+ * URL, a GitHub owner/repo name whose owner has a hyphen as a word of its own
+ * (the owner's ruling on martha#437, r=3), or a GitHub API route — `repos/…` —
+ * whose owner may have no hyphen and may be built at run time (Jupiter's note on
+ * PR 469). A bare hyphen-free `owner/repo` is spelled like a relative path and is
+ * not one.
  */
-export const holdsAnAddress = (literal: string): boolean => literal.includes(URL_MARK) || OWNER_REPO.test(literal)
+export const holdsAnAddress = (literal: string): boolean => literal.includes(URL_MARK) || OWNER_REPO.test(literal) || REPOS_ROUTE.test(literal)
+
+/** The text a template holds, each substitution standing as one mark, so what it builds at run time is visible as built (martha#437). */
+export const textOfATemplate = (node: ts.TemplateExpression): string =>
+  node.templateSpans.reduce((text, span) => `${text}${SUBSTITUTION_MARK}${span.literal.text}`, node.head.text)
+
+/** The distinct segments of a path literal that name a value on their own: never the literal itself, and never one a substitution stands in (martha#437). */
+export const piecesOfALiteral = (literal: string): string[] => pathSegmentsOf(literal).filter((piece) => !piece.includes(SUBSTITUTION_MARK))
 
 /** A value written as one segment of a path literal: a use of it, as the bare value would be (martha#437). */
-const findingsForTheSegments = (path: string, line: number, literal: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] =>
-  pathSegmentsOf(literal).flatMap((segment) => findingsForAUse(path, line, segment, declared, definitions).map((finding) => ({ ...finding, segment: true })))
+const findingsForTheSegments = (path: string, line: number, segments: readonly string[], files: ReadonlySet<string>, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] =>
+  segments
+    .filter((segment) => !files.has(segment))
+    .flatMap((segment) => findingsForAUse(path, line, segment, declared, definitions).map((finding) => ({ ...finding, segment: true })))
 
 /** The literals of a source that can carry a value: not a module's path, not a property's name, not a type (rule 1 of part b). */
 const literalsThatCarryAValue = (file: ts.SourceFile): ts.Node[] =>
-  nodesOf(file).filter(isAValueLiteral).filter((node) => !namesAModule(node) && !namesAProperty(node) && !isInAType(node))
+  nodesOf(file).filter(isRead).filter((node) => !namesAModule(node) && !namesAProperty(node) && !isInAType(node))
 
 /** What one literal is, if it restates something; `files` are the paths of the sources read, whose segments name directories, not values. */
 function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], everyDefinition: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>, files: ReadonlySet<string>): Finding[] {
+  if (ts.isTemplateExpression(node)) {
+    const text = textOfATemplate(node)
+    return holdsAnAddress(text) ? [] : findingsForTheSegments(path, line, piecesOfALiteral(text), files, declared, definitions)
+  }
   const literal = valueOfALiteral(node as ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral)
   if (!isANumber(literal) && literal.length < SHORTEST_VALUE) return []
   const definition = definitionAt.get(node)
   const whole = definition === undefined
     ? findingsForAUse(path, line, literal, declared, definitions)
     : findingsForADefinition(definition, line, declared, definitions, everyDefinition)
-  return files.has(literal) || holdsAnAddress(literal) ? whole : [...whole, ...findingsForTheSegments(path, line, literal, declared, definitions)]
+  return files.has(literal) || holdsAnAddress(literal) ? whole : [...whole, ...findingsForTheSegments(path, line, pathSegmentsOf(literal), files, declared, definitions)]
 }
 
 /**
@@ -530,10 +594,10 @@ export function restatementsIn(sources: readonly CoreSource[], judge: Judge): Fi
     .sort(byPlace)
 }
 
-/** The literal sites a set of judged lines holds, read from the sources: what the gate may say it looked at. */
+/** The sites a set of judged lines holds, read from the sources — a literal, or a template with a substitution: what the gate may say it looked at. */
 export function literalSitesJudged(sources: readonly CoreSource[], judged: ReadonlySet<string> | null): number {
   return parseAll(sources).flatMap(({ path, file }) =>
-    nodesOf(file).filter(isAValueLiteral).filter((node) => judged === null || judged.has(at(path, lineOf(file, node)))),
+    nodesOf(file).filter(isRead).filter((node) => judged === null || judged.has(at(path, lineOf(file, node)))),
   ).length
 }
 

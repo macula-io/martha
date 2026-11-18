@@ -32,6 +32,11 @@ import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { LAND, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { ContractAction } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
+import { KEEP_THE_CONTRACT_TOOL } from '../keep_the_package_contract/the_contract_tools.ts'
+import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
+import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 
 const names = claudeCodeToolNames
 
@@ -48,6 +53,8 @@ const launch: ApprovedLaunch = {
 
 // Synthetic identities, never a real one: this repository is public.
 const supervisor_identity = 'identity-of-the-supervisor'
+/** A synthetic package, never a real one: this repository is public. */
+const PACKAGE = 'synthetic-owner/repo#7'
 
 const policy: Policy = { may_send_executable_text: [supervisor_identity] }
 
@@ -311,4 +318,35 @@ test('a member at its wall is told it is spent, not told to ask for a new contra
   // The contract's own refusal would name what that contract allows, which is nothing; this answer is the budget's,
   // whose own closing line speaks of a new version of the contract and so cannot be told apart by that word alone.
   assert.doesNotMatch(answer, /allows no act at all/)
+})
+
+// --- a package with no contract at all (martha#597) ---------------------------
+
+/** A package whose ledger holds no contract version: what the gate is handed for one (martha#597). */
+const aPackageWithNoContract = { package: PACKAGE }
+test('#597: a package with no contract is refused the work it asks for, and told the tool that records one', () => {
+  const session = beginSession(store(), 's-none-recorded')
+  // A call that is an act and one that is no act are both refused: this gate does not stand only on the act table.
+  for (const call of [
+    { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'git push origin main' } },
+    { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'npm test' } },
+    { tool: WHOLE_FILE_TOOL, input: { file_path: 'a-file' } },
+  ]) {
+    const said = denied(answerToolCall({ names, session, policy, launch, host: thisMachine, ...call, contract: aPackageWithNoContract }))
+    assert.match(said, /has no contract recorded, so none of its work runs/)
+    assert.match(said, new RegExp(`keeps it with ${KEEP_THE_CONTRACT_TOOL.name}`))
+  }
+  // The four that end a package still run, under the names this host calls them by, and so does the tool that keeps one.
+  for (const ending of [WRITE_MY_HANDOVER_TOOL, SAY_TO_THE_CREW, REPORT_WHERE_THE_WORK_STANDS, PARK_A_MEMBER, KEEP_THE_CONTRACT_TOOL.name]) {
+    assert.equal(
+      answerToolCall({ names, tool: `mcp__martha__${ending}`, session, policy, launch, host: thisMachine, input: {}, contract: aPackageWithNoContract }),
+      undefined,
+      ending,
+    )
+  }
+  // A look-alike of one of them is refused like any other call, so the table cannot be widened by a name.
+  const look_alike = denied(
+    answerToolCall({ names, tool: 'mcp__martha__not_write_my_handover', session, policy, launch, host: thisMachine, input: {}, contract: aPackageWithNoContract }),
+  )
+  assert.match(look_alike, /has no contract recorded/)
 })
