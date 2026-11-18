@@ -4,12 +4,14 @@
 
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import { rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { escaped, manifestOf, PACKAGES, type Manifest } from './declared_in_package_json.ts'
-import { leakReportOf, leftRunning } from './every_test_file_cleans_up.ts'
+import { leakReportOf, leftBehind, leftoverReportOf, leftoversInTheTempDirectory, leftRunning } from './every_test_file_cleans_up.ts'
 import {
   FORCE_EXIT_FLAG,
   GUARD_FLAG,
@@ -136,9 +138,12 @@ for (const folder of PACKAGES) {
   })
 }
 
-/** The planted files: two whose tests pass but leave something running, and one that cleans up. */
+/** The planted files: two whose tests pass but leave something running, one that leaves a link behind, one that removes
+ * the link it makes, and one that cleans up. */
 const LEAKS_A_SERVER = 'a_test_file_that_leaks_a_listening_server.ts'
 const LEAKS_AN_INTERVAL = 'a_test_file_that_leaks_an_interval.ts'
+const LEAVES_A_LINK = 'a_test_file_that_leaves_a_link_in_the_temp_directory.ts'
+const REMOVES_ITS_LINK = 'a_test_file_that_removes_its_link_from_the_temp_directory.ts'
 const CLOSES_ITS_SERVER = 'a_test_file_that_closes_its_server.ts'
 
 for (const folder of PACKAGES) {
@@ -163,6 +168,41 @@ for (const folder of PACKAGES) {
     assert.match(output, /ℹ fail 2\n/, 'two files fail, no more')
   })
 }
+
+for (const folder of PACKAGES) {
+  test(`with the test script's own flags in ${folder}, a file that leaves a link in the temp directory fails by name, and the link goes`, async (t) => {
+    // This file's own process is judged by the same guard, so what the planted run leaves is removed after `t`: a link
+    // named by that run's pid, which nothing else here makes.
+    const before = leftoversInTheTempDirectory()
+    t.after(() => {
+      for (const name of leftBehind(before, leftoversInTheTempDirectory())) rmSync(join(tmpdir(), name), { force: true })
+    })
+    const { ended, output, flags } = await runWithTheScriptsFlags(t, folder, [LEAVES_A_LINK, REMOVES_ITS_LINK])
+
+    assert.notEqual(ended, 'hung', `the run did not end within ${RUN_DEADLINE_MS} ms with the flags ${JSON.stringify(flags)}`)
+    if (ended === 'hung') return
+    assert.notEqual(ended.code, 0, 'the run fails')
+    assert.match(output, /✔ a file that leaves a link in the temp directory behind/, 'its test passes, so only the guard can fail it')
+    assert.match(output, /✔ a file that removes the link it made/, 'and a file that removes its own link passes')
+    assert.match(
+      output,
+      new RegExp(`left behind in the temp directory after its tests: martha-472-link-\\d+\\. Remove it in t\\.after\\.`),
+      `the file that leaves a link is named with what it left:\n${output}`,
+    )
+    assert.match(output, new RegExp(`✖ ${escaped(plantedPath(LEAVES_A_LINK, folder))}`), 'the file that leaves a link is failed')
+    assert.doesNotMatch(output, new RegExp(escaped(REMOVES_ITS_LINK)), 'the file that removes its link is neither failed nor blamed')
+    assert.match(output, /ℹ fail 1\n/, 'one file fails, no more')
+  })
+}
+
+test('what a file leaves behind is judged on its own pid\'s names only, and named with what it left', () => {
+  assert.deepEqual(leftBehind(['a'], ['a', 'b']), ['b'])
+  assert.deepEqual(leftBehind(['a', 'b'], ['b', 'a']), [], 'what was there before the file ran is not its leaving')
+  assert.equal(
+    leftoverReportOf('src/x.node-test.ts', ['martha-472-link-4242']),
+    'src/x.node-test.ts left behind in the temp directory after its tests: martha-472-link-4242. Remove it in t.after.',
+  )
+})
 
 test('what a file leaves running is what it holds beyond what its process held before it ran, each kind counted', () => {
   assert.deepEqual(leftRunning(['PipeWrap', 'PipeWrap'], ['PipeWrap', 'PipeWrap']), [])
