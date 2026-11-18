@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url'
 import { DRY_RESTORE_SUBJECT } from './dry_restore.mjs'
 import { installerRef, NAMES } from '../../installer/keep_the_names_in_one_place/names.mjs'
 import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { aScriptsConstant } from './read_a_scripts_constant.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = join(HERE, '..', '..')
@@ -28,7 +29,7 @@ const NAMES_MODULE = join(REPO, 'installer', 'keep_the_names_in_one_place', 'nam
 /** The files the script reads from the tree it packs, copied as they are. */
 const CARRIED = [SCRIPT, NAMES_MODULE, join(HERE, 'dry_restore.mjs'), join(REPO, 'installer', 'package.json'), join(REPO, 'package.json')]
 const NOT_PACKABLE = 'dry: not packable: installer ahead of its tag'
-const NOT_PACKABLE_EXIT = 3
+const NOT_PACKABLE_EXIT = aScriptsConstant(SCRIPT, 'NOT_PACKABLE')
 const COULD_NOT_RUN_EXIT = 2
 /** The installer file the tag holds, and what main's own installer says after a change, told apart in the tarball. */
 const A_MODULE = join('installer', 'a_module.mjs')
