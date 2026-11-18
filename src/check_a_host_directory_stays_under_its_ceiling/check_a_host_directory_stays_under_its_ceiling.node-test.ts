@@ -270,6 +270,8 @@ test('#736: a top-level folder of code is walked as src is, and a unit one line 
     `a_top_dir (its own files): 3 lines of code, over the cap of 2 (martha.sliceCap)\n${SPLIT_IT}`,
     `a_top_dir/part: 3 lines of code, over the cap of 2 (martha.sliceCap)\n${SPLIT_IT}`,
   ], 'a unit is counted at any depth, and node_modules inside a folder is no unit, by the rule the code roots keep')
+  assert.deepEqual(Object.keys((await judgeTheTree(over)).top_level.units).sort(), ['. (its own files)', 'a_top_dir (its own files)', 'a_top_dir/part'],
+    'node_modules inside a folder is no unit: the linter ignores its files, so only the unit list can show the skip')
 })
 
 test('#736: the files directly in the repository are a unit too, never skipped', async (t) => {
