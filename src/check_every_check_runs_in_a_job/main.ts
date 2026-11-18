@@ -27,9 +27,13 @@ const NAME = 'check_every_check_runs_in_a_job'
 const WORKFLOWS = dirname(WORKFLOW)
 const A_WORKFLOW = /\.ya?ml$/
 
+/** The value given after `name`, or undefined when `name` is not given. Throws when it is given with no value. */
 const option = (name: string): string | undefined => {
   const at = process.argv.indexOf(name)
-  return at === -1 ? undefined : process.argv[at + 1]
+  if (at === -1) return undefined
+  const value = process.argv[at + 1]
+  if (value === undefined || value.startsWith('--')) throw new Error(`${name} names no directory`)
+  return value
 }
 
 /** package.json's scripts under `root`. Throws when it cannot be read or holds no scripts. */

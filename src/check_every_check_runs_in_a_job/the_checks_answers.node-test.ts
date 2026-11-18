@@ -9,7 +9,10 @@
 //   - a stale exception accepted: 8;  exit 0 where a file cannot be read: 9;
 //   - any mentioning line counts as a run: 11, 12;  the paths filter not read: 13;
 //   - an unparsed `on:` read as no trigger: 14;  zero job headers read as no jobs: 15;
-//   - check:posted-text's exception dropped: 10;  the self-test plants nothing: the self-test case.
+//   - check:posted-text's exception dropped: 10;  the self-test plants nothing: the self-test case;
+//   - a run whose exit is swallowed (||, a pipe, a trailing &) counts: 16;
+//   - a block on:'s pull_request: with an inline value read as every pull request: 17;
+//   - --root with no value read as the checkout: 18.
 //
 // Every planted package.json also declares the excused scripts, run by no job, as the real tree does, so the cases see
 // only what they plant.
@@ -195,4 +198,26 @@ test('15: a jobs: whose jobs the reader cannot see is never read as no jobs: exi
 
 test('the self-test plants a check no job runs and requires it named', () => {
   assert.deepEqual(theCommand('--self-test'), { status: 0, out: ['the check bites, check:planted named'], err: [] })
+})
+
+test('16: a one-line run whose exit the step swallows is not a run: ||, a pipe, a trailing &; && still is', (t) => {
+  const swallowed = ['- run: npm run --silent check:a || true', '- run: npm run --silent check:a | tee out.txt', '- run: node a.ts &']
+  for (const step of swallowed) {
+    const root = plantedTree(t, { scripts: { 'check:a': 'node a.ts' }, workflows: { 'ci.yml': aWorkflow(ON_EVERY_PULL_REQUEST, aJob('gate', step)) } })
+    assert.deepEqual(theCommand('--root', root), { status: 1, out: [], err: findings(unrun('check:a')) }, step)
+  }
+  const kept = plantedTree(t, { scripts: { 'check:a': 'node a.ts' }, workflows: { 'ci.yml': aWorkflow(ON_EVERY_PULL_REQUEST, aJob('gate', '- run: npm run --silent check:a && echo done')) } })
+  assert.deepEqual(theCommand('--root', kept), { status: 0, out: [passed(1)], err: [] })
+})
+
+test('17: a block on: whose pull_request: carries an inline value is never read as every pull request: exit 2', (t) => {
+  const root = plantedTree(t, {
+    scripts: { 'check:a': 'node a.ts' },
+    workflows: { 'ci.yml': aWorkflow('on:\n  pull_request: { paths: [docs/**] }\n', aJob('gate', '- run: npm run --silent check:a')) },
+  })
+  assert.deepEqual(theCommand('--root', root), { status: 2, out: [], err: [`the check could not be made: ${CI}: its on: cannot be read`] })
+})
+
+test('18: --root with no value is never read as the checkout: exit 2, naming it', () => {
+  assert.deepEqual(theCommand('--root'), { status: 2, out: [], err: ['the check could not be made: --root names no directory'] })
 })

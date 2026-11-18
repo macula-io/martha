@@ -5,8 +5,8 @@
 // 2. A job with no script: a job that names `check:<name>` for a name `package.json` does not declare fails by name.
 //
 // A check is RUN only by a step written on one line, `run: npm run [--silent] check:<name>[ <args>]` or
-// `run: node <its entry>[ <args>]`, whose args hold no `--self-test`, in a workflow every pull request triggers: an
-// `on:` with pull_request and no paths filter. A mention anywhere else (a line inside a `run: |` block, a self-test, a
+// `run: node <its entry>[ <args>]`, whose args hold no `--self-test` and nothing that swallows its exit (`||`, a pipe
+// `|`, a trailing `&`), in a workflow every pull request triggers: an `on:` with pull_request and no paths filter. A mention anywhere else (a line inside a `run: |` block, a self-test, a
 // planted run in a check's own bite) counts for direction 2 only. It never makes a check run, because a planted line
 // would keep a check "run" after its real step was deleted.
 //
@@ -25,6 +25,8 @@ const NPM_RUN = new RegExp(String.raw`^npm run(?: --silent)? (${NAME})(?=\s|$)(.
 const MENTION = new RegExp(String.raw`npm run(?: --silent)? (${NAME})`, 'g')
 const NODE_RUN = /^node (\S+)(.*)$/
 const SELF_TEST = /(?:^|\s)--self-test(?:\s|$)/
+/** Args after which the step's exit is no longer the check's: `||`, a pipe, or a trailing `&`. `&&` keeps it. */
+const SWALLOWED = /\|\||(?<!\|)\|(?!\|)|(?<!&)&\s*$/
 
 /** Where one check is run: a job of a workflow, and how that workflow reaches pull requests. */
 interface Place {
@@ -51,10 +53,11 @@ function theEntries(scripts: Readonly<Record<string, string>>, checks: readonly 
   }))
 }
 
-/** The check a one-line step runs, or undefined: a step that runs none, or only a check's self-test. */
+/** The check a one-line step runs, or undefined: a step that runs none, only a check's self-test, or a check whose
+ * exit the step swallows, since that step never fails when the check does. */
 function theCheckRun(step: string, entries: ReadonlyMap<string, string>): string | undefined {
   const [check, args] = npmRun(step) ?? nodeRun(step, entries) ?? [undefined, '']
-  return SELF_TEST.test(args) ? undefined : check
+  return SELF_TEST.test(args) || SWALLOWED.test(args) ? undefined : check
 }
 
 /** The check and the args of a step `npm run [--silent] check:<name>[ <args>]`, or undefined for another step. */
