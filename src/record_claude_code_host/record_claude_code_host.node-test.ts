@@ -262,10 +262,18 @@ test('a host the recorder cannot read fails the check, naming the part', (t) => 
   assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: prompt origins\n`)
 })
 
+/**
+ * A folder kind no host loads, planted to make the markdown folders differ. It was `output-styles` until 2.1.327 began
+ * loading that one itself, and a planted kind the host already loads adds nothing, so the check stayed green
+ * (martha#624). The test below holds it outside the recording, so a host that ships it fails there by name.
+ */
+const A_KIND_NO_HOST_LOADS = 'planted-kind-no-host-loads'
+
 test('a host whose frontmatter pattern, markdown folders or output-style schema differ fails the check, naming the field (martha#146)', (t) => {
+  assert.ok(!RECORDED_HOST.markdown_kinds.includes(A_KIND_NO_HOST_LOADS), `the recorded host loads ${A_KIND_NO_HOST_LOADS}, so planting it changes nothing; plant another kind`)
   for (const [field, planted] of [
     ['frontmatter_pattern', MARKDOWN_PARTS.frontmatter_pattern?.replace('\\s*\\n(', '[ \\t]*\\n(')],
-    ['markdown_kinds', `${MARKDOWN_PARTS.markdown_kinds ?? ''};Wq("output-styles",0)`],
+    ['markdown_kinds', `${MARKDOWN_PARTS.markdown_kinds ?? ''};Wq("${A_KIND_NO_HOST_LOADS}",0)`],
     ['output_style_schema', MARKDOWN_PARTS.output_style_schema?.replace('"force-for-plugin":', 'hooks:Jq().optional(),"force-for-plugin":')],
   ] as const) {
     assert.notEqual(planted, MARKDOWN_PARTS[field], `the planted ${field} differs`)
