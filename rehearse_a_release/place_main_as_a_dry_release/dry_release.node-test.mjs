@@ -78,11 +78,22 @@ test('a layer with an entry the installer refuses is refused in the installer\'s
 
 // --- condition 3: a dry pass is never the clean-install proof's release result -------------------------------------------
 
-/** The line the clean-install proof logs when a release's run passes, read from the proof itself, never typed here. */
+/**
+ * The words the clean-install proof logs when a release's run passes, read from the proof itself, never typed here.
+ * The last line is either the words as a literal, or opens with the variable that holds them (then the members'
+ * names follow, which differ run to run); the variable's value is read from its one definition in the proof.
+ */
 const theReleaseResult = () => {
-  const found = /log '([^']+)'\s*\n\s*exit 0\s*\n\}/.exec(readFileSync(PROOF, 'utf8'))
+  const proof = readFileSync(PROOF, 'utf8')
+  const found = /log ('[^']+'|"[^"]+")\s*\n\s*exit 0\s*\n\}/.exec(proof)
   assert.ok(found, 'the clean-install proof\'s release result line was read')
-  return found[1] ?? ''
+  const said = found[1] ?? ''
+  if (said.startsWith('\'')) return said.slice(1, -1)
+  const name = /^"\$\{([A-Z_]+)\}/.exec(said)?.[1]
+  assert.ok(name, `the release result line ${said} opens with the variable that holds its words`)
+  const definitions = [...proof.matchAll(new RegExp(`^${name}='([^']+)'$`, 'gm'))]
+  assert.equal(definitions.length, 1, `${name} is defined once in the proof`)
+  return definitions[0]?.[1] ?? ''
 }
 
 test('the dry result line names every step it skipped and is never the release result', () => {
