@@ -16,7 +16,7 @@ import { test, type TestContext } from 'node:test'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { holdingTheEnds } from '../end_a_running_turn/hold_the_end.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SUBAGENT_SPAWN, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -29,6 +29,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
+import { THE_GUARD_ASK_UNREADABLE } from '../guard_the_git_a_member_runs/judge_a_guards_question.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
@@ -45,6 +46,9 @@ const SESSION = 'the-session'
  * reason on, and how it stands against the gate's — not the wording of the rule, which has its own tests.
  */
 const A_REFUSED_REVIEW = 'Not run: this crew holds its reviews to the model its owner declared.'
+
+/** The reason this crew gives a shell line the workspace guard refuses (martha#562, seam a), in its own words. */
+const A_REFUSED_GIT_CALL = 'Not run: this call would move a clone off its default branch.'
 
 /** One member's places under a directory the test removes. */
 function placesOf(t: TestContext): Places {
@@ -68,7 +72,7 @@ const userScopeFor = (home: string): OwnerUserScope => ({
  * A crew that refuses every call it is asked about, so what a test reads is the relay's own order: a real crew refuses
  * only a review, and a call it would not refuse is one these tests do not need.
  */
-function aCrewRefusingEverything(asked: string[]): CrewTools {
+function aCrewRefusingEverything(asked: string[], git_asked: string[] = [], path_asked: { directory: string; args: readonly string[] }[] = [], refs_asked: string[] = []): CrewTools {
   return {
     tools: [],
     answer: async () => ({ answer: '' }),
@@ -85,8 +89,25 @@ function aCrewRefusingEverything(asked: string[]): CrewTools {
     // This crew hears no menu close, which is what the ask queue reads a settle on (martha#313).
     noteTheCallsAnswer: () => undefined,
     refusesTheSubagent: async (call) => {
+      if (!CLAUDE_CODE_SUBAGENT_SPAWN.tools.includes(call.tool)) return undefined
       asked.push(call.tool)
       return A_REFUSED_REVIEW
+    },
+    refusesTheGitIn: async (call) => {
+      if (call.tool !== CLAUDE_CODE_SHELL_TOOL) return undefined
+      git_asked.push(String(call.input['command'] ?? ''))
+      return A_REFUSED_GIT_CALL
+    },
+    // The two seams that reach git without a tool call (martha#562): the shim on the member's PATH, and the clone's
+    // ref transaction. This crew refuses a call in another member's branch, as the real one does.
+    refusesTheGitOnThePath: async (call) => {
+      path_asked.push({ directory: call.directory, args: call.args })
+      return call.args.includes('uranus/9') ? A_REFUSED_GIT_CALL : undefined
+    },
+    refusesTheRefUpdate: (updates) => {
+      const deletes = updates.filter((update) => update.deletes).map((update) => update.ref)
+      refs_asked.push(...deletes)
+      return deletes.some((ref) => ref.endsWith('/uranus/9')) ? A_REFUSED_GIT_CALL : undefined
     },
   }
 }
@@ -101,7 +122,7 @@ function theReceiptsTaken(allowed: string[]): SignedRuns {
 }
 
 /** The relay for one member, over a crew's own tools and the receipts a call would take. */
-function relayFor(places: Places, crew: CrewTools, signed_runs: SignedRuns): MemberRelay {
+function relayFor(places: Places, crew: CrewTools | undefined, signed_runs: SignedRuns): MemberRelay {
   return memberRelay({
     records: sessionRecordsIn(rowStreamsDirectory(places.rows)),
     launch: { host: CLAUDE_CODE, launch_dir: places.checkout, stop_dir: places.home, approved_fingerprints: [] },
@@ -126,7 +147,7 @@ function relayFor(places: Places, crew: CrewTools, signed_runs: SignedRuns): Mem
       settings_files: [],
       user_scope: userScopeFor(places.home),
     }),
-    crew,
+    ...(crew === undefined ? {} : { crew }),
     signed_runs,
     stopMember: () => {},
   })
@@ -155,6 +176,21 @@ test('#315: the relay denies a call the crew refuses, with the crew\'s own reaso
   assert.deepEqual(allowed, [], 'a receipt was taken for a call that never ran')
 })
 
+test('#562: the relay asks the crew what the workspace guard refuses of a shell call, and denies it with that reason', async (t) => {
+  const places = placesOf(t)
+  const asked: string[] = []
+  const git_asked: string[] = []
+  const allowed: string[] = []
+  const relay = relayFor(places, aCrewRefusingEverything(asked, git_asked), theReceiptsTaken(allowed))
+  await startedOn(relay)
+
+  const line = 'git checkout main'
+  assert.deepEqual(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL, { command: line })), denied(A_REFUSED_GIT_CALL), 'a shell call the guard refuses was not denied with the guard\'s reason')
+  assert.deepEqual(git_asked, [line], 'the relay never handed the shell line to the crew\'s guard')
+  assert.deepEqual(asked, [], 'the reviewer rule answered for a call that is no review')
+  assert.deepEqual(allowed, [], 'a receipt was taken for a call that never ran')
+})
+
 test('#315: the gate\'s own answer comes first, so a call the gate denies is denied by the gate though the crew refuses it', async (t) => {
   const places = placesOf(t)
   const asked: string[] = []
@@ -169,4 +205,42 @@ test('#315: the gate\'s own answer comes first, so a call the gate denies is den
     'the crew\'s review rule answered for a call the gate refuses, so it sits before the gate rather than beside it',
   )
   assert.deepEqual(allowed, [], 'a receipt was taken for a call that never ran')
+})
+
+test('#562: the git on the member\'s PATH is answered with the crew\'s verdict, and a crew that guards nothing is answered with a yes', async (t) => {
+  const places = placesOf(t)
+  const path_asked: { directory: string; args: readonly string[] }[] = []
+  const relay = relayFor(places, aCrewRefusingEverything([], [], path_asked), theReceiptsTaken([]))
+
+  assert.deepEqual(
+    await relay.judgeAGitCall({ cwd: places.checkout, args: ['branch', '-D', 'uranus/9'] }),
+    { verdict: { deny: A_REFUSED_GIT_CALL } },
+    "the shim's question was not answered with the crew's own reason",
+  )
+  assert.deepEqual(path_asked, [{ directory: places.checkout, args: ['branch', '-D', 'uranus/9'] }], "the relay never handed the call to the crew's guard")
+  assert.deepEqual(await relay.judgeAGitCall({ cwd: places.checkout, args: ['status'] }), { verdict: { allow: 1 } }, 'a call the crew allows was not allowed')
+  // A question this launcher cannot read is refused rather than answered with a yes: the shim fails open on it and
+  // writes the miss down, so a body that is not the shim's never runs as an allowed call.
+  assert.deepEqual(await relay.judgeAGitCall({ cwd: 'not/absolute', args: ['branch', '-D', 'uranus/9'] }), { refused: THE_GUARD_ASK_UNREADABLE })
+  assert.deepEqual(await relay.judgeAGitCall({ cwd: places.checkout, args: [1] }), { refused: THE_GUARD_ASK_UNREADABLE })
+
+  // A launch the crew handed no guard at all, which is a crew that declared no workspace layout: nothing is refused.
+  const unguarded = relayFor(places, undefined, theReceiptsTaken([]))
+  assert.deepEqual(await unguarded.judgeAGitCall({ cwd: places.checkout, args: ['branch', '-D', 'uranus/9'] }), { verdict: { allow: 1 } })
+})
+
+test('#562: the clone\'s ref transaction is answered with the crew\'s verdict, and the refs it names are the question', async (t) => {
+  const places = placesOf(t)
+  const refs_asked: string[] = []
+  const relay = relayFor(places, aCrewRefusingEverything([], [], [], refs_asked), theReceiptsTaken([]))
+
+  assert.deepEqual(
+    await relay.judgeARefTransaction({ updates: [{ ref: 'refs/heads/uranus/9', deletes: true }] }),
+    { verdict: { deny: A_REFUSED_GIT_CALL } },
+    "the hook's question was not answered with the crew's own reason",
+  )
+  assert.deepEqual(refs_asked, ['refs/heads/uranus/9'], 'the relay never handed the refs to the crew\'s guard')
+  assert.deepEqual(await relay.judgeARefTransaction({ updates: [{ ref: 'refs/heads/hygiea/562', deletes: true }] }), { verdict: { allow: 1 } })
+  assert.deepEqual(await relay.judgeARefTransaction({ updates: [{ ref: 'refs/heads/uranus/9' }] }), { refused: THE_GUARD_ASK_UNREADABLE })
+  assert.deepEqual(await relay.judgeARefTransaction({}), { refused: THE_GUARD_ASK_UNREADABLE })
 })

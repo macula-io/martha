@@ -87,6 +87,8 @@ import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { theApprovalInUse, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { theWorkspaceTheCrewDeclared } from '../refuse_a_git_call_in_a_members_shell/refuse_a_git_call_in_a_members_shell.ts'
+import { theGitGuardPlacesOf, type TheGitGuardPlaces } from '../guard_the_git_a_member_runs/the_git_guard_places_of_a_crew.ts'
 
 /** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
 export const NOT_A_TERMINAL =
@@ -264,6 +266,16 @@ export function stoppingHostOn(places: { readonly launcher: MemberPlaces; readon
   }
 }
 
+/**
+ * The workspace guard's places, for the crew's own tools and for the two seams that reach git without a tool call
+ * (martha#562): a crew that declared a layout has every shell line a tool call carries read into its git calls, every
+ * call the `git` on a member's PATH is handed judged, and every ref a transaction deletes read for whose branch it is.
+ * No layout declared, nothing is judged, and the crew's tools are handed no guard at all.
+ */
+function theGitGuardPlaceOf(settings: CrewSettings, member: string): TheGitGuardPlaces {
+  return theGitGuardPlacesOf(theWorkspaceTheCrewDeclared(settings), member, thisMachine) ?? {}
+}
+
 /** The place a member's restart tool asks through; none when the crew's directory is not this user's own. */
 function theRestartPlaceOf(request: MemberStartRequest): { readonly lifecycle?: StoppingHost } {
   const crew = crewStateDirectory(request.state.state_root, request.root)
@@ -313,7 +325,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     ...(request.hear_relay_place === undefined ? {} : { hearRelayPlace: request.hear_relay_place }),
     turns,
     crew_tools: (sessions, member) =>
-      crewToolsOver({
+      crewToolsOver({ ...theGitGuardPlaceOf(ready.settings, request.member),
         member: request.member,
         ledger: channel,
         beats: dashboardRowsIn(request.places.dashboard),
