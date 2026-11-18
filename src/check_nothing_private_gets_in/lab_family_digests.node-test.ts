@@ -129,9 +129,10 @@ test('the digests find exactly what the plain rule finds, over generated lines (
   const next = seeded(731)
   const pick = <T>(from: readonly T[]): T => from[Math.floor(next() * from.length)]!
   for (let round = 0; round < 200; round += 1) {
-    // Families that share starts, carry hyphens and digits, and end in either.
+    // Families that share starts, carry hyphens and digits, and end in either; and one
+    // that holds another's whole name, digits and all, so both match at one start.
     const stem = `${pick(['a', 'b', 'ab'])}${pick(['', 'c', '-c', '1', 'c-'])}`
-    const families = [...new Set([stem, `${stem}${pick(['d', '-d', '2', '0'])}`, pick(['b', 'cd', 'a-b', 'x9'])])]
+    const families = [...new Set([stem, `${stem}${pick(['d', '-d', '2', '0'])}`, `${stem}07-${pick(['c', 'd'])}`, pick(['b', 'cd', 'a-b', 'x9'])])]
     const digests = digestsFor(families)
     const pieces = [...families, ...families.map((family) => family.toUpperCase()), '0', '7', '07', '-', '_', ' ', '.', 'é', 'K', 'x', '9']
     for (let line = 0; line < 25; line += 1) {
@@ -164,6 +165,10 @@ test('the digests hold to JavaScript\'s \\b and its case folding, case by case (
     assert.equal(plainNamesIn(text, families).length > 0, expected, `the plain rule, ${text}`)
     assert.equal(labNamesIn(text, digests).length > 0, expected, `the digests, ${text}`)
   }
+  // Two families at one start: the longer is the name, as the rule finds it with its families longest first.
+  const nested = ['ab', 'ab07-c']
+  assert.deepEqual(labNamesIn('ab07-c07', digestsFor(nested)), [{ value: 'ab07-c07', at: 0 }])
+  assert.deepEqual(plainNamesIn('ab07-c07', longestFirst(nested)), [{ value: 'ab07-c07', at: 0 }])
 })
 
 test('a printed location loses the names the digests find, and a shown value naming one is withheld (martha#731)', async () => {
