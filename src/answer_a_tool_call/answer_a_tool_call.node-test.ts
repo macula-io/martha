@@ -53,6 +53,8 @@ const launch: ApprovedLaunch = {
 
 // Synthetic identities, never a real one: this repository is public.
 const supervisor_identity = 'identity-of-the-supervisor'
+/** A synthetic package, never a real one: this repository is public. */
+const PACKAGE = 'synthetic-owner/repo#7'
 
 const policy: Policy = { may_send_executable_text: [supervisor_identity] }
 
@@ -321,8 +323,7 @@ test('a member at its wall is told it is spent, not told to ask for a new contra
 // --- a package with no contract at all (martha#597) ---------------------------
 
 /** A package whose ledger holds no contract version: what the gate is handed for one (martha#597). */
-const aPackageWithNoContract = { package: 'synthetic-owner/repo#7' }
-
+const aPackageWithNoContract = { package: PACKAGE }
 test('#597: a package with no contract is refused the work it asks for, and told the tool that records one', () => {
   const session = beginSession(store(), 's-none-recorded')
   // A call that is an act and one that is no act are both refused: this gate does not stand only on the act table.
@@ -333,7 +334,7 @@ test('#597: a package with no contract is refused the work it asks for, and told
   ]) {
     const said = denied(answerToolCall({ names, session, policy, launch, host: thisMachine, ...call, contract: aPackageWithNoContract }))
     assert.match(said, /has no contract recorded, so none of its work runs/)
-    assert.match(said, /keeps it with keep_the_package_contract/)
+    assert.match(said, new RegExp(`keeps it with ${KEEP_THE_CONTRACT_TOOL.name}`))
   }
   // The four that end a package still run, under the names this host calls them by, and so does the tool that keeps one.
   for (const ending of [WRITE_MY_HANDOVER_TOOL, SAY_TO_THE_CREW, REPORT_WHERE_THE_WORK_STANDS, PARK_A_MEMBER, KEEP_THE_CONTRACT_TOOL.name]) {

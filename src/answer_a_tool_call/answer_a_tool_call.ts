@@ -95,10 +95,15 @@ export interface ToolCall {
    */
   readonly spend?: ASpendInForce | undefined
   /**
-   * What the package this member holds says about this call (martha#513 slice 2), or none: absent refuses nothing, which
-   * is the case of a package with no contract, of a call that is no act, and of a crew that keeps none. Read by the
+   * What the package this member holds says about this call (martha#513 slice 2, martha#597), or none. Read by the
    * caller from the package's own ledger (../a_crews_tools), never guessed here: the gate stays a function of what it is
-   * handed. A contract the ledger could not read back arrives as that, and refuses the acts it cannot judge.
+   * handed.
+   *
+   * A package with no contract version at all arrives as "none recorded", and that refuses every call but five: the four
+   * that end a package, and the tool that records one (martha#597). Absent therefore means only one of three things: the
+   * member holds no package, the call is no act and the version in force reads none, or the crew keeps no contracts at
+   * all — and each of those refuses nothing. A contract the ledger could not read back arrives as that, and refuses the
+   * acts it cannot judge.
    */
   readonly contract?: TheContractHanded
 }

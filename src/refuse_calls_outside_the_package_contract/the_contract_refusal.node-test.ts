@@ -197,8 +197,8 @@ test('a package with no contract recorded refuses every call but the ones that e
   for (const call of [aShellCall('git push origin main'), aShellCall('npm test'), { tool: 'Read', input: { file_path: 'a-file' } }]) {
     const refused = refuseACallOutsideTheContract(call, none_recorded, ownNameOfCalledTool)
     assert.ok(refused !== undefined, call.tool)
-    assert.match(refused, /package synthetic-owner\/repo#7 has no contract recorded, so none of its work runs until one is kept/)
-    assert.match(refused, /keeps it with keep_the_package_contract/)
+    assert.match(refused, new RegExp(`${PACKAGE} has no contract recorded, so none of its work runs until one is kept`))
+    assert.match(refused, new RegExp(`keeps it with ${KEEP_THE_CONTRACT_TOOL.name}`))
   }
   // The four that end a package still run, by the host's own name for each, and so does the tool that keeps a contract.
   for (const own_name of [WRITE_MY_HANDOVER_TOOL, SAY_TO_THE_CREW, REPORT_WHERE_THE_WORK_STANDS, PARK_A_MEMBER, KEEP_THE_CONTRACT_TOOL.name]) {

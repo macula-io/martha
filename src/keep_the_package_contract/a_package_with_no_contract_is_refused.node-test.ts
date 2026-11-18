@@ -119,7 +119,7 @@ for (const [shape, solo] of [[SOLO_MODE, true], ['team', false]] as const) {
     ] as const) {
       const said = theRefusalIn(await theAnswer(place, tool, input, 'session-1'))
       assert.match(said, /has no contract recorded, so none of its work runs until one is kept/)
-      assert.match(said, /keeps it with keep_the_package_contract/)
+      assert.match(said, new RegExp(`keeps it with ${KEEP_THE_CONTRACT_TOOL.name}`))
     }
 
     // The four that end a package, and the tool that records a contract, still run — under the names this host uses.
