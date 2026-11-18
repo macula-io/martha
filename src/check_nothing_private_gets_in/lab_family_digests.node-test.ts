@@ -22,14 +22,14 @@ import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_
 import { privateHitsIn, withoutLabNames, type Rules } from './check_nothing_private_gets_in.ts'
 import { DECLARED } from './declared.ts'
 import { FAMILY_MAX, KEY_BYTES, keptFileText, labFamilyDigestsOf, labNamesIn, type LabFamilyDigests } from './lab_family_digests.ts'
-import { keepLabFamilies } from './keep_lab_families.ts'
+import { keepLabFamilies } from '../keep_the_lab_families/keep_the_lab_families.ts'
 import { PUBLIC_TEXT_PATTERNS } from './public_text.ts'
 import { labFamiliesFileIn, labFamilyDigestsFrom } from './read_lab_family_digests.ts'
 
 const WITHHELD = 'a lab machine name (value withheld)'
 const POSTED_TEXT_CHECK = join(import.meta.dirname, '..', 'check_posted_text_carries_nothing_private', 'main.ts')
 const TREE_CHECK = join(import.meta.dirname, 'main.ts')
-const KEEP = join(import.meta.dirname, 'keep_lab_families_main.ts')
+const KEEP = join(import.meta.dirname, '..', 'keep_the_lab_families', 'main.ts')
 const READER = join(import.meta.dirname, 'read_lab_family_digests.ts')
 
 const scratch = (t: TestContext): string => {
@@ -46,7 +46,7 @@ const digestsFor = (families: readonly string[]): LabFamilyDigests => labFamilyD
 /** A home and a config folder under scratch, with the families kept there by the owner's own act, or none. */
 const aMachine = (t: TestContext, families: readonly string[] | undefined) => {
   const root = scratch(t)
-  const env = { HOME: join(root, 'home'), XDG_CONFIG_HOME: join(root, 'config') }
+  const env = { HOME: join(root, 'home'), XDG_CONFIG_HOME: join(root, 'xdg-config') }
   mkdirSync(env.HOME)
   if (families !== undefined) {
     const kept = keepLabFamilies(env, JSON.stringify(families), randomBytes(KEY_BYTES))
@@ -333,7 +333,7 @@ test('the owner\'s act refuses where there is no terminal, and keeps nothing (ma
 })
 
 test('the file is found under XDG_CONFIG_HOME when it is absolute, else under HOME\'s .config, else nowhere (martha#731)', () => {
-  const config = join(tmpdir(), 'config')
+  const config = join(tmpdir(), 'xdg-config')
   const home = join(tmpdir(), 'home')
   const under = (folder: string) => join(folder, 'martha', 'lab_families.json')
   assert.equal(labFamiliesFileIn({ XDG_CONFIG_HOME: config, HOME: home }), under(config))

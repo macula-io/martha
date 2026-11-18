@@ -2,17 +2,17 @@
 //
 // The families come from MARTHA_LAB_HOSTS when the owner's own shell has it set,
 // else they are asked for on the terminal, with what is typed not shown. Exit 0
-// kept, 1 refused. What it does: ./keep_lab_families.ts.
+// kept, 1 refused. What it does: ./keep_the_lab_families.ts.
 
 import { randomBytes } from 'node:crypto'
 import { createInterface } from 'node:readline/promises'
 import { Writable } from 'node:stream'
 import { isatty } from 'node:tty'
 
-import { KEY_BYTES } from './lab_family_digests.ts'
-import { keepLabFamilies } from './keep_lab_families.ts'
+import { KEY_BYTES } from '../check_nothing_private_gets_in/lab_family_digests.ts'
+import { keepLabFamilies } from './keep_the_lab_families.ts'
 
-const NAME = 'keep_lab_families'
+const NAME = 'keep_the_lab_families'
 
 /** Why the act is refused where no owner is at the keyboard. */
 const NO_TERMINAL =
