@@ -53,6 +53,7 @@
     "hostAdapters": [
       "src/answer_the_relay",
       "src/approve_a_checkouts_config",
+      "src/ask_git_what_a_member_is_about_to_change",
       "src/ask_the_host_what_it_loads",
       "src/claude_code_host",
       "src/claude_code_relay",
@@ -131,7 +132,8 @@
       "src/serve_the_relay_to_a_launch": 244,
       "src/start_a_member": 222,
       "src/start_the_member_on_the_owners_terminal": 86,
-      "src/sweep_leftover_launch_directories": 153
+      "src/sweep_leftover_launch_directories": 153,
+      "src/ask_git_what_a_member_is_about_to_change": 85
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",

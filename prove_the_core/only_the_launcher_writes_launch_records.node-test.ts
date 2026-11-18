@@ -41,6 +41,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
   assert.deepEqual(declaredHostGlue(repository, 'hostAdapters'), [
     'answer_the_relay',
     'approve_a_checkouts_config',
+    'ask_git_what_a_member_is_about_to_change',
     'ask_the_host_what_it_loads',
     'claude_code_host',
     'claude_code_relay',
