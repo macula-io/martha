@@ -44,6 +44,19 @@ export function sliceCeilingsOf(manifest: Manifest): Readonly<Record<string, num
   return manifest.martha?.sliceCeilings ?? {}
 }
 
+/**
+ * Where the top-level folders of code no ceiling walks stand, each with its reason (martha#736). An exclusion is for a
+ * folder that is not code to be read at all, never for one that is too big: a size argument is the decision a ceiling
+ * exists to surface. The check requires a reason and fails an exclusion naming no folder it would judge; whether the
+ * reason is about size is the review's to read.
+ */
+export const CEILING_EXCLUSIONS_NAME = 'martha.ceilingExclusions'
+
+/** The top-level folders the ceiling check does not walk, each with its reason, as package.json holds them. */
+export function ceilingExclusionsOf(manifest: Manifest): Readonly<Record<string, string>> {
+  return manifest.martha?.ceilingExclusions ?? {}
+}
+
 /** The part of package.json this reads and writes. */
 interface WithMaps {
   readonly martha?: Readonly<Record<string, unknown>>

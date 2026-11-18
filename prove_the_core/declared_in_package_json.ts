@@ -30,6 +30,8 @@ export interface Manifest {
     readonly sliceCap?: number
     /** The core slices measured above the cap, each at its own ceiling (martha#415). */
     readonly sliceCeilings?: Readonly<Record<string, number>>
+    /** The top-level folders of code no ceiling walks, each with the reason it is not code to be read (martha#736). */
+    readonly ceilingExclusions?: Readonly<Record<string, string>>
     /** The directories only one program loads, each mapped to that program's directory, both as <core>/<directory> (martha#443). */
     readonly programParts?: Readonly<Record<string, string>>
     readonly packageImports?: Readonly<Record<string, string>>

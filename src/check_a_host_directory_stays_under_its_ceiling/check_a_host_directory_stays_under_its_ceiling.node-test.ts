@@ -1,4 +1,4 @@
-// The ceiling bites (martha#322), both ways (martha#341).
+// The ceiling bites (martha#322), both ways (martha#341), and outside src too (martha#736).
 //
 // A host directory's ceiling is only worth having if it fails a directory that
 // grew by one line of code, and stays quiet for what is not code. These plants
@@ -9,6 +9,7 @@
 // that only exercised a helper would prove neither.
 
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -22,6 +23,7 @@ import { describe, RECORD_COMMAND } from './check_a_host_directory_stays_under_i
 import { judgeTheTree } from './judge_the_tree.ts'
 import { withLoweredCeilings, withLoweredSliceCeilings } from './record_the_ceilings.ts'
 import { describeASlice } from './the_core_slices_under_the_cap.ts'
+import { describeATopLevelUnit } from './the_top_level_units_under_the_cap.ts'
 
 const plantedPackageJson = theManifestOfAPlantedTree
 
@@ -242,4 +244,76 @@ test('#522: growth only in a coincidence file keeps a host directory and a core 
       '  an adapter composes slices of the core; a decision inside it belongs in a slice',
   ])
   assert.deepEqual(await sliceFindingsIn(elsewhere), [`src/big: 4 lines of code, ceiling 3 (martha.sliceCeilings)\n${MOVE_IT}`])
+})
+
+// --- #736: every unit outside src under the same cap, with no ceiling to excuse one --------------------------------
+
+/** What a red run would print over the tree about the code outside src. */
+const topLevelFindingsIn = async (root: string): Promise<string[]> => (await judgeTheTree(root)).top_level_findings.map(describeATopLevelUnit)
+
+const SPLIT_IT = '  split the folder so each part holds one decision; outside src no ceiling may stand above the cap'
+
+test('#736: a top-level folder of code is walked as src is, and a unit one line over the cap fails naming it', async (t) => {
+  const at = craft(t, { slice_cap: 2, files: { 'a_top_dir/a.ts': TWO_LINES + NO_CODE, 'a_top_dir/part/p.ts': TWO_LINES } })
+  assert.deepEqual(await topLevelFindingsIn(at), [], 'each unit at the cap passes')
+  assert.deepEqual(Object.keys((await judgeTheTree(at)).top_level.units).sort(), [
+    '. (its own files)',
+    'a_top_dir (its own files)',
+    'a_top_dir/part',
+  ])
+
+  const over = craft(t, {
+    slice_cap: 2,
+    files: { 'a_top_dir/a.ts': THREE_LINES, 'a_top_dir/part/deeper/p.ts': THREE_LINES, 'a_top_dir/node_modules/n.ts': THREE_LINES },
+  })
+  assert.deepEqual(await topLevelFindingsIn(over), [
+    `a_top_dir (its own files): 3 lines of code, over the cap of 2 (martha.sliceCap)\n${SPLIT_IT}`,
+    `a_top_dir/part: 3 lines of code, over the cap of 2 (martha.sliceCap)\n${SPLIT_IT}`,
+  ], 'a unit is counted at any depth, and node_modules inside a folder is no unit, by the rule the code roots keep')
+})
+
+test('#736: the files directly in the repository are a unit too, never skipped', async (t) => {
+  const ROOT = '. (its own files)'
+  // The linter's own config sits at every planted root and is counted as the linter reads it, so the plant is measured
+  // without the file first, and the file's three lines are what the run must add.
+  const before = (await judgeTheTree(craft(t, {}))).top_level.units[ROOT] ?? 0
+  assert.deepEqual(await topLevelFindingsIn(craft(t, { slice_cap: before + 2, files: { 'a_root_file.ts': THREE_LINES } })), [
+    `${ROOT}: ${before + 3} lines of code, over the cap of ${before + 2} (martha.sliceCap)\n${SPLIT_IT}`,
+  ])
+})
+
+test('#736: a martha.sliceCeilings entry outside src fails by name, once, and excuses nothing', async (t) => {
+  const root = craft(t, { slice_cap: 2, slice_ceilings: { a_top_dir: 3 }, files: { 'a_top_dir/a.ts': THREE_LINES } })
+  assert.deepEqual(await topLevelFindingsIn(root), [
+    `a_top_dir (its own files): 3 lines of code, over the cap of 2 (martha.sliceCap)\n${SPLIT_IT}`,
+    'martha.sliceCeilings holds a_top_dir at 3, a ceiling outside the core: outside src every unit stays under martha.sliceCap',
+  ])
+  assert.deepEqual(await sliceFindingsIn(root), [], 'the core slices do not say it a second time as an exception no slice has')
+})
+
+test('#736: an exclusion with its reason stands a folder aside; one with no reason, or no folder to judge, fails', async (t) => {
+  const files = { 'a_top_dir/a.ts': THREE_LINES, 'a_top_dir/part/p.ts': THREE_LINES, 'docs/notes.md': '# notes\n' }
+  const excluded = craft(t, { slice_cap: 2, ceiling_exclusions: { a_top_dir: 'recorded host output kept as it was captured' }, files })
+  assert.deepEqual(await topLevelFindingsIn(excluded), [])
+  assert.deepEqual(Object.keys((await judgeTheTree(excluded)).top_level.units), ['. (its own files)'], 'nothing of it is counted')
+
+  const wrong = craft(t, { slice_cap: 2, ceiling_exclusions: { a_top_dir: ' ', gone: 'it moved', docs: 'prose', src: 'the core' }, files })
+  assert.deepEqual(await topLevelFindingsIn(wrong), [
+    'martha.ceilingExclusions excludes a_top_dir with no reason: say why it is not code to be read',
+    'martha.ceilingExclusions names gone, which is no top-level folder of code the check would judge',
+    'martha.ceilingExclusions names docs, which is no top-level folder of code the check would judge',
+    'martha.ceilingExclusions names src, which is no top-level folder of code the check would judge',
+  ])
+})
+
+test('#736: --record writes no entry for a unit outside src, even one over the cap', async (t) => {
+  const root = craft(t, {
+    slice_cap: 2,
+    slice_ceilings: { 'src/big': 4 },
+    files: { 'src/big/b.ts': THREE_LINES, 'a_top_dir/a.ts': THREE_LINES.repeat(2) },
+  })
+  const recorded = spawnSync(process.execPath, [join(import.meta.dirname, 'main.ts'), '--repository', root, '--record'], { encoding: 'utf8' })
+  assert.equal(recorded.status, 0, recorded.stderr)
+  const after = JSON.parse(readFileSync(manifestPathOf(root), 'utf8')) as { martha: { sliceCeilings: Record<string, number> } }
+  assert.deepEqual(after.martha.sliceCeilings, { 'src/big': 3 }, 'the core slice was lowered, and nothing outside src was written')
 })

@@ -15,6 +15,8 @@ export interface Planted {
   /** The cap on every core slice (martha#415): A_PLANTED_SLICE_CAP when left out, and none at all when null. */
   readonly slice_cap?: number | null
   readonly slice_ceilings?: Readonly<Record<string, number>>
+  /** The top-level folders no ceiling walks, each with its reason (martha#736). */
+  readonly ceiling_exclusions?: Readonly<Record<string, string>>
   /** The host contract's directory, as package.json declares it in martha.hostContract. */
   readonly host_contract?: string
 }
@@ -37,6 +39,7 @@ export const theManifestOfAPlantedTree = (planted: Planted): string =>
         hostCeilings: planted.ceilings ?? {},
         ...(planted.slice_cap === null ? {} : { sliceCap: planted.slice_cap ?? A_PLANTED_SLICE_CAP }),
         ...(planted.slice_ceilings === undefined ? {} : { sliceCeilings: planted.slice_ceilings }),
+        ...(planted.ceiling_exclusions === undefined ? {} : { ceilingExclusions: planted.ceiling_exclusions }),
       },
     },
     null,

@@ -21,17 +21,24 @@
 // --record also lowers those, and takes out an exception whose slice is now at or
 // under the cap.
 //
+// Every unit outside src (each folder directly under a top-level folder of code, the files directly in one, and the
+// files directly in the repository) is held to the same cap, and nothing excuses one over it: no ceiling stands outside
+// the core. A folder that is not code to be read stands in martha.ceilingExclusions with its reason (martha#736).
+// --measure prints those units too; --record never writes one, since there is no ceiling outside the core to lower.
+//
 // Exit 0 every directory at its ceiling and every slice within what it may hold,
 // 1 a directory over its ceiling, a ceiling above its directory, a declared
 // directory with no ceiling, a ceiling no list declares a directory for, no cap,
 // or a slice over the cap or its own ceiling, under it, or an exception that is
-// stale, 2 the check could not be made. It never passes because it could not look.
+// stale, a unit outside src over the cap, a ceiling outside the core, or an exclusion with no reason or no
+// folder, 2 the check could not be made. It never passes because it could not look.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 
 import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
 import { describe } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { describeASlice } from './the_core_slices_under_the_cap.ts'
+import { describeATopLevelUnit } from './the_top_level_units_under_the_cap.ts'
 import { judgeTheTree, type Judged } from './judge_the_tree.ts'
 import { withLoweredCeilings, withLoweredSliceCeilings } from './record_the_ceilings.ts'
 
@@ -54,6 +61,7 @@ const measure = (judged: Judged): number => {
     console.log(`${String(judged.code[directory] ?? 0).padStart(6)}  ${directory}  (${list})`)
   }
   for (const [slice, code] of Object.entries(judged.slices)) console.log(`${String(code).padStart(6)}  ${slice}  (core slice)`)
+  for (const [unit, code] of Object.entries(judged.top_level.units)) console.log(`${String(code).padStart(6)}  ${unit}  (outside the core)`)
   return 0
 }
 
@@ -80,13 +88,17 @@ const record = (repository: string, judged: Judged): number => {
 
 /** The verdict over the tree, in the words a red run prints. */
 const judge = (judged: Judged): number => {
-  const said = [...judged.findings.map(describe), ...judged.slice_findings.map(describeASlice)]
+  const said = [
+    ...judged.findings.map(describe),
+    ...judged.slice_findings.map(describeASlice),
+    ...judged.top_level_findings.map(describeATopLevelUnit),
+  ]
   for (const line of said) console.error(line)
   if (said.length > 0) {
     console.error(`${NAME}: ${said.length} finding(s)`)
     return 1
   }
-  console.log(`${NAME}: ${judged.declared.length} host director(ies) at their ceilings, ${Object.keys(judged.slices).length} core slice(s) within what they may hold`)
+  console.log(`${NAME}: ${judged.declared.length} host director(ies) at their ceilings, ${Object.keys(judged.slices).length} core slice(s) within what they may hold, ${Object.keys(judged.top_level.units).length} unit(s) outside the core under the cap`)
   return 0
 }
 
