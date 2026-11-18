@@ -4,12 +4,9 @@
 // environment may name a crew's state: the state home a root sits in, a path inside the root, or a session id the crew
 // has recorded. A test process holding a real member's state must not pass it on to what it launches, so the member is
 // handed none of it: the rule is the slice's (../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of),
-// and what this composes for it is what a launch reads of this machine — where the root the launching process names is,
+// and what this composes for it is what only a host adapter can read — where the root the launching process names is,
 // how a home's state root is found, and which sessions the crew has recorded: one append-only stream per session under
 // its rows place, named and decoded by the row store's own names (../row_streams_directory).
-//
-// It is a slice and not the adapter's own: it decides what a member's environment is and hands the answer back, while
-// ../launch_a_claude_code_member is left to compose it with the launch it is making (martha#322's ceiling says so).
 //
 // The environment is built in this order: what it inherits without the crew's state, the gate's switches, the member's
 // own config folder, and the launcher's own state home last, so neither an inherited value nor a switch can point a

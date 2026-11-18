@@ -7,7 +7,7 @@
 //
 // This is the decision alone, so it is pure: a slice reads no machine. Whoever builds a member's environment resolves
 // the places a crew's state sits in and the session ids the crew has recorded, and hands them here
-// (../give_a_member_its_environment/the_environment_a_member_is_given.ts does both).
+// (../launch_a_claude_code_member/the_environment_a_member_is_given.ts does both).
 
 import { dirname, sep } from 'node:path'
 

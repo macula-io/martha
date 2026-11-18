@@ -52,7 +52,7 @@
 //      switches and the relay's copy. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
 //      environment is `theEnvironmentAMemberIsGiven(inherited, switches, crew, config, host)`
-//      (../give_a_member_its_environment/the_environment_a_member_is_given.ts): what it inherits without the crew's
+//      (./the_environment_a_member_is_given.ts): what it inherits without the crew's
 //      state, the switches, the member's own config folder and the launcher's own
 //      state home, then the settings that keep a checkout from running its hooks,
 //      install scripts and .envrc through the member's own commands (martha#24),
@@ -170,7 +170,8 @@ import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../gu
 import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
-import { theEnvironmentAMemberIsGiven } from '../give_a_member_its_environment/the_environment_a_member_is_given.ts'
+import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
+import { theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -604,24 +605,6 @@ function sessionStartDeadline(launch: ClaudeCodeMemberLaunch, hostEnv: Readonly<
   }
   const ms = launch.session_start_deadline_ms ?? SESSION_START_DEADLINE_MS
   return { ms, why: `its relay did not report the session's start within ${ms / 1000} s, so the host is not running Martha's gates` }
-}
-
-/**
- * The backstop (#104): a host that runs the relay reports the session's start;
- * a member whose relay has not, the deadline's ms after it was armed, is stopped.
- */
-function relayBackstop(deadline: { readonly ms: number; readonly why: string }, stop: (why: string) => void): { reported(): void; arm(): void; disarm(): void } {
-  let reported = false
-  let unheard: NodeJS.Timeout | undefined
-  const disarm = (): void => clearTimeout(unheard)
-  return {
-    reported: () => ((reported = true), disarm()),
-    arm: () => {
-      if (reported) return
-      unheard = setTimeout(() => stop(deadline.why), deadline.ms)
-    },
-    disarm,
-  }
 }
 
 /**
