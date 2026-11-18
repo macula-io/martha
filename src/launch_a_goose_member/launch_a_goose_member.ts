@@ -64,7 +64,7 @@ import { getuid } from 'node:process'
 import { killGroup } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import type { RecordedEngine } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { theConfigOfALaunch, type TheModelALaunchRuns } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
-import { prepareLaunch, theTextAStartLoads, type ATextAStartLoads, type PreparedLaunch, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { prepareLaunch, theRecordOfTheTextAStartLoads, type ATextAStartLoads, type PreparedLaunch, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { realOrResolved } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -281,6 +281,9 @@ export function theConfigFileOf(root: string): string {
   return join(root, THE_CONFIG_FOLDER, THE_CONFIG_FILE)
 }
 
+/** One launch's refusal, in the words every refusal of this launcher is given in. */
+const refused = (why: string): { readonly refusal: string } => ({ refusal: `The member is not started: ${why}` })
+
 /** One launch of a Goose member, as it runs. */
 export interface AGooseLaunch {
   readonly places: ThePlacesOfALaunch
@@ -328,7 +331,6 @@ export interface AGooseLaunchAsked {
  * behind and starts nothing.
  */
 export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AGooseLaunch | { readonly refusal: string }> {
-  const refused = (why: string): { readonly refusal: string } => ({ refusal: `The member is not started: ${why}` })
   if (asked.place.host !== asked.facts.engine_name) {
     return refused(`${asked.place.host} is not the engine this launcher starts (${asked.facts.engine_name}).`)
   }
@@ -342,7 +344,7 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
   if (!prepared.allow) return { refusal: prepared.refusal }
   const made = theLaunchMadeBy(asked, prepared)
   if ('refusal' in made) return made
-  const { places, config_at } = made
+  const { places, config_at, text_a_start_loads } = made
 
   const started = await startTheEngine(asked.facts, asked.binary, places, theEnvironmentOfALaunch(asked.facts, places))
   if ('refusal' in started) {
@@ -359,13 +361,17 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
     removeTheTree(prepared.snapshot_dir)
     return { stopped, permissions: thePermissionStoreIsStillEmpty(places.root) }
   }
-  return { places, config_at, text_a_start_loads: theTextAStartLoads(asked.place, thisMachine), engine: started, end }
+  return { places, config_at, text_a_start_loads, engine: started, end }
 }
 
-/** What a launch makes once the gate has decided: its places and the config root written inside them, or the refusal. */
-function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly places: ThePlacesOfALaunch; readonly config_at: string } | { readonly refusal: string } {
-  const refused = (why: string): { readonly refusal: string } => ({ refusal: `The member is not started: ${why}` })
-  const leaveNothingBehind = (why: string): { readonly refusal: string } => {
+/**
+ * What a launch makes once the gate has decided: the checkout's text the engine will attach, read before anything of
+ * the launch's is made and so before the engine starts, its places and the config root written inside them, or the
+ * refusal. A read that fails is a refusal like any other: nothing of the launch's is left, and no engine starts.
+ */
+function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly places: ThePlacesOfALaunch; readonly config_at: string; readonly text_a_start_loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
+  const leaveNothingBehind = (why: string, folders: readonly string[] = []): { readonly refusal: string } => {
+    for (const folder of folders) removeTheTree(folder)
     removeTheTree(prepared.snapshot_dir)
     return refused(why)
   }
@@ -374,28 +380,26 @@ function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLau
   } catch {
     return leaveNothingBehind(`${asked.binary} is not a program this user may run.`)
   }
+  const recorded = theRecordOfTheTextAStartLoads(asked.place, thisMachine)
+  if ('refusal' in recorded) return leaveNothingBehind(recorded.refusal)
   const made = thePlacesOfALaunch(asked.launch_root, realOrResolved(thisMachine, asked.place.launch_dir))
   if ('refusal' in made) return leaveNothingBehind(made.refusal)
   const { places } = made
-  const nothingOfItsOwn = (why: string): { readonly refusal: string } => {
-    for (const folder of [places.root, places.home]) removeTheTree(folder)
-    return leaveNothingBehind(why)
-  }
 
   let config: string
   try {
     config = theConfigOfALaunch(asked.facts, asked.model)
   } catch (error) {
-    return nothingOfItsOwn(error instanceof Error ? error.message : String(error))
+    return leaveNothingBehind(error instanceof Error ? error.message : String(error), [places.root, places.home])
   }
   const config_at = theConfigFileOf(places.root)
   try {
     mkdirSync(join(places.root, THE_CONFIG_FOLDER), { mode: A_LAUNCHS_FOLDERS_MODE })
     writeFileSync(config_at, config, { mode: FILE_MODE, flag: 'wx' })
   } catch (error) {
-    return nothingOfItsOwn(`the config root could not be written at ${config_at} (${error instanceof Error ? error.message : String(error)})`)
+    return leaveNothingBehind(`the config root could not be written at ${config_at} (${error instanceof Error ? error.message : String(error)})`, [places.root, places.home])
   }
-  return { places, config_at }
+  return { places, config_at, text_a_start_loads: recorded.loads }
 }
 
 /** Whether `at` is a real directory: a link is not one, and neither is a path that is not there. */

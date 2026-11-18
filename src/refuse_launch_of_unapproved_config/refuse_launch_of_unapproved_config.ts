@@ -178,6 +178,19 @@ export function theTextAStartLoads({ launch_dir }: LaunchPlace, machine: LaunchH
 }
 
 /**
+ * The record a launch makes of the checkout's own text, or the refusal when a directory on the way could not be read:
+ * a record that skipped what it could not read would leave text the engine attaches to its prompt unrecorded, so a
+ * read that fails is a launch that does not start (martha#541).
+ */
+export function theRecordOfTheTextAStartLoads(place: LaunchPlace, machine: LaunchHost): { readonly loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
+  try {
+    return { loads: theTextAStartLoads(place, machine) }
+  } catch (error) {
+    return { refusal: `the checkout's hint files could not be read (${error instanceof Error ? error.message : String(error)})` }
+  }
+}
+
+/**
  * The directories the engine reads a checkout's hints from, root first: the working directory and each directory
  * above it up to the first holding `.git`, as the engine walks them, or the working directory alone when nothing
  * above holds one (the engine's own `find_git_root` returning none).
