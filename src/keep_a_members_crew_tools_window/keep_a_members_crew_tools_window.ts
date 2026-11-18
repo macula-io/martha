@@ -17,6 +17,7 @@
 // and Martha's own counts. No string the transcript carries is ever written here.
 
 import type { CrewPlace, Refused, ServedToolsCause, ServedToolsHeld } from '../host_contract/host_contract.ts'
+import type { CrewToolsOnARow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { readTheGitCallsInAShellLine } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 
 /** The place in the crew's store that keeps each member's window, one file per member. */
@@ -58,8 +59,6 @@ export interface ACrewToolsWindow {
   readonly closed_by?: ClosedBy
 }
 
-/** What a window says on a member's row: the tools held, lost since a time, or nothing known. */
-export type CrewToolsOnARow = { readonly state: 'held' } | { readonly state: 'unknown' } | { readonly state: 'lost'; readonly since: number }
 
 /** What one fact does to a member's window. */
 export type AWindowStep =

@@ -7,7 +7,7 @@
 // writer records it — so a session that dies leaves a row that says so within one interval instead of a row
 // claiming work it is not doing.
 
-import { BEAT_INTERVAL_MS, IDLE, OFFLINE, OFFLINE_AFTER_MS, STATES, type DashboardRow, type HostFacts, type Progress, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, IDLE, OFFLINE, OFFLINE_AFTER_MS, STATES, type CrewToolsOnARow, type DashboardRow, type HostFacts, type Progress, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 
 /** One member's row as a reader is shown it. */
@@ -27,6 +27,19 @@ export interface CrewRow {
   readonly quiet_for: number | null
   /** When the member last reported its progress (martha#319); null when it never reported. */
   readonly reported_at: number | null
+  /** Whether it holds its crew tools (martha#658); unknown for a row that never said, never held. */
+  readonly crew_tools: CrewToolsOnARow
+}
+
+/** What a row that says nothing of the crew tools reads as: nothing known. */
+const NOTHING_KNOWN: CrewToolsOnARow = { state: 'unknown' }
+
+/**
+ * The flag a loss raises (martha#658), in the row's own time words: the strip and the free list both say it beside the
+ * state, so a member working without its tools reads as working, crew tools lost.
+ */
+export function theCrewToolsFlag(row: Pick<CrewRow, 'crew_tools'>): string | null {
+  return row.crew_tools.state === 'lost' ? `crew tools lost since ${new Date(row.crew_tools.since).toISOString().slice(11, 16)}Z` : null
 }
 
 /** What the pane's header counts. */
@@ -66,6 +79,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
       at: null,
       quiet_for: null,
       reported_at: null,
+      crew_tools: NOTHING_KNOWN,
     }
   }
   const quiet_for = Math.max(0, now - beat.at)
@@ -86,6 +100,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
     at: beat.at,
     quiet_for,
     reported_at: beat.reported_at ?? null,
+    crew_tools: beat.crew_tools ?? NOTHING_KNOWN,
   }
 }
 
@@ -126,7 +141,8 @@ export function thePaneLine(row: CrewRow): string {
   const waits = row.waits === null ? '' : ` · waits on ${row.waits.on} for ${row.waits.for}`
   const needs = row.needs === '' ? '' : ` · needs you: ${row.needs}`
   const holds = row.holds === '' ? '' : ` · ${row.holds}`
-  return `${row.member}: ${row.state} · ${row.task} ${bar}${holds}${waits}${needs}`
+  const tools = theCrewToolsFlag(row)
+  return `${row.member}: ${row.state}${tools === null ? '' : `, ${tools}`} · ${row.task} ${bar}${holds}${waits}${needs}`
 }
 
 /**

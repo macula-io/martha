@@ -10,6 +10,7 @@ import { test } from 'node:test'
 import {
   beatAfter,
   BEAT_INTERVAL_MS,
+  CREW_TOOLS_FIELD,
   isDashboardRow,
   memberOfRowFileName,
   OFFLINE_AFTER_MS,
@@ -80,4 +81,11 @@ test('r=2 R3: the moment a report was taken is the shape of a position, or the r
 test('the beat interval and its offline threshold are named once, and the threshold is a whole multiple of it (test 3, the constants)', () => {
   assert.ok(OFFLINE_AFTER_MS > BEAT_INTERVAL_MS, 'a row must miss more than one beat to read offline')
   assert.equal(OFFLINE_AFTER_MS % BEAT_INTERVAL_MS, 0, 'the threshold counts beats')
+})
+
+test('a row may say held, unknown or lost since a time of its crew tools, and says nothing else there (martha#658)', () => {
+  for (const crew_tools of [{ state: 'held' }, { state: 'unknown' }, { state: 'lost', since: 5 }] as const) assert.equal(isDashboardRow(beat('Vesta', 1, { crew_tools })), true, crew_tools.state)
+  for (const wrong of [{ state: 'lost' }, { state: 'lost', since: -1 }, { state: 'withdrawn', at: 1 }, 'lost', null]) {
+    assert.equal(isDashboardRow({ ...beat('Vesta', 1), [CREW_TOOLS_FIELD]: wrong }), false, JSON.stringify(wrong))
+  }
 })

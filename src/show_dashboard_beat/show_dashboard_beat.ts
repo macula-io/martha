@@ -98,6 +98,16 @@ export interface AnOwnerDialogOnARow {
  */
 export const SPEND_FIELD = 'spend'
 
+/**
+ * The row's own field for whether the member holds the crew tools its launch served (martha#658): a spelling of the
+ * row, and nothing else. When a window opens and closes is the window slice's business
+ * (../keep_a_members_crew_tools_window); the row only carries what a reader flags.
+ */
+export const CREW_TOOLS_FIELD = 'crew_tools'
+
+/** What the row says of the member's crew tools: held, lost since a time, or nothing known. */
+export type CrewToolsOnARow = { readonly state: 'held' } | { readonly state: 'unknown' } | { readonly state: 'lost'; readonly since: number }
+
 /** One unit of a package's budget, as the row carries it: what the package spent, and what its contract allows. */
 export interface AUnitOnARow {
   readonly unit: string
@@ -145,6 +155,11 @@ export interface DashboardRow {
    * last turn — which is where a member nearing its wall is seen.
    */
   readonly spend?: readonly AUnitOnARow[] | undefined
+  /**
+   * Whether the member holds its crew tools (martha#658): absent on a row written before the field existed, which a
+   * reader takes as nothing known, never as held.
+   */
+  readonly crew_tools?: CrewToolsOnARow
 }
 
 /** The file one member's row is kept in: never a path, and never a dot a person or git could steer with. */
@@ -272,12 +287,17 @@ export function isDashboardRow(value: unknown): value is DashboardRow {
 /**
  * The fields a row carries only when it has something to say, each optional and never demanded of a row written
  * before it existed: the refresh flow the member is in (martha#255), the dialogs the host has open for the owner
- * (martha#313), and what the member's package has spent (martha#513, slice 3).
+ * (martha#313), what the member's package has spent (martha#513, slice 3), and its crew tools (martha#658).
  */
 const isTheOptionalFields = (row: Record<string, unknown>): boolean =>
   (row[REFRESH_FIELD] === undefined || row[REFRESH_FIELD] === null || isARefreshsPhase(row[REFRESH_FIELD])) &&
   (row[OWNER_DIALOGS_FIELD] === undefined || isOwnerDialogs(row[OWNER_DIALOGS_FIELD])) &&
-  (row[SPEND_FIELD] === undefined || isBudgetUnits(row[SPEND_FIELD]))
+  (row[SPEND_FIELD] === undefined || isBudgetUnits(row[SPEND_FIELD])) &&
+  (row[CREW_TOOLS_FIELD] === undefined || isCrewTools(row[CREW_TOOLS_FIELD]))
+
+/** Whether a field is what a row says of the crew tools: held, unknown, or lost since a time. */
+const isCrewTools = (value: unknown): boolean =>
+  isRecord(value) && (value['state'] === 'held' || value['state'] === 'unknown' || (value['state'] === 'lost' && isPosition(value['since'])))
 
 /** Whether a field is what a package has spent, as a row carries it: one entry per unit, each a count and its limit. */
 const isBudgetUnits = (value: unknown): boolean =>
