@@ -48,6 +48,12 @@ export interface EngineFacts {
   readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string }
   /** The model names the delegate tool takes: closed when its schema lists them, open when it takes any text (#541 package 6). */
   readonly subagent_models: ModelVocabulary
+  /**
+   * The files the engine reads into every prompt from the folder it starts in (martha#785): its own hints file, the
+   * instruction file, the setting whose value replaces the list, and the list it loads when that setting is unset, in
+   * its order. A launch records exactly these, so none is typed by hand.
+   */
+  readonly hint_files: { readonly setting: string; readonly goose_hints: string; readonly agents_md: string; readonly when_unset: readonly string[] }
 }
 
 /** Reads one checkout of the engine: a file's text, or undefined when there is none; a directory's entries, or []. */
@@ -69,7 +75,11 @@ export const ENGINE_PLACES = {
   acp_server: 'crates/goose/src/acp/server.rs',
   openai_provider: 'crates/goose-providers/src/openai.rs',
   delegate_tool: 'crates/goose/src/agents/platform_extensions/summon.rs',
+  hint_files: 'crates/goose/src/hints/load_hints.rs',
 } as const
+
+/** The constants the engine declares its two hint file names as, in the file that reads them (martha#785). */
+export const HINT_FILE_CONSTANTS = { goose_hints: 'GOOSE_HINTS_FILENAME', agents_md: 'AGENTS_MD_FILENAME' } as const
 
 /** The crate root the platform extension map's `crate::` paths start from. */
 export const GOOSE_CRATE = 'crates/goose/src'
