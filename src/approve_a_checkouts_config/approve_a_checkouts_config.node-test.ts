@@ -14,7 +14,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { openState, readApprovals, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
-import { soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { soloDeclaration } from '../declare_crew/declare_crew.ts'
 import { fingerprintOf, readLaunchState } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { approveConfig, NOT_A_TERMINAL, type OwnersTerminal } from './approve_a_checkouts_config.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -145,7 +145,7 @@ test('approving a config already approved keeps no second line', async (t) => {
  */
 test('#306 r=6: approve reads the crew declaration with the models the host runs, so a crew naming its reviewer model is approved', async (t) => {
   const place = placeFor(t, { '.mcp.json': SERVERS })
-  const declared = { ...soloDeclaration('Ada Owner'), house_rules: { review_model: CLAUDE_CODE_MODELS[0]! } }
+  const declared = { ...soloDeclaration('Ada Owner'), house_rules: { review_model: CLAUDE_CODE_MODELS.names[0]! } }
   const documents = { read: async () => JSON.stringify(declared) }
   const terminal = terminalAnswering('yes')
 

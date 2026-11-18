@@ -13,13 +13,20 @@
 // still removes the asks the owner ticked, because the owner often answers hours later.
 //
 // Who may take and settle is the declaration's table, answered as the owner's list answers it (martha#316) and never
-// from ../who_may_act's node ids: a solo crew has none. The act is OFFER_OWNER_ASKS, and both tools are gated alike.
+// from a node id: a solo crew has none. The act is OFFER_OWNER_ASKS, and both tools are gated alike.
 //
-// A settle is refused unless a menu closed in the session that took the batch after it took it. The launcher sees that,
-// because its relay answers every tool call the host made, the menu tool included; the model's own word that it showed
-// the owner a menu never counts. Which tool that is is the dialogs half's to name, once, in
-// ../say_what_the_host_is_asking, and this slice reads it from there. The launcher keeps those closings in memory
-// (menusTheLauncherKeeps), so a refresh forgets them and the next settle is refused rather than trusted.
+// A settle is refused unless a menu closed in the session that took the batch after it took it, and every id it names is
+// an option the owner picked in that menu, as the host's own answer reports it (martha#608, thePicksIn). The launcher
+// sees both, because its relay answers every tool call the host made, the menu tool included, and hands the crew the
+// call's posted input with the host's answer; the model's own word about what it showed or what was ticked never
+// counts. Which tool that is is the dialogs half's to name, once, in ../say_what_the_host_is_asking, and this slice reads
+// it from there. The launcher keeps those menus in memory (menusTheLauncherKeeps), so a refresh forgets them and the
+// next settle is refused rather than trusted.
+//
+// This closes a settle through the tool with ids the owner did not tick. It does not close a write that bypasses the
+// tool: members run as the owner's own OS user (the owner's ruling of 2026-11-18, #258 closed), so a process of theirs
+// can append to the stream, or speak to the relay's socket, itself. A speed bump that makes a faked yes awkward and
+// visible, not a boundary.
 //
 // Every ask is stamped with the member the launcher started, never with a name the ask's text chose, and its text is
 // capped and stripped of the characters that repaint a row: it reaches the session that offers it as a menu, which is a
@@ -94,13 +101,15 @@ export const LIST_ASKS_DESCRIPTION = 'List the asks waiting for the owner, oldes
 
 /** What `take_the_owners_asks` says it is for: one batch, one menu, and the window that puts it back. */
 export const TAKE_ASKS_DESCRIPTION =
-  "Take every ask waiting for the owner, oldest first, as one batch to offer in a single multi-select menu. Each ask's id " +
-  `goes into its menu option. A batch not settled within ${THE_WINDOW} puts its asks back in the queue.`
+  "Take every ask waiting for the owner, oldest first, as one batch to offer in a single multi-select menu. Each ask is " +
+  `one menu option, posted exactly as the answer gives it. A batch not settled within ${THE_WINDOW} puts its asks back in the queue.`
 
 /** What `settle_the_owners_asks` says it is for: the batch off, with what the owner ticked. */
 export const SETTLE_ASKS_DESCRIPTION =
-  "Take a batch off the owner's ask queue once the owner has answered it, with the ids they ticked. Refused unless a menu " +
-  `closed in this session since the batch was taken, and a settle after ${THE_WINDOW} still removes them.`
+  "Take a batch off the owner's ask queue once the owner has answered it, with the ids they ticked. Checked against the " +
+  "host's own answer to the last menu that closed in this session since the batch was taken: an id the owner did not pick " +
+  `there is refused. A settle after ${THE_WINDOW} still removes them. A speed bump, not a wall: a process running as the ` +
+  "owner's OS user can still write the queue's stream itself."
 
 /** One ask waiting for the owner. `id` is the position its row was written at, in the queue and in a menu. */
 export interface AnAsk {
@@ -418,9 +427,10 @@ function theBatchOffered(waiting: readonly AnAsk[], batch: number, skipped: read
   const one = waiting.length === 1
   return [
     `${String(waiting.length)} queued ${one ? 'ask' : 'asks'}, oldest first. Offer them to the owner as ONE multi-select menu, ` +
-      `at most 4 options a question and more questions in the same menu when there are more, with each ask's id in its option. ` +
-      `Then settle batch ${String(batch)} with the ids the owner ticked.`,
-    ...waiting.map(theLineOf),
+      `at most ${String(MENU_OPTIONS_MAX)} options a question and more questions in the same menu when there are more, each question's text its own. ` +
+      'Each ask is one option, posted exactly as given below: its label, and its description. ' +
+      `Then settle batch ${String(batch)} with the ids the owner ticked: a settle is checked against the host's own answer to that menu.`,
+    ...waiting.map((ask) => `${theLineOf(ask)}\n  label: ${JSON.stringify(theOptionOf(ask).label)}\n  description: ${JSON.stringify(theOptionOf(ask).description)}`),
     ...theSkipsOffered(skipped, members),
   ].join('\n')
 }
@@ -470,10 +480,12 @@ export async function settleTheAsks(
   const stored = await host.stores.rows.read(OWNER_ASKS_STREAM)
   const claim = theBatchACallNames(args, stored)
   if ('refused' in claim) return claim
-  const closed = noMenuClosed(settled.menus, claim.batch)
-  if (closed !== undefined) return { refused: closed }
+  const menu = theMenuTheSettleStandsOn(settled.menus, claim.batch)
+  if (typeof menu === 'string') return { refused: menu }
   const yes = theTickedIn(args, claim.batch)
   if (typeof yes === 'string') return { refused: yes }
+  const unticked = theTicksTheMenuDoesNotHold(yes, menu, theRowsIn(stored).asks)
+  if (unticked !== undefined) return { refused: unticked }
   const row = { kind: ASKS_SETTLED, batch: claim.batch.id, yes, at: host.clock.now(), by: settled.member }
   const kept = await appendAtLength(host, row, stored.length, '')
   if ('refused' in kept) return kept
@@ -481,42 +493,189 @@ export async function settleTheAsks(
   return { told: `Batch ${String(claim.batch.id)} settled: ${String(yes.length)} the owner ticked, ${String(back)} back in the queue.` }
 }
 
-/** Why no menu closed since the batch was taken, or undefined when one did: the one thing a settle stands on. */
-function noMenuClosed(menus: TheOwnersMenus | undefined, batch: ABatch): string | undefined {
+/**
+ * The options the owner picked in the menu a settle stands on, or why there is none to stand on: no menu closed in the
+ * session that took the batch since it took it, or the host's answer to it was not kept. Not kept refuses every settle,
+ * an empty yes included, because nothing then says what the owner answered (martha#608).
+ */
+function theMenuTheSettleStandsOn(menus: TheOwnersMenus | undefined, batch: ABatch): readonly APostedOption[] | string {
   if (menus === undefined) {
     return `settle_the_owners_asks is refused: this launch keeps no record of menus, so nothing shows batch ${String(batch.id)} was ever offered.`
   }
-  const closed = menus.closedAt(batch.session)
-  if (closed !== null && closed > batch.at) return undefined
+  const closed = menus.lastClosed(batch.session)
+  if (closed === null || closed.at <= batch.at) {
+    return (
+      `settle_the_owners_asks is refused: no menu has closed in the session that took batch ${String(batch.id)} since it was taken, so ` +
+      'nobody has offered it to the owner. Offer the batch as one menu, then settle it.'
+    )
+  }
+  if (closed.picked !== undefined) return closed.picked
   return (
-    `settle_the_owners_asks is refused: no menu has closed in the session that took batch ${String(batch.id)} since it was taken, so ` +
-    'nobody has offered it to the owner. Offer the batch as one menu, then settle it.'
+    `settle_the_owners_asks is refused: the host's answer to the last menu in the session that took batch ${String(batch.id)} was not kept, ` +
+    'so nothing says what the owner ticked. Offer the batch again as one menu, then settle it.'
   )
 }
 
-// --- what a menu's closing is ------------------------------------------------------
+/**
+ * Why the ids a settle names are not what the owner picked, or undefined when every one is (martha#608). Each id must be
+ * an option the owner picked whose label and description are that ask's own, exactly as the take printed them
+ * (theOptionOf); and no picked option may stand for two asks.
+ */
+function theTicksTheMenuDoesNotHold(yes: readonly number[], picked: readonly APostedOption[], asks: readonly AnAsk[]): string | undefined {
+  const two = picked.find((option) => aLabelForTwoAsks(option.label))
+  if (two !== undefined) return `the owner picked ${JSON.stringify(two.label)}, which stands for more than one ask, so it settles none. Nothing was settled.`
+  for (const id of yes) {
+    const ask = asks.find((one) => one.id === id)
+    // The whole label, never its opening: the owner reads the label, so one the member wrote after the id is not this ask.
+    const option = ask === undefined ? undefined : picked.find((one) => one.label === theOptionOf(ask).label)
+    if (ask === undefined || option === undefined) return `${String(id)} is not an option the owner picked in the menu. Nothing was settled.`
+    if (option.description !== theLineOf(ask)) {
+      return `the option the owner picked for ${String(id)} does not carry ask ${String(id)}'s own line as its description, so it is not that ask. Nothing was settled.`
+    }
+  }
+  return undefined
+}
+
+/** How a label opens for the ask with this id: what a take tells the member to post, and what a settle reads. */
+const theIdOpening = (id: number): string => `${String(id)}. `
+
+/** Another id's opening anywhere in a text: digits, then the opening's own dot and space. */
+const ANOTHER_ID = /\d+\. /u
+
+/** Whether a label that opens with an ask's id carries another id, or the joiner, after it: it would stand for two asks. */
+function aLabelForTwoAsks(label: string): boolean {
+  const opening = new RegExp(`^${ANOTHER_ID.source}`, 'u').exec(label)
+  if (opening === null) return false
+  const rest = label.slice(opening[0].length)
+  return ANOTHER_ID.test(rest) || rest.includes(PICK_JOINER)
+}
+
+/** The option a take tells the member to post for one ask: its id and question as the label, its line as the description. */
+export const theOptionOf = (ask: AnAsk): APostedOption => ({ label: `${theIdOpening(ask.id)}${ask.question}`, description: theLineOf(ask) })
+
+// --- what a menu's closing is, and what the owner picked in it ---------------------
+
+/** One option of a menu, as the member posted it: what the owner reads, and what the host reports back when ticked. */
+export interface APostedOption {
+  readonly label: string
+  readonly description: string
+}
+
+/** A menu the host closed: when, and the options the owner picked, or no `picked` when the answer could not be kept. */
+export interface AMenuClosed {
+  readonly at: number
+  /** Every posted option the owner picked, over all of the menu's questions. Absent: the answer was not kept. */
+  readonly picked?: readonly APostedOption[]
+}
+
+/** A call's answer as the relay hands it to the crew: the tool, the input the host posted, and the host's own answer. */
+export interface ACallAnswered {
+  readonly tool: string
+  readonly input?: unknown
+  readonly answer?: unknown
+}
 
 /**
- * What the launcher keeps of the menus its host closed: the last time one closed in each session, by the host's own
- * answer to the menu tool. Kept in memory on purpose: a closing is about a session that is running now, and a refresh
- * loses it, so the settle after a refresh is refused rather than trusted.
+ * What the launcher keeps of the menus its host closed: the last one in each session, with what the host's own answer
+ * says the owner picked (martha#608). Kept in memory on purpose: a closing is about a session that is running now, and a
+ * refresh loses it, so the settle after a refresh is refused rather than trusted. One slot a session: a later menu
+ * replaces the earlier one.
  */
 export interface TheOwnersMenus {
-  /** When a menu last closed in `session`, in ms since the epoch; null when none has. */
-  closedAt(session: string): number | null
+  /** The menu that last closed in `session`; null when none has. */
+  lastClosed(session: string): AMenuClosed | null
   /** The launcher saw the host answer one of its calls: the menu tool's answer is the one this keeps. */
-  noteTheCallsAnswer(call: { readonly tool: string }, session: string): void
+  noteTheCallsAnswer(call: ACallAnswered, session: string): void
 }
 
 /** The record a launcher keeps, over the clock the launcher reads. */
 export function menusTheLauncherKeeps(clock: { now(): number }): TheOwnersMenus {
-  const closed = new Map<string, number>()
+  const closed = new Map<string, AMenuClosed>()
   return {
-    closedAt: (session) => closed.get(session) ?? null,
+    lastClosed: (session) => closed.get(session) ?? null,
     noteTheCallsAnswer: (call, session) => {
-      if (call.tool === MENU_TOOL) closed.set(session, clock.now())
+      if (call.tool !== MENU_TOOL) return
+      const picked = thePicksIn(call.input, call.answer)
+      closed.set(session, picked === undefined ? { at: clock.now() } : { at: clock.now(), picked })
     },
   }
+}
+
+/**
+ * What the host puts between the labels of a multi-select answer, as recorded on Claude Code 2.1.327
+ * (./recorded_menu_answers.json): the picks in the order the owner ticked them, not the order they were posted.
+ */
+export const PICK_JOINER = ', '
+
+/** The most options the host takes in one question of its menu: what a take tells the member, and what the reader tries. */
+export const MENU_OPTIONS_MAX = 4
+
+/**
+ * The options the owner picked, read from the host's own answer to the menu, never from the member's word (martha#608);
+ * undefined when the answer cannot be kept.
+ *
+ * What the recording (./recorded_menu_answers.json, Claude Code 2.1.327, driven at its terminal) shows, and why this
+ * reads it the way it does:
+ * 1. The answer the relay hands over carries `result.answers`: one string per question, keyed by the question's text.
+ * 2. A multi-select question's string is its picked labels joined by PICK_JOINER, in the order the owner ticked them.
+ *    So nothing is split: every ordering of every subset of the posted options is joined and compared whole, and a
+ *    label that itself holds the joiner can only match the option it is.
+ * 3. An "Other" answer is the owner's typed words, bare, with nothing in `annotations` to say so. A string no subset
+ *    matches is therefore read as the owner's words: that question picks nothing, and an id never comes from a box
+ *    the owner typed in.
+ * 4. A menu the owner cancels answers with an error text and no `answers`, so it is not kept.
+ * Not kept, too: two posted questions with the same text (the answers are keyed by text), a posted question the
+ * answer has no string for, and a string more than one ordering of the options matches.
+ */
+export function thePicksIn(input: unknown, answer: unknown): readonly APostedOption[] | undefined {
+  const questions = thePostedQuestions(input)
+  const answers = isARecord(answer) && isARecord(answer['result']) ? answer['result']['answers'] : undefined
+  if (questions === undefined || !isARecord(answers)) return undefined
+  if (new Set(questions.map((one) => one.question)).size !== questions.length) return undefined
+  const picked: APostedOption[] = []
+  for (const one of questions) {
+    const of_one = thePicksOfOne(one, answers[one.question])
+    if (of_one === undefined) return undefined
+    picked.push(...of_one)
+  }
+  return picked
+}
+
+/** One question's picks: the one ordering of its options its answer joins to, none for the owner's words, undefined when unreadable. */
+function thePicksOfOne(question: APostedQuestion, said: unknown): readonly APostedOption[] | undefined {
+  if (typeof said !== 'string') return undefined
+  const matching = everyOrderingOf(question.options).filter((ordering) => ordering.map((option) => option.label).join(PICK_JOINER) === said)
+  return matching.length > 1 ? undefined : (matching[0] ?? [])
+}
+
+/** One posted question: its text and its options, as the member posted them. */
+interface APostedQuestion {
+  readonly question: string
+  readonly options: readonly APostedOption[]
+}
+
+const isARecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const isAnOption = (value: unknown): value is APostedOption =>
+  isARecord(value) && typeof value['label'] === 'string' && typeof value['description'] === 'string'
+
+/** The menu's questions as the member posted them, or undefined when the input is not a menu this reader can hold. */
+function thePostedQuestions(input: unknown): readonly APostedQuestion[] | undefined {
+  const questions = isARecord(input) ? input['questions'] : undefined
+  if (!Array.isArray(questions)) return undefined
+  const held = questions.filter(
+    (one): one is APostedQuestion =>
+      isARecord(one) && typeof one['question'] === 'string' && Array.isArray(one['options']) && one['options'].length <= MENU_OPTIONS_MAX && one['options'].every(isAnOption),
+  )
+  return held.length === questions.length ? held : undefined
+}
+
+/** Every ordering of every non-empty subset of `options`: at most 64 for the host's most options a question. */
+function everyOrderingOf(options: readonly APostedOption[]): (readonly APostedOption[])[] {
+  return options.flatMap((first, at) => {
+    const rest = options.filter((_, other) => other !== at)
+    return [[first], ...everyOrderingOf(rest).map((tail) => [first, ...tail])]
+  })
 }
 
 // --- the gate that stands on the row ----------------------------------------------
@@ -535,6 +694,8 @@ export function whyNotAdmitted(ask: AnAsk, members: readonly string[]): string |
   if (ask.question.length > MAX_ASK) return `its text is longer than ${String(MAX_ASK)} characters`
   if (CONTROL.test(ask.question)) return 'its text carries a control or hidden character'
   if (ask.question === '') return 'its text is empty'
+  const { label } = theOptionOf(ask)
+  if (aLabelForTwoAsks(label)) return `its menu option ${JSON.stringify(label)} would read as more than one ask, because its text holds another id or ${JSON.stringify(PICK_JOINER)}: ask it again without either`
   return ask.removes === undefined ? undefined : whyTheBranchIsRefused(ask.removes.branch)
 }
 

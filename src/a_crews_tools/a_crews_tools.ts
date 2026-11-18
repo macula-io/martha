@@ -38,7 +38,7 @@ import { parkAMember, parkedPlace, theParkOf, unparkAMember } from '../park_and_
 import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL, theParkToolOver, type AParkAsked } from '../park_and_wake_a_member/the_park_tools.ts'
 import type { AGuardedSwitch, OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack, type AnOrderAsked } from '../put_the_owners_model_back/the_guarded_switch.ts'
-import { menusTheLauncherKeeps, type TheOwnersMenus } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { menusTheLauncherKeeps, type ACallAnswered, type TheOwnersMenus } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import {
   LIST_ASKS_TOOL,
   QUEUE_ASK_TOOL,
@@ -89,7 +89,6 @@ import {
   rowAfterASwitch,
   theRowWithNothingSaid,
   type AUnitOnARow,
-  type CrewToolsOnARow,
   type DashboardRow,
   type DashboardStore,
   type TheOwnersDefaultTold,
@@ -99,11 +98,12 @@ import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
-import { heedTheCrewTools, theOwedLineAtStart, type TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
+import { theBeatOverTheCrewTools, withTheOwedLine, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
+import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
@@ -150,8 +150,11 @@ export type CoreToolAnswer = { readonly answer: string } | { readonly refused: s
 /** What a tool's call named, read by the slice that owns the tool: what it names, or why the call is refused. */
 type AnAsked<Asked> = { readonly ok: Asked } | { readonly refused: string }
 
-/** What the tools are given: whose row it is, where the crew's place is, and how the declaration is read. */
-export interface CrewToolPlaces {
+/**
+ * What the tools are given: whose row it is, where the crew's place is, and how the declaration is read; and what the
+ * host adapter reads of its sessions' crew tools (martha#658), so a launch given none keeps no window.
+ */
+export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
   readonly member: string
   /** The crew's streams: the ledger and the session records. */
   readonly ledger: LedgerHost
@@ -180,7 +183,7 @@ export interface CrewToolPlaces {
    * crew whose `review_model` the host cannot spell is refused by name. A place given none names no model, and a
    * declaration naming one is then refused — nothing here invents a model list.
    */
-  readonly models?: readonly string[]
+  readonly models?: ModelVocabulary
   /** The model this member was launched on (martha#315): what its row says until a switch is confirmed. */
   readonly launched_on?: string
   /**
@@ -216,8 +219,23 @@ export interface CrewToolPlaces {
    * no machine root, so the note then names only what the declaration names.
    */
   readonly volatile_roots?: readonly string[]
-  /** What the host adapter reads of its sessions' crew tools (martha#658); a launch given none keeps no window. */
-  readonly served_tools?: TheServedToolsWatch
+  /**
+   * What the workspace guard refuses of a git call a member's shell is about to run (martha#562, seam a): the adapter
+   * that asks git hands the refusal here, so the relay asks the crew once. A place given none refuses nothing, and a
+   * crew that declared no workspace layout hands none.
+   */
+  readonly refusesTheGitCall?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of a git call the launch's own `git` was handed (martha#562, seam b): the words a
+   * member's shell gave the shim, and the directory it runs them in. A place given none refuses nothing, and a crew that
+   * declared no workspace layout hands none.
+   */
+  readonly refusesTheGitOnThePath?: (call: { readonly directory: string; readonly args: readonly string[] }) => Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of the refs a clone's transaction would update (martha#562, seam c): a delete of
+   * another member's branch that reached git past the shell and past the shim. A place given none refuses nothing.
+   */
+  readonly refusesTheRefUpdate?: (updates: readonly { readonly ref: string; readonly deletes: boolean }[]) => string | undefined
 }
 
 /** The tools a crew's member can call. */
@@ -259,9 +277,10 @@ export interface CrewTools extends TheReviewRule {
   noteTheCallCounted(session_id: string, own_name: string): Promise<string | undefined>
   /**
    * The launcher saw the host answer one of this session's calls (martha#313): the menu tool's answer is what a settle
-   * of the owner's asks stands on, so the relay hands every answer here and the queue decides which one is a menu.
+   * of the owner's asks stands on, so the relay hands every answer here, with the input the host posted, and the queue
+   * decides which one is a menu and what the owner picked in it (martha#608).
    */
-  noteTheCallsAnswer(call: { readonly tool: string }, session: string): void
+  noteTheCallsAnswer(call: ACallAnswered, session: string): void
   /**
    * The end of a running turn held at a tool boundary (martha#311, ruling D): the launcher's tool verdict asks it last,
    * so it only narrows a yes, and hands the end out on a yes to the last call in flight.
@@ -274,6 +293,24 @@ export interface CrewTools extends TheReviewRule {
    * the ledger cannot read back comes back as that, so the act is refused and every other call still runs.
    */
   theContractInForce(call: AReadableCall, names: ToolNames): Promise<TheContractHanded>
+  /**
+   * What the workspace guard refuses of this call, before it runs (martha#562): the member's shell line read into its
+   * git calls and judged against the crew's declared layout. Undefined when nothing refuses it — a call that is no git
+   * call, or a crew that declared no layout. The asking is the adapter's, handed in by the place; a place given none
+   * refuses nothing.
+   */
+  refusesTheGitIn?(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of a git call the launch's own `git` was handed (martha#562, seam b): the same
+   * rules, asked from the shim's own words rather than from a shell line. Undefined when nothing refuses it, when the
+   * crew declared no layout, or when a launch handed no guard of this seam at all.
+   */
+  refusesTheGitOnThePath?(call: { readonly directory: string; readonly args: readonly string[] }): Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of a clone's ref transaction (martha#562, seam c): the refs git would update, and
+   * whether each is a delete. Undefined when nothing refuses it, or when the crew declared no layout.
+   */
+  refusesTheRefUpdate?(updates: readonly { readonly ref: string; readonly deletes: boolean }[]): string | undefined
 }
 
 /** The tools, in the order the mod registers them, each as the slice that owns it defines it. */
@@ -394,16 +431,11 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
       return handle(args)
     },
     startBeating(): () => void {
-      // What the last look at the crew tools found (martha#658). The next beat writes it: a write of its own would carry
-      // the same moment as the beat it followed, and the newest beat wins, so it would be dropped.
-      let tools: CrewToolsOnARow | undefined
+      // A heartbeat says nothing of its own but the crew tools (martha#658): it is the row as this session last left it.
+      const beat = theBeatOverTheCrewTools(held, () => state.session, (change) => writeRow(held, state, change))
       const timer = setInterval(() => {
         try {
-          // A heartbeat says nothing of its own but the crew tools: it is the row as this session last left it.
-          writeRow(held, state, (row) => (tools === undefined ? row : { ...row, served_tools: tools }))
-          // The look starts once the beat has landed, so a look that fails leaves the beat as it was.
-          const heeded = held.served_tools === undefined ? undefined : heedTheCrewTools(held, state.session)
-          void heeded?.then((found) => void (tools = found ?? tools), () => undefined)
+          beat()
         } catch {
           // A beat the disk would not take is the next beat's business: the row it could not write stays readable.
         }
@@ -420,6 +452,9 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
     ends: state.ends,
     theContractInForce: (call, names) => theContractTheMemberHolds(held, call, names),
+    refusesTheGitIn: async (call) => (held.refusesTheGitCall === undefined ? undefined : held.refusesTheGitCall(call)),
+    refusesTheGitOnThePath: async (call) => held.refusesTheGitOnThePath?.(call),
+    refusesTheRefUpdate: (updates) => held.refusesTheRefUpdate?.(updates),
   }
 }
 
@@ -556,16 +591,14 @@ function theNeedsAfter(state: SessionState, row: DashboardRow): string {
  * that was sent with no outcome recorded (martha#254 design line 53, test 10). Null when nothing is handed.
  */
 async function theStartLineOf(places: CrewToolPlaces, state: SessionState): Promise<TheStartLine | null> {
-  const line = await theLineToHandAtStart({
+  // What a successor owes for its member's open window follows the line (martha#658).
+  return withTheOwedLine(places, await theLineToHandAtStart({
     ledger: places.ledger,
     member: places.member,
     settings: await theSettingsOrRefusal(places),
     held: state.held ?? places.beats.read(places.member),
     now: places.ledger.clock.now(),
-  })
-  // What a successor owes for its member's open window (martha#658): Martha's own words, so it carries no source to take in.
-  const owed = places.served_tools === undefined ? null : theOwedLineAtStart(places)
-  return owed === null ? line : { line: line === null ? owed : `${line.line}\n\n${owed}`, taken_in: line?.taken_in ?? [] }
+  }))
 }
 
 /**
@@ -897,7 +930,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     ...(places.stamps === undefined ? {} : { stamps: places.stamps }),
     root: places.root,
     documents: places.documents,
-    models: places.models ?? [],
+    models: places.models ?? NO_MODEL_NAMED,
     ledger: places.ledger,
     began_at: state.began_at,
     ends: state.ends,
@@ -907,7 +940,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
 /** The declaration, and the crew's names as a report's rules read them; or why it could not be read. */
 async function crewOrRefusal(places: CrewToolPlaces): Promise<CrewDeclared | { readonly refused: string }> {
   try {
-    const settings = await declareCrew(places.documents, places.root, places.models ?? [])
+    const settings = await declareCrew(places.documents, places.root, places.models ?? NO_MODEL_NAMED)
     return { crew: { owner: settings.owner, members: settings.members.map((member) => member.name) }, settings }
   } catch (error) {
     return { refused: `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}` }

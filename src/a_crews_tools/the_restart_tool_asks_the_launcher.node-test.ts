@@ -25,8 +25,9 @@ import { notRunningToRestart } from '../stop_and_restart_a_member/restart_a_memb
 import { LIFECYCLE_PLACE, theRequestOf, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { CREW_TOOL_NAMES, crewToolsOver } from './a_crews_tools.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
-const HOST_MODELS = ['opus', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-restart-tool-'))
 after(() => removeTheTree(homeOfAll))
 const documents = { read: (path: string) => readFile(path, 'utf8') }
@@ -41,7 +42,7 @@ async function aCrewOfTools(member: string, options: { grant?: readonly string[]
   mkdirSync(root, { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   if (options.grant !== undefined) {
     const file = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)

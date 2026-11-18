@@ -21,8 +21,11 @@
 // channel_read_seconds reads that value too (martha#374), so a file an earlier
 // release wrote still declares.
 
+import { hostRuns, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
+
+export type { ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { memberNameKey } from './member_names.ts'
-import { isAbsolute, join, normalize, sep } from 'node:path'
+import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { GATE_AUDITS, GATE_ENFORCES, gateSettingOf, type GateSetting } from '../read_the_gate_mode/read_the_gate_mode.ts'
@@ -161,8 +164,11 @@ export interface Backlog {
   readonly idle_minutes: number
 }
 
+/** The house rule that turns a crew's workspace layout on (martha#256), which brings the two places below with it. */
+export const WORKSPACE_LAYOUT = 'workspace_layout'
+
 /** The house rules a crew can switch on. Each is off unless the declaration says true. */
-export const HOUSE_RULE_SWITCHES = ['owner_items', 'workspace_layout', 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES] as const
+export const HOUSE_RULE_SWITCHES = ['owner_items', WORKSPACE_LAYOUT, 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES] as const
 export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
 
 /** The house rule that names a model rather than switching a rule on. */
@@ -178,6 +184,78 @@ export const CLONES = 'clones'
 export const WORKTREES = 'worktrees'
 export const HOUSE_RULE_PLACES = [CLONES, WORKTREES] as const
 export type HouseRulePlace = (typeof HOUSE_RULE_PLACES)[number]
+
+/** The two places a crew's workspace layout names (martha#256): where its clones sit, and where its worktrees are made. */
+export interface WorkspaceLayout {
+  readonly clones: string
+  readonly worktrees: string
+}
+
+/** The place a crew's worktrees sit in, beside the place that holds its clones: `worktrees` next to `clones`. */
+export const WORKTREES_BESIDE_CLONES = 'worktrees'
+
+/** What a checkout that proves no layout is told to add, in the words of this declaration's own keys (martha#611). */
+export const LAYOUT_TO_ADD = 'Add "workspace_layout": true with "clones" and "worktrees" to house_rules to declare one.'
+
+/** What a checkout's own path proves about its workspace (martha#611): the layout to declare, and the line `martha init` says of it. */
+export interface WhatACheckoutProves {
+  /** The two places to declare, or null when the checkout proves none. */
+  readonly layout: WorkspaceLayout | null
+  /** The line init says after its first: the two places, or why there is none and what to add. */
+  readonly said: string
+}
+
+/** A checkout that proves no layout: none to declare, and the line that says why and what to add instead. */
+const noLayout = (why: string): WhatACheckoutProves => ({ layout: null, said: `No workspace layout: ${why}. ${LAYOUT_TO_ADD}` })
+
+/**
+ * The workspace layout a checkout's own path proves (martha#611): a checkout at `<clones>/<org>/<name>`, whose origin
+ * names that same `org/name`, keeps its clones in `<clones>` and its worktrees in `worktrees` beside them. A checkout
+ * the origin does not place there proves no layout — what would be written is a guess about places the owner never
+ * named — so the reason is answered instead, and `martha init` reads it (../declare_a_solo_crew).
+ */
+export function workspaceLayoutOf(root: string, repo: string | undefined, origin: string | null): WhatACheckoutProves {
+  if (repo === undefined) {
+    // The origin is not quoted back: it can carry a token in its userinfo, and this line is printed.
+    const why = origin === null ? `${root} names no origin remote` : `the origin of ${root} names no repository as org/name`
+    return noLayout(why)
+  }
+  if (`${basename(dirname(root))}/${basename(root)}` !== repo) return noLayout(`${root} does not sit at <clones>/${repo}`)
+  const clones = dirname(dirname(root))
+  const layout = { clones, worktrees: join(dirname(clones), WORKTREES_BESIDE_CLONES) }
+  return { layout, said: `Workspace layout declared: clones ${layout.clones}, worktrees ${layout.worktrees}.` }
+}
+
+/** The mode a solo crew is declared in: a name for people to read. */
+export const SOLO_MODE = 'solo'
+
+/** The members of a solo crew, each in the role it is named after. */
+export const SOLO_MEMBERS = [
+  { name: 'builder', role: 'builder' },
+  { name: 'reviewer', role: 'reviewer' },
+] as const
+
+/**
+ * A solo crew's declaration (martha#98): the owner may do every act, how often its sessions read the crew channel
+ * (martha#253) is the one value a writer sets and this reader reads a missing field as (martha#374), and the layout
+ * its checkout proves (martha#611) is declared when one was given. The shape lives beside the reader so that what a
+ * writer emits and what this slice accepts cannot drift; `martha init` writes it (../declare_a_solo_crew), and the
+ * two places of a layout are written together or not at all, as a layout naming one without the other is refused here.
+ */
+export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = null) {
+  return {
+    version: DECLARATION_VERSION,
+    owner,
+    members: SOLO_MEMBERS,
+    mode: {
+      name: SOLO_MODE,
+      roles: SOLO_MEMBERS.map((member) => member.role),
+      may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])),
+    },
+    ...(layout === null ? {} : { house_rules: { [WORKSPACE_LAYOUT]: true, [CLONES]: layout.clones, [WORKTREES]: layout.worktrees } }),
+    channel_read_seconds: CHANNEL_READ_SECONDS_WHEN_UNNAMED,
+  }
+}
 
 /**
  * The two directories a role's text and a mode's text sit in (martha#306), named once here because two trees use the
@@ -297,11 +375,11 @@ const isText = (value: unknown): value is string => typeof value === 'string' &&
  * store, and return its settings. `root` is the project's absolute path, as the
  * composer knows it.
  *
- * `models` is the vocabulary the host runs, as its adapter records it (martha#315): a `review_model` must be one of
- * these, because the host publishes no other name it would accept for a subagent's model, and a crew that named one
- * Martha cannot spell would hold every review to a model nothing ever matches.
+ * `models` is the vocabulary the host runs, as its adapter records it (martha#315, martha#541): when the host names
+ * its models, a `review_model` must be one of them, because a crew that named one Martha cannot spell would hold every
+ * review to a model nothing ever matches; when the host takes any name its provider serves, any name is read.
  */
-export async function declareCrew(documents: DocumentStore, root: string, models: readonly string[]): Promise<CrewSettings> {
+export async function declareCrew(documents: DocumentStore, root: string, models: ModelVocabulary): Promise<CrewSettings> {
   const crew = join(root, DECLARATION_DIRECTORY)
   const declaration = join(crew, DECLARATION_FILE)
   if (!isAbsolute(root)) throw new DeclarationRefused(declaration, null, 'is not under an absolute project root')
@@ -357,7 +435,7 @@ class Refuse {
   }
 }
 
-function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conventions'>, models: readonly string[]): CrewSettings {
+function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conventions'>, models: ModelVocabulary): CrewSettings {
   if (!isObject(value)) return refuse.at(null, 'is not a JSON object')
   refuse.unknownKeys(value, TOP_LEVEL_KEYS, '')
   if (value['version'] !== DECLARATION_VERSION) refuse.at('version', `is not ${DECLARATION_VERSION}`)
@@ -528,7 +606,7 @@ function gateOf(refuse: Refuse, value: unknown, members: readonly Member[]): Gat
   return read
 }
 
-function houseRulesOf(refuse: Refuse, value: unknown, models: readonly string[]): HouseRules {
+function houseRulesOf(refuse: Refuse, value: unknown, models: ModelVocabulary): HouseRules {
   if (value === undefined) return houseRulesFrom({})
   if (!isObject(value)) return refuse.at('house_rules', `is not ${shapeOf(HOUSE_RULE_KEYS)}`)
   refuse.unknownKeys(value, HOUSE_RULE_KEYS, 'house_rules.')
@@ -538,7 +616,7 @@ function houseRulesOf(refuse: Refuse, value: unknown, models: readonly string[])
   return houseRulesFrom(value)
 }
 
-function refuseSwitches(refuse: Refuse, value: Json, models: readonly string[]): void {
+function refuseSwitches(refuse: Refuse, value: Json, models: ModelVocabulary): void {
   for (const name of HOUSE_RULE_SWITCHES) {
     if (value[name] !== undefined && typeof value[name] !== 'boolean') refuse.at(`house_rules.${name}`, 'is not true or false')
   }
@@ -549,14 +627,12 @@ function refuseSwitches(refuse: Refuse, value: Json, models: readonly string[]):
  * The reviewer model, read against the models the host runs (martha#315): a name the host cannot spell is refused here,
  * where the owner sees which model it does run, rather than left as a rule nothing could ever match.
  */
-function refuseTheReviewModel(refuse: Refuse, model: unknown, models: readonly string[]): void {
+function refuseTheReviewModel(refuse: Refuse, model: unknown, models: ModelVocabulary): void {
   if (model === undefined) return
   if (!isText(model)) return refuse.at(`house_rules.${REVIEW_MODEL}`, 'is not a model name')
-  if (models.includes(model.trim())) return
-  refuse.at(
-    `house_rules.${REVIEW_MODEL}`,
-    `is not a model this host runs (it runs ${models.length === 0 ? 'none Martha can name' : models.join(', ')}), so a review could never be held to it`,
-  )
+  if (hostRuns(models, model.trim())) return
+  const runs = models.names.length === 0 ? 'none Martha can name' : models.names.join(', ')
+  refuse.at(`house_rules.${REVIEW_MODEL}`, `is not a model this host runs (it runs ${runs}), so a review could never be held to it`)
 }
 
 /**

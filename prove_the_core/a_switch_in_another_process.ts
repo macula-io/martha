@@ -24,6 +24,7 @@ import { rowStreamsDirectory } from '../src/row_streams_directory/row_streams_di
 import { THE_REFRESH_ASK } from '../src/refresh_a_member/the_refresh_flow.ts'
 import { THE_MODEL_REPORT_ASK, crewToolsOver } from '../src/a_crews_tools/a_crews_tools.ts'
 import { SWITCH_YOUR_MODEL } from '../src/switch_a_members_model/the_switch_tools.ts'
+import { CLOSED_VOCABULARY } from '../src/declare_crew/a_hosts_model_vocabulary.ts'
 
 /** What the test tells this process to be: one crew, one member, one model, and where the owner's file is. */
 interface ItsPart {
@@ -72,7 +73,7 @@ async function theCrewTools(): Promise<ReturnType<typeof crewToolsOver>> {
   for (const made of [root, join(its.home, 'row'), join(its.home, CREW_ROWS_PLACE), its.config_dir]) mkdirSync(made, { recursive: true })
   const state = openState(join(its.home, 'state'), root)
   if ('refusal' in state) throw new Error(state.refusal)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: [its.own_model, its.review_model] })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: { kind: CLOSED_VOCABULARY, names: [its.own_model, its.review_model] } })
   if (!declared.declared) throw new Error(declared.refusal)
   declareTheModels(root, its)
   return crewToolsOver({
@@ -82,7 +83,7 @@ async function theCrewTools(): Promise<ReturnType<typeof crewToolsOver>> {
     root,
     documents,
     stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
-    models: [its.own_model, its.review_model],
+    models: { kind: CLOSED_VOCABULARY, names: [its.own_model, its.review_model] },
     launched_on: its.own_model,
     owners_settings: { config_dir: its.config_dir, file: its.settings_file, store: ownersSettingsIn(its.settings_file, its.lock_root) },
   })

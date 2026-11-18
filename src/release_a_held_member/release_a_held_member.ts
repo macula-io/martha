@@ -5,8 +5,8 @@
 //
 // WHY THE TERMINAL, AND WHY NO TOOL. A member's shell tool runs with no terminal on its input, so a gate that refuses
 // the shell refuses this too: `martha release` is refused where there is no terminal, exactly as `martha approve` is.
-// There is no crew tool and no act in `who_may_act` for it — the release is the owner's, and the model it frees
-// cannot reach it.
+// There is no crew tool and no act in the declaration's table for it — the release is the owner's, and the model it
+// frees cannot reach it.
 //
 // WHY THE WHOLE RECORD. Not a chosen subset: the member cannot be asked which arrivals are safe, because deciding is
 // the model's job and the model is what the gate exists to protect against (the same reason ../refuse_execution_after_
@@ -16,9 +16,11 @@
 // record: that stream has exactly one writer, the member's launcher, and a second writer would leave the member
 // refused or lost. The count travels in the mark and reaches the owner; the text of what was cleared never does.
 //
-// The residual the design names rather than hides: a release needs the owner's terminal, but a *second* member on the
-// same machine — one the gate is not holding — can type it, because a terminal is the same OS user's. Martha's gate
-// refuses the shell only and has no protected-writes class yet; this slice does not pretend to close that (A13).
+// The residual, said plainly (martha#619; Raf, 2026-11-18, "Speed bumps, said plainly"): a member runs as the owner's
+// own OS user. Martha refuses this act typed from inside a member (../refuse_an_owner_act_from_inside_a_member) and
+// denies Martha's state to a member's file tools, but these are speed bumps, not a wall: a member that sets out to could
+// still fake the owner's release, by making a terminal of its own outside its process tree or by writing the release
+// stream directly with its shell. No check inside the same OS user closes that, and this slice does not pretend to.
 
 import { sameMemberName } from '../declare_crew/declare_crew.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'

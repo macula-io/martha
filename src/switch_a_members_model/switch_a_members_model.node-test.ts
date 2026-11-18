@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, declareCrew, OWNER, REVIEW_MODEL, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
@@ -29,6 +29,7 @@ import {
   theSwitchDirected,
   type ModelMarker,
 } from './switch_a_members_model.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-model-switch-'))
 after(() => removeTheTree(homeOfAll))
@@ -36,7 +37,7 @@ after(() => removeTheTree(homeOfAll))
 const documents = { read: (path: string) => readFile(path, 'utf8') }
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's `review_model` is read against. */
-const HOST_MODELS = ['opus', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 
 /** The crew every test works on: builder and reviewer, a declared model each, and a reviewer model for reviews. */
 interface ADeclaredCrew {

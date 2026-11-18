@@ -23,7 +23,7 @@ import { KEEP_THE_CONTRACT_TOOL } from '../keep_the_package_contract/the_contrac
 import { REPORT_PROGRESS_TOOL } from '../report_where_the_work_stands/report_progress_tool.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
-import { SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { SOLO_MEMBERS, soloDeclaration } from '../declare_crew/declare_crew.ts'
 import { recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { shellGateRowsNothingRecords } from '../check_every_path_is_gated/check_every_path_is_gated.ts'

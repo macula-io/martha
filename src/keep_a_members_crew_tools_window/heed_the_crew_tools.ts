@@ -13,7 +13,8 @@ import type { ServedToolsHeld, TheCrewFilesStores } from '../host_contract/host_
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
-import type { CrewToolsOnARow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import type { TheStartLine } from '../hand_a_member_its_crew_text/the_start_line.ts'
+import { CREW_TOOLS_FIELD, type CrewToolsOnARow, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
   aShellLineCounted,
   aTurnCounted,
@@ -106,4 +107,23 @@ export function theOwedLineAtStart(places: TheWindowPlaces): string | null {
   const place = placeOf(places)
   const open = place === undefined ? undefined : theWindowOf(place, places.member)
   return open === undefined || open.to !== undefined ? null : theOwedLineOf(open)
+}
+
+/**
+ * One beat of a launch that watches its crew tools: the row the beat writes carries what the last look found, and the
+ * next look starts once that row has landed. A write of the look's own would carry the beat's own moment, and the newest
+ * beat wins, so it would be dropped: the next beat writes it instead. A look that fails leaves the beat as it was.
+ */
+export function theBeatOverTheCrewTools(places: TheWindowPlaces, sessionOf: () => string, write: (change: (row: DashboardRow) => DashboardRow) => void): () => void {
+  let tools: CrewToolsOnARow | undefined
+  return () => {
+    write((row) => (tools === undefined ? row : { ...row, [CREW_TOOLS_FIELD]: tools }))
+    if (places.served_tools !== undefined) void heedTheCrewTools(places, sessionOf()).then((found) => void (tools = found ?? tools), () => undefined)
+  }
+}
+
+/** The line a starting session is handed, with what it owes for its member's open window after it: Martha's own words. */
+export function withTheOwedLine(places: TheWindowPlaces, line: TheStartLine | null): TheStartLine | null {
+  const owed = places.served_tools === undefined ? null : theOwedLineAtStart(places)
+  return owed === null ? line : { line: line === null ? owed : `${line.line}\n\n${owed}`, taken_in: line?.taken_in ?? [] }
 }

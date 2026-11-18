@@ -6,7 +6,7 @@
 // contract (src/keep_the_crews_files_as_directories), so this slice decides and the host writes.
 //
 // Who may park another member is answered from what the launcher already holds — the declaration it started its member
-// from — and not from who_may_act: that compares node ids against signed lists, and a solo crew has neither (r=3).
+// from — and not from a node id: a solo crew has none (r=3).
 //
 // Waking is the owner's: `martha wake <member>` starts a member that is not running from its newest handover, read by
 // the time the host stamped it rather than by the file's own name, because a name carries a day and a day cannot tell

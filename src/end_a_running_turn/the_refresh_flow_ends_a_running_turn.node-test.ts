@@ -31,8 +31,9 @@ import { THE_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handov
 import { HANDOVER_LIMIT_PERCENT, refreshesPlace, theFlowOf, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
 import { FORCED_ENDS } from './end_a_running_turn.ts'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
-const HOST_MODELS = ['opus', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 const MEMBER = 'builder'
 const SESSION = 'a-session'
 const SUCCESSOR = 'b-session'
@@ -74,7 +75,7 @@ async function aMemberHandingOver(options: ACrewOptions) {
   mkdirSync(join(home, CREW_ROWS_PLACE), { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), 'the test could not open Martha\'s state')
-  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, 'the test could not declare a crew')
   declareTheSupervisorAndTheCeiling(root, options.ceiling_minutes)
   const records = sessionRecordsInMemory()

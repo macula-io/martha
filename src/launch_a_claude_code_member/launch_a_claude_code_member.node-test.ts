@@ -23,7 +23,8 @@ import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../claude_code_relay/hooks/register.ts'
 import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type Ran, type Refused, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
+import { ROW_NOT_DURABLE, type HandoverStamp, type HandoverStampStore, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
+import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities, PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -49,7 +50,7 @@ import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } f
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { MEMBER_CONFIG_FOLDER, MEMBERS_OWN_SETTINGS, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { hookSettingsWatch, realPathOf } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import { keepTheLifelineIn, RUN_LIFELINE_FD } from '../end_a_launch_when_its_run_ends/keep_the_lifeline_in.ts'
@@ -79,6 +80,8 @@ import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
+import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 
 // --- the run this file is (martha#559) --------------------------------------------
 
@@ -125,6 +128,8 @@ interface Place {
   readonly mesh_servers: string
   /** Where the launcher keeps what it is doing, one file per launch (martha#240). */
   readonly relay_journal: string
+  /** Martha's own state root, which a member's file tools may not write (martha#619). */
+  readonly state_root: string
   readonly approved: readonly string[]
   /**
    * Told by the helper that starts a member here. The place's own hook then leaves the removal to that member's hook,
@@ -200,6 +205,7 @@ function placeFor(t: TestContext, servers = SERVERS, files: Readonly<Record<stri
     snapshot_root: closed('snapshots'),
     mesh_servers: closed('mesh-servers'),
     relay_journal: closed('the-relay-journal'),
+    state_root: closed('martha-state'),
     approved,
     aMemberStartsHere: () => {
       aMemberStarts = true
@@ -1430,7 +1436,7 @@ function memberLaunch(place: Place, command: string, approved = place.approved, 
     node_id: NODE_ID,
     place: { ...launchOf(place), approved_fingerprints: approved, snapshot_root: place.snapshot_root },
     policy: { may_send_executable_text: [] },
-    places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },
+    places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal, state_root: place.state_root },
     ...(mesh_trees === undefined ? {} : { mesh_trees }),
     // The managed settings the host would read, under the place: never the machine's own.
     managed_settings: managedSettingsOf(place),
@@ -1700,6 +1706,27 @@ test('the started_with the relay is handed is what the host was spawned with, do
   const spawnedEnv = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
   assert.equal(heard.length, 1, 'the launcher handed the relay one place')
   assert.deepEqual(heard[0]?.started_with, startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, spawnedArgs, spawnedEnv))
+})
+
+test('a member\'s git meets the workspace guard: its folder is first on PATH, and git is pointed at the guard\'s hooks (martha#562)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved))
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write what it was started with', () => existsSync(fake.envFile), t)
+  const spawned = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
+
+  const first = (spawned['PATH'] ?? '').split(':')[0] ?? ''
+  assert.match(first, /\/git-guard$/, `the guard is not first on the member's PATH: ${spawned['PATH'] ?? ''}`)
+  assert.ok(existsSync(join(first, 'git')), 'the folder first on the PATH holds no git to run')
+  // Seam (c)'s hook is the one file in the folder git looks in, which is the guard's own; every event stays off, so a
+  // hook a checkout names in its own config runs none (martha#562 r=1, martha#24).
+  const settings = spawned[GIT_SETTINGS_VARIABLE] ?? ''
+  assert.ok(settings.includes(`'core.hooksPath'='${join(first, THE_HOOKS_DIRECTORY_NAME)}'`), settings)
+  assert.ok(settings.includes(`'hook.reference-transaction.enabled'='false'`), `the launch left the event open to a checkout's own hook: ${settings}`)
+
+  started.stop('the test is over')
+  await started.stopped
 })
 
 test('a member with no owner to answer its host, whose relay never reports its session start, is stopped once its deadline passes, saying why', async (t) => {
@@ -2144,11 +2171,13 @@ for (const [shape, carried, kept] of [
     // The member's environment names its own config folder (martha#602, T2): the rules cover that folder's places
     // and the owner's alike, so nothing the member writes in its own folder runs as code either.
     const member_env = { ...launch.inherited, ...theMembersConfigEnvironment(membersOwnConfig(place)) }
-    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) })
+    // And Martha's own state root, whole (martha#619): the records of the owner's acts are no member's to write.
+    const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home), martha_state_root: place.state_root })
     const ownersOnly = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) })
     assert.ok(memoryDenyRules(places).length > memoryDenyRules(ownersOnly).length, "the member's own folder adds rules of its own")
     for (const rule of memoryDenyRules(ownersOnly)) assert.ok(memoryDenyRules(places).includes(rule), `the owner's ${rule} is still denied`)
     const permissions = settings.permissions as { deny: string[]; allow?: string[] }
+    assert.ok(permissions.deny.includes(`Edit(/${realPathOf(place.state_root)}/**)`), "the host starts with no rule denying Martha's state root")
     assert.deepEqual(permissions.deny, [...kept, ...memoryDenyRules(places)])
     if (carried !== undefined) {
       assert.equal(settings.model, 'x')
@@ -2666,7 +2695,7 @@ function launcherProcess(
       `  node_id: ${JSON.stringify(NODE_ID)},`,
       `  place: { host: ${JSON.stringify(CLAUDE_CODE)}, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },`,
       '  policy: { may_send_executable_text: [] },',
-      '  places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal },',
+      '  places: { rows: place.rows, dashboard: place.dashboard, launch_records: place.launch_records, relay_root: place.relay_root, mesh_servers: place.mesh_servers, relay_journal: place.relay_journal, state_root: place.state_root },',
       ...(mesh_trees === undefined ? [] : [`  mesh_trees: ${JSON.stringify(mesh_trees)},`]),
       ...Object.entries(deadlines).map(([name, ms]) => `  ${name}: ${ms},`),
       `  command: ${JSON.stringify(command)},`,
@@ -4383,4 +4412,62 @@ test('a launcher told a run\'s end it cannot even open ends at once, taking its 
   await until('the launcher to end by itself', () => launcher.exitCode !== null || launcher.signalCode !== null, t, () => said)
   assert.equal(await ended, 0, `the launcher did not end by itself: ${JSON.stringify(said)}`)
   assert.equal(existsSync(place.home), false, 'the home the run made went with it')
+})
+
+// --- the crew tools read the launch's own sessions map (martha#669) ------------------
+
+test('the crew tools a launch hands over read the sessions map its relay keeps, so a handover is stamped with its session (martha#669)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  // The stamps the launch's crew tools write, kept here rather than on disk: what a handover was stamped with is
+  // this case's question, and the handover file itself is proved in its own slice.
+  const stamped: HandoverStamp[] = []
+  const stamps: HandoverStampStore = {
+    read: () => undefined,
+    write: (_file, stamp) => {
+      stamped.push(stamp)
+      return undefined
+    },
+  }
+  const handed: CrewTools[] = []
+  const started = await aMemberStartedIn(t, place, {
+    ...memberLaunch(place, fake.command, place.approved),
+    // Exactly the shape the launcher's own wiring uses: the crew tools are built over the accessor the launcher
+    // hands over, and that accessor is the thing under test.
+    crew_tools: (sessions) => {
+      const crew = crewToolsOver({
+        member: 'Mercury',
+        ledger: { clock: { now: () => 5_000 }, stores: { rows: rowStreamsDirectory(place.rows) } },
+        beats: dashboardRowsIn(place.dashboard),
+        root: place.checkout,
+        documents: { read: async (path) => readFileSync(path, 'utf8') },
+        stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')) },
+        stamps,
+        sessions,
+      })
+      handed.push(crew)
+      return crew
+    },
+  })
+  if (!started.started) assert.fail(started.refusal)
+
+  // A session really starts in this launch, through the relay the member's host talks to.
+  await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
+  const posted = await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(start('startup')),
+    socketPath: readFileSync(fake.envFile, 'utf8'),
+  })
+  assert.equal(posted.text, '{"taken":1}', 'the launch took the session start')
+
+  const crew = handed[0]
+  if (crew === undefined) assert.fail('the launch handed no crew tools over')
+  // The handover comes from the session that just started. It is stamped with that session only if the crew tools
+  // read the map the launch's relay keeps: were they handed a map of their own, this call would be refused as one
+  // from a session the launch does not know, and no handover would be stamped.
+  const answered = await crew.answer(WRITE_MY_HANDOVER_TOOL, { content: 'The next session carries on from here.' }, SESSION)
+  assert.equal('refused' in answered ? answered.refused : '', '', 'the launch knows the session that started in it')
+  assert.equal(stamped.length, 1, 'the handover was stamped')
+  assert.equal(stamped[0]?.predecessor_id, SESSION, 'the stamp names the session the handover came from')
 })

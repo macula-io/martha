@@ -156,3 +156,63 @@ function textOrWhy(path: string): { readonly text: string } | { readonly code: s
     return { code: (error as NodeJS.ErrnoException).code ?? String(error) }
   }
 }
+
+/** The parent pid's place among the fields that follow the command name (field 3 onwards): field 4. */
+const PARENT_AFTER_COMMAND = 4 - 3
+
+/** The parent pid in one /proc/<pid>/stat line, or null when the line is not one. */
+export function parentIn(stat: string): number | null {
+  const command_end = stat.lastIndexOf(')')
+  if (command_end === -1) return null
+  const parent = stat.slice(command_end + 1).trim().split(/\s+/)[PARENT_AFTER_COMMAND]
+  return parent !== undefined && /^\d+$/.test(parent) ? Number(parent) : null
+}
+
+/** One process on the way up from a process: its pid, and its identity as `identityOf` reads it, or null. */
+export interface AProcessSeen {
+  readonly pid: number
+  readonly identity: string | null
+}
+
+/**
+ * The processes above `pid` under a /proc root, its parent first and never `pid` itself (martha#619): read once, up to
+ * the first process the kernel will not show, or to pid 1. What a process that daemonized out of its tree had above it
+ * is gone from this walk, which is why it is a speed bump and not a wall.
+ */
+export function ancestorsUnder(proc_root: string, pid: number): readonly AProcessSeen[] {
+  const identities = procProcessIdentities(proc_root)
+  const seen: AProcessSeen[] = []
+  const visited = new Set<number>([pid])
+  let at = pid
+  for (;;) {
+    const stat = textOrWhy(join(proc_root, String(at), 'stat'))
+    const parent = 'text' in stat ? parentIn(stat.text) : null
+    if (parent === null || parent < 1 || visited.has(parent)) return seen
+    visited.add(parent)
+    seen.push({ pid: parent, identity: identities.identityOf(parent) })
+    at = parent
+  }
+}
+
+/** The session id's place among the fields that follow the command name (field 3 onwards): field 6. */
+const SESSION_AFTER_COMMAND = 6 - 3
+
+/** The session id in one /proc/<pid>/stat line, or null when the line is not one. */
+export function sessionIn(stat: string): number | null {
+  const command_end = stat.lastIndexOf(')')
+  if (command_end === -1) return null
+  const session = stat.slice(command_end + 1).trim().split(/\s+/)[SESSION_AFTER_COMMAND]
+  return session !== undefined && /^\d+$/.test(session) ? Number(session) : null
+}
+
+/** Where a process is typed in (martha#619): the terminal on its standard input, or null, and its session id, or null. */
+export function whereItIsTypedUnder(proc_root: string, pid: number): { readonly tty: string | null; readonly session: number | null } {
+  let tty: string | null = null
+  try {
+    tty = readlinkSync(join(proc_root, String(pid), 'fd', '0'))
+  } catch {
+    tty = null
+  }
+  const stat = textOrWhy(join(proc_root, String(pid), 'stat'))
+  return { tty, session: 'text' in stat ? sessionIn(stat.text) : null }
+}

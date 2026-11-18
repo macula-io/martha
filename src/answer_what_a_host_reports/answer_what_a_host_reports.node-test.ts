@@ -18,6 +18,7 @@ import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cro
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { reviewSpawnsRemembered } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { beginSession, takeInTurn } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -45,7 +46,7 @@ function answersOn(t: TestContext): TheAnswersOfOneLaunch {
   const places = placesOf(t)
   const records = sessionRecordsIn(rowStreamsDirectory(places.rows))
   const launch = { host: CLAUDE_CODE, launch_dir: places.checkout, stop_dir: places.home, approved_fingerprints: [] }
-  return answersOver({ records, launch, machine: thisMachine })
+  return answersOver({ records, launch, machine: thisMachine, binder: bindNothing, handed_at_start: [], reviews: reviewSpawnsRemembered() })
 }
 
 test('#541 1a: a session this launch never took a start of is refused by name, and one it kept is named', async (t) => {

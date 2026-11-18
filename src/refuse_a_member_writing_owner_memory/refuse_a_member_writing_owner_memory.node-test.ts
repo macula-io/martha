@@ -34,6 +34,9 @@ import {
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { SKILLS_KIND } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { APPROVALS_FILE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
+import { THE_BELLS_FILE, THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 
 /** A home with a config dir, a main clone's memory folder, and a member's worktree elsewhere. */
 function placeFor(t: TestContext) {
@@ -1424,4 +1427,20 @@ test('the refusal names the file, the key and the value that put a whole checkou
   assert.ok(said?.includes('safe.directory'), `the refusal names the key (${said})`)
   assert.ok(said?.includes(checkout), `the refusal names the value (${said})`)
   assert.ok(said?.includes('git configuration'), `the refusal tells the owner what to change (${said})`)
+})
+
+test("Martha's own state root is denied whole to a member's file tools, by the gate and by the settings' rules, and the checkout is not (martha#619)", (t) => {
+  const place = placeFor(t)
+  const state_root = join(place.home, 'state', 'martha')
+  mkdirSync(join(state_root, CREWS_PLACE), { recursive: true })
+  const places = ownerMemoryPlaces({ launcher_env: { HOME: place.home }, member_env: { HOME: place.home }, home: place.home, launch_dir: place.worktree, settings_files: [], user_scope: userScopeFor(place), martha_state_root: state_root })
+  // The records of the owner's acts, and a file a new release of Martha might keep there: every one, under the root.
+  for (const file of [APPROVALS_FILE, OWNER_KEYS_FILE, join(CREWS_PLACE, THE_BELLS_PLACE, THE_BELLS_FILE), 'a-file-no-release-keeps-yet']) {
+    assertDeniedBy(places, place.worktree, place.home, join(state_root, file), 'martha#619', `a write into Martha's state: ${file}`)
+  }
+  assert.ok(memoryDenyRules(places).includes(`Edit(/${realPathOf(state_root)}/**)`), "the permission rules do not name Martha's state root")
+  // The member's own work is not touched by it.
+  assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.worktree, 'src.ts')), places, place.worktree, place.home, thisMachine), undefined, 'a write in the checkout was refused')
+  // A probe of the owner's folders names no state root, and denies none.
+  assert.ok(!memoryDenyRules(placesFor(place)).some((rule) => rule.includes(realPathOf(state_root))), 'a place given no state root denied one')
 })

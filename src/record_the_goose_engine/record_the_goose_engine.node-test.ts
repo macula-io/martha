@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { test, type TestContext } from 'node:test'
 
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
-import { engineFilesSaying } from '../know_the_goose_engines_facts/an_engine_source_from_its_facts.ts'
+import { engineFilesSaying, theOtherKindOf } from '../know_the_goose_engines_facts/an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { ENGINE_PARTS, ENGINE_PLACES, type EngineFacts } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -22,6 +22,8 @@ const CHECK = '--check'
 const { [NOTE]: _ignoredWhy, engine_commit: RECORDED_COMMIT, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
 /** A commit that is not the recorded one: the commit is where facts were read, not a fact. */
 const ANOTHER_COMMIT = [...RECORDED_COMMIT].reverse().join('')
+/** The recorded subagent vocabulary turned the other way: closed when it is open, open when it is closed. */
+const OTHER_SUBAGENT_MODELS = theOtherKindOf(RECORDED_FACTS.subagent_models)
 
 /** Writes a tree that says `facts` under a fresh directory the test removes, and returns the directory. */
 function aCheckoutSaying(t: TestContext, facts: EngineFacts, drop: string | undefined = undefined): string {
@@ -71,6 +73,12 @@ test('a permission answer the engine adds fails by permission_options', (t) => {
   const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, permission_options: added }))
   assert.equal(ran.status, 1)
   assert.match(ran.stdout, /\ndiffers: permission_options\n$/)
+})
+
+test('a delegate tool whose models change kind fails by subagent_models, so a crew is never read against the old vocabulary', (t) => {
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, subagent_models: OTHER_SUBAGENT_MODELS }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: subagent_models\n$/)
 })
 
 test('two facts that differ are both named, in order', (t) => {
