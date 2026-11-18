@@ -91,7 +91,8 @@
       "src/start_the_member_on_the_owners_terminal",
       "src/sweep_leftover_launch_directories",
       "src/read_what_claude_code_says_of_an_agent",
-      "src/read_what_claude_code_records_of_its_tools"
+      "src/read_what_claude_code_records_of_its_tools",
+      "src/watch_the_crew_tools_a_launch_served"
     ],
     "decisionFiles": [
       "src/launch_a_claude_code_member/remember_own_write_of_a_call.ts"
@@ -103,6 +104,7 @@
       "src/claude_code_host": 483,
       "src/read_what_claude_code_says_of_an_agent": 117,
       "src/read_what_claude_code_records_of_its_tools": 64,
+      "src/watch_the_crew_tools_a_launch_served": 88,
       "src/read_one_file_held_by_its_descriptor": 111,
       "src/claude_code_relay": 717,
       "src/cut_the_rules_from_the_host_binary": 395,
@@ -123,7 +125,7 @@
       "src/keep_the_crews_files_as_directories": 155,
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
-      "src/launch_a_claude_code_member": 532,
+      "src/launch_a_claude_code_member": 535,
       "src/linux_process_identity": 267,
       "src/list_stop_and_restart_the_crew": 99,
       "src/load_the_hosts_markdown": 337,
@@ -137,7 +139,7 @@
       "src/run_the_martha_command": 400,
       "src/run_the_nodes_own_npm_alone": 165,
       "src/serve_the_relay_to_a_launch": 244,
-      "src/start_a_member": 241,
+      "src/start_a_member": 248,
       "src/start_the_member_on_the_owners_terminal": 86,
       "src/sweep_leftover_launch_directories": 153,
       "src/ask_git_what_a_member_is_about_to_change": 85

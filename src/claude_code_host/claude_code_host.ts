@@ -175,8 +175,8 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
 }
 
 /** What Claude Code puts between the parts of an MCP tool's name: `mcp__<server>__<tool>`. */
-const MCP_NAME_SEPARATOR = '__'
-const MCP_NAME_PREFIX = `mcp${MCP_NAME_SEPARATOR}`
+export const MCP_NAME_SEPARATOR = '__'
+export const MCP_NAME_PREFIX = `mcp${MCP_NAME_SEPARATOR}`
 
 /**
  * The name a called tool's own server gave it: what follows the last `__` of an

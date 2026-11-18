@@ -89,7 +89,7 @@
 // them, until the crew's declaration (port map step 2) holds them.
 
 import { randomUUID } from 'node:crypto'
-import { rmSync } from 'node:fs'
+import { realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
@@ -116,6 +116,8 @@ import {
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import type { TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
+import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_served/watch_the_crew_tools_a_launch_served.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
@@ -243,7 +245,7 @@ export interface ClaudeCodeMemberLaunch {
    * The crew's tools, over this member's crew place (martha#254); a launch with none answers no tool. They are handed
    * the member's own config folder (martha#602), where the host's model command saves a switch, before the host starts.
    */
-  readonly crew_tools?: (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string }) => CrewTools
+  readonly crew_tools?: (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch }) => CrewTools
   /**
    * What this launch raises every turn the host took in to (martha#253): the crew channel's carrier builds one and
    * reads it, so a message counts as taken in only once the host raised it back. A launch given none raises nothing.
@@ -330,8 +332,8 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
   return env
 }
 
-/** The member's own config folder for a launch: decided once, from the launch's snapshot directory, and read by both its users. */
-const membersConfigFolderOf = (prepared: Extract<PreparedLaunch, { readonly allow: true }>): string => join(prepared.snapshot_dir, MEMBER_CONFIG_FOLDER)
+/** The member's own config folder for a launch: decided once, from the launch's snapshot directory as its real path (the kernel's name for it, martha#658), and read by its users. */
+export const membersConfigFolderOf = (prepared: Extract<PreparedLaunch, { readonly allow: true }>): string => join(realpathSync(prepared.snapshot_dir), MEMBER_CONFIG_FOLDER)
 
 /** Step 1: the launch gate, the mesh server version, and the settings files' env; or the refusal. */
 function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
@@ -479,10 +481,10 @@ function wordlessAnswersOf(
  * sessions are this launch's own, handed over so a handover is stamped with the session it came from and a refreshed
  * session inherits the one it was cleared from (martha#255).
  */
-function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSession>, ready: ReadyLaunch): { readonly crew?: CrewTools } {
+function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSession>, ready: ReadyLaunch, served_tools: TheServedToolsWatch): { readonly crew?: CrewTools } {
   return launch.crew_tools === undefined
     ? {}
-    : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared) }) }
+    : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared), served_tools }) }
 }
 
 /** What this launch raises turns to, or nothing: a launch given none raises nothing (martha#253). */
@@ -499,8 +501,8 @@ function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising
  * asked again every time the screen is about to ring: a mute typed at the owner's terminal reaches a member that is
  * running, so a member is never restarted to silence a bell.
  */
-function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen' | 'telling'> {
-  const journal = relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID())
+function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch, hearing: (journal: RelayJournal) => RelayJournal): Pick<MemberRelayPlace, 'journal' | 'screen' | 'telling'> {
+  const journal = hearing(relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()))
   const mute = (): TheMute => (launch.places.bells === undefined ? NOTHING_IS_MUTED : theMuteOf({ directory: launch.places.bells, lines: { append: appendStateLine, read: readStateFile } }, launch.member_name))
   if (mute().muted) launch.tellOwner(theMutedStartLine(launch.member_name))
   return {
@@ -585,6 +587,8 @@ async function servedRelay(
   // One map of this launch's sessions, shared by the relay that keeps them and the crew's tools that read them
   // (martha#255): a handover is stamped with the session it came from, and a refresh's successor inherits it.
   const sessions = new Map<string, HostSession>()
+  // The crew tools this launch served, watched through the journal it keeps (martha#658); the crew answers a refresh's predecessor.
+  const watched = watchTheCrewToolsServedBy(membersConfigFolderOf(ready.prepared), async (id) => (await place.crew?.thePredecessorOf(id)) ?? null)
   const rows = rowStreamsDirectory(launch.places.rows)
   const place: MemberRelayPlace = {
     // The owner's releases are read again at load and before every check, so a member released while it runs is free
@@ -608,12 +612,12 @@ async function servedRelay(
     hookSettings: ready.hookSettings,
     ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
-    ...crewOf(launch, sessions, ready),
+    ...crewOf(launch, sessions, ready, watched.watch),
     // The crew text this launch hands every session it starts (martha#306), composed once from the approved bytes.
     crew_text: ready.crew_text,
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
-    ...thePlacesOfItsOwn(launch),
+    ...thePlacesOfItsOwn(launch, watched.journalOver),
     stopMember: stop,
   }
   launch.hearRelayPlace?.(place)
