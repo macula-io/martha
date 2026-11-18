@@ -32,6 +32,7 @@ import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pas
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   THE_LAUNCHERS_OF_HOST,
+  leftoversOfALaunch,
   noLauncherFor,
   theStartOfAHost,
   theStartOfAMember,
@@ -181,4 +182,24 @@ test('#541 6b r=3: a reviewer member on the engine is refused to start by name, 
     noLauncherFor(THE_ENGINES_HOST),
     'a reviewer member on martha-engine is no longer refused by the missing launcher, and nothing in this release reads its model back yet',
   )
+})
+
+/** The crew's layout places, as a declaration names them: no constant in the tree carries these path segments. */
+const LAID_OUT = { clones: '/laid/out/first-places', worktrees: '/laid/out/second-places' }
+
+/** A declaration carrying only what a launch's leftovers read: the layout switch, its places, and the members. */
+const layoutDeclared = (on: boolean): CrewSettings =>
+  ({
+    house_rules: { workspace_layout: on, clones: LAID_OUT.clones, worktrees: LAID_OUT.worktrees },
+    members: [{ name: 'Hygiea' }, { name: 'Uranus' }],
+  }) as unknown as CrewSettings
+
+test('a start hands its launch the workspace its declaration lays out, and the crew store its end reads (#562, #693)', () => {
+  // The launch tests hand `leftovers.workspace` in themselves, so nothing there says a real start gives the scan one at
+  // all: this reads the start's own builder, from a planted declaration, and holds it to the planted places.
+  const crew = hostForTests().host.stores.crew
+  const declared = leftoversOfALaunch(layoutDeclared(true), crew)
+  assert.deepEqual(declared.workspace, { clones: LAID_OUT.clones, worktrees: LAID_OUT.worktrees, members: ['Hygiea', 'Uranus'] })
+  assert.equal(declared.crew, crew, 'the crew store the launch end keeps what a killed command left in is not the one the start was given')
+  assert.equal(leftoversOfALaunch(layoutDeclared(false), crew).workspace, undefined, 'a crew that declared no layout handed its launch a workspace anyway')
 })

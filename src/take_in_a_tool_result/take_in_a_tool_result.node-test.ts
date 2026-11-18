@@ -26,7 +26,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { readCheckoutTree } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import {
-  HOSTS,
+  theRowOfHost,
   readLaunchState,
   startedWithOf,
   type ApprovedLaunch,
@@ -282,7 +282,7 @@ test('a launch that recorded no start records B4 for every read, whatever it say
 })
 
 test('the adapter declaration is the very project-config-off switches, referenced and never copied (martha#135)', () => {
-  assert.equal(CLAUDE_CODE_READ_ATTACHES_NOTHING, HOSTS['claude-code'].project_config_off)
+  assert.equal(CLAUDE_CODE_READ_ATTACHES_NOTHING, theRowOfHost(CLAUDE_CODE).project_config_off)
 })
 
 test('a checkout with no approved start keeps every read counting, whatever the launch started with (martha#135, martha#127 r=3)', (t) => {

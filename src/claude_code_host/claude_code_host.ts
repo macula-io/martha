@@ -62,7 +62,7 @@ import { launchRecordsDirectory } from '../linux_process_identity/launch_records
 import { whatAPromptCarries } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { HOSTS, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_PROJECT_CONFIG_OFF, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import type { ASpawnedAgent } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { vocabularyOf, type ModelVocabulary, type RecordedVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
@@ -210,7 +210,7 @@ export const CLAUDE_CODE_SHELL_TOOL = 'Bash'
  * ignored CLAUDE.local.md with it; under these it brings neither. These are the very switches that keep project config
  * off, referenced and never copied, so a change to them is a change to what a read is exempt on.
  */
-export const CLAUDE_CODE_READ_ATTACHES_NOTHING: HostSwitches = HOSTS['claude-code'].project_config_off
+export const CLAUDE_CODE_READ_ATTACHES_NOTHING: HostSwitches = CLAUDE_PROJECT_CONFIG_OFF
 
 export const CLAUDE_CODE_TOOL_RESULT_ROWS: ToolResultRows = {
   Read: { reads: 'a_file', source: 'checkout_file', field: FILE_PATH_ARGUMENT },
