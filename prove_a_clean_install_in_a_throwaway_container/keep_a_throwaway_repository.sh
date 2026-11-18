@@ -441,6 +441,14 @@ self_test() {
   status_is "${case}" 0
   [ -e "${case}/deleted" ] || fail 'a public create was not deleted'
 
+  # A round trip whose open fails after the create, with no signal: it still deletes what it made, and its login goes.
+  case="${root}/failed-round-trip"; a_case "${case}" "${token}"
+  printf '{"id":77,"full_name":"synthetic-bot/the-made-one","private":false}' > "${case}/create.json"
+  run_a_case "${case}" round-trip
+  status_is "${case}" 1; said "${case}" 'was not made private'; said "${case}" 'deleted, and its id answers 404'
+  [ -e "${case}/deleted" ] || fail 'a round trip that failed after the create did not delete what it made'
+  [ ! -e "${case}/run/${PRIVATE_PART}" ] || fail "a round trip that failed after the create left the run's own login"
+
   # A round trip stopped by a signal after the create: its trap deletes what it made.
   case="${root}/stopped"; a_case "${case}" "${token}"
   : > "${case}/issue.hangs"
