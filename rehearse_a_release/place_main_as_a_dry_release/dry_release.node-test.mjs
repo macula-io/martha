@@ -11,13 +11,19 @@ import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 
 import { goodEntries, scratchMachine, tarOf } from '../../installer/serve_a_release_locally/serve_a_release_locally.mjs'
-import { DRY, dryResultLine, INSTALLER_STEPS, placeADryRelease, SKIPPED_STEPS, THE_INSTALLERS_STEPS } from './dry_release.mjs'
+import { DRY, dryResultLine, INSTALLER_STEPS, MAINS_OWN_INSTALLER, placeADryRelease, SKIPPED_STEPS, THE_INSTALLERS_STEPS, THE_PUBLISHED_INSTALLER, theInstallerThatRan } from './dry_release.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = join(HERE, '..', '..')
 const INSTALLER = join(REPO, 'installer')
 const SHA = 'a'.repeat(40)
 const VERSION = '9.8.7'
+/** Main's own installer, by the digest the packer wrote for it: what a dry run of a drifted main proves (martha#695). */
+const MAINS = { origin: MAINS_OWN_INSTALLER, digest: `sha256:${'b'.repeat(64)}` }
+/** The published installer, by its name and version: what a dry run whose installer/ is its tag's proves. */
+const PUBLISHED = { origin: THE_PUBLISHED_INSTALLER, published: 'the-installer@1.2.3' }
+/** The argument that says which installer ran, as the dry step hands it to the harness. @param {{ origin: string, digest?: string, published?: string }} proven */
+const saidOf = (proven) => (proven === MAINS ? ['--main-installer', MAINS.digest] : ['--published-installer', PUBLISHED.published])
 const PROOF = join(REPO, 'prove_a_clean_install_in_a_throwaway_container', 'prove_a_clean_install_in_a_throwaway_container.sh')
 
 /** A layer the installer accepts, gzipped, as pack_main_as_a_dry_layer.sh writes one. */
@@ -37,19 +43,19 @@ const aMachine = (t) => {
 
 test('main\'s layer is placed by the installer\'s own steps: its own directory, current swapped, the command linked', async (t) => {
   const { home, places } = aMachine(t)
-  const placed = await placeADryRelease({ steps: THE_INSTALLERS_STEPS, layer: aGoodLayer(), version: VERSION, sha: SHA, home })
+  const placed = await placeADryRelease({ steps: THE_INSTALLERS_STEPS, layer: aGoodLayer(), version: VERSION, sha: SHA, home, proven: MAINS })
   assert.equal(dirname(placed.release), places.releases)
   assert.ok(placed.release.endsWith(`/${VERSION}-sha256-${placed.release.split('-sha256-')[1]}`), placed.release)
   assert.equal(readlinkSync(places.current), placed.release)
   assert.ok(existsSync(join(places.binDir, 'martha')), 'the command is linked')
   assert.ok(placed.lines.every((line) => line.startsWith(`${DRY} `)), placed.lines.join('\n'))
-  assert.equal(placed.lines.at(-1), dryResultLine(SHA))
+  assert.equal(placed.lines.at(-1), dryResultLine(SHA, MAINS))
 })
 
 test('a Node Martha does not run on is refused by the installer\'s own step 1, before anything is placed', async (t) => {
   const { home, places } = aMachine(t)
   await assert.rejects(
-    placeADryRelease({ steps: THE_INSTALLERS_STEPS, layer: aGoodLayer(), version: VERSION, sha: SHA, home, nodeVersion: '18.0.0' }),
+    placeADryRelease({ steps: THE_INSTALLERS_STEPS, layer: aGoodLayer(), version: VERSION, sha: SHA, home, nodeVersion: '18.0.0', proven: MAINS }),
     /^Refused: Martha needs Node .*; this is Node 18\.0\.0\./,
   )
   assert.equal(existsSync(places.current), false, 'current was not swapped')
@@ -66,7 +72,7 @@ test('a layer with an entry the installer refuses is refused in the installer\'s
     ['/etc/absolute', /names an absolute path \(\/etc\/absolute\); refused$/],
   ])) {
     const layer = gzipSync(tarOf([{ name: 'martha/', type: '5', mode: 0o755 }, { name, body: 'x' }]))
-    await assert.rejects(placeADryRelease({ steps, layer, version: VERSION, sha: SHA, home }), words, name)
+    await assert.rejects(placeADryRelease({ steps, layer, version: VERSION, sha: SHA, home, proven: MAINS }), words, name)
     /** @type {string[]} */
     let underReleases = []
     try { underReleases = readdirSync(places.releases).filter((name) => !name.startsWith('.')) } catch { /* never made */ }
@@ -97,24 +103,39 @@ const theReleaseResult = () => {
 }
 
 test('the dry result line names every step it skipped and is never the release result', () => {
-  const line = dryResultLine(SHA)
-  assert.ok(line.startsWith(`${DRY} main at ${SHA}, not a release;`), line)
+  const line = dryResultLine(SHA, MAINS)
+  assert.ok(line.startsWith(`${DRY} main at ${SHA}, not a release,`), line)
   for (const step of SKIPPED_STEPS) assert.ok(line.includes(step), `${step} is named`)
   assert.equal(line.includes(theReleaseResult()), false)
+})
+
+test('the result line names which installer ran: main\'s own by its digest, the published one by its name and version', () => {
+  const main = dryResultLine(SHA, MAINS)
+  assert.ok(main.includes(`main's own installer (${MAINS.digest})`), main)
+  assert.equal(main.includes(PUBLISHED.published), false, 'a run that proves the installer main holds does not name the published one')
+  const published = dryResultLine(SHA, PUBLISHED)
+  assert.ok(published.includes(`the published ${PUBLISHED.published}`), published)
+  assert.equal(published.includes(MAINS.digest), false, 'a run that proves the published installer does not name a digest')
+})
+
+test('a run that cannot say which installer it proved is refused, never given a line that leaves it out', () => {
+  assert.throws(() => theInstallerThatRan({ origin: MAINS_OWN_INSTALLER }), /digest/)
+  assert.throws(() => theInstallerThatRan({ origin: THE_PUBLISHED_INSTALLER }), /name and version/)
+  assert.throws(() => theInstallerThatRan({ origin: 'something else' }), /not an installer/)
 })
 
 test('the dry command prints only dry lines, the result last, and never the release result', (t) => {
   const { home } = aMachine(t)
   const layer = join(home, 'layer.tar.gz')
   writeFileSync(layer, aGoodLayer())
-  const run = spawnSync(process.execPath, [join(HERE, 'main.mjs'), layer, VERSION, SHA], {
+  const run = spawnSync(process.execPath, [join(HERE, 'main.mjs'), layer, VERSION, SHA, ...saidOf(MAINS)], {
     env: { PATH: process.env.PATH ?? '', HOME: home },
     encoding: 'utf8',
   })
   assert.equal(run.status, 0, run.stderr)
   const lines = run.stdout.trim().split('\n')
   assert.ok(lines.every((line) => line.startsWith(`${DRY} `)), run.stdout)
-  assert.equal(lines.at(-1), dryResultLine(SHA))
+  assert.equal(lines.at(-1), dryResultLine(SHA, MAINS))
   assert.equal(run.stdout.includes(theReleaseResult()), false)
 })
 
@@ -123,8 +144,9 @@ test('the dry command refuses a sha that is not 40 characters, and a step\'s ref
   const layer = join(home, 'bad.tar.gz')
   writeFileSync(layer, gzipSync(tarOf([{ name: 'martha/', type: '5', mode: 0o755 }, { name: 'martha/../x', body: 'x' }])))
   const env = { PATH: process.env.PATH ?? '', HOME: home }
-  assert.equal(spawnSync(process.execPath, [join(HERE, 'main.mjs'), layer, VERSION, 'abc'], { env }).status, 2)
-  const refused = spawnSync(process.execPath, [join(HERE, 'main.mjs'), layer, VERSION, SHA], { env, encoding: 'utf8' })
+  assert.equal(spawnSync(process.execPath, [join(HERE, 'main.mjs'), layer, VERSION, 'abc', ...saidOf(MAINS)], { env }).status, 2)
+  assert.equal(spawnSync(process.execPath, [join(HERE, 'main.mjs'), layer, VERSION, SHA], { env }).status, 2, 'a run naming no installer is refused')
+  const refused = spawnSync(process.execPath, [join(HERE, 'main.mjs'), layer, VERSION, SHA, ...saidOf(MAINS)], { env, encoding: 'utf8' })
   assert.equal(refused.status, 1)
   assert.equal(refused.stdout, '')
   assert.match(refused.stderr, /^dry: not placed: /)

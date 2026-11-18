@@ -5,7 +5,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { INSTRUCTION_FILES } from '../inbound_paths/inbound_paths.ts'
-import { LAUNCH_FILES_OF_HOST } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_CODE_FILES, OPENCODE_FILES } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import {
   claude,
   claudeAsTheAgent,
@@ -20,8 +20,8 @@ import {
 import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
-const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
-const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
+const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = CLAUDE_CODE_FILES
+const [OPENCODE_CONFIG, , OPENCODE_DIR] = OPENCODE_FILES
 
 /** A server that only touches its marker, then lingers long enough to be seen. */
 const LINGER_SECONDS = 3

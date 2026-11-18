@@ -23,8 +23,10 @@
     "check:recorded-host-runs": "node src/check_every_recorded_host_test_is_run/main.ts",
     "check:no-member-outlives-its-run": "node src/check_no_member_outlives_its_run/main.ts",
     "check:no-launcher-outlives-its-run": "node prove_the_core/no_launcher_outlives_its_run.ts",
+    "check:no-restore-in-the-release": "node prove_the_core/no_restore_reaches_the_release.ts",
     "check:no-member-works-without-its-crew-tools": "node src/check_no_member_works_without_its_crew_tools/main.ts",
     "check:no-import-cycle": "node src/check_no_import_cycle/main.ts",
+    "check:workspace-layout": "node src/check_the_workspace_layout/main.ts",
     "check:pictures": "node src/check_the_pictures_change_with_the_version/main.ts",
     "check:every-check-runs-in-a-job": "node src/check_every_check_runs_in_a_job/main.ts",
     "probe:launch": "node src/probe_launch_hosts/probe_hosts.ts",
@@ -139,7 +141,7 @@
       "src/keep_the_crews_files_as_directories": 155,
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
-      "src/launch_a_claude_code_member": 550,
+      "src/launch_a_claude_code_member": 545,
       "src/launch_a_goose_member": 257,
       "src/linux_process_identity": 309,
       "src/list_stop_and_restart_the_crew": 99,
@@ -161,8 +163,7 @@
       "src/sweep_leftover_launch_directories": 153,
       "src/ask_git_what_a_member_is_about_to_change": 78,
       "src/tell_the_member_a_line": 42,
-      "src/a_launch_end_on_this_machine": 119,
-      "src/watch_the_crew_tools_a_launch_served": 94
+      "src/a_launch_end_on_this_machine": 119
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",
