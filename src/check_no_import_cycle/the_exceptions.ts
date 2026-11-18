@@ -1,4 +1,4 @@
-// The loops of value imports the core is allowed to keep, each with why and with what untangles it (martha#525).
+// The loops of value imports the repository is allowed to keep, each with why and with what untangles it (martha#525).
 //
 // Main has none: the list below is empty, and it is here because the mechanism is the decision, not the entries. A loop
 // fails the check unless it is declared here, and it is declared by the whole group of files that load each other, so
@@ -11,7 +11,7 @@
 
 /** One group of files that load each other, allowed until the package that untangles it lands. */
 export interface DeclaredCycle {
-  /** The files of the loop, sorted, relative to `src/`, as the check prints them. */
+  /** The files of the loop, sorted, relative to the repository, as the check prints them. */
   readonly files: readonly string[]
   /** Why the loop stands. */
   readonly reason: string
@@ -19,5 +19,5 @@ export interface DeclaredCycle {
   readonly removed_by: string
 }
 
-/** Every loop of value imports the core may keep. None today: a loop that lands is a finding. */
+/** Every loop of value imports the repository may keep. None today: a loop that lands is a finding. */
 export const EXCEPTIONS: readonly DeclaredCycle[] = []
