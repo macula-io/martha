@@ -94,6 +94,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
+      # The C4 pictures are drawn at release, and the version bump is the one pull request
+      # allowed to carry one (martha#627). A rehearsal that packed a tree whose picture is
+      # not what the generator draws would prove a tree the release refuses, so the same
+      # check release.yml runs before its pack runs here, before anything is packed.
+      - name: Every picture the release archives is what the generator draws
+        run: node src/check_the_pictures_change_with_the_version/main.ts --tree --repository .
       - name: Pack the tree
         run: pack_a_release/pack_a_release.sh "${{ steps.names.outputs.version }}" "$RELEASE_CTX"
       - name: Push the image, and an unsigned one beside it

@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -103,4 +103,36 @@ test('a change cut before the release bump is read from its merge base, never fr
   } finally {
     removeTheTree(directory)
   }
+})
+
+const WORKFLOWS = join(import.meta.dirname, '..', '.github', 'workflows')
+
+/**
+ * The `run:` steps a workflow holds, in the order it runs them, each as its own line says it and without the `- ` an
+ * inline step opens with: a step written beside its `run:` and a step written under it are the same step here, so
+ * nothing slips between two steps unread.
+ */
+const theRunsIn = (workflow: string): readonly string[] =>
+  readFileSync(join(WORKFLOWS, workflow), 'utf8')
+    .split('\n')
+    .filter((line) => /^\s*(- )?run: \S/.test(line))
+    .map((line) => line.trim().replace(/^- /, ''))
+
+/**
+ * The dry run rehearses a tree the release would then refuse if it packed it: the rehearsal proves nothing about the
+ * release when the picture it packs is stale (martha#601). So the dry run reads the tree as the release does, and the
+ * two commands are held to each other rather than to a spelling here: whatever the release runs immediately before it
+ * packs, the rehearsal runs immediately before it packs.
+ */
+test('the dry run reads the pictures as the release does, and immediately before it packs', () => {
+  const doesWhat = (workflow: string): { before: string; pack: string } => {
+    const runs = theRunsIn(workflow)
+    const pack = runs.findIndex((run) => run.includes('pack_a_release/pack_a_release.sh'))
+    assert.ok(pack > 0, `${workflow} has no pack step to judge the order by`)
+    return { before: runs[pack - 1] ?? '', pack: runs[pack] ?? '' }
+  }
+  const release = doesWhat('release.yml')
+  const dryRun = doesWhat('release-dry-run.yml')
+  assert.match(release.before, /^run: node \S+ --tree --repository \.$/, 'release.yml packs without reading the tree first')
+  assert.equal(dryRun.before, release.before, 'the dry run packs without the tree read the release runs before its own pack')
 })
