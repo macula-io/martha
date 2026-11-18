@@ -8,6 +8,9 @@
 import type { ChildProcess } from 'node:child_process'
 import type { Readable, Writable } from 'node:stream'
 
+import { answerOnce, type AnOfferedOption, type TheOutcome } from '../src/speak_acp_to_an_agent/answer_a_permission_once.ts'
+import { METHOD_NOT_FOUND } from '../src/speak_acp_to_an_agent/the_acp_client.ts'
+
 /** A permission request as Goose asks it: which tool, and the answers it offers. */
 export interface Asked {
   readonly toolName: string
@@ -42,14 +45,17 @@ interface Rpc {
 /** A permission request's params, as much of them as the trial reads. */
 interface PermissionParams {
   readonly toolCall?: { readonly title?: unknown; readonly toolCallId?: unknown }
-  readonly options?: readonly { readonly optionId?: string }[]
+  readonly options?: readonly (AnOfferedOption & { readonly optionId?: string })[]
 }
 
 const optionIds = (params: PermissionParams): string[] => (params.options ?? []).map((option) => option.optionId ?? '')
 
-/** The answer given among the options offered: the one the line set, else the first, never an "always". */
-const chosen = (options: readonly string[], wanted: OnceAnswer): string =>
-  options.includes(wanted) ? wanted : options[0] ?? 'reject_once'
+/** The answer given: the once-answer the line set when it is offered, else a cancel, never an "always" (martha#677). */
+const chosen = (params: PermissionParams, wanted: OnceAnswer): TheOutcome =>
+  answerOnce(params.options ?? [], wanted === 'allow_once' ? 'allow' : 'reject')
+
+/** The outcome as the record names it: the option's id, or `cancelled`. */
+const named = (outcome: TheOutcome): string => (outcome.outcome === 'selected' ? outcome.optionId : outcome.outcome)
 
 const said = (value: unknown): string => (typeof value === 'string' ? value : '')
 
@@ -117,22 +123,23 @@ export class GooseOverAcp {
   #answerServerRequest(rpc: Rpc): void {
     if (rpc.method !== 'session/request_permission') {
       this.notes.push(`unexpected request from goose: ${rpc.method ?? ''}`)
-      this.#reply(rpc.id ?? 0, { code: -32601, message: `the trial has no answer for ${rpc.method ?? ''}` })
+      this.#refuse(rpc.id ?? 0, { code: METHOD_NOT_FOUND, message: `the trial has no answer for ${rpc.method ?? ''}` })
       return
     }
-    const asked = this.#record(rpc.params)
-    this.#reply(rpc.id ?? 0, { outcome: 'selected', optionId: asked.answered })
+    const body = (rpc.params ?? {}) as PermissionParams
+    const outcome = chosen(body, this.answers.next)
+    this.#record(body, named(outcome))
+    this.#reply(rpc.id ?? 0, outcome)
   }
 
-  #record(params: unknown): Asked {
-    const body = (params ?? {}) as PermissionParams
+  #record(body: PermissionParams, answered: string): Asked {
     const options = optionIds(body)
     const asked: Asked = {
       toolName: said(body.toolCall?.title) || said(body.toolCall?.toolCallId),
       toolCallId: said(body.toolCall?.toolCallId),
       title: said(body.toolCall?.title),
       options,
-      answered: chosen(options, this.answers.next),
+      answered,
     }
     this.answers.asked.push(asked)
     return asked
@@ -140,5 +147,10 @@ export class GooseOverAcp {
 
   #reply(id: number, outcome: unknown): void {
     this.#stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, result: { outcome } })}\n`)
+  }
+
+  /** A JSON-RPC error for a request the trial has no answer for, never a success that carries one. */
+  #refuse(id: number, error: { readonly code: number; readonly message: string }): void {
+    this.#stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, error })}\n`)
   }
 }

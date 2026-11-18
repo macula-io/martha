@@ -29,6 +29,7 @@
     "record:claude-code-host": "node src/record_claude_code_host/record_claude_code_host.ts",
     "record:goose-engine": "node src/record_the_goose_engine/record_the_goose_engine.ts",
     "stand-in:openai-model": "node src/stand_in_for_an_openai_model/main.ts",
+    "stand-in:acp-agent": "node src/stand_in_for_an_acp_agent/main.ts",
     "lint": "eslint . --max-warnings=0",
     "redo:generated": "node src/redo_the_generated_files_of_a_merge/main.ts",
     "record:ring-results": "node src/record_ring_results/record_ring_results.ts",
