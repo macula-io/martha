@@ -3,6 +3,7 @@
 // passed or was refused.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
+import { once } from 'node:events'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -13,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 import { removeEvenReadOnly } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { TOP } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
-import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX, startOnATerminal, killEvenIfGone, killEveryMember, stopMember, theProcessesOnThisMachine, MEMBER_WAIT_MS, NOTHING_MATCHED, POLL_MS, RUNNABLE, quoted } from './prove_a_clean_install.mjs'
+import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX, startOnATerminal, killEvenIfGone, killEveryMember, runningMember, stopMember, theProcessesOnThisMachine, MEMBER_WAIT_MS, NOTHING_MATCHED, POLL_MS, RUNNABLE, quoted } from './prove_a_clean_install.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
@@ -816,6 +817,54 @@ test('a stop is refused by name for a member whose pid is no longer the process 
   const member = aMember('moved', wrapper, { pid: Number(leader.pid), identity: PROCESSES.identityOf(process.pid) })
   await assert.rejects(stopMember(member, {}, PROCESSES), /moved, pid \d+, is no longer the process this run recorded/)
   assert.equal(alive(Number(leader.pid)), true, 'no signal reached the group whose leader is another process now')
+})
+
+// martha#628 r=1: a member whose group leader has ended and been reaped leaves orphans in its group. They are no longer
+// anyone's child, so the walk cannot reach them, and a tear-down that signals nothing and says nothing reports a run it
+// never reached as ended, which #590 forbids. The group may now be a stranger's, so nothing is signalled; what is left
+// in it is refused by name.
+test('a group whose leader has ended is refused by name, and the orphans in it are not signalled (martha#628 r=1)', async (t) => {
+  const wrapper = spawn('sleep', ['300'], { stdio: 'ignore' })
+  // A detached shell leads a group of its own, starts a process in it and exits, so that process is orphaned but keeps
+  // the group.
+  const leader = spawn('sh', ['-c', `${quoted('sleep')} 300 & echo $!; ${quoted('sleep')} 1`], { stdio: ['ignore', 'pipe', 'ignore'], detached: true })
+  const identity = PROCESSES.identityOf(Number(leader.pid))
+  const [line] = await once(leader.stdout, 'data')
+  const orphan = Number(String(line).trim())
+  t.after(() => { for (const pid of [Number(wrapper.pid), orphan]) { try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ } } })
+  await once(leader, 'exit')
+  await delay(100)
+  assert.notEqual(identity, null, "the leader's start time was held while it lived")
+  assert.equal(alive(orphan), true, 'the orphan is in the group before the tear-down')
+  const member = aMember('leader gone', wrapper, { pid: Number(leader.pid), identity })
+  const refusals = killEvenIfGone(member, PROCESSES)
+  assert.equal(refusals.length, 1, `one refusal, the group's: ${JSON.stringify(refusals)}`)
+  assert.match(refusals[0] ?? '', new RegExp(`leader gone, pid ${String(leader.pid)}, was not signalled: its group still holds \\d+ process\\(es\\) \\(.*\\b${String(orphan)}\\b`), 'and it names the group and what is left in it')
+  assert.equal(alive(orphan), true, 'nothing was signalled to that group: its number may lead another process\'s group now')
+})
+
+// martha#628 r=2: the run's own record of its wrapper's start time is what enters the walk. A member built by a copy of
+// that line, as the cases above are, would stay green with the run's own line turned off, so this case drives the line
+// itself.
+test("the run holds its wrapper's start time when it makes a member (martha#628 r=2)", async (t) => {
+  const child = spawn('sleep', ['300'], { stdio: 'ignore' })
+  t.after(() => { try { process.kill(Number(child.pid), 'SIGKILL') } catch { /* already gone */ } })
+  const member = runningMember('recorded', child, PROCESSES)
+  assert.equal(member.childIdentity, PROCESSES.identityOf(Number(child.pid)), "the wrapper's start time is the one the kernel holds for its pid")
+  assert.notEqual(member.childIdentity, null, 'a wrapper just spawned has a start time to hold')
+})
+
+// martha#628 r=2: the wrapper is this process's own child until it is reaped, so a run that holds no start time for it
+// cannot vouch for anything under it. The walk is refused by name instead of skipped, which would report a run as ended
+// that the tear-down never reached.
+test('a wrapper the run holds no start time for is refused by name, and nothing under it is walked (martha#628 r=2)', async (t) => {
+  const { wrapper, pids } = await aTreeTwoDeep(t)
+  const child = pids[1]
+  if (child === undefined) assert.fail('the tree came to a child')
+  const refusals = killEvenIfGone(aMember('unheld', wrapper, { childIdentity: null }), PROCESSES)
+  assert.equal(refusals.length, 1, `one refusal, the walk's: ${JSON.stringify(refusals)}`)
+  assert.match(refusals[0] ?? '', /the wrapper, pid \d+, was never recorded with a start time/, 'and it names what the run never held')
+  assert.equal(stateOf(child), 'S', 'nothing under a wrapper the run cannot vouch for is even stopped')
 })
 
 // martha#189 r=2: the hold's own promise. The interrupt tests above only show that a run which logs the held line is

@@ -524,12 +524,15 @@ async function startMember ({ owner, name, startedLine, host, plant, log, relay,
 }
 
 /**
+ * A member as the run makes one, with the start time the kernel holds for its wrapper held from the moment it is
+ * spawned: the tear-down's walk is entered on that record, so a case that pins it must drive this line and not a copy
+ * of it (martha#628 r=2). Exported for that case, as stopMember and killEveryMember are.
  * @param {string} name
  * @param {import('node:child_process').ChildProcess} child
  * @param {ProcessesOnThisMachine} processes
  * @returns {Member}
  */
-function runningMember (name, child, processes) {
+export function runningMember (name, child, processes) {
   /** @type {Member} */
   const member = { name, child, pid: 0, said: '', ended: '', exited: Promise.resolve(''), identity: null, childIdentity: processes.identityOf(Number(child.pid)) }
   const hear = (/** @type {Buffer} */ chunk) => { member.said += chunk.toString('utf8') }
@@ -655,25 +658,47 @@ export async function killEveryMember (members, plant, processes) {
 export const NOTHING_MATCHED = 1
 
 /**
- * The child pids `pgrep` names for `pid`, or a refusal when the question could not be asked: a status of 2 or 3 (a
- * usage or a system error) and a `pgrep` that is not there each read as "no children" if they are not told apart from
+ * The pids `pgrep` names when asked `ask`, or a refusal when the question could not be asked: a status of 2 or 3 (a
+ * usage or a system error) and a `pgrep` that is not there each read as "none" if they are not told apart from
  * `NOTHING_MATCHED`, and a tear-down would then report a run it never reached as ended (martha#590 r=2).
+ * @param {string[]} ask
+ * @param {string} what the question, as a refusal names it
+ * @param {string[]} refusals
+ * @returns {number[]}
+ */
+function pidsNamedBy (ask, what, refusals) {
+  const ran = spawnSync('pgrep', ask, { encoding: 'utf8' })
+  if (ran.error) {
+    refusals.push(`${what} could not be read: ${reason(ran.error)}`)
+    return []
+  }
+  if (ran.status === NOTHING_MATCHED) return []
+  if (ran.status !== 0) {
+    refusals.push(`${what} could not be read: pgrep ended with status ${String(ran.status)}`)
+    return []
+  }
+  return ran.stdout.trim().split('\n').filter((pid) => pid !== '').map(Number)
+}
+
+/**
+ * The child pids `pgrep` names for `pid`, read as `pidsNamedBy` reads every question.
  * @param {number} pid
  * @param {string[]} refusals
  * @returns {number[]}
  */
 function childrenOf (pid, refusals) {
-  const ran = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' })
-  if (ran.error) {
-    refusals.push(`the children of pid ${pid} could not be read: ${reason(ran.error)}`)
-    return []
-  }
-  if (ran.status === NOTHING_MATCHED) return []
-  if (ran.status !== 0) {
-    refusals.push(`the children of pid ${pid} could not be read: pgrep ended with status ${String(ran.status)}`)
-    return []
-  }
-  return ran.stdout.trim().split('\n').filter((child) => child !== '').map(Number)
+  return pidsNamedBy(['-P', String(pid)], `the children of pid ${pid}`, refusals)
+}
+
+/**
+ * The pids still in the process group `pgid`, read as `childrenOf` reads the children: a group whose leader has ended
+ * keeps its orphans, and a tear-down that asks nothing about it reports a run it never reached as ended (martha#628 r=1).
+ * @param {number} pgid
+ * @param {string[]} refusals
+ * @returns {number[]}
+ */
+function groupOf (pgid, refusals) {
+  return pidsNamedBy(['-g', String(pgid)], `the processes left in the group of pid ${pgid}`, refusals)
 }
 
 /**
@@ -689,6 +714,10 @@ function childrenOf (pid, refusals) {
  *
  * Every stop is sent only while the kernel still holds the process whose start time was read for it a moment before:
  * a pid the kernel has handed on is another process's now, and neither it nor anything under it is walked (martha#628).
+ *
+ * A wrapper with a pid the run holds no start time for is refused by name rather than walked: the wrapper is this
+ * process's own child until it is reaped, so a run that never held its start time cannot vouch for what is under it
+ * (martha#628 r=2).
  * @param {number | undefined} pid
  * @param {string | null} identity the start time the kernel held for `pid` when it was recorded
  * @param {ProcessesOnThisMachine} processes
@@ -719,6 +748,7 @@ function frozenUnder (pid, identity, processes) {
     }
   }
   if (pid && identity !== null) walk(pid, identity)
+  else if (pid) refusals.push(`the wrapper, pid ${pid}, was never recorded with a start time, so nothing under it was walked`)
   return { frozen, refusals }
 }
 
@@ -731,6 +761,11 @@ function frozenUnder (pid, identity, processes) {
  * Nothing here signals a pid alone: each kill is sent only while the kernel still holds the process whose start time
  * was held for it, so a pid the kernel has handed on is never killed, and a group is only signalled when its leader is
  * still the process the member holds (martha#628).
+ *
+ * A group that was not signalled is not left silent either: its leader has ended or its number leads another process's
+ * group now, and the orphans left in it are beyond the walk, so whatever is still in it is refused by name. Killing it
+ * is wrong, because the group may be a stranger's; a run the tear-down never reached must not read as ended
+ * (martha#628 r=1).
  * @param {Member} member
  * @param {ProcessesOnThisMachine} processes
  * @returns {string[]} what could not be done, if anything: the tear-down fails on it by name
@@ -738,7 +773,10 @@ function frozenUnder (pid, identity, processes) {
 export function killEvenIfGone (member, processes) {
   const { frozen, refusals } = frozenUnder(member.child.pid, member.childIdentity, processes)
   for (const { pid, identity } of frozen) signalIfStillTheOne(processes, pid, identity, 'SIGKILL')
-  signalItsGroup(processes, member.pid, member.identity, 'SIGKILL')
+  if (!signalItsGroup(processes, member.pid, member.identity, 'SIGKILL') && member.pid) {
+    const left = groupOf(member.pid, refusals)
+    if (left.length) refusals.push(`${member.name}, pid ${member.pid}, was not signalled: its group still holds ${left.length} process(es) (${left.join(', ')}), and its leader is not the process this run recorded`)
+  }
   member.child.kill('SIGKILL')
   return refusals
 }
