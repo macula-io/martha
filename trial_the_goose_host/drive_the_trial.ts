@@ -21,10 +21,11 @@ import { userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
 import { HOME_MARKERS, CHECKOUT_MARKERS, aPlaceFor, plant, writeTheConfig, type Place } from './a_launch_the_trial_writes.ts'
-import { NoAnswerInTime, promptOver, withTimeout } from './a_turn_with_goose.ts'
+import { NoAnswerInTime, promptOver, setTheCapInHand, withTimeout } from './a_turn_with_goose.ts'
 import { findingsIn, pathsIn, type TraceFindings } from './read_the_trace.ts'
 import { RecordingProxy } from './record_what_goose_sends.ts'
 import { GooseOverAcp, type Exchange } from './speak_acp_to_goose.ts'
+import { TheModelPace, theCapFor, theLaunchesBoundMs, whyALineCannotFitItsRequests, type TheCapALineGets, type TheCapMadeOf } from './the_cap_a_line_gets.ts'
 import { THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_says_why.ts'
 import {
   lineEight, lineFive, lineFour, lineNine, lineOne, lineSix, lineThree, lineTwo, sevenAfterTheKill,
@@ -52,6 +53,10 @@ export interface Running {
   readonly tracePath: string
   readonly sessionId: string
   readonly currentMode: string
+  /** The model's own pace, measured as this launch runs: what the line's bound is made from (martha#732). */
+  readonly pace: TheModelPace
+  /** The bound this line's turns are under, and what it was made of. */
+  readonly cap: TheCapALineGets
 }
 
 /** The lines that ask the session something; line 7 is the kill, and the driver runs it. */
@@ -119,11 +124,15 @@ async function startARun(line: number, options: Options): Promise<Running> {
   const place = aPlaceFor(line, options.evidence, options.launch)
   if (line === 1) plant(place.ownerHome, HOME_MARKERS)
   if (line === 2) plant(place.checkout, CHECKOUT_MARKERS)
-  const proxy = new RecordingProxy(options.ollama)
-  const port = await proxy.start()
-  writeTheConfig(place, options.model, `http://127.0.0.1:${port}`, options.gooseSource)
   const evidenceForLine = join(options.evidence, `line-${line}`)
   mkdirSync(evidenceForLine, { recursive: true })
+  // The model's pace is measured from the proxy's answers, into the launch's own evidence, and becomes the
+  // bound the line's turns are under (martha#732).
+  const pace = new TheModelPace()
+  const cap = theCapFor(line, pace, theLaunchesBoundMs(options.gooseSource) ?? Number.POSITIVE_INFINITY)
+  const proxy = new RecordingProxy(options.ollama, { into: evidenceForLine, pace })
+  const port = await proxy.start()
+  writeTheConfig(place, options.model, `http://127.0.0.1:${port}`, options.gooseSource)
   const tracePath = join(evidenceForLine, 'trace.log')
   // The exchange is kept as it crosses, one line per message, in the launch's own evidence directory
   // (martha#694). Written empty first: a launch killed before its first message still leaves the file the
@@ -138,7 +147,7 @@ async function startARun(line: number, options: Options): Promise<Running> {
   const child = startGoose(place, options, line, tracePath)
   const acp = new GooseOverAcp(child, keep)
   const { sessionId, currentMode } = await shakeHands(acp, place)
-  return { line, options, place, proxy, acp, child, tracePath, sessionId, currentMode }
+  return { line, options, place, proxy, acp, child, tracePath, sessionId, currentMode, pace, cap }
 }
 
 function trialOf(running: Running): Trial {
@@ -163,6 +172,15 @@ export async function conduct(running: Running, lines: Readonly<Record<number, L
 }
 
 async function conductTheLine(running: Running, lines: Readonly<Record<number, Line>>): Promise<Observation> {
+  setTheCapInHand(running.cap)
+  try {
+    return await theLineInHand(running, lines)
+  } finally {
+    setTheCapInHand(undefined)
+  }
+}
+
+async function theLineInHand(running: Running, lines: Readonly<Record<number, Line>>): Promise<Observation> {
   if (running.line === 7) {
     running.acp.answers.next = 'allow_once'
     await promptOver(running.acp, running.sessionId, 'Use the shell tool to run: echo the launch has work to end')
@@ -268,10 +286,20 @@ async function runLine(line: number, options: Options): Promise<void> {
   const observation = await conduct(running)
   const { trace, groupLeft, engineLogs } = await endARun(running)
   const verdict = theVerdictKeptWithItsExchange(line, verdictOf(line, running.currentMode, observation, trace, groupLeft), evidenceForLine)
-  const result = { line, ...verdict, trace, groupLeft, engineLogs }
+  const result = { line, ...verdict, trace, groupLeft, engineLogs, cap: theCapTheLineHad(running) }
   mkdirSync(evidenceForLine, { recursive: true })
   writeFileSync(join(evidenceForLine, 'result.json'), JSON.stringify(result, null, 2))
   console.log(`line ${line}: ${result.verdict} — ${result.say}`)
+}
+
+/**
+ * What the line's bound was made of, as its result records it (martha#732): the model's own slowest answer this
+ * launch measured, the requests its turn makes, and the bound those made against the launch's own. Recorded
+ * whether or not it fitted, since a line cut at the cap is told apart from one the model never answered by it.
+ */
+function theCapTheLineHad(running: Running): TheCapMadeOf & { readonly whyNot: string | undefined } {
+  const made = running.cap.made()
+  return { ...made, whyNot: whyALineCannotFitItsRequests(made) }
 }
 
 async function main(): Promise<void> {

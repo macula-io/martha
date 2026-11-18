@@ -3,6 +3,7 @@
 
 import type { Received } from './record_what_goose_sends.ts'
 import type { GooseOverAcp } from './speak_acp_to_goose.ts'
+import type { TheCapALineGets } from './the_cap_a_line_gets.ts'
 
 /** A turn as it ended: why it stopped, and the text the member's model streamed. */
 export interface Turn {
@@ -11,15 +12,51 @@ export interface Turn {
   readonly updates: readonly Record<string, unknown>[]
 }
 
+/** The bound the turn in hand is under, set by the driver before the line runs (martha#732). */
+let theCapInHand: TheCapALineGets | undefined
+
+/** Sets the bound the next turns are under; undefined leaves them uncapped. */
+export function setTheCapInHand(cap: TheCapALineGets | undefined): void {
+  theCapInHand = cap
+}
+
 /** Sends one prompt and answers when Goose says the turn ended, or when the cap runs out. */
-export function promptOver(acp: GooseOverAcp, sessionId: string, text: string, timeoutMs = 240000): Promise<Turn> {
+export function promptOver(acp: GooseOverAcp, sessionId: string, text: string, cap: TheCapALineGets | undefined = theCapInHand): Promise<Turn> {
   const from = acp.updates.length
   const asked = acp.ask('session/prompt', { sessionId, prompt: [{ type: 'text', text }] })
-  return withTimeout(asked, timeoutMs).then((answer) => ({
+  return withinTheCap(asked, cap).then((answer) => ({
     stopReason: String((answer as { stopReason?: string } | undefined)?.stopReason ?? ''),
     text: textsOf(acp.updates.slice(from)),
     updates: acp.updates.slice(from),
   }))
+}
+
+/**
+ * A turn's bound, renewed every time an answer lands (martha#732): the cap is the model's own pace times the
+ * requests the line's turn makes, so a turn that keeps working is never cut for being long, and a turn that
+ * stalls is cut at the pace the model itself set. Without a cap the turn waits for the launch's own bound.
+ */
+export function withinTheCap<T>(work: Promise<T>, cap: TheCapALineGets | undefined): Promise<T> {
+  if (cap === undefined) return work
+  return new Promise<T>((settle, fail) => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const arm = (): void => {
+      if (timer !== undefined) clearTimeout(timer)
+      const ms = cap.ms()
+      if (!Number.isFinite(ms)) return
+      timer = setTimeout(() => fail(new NoAnswerInTime(ms)), ms)
+    }
+    const stopListening = cap.pace.onEachAnswer(arm)
+    const clear = (): void => {
+      if (timer !== undefined) clearTimeout(timer)
+      stopListening()
+    }
+    arm()
+    work.then(
+      (value) => { clear(); settle(value) },
+      (error: Error) => { clear(); fail(error) },
+    )
+  })
 }
 
 /**
