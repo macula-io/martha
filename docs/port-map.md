@@ -73,7 +73,7 @@ links check fails on it, so the table is changed on the landing that moves it.
 | Step | Where it stands | On `main`, or tracked in |
 |---|---|---|
 | 1. host_contract with log_ledger | built | [`host_contract`](../src/host_contract), [`log_ledger`](../src/log_ledger), [`keep_the_ledger`](../src/keep_the_ledger); see [the host contract and the ledger](host-contract-and-ledger.md) |
-| 2. declare_crew | built | [`declare_crew`](../src/declare_crew), [`declare_a_solo_crew`](../src/declare_a_solo_crew), [`who_may_act`](../src/who_may_act) |
+| 2. declare_crew | built | [`declare_crew`](../src/declare_crew), [`declare_a_solo_crew`](../src/declare_a_solo_crew) |
 | 3. deliver_crew_room | built on one machine; the room across machines is planned | [`keep_the_crew_channel`](../src/keep_the_crew_channel), [`send_a_crew_message`](../src/send_a_crew_message), [`hand_a_crew_message_to_its_member`](../src/hand_a_crew_message_to_its_member), [`show_what_a_message_became`](../src/show_what_a_message_became), [`read_a_crew_line`](../src/read_a_crew_line); across machines: [#310](https://github.com/macula-io/martha/issues/310), [#510](https://github.com/macula-io/martha/issues/510) |
 | 4. show_dashboard_beat | built | [`show_dashboard_beat`](../src/show_dashboard_beat), [`report_where_the_work_stands`](../src/report_where_the_work_stands), [`see_the_crew`](../src/see_the_crew) |
 | 5. park_and_wake, refresh_member, hand_over_at_limit | built | [`park_and_wake_a_member`](../src/park_and_wake_a_member), [`wake_a_member`](../src/wake_a_member), [`refresh_a_member`](../src/refresh_a_member), [`write_my_handover`](../src/write_my_handover), [`end_a_running_turn`](../src/end_a_running_turn) |
