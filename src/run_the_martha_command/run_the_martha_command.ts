@@ -135,12 +135,12 @@ function belowTheFloor(): string | undefined {
 const version = (): string => releaseVersionOf(releaseTree(), (path) => readFileSync(path, 'utf8'))
 
 async function init(io: CommandIo, places: Places): Promise<number> {
-  const owner = gitSays(places.root, 'config', 'user.name') ?? null
-  // The origin is what says whether the checkout's path can prove a workspace layout (martha#611), so it is read
-  // here, where Martha's own git runs, and handed on as a value the declaration slice reads.
-  const declared = await declareSoloCrew({ root: places.root, owner, origin: gitSays(places.root, 'remote', 'get-url', 'origin') ?? null, state: places.state, documents, models: CLAUDE_CODE_MODELS })
+  // The owner and the origin are both read here, where Martha's own git runs: the origin is what says whether the
+  // checkout's path can prove a workspace layout (martha#611), and the declaration slice reads it as a value.
+  const declared = await declareSoloCrew({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, origin: gitSays(places.root, 'remote', 'get-url', 'origin') ?? null, state: places.state, documents, models: CLAUDE_CODE_MODELS })
   if (!declared.declared) return refused(io, declared.refusal)
-  io.out(`Declared a solo crew in ${declared.declaration}: ${declared.settings.members.map((member) => member.name).join(', ')}.\n${declared.workspace}`)
+  io.out(`Declared a solo crew in ${declared.declaration}: ${declared.settings.members.map((member) => member.name).join(', ')}.`)
+  io.out(declared.workspace)
   return EXIT_DONE
 }
 
