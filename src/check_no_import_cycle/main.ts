@@ -1,17 +1,21 @@
 // Run the check: node src/check_no_import_cycle/main.ts [--root <dir>]
 //
-// Exit 0 no group of the core's files loads each other in a loop, 1 a loop (the whole path, one line) or an exception
-// that excused nothing, 2 the check could not look. It never passes because it could not look.
+// Exit 0 no group of the repository's own files loads each other in a loop, 1 a loop (the whole path, one line) or an
+// exception that excused nothing, 2 the check could not look. It never passes because it could not look.
 //
-// What it reads: every value import between the core's sources, from the syntax tree, so an import written inside a
-// string or a comment is text and a real import split over lines is still an import. `import type` and the other
+// What it reads: every value import between the repository's sources, from the syntax tree, so an import written inside
+// a string or a comment is text and a real import split over lines is still an import. `import type` and the other
 // type-only references close no loop, because they are erased at run time. An `export … from`, a dynamic `import()`
 // and a `require()` do run, and each is followed like an `import`. A `node:` specifier, a package and a `.json` beside
-// the sources leave the walk: a loop needs two modules of the core that load each other.
+// the sources leave the walk: a loop needs two modules of this repository that load each other.
+//
+// Every tree the repository holds is judged, and the files directly in its root too (martha#748), so a loop between
+// `architecture/` and `prove_the_core/` is named like one inside a single slice. `node_modules` and dot-directories are
+// no part of this repository's code and are never read, at any depth.
 //
 // What it cannot see, stated: a module a file loads by a name built at run time (the check that every import is a
-// plain one, prove_the_core/imports_beyond_the_core, refuses those by name), and a loop that runs through a file of the
-// repository outside `src/`, which is not a module of the core.
+// plain one, prove_the_core/imports_beyond_the_core, refuses those by name), and a loop that runs through a file
+// outside the repository, which no walk here reads.
 //
 // The exception list (./the_exceptions.ts) names the groups allowed to keep a loop, one entry per group of files, each
 // with the package that untangles it. An entry that excuses nothing is a finding of its own, so the list cannot go on
@@ -30,16 +34,16 @@ const option = (name: string): string | undefined => {
 }
 
 /** One loop as a red run prints it: the whole path, from its first file round to it again. */
-const theLoop = (paths: readonly string[]): string => paths.map((path) => `src/${path}`).join(' -> ')
+const theLoop = (paths: readonly string[]): string => paths.join(' -> ')
 
 /** The verdict over the tree, in the words a red run prints. */
 const judge = (judged: Judged): number => {
   if (judged.files === 0) {
-    console.error(`${NAME}: the check could not look: no source was found under src/`)
+    console.error(`${NAME}: the check could not look: no source was found under the repository's code roots`)
     return 2
   }
   for (const loop of judged.findings) {
-    console.error(`${NAME}: ${loop.files.length} file(s) of the core load each other in a loop: ${theLoop(loop.through)}`)
+    console.error(`${NAME}: ${loop.files.length} file(s) of the repository load each other in a loop: ${theLoop(loop.through)}`)
   }
   for (const exception of judged.stale as readonly DeclaredCycle[]) {
     console.error(`${NAME}: ${exception.files.length} file(s) are excused by nothing (${exception.reason}; removed by ${exception.removed_by})`)
@@ -49,7 +53,7 @@ const judge = (judged: Judged): number => {
     console.error(`${NAME}: ${said} finding(s)`)
     return 1
   }
-  console.log(`${NAME}: ${judged.files} source(s) read, no loop of value imports in the core`)
+  console.log(`${NAME}: ${judged.files} source(s) read, no loop of value imports in the repository`)
   return 0
 }
 

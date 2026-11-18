@@ -42,6 +42,22 @@ process once its tests are done, even if it still holds something open. So a
 hung test never outlives an interrupted run. The timeout is written once, in
 the test script in package.json.
 
+To run one file, or one named case, through those same bounds:
+
+```bash
+npm run test:file -- prove_the_core/parse_a_source.node-test.ts
+npm run test:file -- '--test-name-pattern=a source that parses' prove_the_core/parse_a_source.node-test.ts
+```
+
+It is the run `npm test` makes of its files, with the six globs replaced by the
+files you name (`prove_the_relay_loads/run_the_tests_of_one_file.sh`), so it
+carries the test script's own timeout, force-exit and guard, and goes through
+the same output check. The recorded-host and installer stages do not run, so a
+green `test:file` says nothing about them: `npm test` is still the gate before a
+handoff. A path the suite's own globs do not pick is refused, and a flag of your
+own is refused too — the bounds are the test script's, and `--test-name-pattern`
+is the one word it takes.
+
 Ending a file's process must not hide what it left behind, so the script also
 loads `prove_the_core/fail_a_test_file_that_leaves_something_running.ts` into
 every test file's process. A test file that leaves a server, socket, timer or

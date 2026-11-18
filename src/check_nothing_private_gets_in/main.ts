@@ -2,13 +2,14 @@
 //
 // Environment: MARTHA_LAB_HOSTS (a JSON array of the lab's machine families; a
 // secret in CI), MARTHA_FORK_PR=1 on a pull request from a fork, GITHUB_TOKEN
-// for the repository lookups.
+// for the repository lookups. Without MARTHA_LAB_HOSTS, the families' digests
+// the owner kept on this machine (read_lab_family_digests.ts, martha#731).
 //
 // Exit 0 clean, 1 hits (one line each, `where: what`), 2 the check could not be
-// made. It never passes because it could not look.
+// made. It never passes because it could not look: with no families at all, every
+// other rule runs and prints its hits, and the exit is 2.
 
 import {
-  familiesFrom,
   withoutLabNames,
   privateHitsIn,
   type Families,
@@ -20,7 +21,7 @@ import {
 } from './check_nothing_private_gets_in.ts'
 import { DECLARED } from './declared.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
-import { declaredOrNone, resolveOnGitHub, rulesOf } from './scan_rules_and_visibility.ts'
+import { declaredOrNone, familiesOf, resolveOnGitHub, rulesOf } from './scan_rules_and_visibility.ts'
 
 const option = (name: string): string | undefined => {
   const at = process.argv.indexOf(name)
@@ -74,11 +75,18 @@ const report = (hits: readonly Hit[]) => {
   for (const hit of hits) console.log(`${hit.where}: ${hit.what}`)
 }
 
-const main = async (): Promise<number> => {
-  const families = familiesFrom(process.env['MARTHA_LAB_HOSTS'], process.env['MARTHA_FORK_PR'] === '1')
+const sayWhereTheFamiliesCameFrom = (families: Families) => {
   if (families.kind === 'skipped') console.log(`lab machine families not checked: ${families.why}`)
+  // Kept as digests, the families cannot be planted: the self-test plants none of them.
+  if (families.kind === 'kept') console.log('lab machine families read from this machine\'s digests')
+}
+
+const main = async (): Promise<number> => {
+  const families = familiesOf(process.env)
+  sayWhereTheFamiliesCameFrom(families)
   const resolve = resolveOnGitHub(process.env['GITHUB_TOKEN'])
   if (process.argv.includes('--self-test')) {
+    if (families.kind === 'unchecked') throw new Error(families.why)
     const failures = await selfTest(families, resolve)
     for (const failure of failures) console.log(`does not bite: ${failure}`)
     console.log(failures.length === 0 ? 'check_nothing_private_gets_in: the check bites' : 'check_nothing_private_gets_in: self-test failed')
@@ -87,6 +95,10 @@ const main = async (): Promise<number> => {
   const root = option('--root') ?? process.cwd()
   const hits = await privateHitsIn(sourcesOf(root, option('--range')), rulesOf(families, true), resolve)
   report(hits)
+  if (families.kind === 'unchecked') {
+    console.error(`check_nothing_private_gets_in: ${hits.length} hit(s) from the other rules; ${families.why}`)
+    return 2
+  }
   if (hits.length > 0) {
     console.error(`check_nothing_private_gets_in: ${hits.length} hit(s). Keep the reasoning, drop the link: docs/nothing-private-gets-in.md`)
     return 1
@@ -98,7 +110,8 @@ const main = async (): Promise<number> => {
 main().then(
   (code) => process.exit(code),
   (error: unknown) => {
-    const said = withoutLabNames(error instanceof Error ? error.message : String(error), declaredOrNone())
+    const lab = declaredOrNone(process.env)
+    const said = withoutLabNames(error instanceof Error ? error.message : String(error), lab.labHosts, lab.labDigests)
     console.error(`check_nothing_private_gets_in: the check could not be made: ${said}`)
     process.exit(2)
   },
