@@ -293,6 +293,29 @@ jobs:
       - run: npm ci
       - run: npm run --silent check:no-member-outlives-its-run
 
+  # The workspace's layout, as a check that fails by name (martha#562, port-map step 9): every clone on its default
+  # branch and clean, every worktree where the crew declared it, one clone per repository.
+  #
+  # The job runs the entry with --self-test, and not the plain run, because this repository declares no layout: a plain
+  # run here would always take the nothing-declared answer and be green whatever the check did. The self-test plants a
+  # workspace under the runner's temp directory, requires the drift to be named at the planted clone's own path, and
+  # requires a planted workspace that matches its layout to name nothing.
+  workspace-layout:
+    name: the workspace matches its layout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:workspace-layout -- --self-test
+      # The plain run too, and not only the self-test: this repository declares no layout, so here it answers the
+      # nothing-declared line and exits 0. It proves the script reaches the entry it names, which the self-test alone
+      # would not (martha#741 counts a step that runs only a --self-test as no run of the check).
+      - run: npm run --silent check:workspace-layout
+
   # No launcher outlives its run (martha#559): a launch test's `script -qec ... launcher.ts` pair is a terminal held
   # open, and a run killed hard leaves them piled up until the next launch test stops reporting. The job is a run over a
   # machine that holds none, and answers 0. That it BITES is a test's, and so is every line of the rule: a kernel the
