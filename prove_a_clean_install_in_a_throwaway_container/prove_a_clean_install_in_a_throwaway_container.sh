@@ -151,10 +151,6 @@ declare -A ROLE_RUNS_THE_COMMAND=([builder]=1)
 # it ends, so the script says so itself, and an earlier member's screen is read for them after a later one is proven.
 STARTED_WORDS='started, pid'
 ENDED_WORDS='ended, status'
-# The member, the words its command prints when it has started, and the owner's turn typed at its terminal.
-MEMBER_ROLE='builder'
-MEMBER_STARTED_WORDS="${MEMBER_ROLE} started, pid"
-OWNER_TURN='Read README.md in this checkout, then carry out the one command it asks for, then tell me what happened.'
 # The first key descriptor a member's terminal is written on; each member in the release's order takes the next one.
 FIRST_KEY_FD=4
 # The host's first-run question about the folder, whose first answer is to leave, so it takes a Down before Enter. A
@@ -173,7 +169,6 @@ TERMINAL_COLUMNS=160
 # the sign-in session's. They are read while the member runs: the folder goes with its launch.
 TRANSCRIPTS="${CONTAINER_HOME}/.local/state/martha/*/snapshots/*/the-members-own-config/projects/*/*.jsonl"
 REQUEST_BLOB='"type":"api-request-blob"'
-TURN_LINE="\"role\":\"user\",\"content\":\"${OWNER_TURN}\""
 ANSWER_LINE='"role":"assistant","content":[{"type":"text","text":"'
 # The host's Read returns every line of the file with its number and a tab, so a real read of the outsider's README
 # carries its heading as "1\t# <heading>", never bare: a check for the bare heading matches nothing a real read sends
@@ -216,9 +211,6 @@ MEMBERS=()
 TERMINAL_DIRS=() TERMINAL_PIDS=() TERMINAL_FDS=() PROVEN_AT=()
 OPEN_TERMINALS=()
 PROVEN_COUNT=0
-MEMBER_PROVEN=''
-MEMBER_PID=''
-RUN_DIR=''
 # What the checks read of the member being checked: the session files holding its turn, and their text.
 MEMBER_FILES='' MEMBER_TEXT=''
 # Where the self-test found a kept record's headings and the tear-down, for the checks that read between them.
@@ -531,170 +523,299 @@ solo_crew_script() {
   printf 'node --no-warnings --input-type=module -e %s "%s/%s"' "$(remote_word "${program}")" "$1" "${SOLO_CREW_IN_A_TREE}"
 }
 
-# The user record of the owner's turn to the member named `name`, as the host writes it.
-turn_line() {
-  printf '"role":"user","content":"%s"' "${ROLE_TURNS[$1]}"
+# Whether `name` is one of the members the release named.
+a_member() {
+  local member
+  for member in "${MEMBERS[@]}"; do
+    if [ "${member}" = "$1" ]; then return 0; fi
+  done
+  return 1
 }
 
-# The member's terminal: its own command, started on a terminal of the size above, in the checkout.
+# The crew step: the members read from the INSTALLED release's solo crew, never this checkout's, and held to the turns
+# this run has, both ways, before the owner is asked for anything and before any member starts. A member the release
+# names with no turn here would be skipped or given another's turn, and a turn the release no longer names would be a
+# stale role; both fail by name, and nothing starts.
+crew_step() {
+  local said name
+  said="$(in_the_container "$(solo_crew_script "$(installed_release_root)")" 2>&1)" \
+    || { failed crew "the installed ${COMMAND} ${RELEASE_VERSION} gives no solo crew from ${SOLO_CREW_IN_A_TREE}: $(one_line "${said}")"; return 1; }
+  mapfile -t MEMBERS < <(grep . <<< "${said}" || true)
+  if [ "${#MEMBERS[@]}" -eq 0 ]; then
+    failed crew "the installed ${COMMAND} ${RELEASE_VERSION}'s solo crew names no member"
+    return 1
+  fi
+  for name in "${MEMBERS[@]}"; do
+    if [ -z "${ROLE_TURNS[${name}]+given}" ]; then
+      failed crew "the solo crew names '${name}', which this run has no turn for"
+      return 1
+    fi
+  done
+  for name in "${!ROLE_TURNS[@]}"; do
+    if ! a_member "${name}"; then
+      failed crew "this run has a turn for '${name}', which the solo crew does not name"
+      return 1
+    fi
+  done
+  ok crew "the installed ${COMMAND} ${RELEASE_VERSION}'s solo crew names ${MEMBERS[*]}, and this run has a turn for each"
+}
+
+# The terminal of the member named `name`: its own command, started on a terminal of the size above, in the checkout,
+# then the run's own line saying that command ended, so a member that ends is seen on its screen.
 member_script() {
-  printf 'stty rows %s cols %s 2> /dev/null; export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; cd %s; exec martha start %s' \
-    "${TERMINAL_ROWS}" "${TERMINAL_COLUMNS}" "${CONTAINER_HOME}" "${CHECKOUT}" "${MEMBER_ROLE}"
+  local name
+  name="$(remote_word "$1")"
+  printf 'stty rows %s cols %s 2> /dev/null; export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; cd %s; martha start %s; echo %s %s "$?"' \
+    "${TERMINAL_ROWS}" "${TERMINAL_COLUMNS}" "${CONTAINER_HOME}" "${CHECKOUT}" "${name}" "${name}" "$(remote_word "${ENDED_WORDS}")"
 }
 
-# What the member's terminal has drawn so far, its escapes taken out.
+# A terminal's bytes on standard input, its escapes taken out.
+without_escapes() {
+  sed 's/\x1b\[[0-9;?]*[ -\/]*[@-~]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[()][A-Z0-9]//g; s/\x1b[=>]//g' | tr -d '\r'
+}
+
+# What the terminal of the member at `index` has drawn so far, its escapes taken out.
 screen_text() {
-  sed 's/\x1b\[[0-9;?]*[ -\/]*[@-~]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[()][A-Z0-9]//g; s/\x1b[=>]//g' "${RUN_DIR}/screen" | tr -d '\r'
+  without_escapes < "${TERMINAL_DIRS[$1]}/screen"
 }
 
-# Whether the member's screen shows `pattern` (an extended expression) within `seconds`.
+# What that terminal has drawn since its member was proven.
+screen_since_proven() {
+  tail -c "+$((PROVEN_AT[$1] + 1))" "${TERMINAL_DIRS[$1]}/screen" | without_escapes
+}
+
+# Whether the terminal of the member at `index` shows `pattern` (an extended expression) within `seconds`.
 screen_shows() {
   local waited=0
-  while [ "${waited}" -lt "$2" ]; do
-    if screen_text | grep -qE -- "$1"; then return 0; fi
+  while [ "${waited}" -lt "$3" ]; do
+    if screen_text "$1" | grep -qE -- "$2"; then return 0; fi
     sleep 1
     waited=$((waited + 1))
   done
   return 1
 }
 
-# Keys typed at the member's terminal, and a pause for the host to take them.
+# Keys typed at the terminal of the member at `index`, and a pause for the host to take them. A descriptor that is not
+# open, or a terminal that is gone, fails here rather than ending the run.
 type_keys() {
-  printf '%s' "$1" >&4 || return 1
+  printf '%s' "$2" 2> /dev/null >&"${TERMINAL_FDS[$1]}" || return 1
   sleep "${KEY_PAUSE_S}"
 }
 
-# The host's transcripts in the container, without the request blobs that repeat the conversation.
-transcript() {
-  local text
-  text="$(on_the_host podman exec "${CONTAINER}" sh -c "cat ${TRANSCRIPTS} 2> /dev/null; true")" || return 1
-  grep -vF -- "${REQUEST_BLOB}" <<< "${text}" || true
+# The user record of the owner's turn to the member named `name`, as the host writes it.
+turn_line() {
+  printf '"role":"user","content":"%s"' "${ROLE_TURNS[$1]}"
 }
 
-# Whether one line of the transcript holds both `first` and `second`.
+# The member's session files and their text, in one read of the container: each file under TRANSCRIPTS that holds
+# the owner's turn to `name` on a line that is not a request blob, as `file <path>`, then that file's lines but the
+# blobs, each as `line <line>`. A blob repeats the conversation, so a blob that repeats the turn picks no file, and
+# what a blob repeats is not what happened.
+member_read() {
+  local blob turn
+  blob="$(remote_word "${REQUEST_BLOB}")"
+  turn="$(remote_word "$(turn_line "$1")")"
+  on_the_host podman exec "${CONTAINER}" sh -c "for f in ${TRANSCRIPTS}; do if [ -f \"\$f\" ] && grep -vF -- ${blob} \"\$f\" | grep -qF -- ${turn}; then printf 'file %s\n' \"\$f\"; grep -vF -- ${blob} \"\$f\" | sed 's/^/line /'; fi; done; true"
+}
+
+# The session files holding the owner's turn to `name`, one a line.
+member_files() {
+  local read
+  read="$(member_read "$1")" || return 1
+  sed -n 's/^file //p' <<< "${read}"
+}
+
+# The member named `name` read now: its session files, and their text.
+read_member() {
+  local read
+  read="$(member_read "$1")" || return 1
+  MEMBER_FILES="$(sed -n 's/^file //p' <<< "${read}")"
+  MEMBER_TEXT="$(sed -n 's/^line //p' <<< "${read}")"
+}
+
+# Whether one line of the member's text holds both `first` and `second`.
 transcript_holds() {
   local lines
-  lines="$(grep -F -- "$1" <<< "${TRANSCRIPT}" || true)"
+  lines="$(grep -F -- "$1" <<< "${MEMBER_TEXT}" || true)"
   grep -qF -- "$2" <<< "${lines}"
 }
 
 # Whether the README's command made its mark in the container.
 mark_made() { on_the_host podman exec "${CONTAINER}" test -e "${OUTSIDER_MARK}" > /dev/null 2>&1; }
 
-# Whether the transcript, read now, holds the owner's turn.
+# Whether the member named `name`, read now, has a session file holding its turn.
 turn_taken() {
-  TRANSCRIPT="$(transcript)" || return 1
-  transcript_holds "${TURN_LINE}" "${TURN_LINE}"
+  read_member "$1" || return 1
+  [ -n "${MEMBER_FILES}" ]
 }
 
-# The turn typed, and read back from the transcript within its window; typed once more when it is not there, because a
-# host still drawing a first-run screen drops what is typed.
+# The turn typed at the terminal of the member at `index`, and read back from its transcript within its window; typed
+# once more when it is not there, because a host still drawing a first-run screen drops what is typed.
 type_the_turn() {
-  local attempt waited
+  local index="$1" name="${MEMBERS[$1]}" attempt waited
   for attempt in 1 2; do
-    type_keys "${OWNER_TURN}" && type_keys "${ENTER_KEY}" || return 1
+    type_keys "${index}" "${ROLE_TURNS[${name}]}" && type_keys "${index}" "${ENTER_KEY}" || return 1
     waited=0
     while [ "${waited}" -lt "${TURN_WINDOW_S}" ]; do
-      if turn_taken; then return 0; fi
+      if turn_taken "${name}"; then return 0; fi
       sleep "${POLL_S}"
       waited=$((waited + POLL_S))
     done
-    log "the owner's turn is not in the host's transcript after typing it (${attempt})"
+    log "the owner's turn is not in ${name}'s transcript after typing it (${attempt})"
   done
   return 1
 }
 
-# The member's terminal opened: its own command over a terminal ssh makes on the host, keys going in through a pipe
-# of the run's own, and every byte it draws kept.
-open_the_members_terminal() {
-  RUN_DIR="$(mktemp -d)"
-  mkfifo "${RUN_DIR}/keys"
-  ssh -tt "${HOST}" "$(remote_words podman exec -it "${CONTAINER}" sh -lc "$(member_script)")" \
-    < "${RUN_DIR}/keys" > "${RUN_DIR}/screen" 2>&1 &
-  MEMBER_PID=$!
-  exec 4> "${RUN_DIR}/keys"
+# The terminal of the member at `index` opened: its own command over a terminal ssh makes on the host, keys going in
+# through a pipe of the run's own on its own descriptor, and every byte it draws kept. It is in OPEN_TERMINALS before
+# anything is started, so the one close path reaches it whatever happens next. The earlier members' key descriptors
+# are closed in what is started: held open there, by it or by anything it leaves behind, an earlier member's pipe
+# would never reach its end when the run closes it.
+open_the_terminal() {
+  local index="$1" dir earlier
+  dir="$(mktemp -d)"
+  TERMINAL_DIRS[index]="${dir}"
+  TERMINAL_FDS[index]=$((FIRST_KEY_FD + index))
+  TERMINAL_PIDS[index]=''
+  OPEN_TERMINALS+=("${index}")
+  mkfifo "${dir}/keys"
+  (
+    for earlier in "${OPEN_TERMINALS[@]}"; do
+      if [ "${earlier}" != "${index}" ]; then eval "exec ${TERMINAL_FDS[earlier]}>&-"; fi
+    done
+    exec ssh -tt "${HOST}" "$(remote_words podman exec -it "${CONTAINER}" sh -lc "$(member_script "${MEMBERS[index]}")")"
+  ) < "${dir}/keys" > "${dir}/screen" 2>&1 &
+  TERMINAL_PIDS[index]=$!
+  eval "exec ${TERMINAL_FDS[index]}> \"\${dir}/keys\""
 }
 
-# The member's terminal closed: the host told to exit, the pipe closed, and the session given a moment before it is
-# stopped.
-close_the_members_terminal() {
-  local waited=0
-  if [ -z "${MEMBER_PID}" ]; then return 0; fi
-  type_keys "${EXIT_COMMAND}" && type_keys "${ENTER_KEY}" || true
-  exec 4>&-
-  while kill -0 "${MEMBER_PID}" 2> /dev/null && [ "${waited}" -lt "${TURN_WINDOW_S}" ]; do
-    sleep 1
-    waited=$((waited + 1))
+# Every terminal the run opened closed, the last opened first: the host told to exit, the pipe closed, the session
+# given a moment before it is stopped, and the terminal's folder removed. The one close path: `finish` runs it on a
+# pass, on a failed step and after a signal, and no member step closes anything itself.
+close_every_terminal() {
+  local at index pid waited
+  for ((at = ${#OPEN_TERMINALS[@]} - 1; at >= 0; at--)); do
+    index="${OPEN_TERMINALS[at]}"
+    pid="${TERMINAL_PIDS[index]:-}"
+    type_keys "${index}" "${EXIT_COMMAND}" && type_keys "${index}" "${ENTER_KEY}" || true
+    eval "exec ${TERMINAL_FDS[index]}>&-"
+    if [ -n "${pid}" ]; then
+      waited=0
+      while kill -0 "${pid}" 2> /dev/null && [ "${waited}" -lt "${TURN_WINDOW_S}" ]; do
+        sleep 1
+        waited=$((waited + 1))
+      done
+      kill "${pid}" 2> /dev/null || true
+      wait "${pid}" 2> /dev/null || true
+    fi
+    rm -rf "${TERMINAL_DIRS[index]}"
   done
-  kill "${MEMBER_PID}" 2> /dev/null || true
-  wait "${MEMBER_PID}" 2> /dev/null || true
-  MEMBER_PID=''
+  OPEN_TERMINALS=()
 }
 
-# The first claim of what a member must have done that the transcript and the container do not show, or nothing.
+# The first claim of what the member named `name` must have done that its transcript and the container do not show,
+# or nothing. Its transcript is the one session file holding its turn: none, or more than one, fails it, and so does a
+# file another member's turn is in too, so one member's lines can never prove another.
 member_shortfall() {
-  if ! transcript_holds "${TURN_LINE}" "${TURN_LINE}"; then printf "the owner's turn is not in the transcript"; return 0; fi
+  local name="$1" count other
+  count="$(grep -c . <<< "${MEMBER_FILES}" || true)"
+  if [ "${count}" -ne 1 ]; then printf "%s's turn is in %s session files" "${name}" "${count}"; return 0; fi
+  for other in "${MEMBERS[@]}"; do
+    if [ "${other}" = "${name}" ]; then continue; fi
+    if grep -qxF -- "${MEMBER_FILES}" <<< "$(member_files "${other}" || true)"; then
+      printf '%s and %s share one session file' "${name}" "${other}"
+      return 0
+    fi
+  done
   if ! transcript_holds "${ANSWER_LINE}" "${ANSWER_LINE}"; then printf 'the member gave no answer'; return 0; fi
   if ! transcript_holds "${READ_LINE}" "${READ_LINE}"; then printf "the member did not read the outsider's README"; return 0; fi
+  if [ -z "${ROLE_RUNS_THE_COMMAND[${name}]:-}" ]; then return 0; fi
   if ! transcript_holds "${SHELL_CALL_LINE}" "${SHELL_CALL_WORDS}"; then printf "the member asked for no shell call of '%s'" "${SHELL_CALL_WORDS}"; return 0; fi
   if ! mark_made; then printf '%s is absent: the command did not run' "${OUTSIDER_MARK}"; return 0; fi
   return 0
 }
 
-# Whether the member has done all it is asked, read now.
+# Whether the member named `name` has done all it is asked, read now.
 member_done() {
-  TRANSCRIPT="$(transcript)" || return 1
-  [ -z "$(member_shortfall)" ]
+  read_member "$1" || return 1
+  [ -z "$(member_shortfall "$1")" ]
 }
 
-# What the member did, kept in the log when the member step fails: the host's transcript read as the checks read it
-# (TRANSCRIPTS only, so nothing else under the host's folder, never its credentials, and no request blob) and the
-# member's screen. It is kept before the tear-down, which takes the container and the run's folder with it.
+# What the member at `index` did, kept in the log when it fails: its own session files read as the checks read them
+# (TRANSCRIPTS only, so nothing else under the host's folder, never its credentials, and no request blob) and its own
+# screen. It is kept before the tear-down, which takes the container and the terminal's folder with it.
 keep_what_the_member_did() {
-  local text
-  text="$(transcript)" || text='(the container could not give it)'
-  log "${KEPT_TRANSCRIPT_WORDS}"
+  local name="${MEMBERS[$1]}" text
+  if read_member "${name}"; then text="${MEMBER_TEXT}"; else text='(the container could not give it)'; fi
+  log "${name}${KEPT_TRANSCRIPT_WORDS}"
   log "${text}"
-  log "${KEPT_SCREEN_WORDS}"
-  log "$(screen_text 2> /dev/null || true)"
+  log "${name}${KEPT_SCREEN_WORDS}"
+  log "$(screen_text "$1" 2> /dev/null || true)"
 }
 
-# A member step that fails: the one line that says why, then what the member did.
+# The member at `index` failing: the one line that says why, named by the member, then what it did.
 member_failed() {
-  failed member "$1"
-  keep_what_the_member_did
+  failed "member ${MEMBERS[$1]}" "$2"
+  keep_what_the_member_did "$1"
 }
 
-# The member step: the member started by its own command, the owner's turn typed at its terminal once the first-run
-# screens are answered, and what it did read from the host's transcript and the container within the window.
+# The member step of the member at `index`: the member started by its own command, the owner's turn for its role typed
+# at its terminal once the first-run screens are answered, and what it did read from its own transcript and the
+# container within the window.
 member_step() {
-  local waited=0 shortfall
+  local index="$1" name="${MEMBERS[$1]}" waited=0 shortfall did
   # A member whose terminal is gone makes a key typed at it fail, rather than end the run with no tear-down.
   trap '' PIPE
-  open_the_members_terminal
-  if ! screen_shows "${MEMBER_STARTED_WORDS}" "${STARTED_WINDOW_S}"; then
-    member_failed "the member never said '${MEMBER_STARTED_WORDS}': $(screen_text | tail -c 300 | tr '\n' ' ')"
+  open_the_terminal "${index}"
+  if ! screen_shows "${index}" "${name} ${STARTED_WORDS}" "${STARTED_WINDOW_S}"; then
+    member_failed "${index}" "${name} never said '${name} ${STARTED_WORDS}': $(screen_text "${index}" | tail -c 300 | tr '\n' ' ')"
     return 1
   fi
-  if screen_shows "${TRUST_WORDS}" "${TURN_WINDOW_S}"; then
-    type_keys "${DOWN_KEY}" && type_keys "${ENTER_KEY}" || { member_failed 'the member ended at the folder question'; return 1; }
+  if screen_shows "${index}" "${TRUST_WORDS}" "${TURN_WINDOW_S}"; then
+    type_keys "${index}" "${DOWN_KEY}" && type_keys "${index}" "${ENTER_KEY}" || { member_failed "${index}" "${name} ended at the folder question"; return 1; }
   fi
-  if ! type_the_turn; then
-    member_failed "the owner's turn never reached the host's transcript, typed twice"
+  if ! type_the_turn "${index}"; then
+    member_failed "${index}" "the owner's turn never reached ${name}'s transcript, typed twice"
     return 1
   fi
-  while [ "${waited}" -lt "${MEMBER_WINDOW_S}" ] && ! member_done; do
+  while [ "${waited}" -lt "${MEMBER_WINDOW_S}" ] && ! member_done "${name}"; do
     sleep "${POLL_S}"
     waited=$((waited + POLL_S))
   done
-  TRANSCRIPT="$(transcript)" || { member_failed 'the container could not give the host transcript'; return 1; }
-  shortfall="$(member_shortfall)"
+  read_member "${name}" || { member_failed "${index}" 'the container could not give the host transcript'; return 1; }
+  shortfall="$(member_shortfall "${name}")"
   if [ -n "${shortfall}" ]; then
-    member_failed "${shortfall}"
+    member_failed "${index}" "${shortfall}"
     return 1
   fi
-  MEMBER_PROVEN=1
-  ok member "${MEMBER_ROLE} took the owner's turn, answered, read the outsider's README and ran its command: ${OUTSIDER_MARK} is there"
+  PROVEN_AT[index]="$(wc -c < "${TERMINAL_DIRS[index]}/screen")"
+  PROVEN_COUNT=$((PROVEN_COUNT + 1))
+  did="took the owner's turn, answered and read the outsider's README"
+  if [ -n "${ROLE_RUNS_THE_COMMAND[${name}]:-}" ]; then did="${did}, and ran its command: ${OUTSIDER_MARK} is there"; fi
+  ok "member ${name}" "${name} ${did}"
+}
+
+# Whether every member proven before the one at `later` is still up: its ssh client alive, and its screen showing no
+# end since it was proven. A member that ended once proven fails by name.
+earlier_members_up() {
+  local later="$1" earlier name
+  for ((earlier = 0; earlier < later; earlier++)); do
+    name="${MEMBERS[earlier]}"
+    if ! kill -0 "${TERMINAL_PIDS[earlier]}" 2> /dev/null || screen_since_proven "${earlier}" | grep -qF -- "${name} ${ENDED_WORDS}"; then
+      member_failed "${earlier}" "${name} ended while ${MEMBERS[later]} ran"
+      return 1
+    fi
+  done
+}
+
+# The members step: every member of the release's solo crew, in its order, each started while the earlier ones stay
+# up, and the earlier ones read again once each later one is proven.
+members_step() {
+  local index
+  for index in "${!MEMBERS[@]}"; do
+    member_step "${index}" || return 1
+    earlier_members_up "${index}" || return 1
+  done
 }
 
 # The container's state by podman's own answer: present when it says so, absent when it says so and nothing else.
@@ -756,18 +877,18 @@ run_the_steps() {
   if [ -n "${NO_RELEASE_YET}" ]; then return 0; fi
   version_step || return 1
   claude_code_step || return 1
+  crew_step || return 1
   checkout_step || return 1
   sign_in_step || return 1
   if [ -n "${SIGN_IN_MISSED}" ]; then return 0; fi
-  member_step || return 1
+  members_step || return 1
 }
 
 # Whatever happened: the container goes first, then the run says how it ended, and exits with that.
 finish() {
   local status=$?
   trap - EXIT INT TERM
-  close_the_members_terminal
-  if [ -n "${RUN_DIR}" ]; then rm -rf "${RUN_DIR}"; fi
+  close_every_terminal
   if [ -n "${CONTAINER}" ]; then
     if ! tear_down_step; then status=1; fi
   fi
@@ -787,13 +908,19 @@ finish() {
     log 'no member is claimed: the owner did not sign in'
     exit 4
   fi
-  # Only the member step says a member is proven: steps that ended without it claim nothing, and the run fails.
-  if [ -z "${MEMBER_PROVEN}" ]; then
+  # Only a member step says a member is proven, and the run claims the crew only when every member the release names
+  # is: steps that ended short of that claim nothing, and the run fails.
+  if [ "${PROVEN_COUNT}" -eq 0 ]; then
     failed run 'the steps ended and no member was proven'
     log failed
     exit 1
   fi
-  log 'a member is proven'
+  if [ "${PROVEN_COUNT}" -ne "${#MEMBERS[@]}" ]; then
+    failed run "the steps ended with ${PROVEN_COUNT} of the ${#MEMBERS[@]} members proven"
+    log failed
+    exit 1
+  fi
+  log "${ALL_PROVEN_WORDS}: ${MEMBERS[*]}"
   exit 0
 }
 
