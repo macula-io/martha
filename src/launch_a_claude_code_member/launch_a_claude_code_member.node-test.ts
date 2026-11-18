@@ -4563,10 +4563,13 @@ test('a workspace this launch was given is scanned once it is up, and its drift 
   dashboardRowsIn(place.dashboard).change(member, () => ({ ...theRowWithNothingSaid(), member, session: 'a-session', at: 1 }))
   // A clones place holding one plain file: the walk names it rather than dying on it, which is the whole drift this
   // launch has to report, and it needs no git to be planted.
-  const clones = join(place.state_root, 'the-clones-place')
+  const clonesPlace = join(place.state_root, 'the-clones-place')
   const worktrees = join(place.state_root, 'the-worktrees-place')
-  mkdirSync(clones, { recursive: true })
+  mkdirSync(clonesPlace, { recursive: true })
   mkdirSync(worktrees, { recursive: true })
+  // Resolved, because the scan reports what it followed: CI runs this suite under a temporary directory reached
+  // through a link, where the planted path and the one the walk names differ by the link in front of them.
+  const clones = realpathSync(clonesPlace)
   writeFileSync(join(clones, 'a-note.md'), 'someone left this here\n')
   const launch = {
     ...memberLaunch(place, fake.command, place.approved, lines),
