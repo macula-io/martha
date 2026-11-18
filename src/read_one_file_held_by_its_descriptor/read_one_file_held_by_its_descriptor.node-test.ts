@@ -19,7 +19,7 @@ const SECOND = JSON.stringify({ line: 'second', more: 'x'.repeat(40) })
 
 /** A launch's config folder with one session's transcript in it, and the input that names it. */
 function aLaunch(t: { after(fn: () => void): void }) {
-  const root = mkdtempSync(join(tmpdir(), 'martha-658-transcript-'))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'martha-658-transcript-')))
   t.after(() => removeTheTree(root))
   const config_dir = join(root, 'launch-config')
   const folder = join(config_dir, HELD_IN, '-work-project')

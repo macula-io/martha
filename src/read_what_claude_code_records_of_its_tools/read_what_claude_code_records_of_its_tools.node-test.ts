@@ -1,7 +1,7 @@
 // The host's tool deltas read as the host-neutral fact, and its transcript opened in its own projects folder (martha#658).
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -106,7 +106,7 @@ test('a line of another attachment type is not a tool delta', () => {
 })
 
 test("a Claude Code transcript is read in the config folder's projects folder, and refused one folder beside it", (t) => {
-  const root = mkdtempSync(join(tmpdir(), 'martha-658-claude-code-transcript-'))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'martha-658-claude-code-transcript-')))
   t.after(() => removeTheTree(root))
   const config_dir = join(root, 'launch-config')
   const session_id = '0a1b2c3d-0000-4000-8000-000000000003'
