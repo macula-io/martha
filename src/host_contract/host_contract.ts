@@ -459,6 +459,37 @@ export interface ArrivingTurn {
   readonly arrival: Arrival
 }
 
+/** What a host's start event does to the session's record. Each host's adapter reads it from its own table of events. */
+export type SessionStartOutcome = 'same_id' | 'inherits' | 'fresh'
+
+/**
+ * A session starting, in the contract's words (martha#541): the outcome the host's own event has on the record, never
+ * the event's name, so the core reads no host's table. `outcome` is undefined for an event the host's table does not
+ * declare, and such a start has lost its record. `predecessor_id` is the host's to give, never the model's.
+ */
+export interface AStartingSession {
+  readonly session_id: string
+  readonly outcome: SessionStartOutcome | undefined
+  readonly predecessor_id?: string
+}
+
+/** What a start is answered with: refused and why, or taken, with what the session is handed as it starts ('' for nothing). */
+export type TheAnswerToAStart = { readonly refused: string } | { readonly taken: string }
+
+/** What a turn is answered with: kept in its session's record, or refused and why. A refused turn is never raised. */
+export type TheAnswerToATurn = { readonly kept: 1 } | { readonly refused: string }
+
+/**
+ * A turn the host stamped as its report that an agent failed (martha#390, martha#541): the session it arrived in, its
+ * text, and the origin kind the engine stamped on it, the same value the turn carried. An adapter reports it only after
+ * the turn was kept and raised.
+ */
+export interface AReviewTheHostSawFail {
+  readonly session_id: string
+  readonly text: string
+  readonly origin_kind: string
+}
+
 export interface Delivery {
   /** Hands a turn to the model of this member's session. */
   handToModel(text: string): Promise<void>
