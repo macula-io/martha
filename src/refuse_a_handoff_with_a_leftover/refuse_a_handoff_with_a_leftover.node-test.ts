@@ -52,15 +52,15 @@ const A_VERDICT = 'VERDICT macula-io/martha#719 PASS doc=https://github.com/macu
 const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text)
 
 /** A record over one tree — `undefined` for one that names no tree — holding one leftover that kept `KEPT`. */
-const aRecordOver = (tree: string | undefined): WhatAKilledRunLeft => {
+const aRecordOver = (tree: string | undefined, path: string = A_PATH): WhatAKilledRunLeft => {
   const place = tree === undefined ? {} : { worktree: tree }
   const digest = theDigestOf(bytesOf(KEPT))
   return {
     member: THE_MEMBER,
     at_ms: ENDED_AT,
     running: [{ command_line: THE_COMMAND, started_at_ms: STARTED_AT }],
-    dirty: [{ path: A_PATH, ...place, digest }],
-    leftovers: [{ path: A_PATH, ...place, digest, mtime_ms: STARTED_AT, command_line: THE_COMMAND, started_at_ms: STARTED_AT }],
+    dirty: [{ path, ...place, digest }],
+    leftovers: [{ path, ...place, digest, mtime_ms: STARTED_AT, command_line: THE_COMMAND, started_at_ms: STARTED_AT }],
     dropped: { commands: 0, files: 0, leftovers: 0 },
   }
 }
@@ -120,12 +120,14 @@ test("a hand-off is refused while the leftover's bytes stand in the member's one
   assert.equal(await refusedFor(tools, A_HAND_OFF), undefined)
 })
 
-test('a record that names no tree refuses nothing, and is not read at the checkout instead (martha#719 N1)', async (t) => {
+test('a record that names no tree refuses nothing, and is not read at a path or a checkout instead (martha#719 N1)', async (t) => {
   const home = aFolder(t)
-  // The checkout holds the kept bytes, so a refusal that fell back on it would refuse this hand-off.
-  written(join(home, A_PATH), KEPT)
+  // The file stands, spelled absolutely, and holds the kept bytes: anything that read it without the record's tree —
+  // the path alone, or the crew's checkout — would refuse this hand-off.
+  const standing = join(home, A_PATH)
+  written(standing, KEPT)
   const crew = crewUnder(home)
-  keepTheLeftoverRecordOf(crew, aRecordOver(undefined))
+  keepTheLeftoverRecordOf(crew, aRecordOver(undefined, standing))
   assert.equal(await refusedFor(crewOf(crew, home), A_HAND_OFF), undefined)
 })
 

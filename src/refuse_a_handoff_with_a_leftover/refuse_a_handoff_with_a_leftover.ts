@@ -51,15 +51,19 @@ const isAHandOff = (text: string): boolean => {
   return 'line' in read && read.line !== null && read.line.verb === 'HANDOFF'
 }
 
+/** The tree a leftover stands in, as the record named it: never the checkout the crew was declared in, and never a guess. */
+const theTreeOf = (one: ILeftover): string | undefined => one.worktree
+
 /**
- * The bytes a leftover's path holds now, read at the tree the record names and never at the crew's checkout: undefined
- * when the record names no tree (kept before every record did, one launch long), when the file is gone, or when the
- * port will not answer — each of which is not standing, and is not refused on.
+ * The bytes a leftover's path holds now, read at the tree the record names: undefined when the record names no tree
+ * (kept before every record did, one launch long), when the file is gone, or when the port will not answer — each of
+ * which is not standing, and is not refused on.
  */
 const theBytesNowAt = (host: TheFilesAndProcesses, one: ILeftover): Uint8Array | undefined => {
-  if (one.worktree === undefined) return undefined
+  const tree = theTreeOf(one)
+  if (tree === undefined) return undefined
   try {
-    return host.stores.files.bytesOf(join(one.worktree, one.path))
+    return host.stores.files.bytesOf(join(tree, one.path))
   } catch {
     return undefined
   }
