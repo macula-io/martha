@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { DIAGRAMS, THE_C4_DIAGRAMS_PROGRAM, THE_PICTURES_THE_C4_DRAWS } from '../../architecture/c4_diagrams.ts'
+import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
 import {
   DRAWN_AT_RELEASE,
   bumpsTheVersion,
@@ -15,6 +16,9 @@ import {
   theRefusalsOfATree,
   type AChange,
 } from './check_the_pictures_change_with_the_version.ts'
+
+/** The manifest as a range names it: the tree's own declaration of the path, never spelled here. */
+const THE_MANIFEST = manifestPathOf('.')
 
 const drawnAt = (at: number): string => DIAGRAMS[at]?.().svg() ?? ''
 
@@ -37,7 +41,7 @@ test('a change that touches no picture passes, whether or not it bumps the versi
 })
 
 test('a version bump need not redraw: pictures the generator already draws pass it', () => {
-  assert.deepEqual(theRefusalsOfAChange(aChange(['package.json'], '1.0.0', '1.1.0'), thePictures()), [])
+  assert.deepEqual(theRefusalsOfAChange(aChange([THE_MANIFEST], '1.0.0', '1.1.0'), thePictures()), [])
 })
 
 test('a version bump that leaves a picture stale is refused by name, with the command that redraws it', () => {

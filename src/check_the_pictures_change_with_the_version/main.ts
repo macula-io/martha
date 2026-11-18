@@ -35,26 +35,37 @@ const couldNotLook = (why: string): number => {
   return 2
 }
 
-const main = (): number => {
-  const repository = option('--repository') ?? '.'
-  const base = option('--base')
-  const head = option('--head')
+/** The release's read: a tree alone, held to what the generator draws. */
+const theTreeRead = (repository: string): number => {
   const pictures = thePicturesAt(repository)
-  if (base === undefined || head === undefined) {
-    const refusals = theRefusalsOfATree(pictures)
-    if (refusals.length > 0) return refused(refusals)
-    console.log(`${NAME}: ${String(pictures.length)} picture(s) are what the generator draws`)
-    return 0
-  }
+  const refusals = theRefusalsOfATree(pictures)
+  if (refusals.length > 0) return refused(refusals)
+  console.log(`${NAME}: ${String(pictures.length)} picture(s) are what the generator draws`)
+  return 0
+}
+
+/** A change's read: the pictures it touches, against the version bump that alone lets it touch one. */
+const theRangeRead = (repository: string, base: string, head: string): number => {
   const change = theChangeFrom(repository, base, head)
   if (change === undefined) return couldNotLook(`git would not say what ${base}..${head} changes in ${repository}`)
   const unread = theVersionsItCannotRead(change)
   if (unread.length > 0) return couldNotLook(unread.join(', '))
-  const refusals = theRefusalsOfAChange(change, pictures)
+  const refusals = theRefusalsOfAChange(change, thePicturesAt(repository))
   if (refusals.length > 0) return refused(refusals)
   const bumped = bumpsTheVersion(change) ? 'the version is bumped, and' : 'no picture is touched, and'
   console.log(`${NAME}: ${bumped} the pictures are what the generator draws`)
   return 0
+}
+
+const main = (): number => {
+  const repository = option('--repository') ?? '.'
+  const base = option('--base')
+  const head = option('--head')
+  if (process.argv.includes('--tree')) return theTreeRead(repository)
+  if (base === undefined || head === undefined) {
+    return couldNotLook('needs --tree, or --base and --head with it: a run told neither would read no change')
+  }
+  return theRangeRead(repository, base, head)
 }
 
 process.exitCode = main()
