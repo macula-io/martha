@@ -25,6 +25,7 @@ import { NOT_IN_A_MEMBER } from '../run_an_owner_signed_command/ask_the_launcher
 import { RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { hostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
+import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREWS_PLACE, CREW_ROWS_PLACE, crewStateDirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -334,7 +335,7 @@ function claudeThatEnds(place: Place, t: TestContext): { readonly ran: string; r
   const bin = join(place.home, 'bin')
   mkdirSync(bin)
   const ran = join(place.home, 'ran')
-  writeFileSync(join(bin, 'claude'), ['#!/bin/sh', ...hostAnswers(), `: > '${ran}'`, 'exit 7', ''].join('\n'), { mode: 0o700 })
+  writeFileSync(join(bin, CLAUDE), ['#!/bin/sh', ...hostAnswers(), `: > '${ran}'`, 'exit 7', ''].join('\n'), { mode: 0o700 })
   return { ran, env: { PATH: `${bin}:${process.env.PATH}`, XDG_RUNTIME_DIR: shortRelayRoot(t) } }
 }
 
@@ -512,7 +513,7 @@ function claudeThatWritesItsArguments(place: Place, t: TestContext): { readonly 
   const bin = join(place.home, 'wake-bin')
   mkdirSync(bin)
   const args = join(place.home, 'wake-args')
-  writeFileSync(join(bin, 'claude'), ['#!/bin/sh', ...hostAnswers(), `{ printf '%s\\n' "$@"; echo '---'; } >> '${args}'`, 'exit 0', ''].join('\n'), { mode: 0o700 })
+  writeFileSync(join(bin, CLAUDE), ['#!/bin/sh', ...hostAnswers(), `{ printf '%s\\n' "$@"; echo '---'; } >> '${args}'`, 'exit 0', ''].join('\n'), { mode: 0o700 })
   return { args, env: { PATH: `${bin}:${process.env.PATH}`, XDG_RUNTIME_DIR: shortRelayRoot(t) } }
 }
 
