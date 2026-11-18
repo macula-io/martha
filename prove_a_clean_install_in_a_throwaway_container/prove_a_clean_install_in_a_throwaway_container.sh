@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>]
+# prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--night <run folder>]
 #                                                    --self-test
 #
 # The clean-install proof (martha#69). A stranger's machine carries nothing of ours, so this starts a container that
@@ -193,7 +193,11 @@ STARTED_WINDOW_S="${MARTHA_CLEAN_INSTALL_STARTED_WINDOW_S:-120}"
 POLL_S="${MARTHA_CLEAN_INSTALL_POLL_S:-5}"
 KEY_PAUSE_S="${MARTHA_CLEAN_INSTALL_KEY_PAUSE_S:-2}"
 
-USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] | --self-test'
+USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--night <run folder>] | --self-test'
+
+# The nightly live run's container side (martha#639), taken with --night: its steps, its stand-ins and its cases.
+# shellcheck source=prove_a_clean_install_in_a_throwaway_container/the_night_in_the_container.sh
+. "${HERE}/the_night_in_the_container.sh"
 
 LOG_FILE=''
 CONTAINER=''
@@ -465,7 +469,7 @@ martha init; test ! -e ${OUTSIDER_MARK}" 2>&1)" \
 # with the file that says the session ended written when it does.
 sign_in_command() {
   local script
-  script="export HOME=${CONTAINER_HOME}; export PATH=\"\$HOME/.local/bin:\$PATH\"; cd ${CHECKOUT}; martha approve && claude; touch ${OWNER_SESSION_ENDED}"
+  script="export HOME=${CONTAINER_HOME}; export PATH=\"\$HOME/.local/bin:\$PATH\"; cd ${CHECKOUT}; $(approve_command) && claude; touch ${OWNER_SESSION_ENDED}"
   printf 'ssh -t %s %s' "$(remote_word "${HOST}")" "$(remote_word "$(remote_words podman exec -it "${CONTAINER}" sh -lc "${script}")")"
 }
 
@@ -487,7 +491,7 @@ the_owners_steps() {
   log "the owner's one act, in a terminal of your own, in this order:"
   log "  1. run this command, which approves the crew and opens Claude Code in the checkout:"
   log "  $1"
-  log '  2. type yes to approve'
+  log "$(approve_step_words)"
   log '  3. sign in'
   log "  4. answer the folder question yes"
   log "  5. /exit — the run waits for this; the window closes $2"
@@ -869,6 +873,10 @@ tear_down_step() {
 # The steps before the tear-down, in order; the first failure ends them, and a refusal that is the run's outcome ends
 # them without failing.
 run_the_steps() {
+  if a_night; then
+    night_open_step || return 1
+    night_fetch_step || return 1
+  fi
   image_step || return 1
   pull_step || return 1
   container_step || return 1
@@ -877,11 +885,14 @@ run_the_steps() {
   if [ -n "${NO_RELEASE_YET}" ]; then return 0; fi
   version_step || return 1
   claude_code_step || return 1
+  if a_night; then night_tools_step || return 1; fi
   solo_crew_step || return 1
   checkout_step || return 1
+  if a_night; then night_clone_step || return 1; fi
   sign_in_step || return 1
   if [ -n "${SIGN_IN_MISSED}" ]; then return 0; fi
   members_step || return 1
+  if a_night; then night_steps || return 1; fi
 }
 
 # Whatever happened: the container goes first, then the run says how it ended, and exits with that.
@@ -892,6 +903,8 @@ finish() {
   if [ -n "${CONTAINER}" ]; then
     if ! tear_down_step; then status=1; fi
   fi
+  # The night's repository goes after the container that held its clone and the token, whatever happened.
+  if ! night_close; then status=1; fi
   if [ -n "${INTERRUPTED}" ]; then
     failed run "interrupted by ${INTERRUPTED}"
     status=1
@@ -921,6 +934,11 @@ finish() {
     exit 1
   fi
   log "${ALL_PROVEN_WORDS}: ${MEMBERS[*]}"
+  if a_night && [ -z "${NIGHT_READY}" ]; then
+    failed run 'the night did not get ready'
+    log failed
+    exit 1
+  fi
   exit 0
 }
 
@@ -1882,6 +1900,9 @@ self_test() {
     fi
   done
 
+  # The nightly live run's container side (martha#639): its own stand-ins and cases.
+  night_self_test "${root}" || case_failed=1
+
   if [ "${case_failed}" -ne 0 ]; then
     echo 'the self-test: a case failed, above' >&2
     return 1
@@ -1901,6 +1922,12 @@ main() {
       --log)
         if [ -z "${2:-}" ]; then printf '%s\n' "${USAGE}" >&2; exit 2; fi
         LOG_FILE="$2"
+        shift 2
+        ;;
+      --night)
+        # A run folder is one night's: the throwaway script makes it, and refuses one that is there already.
+        if [ -z "${2:-}" ]; then printf '%s\n' "${USAGE}" >&2; exit 2; fi
+        NIGHT_DIR="$2"
         shift 2
         ;;
       -*)
