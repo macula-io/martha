@@ -279,17 +279,17 @@ test('#541 3: an agent of a session never started is refused by name', async (t)
 test('#541 3: the crew’s tool ask takes a refreshed session in first, then the crew answers it', async (t) => {
   const { answers, seen } = anEntry(t, { refreshed: 'session-b' })
 
-  const answer = await answers.aCrewToolAsked({ session_id: 'session-b', tool: 'crew_status', args: {} })
+  const answer = await answers.aCrewToolAsked({ session_id: 'session-b', tool: 'a_tool_of_the_crew', args: {} })
 
   assert.deepEqual(answer, { answer: 'done' })
-  assert.deepEqual(seen.steps, ['crew answered crew_status for session-b'])
+  assert.deepEqual(seen.steps, ['crew answered a_tool_of_the_crew for session-b'])
   assert.equal(typeof answers.named('session-b'), 'object', 'the refreshed session was not taken in before the crew answered')
 })
 
 test('#541 3: a launch with no crew answers no tool, by name', async (t) => {
   const { answers } = anEntry(t, { no_crew: true })
 
-  assert.deepEqual(await answers.aCrewToolAsked({ session_id: 'session-a', tool: 'crew_status', args: {} }), { refused: NO_CREW_TOOLS })
+  assert.deepEqual(await answers.aCrewToolAsked({ session_id: 'session-a', tool: 'a_tool_of_the_crew', args: {} }), { refused: NO_CREW_TOOLS })
 })
 
 test('#541 3: a turn the host never raised is kept in a session the entry holds, and refused in one it does not', async (t) => {
