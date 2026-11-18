@@ -86,14 +86,27 @@ test('#256: a clone with no origin remote is refused, with the command that give
   assert.match(told.refused, /git remote add origin/)
 })
 
-test('#256: an origin that names no repository is refused, naming what it says', async (t) => {
+test('#256: an origin that names no repository is refused, and the URL it gave is not quoted back', async (t) => {
   const { clone } = aClone(t)
   const nameless = 'https://github.com/acme'
   gitIn(clone, 'remote', 'set-url', 'origin', nameless)
   const told = await toldBy(clone)
   assert.ok('refused' in told, `an origin that names no repository was taken for one: ${JSON.stringify(told)}`)
   assert.match(told.refused, /names no repository as org\/name/)
-  assert.match(told.refused, new RegExp(nameless.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.ok(!told.refused.includes(nameless), `the origin URL reached the refusal: ${told.refused}`)
+})
+
+test('#670: a refusal names no origin URL, so a token in its userinfo is never printed', async (t) => {
+  const { clone } = aClone(t)
+  // An origin can carry a credential in its userinfo, and this one names no repository — exactly the branch a leak would
+  // be printed from. The token is made up, at the example host this repository's own text rules accept.
+  const withAToken = 'https://x-access-token:ghs_plantedtoken@example.invalid/'
+  gitIn(clone, 'remote', 'set-url', 'origin', withAToken)
+  const told = await toldBy(clone)
+  assert.ok('refused' in told, 'an origin that names no repository was taken for one')
+  assert.equal(told.refused, `the origin of ${clone} names no repository as org/name: run git remote set-url origin <url> there, then try again.`)
+  assert.ok(!told.refused.includes('ghs_plantedtoken'), `the token in the origin reached the refusal: ${told.refused}`)
+  assert.ok(!told.refused.includes(withAToken), `the origin URL reached the refusal: ${told.refused}`)
 })
 
 test('#256: a clone that keeps no ref for its origin\'s head is refused, with the command that sets it', async (t) => {
