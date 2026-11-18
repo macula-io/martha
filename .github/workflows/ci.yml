@@ -797,3 +797,23 @@ jobs:
         run: npm run --silent check:restated-values
       - name: no literal restates a defined value, in the range or a value it defines
         run: npm run --silent check:restated-values -- --range "$BASE_SHA..$HEAD_SHA"
+
+  # Every check is run (martha#741). A check nothing runs passes forever: its tests prove a rule no change is held to.
+  # Every `check:` script of package.json must be run, on one step line, by a job every pull request triggers (no paths
+  # filter), and every job that names a `check:` script must name one package.json declares. A line inside a block, a
+  # self-test or a planted run does not count as running a check, so deleting a check's real step fails here by name.
+  # The self-test plants a check no job runs and requires it named; the real run covers this job's own script too.
+  every-check-runs:
+    name: every check runs in a job
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: the check bites on a planted check no job runs
+        run: npm run --silent check:every-check-runs-in-a-job -- --self-test
+      - name: every check script is run by a job a pull request triggers
+        run: npm run --silent check:every-check-runs-in-a-job
