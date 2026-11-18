@@ -194,6 +194,10 @@ const THE_FILES_THE_RUN_READS = [
   'prove_the_core/every_test_run_ends.ts',
   'prove_the_core/fail_a_test_file_that_leaves_something_running.ts',
   'prove_the_core/every_test_file_cleans_up.ts',
+  // The guard gives each file its own directories, and what it needs for that is the machine's own temporary directory
+  // and the removal that opens a read-only folder first (martha#724).
+  'src/host_contract/host_contract.ts',
+  'src/serve_the_relay_to_a_launch/relay_copy.ts',
 ] as const
 
 /**

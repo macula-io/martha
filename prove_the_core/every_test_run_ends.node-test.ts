@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readdirSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import process from 'node:process'
@@ -12,7 +12,15 @@ import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { escaped, manifestOf, PACKAGES, type Manifest } from './declared_in_package_json.ts'
-import { leakReportOf, leftBehind, leftoverReportOf, leftRunning, NEVER_LEFT_IN_THE_TEMP_DIRECTORY } from './every_test_file_cleans_up.ts'
+import {
+  entriesIn,
+  leftoverReportOf,
+  leakReportOf,
+  leftRunning,
+  runtimeLeftoverReportOf,
+  RUN_RUNTIME_ROOT_VARIABLE,
+  RUN_TEMP_ROOT_VARIABLE,
+} from './every_test_file_cleans_up.ts'
 import {
   FORCE_EXIT_FLAG,
   GUARD_FLAG,
@@ -90,16 +98,22 @@ type Run = { readonly ended: { code: number | null } | 'hung'; readonly output: 
  * script's own flags (the timeout shortened so the check does not wait the full
  * bound), in a process group of its own that `t` kills after itself, whatever happens. With `temp`, the run's temp
  * directory is that one, so what its files leave there is the caller's alone to find and remove.
+ *
+ * This run is given no run root of its own (keep_a_test_run_in_one_temporary_root.ts): the roots this file runs under are
+ * stripped, so each planted file makes its directories in the temp directory named here, as a file run by hand does.
  */
 async function runWithTheScriptsFlags(t: TestContext, folder: string, files: readonly string[], temp?: string): Promise<Run> {
   const flags = testRunFlagsOf(manifestOf(join(repository, folder))).map((flag) =>
     flag.startsWith(`${TIMEOUT_FLAG}=`) ? `${TIMEOUT_FLAG}=${SHORT_TIMEOUT_MS}` : flag,
   )
+  const withoutTheRunsRoots = Object.fromEntries(
+    Object.entries(withoutTheTestContext(process.env)).filter(([name]) => name !== RUN_RUNTIME_ROOT_VARIABLE && name !== RUN_TEMP_ROOT_VARIABLE),
+  )
   const runner = spawn(process.execPath, ['--test', ...flags, ...files.map((file) => plantedPath(file, folder))], {
     cwd: join(repository, folder),
     // Without the variable node --test sets in each file's process: with it, a
     // nested node --test reports to this run instead of running as npm test does.
-    env: { ...withoutTheTestContext(process.env), ...(temp === undefined ? {} : { TMPDIR: temp }) },
+    env: { ...withoutTheRunsRoots, ...(temp === undefined ? {} : { TMPDIR: temp, XDG_RUNTIME_DIR: temp }) },
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -141,11 +155,13 @@ for (const folder of PACKAGES) {
 }
 
 /** The planted files: two whose tests pass but leave something running, one that leaves a link behind, one that removes
- * the link it makes, and one that cleans up. */
+ * the link it makes, one that leaves a directory behind and one that removes it, and one that cleans up. */
 const LEAKS_A_SERVER = 'a_test_file_that_leaks_a_listening_server.ts'
 const LEAKS_AN_INTERVAL = 'a_test_file_that_leaks_an_interval.ts'
 const LEAVES_A_LINK = 'a_test_file_that_leaves_a_link_in_the_temp_directory.ts'
 const REMOVES_ITS_LINK = 'a_test_file_that_removes_its_link_from_the_temp_directory.ts'
+const LEAVES_A_DIRECTORY = 'a_test_file_that_leaves_a_directory_in_its_own_temporary_root.ts'
+const REMOVES_THE_DIRECTORY = 'a_test_file_that_removes_the_directory_it_made.ts'
 const CLOSES_ITS_SERVER = 'a_test_file_that_closes_its_server.ts'
 
 for (const folder of PACKAGES) {
@@ -192,21 +208,49 @@ for (const folder of PACKAGES) {
     assert.match(output, new RegExp(`✖ ${escaped(plantedPath(LEAVES_A_LINK, folder))}`), 'the file that leaves a link is failed')
     assert.doesNotMatch(output, new RegExp(escaped(REMOVES_ITS_LINK)), 'the file that removes its link is neither failed nor blamed')
     assert.match(output, /ℹ fail 1\n/, 'one file fails, no more')
-    const [prefix] = NEVER_LEFT_IN_THE_TEMP_DIRECTORY
-    assert.equal(
-      readdirSync(temp).filter((name) => name.startsWith(prefix)).length,
-      1,
-      'the planted run made its links in its own temp directory, and the one it left is there',
-    )
+    // Each file is given a directory of its own in the temp directory, and it goes with the file: the link one file left
+    // is in neither this directory nor anywhere else under it, which is what no later run of the suite must ever find.
+    assert.deepEqual(entriesIn(temp), [], 'a planted run left something in its temp directory, though every file removes what it made')
   })
 }
 
-test('what a file leaves behind is judged on its own pid\'s names only, and named with what it left', () => {
-  assert.deepEqual(leftBehind(['a'], ['a', 'b']), ['b'])
-  assert.deepEqual(leftBehind(['a', 'b'], ['b', 'a']), [], 'what was there before the file ran is not its leaving')
+for (const folder of PACKAGES) {
+  test(`with the test script's own flags in ${folder}, a file that leaves a directory in its temp directory fails by name, and one that removes it passes`, async (t) => {
+    const temp = mkdtempSync(join(tmpdir(), 'martha-724-planted-directory-'))
+    t.after(() => removeTheTree(temp))
+    const { ended, output, flags } = await runWithTheScriptsFlags(t, folder, [LEAVES_A_DIRECTORY, REMOVES_THE_DIRECTORY], temp)
+
+    assert.notEqual(ended, 'hung', `the run did not end within ${RUN_DEADLINE_MS} ms with the flags ${JSON.stringify(flags)}`)
+    if (ended === 'hung') return
+    assert.notEqual(ended.code, 0, 'the run fails')
+    assert.match(output, /✔ a file that leaves a directory in the temp directory it was given/, 'its test passes, so only the guard can fail it')
+    assert.match(output, /✔ a file that removes the directory it made/, 'and a file that removes what it made passes')
+    assert.match(
+      output,
+      new RegExp(`left behind in the temp directory after its tests: martha-724-scratch-\\d+\\. Remove it in t\\.after\\.`),
+      `the file that leaves a directory is named with what it left:\n${output}`,
+    )
+    assert.match(output, new RegExp(`✖ ${escaped(plantedPath(LEAVES_A_DIRECTORY, folder))}`), 'the file that leaves a directory is failed')
+    assert.doesNotMatch(output, new RegExp(escaped(REMOVES_THE_DIRECTORY)), 'the file that removes its directory is neither failed nor blamed')
+    assert.match(output, /ℹ fail 1\n/, 'one file fails, no more')
+    assert.deepEqual(entriesIn(temp), [], 'the directory the file left is still in the temp directory, though its own directory goes with it')
+  })
+}
+
+test('a file\'s own directory is judged by everything in it, and each line names the file and what it left', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'martha-724-entries-'))
+  t.after(() => removeTheTree(directory))
+  assert.deepEqual(entriesIn(directory), [], 'a directory with nothing in it leaves nothing behind')
+  writeFileSync(join(directory, 'martha-runner-tmpdir-1'), '')
+  assert.deepEqual(entriesIn(directory), ['martha-runner-tmpdir-1'], 'an entry of any name, not only a link, is what the file left')
+  assert.deepEqual(entriesIn(join(directory, 'gone')), [], 'a directory that is no longer there holds nothing')
   assert.equal(
     leftoverReportOf('src/x.node-test.ts', ['martha-472-link-4242']),
     'src/x.node-test.ts left behind in the temp directory after its tests: martha-472-link-4242. Remove it in t.after.',
+  )
+  assert.equal(
+    runtimeLeftoverReportOf('src/x.node-test.ts', ['martha-1000']),
+    'src/x.node-test.ts left behind in its runtime directory after its tests: martha-1000. Remove it in t.after.',
   )
 })
 

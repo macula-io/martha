@@ -54,6 +54,7 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { whyAnOwnersActIsRefusedInsideAMember, type AProcessAbove } from '../refuse_an_owner_act_from_inside_a_member/refuse_an_owner_act_from_inside_a_member.ts'
 import { ancestorsUnder, PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
+import { SYSTEM_TEMPORARY_DIRECTORY } from '../host_contract/host_contract.ts'
 import { launchRecordsUnder } from '../read_a_kernel_and_a_home/launch_records_under_a_state_root.ts'
 import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
@@ -259,9 +260,12 @@ async function startingTheMember(
 }
 
 /** The launcher's places in Martha's state, with the relay sockets under this user's runtime directory. */
+/** The directory this user's launches keep their relay roots under, inside the runtime directory they were given. */
+export const theCommandsRuntimeDirectory = (runtime: string): string => join(runtime, `martha-${process.getuid?.()}`)
+
 function launcherOf(io: CommandIo, places: Places): ReturnType<typeof launcherPlacesOf> {
-  const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? '/tmp'
-  return launcherPlacesOf(places.state, join(runtime, `martha-${process.getuid?.()}`), places.root)
+  const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? SYSTEM_TEMPORARY_DIRECTORY
+  return launcherPlacesOf(places.state, theCommandsRuntimeDirectory(runtime), places.root)
 }
 
 /** What `martha ls` and `martha stop` read (martha#312); or why it cannot be read. */
