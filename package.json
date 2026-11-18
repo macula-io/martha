@@ -93,23 +93,26 @@
       "src/run_the_nodes_own_npm_alone",
       "src/serve_the_relay_to_a_launch",
       "src/start_a_member",
+      "src/start_the_member_on_its_host",
       "src/start_the_member_on_the_owners_terminal",
       "src/sweep_leftover_launch_directories",
       "src/tell_the_member_a_line",
       "src/read_what_claude_code_says_of_an_agent",
       "src/read_what_claude_code_records_of_its_tools",
-      "src/a_launch_end_on_this_machine"
+      "src/a_launch_end_on_this_machine",
+      "src/watch_the_crew_tools_a_launch_served"
     ],
     "decisionFiles": [
       "src/launch_a_claude_code_member/remember_own_write_of_a_call.ts"
     ],
     "hostCeilings": {
-      "src/answer_the_relay": 396,
+      "src/answer_the_relay": 367,
       "src/approve_a_checkouts_config": 69,
       "src/ask_the_host_what_it_loads": 292,
       "src/claude_code_host": 480,
       "src/read_what_claude_code_says_of_an_agent": 117,
       "src/read_what_claude_code_records_of_its_tools": 64,
+      "src/watch_the_crew_tools_a_launch_served": 94,
       "src/read_one_file_held_by_its_descriptor": 111,
       "src/claude_code_relay": 717,
       "src/cut_the_rules_from_the_host_binary": 395,
@@ -132,7 +135,7 @@
       "src/keep_the_crews_files_as_directories": 155,
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
-      "src/launch_a_claude_code_member": 490,
+      "src/launch_a_claude_code_member": 550,
       "src/launch_a_goose_member": 257,
       "src/linux_process_identity": 309,
       "src/list_stop_and_restart_the_crew": 99,
@@ -145,15 +148,17 @@
       "src/refuse_settings_that_turn_hooks_off": 203,
       "src/row_streams_directory": 164,
       "src/run_an_owner_signed_command": 562,
-      "src/run_the_martha_command": 455,
+      "src/run_the_martha_command": 454,
       "src/run_the_nodes_own_npm_alone": 165,
       "src/serve_the_relay_to_a_launch": 235,
-      "src/start_a_member": 245,
+      "src/start_a_member": 168,
+      "src/start_the_member_on_its_host": 189,
       "src/start_the_member_on_the_owners_terminal": 86,
       "src/sweep_leftover_launch_directories": 153,
       "src/ask_git_what_a_member_is_about_to_change": 78,
       "src/tell_the_member_a_line": 42,
-      "src/a_launch_end_on_this_machine": 119
+      "src/a_launch_end_on_this_machine": 119,
+      "src/watch_the_crew_tools_a_launch_served": 94
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",

@@ -8,8 +8,15 @@
 # installer pin and the declared floor are the release's, never a copy made here. It then gzips the packed release
 # folder, the one top-level folder unpackLayer accepts, into <out>, and removes its own folder whatever happened.
 #
+# Before anything is installed or packed, the tree's installer/ is held to the tag its own version was published at
+# (installerRef of the version installer/package.json declares, as the release's pin reads it). A tree whose
+# installer/ has moved past that tag can't be packed as a release, because the pin refuses it. That is said as its own
+# line and its own exit, never as a plain refusal: the nightly run reports it as "not packable", never as a pass, and
+# the pin is never skipped (martha#639, ruling (b)). A tree with no such tag here is left to the pin, which refuses it
+# by name.
+#
 # Nothing is signed and nothing is pushed: this layer is placed by the dry harness, never installed as a release.
-# Exit: 0 packed, 1 the packer refused, 2 it could not run.
+# Exit: 0 packed, 1 the packer refused, 2 it could not run, 3 not packable: installer/ is ahead of its tag.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -28,6 +35,21 @@ TREE="${WORK}/tree"
 VERSION="$(jq -r '.version // empty' "${TREE}/package.json")"
 FOLDER="$(jq -r '.martha.releaseFolder // empty' "${TREE}/installer/package.json")"
 [[ -n "${VERSION}" && -n "${FOLDER}" ]] || { echo "dry: the tree at ${SHA} names no version or release folder" >&2; exit 2; }
+
+INSTALLER_VERSION="$(jq -r '.version // empty' "${TREE}/installer/package.json")"
+[[ -n "${INSTALLER_VERSION}" ]] || { echo "dry: the tree at ${SHA} names no installer version" >&2; exit 2; }
+# The tag's ref as the tree's own names say it (installerRef), never spelled here.
+INSTALLER_TAG="$(node --input-type=module -e 'const { installerRef } = await import(process.argv[1]); console.log(installerRef(process.argv[2]))' \
+  "${TREE}/installer/keep_the_names_in_one_place/names.mjs" "${INSTALLER_VERSION}")" \
+  || { echo "dry: the tree at ${SHA} could not name its installer tag" >&2; exit 2; }
+if git -C "${TREE}" rev-parse --verify --quiet "${INSTALLER_TAG}^{commit}" > /dev/null; then
+  DRIFT="$(git -C "${TREE}" diff --name-only "${INSTALLER_TAG}" HEAD -- installer)" \
+    || { echo "dry: git could not compare installer/ at ${SHA} with ${INSTALLER_TAG}" >&2; exit 2; }
+  if [[ -n "${DRIFT}" ]]; then
+    echo "dry: not packable: installer ahead of its tag: installer/ at ${SHA} is not what ${INSTALLER_TAG} published ($(wc -l <<< "${DRIFT}") file(s)); nothing was packed" >&2
+    exit 3
+  fi
+fi
 
 (cd "${TREE}/installer" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund > /dev/null) \
   || { echo "dry: the installer's own dependencies could not be installed" >&2; exit 2; }

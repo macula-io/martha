@@ -22,7 +22,7 @@ import { reviewSpawnsRemembered } from '../name_a_review_the_host_reported_faile
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { beginSession, takeInTurn } from '../take_in_a_turn/take_in_a_turn.ts'
-import { answersOver, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
+import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
 
 interface Places {
   readonly home: string
@@ -46,7 +46,20 @@ function answersOn(t: TestContext): TheAnswersOfOneLaunch {
   const places = placesOf(t)
   const records = sessionRecordsIn(rowStreamsDirectory(places.rows))
   const launch = { host: CLAUDE_CODE, launch_dir: places.checkout, stop_dir: places.home, approved_fingerprints: [] }
-  return answersOver({ records, launch, machine: thisMachine, binder: bindNothing, handed_at_start: [], reviews: reviewSpawnsRemembered() })
+  return answersOver({
+    records,
+    launch,
+    machine: thisMachine,
+    binder: bindNothing,
+    handed_at_start: [],
+    reviews: reviewSpawnsRemembered(),
+    // The tool call's places (PR 2), which no case here calls: no agent, a policy that sends nothing, names as called.
+    agents: agentRunsKept(),
+    policy: { may_send_executable_text: [] },
+    names: { ownNameOf: (called) => called },
+    refusesAWriteToTheOwnersSettings: () => undefined,
+    refusesAWriteToTheOwnersMemory: () => undefined,
+  })
 }
 
 test('#541 1a: a session this launch never took a start of is refused by name, and one it kept is named', async (t) => {

@@ -17,6 +17,7 @@ import { CHUNK } from '../cut_the_rules_from_the_host_binary/protected_config_pl
 import { MEMORY_OFF, type Committed } from './carry_over_what_is_restated_by_hand.ts'
 import { fileModeGuardCallsIn, type GuardCalls } from './what_the_hosts_guards_call.ts'
 import { CLAUDE_MEMORY_OFF } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 const RECORDER = fileURLToPath(new URL('./record_claude_code_host.ts', import.meta.url))
@@ -212,7 +213,7 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
 function hostHolding(t: TestContext, parts: Readonly<Record<string, string>>): string {
   const root = mkdtempSync(join(tmpdir(), 'martha-host-drift-'))
   t.after(() => removeTheTree(root))
-  const host = join(root, 'claude')
+  const host = join(root, CLAUDE)
   writeFileSync(host, `#!junk\n${Object.values(parts).join(';other code;')}\n`, 'latin1')
   return host
 }

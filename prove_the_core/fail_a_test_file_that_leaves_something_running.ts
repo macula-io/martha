@@ -6,14 +6,21 @@
 // what was written to them, and then for SETTLE_TURNS turns of the loop; then
 // what the file left running is judged: anything left fails the file, by its
 // name and what it left, on stderr and with exit code 1.
+//
+// It also ends the process when the run that started it is gone
+// (every_test_run_ends.ts: endWithTheRun, martha#683): force-exit bounds a run
+// left to finish, and does nothing for a runner killed from outside.
 
 import { relative } from 'node:path'
 import process from 'node:process'
 
+import { endWithTheRun } from './every_test_run_ends.ts'
 import { leakReportOf, leftRunning, SETTLE_TURNS } from './every_test_file_cleans_up.ts'
 
 const before = process.getActiveResourcesInfo()
 const exit = process.exit.bind(process)
+// The run that started this file is gone once the runner is: end with it rather than outlive it for hours (martha#683).
+endWithTheRun(exit)
 const turn = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 /** Resolves once what was written to `stream` before has been handed on: writes to one stream complete in order. */
 const flushed = (stream: NodeJS.WriteStream): Promise<void> => new Promise((resolve) => stream.write('', () => resolve()))

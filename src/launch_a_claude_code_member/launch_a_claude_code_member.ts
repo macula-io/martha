@@ -51,10 +51,12 @@
 //      owner's arguments go first, then the launch gate's
 //      switches and the relay's copy. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
-//      environment is `launchEnvironment(inherited, switches, host)`, then the
-//      settings that keep a checkout from running its hooks, install scripts
-//      and .envrc through the member's own commands (martha#24), plus the
-//      socket's path. Its PATH starts with the launch's own `git` guard, and
+//      environment is `theEnvironmentAMemberIsGiven(inherited, switches, crew, config, host)`
+//      (./the_environment_a_member_is_given.ts): what it inherits without the crew's
+//      state, the switches, the member's own config folder and the launcher's own
+//      state home, then the settings that keep a checkout from running its hooks,
+//      install scripts and .envrc through the member's own commands (martha#24),
+//      plus the socket's path. Its PATH starts with the launch's own `git` guard, and
 //      git is pointed at the guard's hooks (../guard_the_git_a_member_runs,
 //      martha#562), so the member's every git meets the workspace rules. Before it starts, each mesh server entry of the approved
 //      copy is rewritten to start its recorded tree by path, installed or
@@ -112,13 +114,14 @@ import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execu
 import {
   CLAUDE_SERVERS,
   CLAUDE_SETTINGS,
-  launchEnvironment,
   prepareLaunch,
   startedWithOf,
   type PreparedLaunch,
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import type { TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
+import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_served/watch_the_crew_tools_a_launch_served.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TheLeftoversALaunchKeeps } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
@@ -161,10 +164,11 @@ import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_own
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { relayJournalKeptIn } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
+import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
-import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -208,6 +212,9 @@ export interface LauncherPlaces {
    */
   readonly bells?: string
 }
+
+/** How a launch builds its crew's tools: over its sessions, its member's own config folder and the crew tools it watches (martha#658). */
+export type CrewToolsOfALaunch = (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch }) => CrewTools
 
 export interface ClaudeCodeMemberLaunch {
   readonly member_name: string
@@ -254,7 +261,7 @@ export interface ClaudeCodeMemberLaunch {
    * The crew's tools, over this member's crew place (martha#254); a launch with none answers no tool. They are handed
    * the member's own config folder (martha#602), where the host's model command saves a switch, before the host starts.
    */
-  readonly crew_tools?: (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string }) => CrewTools
+  readonly crew_tools?: CrewToolsOfALaunch
   /**
    * What this launch raises every turn the host took in to (martha#253): the crew channel's carrier builds one and
    * reads it, so a message counts as taken in only once the host raised it back. A launch given none raises nothing.
@@ -342,7 +349,13 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
   const owners = userSettingsPath(launch.inherited)
   if ('refusal' in owners) return owners.refusal
   const memberConfig = membersConfigFolderOf(prepared)
-  const env = { ...launchEnvironment(launch.inherited, prepared.switches, CLAUDE_CODE), ...theMembersConfigEnvironment(memberConfig) }
+  const env = theEnvironmentAMemberIsGiven({
+    inherited: launch.inherited,
+    switches: prepared.switches,
+    crew: { state_root: launch.places.state_root, rows: launch.places.rows },
+    member_config: memberConfig,
+    host: CLAUDE_CODE,
+  })
   // The key answered yes is the one the member is handed, read from the environment it starts with.
   const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir, env[API_KEY_VARIABLE])
   if (!made.made) return made.refusal
@@ -483,10 +496,10 @@ function wordlessAnswersOf(
  * sessions are this launch's own, handed over so a handover is stamped with the session it came from and a refreshed
  * session inherits the one it was cleared from (martha#255).
  */
-function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSession>, ready: ReadyLaunch): { readonly crew?: CrewTools } {
+function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSession>, ready: ReadyLaunch, served_tools: TheServedToolsWatch): { readonly crew?: CrewTools } {
   return launch.crew_tools === undefined
     ? {}
-    : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared) }) }
+    : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared), served_tools }) }
 }
 
 /** What this launch raises turns to, or nothing: a launch given none raises nothing (martha#253). */
@@ -503,8 +516,8 @@ function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising
  * asked again every time the screen is about to ring: a mute typed at the owner's terminal reaches a member that is
  * running, so a member is never restarted to silence a bell.
  */
-function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen' | 'telling'> {
-  const journal = relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID())
+function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch, hearing: (journal: RelayJournal) => RelayJournal): Pick<MemberRelayPlace, 'journal' | 'screen' | 'telling'> {
+  const journal = hearing(relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID()))
   const mute = (): TheMute => (launch.places.bells === undefined ? NOTHING_IS_MUTED : theMuteOf({ directory: launch.places.bells, lines: { append: appendStateLine, read: readStateFile } }, launch.member_name))
   if (mute().muted) launch.tellOwner(theMutedStartLine(launch.member_name))
   return {
@@ -527,6 +540,8 @@ async function servedRelay(
   // One map of this launch's sessions, shared by the relay that keeps them and the crew's tools that read them
   // (martha#255): a handover is stamped with the session it came from, and a refresh's successor inherits it.
   const sessions = new Map<string, HostSession>()
+  // The crew tools this launch served, watched through the journal it keeps (martha#658); the crew answers a refresh's predecessor.
+  const watched = watchTheCrewToolsServedBy(membersConfigFolderOf(ready.prepared), async (id) => (await place.crew?.thePredecessorOf(id)) ?? null)
   const rows = rowStreamsDirectory(launch.places.rows)
   const place: MemberRelayPlace = {
     // The owner's releases are read again at load and before every check, so a member released while it runs is free
@@ -550,12 +565,12 @@ async function servedRelay(
     hookSettings: ready.hookSettings,
     ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
-    ...crewOf(launch, sessions, ready),
+    ...crewOf(launch, sessions, ready, watched.watch),
     // The crew text this launch hands every session it starts (martha#306), composed once from the approved bytes.
     crew_text: ready.crew_text,
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
-    ...thePlacesOfItsOwn(launch),
+    ...thePlacesOfItsOwn(launch, watched.journalOver),
     stopMember: stop,
   }
   launch.hearRelayPlace?.(place)

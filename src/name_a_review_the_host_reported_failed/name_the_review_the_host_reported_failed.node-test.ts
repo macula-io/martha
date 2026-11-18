@@ -24,6 +24,7 @@ import {
   type HowTheTurnIsRead,
   type TheReportTheHostWrites,
   type TheReviewSpawns,
+  type WhereTheFailedReviewIsTold,
 } from './name_the_review_the_host_reported_failed.ts'
 
 /** The reviewer model, and the model an Agent call that is not a review names. */
@@ -120,8 +121,8 @@ test('the line names the model and repeats the host\'s own words (martha#390)', 
 // --- what the table keeps, and for how long (martha#430) ------------------------------------------------------------------
 
 /** A telling that writes down what it was told, so a case can see the row told and the member told as they happened. */
-function aTellingThatWritesDown(told: string[]): { readonly theRow: (line: string) => void; readonly theMember: (line: string, call: string) => Promise<void> } {
-  return { theRow: (line) => void told.push(`row: ${line}`), theMember: async (line, call) => void told.push(`member: ${line} (call ${call})`) }
+function aTellingThatWritesDown(told: string[]): WhereTheFailedReviewIsTold {
+  return { theRow: (line) => void told.push(`row: ${line}`), theMember: async (line, call) => void told.push(`member: ${line} (call ${call})`), takeTheLineBack: () => {} }
 }
 
 test('the call is forgotten once the line about it is written, so the same stop is not put in the row twice (martha#430)', async () => {
@@ -158,6 +159,7 @@ test('the row is told before the member, so a store that refuses the member\'s h
         order.push('member')
         throw new Error('the rows store refused the append')
       },
+      takeTheLineBack: () => {},
     }),
     /the rows store refused the append/,
   )

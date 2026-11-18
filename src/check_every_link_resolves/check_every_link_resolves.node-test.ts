@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { checkEveryLinkResolves, failuresIn, retryable, type Options, type Scan } from './check_every_link_resolves.ts'
+import { checkEveryLinkResolves, failuresIn, refused, retryable, type Options, type Scan } from './check_every_link_resolves.ts'
 
 type Named = { file: string; url: string; code?: number; timeout?: boolean }
 
@@ -55,6 +55,11 @@ const optionsWith = (slept: number[]): Options => ({
 })
 
 const shields = { file: 'README.md', url: 'https://img.shields.io/github/actions/workflow/status/x?label=CI', code: 408 }
+
+// The link batch 64 went red on (martha#714): a site that answered the checker 403.
+const coffee = { file: 'README.md', url: 'https://buymeacoffee.example/rlefever', code: 403 }
+const missingPage = { file: 'docs/x.md', url: 'file:///nowhere/missing-page.md' }
+const urlsOf = (failures: readonly { url: string }[]): string[] => failures.map((failure) => failure.url)
 
 test('a scan that resolved is not made again', async () => {
   const slept: number[] = []
@@ -126,6 +131,65 @@ test('a host that never answers is unresolved after every scan, and named', asyn
   assert.equal(verdict.verdict === 'unresolved' ? verdict.failures[0]?.status : '', 'Rejected status code: 408')
 })
 
+test('a site that refuses the checker every time is reported, and the check passes', async () => {
+  const slept: number[] = []
+  const scans = scanning([{ exitCode: 2, report: reportOf([coffee]) }])
+  const verdict = await checkEveryLinkResolves(scans.scan, optionsWith(slept))
+  assert.equal(verdict.verdict, 'resolved')
+  assert.deepEqual(verdict.verdict === 'resolved' ? urlsOf(verdict.refused) : [], [coffee.url])
+  assert.equal(scans.asked, 3)
+  assert.deepEqual(slept, [5, 15])
+})
+
+test('a 429 that never clears is a refusal too, reported and passing', async () => {
+  const slept: number[] = []
+  const busy = { file: 'README.md', url: 'https://busy.example/page', code: 429 }
+  const verdict = await checkEveryLinkResolves(scanning([{ exitCode: 2, report: reportOf([busy]) }]).scan, optionsWith(slept))
+  assert.equal(verdict.verdict, 'resolved')
+  assert.deepEqual(verdict.verdict === 'resolved' ? urlsOf(verdict.refused) : [], [busy.url])
+})
+
+test('a refusal that clears on a later scan leaves nothing to report', async () => {
+  const slept: number[] = []
+  const scans = scanning([
+    { exitCode: 2, report: reportOf([coffee]) },
+    { exitCode: 0, report: reportOf([]) },
+  ])
+  const verdict = await checkEveryLinkResolves(scans.scan, optionsWith(slept))
+  assert.equal(verdict.verdict, 'resolved')
+  assert.deepEqual(verdict.verdict === 'resolved' ? verdict.refused : ['not resolved'], [])
+  assert.equal(scans.asked, 2)
+})
+
+test('a missing file beside a refusal still fails at once, named apart from the refusal', async () => {
+  const slept: number[] = []
+  const scans = scanning([{ exitCode: 2, report: reportOf([coffee, missingPage]) }])
+  const verdict = await checkEveryLinkResolves(scans.scan, optionsWith(slept))
+  assert.equal(verdict.verdict, 'unresolved')
+  assert.deepEqual(verdict.verdict === 'unresolved' ? urlsOf(verdict.failures) : [], [missingPage.url])
+  assert.deepEqual(verdict.verdict === 'unresolved' ? urlsOf(verdict.refused) : [], [coffee.url])
+  assert.equal(scans.asked, 1)
+})
+
+test('a slow host that never answers still fails beside a refusal', async () => {
+  const slept: number[] = []
+  const verdict = await checkEveryLinkResolves(scanning([{ exitCode: 2, report: reportOf([coffee, shields]) }]).scan, optionsWith(slept))
+  assert.equal(verdict.verdict, 'unresolved')
+  assert.deepEqual(verdict.verdict === 'unresolved' ? urlsOf(verdict.failures) : [], [shields.url])
+})
+
+test('only a 403 or a 429 is a refusal', () => {
+  const at = (code: number | undefined, timeout = false) => ({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code, timeout })
+  assert.equal(refused(at(403)), true)
+  assert.equal(refused(at(429)), true)
+  assert.equal(refused(at(408)), false)
+  assert.equal(refused(at(404)), false)
+  assert.equal(refused(at(401)), false)
+  assert.equal(refused(at(503)), false)
+  assert.equal(refused(at(undefined)), false)
+  assert.equal(refused(at(undefined, true)), false)
+})
+
 test('a report this check cannot read is never a pass', async () => {
   const slept: number[] = []
   const verdict = await checkEveryLinkResolves(async () => ({ exitCode: 2, report: 'lychee: panic' }), optionsWith(slept))
@@ -142,6 +206,10 @@ test('a status a host asks us to come back for is the only thing retried', () =>
   assert.equal(retryable({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code: 408, timeout: false }), true)
   assert.equal(retryable({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code: 429, timeout: false }), true)
   assert.equal(retryable({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code: 503, timeout: false }), true)
+  assert.equal(retryable({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code: 500, timeout: false }), true)
+  assert.equal(retryable({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code: 599, timeout: false }), true)
+  assert.equal(retryable({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code: 600, timeout: false }), false)
+  assert.equal(retryable({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code: 403, timeout: false }), true)
   assert.equal(retryable({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code: 404, timeout: false }), false)
   assert.equal(retryable({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code: 400, timeout: false }), false)
   assert.equal(retryable({ file: 'a.md', url: 'u', line: 1, column: 1, status: 's', code: undefined, timeout: false }), false)
@@ -189,6 +257,29 @@ test('the command fails a broken link by name, and passes when every link resolv
   assert.match(refused.stderr, /missing-page\.md/)
   const clean = runMain(stand, dead, 0)
   assert.equal(clean.status, 0)
+})
+
+test('the command passes a link a site refused, and reports it as a warning by name', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'martha-714-'))
+  t.after(() => removeTheTree(directory))
+  const stand = join(directory, 'stand-in.cjs')
+  writeFileSync(stand, STAND_IN, { mode: 0o755 })
+  const run = runMain(stand, reportOf([coffee]), 2)
+  assert.equal(run.status, 0)
+  assert.match(run.stderr, /^::warning file=README\.md,line=2,col=3::README\.md:2:3 https:\/\/buymeacoffee\.example\/rlefever \| Rejected status code: 403/m)
+  assert.match(run.stdout, /no link is broken \(3 scan\(s\)\); 1 link\(s\) a site refused the checker for/)
+})
+
+test('the command still fails a missing file by name when a refusal sits beside it', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'martha-714-'))
+  t.after(() => removeTheTree(directory))
+  const stand = join(directory, 'stand-in.cjs')
+  writeFileSync(stand, STAND_IN, { mode: 0o755 })
+  const run = runMain(stand, reportOf([coffee, missingPage]), 2)
+  assert.equal(run.status, 1)
+  assert.match(run.stderr, /^docs\/x\.md:2:3 file:\/\/\/nowhere\/missing-page\.md \|/m)
+  assert.match(run.stderr, /^::warning file=README\.md,line=2,col=3::.*buymeacoffee/m)
+  assert.match(run.stderr, /1 link\(s\) unresolved/)
 })
 
 test('the command cannot look without a checker, and says so', (t) => {

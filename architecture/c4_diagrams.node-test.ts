@@ -1,7 +1,8 @@
-// The C4 model cannot drift: each SVG in assets/ is exactly what c4_diagrams.ts
-// draws, and architecture/README.md shows each one. The test only reads; it
-// writes nothing, so it leaves nothing behind. Redraw with
-// `node architecture/c4_diagrams.ts` after changing a box.
+// The C4 model cannot drift: what c4_diagrams.ts draws is held to src/ here, and
+// architecture/README.md shows each picture. The SVGs in assets/ are not compared
+// here: they are DRAWN_AT_RELEASE (../src/check_the_pictures_change_with_the_version),
+// so a change that moves a box does not redraw them. The test only reads; it writes
+// nothing, so it leaves nothing behind.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

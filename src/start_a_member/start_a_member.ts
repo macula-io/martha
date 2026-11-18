@@ -2,13 +2,14 @@
 //
 // This exists so an owner starts a member by its name, and never by building a launch by hand: the declaration
 // (../declare_crew) is read once and names the member, Martha's state outside the checkout
-// (../keep_martha_state_outside_the_checkout) holds its node id and the owner's approvals, and the launcher
-// (../launch_a_claude_code_member) starts it on the owner's terminal.
+// (../keep_martha_state_outside_the_checkout) holds its node id and the owner's approvals, and the host the
+// declaration names for the member (../start_the_member_on_its_host) starts it on the owner's terminal.
 //
-// Before the launcher is asked, three things refuse a start by name, each with the command that fixes it: no
-// declaration (martha init), a member the crew does not have (the crew's names), and a config the owner has not
-// approved (martha approve). A config that is approved is named to the owner with when they approved it, so an
-// approval they never gave is on their own screen before the member starts.
+// Before a launcher is asked, things refuse a start by name, each with the command that fixes it: no declaration
+// (martha init), a member the crew does not have (the crew's names), a host this release cannot start or a host whose
+// command is not installed (martha#541, #547), and a config the owner has not approved (martha approve). A config that
+// is approved is named to the owner with when they approved it, so an approval they never gave is on their own screen
+// before the member starts.
 //
 // It starts only on a terminal, as martha approve asks only on one: a member's shell tool runs with no terminal on
 // its input, so a model that calls `martha start` to bring up a sibling is refused before anything is read. A speed
@@ -26,26 +27,20 @@
 // is review plus a yes on every push. The declaration is read here once, by ../read_the_gate_mode, and the launcher
 // asks it for this member's mode; no later slice reads a setting for it.
 
-import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
-import { tmpdir } from 'node:os'
-import { dirname } from 'node:path'
 import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
-import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { handoverStampsIn, keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { readingOnly, type CrewStore, type DocumentStore, type HandoverStampStore, type Refused, type RowStore } from '../host_contract/host_contract.ts'
+import { readingOnly, type CrewStore, type DocumentStore, type HandoverStampStore, type RowStore } from '../host_contract/host_contract.ts'
 import { LIFECYCLE_PLACE, watchForAStop, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
-import { machineRootsFrom } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import { THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
-import { declareACrewOrWhy, OWNER_BELL, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { DeclarationRefused, declareCrew, theHostOfMember, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
-import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
-import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import {
   CREW_ROW_PLACE,
   crewRowsDirectory,
@@ -56,39 +51,20 @@ import {
   readApprovals,
   stateSubdirectory,
   STATE_DIRECTORY_MODE,
-  ownWritesKeptForLaunch,
   pruneOwnWritesOfOldLaunches,
   type Approval,
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import {
-  HOOK_SETTINGS_CHECK_MS,
-  launchClaudeCodeMember,
-  type LauncherPlaces,
-  type MemberStarted,
-} from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { HOOK_SETTINGS_CHECK_MS, type LauncherPlaces, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import type { MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
-import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
-import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
-import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { finishTheOwnersDefaultAtLaunch, type OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
-import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
-import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
-import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
-import { RELAY_JOURNAL_PLACE } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
-import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
-import { runAKeptShape } from '../run_an_owner_signed_command/run_a_signed_shape.ts'
-import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
+import { RELAY_JOURNAL_PLACE } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
-import { theApprovalInUse, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
-import { theGitGuardPlacesOf, type TheGitGuardPlaces } from '../guard_the_git_a_member_runs/the_git_guard_places_of_a_crew.ts'
+import { theApprovalInUse } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { theStartOfAHost, type AHostsLauncher } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 
 /** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
 export const NOT_A_TERMINAL =
@@ -141,8 +117,6 @@ export interface MemberStartRequest {
   readonly is_terminal: boolean
   readonly state: MarthaState
   readonly places: MemberPlaces
-  /** The host's command: `claude`, or a path to it. */
-  readonly command: string
   readonly inherited: Readonly<Record<string, string | undefined>>
   readonly stdio: StdioOptions
   readonly documents: DocumentStore
@@ -156,13 +130,18 @@ export interface MemberStartRequest {
 
 /** The declaration, or why there is none to start from. */
 async function settingsOf(request: MemberStartRequest): Promise<CrewSettings | string> {
-  const declared = await declareACrewOrWhy(request.documents, request.root, CLAUDE_CODE_MODELS)
-  return typeof declared === 'string' ? `${NOT_STARTED}: ${declared}` : declared
+  try {
+    return await declareCrew(request.documents, request.root, CLAUDE_CODE_MODELS)
+  } catch (error) {
+    if (!(error instanceof DeclarationRefused)) throw error
+    const fix = error.field === null && error.message.endsWith('is missing') ? ' Run martha init to declare a crew here.' : ''
+    return `${NOT_STARTED}: ${error.message}.${fix}`
+  }
 }
 
 
 /** Everything a start needs before the launcher is asked, or why it may not start. */
-async function readyToStart(request: MemberStartRequest): Promise<{ readonly node_id: string; readonly model: string | null; readonly approval: Approval | undefined; readonly settings: CrewSettings } | string> {
+async function readyToStart(request: MemberStartRequest): Promise<{ readonly node_id: string; readonly model: string | null; readonly approval: Approval | undefined; readonly settings: CrewSettings; readonly launcher: AHostsLauncher; readonly command: string } | string> {
   if (!request.is_terminal) return NOT_A_TERMINAL
   const unpassed = unpassedOwnerArgument(request.args)
   if (unpassed !== undefined) return `${NOT_STARTED}: ${unpassed}`
@@ -171,47 +150,23 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
   const member = settings.members.find((candidate) => candidate.name === request.member)
   const names = settings.members.map((candidate) => candidate.name)
   if (member === undefined) return `${NOT_STARTED}: ${request.member} is not on this crew (its members are ${names.join(', ')}).`
+  // The host the declaration names for this member (martha#541): its launcher, or the refusal naming what this release
+  // has, comes before anything else is read, so a crew naming a host this release cannot start learns that first.
+  const host = theHostOfMember(settings, member)
+  const start = theStartOfAHost(host, request.inherited)
+  if (typeof start === 'string') return start
   const ids = nodeIdsFor(request.state, names)
   if ('refusal' in ids) return `${NOT_STARTED}: ${ids.refusal}`
   const kept = readApprovals(request.state)
   if ('refusal' in kept) return `${NOT_STARTED}: ${kept.refusal}`
   // The crew's own text files are read as entries of the approval (martha#306), so the approval in use is asked about
-  // the same files the launch will read.
-  const inUse = theApprovalInUse({ host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, crew_text_files: crewTextFilesOf(settings) }, kept.approvals, thisMachine)
+  // the same files the launch will read, under the member's own host (martha#541).
+  const inUse = theApprovalInUse({ host, launch_dir: request.root, stop_dir: request.home, crew_text_files: crewTextFilesOf(settings) }, kept.approvals, thisMachine)
   // What the owner reads when the checkout holds a config nobody approved: the entries, and the command that fixes it.
   if ('needs_approval' in inUse) {
     return `${NOT_STARTED}: this checkout holds config that starts code by itself (${inUse.needs_approval.join(', ')}), and you have not approved it as it is now. Run martha approve, read what it shows, and answer yes.`
   }
-  return { node_id: ids.ids[member.name]!, model: member.model, approval: inUse.approval, settings }
-}
-
-/**
- * What the member is started on: the approval's fingerprint, and what its own writes are checked against while it
- * runs (martha#132), each launch named afresh so no other launch's writes pass, and kept in a file of its own
- * (martha#162). None when the checkout needs none.
- */
-export function approvedPlace(request: MemberStartRequest, approval: Approval | undefined): Pick<SnapshotPlace, 'approved_fingerprints' | 'approved_tree' | 'since_approval'> {
-  if (approval === undefined) return { approved_fingerprints: [] }
-  const launch_id = randomUUID()
-  return {
-    approved_fingerprints: [approval.fingerprint],
-    ...(approval.tree === null ? {} : { approved_tree: approval.tree }),
-    since_approval: {
-      approved: { entries: approval.entries, tree: approval.tree },
-      member: request.member,
-      own_writes: ownWritesKeptForLaunch(request.state, launch_id),
-      launch_id,
-    },
-  }
-}
-
-/**
- * The shape names the owner has signed for this project, as the kept list opens now; none when it does not open
- * trusted, so a list that cannot be vouched for keeps no shell (martha#129).
- */
-function signedShapeNames(state: MarthaState): readonly string[] {
-  const opened = openKeptCommandShapes(state, new Date())
-  return opened.trusted ? opened.shapes.map((shape) => shape.name) : []
+  return { node_id: ids.ids[member.name]!, model: member.model, approval: inUse.approval, settings, launcher: start.launcher, command: start.command }
 }
 
 /**
@@ -227,27 +182,6 @@ function theCrewsStores(state: MarthaState, root: string): { readonly crew: Crew
 }
 
 /**
- * Where the owner's own default for new sessions lives, and where the one lock that guards it is kept (martha#359): from
- * the host's own answer about which settings file it reads, made once in ../claude_code_host (martha#65, martha#75), so
- * a config directory the host refuses is refused here by that same line rather than by a second opinion.
- */
-function settingsPlaceOf(env: Readonly<Record<string, string | undefined>>, request: MemberStartRequest): OwnersDefaultPlace | Refused {
-  const settings = userSettingsPath(env)
-  return 'refusal' in settings
-    ? settings
-    : { config_dir: dirname(settings.path), file: settings.path, store: ownersSettingsIn(settings.path, request.state.state_root) }
-}
-
-/**
- * The file a member's switch is guarded in while it runs (martha#602): the settings file in the member's own config
- * folder, which is where the host's model command saves it, and the lock named by that folder. The owner's own file is
- * never written by a member's host any more, so the owner's default stays where the owner left it by construction;
- * the owner's file is read only at launch, to finish a switch a launch from before martha#602 left open.
- */
-const theMembersSwitchPlace = (request: MemberStartRequest, config_dir: string): OwnersDefaultPlace | Refused =>
-  settingsPlaceOf(theMembersConfigEnvironment(config_dir), request)
-
-/**
  * Where a stop or a restart of this crew's members is asked (martha#312): the crew's lifecycle requests, the launcher's
  * records as the binder reads them, and the ledger. The owner's verbs and a member's restart tool ask through it alike.
  */
@@ -261,16 +195,6 @@ export function stoppingHostOn(places: { readonly launcher: MemberPlaces; readon
   }
 }
 
-/**
- * The workspace guard's places, for the crew's own tools and for the two seams that reach git without a tool call
- * (martha#562): a crew that declared a layout has every shell line a tool call carries read into its git calls, every
- * call the `git` on a member's PATH is handed judged, and every ref a transaction deletes read for whose branch it is.
- * No layout declared, nothing is judged, and the crew's tools are handed no guard at all.
- */
-function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: CrewStore): TheGitGuardPlaces {
-  return theGitGuardPlacesOf(theWorkspaceTheCrewDeclared(settings), member, thisMachine, leftovers) ?? {}
-}
-
 /** The place a member's restart tool asks through; none when the crew's directory is not this user's own. */
 function theRestartPlaceOf(request: MemberStartRequest): { readonly lifecycle?: StoppingHost } {
   const crew = crewStateDirectory(request.state.state_root, request.root)
@@ -278,24 +202,9 @@ function theRestartPlaceOf(request: MemberStartRequest): { readonly lifecycle?: 
 }
 
 /**
- * Finishes any switch a killed launch left unfinished (martha#359, step 7): the owner's file must be right before any
- * new session reads it, and the line that needs the owner goes to the terminal.
+ * Starts the named member of the crew declared at `root`, on the config its owner approved, on the host the
+ * declaration names for it (martha#541): the entry for that host is asked, with what the preflight gathered.
  */
-async function finishAnySwitchBeforeTheHostStarts(request: MemberStartRequest, crewStores: ReturnType<typeof theCrewsStores>): Promise<void> {
-  const owners = settingsPlaceOf(request.inherited, request)
-  for (const told of await finishTheOwnersDefaultAtLaunch({ member: request.member, host: { stores: { crew: crewStores.crew } }, owners, beats: dashboardRowsIn(request.places.dashboard), stillThere: fs.existsSync })) request.tellOwner(told)
-}
-
-/**
- * One raising for this launch, and one channel carrier: the carrier counts a handed message taken in when the mod
- * reports the member's next main turn started (martha#253).
- */
-const theTurnsOf = (request: MemberStartRequest) => ({
-  turns: turnsRaised(),
-  channel: { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } },
-})
-
-/** Starts the named member of the crew declared at `root`, on the config its owner approved. */
 export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
   const ready = await readyToStart(request)
   if (typeof ready === 'string') {
@@ -307,60 +216,31 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     for (const unremoved of pruneOwnWritesOfOldLaunches(request.state)) request.tellOwner(unremoved)
   }
   const { snapshot_root, ...places } = request.places
-  const crewStores = theCrewsStores(request.state, request.root)
-  await finishAnySwitchBeforeTheHostStarts(request, crewStores)
-  const { turns, channel } = theTurnsOf(request)
-  const started = await launchClaudeCodeMember({
-    member_name: request.member,
+  // One channel for this launch: its carrier counts a handed message taken in when the mod reports the member's next
+  // main turn started (martha#253), and the watch for a stop of this member reads the same rows.
+  const channel = { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } }
+  const started = await ready.launcher.start({
+    member: request.member,
     node_id: ready.node_id,
-    place: { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, snapshot_root, crew_text_files: crewTextFilesOf(ready.settings), ...approvedPlace(request, ready.approval) },
-    policy: { may_send_executable_text: [] },
-    crew_settings: ready.settings,
-    owner_bell: ready.settings.house_rules[OWNER_BELL],
-    places,
-    leftovers: { crew: crewStores.crew, workspace: theWorkspaceTheCrewDeclared(ready.settings) },
-    command: request.command,
-    args: [...(ready.model === null ? [] : ['--model', ready.model]), ...request.args, ...(request.initial_prompt === undefined ? [] : [request.initial_prompt])],
+    model: ready.model,
+    approval: ready.approval,
+    settings: ready.settings,
+    root: request.root,
+    home: request.home,
+    args: request.args,
+    prompt: request.initial_prompt,
     inherited: request.inherited,
     stdio: request.stdio,
+    documents: request.documents,
+    state: request.state,
+    places,
+    snapshot_root,
+    crew_stores: theCrewsStores(request.state, request.root),
+    restart: theRestartPlaceOf(request),
+    command: ready.command,
+    channel,
+    ...(request.hear_relay_place === undefined ? {} : { hear_relay_place: request.hear_relay_place }),
     tellOwner: (line) => request.tellOwner(line),
-    ...(request.hear_relay_place === undefined ? {} : { hearRelayPlace: request.hear_relay_place }),
-    turns,
-    crew_tools: (sessions, member) =>
-      crewToolsOver({ ...theGitGuardPlaceOf(ready.settings, request.member, crewStores.crew),
-        member: request.member,
-        ledger: channel,
-        beats: dashboardRowsIn(request.places.dashboard),
-        root: request.root,
-        documents: request.documents,
-        stores: { crew: crewStores.crew },
-        carrier: carryingTo({ member: request.member, host: channel }),
-        sessions,
-        // The stamps the host keeps its handovers with (martha#255), under the same crew directory: a handover one
-        // session writes is the one its successor inherits.
-        stamps: crewStores.stamps,
-        // The five tools that act run git and gh through the launcher's own processes, over the declaration's
-        // workspace places: nothing that acts runs inside the member's session (martha#256).
-        processes: thisMachine.processes,
-        settings: ready.settings,
-        // What a reboot deletes on this machine, read here and ruled on by ../tell_a_citer_of_a_volatile_path (martha#314).
-        volatile_roots: machineRootsFrom(tmpdir(), process.env['XDG_RUNTIME_DIR']),
-        models: CLAUDE_CODE_MODELS,
-        launched_on: ready.model ?? '',
-        spawn: CLAUDE_CODE_SUBAGENT_SPAWN,
-        // The settings file the host's model command saves a switch into, and the lock that guards it (martha#359): the
-        // member's own since martha#602. The owner's file was finished above, before the host started.
-        owners_settings: theMembersSwitchPlace(request, member.config_dir),
-        ...theRestartPlaceOf(request),
-      }),
-    signed_runs: signedRunsOf(
-      receiptsInMemory(),
-      (name) => runAKeptShape(request.state, request.root, request.inherited, name, new Date()),
-      // The names the owner has signed now, read when an answer is judged: a list replaced mid-session takes effect
-      // on the next run, and one that no longer opens leaves nothing to keep the shell for (martha#129).
-      () => signedShapeNames(request.state),
-      CLAUDE_CODE_BASH_RESULT_SHAPES,
-    ),
   })
   if (started.started) watchForAStopOf(request, started, channel)
   return started

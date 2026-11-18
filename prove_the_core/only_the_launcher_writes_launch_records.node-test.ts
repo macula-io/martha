@@ -79,12 +79,14 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'run_the_nodes_own_npm_alone',
     'serve_the_relay_to_a_launch',
     'start_a_member',
+    'start_the_member_on_its_host',
     'start_the_member_on_the_owners_terminal',
     'sweep_leftover_launch_directories',
     'tell_the_member_a_line',
     'read_what_claude_code_says_of_an_agent',
     'read_what_claude_code_records_of_its_tools',
     'a_launch_end_on_this_machine',
+    'watch_the_crew_tools_a_launch_served',
   ])
 })
 

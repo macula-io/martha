@@ -35,7 +35,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { hostAnswers } from './host_stand_in.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The first git that runs hooks named in config (`hook.<name>.command`). */
 const CONFIG_HOOKS_SINCE: readonly [number, number] = [2, 54]
@@ -83,7 +83,12 @@ interface Fixture {
   readonly owner_env: Record<string, string | undefined>
   /** What a member types, as one sh script. */
   readonly member_commands: string
+  /** Where a launched member's stderr is kept: the launch hands it no terminal, so a member that stops early says why here. */
+  readonly member_errors: string
 }
+
+/** What the launched member printed on its stderr, for the assertion that it ran to the end. */
+const whatTheMemberPrinted = (place: Fixture): string => (existsSync(place.member_errors) ? readFileSync(place.member_errors, 'utf8') : '(nothing)')
 
 /** The owner's environment, and managed settings in a folder of the test's own, never the machine's (martha#121). */
 const ownersSettings = (place: Fixture) => ({
@@ -103,7 +108,7 @@ function fixture(t: TestContext, direnv: Direnv | undefined): Fixture {
   const owner_env = ownerEnvironment(home, checkout, direnv)
   const member_commands = memberCommands(home, checkout, husky, direnv)
 
-  return { home, checkout, husky, markers, owner_env, member_commands }
+  return { home, checkout, husky, markers, owner_env, member_commands, member_errors: join(home, 'member-errors') }
 }
 
 function repo(dir: string): void {
@@ -247,7 +252,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
       mkdirSync(dir, { mode: 0o700 })
       return dir
     }
-    const member = join(place.home, 'claude')
+    const member = join(place.home, CLAUDE)
     const done = join(place.home, 'done')
     const empty = join(place.home, 'empty')
     writeFileSync(
@@ -256,7 +261,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
         '#!/bin/sh',
         ...hostAnswers(),
         `printf '%s\\n%s\\n' "$${DIRENV_CONFIG_VARIABLE}" "$(stat -c %a "$${DIRENV_CONFIG_VARIABLE}") $(ls -A "$${DIRENV_CONFIG_VARIABLE}" | wc -l)" > '${empty}'`,
-        `${place.member_commands}status=$?`,
+        `exec 2> '${place.member_errors}'; ${place.member_commands}status=$?`,
         `printf '%s' "$status" > '${done}'`,
         '',
       ].join('\n'),
@@ -279,9 +284,9 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
     })
     assert.equal(started.started, true, lines.join('\n'))
     if (!started.started) return
-    await started.stopped
+    const ended = await started.stopped
 
-    assert.equal(existsSync(done), true, 'the member ran its commands to the end')
+    assert.equal(existsSync(done), true, `the member ran its commands to the end; it ended ${JSON.stringify(ended)} and printed: ${whatTheMemberPrinted(place)}`)
     assert.equal(readFileSync(done, 'utf8'), '0', 'and every one of them succeeded')
     assert.deepEqual(readdirSync(place.markers), [], 'no door the checkout planted ran')
 

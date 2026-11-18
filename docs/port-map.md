@@ -96,6 +96,16 @@ links check fails on it, so the table is changed on the landing that moves it.
 | realm admission | planned | [#310](https://github.com/macula-io/martha/issues/310) |
 | release | built | [how a release is made](how-a-release-is-made.md) |
 
+Not everything a launch answers comes from a step of that order.
+[`answer_what_a_host_reports`](../src/answer_what_a_host_reports) (packages 2-4)
+is on `main`: the entry a host's adapter reaches, in one place that names no
+host. It answers a session's start, a turn, and a review the host saw fail; the
+tool call and its result join it with the packages that move them, and the
+handlers still in the adapter ask it for the state until then. A host's own wire
+stays in that host's adapter:
+[`relay_protocol.ts`](../src/claude_code_relay/hooks/relay_protocol.ts) is
+Claude Code's.
+
 ## Left behind on purpose
 
 No behaviour is dropped. What stays behind is the code that exists only because

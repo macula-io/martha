@@ -20,6 +20,7 @@ reader where to look. A lab host name is a map of the network.
 | A private remote or repository name | `git@github.com:synthetic-owner/private-repo.git`, a constant holding `synthetic-owner/private-repo` | a fallback, a default, an install script |
 | An internal host name | a `*.lab` name, a lab machine named by its family and number | a log line, a comment, a test fixture |
 | A home directory, a private address, a private email, a real node id or key | a path under a real user's home, RFC 1918 addresses, a 64-hex id | the same classes the crew's note check and release scan already refuse |
+| A fact recorded from another checkout | a private remote, a lab machine name, a path under a home, held by the engine's own source | recorded rather than typed: `npm run record:goose-engine` reads an engine checkout and writes its facts to [`src/know_the_goose_engines_facts/recorded_goose_engine.json`](../src/know_the_goose_engines_facts/recorded_goose_engine.json), so a value can arrive from a tree this repository does not review |
 
 Each of those can enter through four paths:
 

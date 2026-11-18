@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 
 import { type Host, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
+import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** How long one host run may take before the probe gives up on it. */
 export const RUN_TIMEOUT_MS = 120_000
@@ -115,7 +116,7 @@ export const claudeAsTheAgent = (name: string, ...extra: readonly string[]): Com
     '-c',
     `"$@" 2> ../agent.err && touch ../AGENT_LOADED; grep -qF -e "${noSuchAgent(name)}" ../agent.err && touch ../AGENT_NOT_FOUND; true`,
     'claude-as-agent',
-    'claude',
+    CLAUDE,
     ...extra,
     '--agent',
     name,
@@ -125,7 +126,7 @@ export const claudeAsTheAgent = (name: string, ...extra: readonly string[]): Com
 })
 
 export const claude = (...extra: readonly string[]): Command => (switches) => ({
-  command: 'claude',
+  command: CLAUDE,
   args: [...extra, ...switches.args],
 })
 

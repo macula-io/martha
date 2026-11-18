@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { ACTS, CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, LAYOUT_TO_ADD, OWNER, WORKTREES, WORKTREES_BESIDE_CLONES, type WorkspaceLayout } from '../declare_crew/declare_crew.ts'
+import { ACTS, CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, HOST, LAYOUT_TO_ADD, OWNER, THE_ENGINES_HOST, WORKTREES, WORKTREES_BESIDE_CLONES, type WorkspaceLayout } from '../declare_crew/declare_crew.ts'
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
@@ -20,6 +20,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { declareSoloCrew } from './declare_a_solo_crew.ts'
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
 const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
@@ -38,7 +39,7 @@ function placeFor(t: TestContext): { root: string; state: MarthaState } {
 
 test('init declares a solo crew of a builder and a reviewer that declareCrew reads, the owner may do every act', async (t) => {
   const { root, state } = placeFor(t)
-  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(declared.declared, declared.declared ? '' : declared.refusal)
 
   const settings = await declareCrew(documents, root, HOST_MODELS)
@@ -47,9 +48,22 @@ test('init declares a solo crew of a builder and a reviewer that declareCrew rea
   for (const act of ACTS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
 })
 
+test('#541: init writes the crew-level host the install names, no member host, and the file reads back with it', async (t) => {
+  const { root, state } = placeFor(t)
+  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS, host: THE_ENGINES_HOST })
+  assert.ok(declared.declared, declared.declared ? '' : declared.refusal)
+  // The file itself, not only what the reader makes of it: the key is written where an owner reads it.
+  const written = JSON.parse(readFileSync(join(root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as Record<string, unknown>
+  assert.equal(written[HOST], THE_ENGINES_HOST)
+  const settings = await declareCrew(documents, root, HOST_MODELS)
+  assert.equal(settings.host, THE_ENGINES_HOST)
+  // Init writes no per-member host: a mixed crew adds one to the member it wants elsewhere.
+  for (const member of settings.members) assert.equal(member.host, null, member.name)
+})
+
 test('init gives each member a node id, outside the checkout, that the owner never types', async (t) => {
   const { root, state } = placeFor(t)
-  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(declared.declared)
   const ids = nodeIdsFor(state, SOLO_MEMBERS.map((member) => member.name))
   assert.ok('ids' in ids)
@@ -63,7 +77,7 @@ test('init refuses to overwrite a declaration, naming it, and leaves it as it wa
   const file = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   mkdirSync(join(root, DECLARATION_DIRECTORY))
   writeFileSync(file, '{"the owner": "wrote this"}')
-  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.equal(declared.declared, false)
   assert.ok(!declared.declared && declared.refusal.includes(file), declared.declared ? '' : declared.refusal)
   assert.equal(readFileSync(file, 'utf8'), '{"the owner": "wrote this"}')
@@ -71,7 +85,7 @@ test('init refuses to overwrite a declaration, naming it, and leaves it as it wa
 
 test('init with no owner name refuses, saying how to set one, and writes nothing', async (t) => {
   const { root, state } = placeFor(t)
-  const declared = await declareSoloCrew({ root, owner: null, origin: null, state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: null, origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.equal(declared.declared, false)
   assert.match(declared.declared ? '' : declared.refusal, /git config user\.name/)
   assert.equal(existsSync(join(root, DECLARATION_DIRECTORY)), false)
@@ -82,7 +96,7 @@ test('init refuses a declaration directory that is a link, naming it, and writes
   const elsewhere = join(root, '..', 'elsewhere')
   mkdirSync(elsewhere)
   symlinkSync(elsewhere, join(root, DECLARATION_DIRECTORY))
-  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS })
+  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.equal(outcome.declared, false)
   const refusal = outcome.declared ? '' : outcome.refusal
   assert.ok(refusal.includes(join(root, DECLARATION_DIRECTORY)), refusal)
@@ -92,7 +106,7 @@ test('init refuses a declaration directory that is a link, naming it, and writes
 test('init refuses a declaration path that is a file, naming it, rather than throwing', async (t) => {
   const { root, state } = placeFor(t)
   writeFileSync(join(root, DECLARATION_DIRECTORY), 'not a directory\n')
-  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS })
+  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.equal(outcome.declared, false)
   assert.ok(!outcome.declared && outcome.refusal.includes(join(root, DECLARATION_DIRECTORY)), outcome.declared ? '' : outcome.refusal)
 })
@@ -136,7 +150,7 @@ test('init declares the workspace layout its checkout proves, and a member opens
   const { home, clone, origin } = aCheckoutUnderItsOrigin(t)
   const state = openState(join(home, 'state'), clone)
   assert.ok('directory' in state)
-  const declared = await declareSoloCrew({ root: clone, owner: 'Ada Owner', origin, state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root: clone, owner: 'Ada Owner', origin, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(declared.declared, declared.declared ? '' : declared.refusal)
 
   const layout: WorkspaceLayout = { [CLONES]: join(home, CLONES), [WORKTREES]: join(home, WORKTREES_BESIDE_CLONES) }
@@ -166,7 +180,7 @@ test('init declares the workspace layout its checkout proves, and a member opens
 test('init declares no layout for a checkout its origin does not place under <clones>/<org>/<name>, and says what to add', async (t) => {
   const { root, state } = placeFor(t)
   const origin = join(root, '..', 'remote', 'acme', 'widget.git')
-  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin, state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(declared.declared, declared.declared ? '' : declared.refusal)
   const settings = await declareCrew(documents, root, HOST_MODELS)
   assert.equal(settings.house_rules.workspace_layout, false)
@@ -177,7 +191,7 @@ test('init declares no layout for a checkout its origin does not place under <cl
 
 test('init declares no layout for a checkout with no origin, and says what to add', async (t) => {
   const { root, state } = placeFor(t)
-  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(declared.declared, declared.declared ? '' : declared.refusal)
   assert.equal((await declareCrew(documents, root, HOST_MODELS)).house_rules.workspace_layout, false)
   assert.equal(declared.workspace, `No workspace layout: ${root} names no origin remote. ${LAYOUT_TO_ADD}`)

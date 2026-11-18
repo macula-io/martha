@@ -29,6 +29,7 @@ import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { ELICITATION, NOTIFICATION, PERMISSION_REQUEST } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
+import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { theOwnersScreen } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { IDLE, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
@@ -226,4 +227,22 @@ test('#313: an elicitation and a notification the host posts move the row in the
   await relay.answer('owner_dialog', dialogBody('session-a', NOTIFICATION, { notification_type: 'auth_success', message: 'Signed in' }))
   assert.equal(store.kept.length, wrote, 'a notification whose own event already says it writes no row')
   assert.deepEqual(whatTheOwnerIsShown(theRowOn(store)), { state: IDLE, needs: '' })
+})
+
+test('#541: the menu a call opens reaches the row once the entry allowed the call, and a denied call opens nothing', async (t) => {
+  const places = placesOf(t)
+  const store = aStore()
+  const relay = relayFor(places, store, [])
+  await startedSession(relay, 'session-a')
+  const menu = { tool: MENU_TOOL, tool_use_id: 'toolu_menu_1', questions: [] }
+
+  // A session this launcher never took a start of is denied, and its call opens no menu on the owner's row.
+  const refused = await relay.answer('tool_called', { session_id: 'never-started', call: menu })
+  assert.equal(typeof theBodyOf(refused)['deny'], 'string')
+  assert.deepEqual(store.kept, [], 'a denied call says nothing to the owner\'s screen')
+
+  // The allowed call is the host running the menu: the dialog the owner now answers is on the row.
+  const allowed = await relay.answer('tool_called', { session_id: 'session-a', call: menu })
+  assert.equal(theBodyOf(allowed)['allow'], 1)
+  assert.deepEqual(theRowOn(store).dialogs?.map((dialog) => dialog.key), ['menu:toolu_menu_1'])
 })
