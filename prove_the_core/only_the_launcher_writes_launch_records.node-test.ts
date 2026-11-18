@@ -60,6 +60,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'install_the_pinned_installer',
     'install_the_recorded_mesh_server',
     'keep_martha_state_outside_the_checkout',
+    'keep_where_owners_acts_were_typed',
     'keep_the_relays_journal',
     'keep_what_the_owner_signed',
     'launch_a_claude_code_member',

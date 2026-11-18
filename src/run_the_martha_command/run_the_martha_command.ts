@@ -59,7 +59,7 @@ import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cros
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { keepWhereItWasTyped, linesOf, seenFromThisProcess, theCutoverTakenOnce, theRecordFilesOf, whatTheOwnerReadsOf } from '../record_where_an_owners_act_was_typed/keep_where_owners_acts_were_typed.ts'
+import { keepWhereItWasTyped, linesOf, seenFromThisProcess, theCutoverTakenOnce, theRecordFilesOf, whatTheOwnerReadsOf } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
 
 /** The line `martha start` prints once the member is up: its name and its pid. */
 export const startedLine = (member: string, pid: number | string): string => `${member} started, pid ${pid}`

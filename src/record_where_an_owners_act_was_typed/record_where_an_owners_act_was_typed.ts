@@ -123,12 +123,15 @@ export function howTheLinesRead(file: string, lines: readonly string[], log: The
   const kept = cutover?.files[file]
   const historyHolds = kept === undefined || (lines.length >= kept.lines && prefixHashOf(lines, kept.lines) === kept.sha256)
   return lines.map((line, position): HowALineReads => {
+    // The log first: a line an act wrote is that act's, even at a position the cutover counted, as a whole record
+    // rewritten by its act (the kept shapes) is. Only a line no entry names falls back to history.
+    const sha256 = sha256Of(line)
+    const act = log.entries.find((entry) => entry.file === file && entry.position === position && entry.sha256 === sha256)
+    if (act !== undefined) return { kind: 'act', act }
     if (cutover !== undefined && kept !== undefined && position < kept.lines) {
       return historyHolds ? { kind: 'history', before: cutover.taken_at } : { kind: 'history_changed', before: cutover.taken_at }
     }
-    const sha256 = sha256Of(line)
-    const act = log.entries.find((entry) => entry.file === file && entry.position === position && entry.sha256 === sha256)
-    return act === undefined ? { kind: 'without_the_martha_command' } : { kind: 'act', act }
+    return { kind: 'without_the_martha_command' }
   })
 }
 

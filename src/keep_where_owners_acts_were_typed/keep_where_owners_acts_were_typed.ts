@@ -1,5 +1,5 @@
 // The disk side of where the owner's own acts were typed (martha#619): the record files each act may write, read
-// before and after it, and the log beside them. Every decision is ./record_where_an_owners_act_was_typed.ts's; this
+// before and after it, and the log beside them. Every decision is ../record_where_an_owners_act_was_typed's; this
 // reads and writes the project's own state and hands the lines over.
 //
 // The record is written by the act first; the entries are appended after it, only for an act that ended done, one per
@@ -23,7 +23,7 @@ import {
   type SeenFrom,
   type TheCutover,
   type TheLogRead,
-} from './record_where_an_owners_act_was_typed.ts'
+} from '../record_where_an_owners_act_was_typed/record_where_an_owners_act_was_typed.ts'
 
 /** The log of the owner's acts, and its cutover, in the project's own state. */
 export const OWNER_ACTS_FILE = 'owner_acts.jsonl'

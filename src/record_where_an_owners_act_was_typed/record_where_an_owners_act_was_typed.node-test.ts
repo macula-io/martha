@@ -71,3 +71,14 @@ test('#619: a cutover taken after the first approval it covers is named as late,
   assert.equal(aLateCutover(theCutoverOver({}, CUTOVER_AT), LATER), undefined)
   assert.equal(aLateCutover(theCutoverOver({}, LATER), undefined), undefined)
 })
+
+test('#619: a whole record its act rewrote after the cutover reads as that act, not as changed history (review r=1, mutant: history decided before the log)', () => {
+  const shapes = join('/state', 'project', 'the-kept-shapes')
+  const cutover = theCutoverOver({ [shapes]: ['{"shapes":"old"}'] }, CUTOVER_AT)
+  const rewritten = ['{"shapes":"new"}']
+  const logged = theEntriesFor('keep-shapes', shapes, rewritten, 0, LATER, SEEN)
+  const read = howTheLinesRead(shapes, rewritten, theLogIn(aLogOf(...logged.map((entry) => JSON.stringify(entry)))), cutover)
+  assert.deepEqual(read.map((how) => how.kind), ['act'])
+  // The same rewrite with no entry is still changed history, never an act.
+  assert.deepEqual(howTheLinesRead(shapes, rewritten, { entries: [], unreadable: [] }, cutover).map((how) => how.kind), ['history_changed'])
+})
