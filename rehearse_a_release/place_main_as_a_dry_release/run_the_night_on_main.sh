@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# run_the_night_on_main.sh <ssh-host> --evidence <folder> [--sha <sha40>] [--proof-tree <git checkout>] [-- <proof args>]
+#
+# The nightly live run's driver (martha#696, on #639's path): it packs main at a commit with the packer beside it,
+# pack_main_as_a_dry_layer.sh, and runs the clean-install proof on that layer as a dry run, with the night's evidence
+# kept under one folder.
+#
+# 1. The arguments are read before anything else runs. The host is a parameter and is never named here, as the proof
+#    takes it: this repository is public. The evidence root is a parameter too, so no one's home is written here.
+# 2. The proof checkout (--proof-tree, default this repository) must be clean, and its proof must define DRY_PASSED,
+#    the code of a dry pass, read from the proof itself and never spelled here. The packer must define NOT_PACKABLE
+#    the same way. A missing one refuses the run before anything is packed.
+# 3. The repository is fetched, and the sha is origin/main, or the given one, which must be a commit here.
+# 4. The packer packs main at the sha into <evidence>/<date>_<sha7>/, and the layer's sha256 is kept in run.txt.
+# 5. The proof runs with --log in the same folder and --dry-layer <layer> <sha>. When the proof names --night in its
+#    usage, it is also given --night <that folder>/NIGHT_FOLDER_NAME, a path the driver names and never makes: the
+#    proof makes its own run folder and refuses one that is there. Anything after `--` goes to the proof unchanged.
+#    The driver never reads, copies or passes the live token; the proof reads its own.
+#
+# The run has one temp folder, given to the packer and the proof as TMPDIR, and the EXIT trap removes it, so a temp
+# file a signal strands between a child's mktemp and its rm goes with it. A signal stops the child as well.
+#
+# Exit: the proof's own exit, with DRY_PASSED for a dry pass, never 0. A proof that exits 0 on a dry layer claims a
+# release's pass, which a dry run never is, so that is FAILED. The packer's exits are not passed through, because its
+# codes collide with the proof's: the packer's NOT_PACKABLE is 3, and the proof's 3 is "the registry carries no
+# release". So a packer that refused or could not run is PACK_FAILED, and a tree whose installer is ahead of its tag
+# is NOT_PACKABLE_TONIGHT, reported as "not packable", never as a pass. REFUSED: the arguments or the checkouts were
+# refused, and nothing was packed. Each code is defined once, below, outside the proof's own range.
+set -euo pipefail
+
+FAILED=1
+REFUSED=2
+PACK_FAILED=6
+NOT_PACKABLE_TONIGHT=7
+NIGHT_FOLDER_NAME=night
+
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
+PACKER="${HERE}/pack_main_as_a_dry_layer.sh"
+PROOF_REL='prove_a_clean_install_in_a_throwaway_container/prove_a_clean_install_in_a_throwaway_container.sh'
+USAGE='usage: run_the_night_on_main.sh <ssh-host> --evidence <folder> [--sha <sha40>] [--proof-tree <git checkout>] [-- <proof args>]'
+
+refuse() { printf 'night: %s\n' "$1" >&2; exit "${REFUSED}"; }
+
+# The digits of `NAME=<digits>` on exactly one line of a script, or nothing.
+a_scripts_constant() {
+  local lines
+  lines="$(sed -n "s/^$2=\\([0-9][0-9]*\\)\$/\\1/p" "$1")"
+  [[ -n "${lines}" && "${lines}" != *$'\n'* ]] && printf '%s\n' "${lines}"
+}
+
+HOST="${1:-}"
+[[ -n "${HOST}" && "${HOST}" != -* ]] || refuse "${USAGE}"
+shift
+EVIDENCE=''; SHA=''; PROOF_TREE="${REPO}"; PROOF_EXTRA=()
+while (($#)); do
+  case "$1" in
+    --evidence) [[ -n "${2:-}" ]] || refuse "${USAGE}"; EVIDENCE="$2"; shift 2 ;;
+    --sha) [[ -n "${2:-}" ]] || refuse "${USAGE}"; SHA="$2"; shift 2 ;;
+    --proof-tree) [[ -n "${2:-}" ]] || refuse "${USAGE}"; PROOF_TREE="$2"; shift 2 ;;
+    --) shift; PROOF_EXTRA=("$@"); break ;;
+    *) refuse "${USAGE}" ;;
+  esac
+done
+[[ -n "${EVIDENCE}" ]] || refuse "${USAGE}"
+[[ -d "${EVIDENCE}" ]] || refuse "the evidence root ${EVIDENCE} is not a folder"
+EVIDENCE="$(cd "${EVIDENCE}" && pwd)"
+[[ -z "${SHA}" || "${SHA}" =~ ^[0-9a-f]{40}$ ]] || refuse "--sha takes a 40-character sha, not ${SHA}"
+
+PROOF="${PROOF_TREE}/${PROOF_REL}"
+[[ -f "${PROOF}" ]] || refuse "${PROOF_TREE} holds no proof at ${PROOF_REL}"
+[[ -z "$(git -C "${PROOF_TREE}" status --porcelain)" ]] || refuse "the proof tree ${PROOF_TREE} is not clean"
+DRY_PASSED="$(a_scripts_constant "${PROOF}" DRY_PASSED)" || refuse "the proof in ${PROOF_TREE} defines no DRY_PASSED, so it takes no --dry-layer"
+NOT_PACKABLE="$(a_scripts_constant "${PACKER}" NOT_PACKABLE)" || refuse "the packer defines no NOT_PACKABLE"
+
+git -C "${REPO}" fetch --quiet origin || refuse "git could not fetch origin in ${REPO}"
+[[ -n "${SHA}" ]] || SHA="$(git -C "${REPO}" rev-parse origin/main)"
+git -C "${REPO}" cat-file -e "${SHA}^{commit}" 2> /dev/null || refuse "${SHA} is not a commit in ${REPO}"
+
+RUN="${EVIDENCE}/$(date +%F)_${SHA:0:7}"
+LAYER="${RUN}/main-${SHA:0:7}.tar.gz"
+[[ ! -e "${LAYER}" ]] || refuse "${LAYER} is there already: tonight's run for this sha has its folder"
+mkdir -p "${RUN}"
+
+RUN_TMP="$(mktemp -d)"
+CHILD=''
+trap 'rm -rf "${RUN_TMP}"' EXIT
+stop() {
+  if [[ -n "${CHILD}" ]]; then kill -TERM "${CHILD}" 2> /dev/null || true; wait "${CHILD}" 2> /dev/null || true; fi
+  printf 'night: stopped by a signal; evidence %s\n' "${RUN}" >&2
+  printf 'interrupted=%s\n' "$(date -Is)" >> "${RUN}/run.txt"
+  exit "${FAILED}"
+}
+trap stop INT TERM
+
+# A child in the background, its standard input this run's own, and waited for, so a signal reaches the trap at once
+# rather than after the child ends. Its exit is in CHILD_EXIT.
+run_child() {
+  TMPDIR="${RUN_TMP}" "$@" 0<&0 &
+  CHILD=$!
+  local rc=0
+  wait "${CHILD}" || rc=$?
+  CHILD=''
+  CHILD_EXIT="${rc}"
+}
+
+{
+  printf 'run_folder=%s\n' "${RUN}"
+  printf 'sha=%s\n' "${SHA}"
+  printf 'proof_tree=%s at %s\n' "${PROOF_TREE}" "$(git -C "${PROOF_TREE}" rev-parse HEAD)"
+  printf 'started=%s\n' "$(date -Is)"
+} > "${RUN}/run.txt"
+
+run_child "${PACKER}" "${SHA}" "${LAYER}" > "${RUN}/pack.log" 2>&1
+printf 'pack_exit=%s\n' "${CHILD_EXIT}" >> "${RUN}/run.txt"
+if [[ "${CHILD_EXIT}" -ne 0 ]]; then
+  if [[ "${CHILD_EXIT}" -eq "${NOT_PACKABLE}" ]]; then
+    printf 'result=not packable: installer ahead of its tag\n' >> "${RUN}/run.txt"
+    printf 'night: not packable: installer ahead of its tag at %s; nothing was proven; evidence %s\n' "${SHA}" "${RUN}" >&2
+    exit "${NOT_PACKABLE_TONIGHT}"
+  fi
+  printf 'result=the packer exited %s\n' "${CHILD_EXIT}" >> "${RUN}/run.txt"
+  printf 'night: the packer exited %s; nothing was proven; evidence %s\n' "${CHILD_EXIT}" "${RUN}" >&2
+  exit "${PACK_FAILED}"
+fi
+printf 'layer_sha256=%s\n' "$(sha256sum "${LAYER}" | sed 's/ .*//')" >> "${RUN}/run.txt"
+
+NIGHT_ARGS=()
+if sed -n 's/^USAGE=//p' "${PROOF}" | sed -n '/\[--night </p' | read -r _; then
+  NIGHT_ARGS=(--night "${RUN}/${NIGHT_FOLDER_NAME}")
+  printf 'night_folder=%s\n' "${RUN}/${NIGHT_FOLDER_NAME}" >> "${RUN}/run.txt"
+fi
+
+run_child "${PROOF}" "${HOST}" --log "${RUN}/proof.log" "${NIGHT_ARGS[@]}" --dry-layer "${LAYER}" "${SHA}" "${PROOF_EXTRA[@]}"
+PROOF_EXIT="${CHILD_EXIT}"
+printf 'proof_exit=%s\nended=%s\n' "${PROOF_EXIT}" "$(date -Is)" >> "${RUN}/run.txt"
+if [[ "${PROOF_EXIT}" -eq 0 ]]; then
+  printf 'night: the proof claimed a release'"'"'s pass on a dry layer; evidence %s\n' "${RUN}" >&2
+  exit "${FAILED}"
+fi
+printf 'night: the proof exited %s (%s is a dry pass); evidence %s\n' "${PROOF_EXIT}" "${DRY_PASSED}" "${RUN}"
+exit "${PROOF_EXIT}"
