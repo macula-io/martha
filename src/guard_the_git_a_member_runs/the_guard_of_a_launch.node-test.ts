@@ -508,3 +508,18 @@ test('a guarded commit starts the judge once for the call and once for each tran
   assert.equal(forTheHook.length, 2, `the hook started the judge ${forTheHook.length} times for the commit's two transactions: ${started.join('; ')}`)
   assert.deepEqual(launcher.asked.map((question) => question.path), [GIT_CALL_PATH, REF_TRANSACTION_PATH, REF_TRANSACTION_PATH], 'the launcher was not asked once for the call and once for each transaction')
 })
+
+/** The code lines of a source file with their numbers, its comment lines left out: what runs, not what explains it. */
+const theCodeOf = (source: string): readonly { readonly line: string; readonly number: number }[] =>
+  source.split('\n').map((line, index) => ({ line, number: index + 1 })).filter(({ line }) => !/^\s*(\/\/|\/\*\*|\*)/.test(line))
+
+// check:restated-values judges a whole string literal, but not a word typed inside a template's text (martha#776), and
+// the hook's `case` pattern is a word in shell text the writer builds. So until #776 lands, this test is what holds the
+// writer to one spelling of the state (#755 design A1): PREPARED's value is read through the import, never typed here.
+test("the hook's state word is written from PREPARED, and never typed in the guard's writer (martha#755 A1)", () => {
+  const word = new RegExp(`(?<![\\w$])${PREPARED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`)
+  const typed = theCodeOf(readFileSync(new URL('./the_guard_of_a_launch.ts', import.meta.url), 'utf8'))
+    .filter(({ line }) => word.test(line))
+    .map(({ line, number }) => `the_guard_of_a_launch.ts:${number}: ${line.trim()}`)
+  assert.deepEqual(typed, [], `the guard's writer types PREPARED's value rather than importing it:\n${typed.join('\n')}`)
+})
