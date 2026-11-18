@@ -1,4 +1,4 @@
-// Run the check: node src/check_the_workspace_matches_its_layout/main.ts [--workspace <dir>] [--self-test]
+// Run the check: node src/check_the_workspace_layout/main.ts [--workspace <dir>] [--self-test]
 //
 // Exit 0 looked, and the workspace matches the layout its crew declared; 1 one line per drift, then a summary that
 // names this check; 2 the check could not be made. A crew that declared no layout has nothing to check, and that is
