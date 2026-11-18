@@ -2,8 +2,6 @@
 // a terminal would act on some of what a path, a member's name or a kept approval may hold rather than show it.
 
 /** The lines an owner is shown, and nothing else: what this slice needs of the terminal, so it asks no adapter for it. */
-import type { CommandIo } from '../run_the_martha_command/run_the_martha_command.ts'
-
 export interface LinesShownToTheOwner {
   out(line: string): void
   err(line: string): void
@@ -41,10 +39,10 @@ export const EXIT_USAGE = 2
 export const SAID_BY = 'martha:'
 
 /** How a line of Martha's own is told on the owner's stderr. */
-export const tellOwnerOn = (io: CommandIo) => (line: string): void => io.err(`${SAID_BY} ${line}`)
+export const tellOwnerOn = (io: LinesShownToTheOwner) => (line: string): void => io.err(`${SAID_BY} ${line}`)
 
 /** The refusal, its words told on stderr, and the status a command that refused ends with. */
-export function refused(io: CommandIo, why: string): number {
+export function refused(io: LinesShownToTheOwner, why: string): number {
   tellOwnerOn(io)(why)
   return EXIT_REFUSED
 }
