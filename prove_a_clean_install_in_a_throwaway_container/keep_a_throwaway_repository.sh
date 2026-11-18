@@ -47,7 +47,8 @@ TOKEN_MODE='600'
 NAME_PREFIX='martha-live-'
 STAMP_FORMAT='+%Y%m%d-%H%M%S'
 # The first commit: its author (no person's), its branch, and its two files. The package's test script is node's own
-# runner, so the repository needs nothing installed.
+# runner, so the repository needs nothing installed; its manifest is written where the commit is made (fill), on the
+# one line that writes it, as a manifest Martha ships no run of.
 AUTHOR='the owner'
 AUTHOR_EMAIL='owner@example.invalid'
 BRANCH='main'
@@ -55,18 +56,10 @@ README_TEXT='# A throwaway repository
 
 Made by one night of the nightly live run, and deleted at its end.
 '
-PACKAGE_JSON='{
-  "name": "greet",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": { "test": "node --test" }
-}
-'
 # Issue #1: the night's package, the one the builder is given.
 ISSUE_NUMBER=1
 ISSUE_TITLE='Add greet(name)'
-ISSUE_BODY='Add `greet(name)` in `greet.js`, returning `Hello, <name>!`, with a `node --test` test that pins the exact string, a name with a space included.'
+ISSUE_BODY='Add `greet(name)` in `greet.js`, returning `Hello, <name>!`, with a `node:test` test that pins the exact string, a name with a space included.'
 # GitHub's answer to the same id once the repository is gone, as gh prints its status line.
 GONE_STATUS='404'
 # The run folder's parts: the run's own GitHub login (never kept), the record the delete guard reads, and what the
@@ -186,7 +179,7 @@ fill_the_repository() {
   local first="${RUN_DIR}/first" base answer number
   mkdir "${first}"
   printf '%s' "${README_TEXT}" > "${first}/README.md"
-  printf '%s' "${PACKAGE_JSON}" > "${first}/package.json"
+  printf '{\n  "name": "greet",\n  "version": "0.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": { "test": "node --test" }\n}\n' > "${first}/package.json"
   as_the_bot git -C "${first}" init -q -b "${BRANCH}"
   as_the_bot git -C "${first}" add README.md package.json
   as_the_bot env GIT_AUTHOR_NAME="${AUTHOR}" GIT_AUTHOR_EMAIL="${AUTHOR_EMAIL}" GIT_COMMITTER_NAME="${AUTHOR}" \
