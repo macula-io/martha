@@ -56,5 +56,10 @@
     "name_pattern": "the owner's mute silences a launched member",
     "cases": 1,
     "proves": "the owner's mute silences one member's bell on the terminal it rings on, and the same member unmuted rings (martha#371)"
+  },
+  {
+    "file": "src/drive_the_recorded_host/a_menu_answer_on_the_recorded_host.node-test.ts",
+    "cases": 1,
+    "proves": "the owner's answer to the host's menu is still the one the ask queue's reader was recorded from (martha#608)"
   }
 ]

@@ -816,8 +816,9 @@ async function theReportOfARanTool(state: RelayState, body: Body): Promise<Relay
   const call = callOf(body)
   if (call === undefined) return stopMember(place, 'a tool ran that the relay could not name')
   keepWhatTheReviewResolvedTo(state.reviews, call.id, body.answer)
-  // A menu's answer is what a settle of the owner's asks stands on (martha#313): the queue keeps the closings it hears.
-  place.crew?.noteTheCallsAnswer({ tool: call.tool }, session.id)
+  // A menu's answer is what a settle of the owner's asks stands on (martha#313): the queue keeps the closings it hears,
+  // with the posted options and the host's own answer, which say what the owner picked (martha#608).
+  place.crew?.noteTheCallsAnswer({ tool: call.tool, input: call.input, answer: body.answer }, session.id)
   // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).
   const answering = noteAnAgentsAnswer(state, body)
   closeTheDialogsTheCallAnswered(place, session, body, call)

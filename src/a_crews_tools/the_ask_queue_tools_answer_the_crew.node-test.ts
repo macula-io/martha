@@ -37,7 +37,7 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { ProcessOutcome, ProcessRequest, Processes } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { LIST_ASKS, MAX_ASK, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS, menusTheLauncherKeeps } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { LIST_ASKS, MAX_ASK, PICK_JOINER, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS, menusTheLauncherKeeps } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
@@ -93,6 +93,21 @@ function theToolsOf(member: string): CrewTools {
 const TOLD = (said: { readonly answer: string } | { readonly refused: string }): string => ('answer' in said ? said.answer : assert.fail(`refused: ${said.refused}`))
 const REFUSED = (said: { readonly answer: string } | { readonly refused: string }): string => ('refused' in said ? said.refused : assert.fail(`answered: ${said.answer}`))
 
+/**
+ * The menu a member posts from a take's answer, every option exactly as the take gave it, and the host's answer with the
+ * owner ticking the asks whose ids are `ticked` (martha#608): the shape the recording shows,
+ * ../queue_the_owners_asks/recorded_menu_answers.json.
+ */
+function theMenuPostedFrom(taken: string, ticked: readonly string[]): { readonly tool: string; readonly input: unknown; readonly answer: unknown } {
+  const labels = [...taken.matchAll(/^  label: (".*")$/gmu)].map((found) => JSON.parse(found[1] ?? '""') as string)
+  const descriptions = [...taken.matchAll(/^  description: (".*")$/gmu)].map((found) => JSON.parse(found[1] ?? '""') as string)
+  const options = labels.map((label, at) => ({ label, description: descriptions[at] ?? '' }))
+  const question = 'Which of these may go ahead?'
+  const questions = [{ question, header: 'Asks', multiSelect: true, options }]
+  const picked = ticked.map((id) => labels.find((label) => label.startsWith(`${id}. `)) ?? `no option for ${id}`)
+  return { tool: MENU_TOOL, input: { questions }, answer: { result: { questions, answers: { [question]: picked.join(PICK_JOINER) }, annotations: {} } } }
+}
+
 test('a member queues an ask the launcher stamps with its own member, never with a name the call carries', async () => {
   clock.at = 1_000
   const told = TOLD(await theToolsOf(BUILDER).answer(QUEUE_ASK, { ask: 'Delete the merged branch vesta/313-old?', asked_by: 'a name in the call' }, 'session-builder'))
@@ -113,7 +128,7 @@ test('the session the table does not name is refused, and the one it names takes
   assert.match(REFUSED(await lead.answer(SETTLE_ASKS, { batch, yes: [0] }, 'session-lead')), /no menu has closed/)
 
   clock.at = 3_000
-  lead.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
+  lead.noteTheCallsAnswer(theMenuPostedFrom(taken, ['0']), 'session-lead')
   assert.equal(TOLD(await lead.answer(SETTLE_ASKS, { batch, yes: [0] }, 'session-lead')), `Batch ${String(batch)} settled: 1 the owner ticked, 0 back in the queue.`)
   assert.equal(TOLD(await lead.answer(LIST_ASKS, {}, 'session-lead')), 'No asks are waiting for the owner.')
 })
@@ -294,8 +309,9 @@ test('a place handed no menu record keeps its own over the crew clock, so a menu
   })
   clock.at = 4_000
   TOLD(await place.answer(QUEUE_ASK, { ask: 'Remove the stale worktree?' }, 'session-lead'))
-  const batch = Number(/settle batch (\d+)/.exec(TOLD(await place.answer(TAKE_ASKS, {}, 'session-lead')))?.[1])
+  const taken = TOLD(await place.answer(TAKE_ASKS, {}, 'session-lead'))
+  const batch = Number(/settle batch (\d+)/.exec(taken)?.[1])
   clock.at = 5_000
-  place.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
+  place.noteTheCallsAnswer(theMenuPostedFrom(taken, ['0']), 'session-lead')
   assert.match(TOLD(await place.answer(SETTLE_ASKS, { batch, yes: [0] }, 'session-lead')), /^Batch \d+ settled: 1 the owner ticked, 0 back in the queue\.$/)
 })

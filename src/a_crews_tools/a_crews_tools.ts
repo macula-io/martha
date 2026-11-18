@@ -38,7 +38,7 @@ import { parkAMember, parkedPlace, theParkOf, unparkAMember } from '../park_and_
 import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL, theParkToolOver, type AParkAsked } from '../park_and_wake_a_member/the_park_tools.ts'
 import type { AGuardedSwitch, OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack, type AnOrderAsked } from '../put_the_owners_model_back/the_guarded_switch.ts'
-import { menusTheLauncherKeeps, type TheOwnersMenus } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { menusTheLauncherKeeps, type ACallAnswered, type TheOwnersMenus } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import {
   LIST_ASKS_TOOL,
   QUEUE_ASK_TOOL,
@@ -255,9 +255,10 @@ export interface CrewTools extends TheReviewRule {
   noteTheCallCounted(session_id: string, own_name: string): Promise<string | undefined>
   /**
    * The launcher saw the host answer one of this session's calls (martha#313): the menu tool's answer is what a settle
-   * of the owner's asks stands on, so the relay hands every answer here and the queue decides which one is a menu.
+   * of the owner's asks stands on, so the relay hands every answer here, with the input the host posted, and the queue
+   * decides which one is a menu and what the owner picked in it (martha#608).
    */
-  noteTheCallsAnswer(call: { readonly tool: string }, session: string): void
+  noteTheCallsAnswer(call: ACallAnswered, session: string): void
   /**
    * The end of a running turn held at a tool boundary (martha#311, ruling D): the launcher's tool verdict asks it last,
    * so it only narrows a yes, and hands the end out on a yes to the last call in flight.

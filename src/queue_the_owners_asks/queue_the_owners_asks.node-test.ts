@@ -4,7 +4,7 @@
 // Each test names the mutant of the design that it kills.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -20,6 +20,7 @@ import {
   ASKS_TAKEN,
   MAX_ASK,
   OWNER_ASKS_STREAM,
+  PICK_JOINER,
   admitsAnAskToTheOwner,
   listTheAsks,
   mayOfferTheOwnersAsks,
@@ -27,8 +28,11 @@ import {
   queueAnAsk,
   settleTheAsks,
   takeTheAsks,
+  theOptionOf,
+  thePicksIn,
   theQueueIn,
   type AnAsk,
+  type APostedOption,
   type AskAnswer,
   type TheDeclaration,
   type TheOwnersMenus,
@@ -89,6 +93,24 @@ const taking = (host: AHost, member: string, session: string, declaration: TheDe
   takeTheAsks(host.host, { member, session, declaration })
 const settling = (host: AHost, member: string, batch: number, yes: readonly number[], declaration: TheDeclaration = SUPERVISED) =>
   settleTheAsks(host.host, { member, declaration, menus: host.menus }, { batch, yes })
+
+/** The one question the tests' menus ask: the asks are its options. */
+const QUESTION = 'Which of these may go ahead?'
+
+/** The host's answer to a menu, in the shape the recording shows (./recorded_menu_answers.json). */
+const theHostsAnswer = (questions: unknown, answers: Readonly<Record<string, string>>) => ({ ref: 1, result: { questions, answers, annotations: {} }, text: '', isReadOnly: true })
+
+/** The owner answers one question offering `options` in `session`, ticking the `picked` labels in that order. */
+function theOwnerPicks(host: AHost, session: string, options: readonly APostedOption[], picked: readonly string[]): void {
+  const questions = [{ question: QUESTION, header: 'Asks', multiSelect: true, options }]
+  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL, input: { questions }, answer: theHostsAnswer(questions, { [QUESTION]: picked.join(PICK_JOINER) }) }, session)
+}
+
+/** The owner is offered `asks` as the take tells the member to post them, and ticks those with the ids `ticked`. */
+function theOwnerTicks(host: AHost, session: string, asks: readonly AnAsk[], ticked: readonly number[]): void {
+  const options = asks.map(theOptionOf)
+  theOwnerPicks(host, session, options, ticked.map((id) => options[asks.findIndex((ask) => ask.id === id)]?.label ?? `no ask ${String(id)}`))
+}
 
 // --- what a member queues, and what the queue keeps -------------------------------
 
@@ -220,7 +242,7 @@ test('a batch taken twice offers nothing the second time, and the asks wait agai
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
   const first = TOLD(await taking(host, LEAD, 'session-lead'))
-  assert.match(first, /^1 queued ask, oldest first\..*Then settle batch 1 with the ids the owner ticked\.\n- 0 \(from Builder1\): Remove the stale worktree\?$/)
+  assert.match(first, /^1 queued ask, oldest first\..*Then settle batch 1 with the ids the owner ticked: .*\n- 0 \(from Builder1\): Remove the stale worktree\?\n  label: "0\. Remove the stale worktree\?"\n  description: "- 0 \(from Builder1\): Remove the stale worktree\?"$/)
   assert.deepEqual(await waitingIn(host), [], 'an ask in a live batch is not waiting')
 
   assert.match(REFUSED(await taking(host, LEAD, 'session-lead')), /batch 1 was taken 0 minute\(s\) ago and is not settled/)
@@ -234,11 +256,12 @@ test('a settle after the window still removes the asks the owner ticked, and put
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
   TOLD(await queueAnAsk(host.host, { ask: 'Delete the merged branch?' }, LEAD))
+  const asks = await waitingIn(host)
   const taken = TOLD(await taking(host, LEAD, 'session-lead'))
   const batch = Number(/settle batch (\d+)/.exec(taken)?.[1])
 
   host.at = START + 1
-  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
+  theOwnerTicks(host, 'session-lead', asks, [0])
   host.at = START + ASK_CLAIM_MS + 1
   assert.equal(TOLD(await settling(host, LEAD, batch, [0])), `Batch ${String(batch)} settled: 1 the owner ticked, 1 back in the queue.`)
   const waiting = await waitingIn(host)
@@ -250,17 +273,18 @@ test('a settle after the window still removes the asks the owner ticked, and put
 test('a settle with no menu closed since the take is refused (mutant: the menu check removed)', async () => {
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
+  const asks = await waitingIn(host)
   const batch = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
   assert.match(REFUSED(await settling(host, LEAD, batch, [0])), /no menu has closed in the session that took batch \d+/)
 
   host.menus.noteTheCallsAnswer({ tool: 'a tool that is not the menu' }, 'session-lead')
   assert.match(REFUSED(await settling(host, LEAD, batch, [0])), /no menu has closed/, 'another tool\'s answer is not a menu')
 
-  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'another-session')
+  theOwnerTicks(host, 'another-session', asks, [0])
   assert.match(REFUSED(await settling(host, LEAD, batch, [0])), /no menu has closed/, 'a menu in another session is not this one')
 
   host.at = START + 1
-  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
+  theOwnerTicks(host, 'session-lead', asks, [0])
   assert.match(TOLD(await settling(host, LEAD, batch, [0])), /^Batch \d+ settled: 1 the owner ticked, 0 back in the queue\.$/)
 })
 
@@ -277,7 +301,7 @@ test('a yes that names no ask of the batch is refused, and nothing is settled', 
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
   const batch = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
   host.at = START + 1
-  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
+  theOwnerTicks(host, 'session-lead', [], [])
   assert.match(REFUSED(await settling(host, LEAD, batch, [77])), /^77 is not an ask of batch \d+$/)
 })
 
@@ -285,23 +309,142 @@ test('a batch a settle already names is not settled again, so a stale id cannot 
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Remove the stale worktree?' }, BUILDER))
   TOLD(await queueAnAsk(host.host, { ask: 'Delete the merged branch?' }, BUILDER))
+  const asks = await waitingIn(host)
   const first = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
 
   host.at = START + 1
-  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
+  theOwnerTicks(host, 'session-lead', asks, [0])
   TOLD(await settling(host, LEAD, first, [0]))
   host.at = START + 2
-  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
   const second = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
 
   host.at = START + 3
-  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL }, 'session-lead')
+  theOwnerTicks(host, 'session-lead', asks, [1])
   assert.match(
     REFUSED(await settling(host, LEAD, first, [1])),
     new RegExp(`^batch ${String(first)} was already settled, so it stands once: take the asks again for a new batch\\. Nothing was settled\\.$`),
     'a settle stands once per batch, so a stale id writes no second one',
   )
   assert.equal(TOLD(await settling(host, LEAD, second, [1])), `Batch ${String(second)} settled: 1 the owner ticked, 0 back in the queue.`, 'the batch the ask now waits in settles as usual')
+})
+
+// --- a settle stands on what the owner picked, read from the host's own answer (martha#608) ---
+
+/** Two asks queued and taken as one batch in the lead's session: the asks, the batch, and the stream's length after the take. */
+async function twoAsksTaken(host: AHost): Promise<{ readonly asks: readonly AnAsk[]; readonly batch: number; readonly rows: number }> {
+  TOLD(await queueAnAsk(host.host, { ask: 'Land the docs?' }, BUILDER))
+  TOLD(await queueAnAsk(host.host, { ask: 'Publish the tag?' }, BUILDER))
+  const asks = await waitingIn(host)
+  const batch = Number(/settle batch (\d+)/.exec(TOLD(await taking(host, LEAD, 'session-lead')))?.[1])
+  host.at = START + 1
+  return { asks, batch, rows: (await host.host.stores.rows.read(OWNER_ASKS_STREAM)).length }
+}
+
+/** How many rows the queue's stream holds: a refused settle leaves it as it was. */
+const rowsIn = async (host: AHost): Promise<number> => (await host.host.stores.rows.read(OWNER_ASKS_STREAM)).length
+
+test('#608: a settle naming an ask the owner did not tick is refused, naming it, and writes nothing (mutant: the picks rule removed)', async () => {
+  const host = aHost()
+  const { asks, batch, rows } = await twoAsksTaken(host)
+  theOwnerTicks(host, 'session-lead', asks, [0])
+  assert.equal(REFUSED(await settling(host, LEAD, batch, [0, 1])), '1 is not an option the owner picked in the menu. Nothing was settled.')
+  assert.equal(await rowsIn(host), rows, 'a refused settle grew the stream')
+  assert.equal(TOLD(await settling(host, LEAD, batch, [0])), `Batch ${String(batch)} settled: 1 the owner ticked, 1 back in the queue.`, 'the ask the owner did tick settles')
+})
+
+test('#608: two asks ticked in an order other than the one they were posted in settle, as the host reports click order (mutant: posted order only)', async () => {
+  const host = aHost()
+  const { asks, batch } = await twoAsksTaken(host)
+  theOwnerTicks(host, 'session-lead', asks, [1, 0])
+  assert.equal(TOLD(await settling(host, LEAD, batch, [0, 1])), `Batch ${String(batch)} settled: 2 the owner ticked, 0 back in the queue.`)
+})
+
+test('#608: one option whose label stands for two asks settles neither, and the refusal names the label (mutant: the two-ask label rule removed)', async () => {
+  const host = aHost()
+  const { asks, batch, rows } = await twoAsksTaken(host)
+  const [docs, tag] = asks.map(theOptionOf)
+  const both = { label: `${docs?.label ?? ''}${PICK_JOINER}${tag?.label ?? ''}`, description: docs?.description ?? '' }
+  theOwnerPicks(host, 'session-lead', [both], [both.label])
+  assert.equal(REFUSED(await settling(host, LEAD, batch, [0, 1])), `the owner picked ${JSON.stringify(both.label)}, which stands for more than one ask, so it settles none. Nothing was settled.`)
+  assert.equal(await rowsIn(host), rows)
+})
+
+test('#608: an empty pick refuses a yes and settles a no, with every ask back in the queue (mutant: an empty pick read as every ask)', async () => {
+  const host = aHost()
+  const { asks, batch, rows } = await twoAsksTaken(host)
+  theOwnerTicks(host, 'session-lead', asks, [])
+  assert.equal(REFUSED(await settling(host, LEAD, batch, [1])), '1 is not an option the owner picked in the menu. Nothing was settled.')
+  assert.equal(await rowsIn(host), rows)
+  assert.equal(TOLD(await settling(host, LEAD, batch, [])), `Batch ${String(batch)} settled: 0 the owner ticked, 2 back in the queue.`, 'the owner\'s honest no settles')
+  assert.equal((await waitingIn(host)).length, 2)
+})
+
+test('#608: an answer the launcher could not keep refuses every settle, an empty yes included (mutant: not kept read as no pick)', async () => {
+  const host = aHost()
+  const { asks, batch, rows } = await twoAsksTaken(host)
+  const questions = [{ question: QUESTION, header: 'Asks', multiSelect: true, options: asks.map(theOptionOf) }]
+  host.menus.noteTheCallsAnswer({ tool: MENU_TOOL, input: { questions } }, 'session-lead')
+  const not_kept = /^settle_the_owners_asks is refused: the host's answer to the last menu in the session that took batch \d+ was not kept/
+  assert.match(REFUSED(await settling(host, LEAD, batch, [])), not_kept)
+  assert.match(REFUSED(await settling(host, LEAD, batch, [0])), not_kept)
+  assert.equal(await rowsIn(host), rows)
+})
+
+test('#608: words the owner typed instead of a tick pick nothing: a yes is refused and a no settles (Other)', async () => {
+  const host = aHost()
+  const { asks, batch } = await twoAsksTaken(host)
+  theOwnerPicks(host, 'session-lead', asks.map(theOptionOf), ['0. Land the docs? and 1. Publish the tag?'])
+  assert.equal(REFUSED(await settling(host, LEAD, batch, [0])), '0 is not an option the owner picked in the menu. Nothing was settled.')
+  assert.equal(TOLD(await settling(host, LEAD, batch, [])), `Batch ${String(batch)} settled: 0 the owner ticked, 2 back in the queue.`)
+})
+
+test('#608: a ticked option whose description is not its ask\'s own line is not that ask (mutant: the description rule removed)', async () => {
+  const host = aHost()
+  const { asks, batch, rows } = await twoAsksTaken(host)
+  const options = asks.map(theOptionOf)
+  const [docs] = options
+  const relabelled = { label: docs?.label ?? '', description: 'Publish the tag?' }
+  theOwnerPicks(host, 'session-lead', [relabelled, ...options.slice(1)], [relabelled.label])
+  assert.equal(REFUSED(await settling(host, LEAD, batch, [0])), "the option the owner picked for 0 does not carry ask 0's own line as its description, so it is not that ask. Nothing was settled.")
+  assert.equal(await rowsIn(host), rows)
+})
+
+test('#608: an ask whose option would stand for two asks is skipped at the take, naming its label (mutant: the take-time rule removed)', async () => {
+  const host = aHost()
+  TOLD(await queueAnAsk(host.host, { ask: 'Land the docs, then publish?' }, BUILDER))
+  TOLD(await queueAnAsk(host.host, { ask: 'Land step 2. Then stop?' }, BUILDER))
+  TOLD(await queueAnAsk(host.host, { ask: 'Publish the tag?' }, BUILDER))
+  const taken = TOLD(await taking(host, LEAD, 'session-lead'))
+  assert.match(taken, /^- 0 \(from Builder1\): Land the docs, then publish\? — its menu option "0\. Land the docs, then publish\?" would read as more than one ask/mu)
+  assert.match(taken, /^- 1 \(from Builder1\): Land step 2\. Then stop\? — its menu option "1\. Land step 2\. Then stop\?" would read as more than one ask/mu)
+  assert.match(taken, /^1 queued ask, oldest first\./u, 'only the ask whose option stands for one ask is offered')
+})
+
+// --- the reader, on the recording (martha#608 step 0) ------------------------------
+
+const RECORDED = JSON.parse(readFileSync(new URL('./recorded_menu_answers.json', import.meta.url), 'utf8')) as {
+  readonly input: { readonly questions: readonly { readonly question: string; readonly options: readonly APostedOption[] }[] }
+  readonly ticked: { readonly answer: { readonly result: { readonly answers: Readonly<Record<string, string>> } } }
+  readonly cancelled: { readonly answer: unknown }
+}
+
+/** The recorded options with these labels, in the order named. */
+const recordedOptions = (...labels: readonly string[]): APostedOption[] =>
+  labels.map((label) => RECORDED.input.questions.flatMap((one) => one.options).find((option) => option.label === label) ?? assert.fail(`no recorded option ${label}`))
+
+test('#608: on the recording, the picks are the ticked options in click order, and the typed Other answer picks nothing', () => {
+  assert.equal(RECORDED.ticked.answer.result.answers['Which fruits?'], ['Plum', 'Apple'].join(PICK_JOINER), 'the joiner is not the one the host wrote')
+  assert.deepEqual(thePicksIn(RECORDED.input, RECORDED.ticked.answer), recordedOptions('Green', 'Plum', 'Apple'))
+})
+
+test('#608: an answer that cannot be kept is undefined: a cancelled menu, a question with no answer, a match two ways, a text two questions share', () => {
+  assert.equal(thePicksIn(RECORDED.input, RECORDED.cancelled.answer), undefined, 'a cancelled menu was kept')
+  const { ['Which tree?']: _tree, ...two } = RECORDED.ticked.answer.result.answers
+  assert.equal(thePicksIn(RECORDED.input, { result: { answers: two } }), undefined, 'a posted question with no answer was kept')
+  const twins = { questions: [{ question: 'Q?', options: [{ label: 'A', description: 'one' }, { label: 'A', description: 'two' }] }] }
+  assert.equal(thePicksIn(twins, { result: { answers: { 'Q?': 'A' } } }), undefined, 'an answer two options match was kept')
+  const same = { questions: [RECORDED.input.questions[0], RECORDED.input.questions[0]] }
+  assert.equal(thePicksIn(same, RECORDED.ticked.answer), undefined, 'two questions with one text were kept')
 })
 
 // --- the gate that stands on the inbound row --------------------------------------
