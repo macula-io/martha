@@ -4,7 +4,7 @@
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { THE_ACT_THE_OWNER_TYPES } from '../launch_a_goose_member/coincidences.ts'
-import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../launch_a_goose_member/launch_a_goose_member.ts'
+import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 
 export const COINCIDENCES: readonly Exception[] = [
   // The act the owner types, spelled like the Goose engine's mode that asks its client (martha#541).

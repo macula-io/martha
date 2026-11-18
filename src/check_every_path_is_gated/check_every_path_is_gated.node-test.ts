@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { ARGUMENT_GATES, ASK_GATES, COMMAND_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { ARGUMENT_GATES, ASK_GATES, COMMAND_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, SOURCE_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   admitsLaunch,
@@ -59,11 +59,12 @@ const coverageOf = (
   path: Readonly<Record<string, PathGate>> = PATH_GATES,
   ask: Parameters<typeof gapsInGateCoverage>[7] = ASK_GATES,
   command: Parameters<typeof gapsInGateCoverage>[8] = COMMAND_GATES,
-) => gapsInGateCoverage(paths, refuses, delivery, launch, argument, path, undefined, ask, command)
+  source: Parameters<typeof gapsInGateCoverage>[9] = SOURCE_GATES,
+) => gapsInGateCoverage(paths, refuses, delivery, launch, argument, path, undefined, ask, command, source)
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 24 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 26 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 10 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 9 }, (_, index) => `C${index + 1}`),
   ]
@@ -267,6 +268,33 @@ test('a row naming a command gate nobody has built is named', () => {
 
 test('a command gate on a path that puts no text into a turn is a gap', () => {
   const fetched = { id: 'B98', what: 'text read by a tool, where this is not the control', klass: 'fetched', control: { kind: 'refused-as-a-command', gate: 'a-command-is-not-a-turn' }, attestation: 'none' } as unknown as InboundPath
+  assert.deepEqual(coverageOf([...INBOUND_PATHS, fetched], gateRefuses).map((gap) => gap.path), ['B98'])
+})
+
+// --- the checkout's own text a start records (martha#541) ----------------------
+//
+// The launcher records each file the engine reads into its prompt, with the source it is. The gate is driven once
+// per question, so one that records every file, or none, is a gap like any other.
+
+test('a source gate that records every file is not a control', () => {
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, undefined, undefined, { 'a-checkout-file-the-start-records': () => true })
+  assert.deepEqual(gaps.map((gap) => gap.path), ['A25', 'A26'])
+  assert.match(gaps[0]?.why ?? '', /records a file the engine attaches no text from/)
+})
+
+test('a source gate that records no file is caught too', () => {
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, undefined, undefined, { 'a-checkout-file-the-start-records': () => false })
+  assert.deepEqual(gaps.map((gap) => gap.path), ['A25', 'A26'])
+  assert.match(gaps[0]?.why ?? '', /records no .* which the engine loads/)
+})
+
+test('a row naming a source gate nobody has built is named', () => {
+  const invented = { id: 'A98', what: 'a source gate someone will write later', klass: 'delivered', control: { kind: 'recorded-source', gate: 'a-gate-someone-will-write-later' }, attestation: 'none' } as unknown as InboundPath
+  assert.deepEqual(coverageOf([...INBOUND_PATHS, invented], gateRefuses).map((gap) => gap.path), ['A98'])
+})
+
+test('a source gate on a path that puts no text into a turn is a gap', () => {
+  const fetched = { id: 'B98', what: 'text read by a tool, where this is not the control', klass: 'fetched', control: { kind: 'recorded-source', gate: 'a-checkout-file-the-start-records' }, attestation: 'none' } as unknown as InboundPath
   assert.deepEqual(coverageOf([...INBOUND_PATHS, fetched], gateRefuses).map((gap) => gap.path), ['B98'])
 })
 

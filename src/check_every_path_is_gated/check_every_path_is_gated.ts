@@ -29,7 +29,7 @@
 
 import { join } from 'node:path'
 
-import { ARGUMENT_GATES, ASK_GATES, COMMAND_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type CommandGate, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { ARGUMENT_GATES, ASK_GATES, COMMAND_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, SOURCE_GATES, type CommandGate, type Control, type InboundPath, type SourceGate } from '../inbound_paths/inbound_paths.ts'
 import { MAX_ASK, type AnAsk } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import type { Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -40,6 +40,7 @@ import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_mes
 import {
   CLAUDE_CODE_FILES,
   fingerprintOf,
+  RECORDED_TEXT_FILES,
   type ConfigEntry,
   type Host,
   type LaunchGate,
@@ -154,8 +155,9 @@ export function gapsInGateCoverage(
   config_stand_in?: (probe: ConfigPathProbe) => PathProbe,
   ask_gates: Readonly<Record<string, AskGate>> = ASK_GATES,
   command_gates: Readonly<Record<string, CommandGate>> = COMMAND_GATES,
+  source_gates: Readonly<Record<string, SourceGate>> = SOURCE_GATES,
 ): readonly Gap[] {
-  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates, ask: ask_gates, command: command_gates }
+  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates, ask: ask_gates, command: command_gates, source: source_gates }
 
   return paths.flatMap((path) => {
     const why = gapOfRow(path, gateRefuses, gates, config_stand_in)
@@ -171,6 +173,7 @@ interface Gates {
   readonly path: Readonly<Record<string, PathGate>>
   readonly ask: Readonly<Record<string, AskGate>>
   readonly command: Readonly<Record<string, CommandGate>>
+  readonly source: Readonly<Record<string, SourceGate>>
 }
 
 /**
@@ -205,6 +208,8 @@ function gapOfAClaimedControl(
   if (control.kind === 'refused-before-launch') return argumentRowGap(path, control.gate, gates.argument)
 
   if (control.kind === 'refused-as-a-command') return commandRowGap(path, control.gate, gates.command)
+
+  if (control.kind === 'recorded-source') return sourceRowGap(path, control.gate, gates.source)
 
   if (control.kind === 'ask-gate') return askRowGap(path, control.gate, gates.ask)
 
@@ -294,6 +299,33 @@ function commandRowGap(path: InboundPath, name: string, command_gates: Readonly<
   const failed = COMMAND_PROBES.find((probe) => gate(probe.text) !== probe.passes)
   if (failed === undefined) return undefined
   return failed.passes ? `the gate ${name} refuses ${failed.what}` : `the gate ${name} admits ${failed.what}`
+}
+
+/** One checkout file a source gate is asked about: the name the engine's source spells, and whether the launcher records it. */
+export interface SourceProbe {
+  readonly records: boolean
+  readonly what: string
+  readonly file: string
+}
+
+/**
+ * The questions every source gate is asked (martha#541): each name the launcher records is answered as recorded, so a
+ * gate that records nothing is caught, and a file the engine attaches no text from is answered as not recorded, so a
+ * gate that records every file is caught. The names are the table the launcher reads, never restated here.
+ */
+export const SOURCE_PROBES: readonly SourceProbe[] = [
+  ...RECORDED_TEXT_FILES.map((file) => ({ records: true, what: `${file}, which the engine loads`, file })),
+  { records: false, what: 'a file the engine attaches no text from', file: 'README.md' },
+]
+
+/** Why a row naming a source gate is a gap: it is not delivered text, the gate nobody built, or one that answers a question wrong. */
+function sourceRowGap(path: InboundPath, name: string, source_gates: Readonly<Record<string, SourceGate>>): string | undefined {
+  if (path.klass !== 'delivered') return 'names a recorded source on a path that puts no text into a turn'
+  const gate = source_gates[name]
+  if (gate === undefined) return `names a source gate nobody has built: ${name}`
+  const failed = SOURCE_PROBES.find((probe) => gate(probe.file) !== probe.records)
+  if (failed === undefined) return undefined
+  return failed.records ? `the gate ${name} records no ${failed.what}` : `the gate ${name} records ${failed.what}`
 }
 
 export interface ArgumentProbe {
