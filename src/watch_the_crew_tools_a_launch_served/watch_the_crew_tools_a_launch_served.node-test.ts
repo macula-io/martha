@@ -158,7 +158,7 @@ test('a planted sentence in every field of a forged withdrawal reaches no word M
 test("the served names are the ones the relay's mod answers: its plugin's name, from its own manifest, before each crew tool", () => {
   const crew_tsx = readFileSync(join(RELAY_PLUGIN_DIR, 'hooks', 'crew.tsx'), 'utf8')
   const answered = new Set([...crew_tsx.matchAll(/on\('tool\.call', \{ tool: '([^']+)' \}/g)].map((match) => match[1]))
-  const served = watchTheCrewToolsServedBy('/no/config', async () => null)
+  const served = watchTheCrewToolsServedBy('/no/launch-folder', async () => null)
   const plugin = (JSON.parse(readFileSync(join(RELAY_PLUGIN_DIR, '.claude-plugin', 'plugin.json'), 'utf8')) as { name: string }).name
   const names = theServedNames(plugin, CREW_TOOL_NAMES)
   assert.equal(names.size, CREW_TOOL_NAMES.length)

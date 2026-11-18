@@ -37,8 +37,11 @@ export interface TheWatchedLaunch {
   readonly askThePredecessor: (session_id: string) => Promise<string | null>
 }
 
-/** The most calls held for the beat to take: a launch whose beat stopped keeps no more than this. */
-export const MOST_CALLS_HELD = 10_000
+/**
+ * The most calls held for the beat to take: a launch whose beat stopped keeps no more than this. A beat comes every
+ * few seconds and a member makes a handful of calls in that time, so a full queue means the beat has stopped.
+ */
+export const MOST_CALLS_HELD = 4_096
 
 /** One session as the watch keeps it. */
 interface AWatchedSession {
