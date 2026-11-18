@@ -51,11 +51,14 @@ export const messagesIn = (directory: string): number => {
 /**
  * Why a line's own evidence cannot be read, or `undefined` when it can.
  *
+ * The verdict is handed in, never read back from `result.json`: the driver keeps a verdict before it writes the file
+ * (martha#694), so a rule that read the file would answer "nothing to refuse" on every fresh launch.
+ *
  * Named after the line, because the fork's run turns this into its own red line and the reader of the run has
  * to know which launch said nothing.
  */
-export const theRefusalOf = (line: number, directory: string): string | undefined => {
-  if (verdictIn(directory) !== NOT_OBSERVED) return undefined
+export const theRefusalOf = (line: number, verdict: string, directory: string): string | undefined => {
+  if (verdict !== NOT_OBSERVED) return undefined
   const messages = messagesIn(directory)
   if (messages > 0) return undefined
   return `line ${line}: not-observed, and no ACP transcript was kept, so the run cannot say why`
@@ -71,7 +74,8 @@ export const refusalsIn = (evidence: string): string[] => {
     if (named === null) continue
     const line = Number(named[1])
     if (!Number.isInteger(line)) continue
-    const refusal = theRefusalOf(line, join(evidence, name))
+    const directory = join(evidence, name)
+    const refusal = theRefusalOf(line, verdictIn(directory) ?? '', directory)
     if (refusal !== undefined) found.push(`${refusal} (${name})`)
   }
   return found
@@ -82,7 +86,7 @@ export const refusalsIn = (evidence: string): string[] => {
  * never a verdict the next reader cannot act on. Every other verdict is handed back untouched.
  */
 export const theVerdictKeptWithItsExchange = (line: number, observation: Observation, directory: string): Observation => {
-  const refusal = theRefusalOf(line, directory)
+  const refusal = theRefusalOf(line, observation.verdict, directory)
   if (refusal === undefined) return observation
   return { verdict: 'fail', say: `${observation.say}; ${refusal}`, evidence: { ...observation.evidence } }
 }
