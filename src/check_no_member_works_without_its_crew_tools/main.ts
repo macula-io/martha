@@ -110,6 +110,15 @@ const option = (name: string): string | null | undefined => {
   return value === undefined || value === '' || value.startsWith('-') ? null : value
 }
 
+/**
+ * The state root of the home this gate runs in, read only when no `--state-root` is given. Every test names its own
+ * root, so none reaches a member's real one; the home is its own line, as the martha command reads it (martha#683).
+ */
+function theHomesStateRoot(): string {
+  const home = homedir()
+  return stateRootOf(home, process.env['XDG_STATE_HOME'])
+}
+
 const asked = option('--state-root')
 if (asked === null) console.error(`${NAME}: could not be made: --state-root was given no directory`)
-process.exitCode = asked === null ? 2 : theGate(asked ?? stateRootOf(homedir(), process.env['XDG_STATE_HOME']))
+process.exitCode = asked === null ? 2 : theGate(asked ?? theHomesStateRoot())
