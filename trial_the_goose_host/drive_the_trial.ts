@@ -208,7 +208,8 @@ export function keepTheEngineLogs(root: string, into: string): number {
   if (!existsSync(from)) return 0
   const to = join(into, THE_ENGINE_LOGS)
   cpSync(from, to, { recursive: true, force: true })
-  return readdirSync(to).length
+  // The engine keeps its tracing log a folder down (logs/cli/<date>/), beside the request logs: count files, not entries.
+  return readdirSync(to, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).length
 }
 
 /** Where the launch in hand keeps its evidence, and the root its engine writes its own logs under. */

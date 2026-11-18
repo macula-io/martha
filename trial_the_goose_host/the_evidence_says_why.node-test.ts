@@ -121,10 +121,14 @@ test('the engine request logs are copied beside the transcript, and a launch tha
   mkdirSync(join(root, 'state', 'logs'), { recursive: true })
   writeFileSync(join(root, 'state', 'logs', 'llm_request.1.jsonl'), '{"model":"the named one"}\n')
   writeFileSync(join(root, 'state', 'logs', 'llm_request.2.jsonl'), '{"model":"the named one"}\n')
+  // The engine's own tracing log sits a folder down, as `goose acp` writes it: logs/cli/<date>/.
+  mkdirSync(join(root, 'state', 'logs', 'cli', '2026-11-18'), { recursive: true })
+  writeFileSync(join(root, 'state', 'logs', 'cli', '2026-11-18', 'goose.log'), '{"level":"INFO"}\n')
+  writeFileSync(join(root, 'state', 'logs', 'cli', '2026-11-18', 'goose.2.log'), '{"level":"INFO"}\n')
   const into = join(place, 'line-4')
   mkdirSync(into, { recursive: true })
 
-  assert.equal(keepTheEngineLogs(root, into), 2, 'both request logs are kept, and the count is what the result records')
+  assert.equal(keepTheEngineLogs(root, into), 4, 'both request logs and the two tracing logs a folder down are kept: the count is of files (4), never of entries (3), and it is what the result records')
   assert.equal(readFileSync(join(into, THE_ENGINE_LOGS, 'llm_request.2.jsonl'), 'utf8'), '{"model":"the named one"}\n')
 
   const quiet = join(place, 'goose-root-quiet')

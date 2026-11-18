@@ -22,7 +22,7 @@ export const THE_TRANSCRIPT = 'acp.jsonl'
 export const THE_ENGINE_LOGS = 'engine-logs'
 
 /** The verdict this rule is about: nothing was observed, and the launch may be run again. */
-export const NOT_OBSERVED = 'not-observed'
+export const NOT_OBSERVED: Observation['verdict'] = 'not-observed'
 
 /** What the driver writes for each line: the one field this rule reads. */
 interface KeptVerdict {
