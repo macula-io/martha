@@ -365,7 +365,9 @@ test("the launch records a checkout's own hint files, each with the source it is
     { file: ENGINE_HINTS_FILE, source: 'checkout_file' },
     { file: AGENTS_MD_FILE, source: 'checkout_file' },
   ])
-  for (const one of found) assert.equal(one.at, join(checkout, one.file), 'the record names a file at a path nobody can point at')
+  // The record resolves the checkout before it walks it, so the fixture is compared as the record resolves it: CI runs
+  // this suite under a TMPDIR reached through a link, where the two spellings differ (martha#743).
+  for (const one of found) assert.equal(one.at, join(realpathSync(checkout), one.file), 'the record names a file at a path nobody can point at')
 })
 
 test('a hint file above the checkout, up to the git root, is recorded, and one above the git root is not (martha#541)', (t) => {
@@ -377,7 +379,8 @@ test('a hint file above the checkout, up to the git root, is recorded, and one a
   mkdirSync(checkout, { recursive: true })
   writeFileSync(join(repository, ENGINE_HINTS_FILE), 'a hint above the checkout\n')
   writeFileSync(join(home, ENGINE_HINTS_FILE), 'a hint above the git root\n')
-  assert.deepEqual(theTextAStartLoads({ host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: checkout, stop_dir: home }, thisMachine).map((one) => one.at), [join(repository, ENGINE_HINTS_FILE)])
+  // The record resolves the checkout before it walks it, so the repository is compared as the record resolves it.
+  assert.deepEqual(theTextAStartLoads({ host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: checkout, stop_dir: home }, thisMachine).map((one) => one.at), [join(realpathSync(repository), ENGINE_HINTS_FILE)])
 })
 
 test('a launch on a checkout the owner has not approved is refused before anything is made (martha#541)', async (t) => {
