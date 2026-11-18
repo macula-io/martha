@@ -214,6 +214,9 @@ TURN_WINDOW_S="${MARTHA_CLEAN_INSTALL_TURN_WINDOW_S:-30}"
 STARTED_WINDOW_S="${MARTHA_CLEAN_INSTALL_STARTED_WINDOW_S:-120}"
 POLL_S="${MARTHA_CLEAN_INSTALL_POLL_S:-5}"
 KEY_PAUSE_S="${MARTHA_CLEAN_INSTALL_KEY_PAUSE_S:-2}"
+# How many 0.2 s polls an interrupt case gives the run to reach the step it interrupts it in, before it
+# fails by name: 250 polls is 50 s, the window the interrupt cases used before the helper (martha#718).
+INTERRUPT_STEP_POLLS=250
 
 USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--dry-layer <layer .tar.gz> <sha>] [--night <run folder>] | --self-test'
 
@@ -1351,7 +1354,10 @@ a_case() {
 run_a_case() {
   local standin="$1"
   shift
-  PATH="${STAND_INS}:${PATH}" MARTHA_CLEAN_INSTALL_STAND_IN="${standin}" "${SELF}" "$@" \
+  # Through `env --default-signal=INT,TERM`, so the run's INT and TERM traps install even when the self-test
+  # was itself started with SIGINT ignored (a background job's child) -- the run's own start check then passes,
+  # and a case still judges its steps (martha#718).
+  env --default-signal=INT,TERM PATH="${STAND_INS}:${PATH}" MARTHA_CLEAN_INSTALL_STAND_IN="${standin}" "${SELF}" "$@" \
     > "${standin}/out" 2> "${standin}/err"
 }
 
@@ -1496,14 +1502,93 @@ terminals_ended() {
   done
 }
 
+# Launch the run the way every interrupt case launches it: through `env --default-signal=INT,TERM`, so the
+# run's INT and TERM traps install even when the self-test was itself started with SIGINT ignored (a
+# background job's child is given SIGINT and SIGQUIT ignored). The child's pid is its process group's. The
+# case names the step it must interrupt the run in -- a grep pattern against the case's `calls`, or
+# `both-members-started` for the member half -- and the helper waits for that step before it signals; a run
+# that never reaches it fails by name and is sent no signal, then is cleaned up (martha#718). INT goes to the
+# whole group, so a parked step's ssh and podman are cut short too; TERM goes to the run alone, so its own
+# tear-down closes each member's terminal and the member records the closed pipe.
+signal_the_run_at() {
+  local signal="$1" step="$2" standin="$3" polls="${4:-${INTERRUPT_STEP_POLLS}}"
+  local child waited=0
+  set -m
+  env --default-signal=INT,TERM PATH="${STAND_INS}:${PATH}" MARTHA_CLEAN_INSTALL_STAND_IN="${standin}" "${SELF}" 'a-host' \
+    > "${standin}/out" 2> "${standin}/err" &
+  child=$!
+  set +m
+  while ! the_step_is_reached "${step}" "${standin}"; do
+    sleep 0.2
+    waited=$((waited + 1))
+    if [ "${waited}" -ge "${polls}" ]; then break; fi
+  done
+  if ! the_step_is_reached "${step}" "${standin}"; then
+    echo "the self-test: the run never reached ${step} within the window" >&2
+    kill -9 -"${child}" 2> /dev/null || true
+    kill -9 "${child}" 2> /dev/null || true
+    wait "${child}" 2> /dev/null || true
+    return 1
+  fi
+  case "${signal}" in
+    INT) kill -INT -"${child}" 2> /dev/null || true ;;
+    TERM) kill -TERM "${child}" 2> /dev/null || true ;;
+  esac
+  waited=0
+  wait "${child}" || waited=$?
+  if [ "${waited}" -ne 1 ]; then
+    echo "the self-test: a run stopped at ${step} exited ${waited}, not 1" >&2
+    return 1
+  fi
+}
+
+# Whether the run in `standin` has reached the step its case interrupts it in: a line in `calls`, or both
+# members having said they started.
+the_step_is_reached() {
+  case "$1" in
+    both-members-started) [ -e "$2/started.${first}" ] && [ -e "$2/started.${later}" ] ;;
+    *) grep -q "$1" "$2/calls" 2> /dev/null ;;
+  esac
+}
+
+# The self-test's own source, held to its contract: no interrupt case may signal a run except through the
+# signal_the_run_at helper. A raw group or pid signal outside that helper's body fails by name with its line,
+# so a future case written the old way is caught (martha#718). The signal words are built up here rather than
+# spelled, so this check never names itself.
+check_no_raw_signal_outside_the_helper() {
+  local src="${SELF}" start end n bad='' sig pats=()
+  start="$(grep -n '^signal_the_run_at()' "${src}" | head -1 | cut -d: -f1)"
+  end="$(awk -v s="${start}" 'NR > s && /^}/{ print NR; exit }' "${src}")"
+  if [ -z "${start}" ] || [ -z "${end}" ]; then
+    echo 'the self-test: no signal_the_run_at helper to hold the interrupt cases to' >&2
+    return 1
+  fi
+  for sig in INT TERM; do
+    pats+=("-e" "kill -${sig} -" "-e" "kill -${sig} \"\${child}\"")
+  done
+  while IFS=: read -r n _; do
+    if [ "${n}" -lt "${start}" ] || [ "${n}" -gt "${end}" ]; then bad="${bad} ${n}"; fi
+  done < <(grep -nF "${pats[@]}" "${src}")
+  if [ -n "${bad}" ]; then
+    echo "the self-test: a signal is sent outside signal_the_run_at at line(s):${bad}" >&2
+    return 1
+  fi
+}
+
 self_test() {
-  local standin case_failed=0 child waited installer_name installer_version release_version major image
+  local standin case_failed=0 waited installer_name installer_version release_version major image
   local pulled_at created_at secret signed_in_at passed_window was_window name first later
   SELF_TEST_ROOT="$(mktemp -d)"
   # The host version the stand-in release records: no Claude Code version, so never this checkout's (martha#636).
   SELF_TEST_RELEASE_HOST='0.0.0-the-installed-release'
   STAND_INS="${SELF_TEST_ROOT}/bin"
   SELF="$(readlink -f "$0")"
+  # The interrupt cases reset a launched run's ignored signals through `env --default-signal` (GNU coreutils);
+  # an `env` without it would fail every interrupt case, so it is said plainly first (martha#718).
+  if ! env --default-signal=INT true 2> /dev/null; then
+    echo 'the self-test: env has no --default-signal (GNU coreutils), so the interrupt cases cannot reset a run ignored signals' >&2
+    return 1
+  fi
   # The member half's windows, short enough for a self-test: the stand-ins answer at once.
   export MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S=2 MARTHA_CLEAN_INSTALL_MEMBER_WINDOW_S=2 MARTHA_CLEAN_INSTALL_TURN_WINDOW_S=2
   export MARTHA_CLEAN_INSTALL_STARTED_WINDOW_S=3 MARTHA_CLEAN_INSTALL_POLL_S=1 MARTHA_CLEAN_INSTALL_KEY_PAUSE_S=0.2
@@ -1533,6 +1618,9 @@ self_test() {
   printf '%s' "${image}" | grep -q '^[a-z0-9./-]*:[0-9a-z-]*@sha256:[0-9a-f]\{64\}$' \
     || { echo "the self-test: the image a run starts from is not a reference pinned by digest: ${image}" >&2; case_failed=1; }
   release_version="$(json_field "${RELEASE_PACKAGE}" 'version')"
+  # The self-test's own source, held to its contract: no interrupt case signals a run except through
+  # signal_the_run_at, so a future case written the old way is named at its line (martha#718).
+  check_no_raw_signal_outside_the_helper || case_failed=1
 
   # The derivation the image step rests on: the major comes from the range, and a major with no pin is refused.
   [ "$(node_major '>=24.18.1')" = 24 ] || { echo 'the self-test: node_major does not read >=24.18.1 as 24' >&2; case_failed=1; }
@@ -1716,19 +1804,7 @@ self_test() {
   printf '%s\n' "${release_version}" > "${standin}/version.words"
   : > "${standin}/member.deaf.${later}"
   : > "${standin}/member.outlives-its-pipe"
-  PATH="${STAND_INS}:${PATH}" MARTHA_CLEAN_INSTALL_STAND_IN="${standin}" "${SELF}" 'a-host' \
-    > "${standin}/out" 2> "${standin}/err" &
-  child=$!
-  waited=0
-  while [ ! -e "${standin}/started.${first}" ] || [ ! -e "${standin}/started.${later}" ]; do
-    sleep 0.2
-    waited=$((waited + 1))
-    if [ "${waited}" -gt 250 ]; then break; fi
-  done
-  kill -TERM "${child}" 2> /dev/null || true
-  waited=0
-  wait "${child}" || waited=$?
-  [ "${waited}" -eq 1 ] || { echo "the self-test: a run stopped with both members up exited ${waited}, not 1" >&2; case_failed=1; }
+  signal_the_run_at TERM both-members-started "${standin}" || case_failed=1
   asked_for '^FAIL run: interrupted by SIGTERM' "${standin}/out" || { echo 'the self-test: a run stopped with both members up did not say which signal ended it' >&2; case_failed=1; }
   asked_for '^ok tear down: ' "${standin}/out" || { echo 'the self-test: a run stopped with both members up failed its tear-down' >&2; case_failed=1; }
   terminals_ended "${standin}" "${first}" "${later}" || case_failed=1
@@ -1898,21 +1974,7 @@ self_test() {
   standin="${root}/interrupted"
   a_case "${standin}"
   : > "${standin}/install.holds"
-  set -m
-  PATH="${STAND_INS}:${PATH}" MARTHA_CLEAN_INSTALL_STAND_IN="${standin}" "${SELF}" 'a-host' \
-    > "${standin}/out" 2> "${standin}/err" &
-  child=$!
-  set +m
-  waited=0
-  while ! grep -q '^exec ' "${standin}/calls" 2> /dev/null; do
-    sleep 0.2
-    waited=$((waited + 1))
-    if [ "${waited}" -gt 250 ]; then break; fi
-  done
-  kill -INT -"${child}" 2> /dev/null || true
-  waited=0
-  wait "${child}" || waited=$?
-  [ "${waited}" -eq 1 ] || { echo "the self-test: an interrupted run exited ${waited}, not 1" >&2; case_failed=1; }
+  signal_the_run_at INT '^exec ' "${standin}" || case_failed=1
   asked_for '^FAIL run: interrupted by SIGINT' "${standin}/out" || { echo 'the self-test: an interrupted run did not say which signal ended it' >&2; case_failed=1; }
   asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: an interrupted run did not remove its container' >&2; case_failed=1; }
 
@@ -1922,21 +1984,7 @@ self_test() {
   standin="${root}/interrupted-while-creating"
   a_case "${standin}"
   : > "${standin}/create.holds"
-  set -m
-  PATH="${STAND_INS}:${PATH}" MARTHA_CLEAN_INSTALL_STAND_IN="${standin}" "${SELF}" 'a-host' \
-    > "${standin}/out" 2> "${standin}/err" &
-  child=$!
-  set +m
-  waited=0
-  while ! grep -q '^create ' "${standin}/calls" 2> /dev/null; do
-    sleep 0.2
-    waited=$((waited + 1))
-    if [ "${waited}" -gt 250 ]; then break; fi
-  done
-  kill -INT -"${child}" 2> /dev/null || true
-  waited=0
-  wait "${child}" || waited=$?
-  [ "${waited}" -eq 1 ] || { echo "the self-test: an interrupt during create exited ${waited}, not 1" >&2; case_failed=1; }
+  signal_the_run_at INT '^create ' "${standin}" || case_failed=1
   asked_for '^FAIL run: interrupted by SIGINT' "${standin}/out" || { echo 'the self-test: an interrupt during create did not say which signal ended it' >&2; case_failed=1; }
   asked_for '^ok tear down: ' "${standin}/out" || { echo 'the self-test: an interrupt during create failed its tear-down' >&2; case_failed=1; }
   asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: the container a create made after the signal was not removed' >&2; case_failed=1; }
@@ -1948,27 +1996,32 @@ self_test() {
   standin="${root}/a-create-that-outlives-the-window"
   a_case "${standin}"
   : > "${standin}/create.stuck"
-  set -m
-  PATH="${STAND_INS}:${PATH}" MARTHA_CLEAN_INSTALL_STAND_IN="${standin}" "${SELF}" 'a-host' \
-    > "${standin}/out" 2> "${standin}/err" &
-  child=$!
-  set +m
-  waited=0
-  while ! grep -q '^create ' "${standin}/calls" 2> /dev/null; do
-    sleep 0.2
-    waited=$((waited + 1))
-    if [ "${waited}" -gt 250 ]; then break; fi
-  done
-  kill -INT -"${child}" 2> /dev/null || true
-  waited=0
-  wait "${child}" || waited=$?
-  [ "${waited}" -eq 1 ] || { echo "the self-test: an interrupt during a create that outlived the window exited ${waited}, not 1" >&2; case_failed=1; }
+  signal_the_run_at INT '^create ' "${standin}" || case_failed=1
   asked_for '^FAIL tear down: martha-clean-install-[^ ]* was not seen within the window' "${standin}/out" \
     || { echo 'the self-test: a create still running when the window ended did not fail the tear-down, naming the container' >&2; case_failed=1; }
   if grep -q '^ok tear down: ' "${standin}/out"; then
     echo 'the self-test: a create still running when the window ended was reported as a container never made' >&2
     case_failed=1
   fi
+
+  # A step the run never reaches: the helper must fail by name and send no signal, so a blind fallback that
+  # signals anyway is caught here, and the run is cleaned up (martha#718).
+  standin="${root}/a-step-the-run-never-reaches"
+  a_case "${standin}"
+  printf '%s\n' "${release_version}" > "${standin}/version.words"
+  if signal_the_run_at INT '^no-such-step ' "${standin}" 20 2> "${standin}/helper.err"; then
+    echo 'the self-test: a step the run never reaches did not fail the helper' >&2
+    case_failed=1
+  fi
+  asked_for 'the run never reached ' "${standin}/helper.err" \
+    || { echo 'the self-test: a step the run never reaches was not failed by name' >&2; case_failed=1; }
+  if asked_for '^FAIL run: interrupted by ' "${standin}/out"; then
+    echo 'the self-test: a step the run never reaches still sent a signal' >&2
+    case_failed=1
+  fi
+  # The helper stops a run it could not reach the step in, and a stopped run makes no tear-down, so the
+  # case takes its stand-in container away itself, there being none to remove it (martha#718).
+  rm -f "${standin}/container.present"
 
   # A create podman refused: podman answered, so the create is settled and made nothing. The tear-down has nothing to
   # watch for and says the container was never made -- the words an operator needs -- rather than spending the window on
@@ -2057,7 +2110,7 @@ self_test() {
     a-later-member-that-never-answers a-later-member-that-never-starts a-later-members-lines-in-the-earlier-ones-file \
     a-later-member-only-in-the-earlier-ones-file an-earlier-member-that-ends an-earlier-member-whose-screen-says-it-ended \
     a-release-naming-a-member-with-no-turn a-release-that-drops-a-member interrupted-with-both-members-up \
-    a-later-member-that-asks-no-shell-call dry-passes dry-refused; do
+    a-later-member-that-asks-no-shell-call a-step-the-run-never-reaches dry-passes dry-refused; do
     if [ -e "${root}/${standin}/container.present" ]; then
       echo "the self-test: the ${standin} run left its container behind" >&2
       case_failed=1
@@ -2136,6 +2189,13 @@ main() {
   trap finish EXIT
   trap 'interrupt SIGINT' INT
   trap 'interrupt SIGTERM' TERM
+  # The run's INT trap must have installed: a run started with SIGINT ignored (a background job's child) cannot
+  # trap it, and `trap -p INT` then reads an empty handler. Fail by name rather than run steps whose interrupt
+  # would be silently dropped (martha#718).
+  if ! trap -p INT | grep -qF -- "'interrupt SIGINT'"; then
+    printf 'prove_a_clean_install_in_a_throwaway_container: SIGINT ignored on entry; start it through env --default-signal=INT,TERM\n' >&2
+    exit 1
+  fi
   run_the_steps
 }
 
