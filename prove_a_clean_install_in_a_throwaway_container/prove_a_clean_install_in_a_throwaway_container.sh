@@ -1421,6 +1421,18 @@ self_test() {
   if node_major 'the latest one' > /dev/null; then echo 'the self-test: node_major accepted a range with no number' >&2; case_failed=1; fi
   if image_digest_for 99 > /dev/null; then echo 'the self-test: a major with no pin was not refused' >&2; case_failed=1; fi
 
+  # The run's own line that a member ended: the member's real terminal script, run with a `martha` that ends with a
+  # status of its own, must print it with that status. The stand-in members print this line themselves, so without
+  # this nothing holds member_script to it (#635 review: the deviation from exec).
+  local stub ended_line stub_status=3
+  stub="$(mktemp -d)"
+  printf '#!/bin/sh\nexit %s\n' "${stub_status}" > "${stub}/martha"
+  chmod +x "${stub}/martha"
+  ended_line="$(PATH="${stub}:${PATH}" sh -c "$(member_script builder)" 2> /dev/null | tail -1)"
+  rm -rf "${stub}"
+  [ "${ended_line}" = "builder ${ENDED_WORDS} ${stub_status}" ] \
+    || { echo "the self-test: a member's terminal script did not say it ended with its status: '${ended_line}'" >&2; case_failed=1; }
+
   # A whole run: the container, the install, the version, Claude Code at the recorded version, the checkout, the owner's
   # sign-in, and a member that does all it is asked. The marker this run waits for is there before it looks, so giving it
   # an hour costs nothing, and that hour is what its printed clock is then read against.
