@@ -259,13 +259,12 @@ async function startingTheMember(
   })
 }
 
-/** The launcher's places in Martha's state, with the relay sockets under this user's runtime directory. */
-/** The directory this user's launches keep their relay roots under, inside the runtime directory they were given. */
-export const theCommandsRuntimeDirectory = (runtime: string): string => join(runtime, `martha-${process.getuid?.()}`)
+/** The directory this user's launches keep their relay roots under: inside the runtime directory they were given when it is an absolute path, and under the system's own temporary directory when they were given none. */
+export const theCommandsRuntimeDirectory = (runtime: string | undefined): string => join(absolute(runtime) ?? SYSTEM_TEMPORARY_DIRECTORY, `martha-${process.getuid?.()}`)
 
+/** The launcher's places in Martha's state, with the relay sockets under this user's runtime directory. */
 function launcherOf(io: CommandIo, places: Places): ReturnType<typeof launcherPlacesOf> {
-  const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? SYSTEM_TEMPORARY_DIRECTORY
-  return launcherPlacesOf(places.state, theCommandsRuntimeDirectory(runtime), places.root)
+  return launcherPlacesOf(places.state, theCommandsRuntimeDirectory(io.env['XDG_RUNTIME_DIR']), places.root)
 }
 
 /** What `martha ls` and `martha stop` read (martha#312); or why it cannot be read. */
