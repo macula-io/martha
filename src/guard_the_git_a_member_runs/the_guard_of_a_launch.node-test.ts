@@ -19,6 +19,7 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { theRowWithNothingSaid, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
   foldTheMisses,
@@ -147,9 +148,15 @@ interface AFakeLauncher {
   close(): Promise<void>
 }
 
-/** A launcher that answers every guard's question with `answer`, body and status, and keeps what it was asked. */
-async function aLauncherIn(directory: string, answer: { readonly status: number; readonly body: string }): Promise<AFakeLauncher> {
-  const socket = join(directory, RELAY_SOCKET_NAME)
+/**
+ * A launcher that answers every guard's question with `answer`, body and status, and keeps what it was asked.
+ *
+ * Its socket is served from a relay root short enough for a socket address whatever TMPDIR is (martha#79): this
+ * test's own directory sits under TMPDIR, and CI runs the suite under a long one reached through a link, where
+ * `<directory>/launch/relay.sock` is past the hundred bytes an address holds and `listen` refuses it by name.
+ */
+async function aLauncherIn(t: TestContext, answer: { readonly status: number; readonly body: string }): Promise<AFakeLauncher> {
+  const socket = join(shortRelayRoot(t), RELAY_SOCKET_NAME)
   const asked: AFakeLauncher['asked'] = []
   const server: Server = createServer((request, response) => {
     const chunks: Buffer[] = []
@@ -212,7 +219,7 @@ async function runGitThroughThePath(placed: APlacedGuard, args: readonly string[
 test('the shim runs the real git when the launcher allows the call, and the launch decides the question', async (t) => {
   const directory = aDirectory(t, 'martha-562-shim-a-')
   mkdirSync(join(directory, 'launch'), { recursive: true })
-  const launcher = await aLauncherIn(join(directory, 'launch'), { status: 200, body: JSON.stringify({ allow: 1 }) })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ allow: 1 }) })
   t.after(() => launcher.close())
   const placed = aGuardIn(directory, launcher.socket)
 
@@ -226,7 +233,7 @@ test('the shim runs the real git when the launcher allows the call, and the laun
 test('the shim stops the call on a refusal, with the reason, and the real git never runs', async (t) => {
   const directory = aDirectory(t, 'martha-562-shim-b-')
   mkdirSync(join(directory, 'launch'), { recursive: true })
-  const launcher = await aLauncherIn(join(directory, 'launch'), { status: 200, body: JSON.stringify({ deny: "uranus/9 is another member's branch" }) })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ deny: "uranus/9 is another member's branch" }) })
   t.after(() => launcher.close())
   const placed = aGuardIn(directory, launcher.socket)
 
@@ -256,7 +263,7 @@ test('a launcher that cannot answer is a miss: the real git runs, and one line i
 test('Martha\'s own run, and a shell with no launcher socket, are not asked about at all', async (t) => {
   const directory = aDirectory(t, 'martha-562-shim-d-')
   mkdirSync(join(directory, 'launch'), { recursive: true })
-  const launcher = await aLauncherIn(join(directory, 'launch'), { status: 200, body: JSON.stringify({ allow: 1 }) })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ allow: 1 }) })
   t.after(() => launcher.close())
   const placed = aGuardIn(directory, launcher.socket)
 
@@ -319,7 +326,7 @@ function aCloneUnderTheGuard(directory: string, socket: string): ACloneUnderTheG
 test("a delete that reaches the transaction through git's absolute path is refused", async (t) => {
   const directory = aDirectory(t, 'martha-562-hook-a-')
   mkdirSync(join(directory, 'launch'), { recursive: true })
-  const launcher = await aLauncherIn(join(directory, 'launch'), { status: 200, body: JSON.stringify({ deny: "uranus/9 is another member's branch" }) })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ deny: "uranus/9 is another member's branch" }) })
   t.after(() => launcher.close())
   const under = aCloneUnderTheGuard(directory, launcher.socket)
 
@@ -334,7 +341,7 @@ test("a delete that reaches the transaction through git's absolute path is refus
 test("a delete of the member's own branch reaches git's transaction and is let through", async (t) => {
   const directory = aDirectory(t, 'martha-562-hook-b-')
   mkdirSync(join(directory, 'launch'), { recursive: true })
-  const launcher = await aLauncherIn(join(directory, 'launch'), { status: 200, body: JSON.stringify({ allow: 1 }) })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ allow: 1 }) })
   t.after(() => launcher.close())
   const under = aCloneUnderTheGuard(directory, launcher.socket)
   gitIn(under.clone, 'branch', 'hygiea/562')
@@ -348,7 +355,7 @@ test("a delete of the member's own branch reaches git's transaction and is let t
 test("a checkout's own config-named hook runs none for the event the launch keeps, and the launch's own does (martha#562 r=1)", async (t) => {
   const directory = aDirectory(t, 'martha-562-hook-c-')
   mkdirSync(join(directory, 'launch'), { recursive: true })
-  const launcher = await aLauncherIn(join(directory, 'launch'), { status: 200, body: JSON.stringify({ deny: "uranus/9 is another member's branch" }) })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ deny: "uranus/9 is another member's branch" }) })
   t.after(() => launcher.close())
   const under = aCloneUnderTheGuard(directory, launcher.socket)
 
