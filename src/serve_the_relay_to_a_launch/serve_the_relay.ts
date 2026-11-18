@@ -11,8 +11,8 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 
-import { RELAY_PATHS, RUN_PATH, TOOL_ANSWER_PATH, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
-import type { MemberRelay } from '../answer_the_relay/answer_the_relay.ts'
+import { RELAY_PATHS, GIT_CALL_PATH, REF_TRANSACTION_PATH, RUN_PATH, TOOL_ANSWER_PATH, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
+import type { AGuardsAnswer, MemberRelay } from '../answer_the_relay/answer_the_relay.ts'
 
 /**
  * The largest body the launcher reads. A tool call carries its input whole (a
@@ -60,6 +60,8 @@ function reply(response: ServerResponse, status: number, body: unknown): void {
 async function answerOne(relay: MemberRelay, request: IncomingMessage, response: ServerResponse): Promise<void> {
   if (request.method === 'POST' && request.url === RUN_PATH) return runOne(relay, request, response)
   if (request.method === 'POST' && request.url === TOOL_ANSWER_PATH) return answerAToolOne(relay, request, response)
+  if (request.method === 'POST' && request.url === GIT_CALL_PATH) return judgeOne(request, response, (body) => relay.judgeAGitCall(body))
+  if (request.method === 'POST' && request.url === REF_TRANSACTION_PATH) return judgeOne(request, response, (body) => relay.judgeARefTransaction(body))
   return answerAnEvent(relay, request, response)
 }
 
@@ -88,6 +90,22 @@ async function runOne(relay: MemberRelay, request: IncomingMessage, response: Se
   const body = await bodyOf(request)
   if (body === undefined) return reply(response, 400, { refused: 'the body is not JSON the launcher reads' })
   reply(response, 200, await relay.run(body))
+}
+
+/**
+ * A guard's question (martha#562, seams b and c): its verdict, or a status the shim reads as no answer at all. A
+ * question this launcher cannot read is a 400, which the shim fails open on and writes down as a miss; it is never
+ * answered with a yes the launcher did not reach.
+ */
+async function judgeOne(
+  request: IncomingMessage,
+  response: ServerResponse,
+  judging: (body: unknown) => Promise<AGuardsAnswer>,
+): Promise<void> {
+  const body = await bodyOf(request)
+  if (body === undefined) return reply(response, 400, { refused: 'the body is not JSON the launcher reads' })
+  const answered = await judging(body)
+  return 'refused' in answered ? reply(response, 400, answered) : reply(response, 200, answered.verdict)
 }
 
 async function bodyOf(request: IncomingMessage): Promise<unknown> {

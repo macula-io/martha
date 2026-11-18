@@ -220,6 +220,17 @@ export interface CrewToolPlaces {
    * crew that declared no workspace layout hands none.
    */
   readonly refusesTheGitCall?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of a git call the launch's own `git` was handed (martha#562, seam b): the words a
+   * member's shell gave the shim, and the directory it runs them in. A place given none refuses nothing, and a crew that
+   * declared no workspace layout hands none.
+   */
+  readonly refusesTheGitOnThePath?: (call: { readonly directory: string; readonly args: readonly string[] }) => Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of the refs a clone's transaction would update (martha#562, seam c): a delete of
+   * another member's branch that reached git past the shell and past the shim. A place given none refuses nothing.
+   */
+  readonly refusesTheRefUpdate?: (updates: readonly { readonly ref: string; readonly deletes: boolean }[]) => string | undefined
 }
 
 /** The tools a crew's member can call. */
@@ -283,6 +294,17 @@ export interface CrewTools extends TheReviewRule {
    * refuses nothing.
    */
   refusesTheGitIn(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of a git call the launch's own `git` was handed (martha#562, seam b): the same
+   * rules, asked from the shim's own words rather than from a shell line. Undefined when nothing refuses it, when the
+   * crew declared no layout, or when a launch handed no guard of this seam at all.
+   */
+  refusesTheGitOnThePath?(call: { readonly directory: string; readonly args: readonly string[] }): Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of a clone's ref transaction (martha#562, seam c): the refs git would update, and
+   * whether each is a delete. Undefined when nothing refuses it, or when the crew declared no layout.
+   */
+  refusesTheRefUpdate?(updates: readonly { readonly ref: string; readonly deletes: boolean }[]): string | undefined
 }
 
 /** The tools, in the order the mod registers them, each as the slice that owns it defines it. */
@@ -424,6 +446,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     ends: state.ends,
     theContractInForce: (call, names) => theContractTheMemberHolds(held, call, names),
     refusesTheGitIn: async (call) => (held.refusesTheGitCall === undefined ? undefined : held.refusesTheGitCall(call)),
+    refusesTheGitOnThePath: async (call) => held.refusesTheGitOnThePath?.(call),
+    refusesTheRefUpdate: (updates) => held.refusesTheRefUpdate?.(updates),
   }
 }
 

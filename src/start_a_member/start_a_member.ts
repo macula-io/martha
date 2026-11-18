@@ -88,6 +88,7 @@ import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config
 import { theApprovalInUse, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { refuseAGitCallInAMembersShell, theWorkspaceTheCrewDeclared } from '../refuse_a_git_call_in_a_members_shell/refuse_a_git_call_in_a_members_shell.ts'
+import { refuseAGitCallFromThePath, refuseTheRefUpdates } from '../ask_git_what_a_member_is_about_to_change/ask_git_what_a_member_is_about_to_change.ts'
 
 /** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
 export const NOT_A_TERMINAL =
@@ -266,15 +267,23 @@ export function stoppingHostOn(places: { readonly launcher: MemberPlaces; readon
 }
 
 /**
- * The workspace guard's first seam, for the crew's own tools (martha#562): a crew that declared a layout has every shell
- * line a tool call carries read into its git calls, and each is judged before it runs. No layout declared, nothing is
- * judged, and the crew's tools are handed no guard at all.
+ * The workspace guard's places, for the crew's own tools and for the two seams that reach git without a tool call
+ * (martha#562): a crew that declared a layout has every shell line a tool call carries read into its git calls, every
+ * call the `git` on a member's PATH is handed judged, and every ref a transaction deletes read for whose branch it is.
+ * No layout declared, nothing is judged, and the crew's tools are handed no guard at all.
  */
-function theGitGuardPlaceOf(settings: CrewSettings, member: string): Pick<CrewToolPlaces, 'refusesTheGitCall'> {
+function theGitGuardPlaceOf(
+  settings: CrewSettings,
+  member: string,
+): Pick<CrewToolPlaces, 'refusesTheGitCall' | 'refusesTheGitOnThePath' | 'refusesTheRefUpdate'> {
   const workspace = theWorkspaceTheCrewDeclared(settings)
-  return workspace === undefined
-    ? {}
-    : { refusesTheGitCall: (call) => refuseAGitCallInAMembersShell({ host: thisMachine, workspace, member, ...call }) }
+  if (workspace === undefined) return {}
+  const at = { host: thisMachine, workspace, member }
+  return {
+    refusesTheGitCall: (call) => refuseAGitCallInAMembersShell({ ...at, ...call }),
+    refusesTheGitOnThePath: (call) => refuseAGitCallFromThePath({ ...at, ...call }),
+    refusesTheRefUpdate: (updates) => refuseTheRefUpdates(updates, workspace, member),
+  }
 }
 
 /** The place a member's restart tool asks through; none when the crew's directory is not this user's own. */

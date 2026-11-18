@@ -79,6 +79,8 @@ import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
+import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 
 // --- the run this file is (martha#559) --------------------------------------------
 
@@ -1700,6 +1702,26 @@ test('the started_with the relay is handed is what the host was spawned with, do
   const spawnedEnv = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
   assert.equal(heard.length, 1, 'the launcher handed the relay one place')
   assert.deepEqual(heard[0]?.started_with, startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, spawnedArgs, spawnedEnv))
+})
+
+test('a member\'s git meets the workspace guard: its folder is first on PATH, and git is pointed at the guard\'s hooks (martha#562)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved))
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write what it was started with', () => existsSync(fake.envFile), t)
+  const spawned = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
+
+  const first = (spawned['PATH'] ?? '').split(':')[0] ?? ''
+  assert.match(first, /\/git-guard$/, `the guard is not first on the member's PATH: ${spawned['PATH'] ?? ''}`)
+  assert.ok(existsSync(join(first, 'git')), 'the folder first on the PATH holds no git to run')
+  // Seam (c)'s hook is the one the launch keeps enabled, and the folder git looks in is the guard's own.
+  const settings = spawned[GIT_SETTINGS_VARIABLE] ?? ''
+  assert.ok(settings.includes(`'core.hooksPath'='${join(first, THE_HOOKS_DIRECTORY_NAME)}'`), settings)
+  assert.ok(!settings.includes('hook.reference-transaction.enabled'), 'the launch switched off the hook seam (c) runs')
+
+  started.stop('the test is over')
+  await started.stopped
 })
 
 test('a member with no owner to answer its host, whose relay never reports its session start, is stopped once its deadline passes, saying why', async (t) => {

@@ -7,17 +7,20 @@
 // The workspace guard (../guard_workspace) decides from a call's own words and a few facts only git can say: the
 // branches a clone has, which is what tells `checkout main` from `checkout src/app.ts`, and the worktrees a removal or
 // a prune would meet, with the branch each of them is on. This slice asks for them, runs the guard, and hands back the
-// refusal. All three seams of the guard end here — the relay's tool_called, the `git` shim on the member's PATH, and
+// refusal. All three seams of the guard end here — the relay's tool_called, the `git` first on the member's PATH, and
 // the clone's own ref-transaction hook — so the facts are asked one way and the answers are the same three answers.
-// None of the three is wired yet: package 2 lands them, and nothing calls this slice until it does.
+// The first asks about a shell line (seam a, ../refuse_a_git_call_in_a_members_shell); the second about the words a
+// shim was handed (seam b, refuseAGitCallFromThePath below); the third needs no fact git alone can say, and
+// refuseTheRefUpdates reads the refs the transaction names.
 //
 // Every run carries Martha's own settings (../run_marthas_own_git) and reads only: `for-each-ref` lists branches,
 // `symbolic-ref` names the branch a clone starts on, `worktree list` lists worktrees. Nothing here writes, fetches or
 // prunes.
 //
 // It fails open, as the shim does. A git that cannot be run, or a line this slice cannot read, leaves the fact empty,
-// and the rule that needed it does not fire: a member's shell must not be refused because Martha could not look. Each
-// miss is visible twice — the shim writes its timeout to the member's row, and the scan
+// and the rule that needed it does not fire: a member's shell must not be refused because Martha could not look. A miss
+// the shim itself met is visible twice — the shim appends a line to the launch's misses file and the launcher folds it
+// into the member's row (../guard_the_git_a_member_runs), and the scan
 // (../check_the_workspace_matches_its_layout) reports what got through.
 //
 // Where it asks is the call's own business: the clone the call lands in for the branches, and for the worktrees the
@@ -25,8 +28,8 @@
 // rules that need a fact do not fire.
 
 import type { HostContract } from '../host_contract/host_contract.ts'
-import { refuseACallInTheWorkspace, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
-import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
+import { refuseACallInTheWorkspace, refuseARefUpdate, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
+import { theGitCallsOfAShim, type AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { realpathSync } from 'node:fs'
 import { isAbsolute, join, sep } from 'node:path'
@@ -155,4 +158,39 @@ export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutAC
   const where = calls.map(theWorktreeListedAt).find((found) => found !== null) ?? clone
   const guarded: AGuardedCall = { calls, workspace, member, facts: await theFactsOf(host, clone, where) }
   return refuseACallInTheWorkspace(guarded)
+}
+
+/** A call a `git` on the member's PATH was handed (martha#562, seam b): the words a shell gave it, and where it runs. */
+export interface ACallTheShimsGitWasHanded {
+  readonly host: Pick<HostContract, 'processes'>
+  readonly workspace: TheWorkspace
+  readonly member: string
+  /** The directory the shell runs the call in, as the shim saw it; a shell that names none asks about nothing. */
+  readonly directory: string
+  readonly args: readonly string[]
+}
+
+/**
+ * The refusal a `git` the launch put first on a member's PATH meets, before it runs (martha#562, seam b). The words are
+ * read by the one reader a shell line is read by, so a call written in a line and the same call handed to the shim are
+ * asked about alike; a call that names no directory is asked about nowhere, as one in a line the reader cannot place.
+ */
+export async function refuseAGitCallFromThePath(request: ACallTheShimsGitWasHanded): Promise<string | undefined> {
+  const calls = isAbsolute(request.directory) ? theGitCallsOfAShim(request.args, { directory: request.directory }) : []
+  return calls.length === 0
+    ? undefined
+    : askGitWhatAMemberIsAboutToChange({ host: request.host, calls, workspace: request.workspace, member: request.member })
+}
+
+/**
+ * The refusal a clone's ref transaction meets (martha#562, seam c): a delete of a branch another member owns, which
+ * reached git by an alias, a hook or git's absolute path, past the shell the shim guards. No fact only git can say is
+ * needed here, so nothing is asked of git: the refs the transaction names are the whole of the question.
+ */
+export function refuseTheRefUpdates(
+  updates: readonly { readonly ref: string; readonly deletes: boolean }[],
+  workspace: TheWorkspace,
+  member: string,
+): string | undefined {
+  return updates.map((update) => refuseARefUpdate(update, workspace, member)).find((refusal) => refusal !== undefined)
 }

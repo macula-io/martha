@@ -96,12 +96,28 @@ const NPM_SETTINGS: Readonly<Record<string, string>> = {
 export const DIRENV_OFF_VARIABLE = 'DIRENV_DISABLE'
 export const DIRENV_CONFIG_VARIABLE = 'DIRENV_CONFIG'
 
-/** The git settings that run no hook, given the empty directory hooks are looked for in. */
-export function gitSettingsThatRunNoHook(empty_directory: string): readonly (readonly [string, string])[] {
+/**
+ * The hooks a launch runs of its own, in a folder it made and holds nothing else in (martha#562, seam c): git is
+ * pointed at this folder, so a checkout's own hooks run none, and the events named here stay enabled for these alone —
+ * every other event is switched off as it was. Absent, git is pointed at the empty directory and every event is off.
+ *
+ * The folder is the launch's own, closed to every write, and this setting is command scope, above every config file: a
+ * checkout's own `core.hooksPath` is below it and cannot win, and the hook left enabled is the one file the launch put
+ * there. The other events stay off here, which is also what keeps a hook named in config from running.
+ */
+export interface TheHooksALaunchRuns {
+  readonly directory: string
+  /** The events the folder holds a hook for, as githooks(5) names them. */
+  readonly events: readonly string[]
+}
+
+/** The git settings that run no hook of a checkout's, given the directory hooks are looked for in and the launch's own. */
+export function gitSettingsThatRunNoHook(empty_directory: string, theLaunchesHooks?: TheHooksALaunchRuns): readonly (readonly [string, string])[] {
+  const kept = new Set(theLaunchesHooks?.events ?? [])
   return [
-    ['core.hooksPath', empty_directory],
+    ['core.hooksPath', theLaunchesHooks?.directory ?? empty_directory],
     ['core.fsmonitor', 'false'],
-    ...GIT_HOOK_EVENTS.map((event) => [`hook.${event}.enabled`, 'false'] as const),
+    ...GIT_HOOK_EVENTS.filter((event) => !kept.has(event)).map((event) => [`hook.${event}.enabled`, 'false'] as const),
   ]
 }
 
@@ -118,13 +134,16 @@ export function npmSettingOf(name: string): string | undefined {
 
 /**
  * The environment that keeps a checkout from running code through a member's
- * ordinary commands, on top of `inherited`: for `launchEnvironment`.
+ * ordinary commands, on top of `inherited`: for `launchEnvironment`. The
+ * `theLaunchesHooks` folder is the one hook a launch runs of its own, and it
+ * holds nothing else (martha#562, seam c).
  */
 export function switchesThatRunNothingFromACheckout(
   inherited: Readonly<Record<string, string | undefined>>,
   empty_directory: string,
+  theLaunchesHooks?: TheHooksALaunchRuns,
 ): HostSwitches {
-  const ours = gitSettingsThatRunNoHook(empty_directory)
+  const ours = gitSettingsThatRunNoHook(empty_directory, theLaunchesHooks)
     .map(([key, value]) => `${gitQuoted(key)}=${gitQuoted(value)}`)
     .join(' ')
   const before = inherited[GIT_SETTINGS_VARIABLE]

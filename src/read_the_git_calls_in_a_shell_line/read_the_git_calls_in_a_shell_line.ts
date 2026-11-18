@@ -119,8 +119,11 @@ export function theWordsOfACommand(command: string): readonly string[] {
  */
 const GIT_OPTIONS_THAT_TAKE_A_WORD = new Set([THE_DIRECTORY_OPTION, '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'])
 
+/** The program whose calls are read: the word a shell spells, and the last word of a path to it. */
+const THE_PROGRAM = 'git'
+
 /** Whether a word runs git: `git` itself, or a path to it, `/usr/bin/git` and `./git` alike. */
-const isGit = (word: string | undefined): boolean => word !== undefined && (word === 'git' || word.endsWith('/git'))
+const isGit = (word: string | undefined): boolean => word !== undefined && (word === THE_PROGRAM || word.endsWith(`/${THE_PROGRAM}`))
 
 /** Whether a word is a path this reader can name, rather than a variable or a glob it will not guess at. */
 const isAPath = (word: string): boolean => !NOT_A_PATH.test(word)
@@ -220,4 +223,13 @@ export function theGitCallsInArgv(argv: readonly string[], starting: TheStarting
 /** Every git call a shell line makes: the line's words, read the way a shim's arguments are. */
 export function readTheGitCallsInAShellLine(command: string, starting: TheStartingDirectory = {}): readonly AGitCall[] {
   return theGitCallsInArgv(theWordsOfACommand(command), starting)
+}
+
+/**
+ * The git calls a shim's own arguments make (martha#562, seam b): what the `git` a launch put first on a member's PATH
+ * was handed. A shell hands a program its arguments without the program's own word, so the word is put back here
+ * rather than spelled again by every caller; past that the words are read exactly as a line's are.
+ */
+export function theGitCallsOfAShim(argv: readonly string[], starting: TheStartingDirectory = {}): readonly AGitCall[] {
+  return theGitCallsInArgv([THE_PROGRAM, ...argv], starting)
 }

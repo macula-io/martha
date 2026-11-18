@@ -182,6 +182,9 @@ function standInLauncher(heard: HeardEvent[]): MemberRelay {
     },
     answerTool: async () => nothingToRun,
     run: async () => nothingToRun,
+    // The workspace guard's two seams are not what this run measures: a stand-in with no crew refuses no git call.
+    judgeAGitCall: async () => ({ verdict: ALLOW }),
+    judgeARefTransaction: async () => ({ verdict: ALLOW }),
   }
 }
 

@@ -28,7 +28,7 @@ import { WHO_DECIDES_REACH, MESH_TOOLS_THAT_WIDEN_REACH } from '../refuse_wideni
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
-import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
+import { memberRelay, THE_GUARD_ASK_UNREADABLE, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
@@ -71,7 +71,7 @@ const userScopeFor = (home: string): OwnerUserScope => ({
  * A crew that refuses every call it is asked about, so what a test reads is the relay's own order: a real crew refuses
  * only a review, and a call it would not refuse is one these tests do not need.
  */
-function aCrewRefusingEverything(asked: string[], git_asked: string[] = []): CrewTools {
+function aCrewRefusingEverything(asked: string[], git_asked: string[] = [], path_asked: { directory: string; args: readonly string[] }[] = [], refs_asked: string[] = []): CrewTools {
   return {
     tools: [],
     answer: async () => ({ answer: '' }),
@@ -97,6 +97,17 @@ function aCrewRefusingEverything(asked: string[], git_asked: string[] = []): Cre
       git_asked.push(String(call.input['command'] ?? ''))
       return A_REFUSED_GIT_CALL
     },
+    // The two seams that reach git without a tool call (martha#562): the shim on the member's PATH, and the clone's
+    // ref transaction. This crew refuses a call in another member's branch, as the real one does.
+    refusesTheGitOnThePath: async (call) => {
+      path_asked.push({ directory: call.directory, args: call.args })
+      return call.args.includes('uranus/9') ? A_REFUSED_GIT_CALL : undefined
+    },
+    refusesTheRefUpdate: (updates) => {
+      const deletes = updates.filter((update) => update.deletes).map((update) => update.ref)
+      refs_asked.push(...deletes)
+      return deletes.some((ref) => ref.endsWith('/uranus/9')) ? A_REFUSED_GIT_CALL : undefined
+    },
   }
 }
 
@@ -110,7 +121,7 @@ function theReceiptsTaken(allowed: string[]): SignedRuns {
 }
 
 /** The relay for one member, over a crew's own tools and the receipts a call would take. */
-function relayFor(places: Places, crew: CrewTools, signed_runs: SignedRuns): MemberRelay {
+function relayFor(places: Places, crew: CrewTools | undefined, signed_runs: SignedRuns): MemberRelay {
   return memberRelay({
     records: sessionRecordsIn(rowStreamsDirectory(places.rows)),
     launch: { host: CLAUDE_CODE, launch_dir: places.checkout, stop_dir: places.home, approved_fingerprints: [] },
@@ -135,7 +146,7 @@ function relayFor(places: Places, crew: CrewTools, signed_runs: SignedRuns): Mem
       settings_files: [],
       user_scope: userScopeFor(places.home),
     }),
-    crew,
+    ...(crew === undefined ? {} : { crew }),
     signed_runs,
     stopMember: () => {},
   })
@@ -193,4 +204,42 @@ test('#315: the gate\'s own answer comes first, so a call the gate denies is den
     'the crew\'s review rule answered for a call the gate refuses, so it sits before the gate rather than beside it',
   )
   assert.deepEqual(allowed, [], 'a receipt was taken for a call that never ran')
+})
+
+test('#562: the git on the member\'s PATH is answered with the crew\'s verdict, and a crew that guards nothing is answered with a yes', async (t) => {
+  const places = placesOf(t)
+  const path_asked: { directory: string; args: readonly string[] }[] = []
+  const relay = relayFor(places, aCrewRefusingEverything([], [], path_asked), theReceiptsTaken([]))
+
+  assert.deepEqual(
+    await relay.judgeAGitCall({ cwd: places.checkout, args: ['branch', '-D', 'uranus/9'] }),
+    { verdict: { deny: A_REFUSED_GIT_CALL } },
+    "the shim's question was not answered with the crew's own reason",
+  )
+  assert.deepEqual(path_asked, [{ directory: places.checkout, args: ['branch', '-D', 'uranus/9'] }], "the relay never handed the call to the crew's guard")
+  assert.deepEqual(await relay.judgeAGitCall({ cwd: places.checkout, args: ['status'] }), { verdict: { allow: 1 } }, 'a call the crew allows was not allowed')
+  // A question this launcher cannot read is refused rather than answered with a yes: the shim fails open on it and
+  // writes the miss down, so a body that is not the shim's never runs as an allowed call.
+  assert.deepEqual(await relay.judgeAGitCall({ cwd: 'not/absolute', args: ['branch', '-D', 'uranus/9'] }), { refused: THE_GUARD_ASK_UNREADABLE })
+  assert.deepEqual(await relay.judgeAGitCall({ cwd: places.checkout, args: [1] }), { refused: THE_GUARD_ASK_UNREADABLE })
+
+  // A launch the crew handed no guard at all, which is a crew that declared no workspace layout: nothing is refused.
+  const unguarded = relayFor(places, undefined, theReceiptsTaken([]))
+  assert.deepEqual(await unguarded.judgeAGitCall({ cwd: places.checkout, args: ['branch', '-D', 'uranus/9'] }), { verdict: { allow: 1 } })
+})
+
+test('#562: the clone\'s ref transaction is answered with the crew\'s verdict, and the refs it names are the question', async (t) => {
+  const places = placesOf(t)
+  const refs_asked: string[] = []
+  const relay = relayFor(places, aCrewRefusingEverything([], [], [], refs_asked), theReceiptsTaken([]))
+
+  assert.deepEqual(
+    await relay.judgeARefTransaction({ updates: [{ ref: 'refs/heads/uranus/9', deletes: true }] }),
+    { verdict: { deny: A_REFUSED_GIT_CALL } },
+    "the hook's question was not answered with the crew's own reason",
+  )
+  assert.deepEqual(refs_asked, ['refs/heads/uranus/9'], 'the relay never handed the refs to the crew\'s guard')
+  assert.deepEqual(await relay.judgeARefTransaction({ updates: [{ ref: 'refs/heads/hygiea/562', deletes: true }] }), { verdict: { allow: 1 } })
+  assert.deepEqual(await relay.judgeARefTransaction({ updates: [{ ref: 'refs/heads/uranus/9' }] }), { refused: THE_GUARD_ASK_UNREADABLE })
+  assert.deepEqual(await relay.judgeARefTransaction({}), { refused: THE_GUARD_ASK_UNREADABLE })
 })

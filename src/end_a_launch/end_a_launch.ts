@@ -19,6 +19,7 @@ import process from 'node:process'
 import { type LaunchRecorded, recordMemberLaunch, recordMemberStopped } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { killGroup, refusedIfTheRunIsGone } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { thePathWithTheGuardFirst } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
@@ -120,18 +121,20 @@ export interface Starting {
 
 /**
  * The arguments and the environment the host starts with, built once (martha#135). The relay records what the
- * declaration names out of them, and `spawn` gets them unchanged.
+ * declaration names out of them, and `spawn` gets them unchanged — the guard's folder first on its PATH, and git
+ * pointed at the guard's hooks, so a member's every git meets the workspace rules (martha#562, seams b and c).
  */
 export function whatTheHostStartsWith(
   launch: ClaudeCodeMemberLaunch,
-  made: Pick<LaunchMade, 'prepared' | 'hostEnv' | 'relayDirectory' | 'emptyDirectory' | 'settingsArgs' | 'pluginDir'>,
+  made: Pick<LaunchMade, 'prepared' | 'hostEnv' | 'relayDirectory' | 'emptyDirectory' | 'settingsArgs' | 'pluginDir' | 'guard'>,
 ): Starting {
+  const env = {
+    ...launchEnvironment(made.hostEnv, switchesThatRunNothingFromACheckout(made.hostEnv, made.emptyDirectory, made.guard.hooks), CLAUDE_CODE),
+    [RELAY_SOCKET_VARIABLE]: made.relayDirectory.socket_path,
+  }
   return {
     args: [...launch.args, ...made.prepared.switches.args, ...made.settingsArgs, '--plugin-dir', made.pluginDir],
-    env: {
-      ...launchEnvironment(made.hostEnv, switchesThatRunNothingFromACheckout(made.hostEnv, made.emptyDirectory), CLAUDE_CODE),
-      [RELAY_SOCKET_VARIABLE]: made.relayDirectory.socket_path,
-    },
+    env: thePathWithTheGuardFirst(env, made.guard.directory),
   }
 }
 

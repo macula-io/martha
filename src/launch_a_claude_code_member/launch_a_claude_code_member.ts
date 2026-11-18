@@ -54,7 +54,9 @@
 //      environment is `launchEnvironment(inherited, switches, host)`, then the
 //      settings that keep a checkout from running its hooks, install scripts
 //      and .envrc through the member's own commands (martha#24), plus the
-//      socket's path. Before it starts, each mesh server entry of the approved
+//      socket's path. Its PATH starts with the launch's own `git` guard, and
+//      git is pointed at the guard's hooks (../guard_the_git_a_member_runs,
+//      martha#562), so the member's every git meets the workspace rules. Before it starts, each mesh server entry of the approved
 //      copy is rewritten to start its recorded tree by path, installed or
 //      compared file by file, with every variable of that environment and of
 //      the settings files' env emptied but the few the server needs (martha#65, ../install_the_recorded_mesh_server);
@@ -158,6 +160,7 @@ import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_left
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { relayJournalKeptIn } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
+import { foldTheMisses, NOTHING_FOLDED_YET, putTheGuardIn, theRealGitOnThisMachine, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
@@ -310,6 +313,8 @@ export interface LaunchMade extends ReadyLaunch, WhatTheRunWatches {
   readonly ownerMemory: OwnerMemoryPlaces
   /** The switches that name the settings the launch wrote, when no approved copy was carried (martha#136). */
   readonly settingsArgs: readonly string[]
+  /** The `git` first on the member's PATH, its hook, and the misses file it leaves (../guard_the_git_a_member_runs). */
+  readonly guard: TheGitGuard
 }
 
 /**
@@ -402,7 +407,7 @@ async function placesAwayFromTheOwner(
 function launchDirectories(
   launch: ClaudeCodeMemberLaunch,
   ready: ReadyLaunch,
-): Pick<LaunchMade, 'relayDirectory' | 'emptyDirectory' | 'pluginDir'> | string {
+): Pick<LaunchMade, 'relayDirectory' | 'emptyDirectory' | 'pluginDir' | 'guard'> | string {
   // A launcher killed hard runs none of its own cleanup, so what another launch
   // left in the relay root is swept here, before this launch makes its own
   // directory; a launch still running is left alone (leftover_relay_directories.ts).
@@ -432,7 +437,16 @@ function launchDirectories(
     ready.removeSnapshot()
     return copy.refusal
   }
-  return { relayDirectory, emptyDirectory, pluginDir: copy.plugin_dir }
+  // The guard's shim goes first on the member's PATH and its hook is where git looks for one (../guard_the_git_a_member_runs),
+  // so it is placed here, inside the directory the launch takes away whole.
+  const realGit = theRealGitOnThisMachine(launch.inherited)
+  const guard = realGit === undefined ? { refusal: `The member is not started: its git guard found no git on ${launch.inherited['PATH'] ?? 'a PATH it was given'}.` } : putTheGuardIn(relayDirectory.directory, process.execPath, realGit)
+  if ('refusal' in guard) {
+    relayDirectory.remove()
+    ready.removeSnapshot()
+    return guard.refusal
+  }
+  return { relayDirectory, emptyDirectory, pluginDir: copy.plugin_dir, guard }
 }
 
 /**
@@ -563,6 +577,8 @@ async function servedRelay(
     },
     run: (body) => answering.run(body),
     answerTool: (body) => answering.answerTool(body),
+    judgeAGitCall: (body) => answering.judgeAGitCall(body),
+    judgeARefTransaction: (body) => answering.judgeARefTransaction(body),
   }
 
   try {
@@ -606,10 +622,12 @@ function relayBackstop(deadline: { readonly ms: number; readonly why: string }, 
 /**
  * Reads the settings files the host reads again every `ms`, apart from any
  * hook, and stops the member the first time one sets a switch (martha#122 r=2);
- * returns what ends the watch.
+ * returns what ends the watch. `also` is work the same tick does, which is how a
+ * launch folds the misses its git guard left into the member's row (martha#562).
  */
-function watchHookSettings(watch: HookSettingsWatch, ms: number, stop: (why: string) => void): () => void {
+function watchHookSettings(watch: HookSettingsWatch, ms: number, stop: (why: string) => void, also?: () => void): () => void {
   const timer = setInterval(() => {
+    also?.()
     const why = watch.check()
     if (why === undefined) return
     clearInterval(timer)
@@ -685,7 +703,12 @@ async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeli
 
   const { launchRecords, recorded } = started
   const offLauncherEnd = cleanUpIfTheLauncherEnds(pid, made)
-  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop)
+  // The one tick also folds the misses the member's git guard left (martha#562, seam b): folding is this launcher's own
+  // write, so the row keeps its one writer, and a miss written a moment before the tick still reaches it.
+  let folded = NOTHING_FOLDED_YET
+  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop, () => {
+    folded = foldTheMisses({ misses: made.guard.misses, folded }, { beats: dashboardRowsIn(launch.places.dashboard), member: launch.member_name, at: Date.now() })
+  })
   const ended = (): string | null => (backstop.disarm(), unwatch(), itsRunWent.forgetTheRun(), stoppedBecause)
   const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd, ended)
   backstop.arm()
