@@ -10,7 +10,8 @@ import { readFileSync } from 'node:fs'
  */
 export function aScriptsConstant (script, name) {
   const lines = readFileSync(script, 'utf8').split('\n').filter((line) => line.startsWith(`${name}=`))
-  const digits = lines.length === 1 ? /^[A-Z_]+=(\d+)$/.exec(lines[0])?.[1] : undefined
+  const [line] = lines
+  const digits = lines.length === 1 && line !== undefined ? /^[A-Z_]+=(\d+)$/.exec(line)?.[1] : undefined
   if (digits === undefined) throw new Error(`${script} does not define ${name} as one line ${name}=<digits> (${lines.length} line(s) start so)`)
   return Number(digits)
 }

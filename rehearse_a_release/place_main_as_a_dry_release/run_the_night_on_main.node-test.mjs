@@ -113,7 +113,11 @@ const placeAScript = (dir, file, text) => {
 function aNight (t, { packerConstant = 'NOT_PACKABLE', proofConstant = 'DRY_PASSED', night = false } = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'martha-night-')))
   t.after(() => removeTheTree(root))
-  const [dir, origin, evidence, record, parentTmp] = ['repo', 'origin.git', 'evidence', 'record', 'tmp'].map((name) => join(root, name))
+  const dir = join(root, 'repo')
+  const origin = join(root, 'origin.git')
+  const evidence = join(root, 'evidence')
+  const record = join(root, 'record')
+  const parentTmp = join(root, 'tmp')
   for (const folder of [dir, evidence, record, parentTmp]) mkdirSync(folder)
   git(root, 'init', '--quiet', '--bare', '--initial-branch=main', origin)
   git(dir, 'init', '--quiet', '--initial-branch=main')
@@ -129,38 +133,44 @@ function aNight (t, { packerConstant = 'NOT_PACKABLE', proofConstant = 'DRY_PASS
   return { root, dir, origin, evidence, record, parentTmp, head: git(dir, 'rev-parse', 'HEAD') }
 }
 
-/** The driver's environment for one run: the case's own TMPDIR and stand-in settings, nothing inherited of them. */
+/** @typedef {ReturnType<typeof aNight>} Night */
+/** @typedef {Record<string, string>} Settings */
+
+/** The driver's environment for one run: the case's own TMPDIR and stand-in settings, nothing inherited of them. @param {Night} night @param {Settings} [settings] */
 const envFor = (night, settings = {}) => {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('STAND_IN_')))
   return { ...env, TMPDIR: night.parentTmp, STAND_IN_RECORD: night.record, ...settings }
 }
 
-/** The copied driver in a night's repository. */
+/** The copied driver in a night's repository. @param {Night} night */
 const driverIn = (night) => join(night.dir, relative(REPO, DRIVER))
 
 /** The lines a stand-in recorded, or undefined when it never ran. @param {string} record @param {string} name */
 const recorded = (record, name) => (existsSync(join(record, name)) ? readFileSync(join(record, name), 'utf8').split('\n').slice(0, -1) : undefined)
 
-/** run.txt of a run folder as key=value pairs. @param {string} run */
-const runTxt = (run) => new Map(readFileSync(join(run, 'run.txt'), 'utf8').split('\n').filter(Boolean).map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]))
+/** run.txt of a run folder as key=value pairs, failing the case when no run folder was made. @param {string | undefined} run */
+const runTxt = (run) => {
+  assert.ok(run !== undefined, 'a run folder was made')
+  return new Map(readFileSync(join(run, 'run.txt'), 'utf8').split('\n').filter(Boolean).map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]))
+}
 
-/** The one run folder under the evidence root, or undefined. */
+/** The one run folder under the evidence root, or undefined. @param {Night} night */
 const runFolderOf = (night) => {
   const runs = readdirSync(night.evidence)
   assert.ok(runs.length <= 1, `one run folder at most: ${runs.join(', ')}`)
   return runs[0] === undefined ? undefined : join(night.evidence, runs[0])
 }
 
-/** The driver run to its end with `args`. */
+/** The driver run to its end with `args`. @param {Night} night @param {string[]} args @param {Settings} [settings] */
 function drive (night, args, settings = {}) {
   const run = spawnSync('bash', [driverIn(night), ...args], { encoding: 'utf8', env: envFor(night, settings), timeout: 60_000 })
   return { status: run.status, said: `${run.stdout}${run.stderr}`, run: runFolderOf(night) }
 }
 
-/** The driver given the night's evidence root, with `more` after it. */
+/** The driver given the night's evidence root, with `more` after it. @param {Night} night @param {...string} more */
 const withEvidence = (night, ...more) => [A_HOST, '--evidence', night.evidence, ...more]
 
-/** A run that was refused before anything was packed: REFUSED, no packer, no run folder. */
+/** A run that was refused before anything was packed: REFUSED, no packer, no run folder. @param {Night} night @param {ReturnType<typeof drive>} outcome @param {RegExp} [said] */
 const assertRefusedBeforePacking = (night, outcome, said) => {
   assert.equal(outcome.status, REFUSED, outcome.said)
   assert.equal(recorded(night.record, 'packer.args'), undefined, 'the packer never ran')
@@ -224,7 +234,7 @@ test('5. a dry pass is the proof\'s own DRY_PASSED, with the layer kept by its s
   const [packedSha, layer] = recorded(night.record, 'packer.args') ?? []
   assert.equal(packedSha, night.head)
   assert.equal(dirname(layer ?? ''), outcome.run)
-  assert.ok(outcome.run?.endsWith(`_${night.head.slice(0, 7)}`), outcome.run)
+  assert.ok(outcome.run?.endsWith(`_${night.head.slice(0, 7)}`), String(outcome.run))
   const kept = runTxt(outcome.run)
   assert.equal(kept.get('layer_sha256'), createHash('sha256').update(readFileSync(layer ?? '')).digest('hex'))
   assert.equal(kept.get('proof_exit'), String(PLANTED_DRY_PASSED))
