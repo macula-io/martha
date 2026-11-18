@@ -1,8 +1,9 @@
-// The contract a member is held to, as the crew answers it for the gate (martha#513 slice 2).
+// The contract a member is held to, as the crew answers it for the gate (martha#513 slice 2, martha#597).
 //
 // The rule is the slice's (../refuse_calls_outside_the_package_contract); this file pins the wiring: which package's
-// contract is answered, which version of it, and that a package with no contract answers nothing at all — so the gate
-// refuses nothing for a member that holds none, slice 1's rule that such a package is told so rather than refused.
+// contract is answered, which version of it, and that a package with no contract answers "none recorded" — so the gate
+// refuses every call but the ones that end a package, which is #513 box 1's rule that such a package is refused its
+// work rather than only told about it (martha#597).
 
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync } from 'node:fs'
@@ -23,7 +24,7 @@ import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_wor
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
-import { isAContractThatCannotBeRead, type TheContractHanded, type TheContractInForce } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
+import { type TheContractHanded, type TheContractInForce } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 import { crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-contract-in-force-'))
@@ -88,9 +89,9 @@ const aBriefAllowing = (allowed: string, extra: readonly string[] = []): string 
     '```',
   ].join('\n')
 
-/** The contract in force, when the crew answered one: what a readable ledger gives, and undefined for no contract or none read. */
+/** The version in force, when the crew answered one: undefined for none read, and for a package that holds none. */
 const theContractSaid = (handed: TheContractHanded): TheContractInForce | undefined =>
-  handed === undefined || isAContractThatCannotBeRead(handed) ? undefined : handed
+  handed !== undefined && 'kind' in handed ? handed : undefined
 
 /** A call the gate would hand the contract: a shell command, which the act table reads by its own words. */
 const aCall = (command: string) => ({ tool: CLAUDE_CODE_SHELL_TOOL, input: { command } })
@@ -101,9 +102,10 @@ test('the crew answers the contract of the package its member holds: its newest 
   // A member holding no package is held to nothing, so the gate refuses nothing for it.
   assert.equal(await tools.theContractInForce(pushes, names), undefined)
 
-  // It reports the package it works on, and still holds no contract: nothing is refused yet.
+  // It reports the package it works on and holds no contract yet: the crew answers "none recorded", so the gate
+  // refuses every call but the ones that end a package (martha#597).
   await tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'the work', step: 0, of: 1, package: PACKAGE }, 'session-builder')
-  assert.equal(await tools.theContractInForce(pushes, names), undefined)
+  assert.deepEqual(await tools.theContractInForce(pushes, names), { package: PACKAGE })
 
   const first = await keepThePackageContract(ledger, { package: PACKAGE, member: SUPERVISOR, brief: aBriefAllowing('push, land') })
   assert.ok('answer' in first, 'refused' in first ? first.refused : '')
@@ -114,9 +116,10 @@ test('the crew answers the contract of the package its member holds: its newest 
   assert.ok('answer' in second, 'refused' in second ? second.refused : '')
   assert.deepEqual(await tools.theContractInForce(pushes, names), { package: PACKAGE, version: 2, kind: 'bounded', allowed: ['handoff'] })
 
-  // A member that holds another package is held to that one's contract, not to this one's.
+  // A member that holds another package is held to that one's contract, not to this one's; holding one with no
+  // contract is "none recorded" for that package (martha#597).
   await theToolsOf(SUPERVISOR).answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'other work', step: 0, of: 1, package: 'synthetic-owner/other#9' }, 'session-lead')
-  assert.equal(await theToolsOf(SUPERVISOR).theContractInForce(pushes, names), undefined)
+  assert.deepEqual(await theToolsOf(SUPERVISOR).theContractInForce(pushes, names), { package: 'synthetic-owner/other#9' })
 })
 
 test('a package the owner called unbounded answers an unbounded contract, which refuses no act at all', async () => {
