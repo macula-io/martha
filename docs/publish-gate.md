@@ -1286,15 +1286,17 @@ roster's contents, which is the anchor weakness named separately.
 ## Every list a gate trusts is signed
 
 Every gate compares against a list: the crew room's roster and the shared
-room's, the policy that names whose text a session may act on, the
-supervisors who may act, and the members the binder may attribute a sender to. Kept as plain files, one command run as a member's
+room's, the policy that names whose text a session may act on, and the
+members the binder may attribute a sender to. (No signed list says who may act:
+the declaration's table does, see "Who may act"; the `supervisors` list went
+with `who_may_act`, martha#607.) Kept as plain files, one command run as a member's
 user adds a node id to any of them, and the gate then admits whoever was added.
 So each list is a document the owner signs, opened by `openTrustList`
 (`src/trust_only_signed_lists/`) from the signed bytes on every read.
 
 - **Nothing signed, nobody trusted.** A missing, unsigned, edited or malformed
   list opens empty, and the gate built on it admits nobody. `trustedRoomRosters`,
-  `trustedPolicy` and `trustedSupervisors` turn an opened list into what each
+  `trustedPolicy` and `trustedMembers` turn an opened list into what each
   gate reads, so a refused list reaches the gate as nobody, never as the file.
 - **Only a hardware key, touched.** The owner signs on their own machine with
   `ssh-keygen -Y sign`, a FIDO key (`sk-ssh-ed25519@openssh.com`), and the
