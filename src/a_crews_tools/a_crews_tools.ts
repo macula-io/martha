@@ -33,7 +33,7 @@ import { STANDING_ADD_TOOL, STANDING_CLOSE_TOOL, STANDING_TOOL, keepTheStandingI
 import { FAST_FORWARD_TOOL, LAND_BATCH_TOOL, fastForwardOntoTheApprovedTipOver, landTheBatchOver } from '../land_passed_work_as_one_batch/the_landing_tools.ts'
 import { theFastForwardACallNames, theLandingACallNames } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
-import { finishAWorktree, openAWorktree, type WorktreeAnswer, type WorktreesRequest } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
+import { finishAWorktree, openAWorktree, type WorktreesRequest } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { WORKTREE_FINISH_TOOL, WORKTREE_OPEN_TOOL, theWorktreeToolOver } from '../open_and_finish_a_worktree/the_worktree_tools.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL, theParkToolOver, type AParkAsked } from '../park_and_wake_a_member/the_park_tools.ts'
@@ -99,7 +99,7 @@ import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
-import { theBeatOverTheCrewTools, withTheOwedLine, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
+import { theBeatOverTheCrewTools, withTheOwedLine, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
@@ -401,8 +401,19 @@ export async function theContractACrewHolds(
   return crew === undefined ? undefined : crew.theContractInForce(call, names)
 }
 
-/** The tools a member can call, over the place its launcher gave it. */
-export function crewToolsOver(places: CrewToolPlaces): CrewTools {
+/**
+ * The tools a member can call, over the place its launcher gave it. Places that hold the watch over the crew tools its
+ * host served are answered tools holding that same watch (martha#710), so a launch's builder that leaves the watch out
+ * of its places cannot compile; the type is the watch's own (../keep_a_members_crew_tools_window).
+ *
+ * The overload with the watch is declared first (martha#710). A call takes the first overload it matches, so places
+ * holding a watch are answered tools holding it; and `ReturnType<typeof crewToolsOver>` reads the last one, the plain
+ * CrewTools a test that builds no launch is handed. In the other order a builder that passes the watch would get plain
+ * CrewTools back and fail to compile, and so would every test typed by ReturnType.
+ */
+export function crewToolsOver(places: HoldingTheWatch<CrewToolPlaces>): HoldingTheWatch<CrewTools>
+export function crewToolsOver(places: CrewToolPlaces): CrewTools
+export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWatch<CrewTools> {
   // The menus this launch's host closes, heard by its relay through noteTheCallsAnswer (martha#313): a settle of the
   // owner's asks stands on one, and a launch handed none keeps its own over the same clock.
   const held: CrewToolPlaces = { ...places, menus: places.menus ?? menusTheLauncherKeeps(places.ledger.clock) }
@@ -421,6 +432,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
   const budget = theBudgetOver(held)
 
   return {
+    ...(held.served_tools === undefined ? {} : { served_tools: held.served_tools }),
     tools: CREW_TOOLS,
     async answer(name: string, args: Readonly<Record<string, unknown>>, from: string): Promise<CoreToolAnswer> {
       state.session = from
@@ -759,8 +771,8 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [FAST_FORWARD_TOOL.name]: (args) =>
       actingOn(theFastForwardACallNames(args), async (on, asked) =>
         on.settings === undefined ? { refused: NO_ACTING_PLACE } : fastForwardOntoTheApprovedTipOver(actingHost(on), places.member, asked, on.settings)),
-    [WORKTREE_OPEN_TOOL.name]: async (args) => aWorktreeTool(places, openAWorktree, args),
-    [WORKTREE_FINISH_TOOL.name]: async (args) => aWorktreeTool(places, finishAWorktree, args),
+    [WORKTREE_OPEN_TOOL.name]: async (args) => theWorktreeToolOver(worktreesOf(places), openAWorktree, args),
+    [WORKTREE_FINISH_TOOL.name]: async (args) => theWorktreeToolOver(worktreesOf(places), finishAWorktree, args),
     [OWNER_TODO_ADD_TOOL.name]: declaring(places, async (declared, args) => keepTheOwnersList(theOwnersListAsked(places, declared.settings), () => addAnAct(places.ledger, args, places.member))),
     [OWNER_TODO_DONE_TOOL.name]: declaring(places, async (declared, args) => keepTheOwnersList(theOwnersListAsked(places, declared.settings), () => closeAnAct(places.ledger, args['id'], { by: 'member', member: places.member }))),
     [QUEUE_ASK_TOOL.name]: async (args) => queueTheAsk(theAsksAsked(places, state), args),
@@ -856,23 +868,9 @@ const actingHost = (places: CrewToolPlaces & { readonly processes: HostContract[
   ...places.ledger,
 })
 
-/** What the two worktree tools are given, or null when this place holds no processes or no declaration. */
-const worktreesOf = (places: CrewToolPlaces): WorktreesRequest | null =>
-  places.processes === undefined || places.settings === undefined ? null : { host: actingHost({ ...places, processes: places.processes }), settings: places.settings, member: places.member }
-
-/**
- * `worktree_open` and `worktree_finish`, or the refusal of a place that can act in none (martha#256). The slice's
- * own answer keeps the told/refused split, and it is carried through as it is: wrapping every string as `{ answer }`
- * would hand a member a refusal — a dirty worktree, an unpushed commit, another member's branch — as a success.
- */
-async function aWorktreeTool(
-  places: CrewToolPlaces,
-  act: (request: WorktreesRequest, args: Readonly<Record<string, unknown>>) => Promise<WorktreeAnswer>,
-  args: Readonly<Record<string, unknown>>,
-): Promise<CoreToolAnswer> {
-  const request = worktreesOf(places)
-  return request === null ? { refused: NO_ACTING_PLACE } : theWorktreeToolOver(request, act, args)
-}
+/** What the two worktree tools are given, or the refusal of a place that holds no processes or no declaration (martha#256). */
+const worktreesOf = (places: CrewToolPlaces): WorktreesRequest | { readonly refused: string } =>
+  places.processes === undefined || places.settings === undefined ? { refused: NO_ACTING_PLACE } : { host: actingHost({ ...places, processes: places.processes }), settings: places.settings, member: places.member }
 
 /**
  * Changes the member's row by this session's own fields, applied to the row the store holds at the door: the model is
