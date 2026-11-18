@@ -12,7 +12,7 @@ import { test, type TestContext } from 'node:test'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theRowWithNothingSaid, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { aFolderOfTheScan } from './tell_the_owner_the_workspace_drift.ts'
+import { aFolderOfTheScan, aTickOfTheRowsWork } from './tell_the_owner_the_workspace_drift.ts'
 
 const MEMBER = 'Hygiea'
 
@@ -126,4 +126,10 @@ test("a line another writer put in the row is left alone, and the scan's line wa
   beats.change(MEMBER, (held) => (held === null ? null : { ...held, needs: '' }))
   folder()
   assert.equal(theRowOf(dashboard)?.needs, 'the workspace drifts from its layout: one clone is off its branch')
+})
+
+test('one tick folds both halves: the misses a guard left, and the scan', () => {
+  const ran: string[] = []
+  aTickOfTheRowsWork(() => void ran.push('the misses'), () => void ran.push('the scan'))()
+  assert.deepEqual(ran, ['the misses', 'the scan'], 'a tick that skipped one half would read as a clean row')
 })
