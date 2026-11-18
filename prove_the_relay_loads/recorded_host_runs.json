@@ -50,5 +50,11 @@
     "name_pattern": "the control shows the text the table says a host attaches",
     "cases": 1,
     "proves": "which instruction text a host attaches to a member's session: the control shows the ownership table's texts, and a session Martha starts shows none of them (martha#165)"
+  },
+  {
+    "file": "src/drive_the_recorded_host/a_muted_bell_on_the_recorded_host.node-test.ts",
+    "name_pattern": "the owner's mute silences a launched member",
+    "cases": 1,
+    "proves": "the owner's mute silences one member's bell on the terminal it rings on, and the same member unmuted rings (martha#371)"
   }
 ]
