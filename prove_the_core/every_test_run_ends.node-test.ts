@@ -4,12 +4,13 @@
 
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { escaped, manifestOf, PACKAGES, type Manifest } from './declared_in_package_json.ts'
 import { leakReportOf, leftBehind, leftoverReportOf, leftRunning, NEVER_LEFT_IN_THE_TEMP_DIRECTORY } from './every_test_file_cleans_up.ts'
 import {
@@ -175,7 +176,7 @@ for (const folder of PACKAGES) {
     // The planted run gets a temp directory of its own, removed whole after `t`: what it leaves is gone, and nothing in
     // the shared temp directory is touched. A link there of the same prefix may be another run's, live (martha#724).
     const temp = mkdtempSync(join(tmpdir(), 'martha-724-planted-run-'))
-    t.after(() => rmSync(temp, { recursive: true, force: true }))
+    t.after(() => removeTheTree(temp))
     const { ended, output, flags } = await runWithTheScriptsFlags(t, folder, [LEAVES_A_LINK, REMOVES_ITS_LINK], temp)
 
     assert.notEqual(ended, 'hung', `the run did not end within ${RUN_DEADLINE_MS} ms with the flags ${JSON.stringify(flags)}`)
