@@ -109,7 +109,7 @@
       "src/approve_a_checkouts_config": 69,
       "src/ask_the_host_what_it_loads": 292,
       "src/claude_code_host": 480,
-      "src/read_what_claude_code_says_of_an_agent": 117,
+      "src/read_what_claude_code_says_of_an_agent": 115,
       "src/read_what_claude_code_records_of_its_tools": 64,
       "src/watch_the_crew_tools_a_launch_served": 94,
       "src/read_one_file_held_by_its_descriptor": 111,

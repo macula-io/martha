@@ -55,6 +55,7 @@ import type {
 } from '../host_contract/host_contract.ts'
 import type { LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import {
+  keepTheModelAReviewResolvedTo,
   nameTheFailedReviewIn,
   type TheReportTheHostWrites,
   type TheReviewSpawns,
@@ -126,7 +127,7 @@ export interface ThePlacesAHostReportsOver {
     | {
         callAllowed(tool: string, input: Readonly<Record<string, unknown>>): void
         /** The receipt a call's answer takes (martha#129): single use, and `why` undefined when the answer is exactly the one it builds. */
-        callAnswered?(tool: string, input: Readonly<Record<string, unknown>>, answer: unknown): { readonly why: string | undefined } | undefined
+        callAnswered(tool: string, input: Readonly<Record<string, unknown>>, answer: unknown): { readonly why: string | undefined } | undefined
       }
     | undefined
   /**
@@ -514,12 +515,10 @@ function noteWhatTheResultAnswered(
   session_id: string,
   result: AResultOfACall,
 ): { readonly answering: string | undefined; readonly kept: { readonly why: string | undefined } | undefined } {
-  if (result.call_id !== undefined && result.resolved_model !== undefined && places.reviews.theSpawn(result.call_id) !== undefined) {
-    places.reviews.resolved(result.call_id, result.resolved_model)
-  }
+  keepTheModelAReviewResolvedTo(places.reviews, result.call_id, result.resolved_model)
   places.crew?.noteTheCallsAnswer({ tool: result.tool, input: result.input, answer: result.answer }, session_id)
   const answering = noteTheAgentsAnsweredCall(places.agents, result)
-  return { answering, kept: places.signed_runs?.callAnswered?.(result.tool, result.input, result.answer) }
+  return { answering, kept: places.signed_runs?.callAnswered(result.tool, result.input, result.answer) }
 }
 
 /** A turn the host never raised as a prompt, kept in its session's record (martha#440); false when it was not kept. */

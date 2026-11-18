@@ -16,7 +16,7 @@ import { test, type TestContext } from 'node:test'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { holdingTheEnds } from '../end_a_running_turn/hold_the_end.ts'
-import type { AResultOfACall, ToolNames } from '../host_contract/host_contract.ts'
+import { ROW_NOT_DURABLE, type AResultOfACall, type RowStore, type ToolNames } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
@@ -88,6 +88,8 @@ interface AnEntry {
   readonly seen: Seen
   readonly reviews: TheReviewSpawns
   readonly agents: TheRunTable
+  /** From now on, every row the record appends is refused as not known to be durable (martha#541, PR 3 review). */
+  refuseEveryRow(): void
 }
 
 function anEntry(t: TestContext, does: TheLaunchDoes = {}): AnEntry {
@@ -101,8 +103,17 @@ function anEntry(t: TestContext, does: TheLaunchDoes = {}): AnEntry {
   const seen: Seen = { steps: [] }
   const reviews = reviewSpawnsRemembered()
   const agents = agentRunsKept()
+  const real = rowStreamsDirectory(rows)
+  let refusing = false
+  const store: RowStore = {
+    read: (stream) => real.read(stream),
+    append: async (stream, row, expected) => {
+      if (!refusing) return real.append(stream, row, expected)
+      throw Object.assign(new Error('the row is in the stream and not known to be durable'), { code: ROW_NOT_DURABLE })
+    },
+  }
   const answers = answersOver({
-    records: sessionRecordsIn(rowStreamsDirectory(rows)),
+    records: sessionRecordsIn(store),
     launch: { host: CLAUDE_CODE, launch_dir: checkout, stop_dir: home, approved_fingerprints: [] },
     machine: thisMachine,
     binder: bindNothing,
@@ -135,7 +146,7 @@ function anEntry(t: TestContext, does: TheLaunchDoes = {}): AnEntry {
       },
     },
   })
-  return { answers, seen, reviews, agents }
+  return { answers, seen, reviews, agents, refuseEveryRow: () => void (refusing = true) }
 }
 
 const aResult = (over: Partial<AResultOfACall> = {}): AResultOfACall => ({
@@ -266,6 +277,16 @@ test('#541 3: an agent that stops vouched for records nothing; one never seen to
 
   assert.deepEqual(await answers.anAgentStopped({ session_id: 'session-a', agent_id: 'agent-2' }), { taken: 1 })
   assert.equal(recordedIn(answers, 'session-a').length, before.length + 1, 'an unvouched agent’s answer was not recorded')
+})
+
+test('#541 3: an unvouched agent whose answer cannot be recorded is refused with why, never taken', async (t) => {
+  const { answers, refuseEveryRow } = anEntry(t)
+  await started(answers)
+  refuseEveryRow()
+
+  const answer = await answers.anAgentStopped({ session_id: 'session-a', agent_id: 'agent-2' })
+
+  assert.ok('refused' in answer && answer.refused.includes(ROW_NOT_DURABLE), `an unrecorded agent's answer was answered ${JSON.stringify(answer)}`)
 })
 
 test('#541 3: an agent of a session never started is refused by name', async (t) => {

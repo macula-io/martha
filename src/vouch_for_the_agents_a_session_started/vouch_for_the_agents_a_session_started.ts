@@ -140,11 +140,12 @@ export function noteTheAgentsCall(runs: TheRunTable, session_id: string, body: B
   return agent_id
 }
 
-/** That same call, answered here, back with the agent it belonged to (martha#170). */
+/** That same call, answered here, back with the agent it belonged to (martha#170): `noteTheAgentsAnsweredCall`, from a body. */
 export function noteAnAgentsAnswer(runs: TheRunTable, body: Body): string | undefined {
-  const agent_id = agentIdOf((body['call'] ?? {}) as Body)
-  if (agent_id !== undefined) noteCallAnswered(runs, agent_id, body['call'])
-  return agent_id
+  const call = (body['call'] ?? {}) as Body
+  const agent_id = agentIdOf(call)
+  const call_id = isText(call['tool_use_id']) ? call['tool_use_id'] : undefined
+  return noteTheAgentsAnsweredCall(runs, { ...(agent_id === undefined ? {} : { agent_id }), ...(call_id === undefined ? {} : { call_id }) })
 }
 
 /**
