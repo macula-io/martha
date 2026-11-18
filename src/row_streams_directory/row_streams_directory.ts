@@ -28,6 +28,10 @@
 //   - THE DIRECTORIES ARE CLOSED. The rows directory and every stream directory
 //     are real directories, owned by this user, that nobody else may write into.
 //
+// Each entry of a listing of the rows directory must be decoded with
+// `streamOfDirectoryName` to read the stream it holds; mapping it over the listing
+// yields the streams, while a staging entry or anything else falls out as undefined.
+//
 // The checks are speed bumps, not a boundary: every member runs as the same OS
 // user that owns these files (A13, closed by the signed roster, martha#24).
 
