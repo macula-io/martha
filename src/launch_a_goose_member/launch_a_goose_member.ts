@@ -35,12 +35,16 @@
 // GOOSE_SUBAGENT_PROVIDER, which the engine reads before the session's own model (martha#541 package 6,
 // Neptunus's scope item 1), out of a launch: a variable the launcher does not name cannot reach the
 // engine, whatever the owner's shell holds. It also means no config key's environment variable can
-// override the config root, which wins over the file.
+// override the config root, which wins over the file. The same two keys cannot come in through the config
+// either: the only settings written into the root are the ones the model declaration names for its
+// provider, and a setting under the engine's own prefix — the prefix the root variable carries — is
+// refused rather than written.
 //
 // A launch ends by killing the engine's process group, so the engine and every tool server it started
 // go together (trial line 7), and then reading the permission store: the engine saves a permission under
-// the root when a client answers `allow_always` or `reject_always`, and a later call then skips the
-// client, so a launch that ends with anything saved is a launch Martha did not gate.
+// the root's own config folder, beside its config file, when a client answers `allow_always` or
+// `reject_always`, and a later call then skips the client, so a launch that ends with anything saved is a
+// launch Martha did not gate. A store in a shape this launcher does not know is not read as an empty one.
 //
 // Two gaps are named here rather than closed, and neither is silent:
 //   - Skills. On the pinned build `load_skill` is offered to every session and is not a platform
@@ -82,11 +86,14 @@ export const THE_CONFIG_FOLDER = 'config'
 /** The config file the engine reads from that folder. */
 export const THE_CONFIG_FILE = 'config.yaml'
 
-/** The folder under the path root the engine keeps saved permissions in. */
+/** The folder under the engine's config folder it keeps saved permissions in (the trial found the store there). */
 export const THE_PERMISSION_FOLDER = 'permissions'
 
 /** The store the engine saves a permission in, and reads one from before it asks the client. */
 export const THE_PERMISSION_STORE = 'tool_permissions.json'
+
+/** The one key the store's saved permissions sit under: the thing a store holding a rule has, and an empty one lacks. */
+const THE_STORES_PERMISSIONS_KEY = 'permissions'
 
 /** The folder under the launch root a launch's own root is made as, and the one its home is. */
 export const THE_ROOT_OF_A_LAUNCH = 'goose-root'
@@ -180,6 +187,16 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
     aLine(`  ${extension.key}`, ''),
     aLine('    enabled', extension.key === THE_EXTENSION_A_MEMBER_KEEPS),
   ])
+  // A provider's own settings are what the model declaration names for its endpoint. A setting under the
+  // engine's own prefix is the engine's, read before the session's model: the subagent model and provider
+  // live there, and either one set in this root moves a delegate's model without Martha naming it
+  // (martha#541 package 6, Neptunus's scope item 1). The launch's environment is built from nothing, so
+  // no such variable can reach the engine either; this closes the config root the same way.
+  const enginePrefix = theEnginesOwnPrefix(facts)
+  const borrowed = Object.keys(model.settings).find((setting) => setting.startsWith(enginePrefix))
+  if (borrowed !== undefined) {
+    throw new Error(`a provider setting ${borrowed} carries the engine's own prefix ${enginePrefix}, and only the engine's settings the launcher derives are written to its config root`)
+  }
   return [
     aLine(THE_PROVIDER_SETTING, model.provider),
     aLine(THE_MODEL_SETTING, model.model),
@@ -196,6 +213,12 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
 
 /** A key of the config, indentation included: a word, so no key can start a line of its own. */
 const A_WORD_OF_A_KEY = /^[A-Za-z0-9_-]+$/
+
+/** The prefix the engine's own settings carry, from the variable that moves its root: `GOOSE_` from `GOOSE_PATH_ROOT`. */
+function theEnginesOwnPrefix(facts: RecordedEngine): string {
+  const variable = facts.path_root_variable
+  return variable.slice(0, variable.indexOf('_') + 1)
+}
 
 /** One line of the config: a key and its value, a string quoted so no character of it starts a new one. */
 function aLine(key: string, value: string | boolean): string {
@@ -258,26 +281,48 @@ export async function startTheEngine(facts: RecordedEngine, binary: string, plac
 export type ThePermissionStoreRead = { readonly empty: true } | { readonly empty: false; readonly refusal: string }
 
 /**
- * Whether the permission store under `root` is still empty: the file was never written, or it holds no
- * rule at all. Anything else is a refusal naming the store, since a saved permission lets a later call
- * skip Martha entirely.
+ * Whether the permission store of the launch at `root` is still empty: the file was never written, or it
+ * holds no saved rule at all. The store sits under the engine's own config folder, beside its config file
+ * (`config/permissions/tool_permissions.json`), as the trial found it. Anything else is a refusal naming
+ * the store, since a saved permission lets a later call skip Martha entirely, and a store in a shape this
+ * reader does not know is not read as empty.
  */
 export function thePermissionStoreIsStillEmpty(root: string): ThePermissionStoreRead {
-  const store = join(root, THE_PERMISSION_FOLDER, THE_PERMISSION_STORE)
+  const store = thePermissionStoreOf(root)
   let written: string
   try {
     written = readFileSync(store, 'utf8')
   } catch {
     return { empty: true }
   }
+  const refused = (why: string): ThePermissionStoreRead => ({
+    empty: false,
+    refusal: `The member's launch ended with a permission store that ${why} at ${store}, and a saved permission lets a later tool call skip the gate.`,
+  })
   let held: unknown
   try {
     held = JSON.parse(written)
   } catch (error) {
-    return { empty: false, refusal: `The member's launch ended with a permission store that cannot be read at ${store} (${error instanceof Error ? error.message : String(error)}), and a saved permission lets a later tool call skip the gate.` }
+    return refused(`cannot be read (${error instanceof Error ? error.message : String(error)})`)
   }
-  if (held === null || typeof held !== 'object' || Object.keys(held).length === 0) return { empty: true }
-  return { empty: false, refusal: `The member's launch ended with a saved permission in ${store}, and a saved permission lets a later tool call skip the gate.` }
+  if (held === null || typeof held !== 'object' || Array.isArray(held)) return refused('is not an object')
+  const keys = Object.keys(held)
+  if (keys.length === 0) return { empty: true }
+  if (keys.length !== 1 || keys[0] !== THE_STORES_PERMISSIONS_KEY) return refused(`holds what this reader does not know`)
+  const saved = (held as Record<string, unknown>)[THE_STORES_PERMISSIONS_KEY]
+  if (saved === null || typeof saved !== 'object' || Array.isArray(saved)) return refused(`holds what this reader does not know`)
+  const rules = Object.values(saved as Record<string, unknown>).flatMap((entries) => (Array.isArray(entries) ? entries : [entries]))
+  return rules.length === 0 ? { empty: true } : refused(`holds a saved permission`)
+}
+
+/** The store of the launch whose path root is `root`: under the engine's config folder, beside its config file. */
+export function thePermissionStoreOf(root: string): string {
+  return join(root, THE_CONFIG_FOLDER, THE_PERMISSION_FOLDER, THE_PERMISSION_STORE)
+}
+
+/** The config file of the launch whose path root is `root`: the one the launcher writes for it. */
+export function theConfigFileOf(root: string): string {
+  return join(root, THE_CONFIG_FOLDER, THE_CONFIG_FILE)
 }
 
 /** One launch of a Goose member, as it runs. */
@@ -334,7 +379,7 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
   } catch (error) {
     return leaveNothingBehind(error instanceof Error ? error.message : String(error))
   }
-  const config_at = join(places.root, THE_CONFIG_FOLDER, THE_CONFIG_FILE)
+  const config_at = theConfigFileOf(places.root)
   try {
     mkdirSync(join(places.root, THE_CONFIG_FOLDER), { mode: A_LAUNCHS_FOLDERS_MODE })
     writeFileSync(config_at, config, { mode: FILE_MODE, flag: 'wx' })

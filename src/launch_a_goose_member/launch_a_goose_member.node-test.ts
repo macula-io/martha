@@ -7,27 +7,28 @@
 // test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
+  A_LAUNCHS_FOLDERS_MODE,
   THE_EXTENSION_A_MEMBER_KEEPS,
   THE_EXTENSIONS_SETTING,
   THE_MODE_THAT_ASKS_THE_CLIENT,
   THE_MODEL_SETTING,
   THE_PATH_A_LAUNCH_GIVES,
-  THE_PERMISSION_FOLDER,
-  THE_PERMISSION_STORE,
   THE_PROVIDER_SETTING,
   launchTheGooseEngine,
   startTheEngine,
+  theConfigFileOf,
   theConfigOfALaunch,
   theEnvironmentOfALaunch,
   thePermissionStoreIsStillEmpty,
+  thePermissionStoreOf,
   thePlacesOfALaunch,
 } from './launch_a_goose_member.ts'
 
@@ -131,6 +132,16 @@ test('a key that is not a word cannot start a line of the config of its own, and
   assert.throws(() => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { A_SETTING_A_TEST_NAMES: 'a value\nwith a line of its own' } }))
 })
 
+test('a provider setting under the engine\'s own prefix is refused, so the subagent model cannot be written into the config root (martha#541)', () => {
+  // The engine's own settings carry the prefix of the variable that moves its root, and the subagent model
+  // and provider are among them: either one written here would move a delegate's model without Martha naming it.
+  const enginesOwn = FACTS.path_root_variable.split('_')[0] ?? ''
+  assert.throws(
+    () => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { [`${enginesOwn}_A_SETTING_A_TEST_NAMES`]: 'a-value-a-test-names' } }),
+    new RegExp(`${enginesOwn}_A_SETTING_A_TEST_NAMES`),
+  )
+})
+
 test('the launch gets a root and a home of its own, made new and 0700, and neither is reused (martha#541)', (t) => {
   const { root, checkout } = aLaunchRoot(t)
   const made = thePlacesOfALaunch(root, checkout)
@@ -138,6 +149,8 @@ test('the launch gets a root and a home of its own, made new and 0700, and neith
   assert.equal(existsSync(made.places.root), true)
   assert.equal(existsSync(made.places.home), true)
   assert.notEqual(made.places.root, made.places.home)
+  // Only this user may read either one, and nobody may write into one.
+  for (const folder of [made.places.root, made.places.home]) assert.equal(statSync(folder).mode & 0o777, A_LAUNCHS_FOLDERS_MODE, `${folder} is not only this user's`)
   const again = thePlacesOfALaunch(root, checkout)
   assert.equal('refusal' in again, true, 'a launch root and home are made new, never reused')
 
@@ -156,22 +169,30 @@ test('the environment holds the path root, the home and a narrow PATH, and nothi
   assert.equal(environment['PATH'], THE_PATH_A_LAUNCH_GIVES)
 })
 
-test('the permission store is empty when it was never written or holds nothing, and says what it holds when it does (martha#541)', (t) => {
+test('the permission store sits in the engine\'s config folder beside its config file, and is empty only when it holds no saved rule (martha#541)', (t) => {
   const { root, checkout } = aLaunchRoot(t)
   const made = thePlacesOfALaunch(root, checkout)
   assert.ok('places' in made)
   assert.deepEqual(thePermissionStoreIsStillEmpty(made.places.root), { empty: true })
+  // The store is found where the engine keeps it, under the same config folder as the config file the
+  // launcher writes: a launcher reading a store somewhere else would find nothing and call every launch gated.
+  assert.equal(dirname(theConfigFileOf(made.places.root)), dirname(dirname(thePermissionStoreOf(made.places.root))))
 
-  const store = join(made.places.root, THE_PERMISSION_FOLDER, THE_PERMISSION_STORE)
-  mkdirSync(join(made.places.root, THE_PERMISSION_FOLDER))
-  writeFileSync(store, '{}\n')
+  const store = thePermissionStoreOf(made.places.root)
+  mkdirSync(dirname(store), { recursive: true })
+  // An empty store in the shape the engine writes, and an absent one, are both empty.
+  writeFileSync(store, `${JSON.stringify({ permissions: {} })}\n`)
   assert.deepEqual(thePermissionStoreIsStillEmpty(made.places.root), { empty: true })
 
-  writeFileSync(store, `${JSON.stringify({ 'a-tool-a-test-names': 'an-answer-a-test-names' })}\n`)
+  writeFileSync(store, `${JSON.stringify({ permissions: { 'a-tool-a-test-names': ['an-answer-a-test-names'] } })}\n`)
   const held = thePermissionStoreIsStillEmpty(made.places.root)
   assert.equal(held.empty, false)
   assert.match(held.empty ? '' : held.refusal, new RegExp(store.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
 
+  // A store in a shape this reader does not know is not read as empty: a rule it failed to see would let
+  // a later call skip the gate.
+  writeFileSync(store, `${JSON.stringify({ 'a-tool-a-test-names': 'an-answer-a-test-names' })}\n`)
+  assert.equal(thePermissionStoreIsStillEmpty(made.places.root).empty, false, 'a store holding something else was read as empty')
   writeFileSync(store, 'a store this test made unreadable\n')
   const unreadable = thePermissionStoreIsStillEmpty(made.places.root)
   assert.equal(unreadable.empty, false, 'a store that cannot be read is not an empty one')
@@ -230,8 +251,8 @@ test('the engine runs in its own process group, with the launch\'s own root, hom
   assert.equal(environment['HOME'], made.places.home)
   assert.equal(environment['PATH'], THE_PATH_A_LAUNCH_GIVES)
   assert.equal(environment[FACTS.path_root_variable], made.places.root)
-  // Whatever prefix the engine's own path root variable carries, no other variable of the owner's with it reaches the engine.
-  const prefix = FACTS.path_root_variable.slice(0, FACTS.path_root_variable.lastIndexOf('_') + 1)
+  // Whatever prefix the engine's own settings carry, no other variable of the owner's with it reaches the engine.
+  const prefix = FACTS.path_root_variable.slice(0, FACTS.path_root_variable.indexOf('_') + 1)
   assert.deepEqual(Object.keys(environment).filter((key) => key.startsWith(prefix)), [FACTS.path_root_variable])
   assert.equal(environment['MARTHA_A_LAUNCH_TEST_ONLY'], undefined, 'an inherited variable reached the engine')
 
