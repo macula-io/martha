@@ -74,7 +74,14 @@ async function refusalOf(fixture: Fixture, tool: string, input: Readonly<Record<
 
 test('a shell line that names its directory and moves a clone off its branch is refused', async (t) => {
   const fixture = aWorkspace(t)
-  assert.match((await refusalOf(fixture, CLAUDE_CODE_SHELL_TOOL, { command: `cd ${fixture.clone} && git checkout main` })) ?? '', /a clone stays on its default branch/)
+  // A branch the clone has that is not the one it starts on: the switch the rule is about.
+  gitIn(fixture.clone, 'branch', 'feature/widget')
+  assert.match(
+    (await refusalOf(fixture, CLAUDE_CODE_SHELL_TOOL, { command: `cd ${fixture.clone} && git checkout feature/widget` })) ?? '',
+    /a clone stays on its default branch/,
+  )
+  // A switch back to the branch the clone starts on is the call that puts a drifted clone right, and passes (martha#584).
+  assert.equal(await refusalOf(fixture, CLAUDE_CODE_SHELL_TOOL, { command: `cd ${fixture.clone} && git checkout main` }), undefined)
   // The same line, with no directory named, is asked nowhere and passes: the relay does not know where the shell runs.
   assert.equal(await refusalOf(fixture, CLAUDE_CODE_SHELL_TOOL, { command: 'git checkout main' }), undefined)
 })

@@ -326,8 +326,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     ...(request.hear_relay_place === undefined ? {} : { hearRelayPlace: request.hear_relay_place }),
     turns,
     crew_tools: (sessions, member) =>
-      crewToolsOver({
-        ...theGitGuardPlaceOf(ready.settings, request.member),
+      crewToolsOver({ ...theGitGuardPlaceOf(ready.settings, request.member),
         member: request.member,
         ledger: channel,
         beats: dashboardRowsIn(request.places.dashboard),
