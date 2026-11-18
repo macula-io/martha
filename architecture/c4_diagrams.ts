@@ -634,6 +634,18 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it',
   },
   {
+    name: 'record_the_goose_engine',
+    why: 'a script run by hand, npm run record:goose-engine, when the Goose engine moves to a new version (martha#541); the daily engine drift job runs its --check, and no member ever loads it',
+  },
+  {
+    name: 'know_the_goose_engines_facts',
+    why: "the Goose engine's facts as recorded from its source, and the reader that takes them (martha#541); only the recorder and the model stand-in load it until the Goose adapter is built",
+  },
+  {
+    name: 'stand_in_for_an_openai_model',
+    why: 'a model behind an OpenAI-compatible URL, answered from a script, for runs of the Goose engine with no model (martha#541); tests and npm run stand-in:openai-model load it, and no member ever does',
+  },
+  {
     name: 'check_no_member_outlives_its_run',
     why: 'a script run by hand, npm run check:no-member-outlives-its-run, over this machine\'s /proc; find_a_member_a_run_left_behind is what it reads with, and martha ls shows the same lines without loading the program',
   },
