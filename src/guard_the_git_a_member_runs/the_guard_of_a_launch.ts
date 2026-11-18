@@ -31,6 +31,7 @@ import { MARTHAS_OWN_GIT_SETTINGS } from '../run_marthas_own_git/run_marthas_own
 import type { TheHooksALaunchRuns } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theRowWithTheLine, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { theMissesLine } from '../guard_workspace/guard_workspace.ts'
 
 /** The folder inside a launch's relay directory that holds the shim, the judge and what the judge is given. */
 export const THE_GUARD_DIRECTORY_NAME = 'git-guard'
@@ -262,35 +263,6 @@ export function aFolderOfTheMisses(misses: string, member: string, beats: Dashbo
   let folded = NOTHING_FOLDED_YET
   return () => {
     folded = foldTheMisses({ misses, folded }, { beats, member, at: Date.now() })
-  }
-}
-
-/** The line the row is told for the misses just read, in the owner's words: how many, and the last one's own reason. */
-export function theMissesLine(misses: readonly string[]): string {
-  const last = whatAMissSays(misses[misses.length - 1] ?? '')
-  const calls = misses.length === 1 ? 'one git call' : `${String(misses.length)} git calls`
-  const them = misses.length === 1 ? 'it' : 'them'
-  const which = misses.length === 1 && last.what !== '' ? `: ${last.what}` : ''
-  const why = last.why === '' ? '' : ` (${last.why})`
-  return `the workspace guard could not judge ${calls}${why} and let ${them} run${which}`
-}
-
-/** What one line of the misses file says, as the judge wrote it; a line that cannot be read is its own reason. */
-function whatAMissSays(line: string): { readonly what: string; readonly why: string } {
-  const said = theMissTheLineHolds(line)
-  // A whole line that is not what the judge writes is still a miss, and its own text is the reason it is one.
-  return said ?? { what: '', why: line.trim() }
-}
-
-/** The miss a line holds, or undefined when the line is not one the judge wrote. */
-function theMissTheLineHolds(line: string): { readonly what: string; readonly why: string } | undefined {
-  try {
-    const said: unknown = JSON.parse(line)
-    if (typeof said !== 'object' || said === null || Array.isArray(said)) return undefined
-    const { what, why } = said as Record<string, unknown>
-    return typeof what === 'string' && typeof why === 'string' ? { what, why } : undefined
-  } catch {
-    return undefined
   }
 }
 

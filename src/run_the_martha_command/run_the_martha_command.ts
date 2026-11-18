@@ -110,7 +110,7 @@ function placesOf(io: CommandIo): Places | string {
   if (home === undefined) return 'HOME is not set to an absolute path, so Martha cannot tell where your home is.'
   const root = gitSays(io.cwd, 'rev-parse', '--show-toplevel')
   if (root === undefined) return `${io.cwd} is not inside a git checkout. Run martha in the checkout your crew works in.`
-  const state_root = stateRootOf(home, absolute(io.env['XDG_STATE_HOME']))
+  const state_root = stateRootOf(home, io.env['XDG_STATE_HOME'])
   const state = openState(state_root, root)
   return 'refusal' in state ? state.refusal : { root, home, state }
 }
@@ -576,7 +576,7 @@ const isAnOwnersOwnAct = (asked: Asked, act: ((io: CommandIo, places: Places, as
  * a refusal too, since what cannot be read cannot clear the act.
  */
 function theMemberThisRunsInside(io: CommandIo, places: Places, act: string): string | undefined {
-  const records = launchRecordsUnder(THE_PLACES_A_STATE_ROOT_KEEPS)(places.home, absolute(io.env['XDG_STATE_HOME']))
+  const records = launchRecordsUnder(THE_PLACES_A_STATE_ROOT_KEEPS)(places.home, io.env['XDG_STATE_HOME'])
   if ('cannot_tell' in records) return `martha ${act} cannot tell whether it runs inside a member: ${records.cannot_tell}`
   return whyAnOwnersActIsRefusedInsideAMember({
     act,
@@ -601,7 +601,11 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),
 }
 
-/** The owner's terminal on this process's standard input; questions are asked on stderr. */
+/**
+ * Whether this process's standard input is a terminal; questions are asked on stderr. A speed bump, not proof that the
+ * owner typed this: a member's shell can make a terminal of its own (martha#619), so an owner-only act also asks
+ * ../refuse_an_owner_act_from_inside_a_member, and that is a speed bump too.
+ */
 export const terminalOfThisProcess: OwnersTerminal = {
   is_terminal: isatty(0),
   ask: async (question) => {

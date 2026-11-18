@@ -5,7 +5,7 @@
 // a string. The fields read are declared once, so the core's check (prove_the_core/no_host_bundle_read_in_the_core.ts)
 // names a core slice that reads one of them itself.
 
-import type { TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
+import { keepTheModelAReviewResolvedTo, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 
 /** The field of an Agent call's result that names the model the agent really ran on. */
 export const RESOLVED_MODEL = 'resolvedModel'
@@ -25,10 +25,9 @@ export function resolvedModelIn(answer: unknown): string | undefined {
 
 /**
  * Keeps the model the host said a kept review call resolved to (martha#390): the call's answer carries the agent's own
- * model, and that — never a name out of the host's prose — is what a line about the review names it by.
+ * model, and that — never a name out of the host's prose — is what a line about the review names it by. The rule is the
+ * core's (`keepTheModelAReviewResolvedTo`), which the entry keeps a result's model by too (martha#541, PR 3).
  */
 export function keepWhatTheReviewResolvedTo(reviews: TheReviewSpawns, call_id: string | undefined, answer: unknown): void {
-  if (call_id === undefined || reviews.theSpawn(call_id) === undefined) return
-  const resolved = resolvedModelIn(answer)
-  if (resolved !== undefined) reviews.resolved(call_id, resolved)
+  keepTheModelAReviewResolvedTo(reviews, call_id, resolvedModelIn(answer))
 }

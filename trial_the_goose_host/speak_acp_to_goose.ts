@@ -94,6 +94,21 @@ export class GooseOverAcp {
     const out = child.stdout as Readable
     out.setEncoding('utf8')
     out.on('data', (chunk: string) => this.#read(chunk))
+    // The pipe's end is when everything written has been read: a message the kill cut off before its newline is
+    // still in the buffer, and this keeps it (martha#694). Chunks can still be in flight when the child's exit is
+    // seen, so this event is the right signal and the explicit close below is the fallback.
+    out.on('end', () => this.closeTheExchange())
+  }
+
+  /**
+   * The rest of the exchange: what arrived without a trailing newline, kept when the pipe ends or the launch is
+   * killed. A line the kill cut off usually does not parse, so it is kept as its text, like any line that is not
+   * JSON — that is the right record of a message cut off. Keeps nothing twice: the buffer is emptied either way.
+   */
+  closeTheExchange(): void {
+    const rest = this.#buffered.trim()
+    this.#buffered = ''
+    if (rest !== '') this.#handleLine(rest)
   }
 
   /** One request, answered by the agent, whatever it is. */

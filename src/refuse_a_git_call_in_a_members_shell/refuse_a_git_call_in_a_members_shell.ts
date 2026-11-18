@@ -15,31 +15,21 @@
 // slice may not name it (../claude_code_host imports are an adapter's business).
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import type { CrewSettings } from '../declare_crew/declare_crew.ts'
-import type { HostContract } from '../host_contract/host_contract.ts'
+import type { CrewStore, TheFilesAndProcesses } from '../host_contract/host_contract.ts'
 import { askGitWhatAMemberIsAboutToChange } from '../ask_git_what_a_member_is_about_to_change/ask_git_what_a_member_is_about_to_change.ts'
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import { readTheGitCallsInAShellLine } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 
 /** The call to judge: the host's tool and its input, the member making it, the crew's places, and a host to ask git. */
 export interface AToolCallToGuard {
-  readonly host: Pick<HostContract, 'processes'>
+  readonly host: TheFilesAndProcesses
   readonly workspace: TheWorkspace
   readonly member: string
   /** The name the host gives the tool it is reporting, and the arguments the member's model was given for it. */
   readonly tool: string
   readonly input: Readonly<Record<string, unknown>>
-}
-
-/**
- * The places the crew declared for its clones and worktrees, with its members' names; undefined when it turned no
- * workspace layout on. A crew that declared none is guarded by nothing: the guard refuses breaks of a layout, and
- * there is none to break.
- */
-export function theWorkspaceTheCrewDeclared(settings: CrewSettings): TheWorkspace | undefined {
-  const { workspace_layout: on, clones, worktrees } = settings.house_rules
-  if (on !== true || clones === null || worktrees === null) return undefined
-  return { clones, worktrees, members: settings.members.map((member) => member.name) }
+  /** The crew's own store, where what the member's last launch left is kept: a commit carrying it is refused (#693). */
+  readonly leftovers?: CrewStore
 }
 
 /** The line the member's shell is about to run, when the call is that shell's and it names one. */
@@ -59,5 +49,5 @@ export async function refuseAGitCallInAMembersShell(call: AToolCallToGuard): Pro
   if (line === undefined) return undefined
   const calls = readTheGitCallsInAShellLine(line)
   if (calls.length === 0) return undefined
-  return askGitWhatAMemberIsAboutToChange({ host: call.host, calls, workspace: call.workspace, member: call.member })
+  return askGitWhatAMemberIsAboutToChange({ host: call.host, calls, workspace: call.workspace, member: call.member, ...(call.leftovers === undefined ? {} : { leftovers: call.leftovers }) })
 }

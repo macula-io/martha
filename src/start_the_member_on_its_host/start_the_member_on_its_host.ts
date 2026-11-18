@@ -50,7 +50,7 @@ import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_d
 import { finishTheOwnersDefaultAtLaunch, type OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { turnsRaised } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import type { SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { theWorkspaceTheCrewDeclared } from '../refuse_a_git_call_in_a_members_shell/refuse_a_git_call_in_a_members_shell.ts'
+import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
 import { theGitGuardPlacesOf, type TheGitGuardPlaces } from '../guard_the_git_a_member_runs/the_git_guard_places_of_a_crew.ts'
 
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
@@ -260,8 +260,8 @@ function signedShapeNames(state: MarthaState): readonly string[] {
  * call the `git` on a member's PATH is handed judged, and every ref a transaction deletes read for whose branch it is.
  * No layout declared, nothing is judged, and the crew's tools are handed no guard at all.
  */
-function theGitGuardPlaceOf(settings: CrewSettings, member: string): TheGitGuardPlaces {
-  return theGitGuardPlacesOf(theWorkspaceTheCrewDeclared(settings), member, thisMachine) ?? {}
+function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: CrewStore): TheGitGuardPlaces {
+  return theGitGuardPlacesOf(theWorkspaceTheCrewDeclared(settings), member, thisMachine, leftovers) ?? {}
 }
 
 /** The Claude Code entry: today's launch, unchanged in behaviour, behind the table. */
@@ -269,7 +269,6 @@ async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted>
   await finishAnySwitchBeforeTheHostStarts(start)
   // One raising for this launch, and one channel carrier: the carrier counts a handed message taken in when the mod
   // reports the member's next main turn started (martha#253).
-  const turns = turnsRaised()
   const channel = start.channel
   return launchClaudeCodeMember({
     member_name: start.member,
@@ -279,15 +278,18 @@ async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted>
     crew_settings: start.settings,
     owner_bell: start.settings.house_rules[OWNER_BELL],
     places: start.places,
+    // The crew's own store and the layout it declared, so this launch's end keeps what a killed command left (#693):
+    // the record the member's next start is told from, and the two refusals judge (a launch given none keeps nothing).
+    leftovers: { crew: start.crew_stores.crew, workspace: theWorkspaceTheCrewDeclared(start.settings) },
     command: start.command,
     args: [...(start.model === null ? [] : [THE_MODELS_SWITCH, start.model]), ...start.args, ...(start.prompt === undefined ? [] : [start.prompt])],
     inherited: start.inherited,
     stdio: start.stdio,
     tellOwner: (line) => start.tellOwner(line),
     ...(start.hear_relay_place === undefined ? {} : { hearRelayPlace: start.hear_relay_place }),
-    turns,
+    turns: turnsRaised(),
     crew_tools: (sessions, member) =>
-      crewToolsOver({ ...theGitGuardPlaceOf(start.settings, start.member),
+      crewToolsOver({ ...theGitGuardPlaceOf(start.settings, start.member, start.crew_stores.crew),
         member: start.member,
         ledger: channel,
         beats: dashboardRowsIn(start.places.dashboard),

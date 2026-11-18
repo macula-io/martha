@@ -149,7 +149,7 @@ function bootOrWhy(proc_root: string): { readonly boot: string } | { readonly wh
   return BOOT_ID_FORM.test(boot) ? { boot } : { why: `${path} holds no boot id` }
 }
 
-function textOrWhy(path: string): { readonly text: string } | { readonly code: string } {
+export function textOrWhy(path: string): { readonly text: string } | { readonly code: string } {
   try {
     return { text: readFileSync(path, 'utf8') }
   } catch (error) {
@@ -196,7 +196,6 @@ export function ancestorsUnder(proc_root: string, pid: number): readonly AProces
 
 /** The session id's place among the fields that follow the command name (field 3 onwards): field 6. */
 const SESSION_AFTER_COMMAND = 6 - 3
-
 /** The session id in one /proc/<pid>/stat line, or null when the line is not one. */
 export function sessionIn(stat: string): number | null {
   const command_end = stat.lastIndexOf(')')

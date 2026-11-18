@@ -34,6 +34,8 @@ import { EMPTY_DIRECTORY_NAME, launchClaudeCodeMember } from '../launch_a_claude
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { hostAnswers } from './host_stand_in.ts'
+import { RELAY_PATHS, RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { readTheNewestRelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
@@ -233,6 +235,51 @@ for (const direnv of direnvs.length === 0 ? [undefined] : direnvs) {
   checkoutTests(direnv, which)
 }
 
+/** The body a stand-in posts for its session's start: the shape the launcher's own tests answer with. */
+const THE_STAND_INS_SESSION_START = { session_id: 'the-stand-ins', source: 'startup', hook_event_name: 'SessionStart', transcript_path: '/nowhere' }
+
+/**
+ * Writes the stand-in host the launcher runs: it answers the host's checks, reports its session's start, then runs the
+ * member's commands. The report is what keeps this test off the launcher's clock (martha#700): the launcher stops a
+ * member whose relay has not reported its session's start within SESSION_START_DEADLINE_MS (martha#104), a bound on
+ * the *host* and never on the member's work — and the member's work here is real npm and git, which on a loaded
+ * machine (a full `npm test` beside every other file) outlasts it, so the launcher kills the member mid-way and this
+ * test, alone always inside the bound, reds only under load. With the start reported first, the gate is met and the
+ * test waits on the member's own end. A report the launcher does not take ends the member at that line, and the
+ * stderr kept from it says which one did.
+ */
+function aStandInThatReportsItsStart(place: Fixture, member: string, done: string, empty: string): void {
+  const report_start = join(place.home, 'report-start.mjs')
+  writeFileSync(
+    report_start,
+    [
+      'import { request } from \'node:http\'',
+      `const body = JSON.stringify(${JSON.stringify(THE_STAND_INS_SESSION_START)})`,
+      `const sent = request({ socketPath: process.env[${JSON.stringify(RELAY_SOCKET_VARIABLE)}], path: ${JSON.stringify(RELAY_PATHS.session_started)}, method: 'POST', headers: { 'content-type': 'application/json' } }, (answer) => {`,
+      '  answer.resume()',
+      '  answer.on(\'end\', () => process.exit(answer.statusCode === 200 ? 0 : 1))',
+      '})',
+      'sent.on(\'error\', () => process.exit(1))',
+      'sent.end(body)',
+      '',
+    ].join('\n'),
+  )
+  writeFileSync(
+    member,
+    [
+      '#!/bin/sh',
+      ...hostAnswers(),
+      `exec 2> '${place.member_errors}'`,
+      `'${process.execPath}' '${report_start}' || { printf '%s\\n' 'the stand-in could not report its session start' >&2; exit 1; }`,
+      `printf '%s\\n%s\\n' "$${DIRENV_CONFIG_VARIABLE}" "$(stat -c %a "$${DIRENV_CONFIG_VARIABLE}") $(ls -A "$${DIRENV_CONFIG_VARIABLE}" | wc -l)" > '${empty}'`,
+      `${place.member_commands}status=$?`,
+      `printf '%s' "$status" > '${done}'`,
+      '',
+    ].join('\n'),
+  )
+  chmodSync(member, 0o700)
+}
+
 function checkoutTests(direnv: Direnv | undefined, which: string): void {
   test(`every planted door runs with the owner's own environment (the control; ${which})`, (t) => {
     const place = fixture(t, direnv)
@@ -255,27 +302,17 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
     const member = join(place.home, CLAUDE)
     const done = join(place.home, 'done')
     const empty = join(place.home, 'empty')
-    writeFileSync(
-      member,
-      [
-        '#!/bin/sh',
-        ...hostAnswers(),
-        `printf '%s\\n%s\\n' "$${DIRENV_CONFIG_VARIABLE}" "$(stat -c %a "$${DIRENV_CONFIG_VARIABLE}") $(ls -A "$${DIRENV_CONFIG_VARIABLE}" | wc -l)" > '${empty}'`,
-        `exec 2> '${place.member_errors}'; ${place.member_commands}status=$?`,
-        `printf '%s' "$status" > '${done}'`,
-        '',
-      ].join('\n'),
-    )
-    chmodSync(member, 0o700)
+    aStandInThatReportsItsStart(place, member, done, empty)
 
     const lines: string[] = []
     const relay_root = shortRelayRoot(t)
+    const relay_journal = closed('the-relay-journal')
     const started = await launchClaudeCodeMember({
       member_name: 'Mercury',
       node_id: 'ab'.repeat(32),
       place: { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: [], snapshot_root: closed('snapshots') },
       policy: { may_send_executable_text: [] },
-      places: { rows: closed('row-streams'), dashboard: closed('dashboard-rows'), launch_records: closed('launches'), relay_root, mesh_servers: closed('mesh-servers'), relay_journal: closed('the-relay-journal'), state_root: closed('martha-state') },
+      places: { rows: closed('row-streams'), dashboard: closed('dashboard-rows'), launch_records: closed('launches'), relay_root, mesh_servers: closed('mesh-servers'), relay_journal, state_root: closed('martha-state') },
       command: member,
       args: [],
       ...ownersSettings(place),
@@ -288,6 +325,14 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
 
     assert.equal(existsSync(done), true, `the member ran its commands to the end; it ended ${JSON.stringify(ended)} and printed: ${whatTheMemberPrinted(place)}`)
     assert.equal(readFileSync(done, 'utf8'), '0', 'and every one of them succeeded')
+    // What keeps the test above a race: the launcher met its start gate, and the member ended by itself. A report that
+    // stopped reaching the launcher fails here at once, on an idle machine, instead of surfacing only under load.
+    const heard = readTheNewestRelayJournal(relay_journal)
+    assert.ok(
+      heard.events.some((line) => line.event === 'session_started' && line.phase === 'received'),
+      `the launcher heard the stand-in's session start; it ended ${JSON.stringify(ended)} and printed: ${whatTheMemberPrinted(place)}`,
+    )
+    assert.equal(ended.stopped_because, null, `the member ended by itself; it ended ${JSON.stringify(ended)} and printed: ${whatTheMemberPrinted(place)}`)
     assert.deepEqual(readdirSync(place.markers), [], 'no door the checkout planted ran')
 
     const [emptyPath, modeAndCount] = readFileSync(empty, 'utf8').trimEnd().split('\n')

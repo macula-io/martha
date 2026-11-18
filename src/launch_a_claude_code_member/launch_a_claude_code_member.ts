@@ -107,6 +107,7 @@ import { type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
 import { meshServerEnvironments } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
+import { whatTheLaunchSupplied } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { knownSettingsOf, type MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -123,6 +124,7 @@ import type { TheServedToolsWatch } from '../keep_a_members_crew_tools_window/he
 import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_served/watch_the_crew_tools_a_launch_served.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import type { TheLeftoversALaunchKeeps } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
@@ -138,13 +140,13 @@ import {
 } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { hostThatRunsTheRelay, RELAY_PLUGIN_DIR, rulesTheHostMatches } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
 import {
-  cleanUpIfTheLauncherEnds,
   NOT_STARTED,
   startedMember,
   whatTheHostStartsWith,
   whenTheMemberStops,
   type Starting,
 } from '../end_a_launch/end_a_launch.ts'
+import { cleanUpIfTheLauncherEnds } from '../a_launch_end_on_this_machine/what_a_launch_end_reads.ts'
 import { killGroup, type TheRunsLifeline } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import { theLaunchItsRunAsks, told, watchItsRun, whatTheRunWatches, type WhatTheRunWatches } from '../end_a_launch_when_its_run_ends/watch_the_run_of_a_launch.ts'
 import {
@@ -271,6 +273,12 @@ export interface ClaudeCodeMemberLaunch {
    * launch gives none.
    */
   readonly hearRelayPlace?: (place: MemberRelayPlace) => void
+  /**
+   * The crew's own store and the layout it declared, so this launch's end keeps what a killed command left in the
+   * member's trees (#693): the record the member's next start is told from, and the two refusals judge. A launch given
+   * none keeps no record, and the refusals judge nothing (a test's launch, and a crew that declared no layout).
+   */
+  readonly leftovers?: TheLeftoversALaunchKeeps
 }
 
 /** How a member's process ended. */
@@ -480,16 +488,7 @@ function wordlessAnswersOf(
   const environments = Object.values(
     meshServerEnvironments({ serverConfig: new TextDecoder().decode(carried), hostEnvironment: { ...starting.env, ...ready.settingsEnv } }),
   )
-  const env = environments.length === 1 ? environments[0] : undefined
-  if (env === undefined) return {}
-  return {
-    wordless_answers: {
-      node_id: launch.node_id,
-      env,
-      home: env['HOME'] ?? ready.hookSettings.home,
-      host_version: RECORDED_HOST.host_version,
-    },
-  }
+  return whatTheLaunchSupplied(environments, { node_id: launch.node_id, home: ready.hookSettings.home, host_version: RECORDED_HOST.host_version })
 }
 
 /**
