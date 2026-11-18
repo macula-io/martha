@@ -78,7 +78,7 @@ export async function readTheOriginACloneHas(host: Pick<HostContract, 'processes
   const repo = repoOfTheOrigin(url)
   // The URL is not quoted back (martha#670): an origin can carry a token in its userinfo, and a refusal is read by the
   // owner and the crew. What it does not name is the whole of what this can rightly say of it.
-  if (repo === undefined) return { refused: `the origin of ${path} names no repository as org/name.` }
+  if (repo === undefined) return { refused: `the origin of ${path} names no repository as org/name: run git remote set-url origin <url> there, then try again.` }
   const default_branch = await gitSaid(host, path, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])
   if (default_branch === undefined) {
     return { refused: `${path} cannot say which branch its origin's default is: run git remote set-head origin -a there, then try again.` }

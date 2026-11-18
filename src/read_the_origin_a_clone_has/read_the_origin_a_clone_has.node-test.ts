@@ -99,7 +99,7 @@ test('#670: a refusal names no origin URL, so a token in its userinfo is never p
   gitIn(clone, 'remote', 'set-url', 'origin', withAToken)
   const told = await toldBy(clone)
   assert.ok('refused' in told, 'an origin that names no repository was taken for one')
-  assert.match(told.refused, /names no repository as org\/name/)
+  assert.equal(told.refused, `the origin of ${clone} names no repository as org/name: run git remote set-url origin <url> there, then try again.`)
   assert.ok(!told.refused.includes('ghs_plantedtoken'), `the token in the origin reached the refusal: ${told.refused}`)
   assert.ok(!told.refused.includes(withAToken), `the origin URL reached the refusal: ${told.refused}`)
 })
