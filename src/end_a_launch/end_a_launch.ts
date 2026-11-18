@@ -14,7 +14,6 @@
 
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { type ChildProcess, spawn } from 'node:child_process'
-import process from 'node:process'
 
 import { type LaunchRecorded, recordMemberLaunch, recordMemberStopped } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { killGroup, refusedIfTheRunIsGone } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
@@ -22,6 +21,7 @@ import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol
 import { thePathWithTheGuardFirst } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { keepWhatTheRunLeft } from '../a_launch_end_on_this_machine/what_a_launch_end_reads.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { CLAUDE_SERVERS, launchEnvironment } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { isOnTheOwnersTerminal, startForegroundJob, type ForegroundJob } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
@@ -31,17 +31,6 @@ import type { ClaudeCodeMemberLaunch, LaunchMade, MemberStopped } from '../launc
 
 /** The start of every refusal: the member was not started. */
 export const NOT_STARTED = 'The member is not started'
-
-/**
- * The signals that end the launcher without its 'exit' event, and so clean up on their own.
- *
- * SIGHUP is the one a run delivers (martha#472): a probe, a recorded-host test or a by-hand check that starts a member
- * hands it a throwaway home, and when that run ends its terminal hangs up, so the kernel sends SIGHUP to the session
- * the launcher and its member run in. Unhandled, the launcher died of the hangup and the member, whose own host does
- * not die of it, kept running under the throwaway home for days. SIGQUIT is the key beside it (Ctrl-\), which would
- * otherwise leave the same member behind.
- */
-const LAUNCHER_END_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT']
 
 /**
  * How a spawned member's start ended: the pid the launcher kills the group of,
@@ -212,38 +201,6 @@ async function endTheLaunch(child: ChildProcess, made: LaunchMade): Promise<void
 }
 
 /**
- * Kills the member's group and removes both directories if the launcher exits
- * first, or is ended by SIGTERM or SIGINT; returns what takes those handlers off.
- */
-export function cleanUpIfTheLauncherEnds(pid: number, made: LaunchMade): () => void {
-  const onLauncherExit = (): void => {
-    killGroup(pid)
-    made.relayDirectory.remove()
-    made.removeSnapshot()
-  }
-  process.once('exit', onLauncherExit)
-  // SIGTERM and SIGINT end the process without 'exit', so each cleans up too.
-  // The signal is raised again once this launcher's handlers are off, unless
-  // some other part of the process still listens for it, so it still ends the
-  // launcher the way it would have.
-  const onLauncherSignal = (signal: NodeJS.Signals): void => {
-    offLauncherEnd()
-    onLauncherExit()
-    // A `once` listener registered before this one has already been removed
-    // when this runs, so it counts as 0 here: the signal is raised again before
-    // that listener's own asynchronous shutdown can finish. A part of the
-    // process that needs one must keep listening with `on`.
-    if (process.listenerCount(signal) === 0) process.kill(process.pid, signal)
-  }
-  const offLauncherEnd = (): void => {
-    process.off('exit', onLauncherExit)
-    for (const signal of LAUNCHER_END_SIGNALS) process.off(signal, onLauncherSignal)
-  }
-  for (const signal of LAUNCHER_END_SIGNALS) process.once(signal, onLauncherSignal)
-  return offLauncherEnd
-}
-
-/**
  * Settles once the member exited and everything the launch made is gone: its
  * group killed, its launch record dropped, the server closed, both directories
  * removed and the launcher's own end handlers off.
@@ -261,6 +218,10 @@ export function whenTheMemberStops(
     child.once('exit', (exit_code, signal) => {
       void (async () => {
         const stopped_because = ended()
+        // What the run left is read and kept BEFORE the group is killed (#693): a killed process has nothing left to
+        // read, and the host's background children are still alive when its own exit fires. The reading is synchronous
+        // for the same reason.
+        keepWhatTheRunLeft(launch, pid)
         killGroup(pid)
         recordMemberStopped(launchRecords, launch.member_name)
         await removeWhatTheLaunchMade(made)

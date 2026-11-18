@@ -6,7 +6,7 @@
 // calls read that the gate counts.
 //
 // The table is the launcher's own, one run per agent id, and this slice only reads and notes it: what a vouched agent's
-// answer means for the shell is the relay's (../answer_the_relay), and the host's own table of which tools hand an
+// answer means for the shell is the entry's (../answer_what_a_host_reports), and the host's own table of which tools hand an
 // agent's answer back is the adapter's (../claude_code_host).
 
 import { theAgentInAToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -102,9 +102,7 @@ export function agentOfAResult(
   call: { readonly agent_id: string | undefined },
   answer: unknown,
 ): HowAnAgentStands | undefined {
-  const fromTheAnswer = theAgentInAToolResult(answer)
-  if (fromTheAnswer !== undefined) return agentStateOf(runs, fromTheAnswer)
-  return call.agent_id === undefined ? undefined : agentStateOf(runs, call.agent_id)
+  return agentOfANamedResult(runs, call, theAgentInAToolResult(answer))
 }
 
 /** The run this launcher keeps for an agent, made on first sight: a call with an id it never saw start is still one. */
@@ -142,11 +140,46 @@ export function noteTheAgentsCall(runs: TheRunTable, session_id: string, body: B
   return agent_id
 }
 
-/** That same call, answered here, back with the agent it belonged to (martha#170). */
+/** That same call, answered here, back with the agent it belonged to (martha#170): `noteTheAgentsAnsweredCall`, from a body. */
 export function noteAnAgentsAnswer(runs: TheRunTable, body: Body): string | undefined {
-  const agent_id = agentIdOf((body['call'] ?? {}) as Body)
-  if (agent_id !== undefined) noteCallAnswered(runs, agent_id, body['call'])
-  return agent_id
+  const call = (body['call'] ?? {}) as Body
+  const agent_id = agentIdOf(call)
+  const call_id = isText(call['tool_use_id']) ? call['tool_use_id'] : undefined
+  return noteTheAgentsAnsweredCall(runs, { ...(agent_id === undefined ? {} : { agent_id }), ...(call_id === undefined ? {} : { call_id }) })
+}
+
+/**
+ * The same note in the contract's words (martha#541, PR 3): the call's agent and the host's id for the call, each where
+ * the adapter read one. The agent comes back, so what its call read can be kept on its run.
+ */
+export function noteTheAgentsAnsweredCall(runs: TheRunTable, call: { readonly agent_id?: string; readonly call_id?: string }): string | undefined {
+  if (call.agent_id !== undefined) noteCallAnswered(runs, call.agent_id, { tool_use_id: call.call_id })
+  return call.agent_id
+}
+
+/**
+ * The agent a result belongs to, from what the host's answer names where it names one (the adapter reads that field out
+ * of its own host's answer and passes it as found), else from the call's own agent: `agentOfAResult`'s rule, with the
+ * host's field already read.
+ */
+export function agentOfANamedResult(runs: TheRunTable, call: { readonly agent_id?: string | undefined }, answer_names: unknown): HowAnAgentStands | undefined {
+  if (answer_names !== undefined) return agentStateOf(runs, answer_names)
+  return call.agent_id === undefined ? undefined : agentStateOf(runs, call.agent_id)
+}
+
+/** The host says an agent started under this session (martha#170): only this makes an agent one it saw start. */
+export function anAgentSeenToStart(runs: TheRunTable, session_id: string, agent_id: string): void {
+  runOf(runs, session_id, agent_id).started = true
+}
+
+/**
+ * The host says an agent stopped (martha#170): whether it is vouched for now. A vouched agent's answer is nothing new;
+ * any other agent's answer is a subagent's text, and the caller records it.
+ */
+export function anAgentSeenToStop(runs: TheRunTable, session_id: string, agent_id: string): boolean {
+  const run = runOf(runs, session_id, agent_id)
+  run.stopped = true
+  return vouchedRun(run)
 }
 
 /**

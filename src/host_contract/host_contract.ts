@@ -281,6 +281,12 @@ export interface TheCrewFilesStores {
   readonly crew: CrewStore
 }
 
+/**
+ * What a slice that judges a call against the bytes on disk asks of the host: the files on disk and the processes,
+ * and nothing else (martha#693's commit judgement reads the working tree's own bytes beside git's answer).
+ */
+export type TheFilesAndProcesses = Pick<HostContract, 'processes'> & { readonly stores: Pick<Stores, 'files'> }
+
 
 /**
  * The owner's own settings file — `<config dir>/settings.json` — and the one lock that guards it (martha#359).
@@ -506,6 +512,44 @@ export interface ACalledTool {
 
 /** What a call is answered with: allowed to run, or denied and why. Only the adapter writes its host's own yes. */
 export type TheAnswerToACall = { readonly allowed: 1 } | { readonly denied: string }
+
+/**
+ * A called tool after it ran, with the host's answer (martha#541, PR 3): the call as it was called, and what the host
+ * says of its result. The adapter reads its own host's answer for the three facts the core needs from it, so the entry
+ * reads no host's shape; the answer itself passes untouched, to the readers the launch hands in.
+ */
+export interface AResultOfACall extends ACalledTool {
+  /** The host's answer, passed through untouched: only the readers the launch hands in look inside it. */
+  readonly answer: unknown
+  /** Whether the called name is a tool server's (MCP) rather than one of the host's own tools: the host's naming form decides it. */
+  readonly from_a_tool_server: boolean
+  /**
+   * What the host's answer holds where it names an agent (Claude Code: `tool_response.agentId`), passed as found: a value
+   * that is there but is not an id names an agent nobody can vouch for, and must not fall back to the call's own agent.
+   */
+  readonly answer_names_agent?: unknown
+  /** The model the host says a spawned agent resolved to, when it says so (martha#390). */
+  readonly resolved_model?: string
+}
+
+/** What a result is answered with: taken, with the end of the turn it carries when it carries one, or the member stops and why. */
+export type TheAnswerToAResult = { readonly taken: 1; readonly end_turn?: string } | { readonly stop: string }
+
+/** An agent the host says started or stopped under a session (martha#170). */
+export interface AnAgentOfASession {
+  readonly session_id: string
+  readonly agent_id: string
+}
+
+/** What an agent's start or stop is answered with: taken, or refused and why. */
+export type TheAnswerToAnAgent = { readonly taken: 1 } | { readonly refused: string }
+
+/** A tool the crew's mod asks the launcher to answer (martha#254): its session, the tool's own name, and its arguments. */
+export interface ACrewToolAsked {
+  readonly session_id: string
+  readonly tool: string
+  readonly args: Readonly<Record<string, unknown>>
+}
 
 export interface Delivery {
   /** Hands a turn to the model of this member's session. */

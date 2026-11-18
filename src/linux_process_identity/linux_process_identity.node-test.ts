@@ -28,7 +28,13 @@ import {
   keyOf,
   launchRecordsDirectory,
 } from './launch_records_directory.ts'
-import { ancestorsUnder, linuxProcessIdentities, parentIn, procProcessIdentities, startTimeIn } from './process_identity_from_proc.ts'
+import {
+  ancestorsUnder,
+  linuxProcessIdentities,
+  parentIn,
+  procProcessIdentities,
+  startTimeIn,
+} from './process_identity_from_proc.ts'
 
 // Synthetic node ids and pids, never a real one: this repository is public.
 const PLUTO = { member_name: 'Pluto', node_id: 'a'.repeat(64), pid: 4101 }
@@ -332,3 +338,4 @@ test('#619: a walk that meets a loop or a process the kernel will not show stops
   assert.deepEqual(ancestorsUnder(aProcOfParents(t, { 9: 42 }), 9).map((one) => ({ pid: one.pid, identity: one.identity })), [{ pid: 42, identity: null }])
   assert.equal(parentIn('not a stat line'), null)
 })
+

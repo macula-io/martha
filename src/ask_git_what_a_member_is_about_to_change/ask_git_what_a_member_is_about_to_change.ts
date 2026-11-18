@@ -26,19 +26,25 @@
 // directory the call runs in or the worktree it names. A call with no directory it can name is asked nowhere, and its
 // rules that need a fact do not fire.
 
-import type { HostContract } from '../host_contract/host_contract.ts'
-import { refuseACallInTheWorkspace, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
+import type { CrewStore, TheFilesAndProcesses } from '../host_contract/host_contract.ts'
+import { refuseACallInTheWorkspace, theCloneOf, theWorktreeListedAt, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { theLeftoversRefusal } from '../judge_the_commit_a_member_is_about_to_make/judge_the_commit_a_member_is_about_to_make.ts'
 import { realpathSync } from 'node:fs'
-import { isAbsolute, join, sep } from 'node:path'
+import { isAbsolute } from 'node:path'
 
 /** A call to judge: the git calls it makes, the member making it, the crew's places, and the host that runs git. */
 export interface AQuestionAboutACall {
-  readonly host: Pick<HostContract, 'processes'>
+  readonly host: TheFilesAndProcesses
   readonly calls: readonly AGitCall[]
   readonly workspace: TheWorkspace
   readonly member: string
+  /**
+   * The crew's own store, where the record of what the member's last launch left is kept (martha#693). A commit among
+   * the calls is judged on it; absent, no commit is judged, as for a crew that keeps no record.
+   */
+  readonly leftovers?: CrewStore
 }
 
 /** The porcelain line git prints for a worktree its record names but whose directory no longer stands. */
@@ -58,9 +64,6 @@ const THE_DEFAULT_BRANCH = ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD
 
 /** The argument git takes to list a repository's worktrees with the branch each is on. */
 const LIST_WORKTREES = ['worktree', 'list', '--porcelain']
-
-/** Whether a directory stands in a place or under it: the place itself, or a path past the separator that ends it. */
-const isUnder = (directory: string, place: string): boolean => directory === place || directory.startsWith(`${place}${sep}`)
 
 /**
  * The path a place really is, with every link resolved, or the path as it was given when it cannot be read (martha#79).
@@ -84,20 +87,6 @@ const theCallResolved = (call: AGitCall): AGitCall => ({
   directory: call.directory === null ? null : thePathItself(call.directory),
   args: call.args.map((word) => (isAbsolute(word) ? thePathItself(word) : word)),
 })
-
-/** The clone a directory lands in, as `worktree_open` lays one out: `<clones>/<org>/<repo>`, the first two words past it. */
-function theCloneOf(directory: string | null, clones: string | null): string | null {
-  if (directory === null || clones === null || !isUnder(directory, clones)) return null
-  const [org, repo] = directory.slice(clones.length + 1).split(sep)
-  return org === undefined || org === '' || repo === undefined || repo === '' ? null : join(clones, org, repo)
-}
-
-/** Where the worktrees of the repository a call touches can be listed: the worktree it names, or the place it runs in. */
-function theWorktreeListedAt(call: AGitCall): string | null {
-  if (call.command !== 'worktree') return call.directory
-  const named = call.args.slice(1).find((word) => !word.startsWith('-'))
-  return named !== undefined && isAbsolute(named) ? named : call.directory
-}
 
 /** The words git printed, one line each, or none when it could not be run or did not end well. */
 async function linesGitPrinted(host: AQuestionAboutACall['host'], cwd: string, args: readonly string[]): Promise<readonly string[]> {
@@ -156,5 +145,7 @@ export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutAC
   const clone = calls.map((call) => theCloneOf(call.directory, workspace.clones)).find((found) => found !== null) ?? null
   const where = calls.map(theWorktreeListedAt).find((found) => found !== null) ?? clone
   const guarded: AGuardedCall = { calls, workspace, member, facts: await theFactsOf(host, clone, where) }
-  return refuseACallInTheWorkspace(guarded)
+  const refused = refuseACallInTheWorkspace(guarded)
+  if (refused !== undefined) return refused
+  return theLeftoversRefusal({ calls, processes: host.processes, files: host.stores.files, ...(request.leftovers === undefined ? {} : { leftovers: request.leftovers }), member })
 }

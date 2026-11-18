@@ -43,10 +43,16 @@ in, so that one entry answers every host
 | `ArrivingTurn` | a turn's text, and its `Arrival` | `TheAnswerToATurn`: kept, or refused and why; a refused turn is never raised |
 | `AReviewTheHostSawFail` | the session, the turn's text, and the origin kind the engine stamped on it | nothing: a review the host reports failed is named on the owner's row and to the member, only for a session the entry holds |
 | `ACalledTool` | the session, the tool by the name the host called it, its input, the host's id for the call when it gives one, and the agent that made the call when an agent of the session made it | `TheAnswerToACall`: allowed, or denied and why; only the adapter writes its host's own yes |
+| `AResultOfACall` | the called tool as above, after it ran: the host's answer passed through untouched, whether the called name is a tool server's, what the answer holds where it names an agent, and the model a spawned agent resolved to | `TheAnswerToAResult`: taken, with the end of the turn it carries when it was the last call in flight under a held end, or the member stops and why |
+| `AnAgentOfASession` | the session, and the agent the host says started or stopped under it | `TheAnswerToAnAgent`: taken, or refused and why; an agent that stops unvouched for has its answer recorded as a subagent's text |
+| `ACrewToolAsked` | the session, the crew tool's own name, and its arguments | the crew's own answer, or refused and why; a session the crew refreshed is taken in first |
 
 The entry never reads a host's own table. The adapter turns the host's event
 into its outcome and its prompt origin into an `Arrival`, and it hands the
-envelope its host writes for a failed agent to the launch as a value.
+envelope its host writes for a failed agent to the launch as a value. For a
+result it reads the three facts the core needs out of its own host's answer,
+and hands its table of result rows and its decisions over its own files to the
+launch as values and closures (`WhereAResultIsRecorded`).
 
 The core imports nothing but its own slices and Node's standard library. A
 test reads every script file under `src/` (TypeScript and JavaScript, every

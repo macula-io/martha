@@ -282,9 +282,7 @@ function theOwnersListBlock($: CrewEngine, views: TheViews, list: TheOwnersListS
         {list.next === list.focus ? null : <Button key="todo:next" label="next" hotkey="n" onPress={() => void stepTheOwnersList($, list.next)} />}
       </Box>
       <Text dimColor>{list.claim}</Text>
-      {list.drawn.map((line, at) =>
-        line.copy ? <Button key={`todo:copy:${at}`} label="copy" hotkey="c" onPress={copy} /> : <Text key={`todo:${at}`} bold={line.bold} dimColor={line.dim}>{line.text}</Text>,
-      )}
+      {list.drawn.map((line, at) => line.copy ? <Button key={`todo:copy:${at}`} label="copy" hotkey="c" onPress={copy} /> : <Text key={`todo:${at}`} bold={line.bold} dimColor={line.dim}>{line.text}</Text>)}
     </Box>
   )
 }
@@ -338,6 +336,7 @@ const answerStandingAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<u
 const answerStandingClose = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_close')
 const answerStanding = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing')
 const answerWaitForCi = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'wait_for_ci')
+const answerReleaseTheFiles = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'release_the_files_a_killed_run_left')
 
 /**
  * The pane as the host draws it: the crew's rows, then the owner's list (martha#316). When the read failed it says it
@@ -404,6 +403,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__standing_close' }, answerStandingClose)
   on('tool.call', { tool: 'mcp__martha__standing' }, answerStanding)
   on('tool.call', { tool: 'mcp__martha__wait_for_ci' }, answerWaitForCi)
+  on('tool.call', { tool: 'mcp__martha__release_the_files_a_killed_run_left' }, answerReleaseTheFiles)
 
   // The pane's own command opens it and answers nothing: the drawing is `ui.render`'s (martha#313).
   on('command.run', { command: PANE }, async ($: CrewEngine) => { await openThePane($); return { text: '' } })

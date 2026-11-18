@@ -33,15 +33,26 @@
 // `<member>/<slug>`, so the text before the first `/` is the member, compared with ../declare_crew's sameMemberName.
 // One rule for both, so a branch this guard calls another member's is exactly one `worktree_finish` would not remove.
 
-import { sameMemberName } from '../declare_crew/declare_crew.ts'
+import { sameMemberName, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
-import { isAbsolute, resolve, sep } from 'node:path'
+import { isAbsolute, join, resolve, sep } from 'node:path'
 
 /** The places a crew declared, and the member names it declares: the declaration's own `house_rules` and `members`. */
 export interface TheWorkspace {
   readonly clones: string | null
   readonly worktrees: string | null
   readonly members: readonly string[]
+}
+
+/**
+ * The places the crew declared for its clones and worktrees, with its members' names; undefined when it turned no
+ * workspace layout on. A crew that declared none is guarded by nothing: the guard refuses breaks of a layout, and
+ * there is none to break.
+ */
+export function theWorkspaceTheCrewDeclared(settings: CrewSettings): TheWorkspace | undefined {
+  const { workspace_layout: on, clones, worktrees } = settings.house_rules
+  if (on !== true || clones === null || worktrees === null) return undefined
+  return { clones, worktrees, members: settings.members.map((member) => member.name) }
 }
 
 /** A worktree as git lists it: where it is, the branch it is on, and whether only its record is left. */
@@ -113,6 +124,53 @@ const theWordsNotOptions = (words: readonly string[]): readonly string[] => word
 /** Whether a directory is a place or stands under it: the place itself, or a path past the separator that ends it. */
 const isUnder = (directory: string, place: string): boolean => directory === place || directory.startsWith(`${place}${sep}`)
 
+/** The clone a directory lands in, as `worktree_open` lays one out: `<clones>/<org>/<repo>`, the first two words past it. */
+export function theCloneOf(directory: string | null, clones: string | null): string | null {
+  if (directory === null || clones === null || !isUnder(directory, clones)) return null
+  const [org, repo] = directory.slice(clones.length + 1).split(sep)
+  return org === undefined || org === '' || repo === undefined || repo === '' ? null : join(clones, org, repo)
+}
+
+/** Where the worktrees of the repository a call touches can be listed: the worktree it names, or the place it runs in. */
+export function theWorktreeListedAt(call: AGitCall): string | null {
+  if (call.command !== 'worktree') return call.directory
+  const named = call.args.slice(1).find((word) => !word.startsWith('-'))
+  return named !== undefined && isAbsolute(named) ? named : call.directory
+}
+
+/**
+ * The line the member's row is told for the misses just read, in the guard's own words: how many calls it could not
+ * judge, why, and the last one of them. The shim leaves them and the launcher folds them in
+ * (../guard_the_git_a_member_runs), so a miss is visible where the owner reads the member.
+ */
+export function theMissesLine(misses: readonly string[]): string {
+  const last = whatAMissSays(misses[misses.length - 1] ?? '')
+  const calls = misses.length === 1 ? 'one git call' : `${String(misses.length)} git calls`
+  const them = misses.length === 1 ? 'it' : 'them'
+  const which = misses.length === 1 && last.what !== '' ? `: ${last.what}` : ''
+  const why = last.why === '' ? '' : ` (${last.why})`
+  return `the workspace guard could not judge ${calls}${why} and let ${them} run${which}`
+}
+
+/** What one line of the misses file says, as the judge wrote it; a line that cannot be read is its own reason. */
+function whatAMissSays(line: string): { readonly what: string; readonly why: string } {
+  const said = theMissTheLineHolds(line)
+  // A whole line that is not what the judge writes is still a miss, and its own text is the reason it is one.
+  return said ?? { what: '', why: line.trim() }
+}
+
+/** The miss a line holds, or undefined when the line is not one the judge wrote. */
+function theMissTheLineHolds(line: string): { readonly what: string; readonly why: string } | undefined {
+  try {
+    const said: unknown = JSON.parse(line)
+    if (typeof said !== 'object' || said === null || Array.isArray(said)) return undefined
+    const { what, why } = said as Record<string, unknown>
+    return typeof what === 'string' && typeof why === 'string' ? { what, why } : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Where a word points from a directory: itself when absolute, past the directory when one is known.
  *
@@ -145,6 +203,13 @@ const isAnotherMembers = (branch: string, workspace: TheWorkspace, member: strin
   const owner = theMemberOf(branch)
   return owner !== null && !sameMemberName(owner, member)
 }
+
+/**
+ * Whether a branch is `member`'s own: a branch of this crew, owned by `member`. The trees a launch end reads for what a
+ * killed run left are the worktrees this branch is on (#693), by this one rule rather than a second copy of it.
+ */
+export const isTheMembersBranch = (branch: string, workspace: TheWorkspace, member: string): boolean =>
+  isAMembersBranch(branch, workspace.members) && !isAnotherMembers(branch, workspace, member)
 
 /** The refusal a call of another member's branch is, named for the branch: what the caller is told, or undefined. */
 const refusalOfAnothersBranch = (branch: string, workspace: TheWorkspace, member: string): string | undefined =>

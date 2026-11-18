@@ -24,6 +24,7 @@ import { theNewestHandover, type TheDeclaration } from '../park_and_wake_a_membe
 import { STORM_WINDOW_MS } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { STATE_OF_PHASE } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
+import { theTellingOnTheNextStart } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
 import {
   answerOnce,
@@ -245,7 +246,18 @@ function thePromptToRestartOn<Ended>(host: HoldingHost<Ended>, member: string, f
     host.tellOwner(`${member} has handed nothing over, so it is restarted with no handover.`)
     return { prompt: undefined, from: null }
   }
-  return { prompt: theResumePrompt(newest.handover, member), from: newest.handover.file }
+  return {
+    prompt: theResumePrompt(
+      newest.handover,
+      member,
+      theTellingOnTheNextStart({
+        crew: host.stores.crew,
+        member,
+        now_ms: host.clock.now(),
+      }).telling,
+    ),
+    from: newest.handover.file,
+  }
 }
 
 /** The member started again for `asked`, and the restart answered once, with its ledger row, whether it started or not. */

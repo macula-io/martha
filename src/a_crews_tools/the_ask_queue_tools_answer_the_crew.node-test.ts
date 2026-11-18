@@ -27,6 +27,7 @@ import {
   PERSON_MINUTES,
   REFRESH_BETWEEN_TASKS,
   RESTART_MEMBER,
+  HOLD_REVIEWS,
   REVIEW_MINUTES,
   STALLED_MINUTES,
   STRICT_GATE,
@@ -193,6 +194,7 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
       resume_parked_work: [SUPERVISOR],
       [OFFER_OWNER_ASKS]: [SUPERVISOR],
       [RESTART_MEMBER]: [SUPERVISOR],
+      [HOLD_REVIEWS]: [SUPERVISOR],
     },
   },
   house_rules: {

@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { ACTS, APPROVE_LANDING, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OFFER_OWNER_ASKS, RESTART_MEMBER, declareCrew, type Act } from '../declare_crew/declare_crew.ts'
+import { ACTS, APPROVE_LANDING, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, HOLD_REVIEWS, OFFER_OWNER_ASKS, RESTART_MEMBER, declareCrew, type Act } from '../declare_crew/declare_crew.ts'
 import { NO_MODEL_NAMED } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
@@ -37,6 +37,7 @@ import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL } from '../park_and_wake_a_membe
 import { LIST_ASKS_TOOL, QUEUE_ASK_TOOL, SETTLE_ASKS_TOOL, TAKE_ASKS_TOOL } from '../queue_the_owners_asks/the_ask_tools.ts'
 import { WHO_IS_FREE_TOOL } from '../see_who_is_free/who_is_free_tool.ts'
 import { UNHELD_WORK_TOOL } from '../find_the_unheld_work/unheld_work_tool.ts'
+import { RELEASE_THE_FILES_TOOL } from '../release_what_a_killed_run_left/release_what_a_killed_run_left.ts'
 import { RESTART_A_MEMBER_TOOL } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { LIFECYCLE_PLACE, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { REPORT_PROGRESS_TOOL } from '../report_where_the_work_stands/report_progress_tool.ts'
@@ -211,6 +212,7 @@ const EVERY_CREW_TOOL: Readonly<Record<string, ALedgerLine>> = {
   [STANDING_CLOSE_TOOL.name]: { asks: ['assign_work'] },
   [STANDING_TOOL.name]: { ungated: 'reads the standing items' },
   [WAIT_FOR_CI_TOOL.name]: { ungated: 'reads CI runs; it changes nothing' },
+  [RELEASE_THE_FILES_TOOL.name]: { ungated: "releases paths the caller's own record holds as leftovers, after the caller has looked at them; it writes only the caller's own release list" },
 }
 
 test('#607: the ledger names every tool the crew registers, and no tool the crew does not', () => {
@@ -221,9 +223,18 @@ test('#607: the ledger names every tool the crew registers, and no tool the crew
   assert.deepEqual(extra, [], `the ledger names ${extra.join(', ')}, which the crew does not register`)
 })
 
+/**
+ * The acts no tool asks because the core asks them itself, each read where it decides something: a grant to a role
+ * decides who holds reviews, so a launch (../start_the_member_on_its_host), a switch (../switch_a_members_model) and
+ * each review call (../run_reviews_on_the_review_model) read it, and `declare_crew.node-test.ts` and
+ * `run_reviews_on_the_review_model.node-test.ts` pin each reading. An act with neither a tool nor an entry here still
+ * fails below, which is what this check is for.
+ */
+const ASKED_BY_THE_CORE: readonly string[] = [HOLD_REVIEWS]
+
 test("#607: every act the table can grant is asked by some tool, and a tool asks only acts the table has", () => {
   const asked = new Set(Object.values(EVERY_CREW_TOOL).flatMap((line) => ('asks' in line ? line.asks : [])))
-  for (const act of ACTS) assert.ok(asked.has(act), `act ${act} is asked by no tool`)
+  for (const act of ACTS) assert.ok(asked.has(act) || ASKED_BY_THE_CORE.includes(act), `act ${act} is asked by no tool and read by nothing`)
   for (const act of asked) assert.ok((ACTS as readonly string[]).includes(act), `a tool says it asks ${act}, which is not an act the table has`)
 })
 

@@ -27,6 +27,7 @@ import { RESTART_A_MEMBER } from '../stop_and_restart_a_member/the_restart_tool.
 import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
 import { WAIT_FOR_CI } from '../wait_for_ci/wait_for_ci.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+import { THE_RELEASE_ACT } from '../tell_a_member_what_its_relaunch_killed/tell_a_member_what_its_relaunch_killed.ts'
 import { REFRESH_BEAT_MS } from './hooks/crew_turn_beat.ts'
 import { PANE, RELAY_DEADLINE_MS, RELAY_SOCKET_VARIABLE } from './hooks/relay_protocol.ts'
 
@@ -60,6 +61,8 @@ export const COINCIDENCES: readonly Exception[] = [
   // by a literal for the same reason as the entries above.
   { value: KEEP_THE_PACKAGE_CONTRACT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: SAY_TO_THE_CREW, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  // The release act (#693 r=2): the refusal names it and the mod answers it, each by a literal.
+  { value: THE_RELEASE_ACT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: READ_THE_RECEIPTS, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   // The park, wake and restart tools took their names in slices of their own (#443 part 5), so each is read here from
   // the slice that declares it; the mod still answers each by a literal, for the reason above.
