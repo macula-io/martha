@@ -12,7 +12,7 @@
 // The core's slices are held the same way (martha#415), with one difference: a single cap, martha.sliceCap, bounds every
 // core slice, and martha.sliceCeilings holds only the few slices measured above it, each at its exact count.
 
-import type { Manifest } from './declared_in_package_json.ts'
+import { refuseKeysDeclaredTwice, type Manifest } from './declared_in_package_json.ts'
 
 /** Where the ceilings stand, as package.json names them: the words a landing's commit records of a ceiling it brought. */
 export const CEILINGS_NAME = 'martha.hostCeilings'
@@ -49,8 +49,12 @@ interface WithMaps {
   readonly martha?: Readonly<Record<string, unknown>>
 }
 
-/** `text` with the map under `key` inside `martha` replaced by `next`, every other key where it was. */
+/**
+ * `text` with the map under `key` inside `martha` replaced by `next`, every other key where it was. A text that declares
+ * a key twice is refused first (martha#753): parsing it here would drop one declaration, and write the file without it.
+ */
 export function withTheMap(text: string, key: string, next: Record<string, number>): string {
+  refuseKeysDeclaredTwice(text)
   const manifest = JSON.parse(text) as WithMaps
   const martha = { ...(manifest.martha ?? {}), [key]: next }
   return `${JSON.stringify({ ...manifest, martha }, null, 2)}\n`
