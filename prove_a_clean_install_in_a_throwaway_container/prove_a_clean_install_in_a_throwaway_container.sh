@@ -1552,23 +1552,24 @@ the_step_is_reached() {
 }
 
 # The self-test's own source, held to its contract: no interrupt case may signal a run except through the
-# signal_the_run_at helper. A raw group or pid signal outside that helper's body fails by name with its line,
-# so a future case written the old way is caught (martha#718). The signal words are built up here rather than
-# spelled, so this check never names itself.
+# signal_the_run_at helper. Any kill in the body of self_test fails by name with its line, in whatever spelling
+# (-INT, -s INT, -2, -SIGTERM, a bare kill), so a future case written the old way is caught (martha#718); a kill -0
+# only asks whether a process is alive, and a comment sends nothing. This check sits outside self_test, so it never
+# names itself.
 check_no_raw_signal_outside_the_helper() {
-  local src="${SELF}" start end n bad='' sig pats=()
-  start="$(grep -n '^signal_the_run_at()' "${src}" | head -1 | cut -d: -f1)"
+  local src="${SELF}" start end n bad=''
+  start="$(grep -n '^self_test()' "${src}" | head -1 | cut -d: -f1)"
   end="$(awk -v s="${start}" 'NR > s && /^}/{ print NR; exit }' "${src}")"
   if [ -z "${start}" ] || [ -z "${end}" ]; then
-    echo 'the self-test: no signal_the_run_at helper to hold the interrupt cases to' >&2
+    echo 'the self-test: no self_test body to hold the interrupt cases to' >&2
     return 1
   fi
-  for sig in INT TERM; do
-    pats+=("-e" "kill -${sig} -" "-e" "kill -${sig} \"\${child}\"")
-  done
+  grep -q '^signal_the_run_at()' "${src}" \
+    || { echo 'the self-test: no signal_the_run_at helper to hold the interrupt cases to' >&2; return 1; }
   while IFS=: read -r n _; do
-    if [ "${n}" -lt "${start}" ] || [ "${n}" -gt "${end}" ]; then bad="${bad} ${n}"; fi
-  done < <(grep -nF "${pats[@]}" "${src}")
+    bad="${bad} ${n}"
+  done < <(awk -v s="${start}" -v e="${end}" \
+    'NR > s && NR < e && !/^[[:space:]]*#/ { l = $0; gsub(/kill -0 /, "", l); if (l ~ /(^|[^[:alnum:]_])kill([^[:alnum:]_]|$)/) print NR ":" }' "${src}")
   if [ -n "${bad}" ]; then
     echo "the self-test: a signal is sent outside signal_the_run_at at line(s):${bad}" >&2
     return 1
@@ -2022,6 +2023,19 @@ self_test() {
   # The helper stops a run it could not reach the step in, and a stopped run makes no tear-down, so the
   # case takes its stand-in container away itself, there being none to remove it (martha#718).
   rm -f "${standin}/container.present"
+
+  # A run started with SIGINT ignored cannot trap it: it fails by name before its first step, rather than run steps
+  # whose interrupt would be dropped. The subshell ignores INT and the run inherits that through exec, as a background
+  # job's child does; env here resets nothing (martha#718).
+  standin="${root}/started-with-sigint-ignored"
+  a_case "${standin}"
+  waited=0
+  (trap '' INT; exec env PATH="${STAND_INS}:${PATH}" MARTHA_CLEAN_INSTALL_STAND_IN="${standin}" "${SELF}" 'a-host' \
+    > "${standin}/out" 2> "${standin}/err") || waited=$?
+  [ "${waited}" -eq 1 ] || { echo "the self-test: a run started with SIGINT ignored exited ${waited}, not 1" >&2; case_failed=1; }
+  asked_for ': SIGINT ignored on entry; ' "${standin}/err" \
+    || { echo 'the self-test: a run started with SIGINT ignored did not say so' >&2; case_failed=1; }
+  if [ -s "${standin}/calls" ]; then echo 'the self-test: a run started with SIGINT ignored still ran a step' >&2; case_failed=1; fi
 
   # A create podman refused: podman answered, so the create is settled and made nothing. The tear-down has nothing to
   # watch for and says the container was never made -- the words an operator needs -- rather than spending the window on
