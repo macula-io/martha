@@ -522,6 +522,30 @@ export interface Tools extends ToolNames {
   register(tool: Tool): void
 }
 
+/**
+ * Why the host said the served tools left a session (martha#658), through a closed set: a host's own words never pass
+ * this contract, so a line forged into what the host wrote cannot speak in Martha's voice.
+ */
+export type ServedToolsCause = 'left_the_configuration' | 'other'
+
+/**
+ * Whether a session still holds the tools its launch served it, as its host recorded it (martha#658). `held` is
+ * earned: a session is `unknown` until the host recorded adding every served tool, and stays `unknown` on a host that
+ * records nothing of the kind. Only typed values cross: no string the host wrote is carried.
+ */
+export type ServedToolsHeld =
+  | { readonly state: 'unknown' }
+  | { readonly state: 'held'; readonly at: number }
+  | {
+      readonly state: 'withdrawn'
+      readonly at: number
+      /** The host's own flag that it does not blame the session for the withdrawal. */
+      readonly cause_neutral: boolean
+      readonly causes: readonly ServedToolsCause[]
+      /** How many tool servers the host recorded as failed when it withdrew them. */
+      readonly failed_servers: number
+    }
+
 /** The whole contract. Five parts, as decided on issue #1. */
 export interface HostContract {
   readonly clock: Clock

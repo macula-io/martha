@@ -38,6 +38,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'linux_process_identity',
     'owners_settings_directory',
     'row_streams_directory',
+    'read_one_file_held_by_its_descriptor',
   ])
   assert.deepEqual(declaredHostGlue(repository, 'hostAdapters'), [
     'answer_the_relay',
@@ -78,6 +79,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'start_the_member_on_the_owners_terminal',
     'sweep_leftover_launch_directories',
     'read_what_claude_code_says_of_an_agent',
+    'read_what_claude_code_records_of_its_tools',
   ])
 })
 
