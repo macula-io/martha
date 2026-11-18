@@ -284,9 +284,9 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
     })
     assert.equal(started.started, true, lines.join('\n'))
     if (!started.started) return
-    await started.stopped
+    const ended = await started.stopped
 
-    assert.equal(existsSync(done), true, `the member ran its commands to the end; it printed: ${whatTheMemberPrinted(place)}`)
+    assert.equal(existsSync(done), true, `the member ran its commands to the end; it ended ${JSON.stringify(ended)} and printed: ${whatTheMemberPrinted(place)}`)
     assert.equal(readFileSync(done, 'utf8'), '0', 'and every one of them succeeded')
     assert.deepEqual(readdirSync(place.markers), [], 'no door the checkout planted ran')
 
