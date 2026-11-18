@@ -38,9 +38,8 @@ import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cros
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import { THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
-import { DeclarationRefused, declareCrew, theHostOfMember, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { DeclarationRefused, declareCrewOnHosts, theHostOfMember, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
-import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import {
   CREW_ROW_PLACE,
   crewRowsDirectory,
@@ -64,7 +63,7 @@ import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a
 import { RELAY_JOURNAL_PLACE } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { theApprovalInUse } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { theStartOfAHost, type AHostsLauncher } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
+import { THE_VOCABULARIES_OF_HOST, theStartOfAMember, type AHostsLauncher } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 
 /** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
 export const NOT_A_TERMINAL =
@@ -131,7 +130,7 @@ export interface MemberStartRequest {
 /** The declaration, or why there is none to start from. */
 async function settingsOf(request: MemberStartRequest): Promise<CrewSettings | string> {
   try {
-    return await declareCrew(request.documents, request.root, CLAUDE_CODE_MODELS)
+    return await declareCrewOnHosts(request.documents, request.root, THE_VOCABULARIES_OF_HOST)
   } catch (error) {
     if (!(error instanceof DeclarationRefused)) throw error
     const fix = error.field === null && error.message.endsWith('is missing') ? ' Run martha init to declare a crew here.' : ''
@@ -153,7 +152,7 @@ async function readyToStart(request: MemberStartRequest): Promise<{ readonly nod
   // The host the declaration names for this member (martha#541): its launcher, or the refusal naming what this release
   // has, comes before anything else is read, so a crew naming a host this release cannot start learns that first.
   const host = theHostOfMember(settings, member)
-  const start = theStartOfAHost(host, request.inherited)
+  const start = theStartOfAMember(host, request.inherited, member, settings, request.args)
   if (typeof start === 'string') return start
   const ids = nodeIdsFor(request.state, names)
   if ('refusal' in ids) return `${NOT_STARTED}: ${ids.refusal}`

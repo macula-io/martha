@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path'
 import { type Host, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
 /** How long one host run may take before the probe gives up on it. */
 export const RUN_TIMEOUT_MS = 120_000
@@ -18,7 +19,7 @@ export const PROMPT = 'Reply with the single word ok.'
  * host that spends it on a tool call exits non-zero, and every row that reads the host's
  * exit — or reading the model's answer — reports that as a failure of the tree under test.
  */
-export const HEADLESS_CLAUDE = ['-p', '--max-turns', '3', '--model', 'haiku']
+export const HEADLESS_CLAUDE = ['-p', '--max-turns', '3', THE_MODELS_SWITCH, 'haiku']
 
 /** One scratch checkout: where its files go and where markers land. */
 export interface Place {

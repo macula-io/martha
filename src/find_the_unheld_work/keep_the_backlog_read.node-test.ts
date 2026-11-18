@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
-import { BACKLOG } from '../declare_crew/declare_crew.ts'
+import { BACKLOG, HOLD_REVIEWS } from '../declare_crew/declare_crew.ts'
 import { BACKLOG_READ_INTERVAL_MS, THE_READ_FILE, theBacklogNow, type TheBacklogReader } from './keep_the_backlog_read.ts'
 import { unheldWorkOver, type UnheldWorkAsked } from './unheld_work_tool.ts'
 import { UNHELD_WORK_PATH } from './unheld_work_path.ts'
@@ -71,7 +71,7 @@ const theSupervisorAsks = (reader: TheBacklogReader, changes: Partial<UnheldWork
         { name: 'Supervisor', role: SUPERVISOR, model: null, host: null },
         { name: 'Vesta', role: 'builder', model: null, host: null },
       ],
-      mode: { name: 'team', roles: [SUPERVISOR, 'builder'], may: { assign_work: [SUPERVISOR], approve_landing: ['owner'], resume_parked_work: [SUPERVISOR], offer_owner_asks: ['owner'], restart_member: ['owner'] } },
+      mode: { name: 'team', roles: [SUPERVISOR, 'builder'], may: { assign_work: [SUPERVISOR], approve_landing: ['owner'], resume_parked_work: [SUPERVISOR], offer_owner_asks: ['owner'], restart_member: ['owner'], [HOLD_REVIEWS]: ['owner'] } },
       backlog: { places: ['macula-io'], idle_minutes: 30 },
     },
     asker: 'Supervisor',
@@ -137,7 +137,7 @@ test('#319 B: only a role the table grants assign_work may ask, and a crew with 
   const builder = await theSupervisorAsks(reader, { asker: 'Vesta' })
   assert.ok('refused' in builder && builder.refused.startsWith('Vesta may not ask for unheld work'))
   const none = await theSupervisorAsks(reader, {
-    settings: { members: [{ name: 'Supervisor', role: SUPERVISOR, model: null, host: null }], mode: { name: 'team', roles: [SUPERVISOR], may: { assign_work: [SUPERVISOR], approve_landing: ['owner'], resume_parked_work: ['owner'], offer_owner_asks: ['owner'], restart_member: ['owner'] } }, backlog: null },
+    settings: { members: [{ name: 'Supervisor', role: SUPERVISOR, model: null, host: null }], mode: { name: 'team', roles: [SUPERVISOR], may: { assign_work: [SUPERVISOR], approve_landing: ['owner'], resume_parked_work: ['owner'], offer_owner_asks: ['owner'], restart_member: ['owner'], [HOLD_REVIEWS]: ['owner'] } }, backlog: null },
   })
   assert.deepEqual(none, { refused: 'this crew declares no backlog, so there are no places to look for unheld work in.' })
   assert.equal(reader.calls(), 0, 'a refused ask still asked GitHub')

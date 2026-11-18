@@ -15,7 +15,7 @@ import { after, test } from 'node:test'
 
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
-import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, declareCrew, OWNER, REVIEW_MODEL, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, declareCrew, HOLD_REVIEWS, OWNER, REVIEW_MODEL, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   homeModelOf,
@@ -45,8 +45,14 @@ interface ADeclaredCrew {
   readonly crew: string
 }
 
+/** What a test changes in the crew: the acts a role holds, and the reviewer model (`null` for none declared). */
+interface ACrewsOptions {
+  readonly grants?: Readonly<Record<string, readonly string[]>>
+  readonly review_model?: string | null
+}
+
 let crewsSoFar = 0
-async function aDeclaredCrewOfModels(): Promise<ADeclaredCrew> {
+async function aDeclaredCrewOfModels(options: ACrewsOptions = {}): Promise<ADeclaredCrew> {
   crewsSoFar += 1
   const home = join(homeOfAll, `crew-${crewsSoFar}`)
   const root = join(home, 'checkout')
@@ -64,9 +70,9 @@ async function aDeclaredCrewOfModels(): Promise<ADeclaredCrew> {
     mode: {
       name: SOLO_MODE,
       roles: ['builder', 'reviewer'],
-      may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])),
+      may: { ...Object.fromEntries(ACTS.map((act) => [act, [OWNER]])), ...options.grants },
     },
-    house_rules: { [REVIEW_MODEL]: 'fable' },
+    ...(options.review_model === null ? {} : { house_rules: { [REVIEW_MODEL]: options.review_model ?? 'fable' } }),
     channel_read_seconds: 30,
   }
   writeFileSync(declaration, `${JSON.stringify(declared, null, 2)}\n`)
@@ -89,6 +95,24 @@ test('#315: the declaration names this member its own model and the crew its rev
   assert.deepEqual(modelsTheDeclarationNames(settings, 'reviewer'), ['fable'], 'a member with no declared model is offered a model the declaration does not name')
   assert.equal(homeModelOf(settings, 'builder'), 'opus', 'the member\'s home is not the model the declaration gives it')
   assert.equal(homeModelOf(settings, 'reviewer'), '', 'a member the declaration gives no model has a home model, which the host — not this slice — decides')
+})
+
+test('#541 6b: a reviewer member is refused a switch, and a crew that names no reviewer model holds none (mutant: the switch refusal removed)', async () => {
+  const { settings } = await aDeclaredCrewOfModels({ grants: { [HOLD_REVIEWS]: ['reviewer'] } })
+  assert.equal(
+    theSwitchACallAsks({ model: 'opus', package: 'macula-io/martha#541', why: 'the review is on Opus' }, settings, 'reviewer'),
+    'reviewer holds reviews (role reviewer), and this crew holds reviews to fable: a switch would move the review off it, so no switch was made.',
+    'a reviewer member was let switch its session off the crew\'s reviewer model',
+  )
+  // Only the roles that hold the act are held: the same crew's builder switches as it always did.
+  const builder = theSwitchACallAsks({ model: 'fable', package: 'macula-io/martha#541', why: 'a reason' }, settings, 'builder')
+  assert.ok(typeof builder !== 'string', `a builder that holds no reviews was refused a switch: ${builder}`)
+
+  // With no reviewer model named there is no rule to hold it to: the refusal is the one every member with no declared
+  // model of its own gets, not one about a model the crew never named.
+  const { settings: noneNamed } = await aDeclaredCrewOfModels({ grants: { [HOLD_REVIEWS]: ['reviewer'] }, review_model: null })
+  const asked = theSwitchACallAsks({ model: 'fable', package: 'macula-io/martha#541', why: 'a reason' }, noneNamed, 'reviewer')
+  assert.match(String(asked), /declares no model of its own/, 'a crew that names no reviewer model held its reviewer to a rule it never declared')
 })
 
 test('#315: a switch to a declared model is kept, with its package and why (mutant: allow-list removed)', async () => {

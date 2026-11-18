@@ -46,7 +46,7 @@ import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { POLL_MS, until } from '../drive_the_recorded_host/wait_until_the_event.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { SWITCHES_THAT_LOAD_NO_CONFIG, THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
 import { approvedPlace } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
@@ -447,10 +447,10 @@ test('a switch that takes a value refuses one that is missing or is itself a swi
   const place = placeFor(t, {})
   await declared(place)
   const fake = fakeClaude(place)
-  for (const args of [['--model'], ['--model', '--settings', '{}']]) {
+  for (const args of [[THE_MODELS_SWITCH], [THE_MODELS_SWITCH, '--settings', '{}']]) {
     const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args })
     assert.equal(started.started, false, args.join(' '))
-    assert.ok(!started.started && started.refusal.includes('--model'), started.started ? '' : started.refusal)
+    assert.ok(!started.started && started.refusal.includes(THE_MODELS_SWITCH), started.started ? '' : started.refusal)
   }
   assert.equal(existsSync(fake.ran), false)
 })
@@ -459,7 +459,7 @@ test('the switches that load no config reach the host as the owner gave them', a
   const place = placeFor(t, {})
   await declared(place)
   const fake = fakeClaude(place)
-  const args = ['--model', 'an-owner-model', '--effort', 'high', '--verbose']
+  const args = [THE_MODELS_SWITCH, 'an-owner-model', '--effort', 'high', '--verbose']
   const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), args })
   assert.ok(started.started, started.started ? '' : started.refusal)
   await until('the fake host to write its arguments', () => existsSync(fake.args) && readFileSync(fake.args, 'utf8').includes('--plugin-dir'), t)
@@ -597,6 +597,50 @@ test('a declaration naming a reviewer model this host runs starts the member, an
     reviewModelRefusal(review, { spawn: CLAUDE_CODE_SUBAGENT_SPAWN, review_model }),
     'the crew handed to the member holds no review to the model the owner declared',
   )
+})
+
+/** Why a start refused, or '' for one that started. */
+const refusalOf = (started: MemberStarted): string => (started.started ? '' : started.refusal)
+
+/** That a refusal is a start's own and names every word given, each as it was given. */
+const refusedNaming = (refusal: string, words: readonly string[]): void => {
+  assert.ok(refusal.startsWith(NOT_STARTED), refusal)
+  for (const word of words) assert.ok(refusal.includes(word), `the refusal does not name ${word}: ${refusal}`)
+}
+
+/**
+ * A reviewer member through the start itself (martha#541 package 6b, r=3 amendment C): the crew's reviewer rule is
+ * asked by `martha start`, not only by the slice that composes it, and the owner's own arguments reach that rule. The
+ * reviewer as init writes it declares no model, so a crew that holds reviews to one cannot start it; declared on the
+ * reviewer model it starts; and the owner's own model switch on it is refused before the host runs, whatever it names.
+ */
+test('#541 6b: martha start holds a reviewer member to the reviewer model, and the owner\'s model switch never reaches its host (mutants: the rule not asked at the start; the owner\'s arguments not handed to it)', async (t) => {
+  const [review_model = '', another_model = ''] = CLAUDE_CODE_MODELS.names
+  assert.notEqual(review_model, another_model, 'the recorded host names fewer than two models, so this test could tell no two apart')
+  const reviewer = SOLO_MEMBERS[1].name
+  const reviewerOn = async (model: string | null, args: readonly string[]) => {
+    const place = placeFor(t, {})
+    await declared(place)
+    const declaration = soloDeclaration('Ada Owner')
+    const members = declaration.members.map((member) => (member.name === reviewer ? { ...member, model } : member))
+    writeFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), `${JSON.stringify({ ...declaration, members, house_rules: { [REVIEW_MODEL]: review_model } }, null, 2)}\n`)
+    const fake = fakeClaude(place)
+    const started = await startedOn(place, { ...requestFor(place, fake.command, reviewer, []), args: [...args] })
+    return { started, ran: () => existsSync(fake.ran) }
+  }
+
+  const asInitWritesIt = await reviewerOn(null, [])
+  assert.equal(asInitWritesIt.started.started, false, 'a reviewer member declaring no model was started under a crew that holds reviews to one')
+  refusedNaming(refusalOf(asInitWritesIt.started), [reviewer, review_model])
+  assert.equal(asInitWritesIt.ran(), false, 'the host ran for a reviewer member the rule refused')
+
+  const withTheOwnersSwitch = await reviewerOn(review_model, [THE_MODELS_SWITCH, another_model])
+  assert.equal(withTheOwnersSwitch.started.started, false, `a reviewer member was started with the owner's own ${THE_MODELS_SWITCH}`)
+  refusedNaming(refusalOf(withTheOwnersSwitch.started), [reviewer, another_model])
+  assert.equal(withTheOwnersSwitch.ran(), false, `the host ran with the owner's ${THE_MODELS_SWITCH} on a reviewer member`)
+
+  const onItsModel = await reviewerOn(review_model, [])
+  assert.ok(onItsModel.started.started, refusalOf(onItsModel.started))
 })
 
 test("a run reading a member's rows derives the same place the launcher writes them to (martha#254, r=1 O2)", () => {

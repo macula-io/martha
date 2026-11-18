@@ -27,7 +27,7 @@ import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { OWNER_BELL, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { OWNER_BELL, THE_ENGINES_HOST, type CrewSettings, type Member, type TheVocabulariesOfHost } from '../declare_crew/declare_crew.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
@@ -40,6 +40,9 @@ import {
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { CLAUDE, CLAUDE_CODE, CLAUDE_INSTALL } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { aReviewerMembersModelRefusal, theOwnersModelSwitchRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { launchClaudeCodeMember, type LauncherPlaces, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -108,6 +111,16 @@ export interface AHostsLauncher {
 export type TheLaunchersOfHost = Readonly<Record<string, AHostsLauncher>>
 
 /**
+ * The models each host runs, by the name a declaration writes (martha#541 package 6b): Claude Code's recorded list, and
+ * the engine's, recorded from its delegate tool's own schema. A host with no entry here is a host this release records
+ * no models for, and a declaration that names it is refused by name rather than read as running everything.
+ */
+export const THE_VOCABULARIES_OF_HOST: TheVocabulariesOfHost = new Map([
+  [CLAUDE_CODE, CLAUDE_CODE_MODELS],
+  [THE_ENGINES_HOST, RECORDED_GOOSE_ENGINE.subagent_models],
+])
+
+/**
  * The launchers this release has, by host. `claude-code` is today's launch, moved behind the table so that the start
  * call itself names no host; the engine's entry is packages 7-8's launch.
  */
@@ -140,6 +153,26 @@ export function theStartOfAHost(
 /** Why a host the declaration names cannot start here: this release has no launcher for it. */
 export const noLauncherFor = (host: string, table: TheLaunchersOfHost = THE_LAUNCHERS_OF_HOST): string =>
   `${NOT_STARTED}: ${host} is a host this release has no launcher for (it starts ${Object.keys(table).join(', ')}). A crew whose members name two hosts cannot start until the other host's launch and its approve step are released.`
+
+/**
+ * The start this member makes on `host`, or why it may not start (martha#541 package 6b): the host's launcher and the
+ * command it starts, and then the crew's reviewer rules over this member, whose own session is a review when its role
+ * holds `hold_reviews` — its declared model, and the owner's own model switch in `args`. The one reading a start asks,
+ * so a host this release cannot start and a reviewer member that would run off the crew's reviewer model are refused in
+ * the same place, before anything about the checkout is read.
+ */
+export function theStartOfAMember(
+  host: string,
+  inherited: Readonly<Record<string, string | undefined>>,
+  member: Member,
+  settings: CrewSettings,
+  args: readonly string[] = [],
+): TheStartOfAHost | string {
+  const start = theStartOfAHost(host, inherited)
+  if (typeof start === 'string') return start
+  const heldToTheReviewModel = aReviewerMembersModelRefusal(member, settings) ?? theOwnersModelSwitchRefusal(member, settings, args)
+  return heldToTheReviewModel === undefined ? start : `${NOT_STARTED}: ${heldToTheReviewModel}`
+}
 
 /** The file named on the owner's path, which the launch then starts by its own path, or undefined when there is none. */
 function theCommandOnThePath(command: string, inherited: Readonly<Record<string, string | undefined>>): string | undefined {
@@ -247,7 +280,7 @@ async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted>
     owner_bell: start.settings.house_rules[OWNER_BELL],
     places: start.places,
     command: start.command,
-    args: [...(start.model === null ? [] : ['--model', start.model]), ...start.args, ...(start.prompt === undefined ? [] : [start.prompt])],
+    args: [...(start.model === null ? [] : [THE_MODELS_SWITCH, start.model]), ...start.args, ...(start.prompt === undefined ? [] : [start.prompt])],
     inherited: start.inherited,
     stdio: start.stdio,
     tellOwner: (line) => start.tellOwner(line),
