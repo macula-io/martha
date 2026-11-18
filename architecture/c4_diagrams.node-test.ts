@@ -265,6 +265,77 @@ test('every component box has a row in the Components table', () => {
   assert.deepEqual(missing, [], `the Components table has no row for: ${missing.join('; ')}`)
 })
 
+// A row that exists can still be short: the box draws a slice the row never names, so the page shows
+// a capability in the picture and does not describe it (martha#587). A name counts where the row names
+// it as a directory — in its Component cell or in its description — because that is the page's own way
+// of pointing at a slice.
+
+/** One row of the Components table: the directories its Component cell claims, and everything it says. */
+interface TableRow {
+  /** The directories named in the Component cell: a box is answered for by a row that names one. */
+  readonly component: readonly string[]
+  /** The whole row, both cells, so a directory named in the description counts as named. */
+  readonly said: string
+}
+
+const tableRows = (page: string): TableRow[] => {
+  const section = page.slice(page.indexOf('## Components'), page.indexOf('### Left out'))
+  return section.split('\n')
+    .filter((line) => line.startsWith('| `'))
+    .map((line) => ({
+      component: [...(line.split('|')[1] ?? '').matchAll(/`([^`]+)`/g)].map((match) => match[1] ?? ''),
+      said: line,
+    }))
+}
+
+/** The boxes whose row leaves a directory the box draws unnamed, each with what it left out. */
+const boxesWithAnUnnamedSlice = (page: string): string[] => {
+  const rows = tableRows(page)
+  return components().coverage
+    .map((box) => {
+      const own = rows.filter((row) => row.component.some((name) => box.names.includes(name)))
+      // A box with no row at all is the other test's failure, and saying it here again would report one
+      // fault twice.
+      if (own.length === 0) return ''
+      const said = own.map((row) => row.said).join('\n')
+      const missing = box.names.filter((name) => !said.includes(`\`${name}\``))
+      return missing.length === 0 ? '' : `${box.name} names no ${missing.join(', ')}`
+    })
+    .filter((unnamed) => unnamed !== '')
+}
+
+test('every directory a component box draws is named in its row', () => {
+  const unnamed = boxesWithAnUnnamedSlice(README)
+  assert.deepEqual(unnamed, [], `the Components table leaves out: ${unnamed.join('; ')}`)
+})
+
+// The check above passes on a page whose rows are complete, which proves nothing about it on its own.
+// This page is the real one with one directory taken out of a row — once from the description, once
+// from the Component cell, the two places a name can sit — and the box is found by a directory it
+// stands for, so a renamed title is followed here rather than restated. What the box is left unnamed
+// by is compared with what it was left unnamed by on the real page, so this test answers the same on a
+// page that is already short as on the one that has been filled in.
+test('a directory taken out of a row leaves that slice unnamed', () => {
+  const box = boxHolding('take_in_a_turn')
+  const row = README.split('\n').find((line) => line.startsWith(`| \`${box.names[0]}\``))!
+  const cell = row.split('|')[1] ?? ''
+  const description = row.split('|').slice(2).join('|')
+  const namedInTheDescription = box.names.find((name) => !cell.includes(`\`${name}\``) && description.includes(`\`${name}\``))
+  // The row opens with its first backticked directory, so taking that one out stops the line being read
+  // as a row at all — the other test's failure. This takes a later one, which leaves the row a row.
+  const opensTheRow = /`([^`]+)`/.exec(cell)?.[1]
+  const namedInTheCell = box.names.find((name) => name !== opensTheRow && cell.includes(`\`${name}\``) && !description.includes(`\`${name}\``))
+  assert.ok(namedInTheDescription !== undefined && namedInTheCell !== undefined,
+    'the row no longer names a directory in each of the two places this test takes one out of, so it would prove nothing')
+  const withoutIt = (name: string): string => README.replace(row, row.replace(`\`${name}\``, name.replaceAll('_', ' ')))
+  const unnamedIn = (page: string): string[] => {
+    const entry = boxesWithAnUnnamedSlice(page).find((line) => line.startsWith(`${box.name} names no `))
+    return entry === undefined ? [] : entry.slice(`${box.name} names no `.length).split(', ')
+  }
+  assert.deepEqual(unnamedIn(withoutIt(namedInTheDescription!)).sort(), [...unnamedIn(README), namedInTheDescription!].sort())
+  assert.deepEqual(unnamedIn(withoutIt(namedInTheCell!)).sort(), [...unnamedIn(README), namedInTheCell!].sort())
+})
+
 // The check above passes on a page that has every row, which proves nothing about it on its own. Each
 // page below is the real one with one box's row taken away in a way the check must still see.
 // The boxes are found by a directory each stands for, and their titles are read from the drawing, so a
