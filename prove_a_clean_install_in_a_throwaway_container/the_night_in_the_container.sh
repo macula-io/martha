@@ -77,7 +77,6 @@ NIGHT_FULL_NAME=''
 NIGHT_BRANCH=''
 NIGHT_OPENED=''
 NIGHT_READY=''
-NIGHT_TOKEN_PLACED=''
 
 # Whether this run is a night.
 a_night() { [ -n "${NIGHT_DIR}" ]; }
@@ -296,8 +295,7 @@ night_token_step() {
   local said owner
   owner="$(json_field "${NIGHT_OWNER_FILE}" 'id')" || { failed 'night token' "${NIGHT_OWNER_FILE} names no id"; return 1; }
   said="$(in_the_container_from "${NIGHT_TOKEN_FILE}" "${CONTAINER}" sh -c "$(night_token_script)" 2> /dev/null)" \
-    || { failed 'night token' 'gh in the container would not log in from the token on standard input'; return 1; }
-  NIGHT_TOKEN_PLACED=1
+    || { failed 'night token' 'gh in the container would not log in from the token on standard input, or once logged in would not set itself up for git or say who it is'; return 1; }
   if [ "$(tail -1 <<< "${said}")" != "${owner}" ]; then
     failed 'night token' "gh in the container answers as '$(tail -1 <<< "${said}")', not the bot (${owner})"
     return 1
