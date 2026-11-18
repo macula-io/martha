@@ -13,16 +13,22 @@
 //
 // Everything written here is read from the recording (`../know_the_goose_engines_facts`, package 10):
 // the variable that moves the root, the mode's setting and the values it takes, the slash-commands
-// setting and what it does when unset, and every platform extension's key. Four values the recording
-// cannot supply are Martha's own decisions, declared once in this module and nowhere else:
+// setting and what it does when unset, and every platform extension's key and default. Two values the
+// recording cannot supply are Martha's own decisions, and they are declared once, here, and read from
+// here everywhere:
 //
 //   - THE_EXTENSION_A_MEMBER_KEEPS, the one extension whose tools a member's model is offered;
 //   - THE_MODE_THAT_ASKS_THE_CLIENT, the mode in which the engine brings a tool call to its client
-//     rather than running it, which is the whole of Martha's gate over the engine;
-//   - THE_PROVIDER_SETTING and THE_MODEL_SETTING, the keys the engine reads the provider and the model
-//     from. The first two are held to the recording by the test beside this file, so a renamed key or a
-//     dropped mode fails a test instead of writing a switch the engine ignores (a malformed mode falls
-//     back to `auto` in the engine, which runs every call with nothing asking).
+//     rather than running it, which is the whole of Martha's gate over the engine.
+//
+// The test beside this file holds both to the recording, so a renamed extension key or a dropped mode
+// fails a test instead of writing a switch the engine ignores. That matters more than it looks: a
+// malformed mode falls back to `auto` in the engine, which runs every call with nothing asking.
+//
+// Two more names the recording does not carry are the engine's own config keys for the provider and the
+// model (THE_PROVIDER_SETTING, THE_MODEL_SETTING), and the rest name what this launcher gives a launch:
+// its root, its home and its config and permission folders, the narrow PATH it hands the engine, and the
+// mode its folders are made with.
 //
 // The environment is built from nothing, never filtered from the owner's: the engine gets the root, the
 // home, a narrow PATH and no other variable at all. That is what keeps GOOSE_SUBAGENT_MODEL and
@@ -188,8 +194,12 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
   ].join('\n')
 }
 
+/** A key of the config, indentation included: a word, so no key can start a line of its own. */
+const A_WORD_OF_A_KEY = /^[A-Za-z0-9_-]+$/
+
 /** One line of the config: a key and its value, a string quoted so no character of it starts a new one. */
 function aLine(key: string, value: string | boolean): string {
+  if (!A_WORD_OF_A_KEY.test(key.trim())) throw new Error(`a config key ${JSON.stringify(key)} is not a word, and no key may carry a line of its own`)
   if (typeof value === 'boolean') return `${key}: ${String(value)}`
   if (/[\n\r]/.test(value)) throw new Error(`a value written to the config root holds a line break, which no config key may carry`)
   if (value === '') return `${key}:`

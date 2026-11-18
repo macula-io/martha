@@ -125,6 +125,12 @@ test('a recording that names neither the mode nor the kept extension refuses ins
   assert.throws(() => theConfigOfALaunch(noExtension, A_MODEL), new RegExp(THE_EXTENSION_A_MEMBER_KEEPS))
 })
 
+test('a key that is not a word cannot start a line of the config of its own, and a value cannot carry a line break (martha#541)', () => {
+  // A setting's key comes from the member's declaration, and a key holding a colon would write a second one.
+  assert.throws(() => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { 'a key: a value of its own': 'a-value-a-test-names' } }))
+  assert.throws(() => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { A_SETTING_A_TEST_NAMES: 'a value\nwith a line of its own' } }))
+})
+
 test('the launch gets a root and a home of its own, made new and 0700, and neither is reused (martha#541)', (t) => {
   const { root, checkout } = aLaunchRoot(t)
   const made = thePlacesOfALaunch(root, checkout)
