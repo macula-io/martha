@@ -259,7 +259,9 @@ export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = 
  * the same two names, so a crew overrides a shipped text by putting a file of the same name in the same place.
  */
 export const ROLE_TEXTS_DIRECTORY = 'roles'
-export const MODE_TEXTS_DIRECTORY = 'modes'/** A member's name: what a crew calls it, and what its branches start with. */
+export const MODE_TEXTS_DIRECTORY = 'modes'
+
+/** A member's name: what a crew calls it, and what its branches start with. */
 export const MEMBER_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
 
 /** The one rule member names are compared by (martha#528), held in ./member_names.ts so a slice this one imports can use it. */
