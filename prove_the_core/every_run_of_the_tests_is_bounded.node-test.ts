@@ -198,6 +198,33 @@ const RUNS: ReadonlyArray<{ readonly name: string; readonly script: string; read
   { name: '<(…) runs: a process substitution the command reads', script: 'diff <(node --test x) /dev/null', line: 1, text: 'node --test x' },
   { name: '>(…) runs: a process substitution the command writes to', script: 'echo y > >(node --test x)', line: 1, text: 'node --test x' },
   { name: 'done < <(…): a process substitution a redirection reads', script: 'while read -r l; do echo "$l"; done < <(node --test x)', line: 1, text: 'node --test x' },
+  // The programs whose own option hands its value to a shell (martha#759).
+  { name: "su -c '…' runs its command string in the target user's shell", script: "su -c 'node --test x' u", line: 1 },
+  { name: "su - u -c '…': the option after a positional word is still found", script: "su - u -c 'node --test x'", line: 1 },
+  { name: "su --command='…' runs its value", script: "su --command='node --test x' u", line: 1 },
+  { name: "runuser -c '…' runs its command string", script: "runuser -c 'node --test x' u", line: 1 },
+  { name: "flock … -c '…' runs its command string", script: "flock -x l -c 'node --test x'", line: 1 },
+  { name: "script -qc '…': c last in a cluster", script: "script -qc 'node --test x' /dev/null", line: 1 },
+  { name: "script --command '…' runs its value", script: "script --command 'node --test x'", line: 1 },
+  { name: 'a flock behind a wrapper is still found', script: "sudo flock l -c 'node --test x'", line: 1 },
+  { name: 'watch joins its words and hands them to a shell', script: "watch 'node --test x'", line: 1, text: 'node --test x' },
+  { name: "watch -n 5 '…': a value joins the string, and the run is still found", script: "watch -n 5 'node --test x'", line: 1, text: '5 node --test x' },
+  // A here-document body read as a script, then line by line when its quoting does not close (martha#759).
+  { name: 'a written script whose body holds an apostrophe still names its run', script: "cat > f <<EOF\nit's\nnode --test x\nEOF", line: 3 },
+  { name: 'a substitution in an unquoted body after an apostrophe is still found', script: "cat <<EOF\nit's\n$(node --test x)\nEOF", line: 3 },
+  // npm hands its -c value to a shell, under a two-word program (martha#759's r=2).
+  { name: "npm exec -c '…' runs its value through script-shell", script: "npm exec -c 'node --test x'", line: 1 },
+  { name: "npm exec --call='…' runs its value", script: "npm exec --call='node --test x'", line: 1 },
+  { name: "npm x -c '…': npm's own short name", script: "npm x -c 'node --test x'", line: 1 },
+  { name: "npx -c '…' runs its value", script: "npx -c 'node --test x'", line: 1 },
+  { name: "ksh -c '…' runs its command string", script: "ksh -c 'node --test x'", line: 1 },
+  { name: "mksh -c '…' runs its command string", script: "mksh -c 'node --test x'", line: 1 },
+  { name: "fish -c '…' runs its command string", script: "fish -c 'node --test x'", line: 1 },
+  // GNU parallel runs its arguments as shell command lines (martha#759's r=2).
+  { name: 'parallel ::: runs each argument as a command line', script: "parallel ::: 'node --test x'", line: 1 },
+  { name: 'parallel runs its command template through a shell', script: "parallel 'node --test x {}' ::: x", line: 1, text: 'node --test x {}' },
+  { name: 'parallel -j2: an option before its template', script: "parallel -j2 'node --test x {}' ::: x", line: 1, text: 'node --test x {}' },
+  { name: 'a pipe into parallel is a pipe into a program that runs its input', script: "printf '%s\\n' 'node --test x' | parallel", line: 1 },
 ]
 
 for (const { name, script, line, text } of RUNS) {
@@ -231,11 +258,44 @@ const DATA: ReadonlyArray<{ readonly name: string; readonly script: string }> = 
   { name: 'a shell given a script file reads no script on its input', script: "printf '%s\\n' 'node --test x' | bash ./a.sh" },
   { name: 'a comment is prose', script: '# node --test x is what a run looks like' },
   { name: "'<(…)' inside single quotes is text", script: "echo '<(node --test x)'" },
+  // A here-document's body is text: an apostrophe in it is a plain character, not a quote (martha#759).
+  { name: 'an apostrophe in an unquoted heredoc body is prose', script: "cat <<EOF\nit's prose\nEOF" },
+  { name: "an apostrophe in a quoted heredoc body is prose", script: "cat <<'EOF'\nit's prose\nEOF" },
+  { name: 'an apostrophe in a <<- heredoc body is prose', script: "cat <<-EOF\n\tit's prose\n\tEOF" },
+  // The programs whose option hands a string to a shell, when that string runs nothing unbounded (martha#759).
+  { name: "su -c '…' with a command that runs nothing unbounded", script: "su -c 'echo hi' u" },
+  { name: 'flock with no -c runs its own argv', script: 'flock l true' },
+  { name: 'watch -x runs a command line, not a shell string', script: 'watch -x ls' },
+  { name: "npx -c '…' with a command that runs nothing unbounded", script: "npx -c 'echo hi'" },
+  { name: 'npx without -c runs a package binary', script: 'npx eslint .' },
+  { name: 'parallel with a template runs nothing unbounded', script: 'parallel echo ::: a' },
+  { name: "parallel :::: names files, and a file name that holds the runner is a file name", script: "parallel :::: 'node --test x'" },
+  { name: 'a pipe into parallel that is given a template is not run line by line', script: "printf '%s\\n' 'node --test x' | parallel echo" },
+  { name: "watch -x '…' runs a command line of its own, not a shell string", script: "watch -x 'node --test x'" },
 ]
 
 for (const { name, script } of DATA) {
   test(`this runs nothing unbounded, so it passes: ${name} (martha#727)`, () => {
     assert.deepEqual(theRunsNamedIn(script), [])
+  })
+}
+
+/** Scripts whose quoting does not close: refused by name, at the line it opened on (martha#727, #759's B, D and E). */
+const UNREADABLE_SCRIPTS: ReadonlyArray<{ readonly name: string; readonly script: string; readonly line: number }> = [
+  { name: 'a here-document body a shell reads is a script, and an apostrophe still refuses it', script: "bash <<EOF\nit's\nEOF", line: 2 },
+  { name: 'a body piped into a shell is read by a shell, so its apostrophe still refuses it', script: "cat <<'EOF' | bash\nit's\nEOF", line: 2 },
+  { name: 'a shell reading its input takes the body, and ksh is one', script: "ksh <<EOF\nit's\nEOF", line: 2 },
+  { name: "fish's own quoting is not sh's, so its -c string is refused rather than read as what fish runs", script: 'fish -c "echo \'it\\\'s\'"', line: 1 },
+]
+
+for (const { name, script, line } of UNREADABLE_SCRIPTS) {
+  test(`this is refused, and said by name: ${name} (martha#759)`, () => {
+    const found = unboundedRunsIn([{ path: 'a_script.sh', text: script }])
+    assert.deepEqual(
+      found.map((run) => [run.line, run.problems]),
+      [[line, [UNREADABLE]]],
+      `named ${JSON.stringify(found.map((run) => [run.line, run.problems]))}, not one UNREADABLE at line ${line}`,
+    )
   })
 }
 
