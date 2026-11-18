@@ -10,15 +10,12 @@
 // member that mistypes a path learns the difference at once.
 
 import type { CrewStore } from '../host_contract/host_contract.ts'
-import { namedThenTheRest, type IReleasedPath } from '../tell_a_member_what_its_relaunch_killed/tell_a_member_what_its_relaunch_killed.ts'
+import { namedThenTheRest, THE_RELEASE_ACT, type IReleasedPath } from '../tell_a_member_what_its_relaunch_killed/tell_a_member_what_its_relaunch_killed.ts'
 import { keepTheReleaseOf, theLeftoverRecordOf, theReleasedPathsOf } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 
-/** The name the act is registered under: the one the refusals' own text tells the member to take. */
-export const RELEASE_THE_FILES = 'release_the_files_a_killed_run_left'
-
-/** What the act takes, as the mod registers it. */
+/** What the act takes, as the mod registers it: under the name the refusals' own text tells the member to take. */
 export const RELEASE_THE_FILES_TOOL = {
-  name: RELEASE_THE_FILES,
+  name: THE_RELEASE_ACT,
   description:
     'Say that paths a killed run left in your trees are your own edits, after looking at them. A released path is not ' +
     'refused at the next commit or hand-off, and the telling leaves it out. Name each path as the telling named it.',
