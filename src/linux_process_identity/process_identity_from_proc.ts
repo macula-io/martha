@@ -29,7 +29,7 @@
 // namespace is read here too (`readlink /proc/self/ns/pid`), and a caller that
 // acts across processes compares it before it trusts any pid (martha#124).
 
-import { readFileSync, readlinkSync } from 'node:fs'
+import { readFileSync, readdirSync, readlinkSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { Processes } from '../host_contract/host_contract.ts'
@@ -196,7 +196,6 @@ export function ancestorsUnder(proc_root: string, pid: number): readonly AProces
 
 /** The session id's place among the fields that follow the command name (field 3 onwards): field 6. */
 const SESSION_AFTER_COMMAND = 6 - 3
-
 /** The session id in one /proc/<pid>/stat line, or null when the line is not one. */
 export function sessionIn(stat: string): number | null {
   const command_end = stat.lastIndexOf(')')
@@ -216,3 +215,68 @@ export function whereItIsTypedUnder(proc_root: string, pid: number): { readonly 
   const stat = textOrWhy(join(proc_root, String(pid), 'stat'))
   return { tty, session: 'text' in stat ? sessionIn(stat.text) : null }
 }
+
+/** The group id's place among the fields that follow the command name (field 3 onwards): field 5. */
+const GROUP_AFTER_COMMAND = 5 - 3
+
+/** The group id in one /proc/<pid>/stat line, or null when the line is not one. */
+export function groupIn(stat: string): number | null {
+  const command_end = stat.lastIndexOf(')')
+  if (command_end === -1) return null
+
+  const group = stat.slice(command_end + 1).trim().split(/\s+/)[GROUP_AFTER_COMMAND]
+  return group !== undefined && /^\d+$/.test(group) ? Number(group) : null
+}
+
+/** One command a process group held when it was read: its pid, the line the machine held, and its start in ticks. */
+export interface ACommandInAGroup {
+  readonly pid: number
+  readonly command_line: string
+  readonly start_ticks: string
+}
+
+/** What a group held at the moment it was read, or why this kernel could not say. */
+export type AGroupReading = { readonly commands: readonly ACommandInAGroup[] } | { readonly unreadable: string }
+
+/**
+ * The commands a process group held, as Linux says it (#693): every process whose group is `group`, with the command
+ * line the machine held for it. A kill about to be sent to the group can be told what it ends. Read before the kill and
+ * not after, since a killed process has nothing left to read.
+ */
+export function processesInGroupUnder(proc_root: string, group: number): AGroupReading {
+  let names: readonly string[]
+  try {
+    names = readdirSync(proc_root)
+  } catch (error) {
+    return { unreadable: `${proc_root} could not be listed (${(error as NodeJS.ErrnoException).code ?? String(error)})` }
+  }
+  const commands = names.filter((name) => /^\d+$/.test(name)).flatMap((name) => theCommandOf(proc_root, group, Number(name)))
+  return { commands }
+}
+
+/** The command `pid` holds, when it is in `group` and holds one: a kernel thread or a zombie holds no command line. */
+function theCommandOf(proc_root: string, group: number, pid: number): readonly ACommandInAGroup[] {
+  const stat = textOrWhy(join(proc_root, String(pid), 'stat'))
+  if (!('text' in stat) || groupIn(stat.text) !== group) return []
+  const ticks = startTimeIn(stat.text)
+  const line = textOrWhy(join(proc_root, String(pid), 'cmdline'))
+  if (ticks === null || !('text' in line)) return []
+  const command_line = line.text.split('\u0000').filter((word) => word !== '').join(' ')
+  return command_line === '' ? [] : [{ pid, command_line, start_ticks: ticks }]
+}
+
+/** The boot's own moment on the machine's clock, from the `btime` line of /proc/stat, or null when it cannot be read. */
+export function bootTimeMsUnder(proc_root: string): number | null {
+  const stat = textOrWhy(join(proc_root, 'stat'))
+  if (!('text' in stat)) return null
+  const line = stat.text.split('\n').find((one) => one.startsWith('btime '))
+  const seconds = line?.slice('btime '.length).trim()
+  return seconds !== undefined && /^\d+$/.test(seconds) ? Number(seconds) * 1000 : null
+}
+
+/**
+ * A start given in ticks since the boot as a moment on the machine's clock: the boot's own moment plus the ticks at
+ * `ticks_per_second`, which the machine answers for itself (`getconf CLK_TCK`) rather than this file guessing it.
+ */
+export const startedAtMs = (start_ticks: string, boot_time_ms: number, ticks_per_second: number): number =>
+  boot_time_ms + Math.round((Number(start_ticks) * 1000) / ticks_per_second)
