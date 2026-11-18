@@ -112,12 +112,13 @@ const ANY_MODEL: ModelVocabulary = vocabularyOf(OPEN_VOCABULARY, [])
 
 /** The declaration as a crew writes it, with the reviewer's model and the act's grant set by the test. */
 const aDeclaredCrew = async (options: { readonly review_model?: string; readonly reviewer_model?: string | null; readonly grants?: readonly string[]; readonly members?: readonly { name: string; role: string; model: string | null }[] } = {}): Promise<CrewSettings> => {
+  // A member names no host here, so each runs on the crew's own: a declaration writes a host only where it differs.
   const declaration = {
     version: DECLARATION_VERSION,
     owner: 'Ann',
     members: options.members ?? [
-      { name: 'Builder', role: 'builder', model: null, host: null },
-      { name: 'Reviewer', role: 'reviewer', model: options.reviewer_model ?? null, host: null },
+      { name: 'Builder', role: 'builder', model: null },
+      { name: 'Reviewer', role: 'reviewer', model: options.reviewer_model ?? null },
     ],
     mode: {
       name: 'team',

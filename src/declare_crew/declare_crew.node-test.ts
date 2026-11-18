@@ -20,6 +20,7 @@ import {
   DECLARATION_DIRECTORY,
   PERSON_MINUTES,
   REVIEW_MINUTES,
+  REVIEW_MODEL,
   STALLED_MINUTES,
   DECLARATION_FILE,
   DECLARATION_VERSION,
@@ -460,11 +461,12 @@ test('#374: the declaration v0.1.0 wrote declares, and its channel_read_seconds 
 // --- the host each member runs on (martha#541 package 5) --------------------------------------------------------
 
 test('#541: a member runs on the host it names, else the crew\'s, and the crew\'s is where a member names none (mutant: the member\'s host read as the crew\'s)', async () => {
-  const settings = await declare({
-    ...team,
-    host: THE_ENGINES_HOST,
-    members: [{ name: 'Lead', role: 'supervisor', host: CLAUDE_CODE }, { name: 'Builder1', role: 'builder' }],
-  }).settings
+  // This crew names both hosts, so it is read with both hosts' models (martha#541 package 6b): its `review_model` is
+  // held against every member's host, and the crew's own host is the engine, where a member names none.
+  const settings = await declareOnHosts(
+    { ...team, host: THE_ENGINES_HOST, members: [{ name: 'Lead', role: 'supervisor', host: CLAUDE_CODE }, { name: 'Builder1', role: 'builder' }] },
+    new Map([[CLAUDE_CODE, HOST_MODELS], [THE_ENGINES_HOST, HOST_MODELS]]),
+  )
   assert.equal(settings.members[0]!.host, CLAUDE_CODE)
   assert.equal(theHostOfMember(settings, settings.members[0]!), CLAUDE_CODE, 'the member\'s own host did not win over the crew\'s')
   assert.equal(settings.members[1]!.host, null)
@@ -530,7 +532,7 @@ const acrossTwoHosts = (review_model: string | undefined, hosts: { readonly buil
     { name: 'Reviewer1', role: 'reviewer', host: hosts.reviewer, model: review_model ?? null },
   ],
   mode: { ...team.mode, may: { ...allActsTo([OWNER]), [HOLD_REVIEWS]: ['reviewer'] } },
-  ...(review_model === undefined ? {} : { house_rules: { ...team.house_rules, review_model } }),
+  house_rules: { ...without(REVIEW_MODEL, team.house_rules), ...(review_model === undefined ? {} : { [REVIEW_MODEL]: review_model }) },
 })
 
 const declareOnHosts = (declaration: unknown, vocabularies: ReadonlyMap<string, ModelVocabulary>) =>

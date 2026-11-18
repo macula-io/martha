@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { ACTS, CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, HOST, LAYOUT_TO_ADD, OWNER, THE_ENGINES_HOST, WORKTREES, WORKTREES_BESIDE_CLONES, type WorkspaceLayout } from '../declare_crew/declare_crew.ts'
+import { ACTS, CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, HOLD_REVIEWS, HOST, LAYOUT_TO_ADD, OWNER, THE_ENGINES_HOST, WORKTREES, WORKTREES_BESIDE_CLONES, type WorkspaceLayout } from '../declare_crew/declare_crew.ts'
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
@@ -45,7 +45,10 @@ test('init declares a solo crew of a builder and a reviewer that declareCrew rea
   const settings = await declareCrew(documents, root, HOST_MODELS)
   assert.equal(settings.owner, 'Ada Owner')
   assert.deepEqual(settings.members.map((member) => member.name), SOLO_MEMBERS.map((member) => member.name))
-  for (const act of ACTS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
+  // Every act is the owner's alone, except `hold_reviews`: the solo crew's reviewer role holds it too, so the reviewer's
+  // own session is the review (martha#541 package 6b).
+  const reviewer = SOLO_MEMBERS[1]!
+  for (const act of ACTS) assert.deepEqual(settings.mode.may[act], act === HOLD_REVIEWS ? [OWNER, reviewer.role] : [OWNER], act)
 })
 
 test('#541: init writes the crew-level host the install names, no member host, and the file reads back with it', async (t) => {
