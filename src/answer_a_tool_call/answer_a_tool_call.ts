@@ -100,10 +100,11 @@ export interface ToolCall {
    * handed.
    *
    * A package with no contract version at all arrives as "none recorded", and that refuses every call but five: the four
-   * that end a package, and the tool that records one (martha#597). Absent therefore means only one of three things: the
-   * member holds no package, the call is no act and the version in force reads none, or the crew keeps no contracts at
-   * all — and each of those refuses nothing. A contract the ledger could not read back arrives as that, and refuses the
-   * acts it cannot judge.
+   * that end a package, and the tool that records one (martha#597). Absent therefore means one of four things: the
+   * member holds no package, the call is no act and the version in force reads none, the crew keeps no contracts at
+   * all, or the ledger could not answer and the call is no act — the caller answers "unreadable" only for a call that is
+   * an act, so the acts it cannot judge are refused and nothing else. Each of those refuses nothing. A contract the
+   * ledger could not read back, for an act, arrives as that and refuses the act.
    */
   readonly contract?: TheContractHanded
 }
