@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_SERVERS, HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -15,6 +15,7 @@ import {
   HOST_TRUST_RECORD_FILE,
   hostTrustsTheFolder,
   hostVersionLine,
+  TRUST_ACCEPTED_KEY,
   notACommandThisLauncherCanRun,
   refusalToLoadTheRelay,
   resolvedHostCommand,
@@ -118,6 +119,21 @@ test('the version line is told only when the host is not the recorded version, n
   assert.ok(other?.includes('999.0.0') && other.includes(RECORDED_HOST.host_version), String(other))
   const silent = await hostVersionLine(standIn(dir, []), {}, dir)
   assert.ok(silent?.includes(RECORDED_HOST.host_version) && silent.includes('does not say'), String(silent))
+})
+
+test('a trust record that is missing, does not parse, does not trust the folder, trusts only a folder above it, or trusts with a value that is not true trusts nothing (#104 r=3)', (t) => {
+  const folder = realpathSync(placeFor(t))
+  for (const [what, record] of [
+    ['no record at all', undefined],
+    ['a record that does not parse', '{"projects": {'],
+    ['a record where the folder is not trusted', JSON.stringify({ projects: { [folder]: { [TRUST_ACCEPTED_KEY]: false } } })],
+    ['a record that trusts only a folder above it', JSON.stringify({ projects: { [dirname(folder)]: { [TRUST_ACCEPTED_KEY]: true } } })],
+    ['a record whose trust is not the value true', JSON.stringify({ projects: { [folder]: { [TRUST_ACCEPTED_KEY]: 'true' } } })],
+  ] as const) {
+    const configDir = placeFor(t)
+    if (record !== undefined) writeFileSync(join(configDir, HOST_TRUST_RECORD_FILE), record)
+    assert.equal(hostTrustsTheFolder({ CLAUDE_CONFIG_DIR: configDir }, folder, []), false, what)
+  }
 })
 
 test('the host\'s trust record is read from CLAUDE_CONFIG_DIR before HOME, only when absolute, and not when the host is told to ignore it', (t) => {

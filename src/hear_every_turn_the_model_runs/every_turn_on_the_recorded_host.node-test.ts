@@ -18,7 +18,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
@@ -41,10 +41,9 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 // The run's silence budget is the one the launcher gives a host that shows nothing new (martha#441): named once, there.
 import { HOST_SILENCE_MS } from '../drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'
 import { ARRIVAL_OF_A_PLUGINS_PROMPT, CLAUDE_CODE_PROMPT_ORIGINS, SOURCE_OF_AN_UNKNOWN_ORIGIN } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
-import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { rowStreamsDirectory, streamOfDirectoryName } from '../row_streams_directory/row_streams_directory.ts'
 import { recordOf, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
-import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const MEMBER = 'builder'
 const SENDER = 'the-owner'
@@ -148,12 +147,15 @@ async function untilTheTurnCarryingItEnded(hands: TheOwnersHands, text: string):
   })
 }
 
-/** The sessions the host kept transcripts for in this run: the record of each is read by its id. */
+/**
+ * The sessions the launcher kept a record for in this run, read from the crew's own rows: the host's transcripts are
+ * in the member's own config folder since martha#602, and that folder goes with its launch.
+ */
 function theSessionsOf(project: Project): readonly string[] {
-  const projects = join(project.home, CLAUDE_FOLDER, 'projects')
-  return readdirSync(projects, { recursive: true, encoding: 'utf8' })
-    .filter((name) => name.endsWith('.jsonl') && !name.includes('subagents'))
-    .map((name) => basename(name, '.jsonl'))
+  return readdirSync(crewRowsDirectoryOf(stateHomeUnder(project.home), project.checkout))
+    .map(streamOfDirectoryName)
+    .filter((stream): stream is string => stream?.startsWith(sessionRecordStreamOf('')) === true)
+    .map((stream) => stream.slice(sessionRecordStreamOf('').length))
 }
 
 /** The paths every session's record holds, as the launcher kept them. */

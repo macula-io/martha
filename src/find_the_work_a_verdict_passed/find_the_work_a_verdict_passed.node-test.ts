@@ -15,6 +15,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
+import { CLONES } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { keepTheMilestone } from '../keep_the_ledger/keep_the_ledger.ts'
@@ -44,7 +45,7 @@ const RECORDED = JSON.parse(readFileSync(new URL('./recorded_pulls_at_a_head.jso
 
 const PACKAGE = 'macula-io/martha#251'
 const REPO = PACKAGE.slice(0, PACKAGE.indexOf('#'))
-const CWD = `/clones/${REPO}`
+const CWD = `/${CLONES}/${REPO}`
 const OPEN = RECORDED.open
 const CLOSED = RECORDED.closed
 const BASE = 'e7009dfbd2b89172efccfa077c849a927648daee'

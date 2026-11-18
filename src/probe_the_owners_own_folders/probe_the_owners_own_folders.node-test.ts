@@ -18,3 +18,11 @@ test('every row about the owner\'s own folders claims an absence only beside a p
 test('no row about the owner\'s own folders asks the model to answer in one turn (martha#223, martha#443)', () => {
   assert.deepEqual(rowsWithoutRoomToFinish(ROWS), [])
 })
+
+test('each folder of the owner\'s config dir is probed once, even when the host loads it two ways (martha#624)', () => {
+  // From 2.1.327 the host's markdown loader names output-styles as a kind as well as the init field naming it, so a list
+  // that adds one to the other holds it twice, and the same pair of live probes would run twice.
+  const whats = OWNER_SCOPE_PROBES.map((probe) => probe.what)
+  assert.notDeepEqual(whats, [], 'the rows are read')
+  assert.deepEqual(whats.filter((what, at) => whats.indexOf(what) !== at), [])
+})

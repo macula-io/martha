@@ -22,7 +22,9 @@ import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts
 import { verifyRange } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { DASHBOARD } from '../declare_crew/declare_crew.ts'
+import { APPROVE_LANDING, DASHBOARD, OWNER } from '../declare_crew/declare_crew.ts'
+import { ASK_QUEUED, ASKS_SETTLED, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { THE_PACKAGES_JOINER, theLandingQuestion } from './the_owners_yes_to_a_landing.ts'
 import { forecastWhatABatchLands } from '../forecast_what_a_batch_lands/forecast_what_a_batch_lands.ts'
 import { LINTER_CONFIG, theManifestOfAPlantedTree } from '../check_a_host_directory_stays_under_its_ceiling/a_tree_whose_ceilings_a_test_reads.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest, Row, RowStore, StoredRow } from '../host_contract/host_contract.ts'
@@ -65,6 +67,13 @@ const refusedBy = (asked: { readonly ok?: unknown; readonly refused?: string }):
 const THE_DAY = Date.UTC(2026, 10, 12)
 
 const MEMBER = 'Ceres'
+
+/** The role these tests land as, and a table that grants it approve_landing: the member's own call is the yes (martha#605). */
+const A_LANDING_ROLE = 'lander'
+const MEMBER_APPROVES = { members: [{ name: MEMBER, role: A_LANDING_ROLE }], mode: { may: { [APPROVE_LANDING]: [A_LANDING_ROLE] } } }
+
+/** A solo crew's table: approve_landing is the owner's alone, so a landing stands on an ask the owner said yes to. */
+const THE_OWNER_APPROVES = { members: [{ name: MEMBER, role: A_LANDING_ROLE }], mode: { may: { [APPROVE_LANDING]: [OWNER] } } }
 
 interface Fixture {
   readonly root: string
@@ -283,17 +292,9 @@ function aStoreThatRefusesTheAppendAt(refused: number, asItRefuses: () => void =
   }
 }
 
-/** The adapter a batch's two heads grow, and the picture they redraw: what a landing may redo, and what it may not. */
+/** The adapter a batch's two heads grow, and the C4 picture the release draws: neither is a file a landing redraws. */
 const AN_ADAPTER = 'src/an_adapter'
 const THE_PICTURE = 'assets/c4-context.svg'
-const REDRAWN = 'the picture, redrawn over the merged tree\n'
-
-/** A stand-in for the C4 program inside a fixture: it draws the picture into the tree it is run in, where the real one does. */
-const A_STAND_IN_FOR_THE_C4_PROGRAM = [
-  "import { writeFileSync } from 'node:fs'",
-  "import { join } from 'node:path'",
-  `writeFileSync(join(import.meta.dirname, '..', 'assets', 'c4-context.svg'), ${JSON.stringify(REDRAWN)})`,
-].join('\n')
 
 /** `n` lines the linter counts as code, under `name`, so a planted tree's count is a number the test knows. */
 const codeLines = (name: string, n: number): string =>
@@ -551,7 +552,7 @@ test('#256: the fast-forward puts the passed tip on the default branch, and its 
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
   await aPassedVerdict(tests, work_package, base, tip)
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, MEMBER_APPROVES)
   assert.ok('told' in forwarded, `a fast-forward the owner said yes to was refused: ${wordsOf(forwarded)}`)
   assert.equal(theOriginMain(fixture), tip, 'the default branch was not fast-forwarded onto the passed tip')
   const rows = await readLedger(tests.host, work_package)
@@ -563,6 +564,79 @@ test('#256: the fast-forward puts the passed tip on the default branch, and its 
   assert.equal(concluded[0]?.kind === 'act_concluded' ? concluded[0].outcome.succeeded : false, true, 'the push was kept as failed')
 })
 
+test('#605: a fast-forward with no yes, under a table granting approve_landing to the owner, is refused before its push is announced, and nothing moves', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#605`
+  const tip = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
+  await aPassedVerdict(tests, work_package, base, tip)
+  const before = await readLedger(tests.host, work_package)
+
+  const unasked = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, THE_OWNER_APPROVES)
+  assert.match(wordsOf(unasked), /a landing needs the owner's yes/)
+  const ask = await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: `may I land ${tip}?`, asked_by: MEMBER, since: 0 })
+  await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [ask] })
+  const elsewhere = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package], owner_yes: ask }, THE_OWNER_APPROVES)
+  assert.match(wordsOf(elsewhere), /a yes counts only for the landing it was asked about/)
+
+  assert.equal(theOriginMain(fixture), base, 'the default branch moved on a landing nobody said yes to')
+  assert.deepEqual(await readLedger(tests.host, work_package), before, 'a refused landing wrote to the package\'s ledger')
+})
+
+test('#605 r=2: an owner\'s yes to a landing at a branch name, or of a package whose name carries the joiner, is refused, and nothing moves or is written', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#605`
+  const tip = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
+  await aPassedVerdict(tests, work_package, base, tip)
+  const before = await readLedger(tests.host, work_package)
+  const yesTo = async (landing: { readonly tip: string; readonly packages: readonly string[] }): Promise<number> => {
+    const question = theLandingQuestion({ repo: fixture.repo, default_branch: 'origin/main', ...landing })
+    const ask = await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question, asked_by: MEMBER, since: 0 })
+    await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [ask] })
+    return ask
+  }
+
+  const by_name = { path: fixture.clone, base, tip: 'passed', packages: [work_package] }
+  const named = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { ...by_name, owner_yes: await yesTo(by_name) }, THE_OWNER_APPROVES)
+  assert.match(wordsOf(named), /a landing names its tip as a full commit id, forty hex digits/)
+  const other_package = `${fixture.repo}#606`
+  const joined_name = `${work_package}${THE_PACKAGES_JOINER}${other_package}`
+  const joined = { path: fixture.clone, base, tip, packages: [joined_name] }
+  const one_as_two = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { ...joined, owner_yes: await yesTo(joined) }, THE_OWNER_APPROVES)
+  assert.match(wordsOf(one_as_two), /a package name may not carry/)
+
+  assert.equal(theOriginMain(fixture), base, 'the default branch moved on a yes that named a ref or a joined package')
+  assert.deepEqual(await readLedger(tests.host, work_package), before, 'a refused landing wrote to the package\'s ledger')
+  assert.deepEqual(await readLedger(tests.host, other_package), [], 'a refused landing wrote a row for a package only a joined name named')
+})
+
+test('#605: verify_range hands over the question, the owner says yes to it, and the landing stands on that yes and records it', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#606`
+  const head = aBranchWithOneCommit(fixture, 'passed', base, 'work.txt', 'the work\n')
+  const pulls = new Map<string, unknown>([[`repos/${fixture.repo}/commits/${head}/pulls`, anOpenPullRequest(606, head)]])
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, pulls)))
+  await aPassedVerdict(tests, work_package, base, head)
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: [work_package] })
+  assert.ok('told' in landed, `the batch did not land: ${wordsOf(landed)}`)
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${theLandBranchesOnOrigin(fixture)[0] ?? ''}`)
+  const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: [work_package] })
+  const question = theLandingQuestion({ repo: fixture.repo, default_branch: 'origin/main', tip, packages: [work_package] })
+  assert.ok('told' in checked && checked.told.split('\n').includes(question), `verify_range did not hand over the landing's question: ${wordsOf(checked)}`)
+
+  const ask = await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question, asked_by: MEMBER, since: 0 })
+  await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [ask] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package], owner_yes: ask }, THE_OWNER_APPROVES)
+  assert.ok('told' in forwarded, `the landing the owner said yes to was refused: ${wordsOf(forwarded)}`)
+  assert.equal(theOriginMain(fixture), tip, 'the default branch was not fast-forwarded onto the tip the owner said yes to')
+  const landings = (await readLedger(tests.host, work_package)).filter((row) => row.kind === 'package_landed')
+  assert.deepEqual(landings.map((row) => (row.kind === 'package_landed' ? row.note : '')), [`${base}..${tip} on the owner's yes to ask ${String(ask)}`])
+})
+
 test('#320: a package that reached the default branch is noted as landed, and read back as landed', async (t) => {
   const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
@@ -572,13 +646,13 @@ test('#320: a package that reached the default branch is noted as landed, and re
   await aPassedVerdict(tests, landed_package, base, tip)
 
   assert.deepEqual(await landingsOf(tests.host, [landed_package]), [], 'a package that has not landed holds no landing row')
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [landed_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [landed_package] }, MEMBER_APPROVES)
   assert.ok('told' in forwarded, `a fast-forward the owner said yes to was refused: ${wordsOf(forwarded)}`)
 
   const rows = await readLedger(tests.host, landed_package)
   const landings = rows.filter((row) => row.kind === 'package_landed')
   assert.equal(landings.length, 1, 'the landing was not noted once in the ledger')
-  assert.deepEqual(landings[0]?.kind === 'package_landed' ? landings[0].note : '', `${base}..${tip}`, 'the note holds the range that landed, as the two shas')
+  assert.deepEqual(landings[0]?.kind === 'package_landed' ? landings[0].note : '', `${base}..${tip} on ${MEMBER}'s own yes, as a ${A_LANDING_ROLE}: the declaration grants ${APPROVE_LANDING} to that role`, 'the note holds the range that landed, as the two shas, and the yes it stood on')
   const read_back = await landingsOf(tests.host, [landed_package])
   assert.deepEqual(read_back, [{ package: landed_package, at: landings[0]?.kind === 'package_landed' ? landings[0].at : -1 }], 'the package did not read back as landed, with the moment its own row carries')
 })
@@ -635,7 +709,7 @@ test('#256: the fast-forward is refused when the default branch moved after the 
   gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
   const moved_to = gitIn(fixture.seed, 'rev-parse', 'HEAD')
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, MEMBER_APPROVES)
   assert.match(wordsOf(forwarded), /moved after the range was checked/)
   assert.ok(wordsOf(forwarded).includes(base), 'the answer did not name the base the check was made against')
   assert.ok(wordsOf(forwarded).includes(moved_to), 'the answer did not name where the default branch stands')
@@ -659,7 +733,7 @@ test('#256: a push git refuses is answered with what git said, and kept in the l
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())))
   await aPassedVerdict(tests, work_package, base, tip)
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, MEMBER_APPROVES)
   assert.match(wordsOf(forwarded), /failed as command_failed/)
   assert.match(wordsOf(forwarded), /the act was sent and refused/)
   assert.match(wordsOf(forwarded), /the branch is protected/, 'the answer did not keep what git said')
@@ -683,7 +757,7 @@ test('#512 slice 2: a fast-forward whose row one package will not keep is sent o
   // The first package's announcement is the first row this store keeps, and the second package's is the one it refuses:
   // nothing ran, so the one attempt the packages are given sends it again, and it lands.
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())), aStoreThatRefusesTheAppendAt(2))
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages }, MEMBER_APPROVES)
   assert.ok('told' in forwarded, `a fast-forward that was never sent was not sent once more: ${wordsOf(forwarded)}`)
   assert.equal(theOriginMain(fixture), tip, 'the retry did not land the tip')
   const first = await readLedger(tests.host, at(packages, 0))
@@ -749,13 +823,12 @@ test('#381: two heads that both grow one adapter land together, its ceiling at t
   assert.ok(runs.npm.some((ran) => ran.args.includes('test')), 'a redone landing pushed without the suite')
 })
 
-test('#381: two heads that clash only in the picture and the ceilings land both, the picture redrawn from the merged tree', async (t) => {
+test('#381 #627: two heads that clash in the picture land the first, the second left out naming the picture, which no landing redraws', async (t) => {
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, {
     'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
     [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
     [THE_PICTURE]: 'the picture as the base draws it\n',
-    'architecture/c4_diagrams.ts': A_STAND_IN_FOR_THE_C4_PROGRAM,
   })
   const ours = aBranchWriting(fixture, 'passed0', base, {
     [`${AN_ADAPTER}/two.ts`]: codeLines('c', 1),
@@ -772,32 +845,29 @@ test('#381: two heads that clash only in the picture and the ceilings land both,
   const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
-  assert.ok('told' in landed, `a batch that clashes only in generated files was refused: ${wordsOf(landed)}`)
-  const branch = theLandBranchesOnOrigin(fixture)[0] ?? ''
-  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${branch}`)
-  assert.deepEqual(theMergesOf(fixture, branch, 2), [ours, theirs], 'the batch is not one merge per head, in order')
+  const words = aBatchLeftOneOut(fixture, landed, base, [ours], { package: at(packages, 1), pr: 282 })
+  // Since martha#627 the release draws the picture and no change carries one: a landing has no drawing to choose
+  // between two of them, so the head that brings the second is the builder's to settle.
   assert.ok(
-    runs.programs.some((ran) => ran.args[0] === THE_REDO_PROGRAM),
-    'the landing did not run the program that redoes the generated files',
+    words.includes(`clashes in ${THE_PICTURE}, which a landing does not redo`),
+    `the answer did not name the picture a builder has to settle, nor say a landing does not redo it: ${words}`,
   )
-  assert.equal(inTheOrigin(fixture, 'show', `${tip}:${THE_PICTURE}`), REDRAWN.trim(), 'the tip holds a picture the landing did not draw')
-  assert.equal(theCeilingOnTheTip(fixture, tip), 5, 'the tip does not hold the count the merged tree measures: 2 + 1 + 2')
-  assert.match(
-    inTheOrigin(fixture, 'log', '-1', '--format=%B', tip),
-    /Redone-generated: assets\/c4-context\.svg \(picture\); package\.json martha\.hostCeilings \(measured\)/,
-    'the landing commit does not say what it redid',
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${theLandBranchesOnOrigin(fixture)[0] ?? ''}`)
+  assert.equal(
+    inTheOrigin(fixture, 'show', `${tip}:${THE_PICTURE}`),
+    'the picture as ours draws it',
+    'the tip holds a picture a landing drew: the release draws them now, and a landing refuses one it did not draw',
   )
-  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left holding a change after a redone landing')
-  assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'a redone landing kept its land branch in the clone')
+  // The redo program is still asked, and it is what refuses: a picture is not a path it redraws.
+  assert.ok(runs.programs.some((ran) => ran.args[0] === THE_REDO_PROGRAM), 'the landing refused a clash without asking the redo program what it settles')
 })
 
-test('#381 #339: a clash that also touches a source file leaves that head out, naming the path it will not settle', async (t) => {
+test('#381 #339: a clash that also touches a source file leaves that head out, naming every path it will not settle', async (t) => {
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, {
     'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
     [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
     [THE_PICTURE]: 'the picture as the base draws it\n',
-    'architecture/c4_diagrams.ts': A_STAND_IN_FOR_THE_C4_PROGRAM,
   })
   const ours = aBranchWriting(fixture, 'passed0', base, {
     [`${AN_ADAPTER}/one.ts`]: `${codeLines('a', 2)}export const ours = 1\n`,
@@ -815,7 +885,10 @@ test('#381 #339: a clash that also touches a source file leaves that head out, n
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
   const words = aBatchLeftOneOut(fixture, landed, base, [ours], { package: at(packages, 1), pr: 282 })
-  assert.ok(words.includes(`clashes in ${AN_ADAPTER}/one.ts, which a landing does not redo`), `the answer did not name the path a builder has to settle: ${words}`)
+  assert.ok(
+    words.includes(`clashes in ${THE_PICTURE}, ${AN_ADAPTER}/one.ts, which a landing does not redo`),
+    `the answer did not name every path a builder has to settle: ${words}`,
+  )
 })
 
 test('#381 #339: a package.json that differs outside the ceilings is not a generated file: that head is left out, named', async (t) => {
@@ -981,7 +1054,7 @@ test('#364: the fast-forward of a held package is refused before its push is ann
   const { tests, ran } = aHostThatMayRunNothing()
   await aHoldOn(tests.host, 'hold-martha-364', work_package)
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: '/no/clone/is/read', base: 'a'.repeat(40), tip: 'b'.repeat(40), packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: '/no/clone/is/read', base: 'a'.repeat(40), tip: 'b'.repeat(40), packages: [work_package] }, MEMBER_APPROVES)
   assert.ok('refused' in forwarded, `the fast-forward of a held package ran: ${wordsOf(forwarded)}`)
   assert.match(forwarded.refused, /nothing was pushed/)
   assert.ok(forwarded.refused.includes('hold-martha-364') && forwarded.refused.includes(work_package))
@@ -1120,14 +1193,14 @@ test('#339 T1: a head that clashes with three landings on main is named, each pa
   assert.ok(words.includes(`- clashes by hand: ${at(packages, 0)} (PR 281): `), `the dry run did not name the head that clashes by hand: ${words}`)
   assert.ok(words.includes(`${ONE_TOOL_FILE}, ${ONE_EXCEPTIONS_FILE} with PR 376`), `the two source files are not named with the landing that brought them: ${words}`)
   assert.ok(words.includes(`${A_RELAY_SCRIPT} with PR 396`), `the relay script is not named with the landing that brought it: ${words}`)
-  assert.ok(words.includes(`(it would redo ${THE_PICTURE} (picture))`), `the picture is not said to be redone: ${words}`)
-  assert.ok(!words.includes(`${THE_PICTURE} with`), `the picture, which the redo redraws, was named as a clash by hand: ${words}`)
+  assert.ok(words.includes(`${THE_PICTURE} with PR 392`), `the picture is not named with the landing that brought it, as a clash a builder settles since martha#627: ${words}`)
   assert.equal(whatTheCloneHolds(fixture), before, 'the dry run changed a ref, HEAD or the status of the clone')
   assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'the dry run pushed a land branch')
 })
 
-test('#339 T2: two heads that clash only in the picture are answered lands, picture redone, and nothing is written (mutants: ignore the generated list; write the branch)', async (t) => {
-  // The shape of PR 335 and PR 333 at 7283107: both redrew the picture, and nothing else of theirs clashes.
+test('#339 T2: two heads that clash only in the picture are answered left out, the picture named, since no landing redraws one (mutants: take a picture for generated; write the branch)', async (t) => {
+  // The shape of PR 335 and PR 333 at 7283107: both redrew the picture, and nothing else of theirs clashes. Since
+  // martha#627 the release draws it, so the second head is a builder's to settle by hand, not a drawing to choose.
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, { [THE_PICTURE]: 'base\n' })
   const ours = aBranchWriting(fixture, 'passed0', base, { [THE_PICTURE]: 'ours\n', 'ours.txt': 'ours\n' })
@@ -1137,10 +1210,12 @@ test('#339 T2: two heads that clash only in the picture are answered lands, pict
   const before = whatTheCloneHolds(fixture)
 
   const forecast = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
+  const words = refusedLanding(forecast)
   assert.equal(whatTheCloneHolds(fixture), before, 'the dry run changed a ref, HEAD or the status of the clone while it chained a merge')
-  assert.ok('told' in forecast, `a batch that clashes only in the picture was refused by the dry run: ${wordsOf(forecast)}`)
-  assert.ok(forecast.told.includes(`- lands: ${at(packages, 0)} (PR 281)`), `the first head is not answered lands: ${forecast.told}`)
-  assert.ok(forecast.told.includes(`- lands, redone: ${at(packages, 1)} (PR 282): ${THE_PICTURE} (picture) (a forecast:`), `the second head is not answered lands, redone, as a forecast: ${forecast.told}`)
+  assert.ok(
+    words.includes(`- clashes by hand: ${at(packages, 1)} (PR 282): ${THE_PICTURE} with PR 281`),
+    `the second head is not answered left out with the picture named as a clash by hand: ${words}`,
+  )
 })
 
 /** Two heads whose package.json differ from the base in the ceilings, and in `scripts` when the test asks. */
@@ -1407,7 +1482,7 @@ test('#512 slice 2: a fast-forward whose outcome was not kept is read on origin,
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())), aStoreThatRefusesTheAppendAt(3))
   await aPassedVerdict(tests, work_package, base, tip)
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, MEMBER_APPROVES)
   assert.ok('told' in forwarded, `a fast-forward origin shows landed was refused: ${wordsOf(forwarded)}`)
   assert.equal(theOriginMain(fixture), tip)
   const rows = await readLedger(tests.host, work_package)
@@ -1430,7 +1505,7 @@ test('#512 slice 2: a fast-forward origin has already moved past is read as land
   const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map())), aStoreThatRefusesTheAppendAt(3, later))
   await aPassedVerdict(tests, work_package, base, tip)
 
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: fixture.clone, base, tip, packages: [work_package] }, MEMBER_APPROVES)
   assert.ok('told' in forwarded, `a fast-forward origin's main contains was refused: ${wordsOf(forwarded)}`)
   assert.notEqual(theOriginMain(fixture), tip, 'origin did not move past the tip, so this test reads nothing')
   const rows = await readLedger(tests.host, work_package)
@@ -1444,7 +1519,7 @@ test('#512 slice 2: a paused package holds the fast-forward: nothing is announce
   const before = (await readLedger(tests.host, work_package)).length
 
   const others = ['macula-io/martha#1', 'macula-io/martha#2']
-  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: '/no/clone/is/read', base: 'a'.repeat(40), tip: 'b'.repeat(40), packages: [at(others, 0), work_package, at(others, 1)] })
+  const forwarded = await fastForwardAfterTheOwnersYes(tests.host, MEMBER, { path: '/no/clone/is/read', base: 'a'.repeat(40), tip: 'b'.repeat(40), packages: [at(others, 0), work_package, at(others, 1)] }, MEMBER_APPROVES)
   assert.ok('refused' in forwarded, `the fast-forward of a paused package ran: ${wordsOf(forwarded)}`)
   assert.match(forwarded.refused, /paused/)
   assert.ok(forwarded.refused.includes(work_package), 'the refusal did not name the paused package')
