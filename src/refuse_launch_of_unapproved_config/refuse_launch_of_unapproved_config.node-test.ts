@@ -313,8 +313,8 @@ test("everything inside a host's config directory is fingerprinted, except insta
   commitAll(place.checkout, 'a plugin')
   const read = () => readLaunchConfig({ host: 'opencode', launch_dir: place.checkout, stop_dir: place.home }, thisMachine)
   const before = read()
-  assert.ok(before.some((entry) => entry.path === `${OPENCODE_DIR}/node_modules` && entry.kind === 'directory'))
-  assert.ok(!before.some((entry) => entry.path.startsWith(`${OPENCODE_DIR}/node_modules/`)))
+  assert.ok(before.some((entry) => entry.path === `${OPENCODE_DIR}/${DEPENDENCIES}` && entry.kind === 'directory'))
+  assert.ok(!before.some((entry) => entry.path.startsWith(`${OPENCODE_DIR}/${DEPENDENCIES}/`)))
 
   put(place.checkout, join(OPENCODE_DIR, DEPENDENCIES, 'dep', 'index.js'), 'two')
   assert.deepEqual(read(), before)

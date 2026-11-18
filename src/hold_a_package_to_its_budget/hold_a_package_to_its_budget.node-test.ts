@@ -255,7 +255,7 @@ test('an unbounded package counts nothing and never stops a call', async () => {
   assert.deepEqual(await theSpendCounts(host, PACKAGE), {})
 })
 
-test('a member holding no package, and a package with no contract, count nothing and are refused nothing', async () => {
+test('a member holding no package spends nothing, and neither does a package with no contract: the budget refuses nothing on its own (martha#597)', async () => {
   const { host } = aHostForTheBudget()
   assert.equal(await theBudgetOver(placesOver(host, '')).theSpendInForce(SESSION), undefined)
 
@@ -263,6 +263,8 @@ test('a member holding no package, and a package with no contract, count nothing
   const no_contract = theBudgetOver(placesOver(host, 'synthetic-owner/repo#99'))
   assert.equal(await no_contract.theSpendInForce(SESSION), undefined)
   assert.equal(await no_contract.noteTheCallCounted(SESSION, 'some_working_tool'), undefined)
+  // A package with no contract is refused by its contract, not by this slice: the gate's refusal is
+  // ../refuse_calls_outside_the_package_contract's, and it is pinned there (martha#597).
 })
 
 test('minutes spend a package with calls left, and they count while it waits', async () => {

@@ -28,7 +28,7 @@ import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../appro
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
-import { declareCrew } from '../declare_crew/declare_crew.ts'
+import { declareCrew, OWNER_BELL } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -43,33 +43,24 @@ import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.
 import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
-import { holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
-import { showingSafely } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
+import { drawTheCrewStrip, holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
+import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, refused, showingSafely, tellOwnerOn } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
+import { bellsOf, theBellsTold, theFlipNamed } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
-
-/** The command ended as asked. */
-export const EXIT_DONE = 0
-/** The command refused, and said why. */
-export const EXIT_REFUSED = 1
-/** The command was not used in a way it knows. */
-export const EXIT_USAGE = 2
 
 /** The line `martha start` prints once the member is up: its name and its pid. */
 export const startedLine = (member: string, pid: number | string): string => `${member} started, pid ${pid}`
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha gate [--member <name>] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
-
-/** What starts every line Martha shows the owner on stderr. */
-export const SAID_BY = 'martha:'
 
 /** The host the owner has installed, found on their PATH. */
 const CLAUDE = 'claude'
@@ -93,13 +84,6 @@ interface Places {
   readonly root: string
   readonly home: string
   readonly state: MarthaState
-}
-
-const tellOwnerOn = (io: CommandIo) => (line: string): void => io.err(`${SAID_BY} ${line}`)
-
-function refused(io: CommandIo, why: string): number {
-  tellOwnerOn(io)(why)
-  return EXIT_REFUSED
 }
 
 const absolute = (path: string | undefined): string | undefined => (path !== undefined && isAbsolute(path) ? path : undefined)
@@ -290,6 +274,20 @@ async function ls(io: CommandIo, places: Places): Promise<number> {
   return EXIT_DONE
 }
 
+/** What moves the cursor home and clears the terminal, so each frame of the strip is drawn in place of the last. */
+export const CLEAR_THE_TERMINAL = '\u001b[H\u001b[2J'
+
+/** `martha crew` (martha#572): the crew strip, redrawn in place until the owner ends it. */
+async function crew(io: CommandIo, places: Places): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  await drawTheCrewStrip(crew, (frame) => {
+    io.outBytes(Buffer.from(CLEAR_THE_TERMINAL))
+    for (const line of frame) io.out(line)
+  }, new AbortController().signal)
+  return EXIT_DONE
+}
+
 /** `martha stop [<member>]` (martha#312): one member, or every running one; each outcome told to the owner. */
 async function stop(io: CommandIo, places: Places, member: string | undefined): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
@@ -326,6 +324,17 @@ async function release(io: CommandIo, places: Places, member: string): Promise<n
   if (!released.released) return refused(io, toldOfARelease(released))
   io.out(toldOfARelease(released))
   return EXIT_DONE
+}
+
+/**
+ * `martha bells [<member> muted|heard]` (martha#371): every declared member's bells, or the owner's own silence for one
+ * member's, typed at the owner's terminal. The act is ../ring_the_owner's; this hands it the crew's own place and tells
+ * the owner its answer.
+ */
+async function bells(io: CommandIo, places: Places, asked: Asked): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  return theBellsTold(io, { members: crew.settings.members.map((one) => one.name), declared: crew.settings.house_rules[OWNER_BELL], owner: crew.settings.owner }, { directory: crew.launcher.bells!, lines: { append: appendStateLine, read: readStateFile } }, theFlipNamed(asked.member, asked.args[0]))
 }
 
 /**
@@ -397,7 +406,7 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 }
 
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
-export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', '--version']
+export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', 'crew', '--version']
 /** The acts that take exactly one argument (martha#129). */
 export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release']
 
@@ -419,6 +428,7 @@ const installOf = (act: string, argv: readonly string[]): Asked | undefined => (
 export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: readonly string[]) => Asked | undefined>> = {
   install: installOf,
   gate: gateOf,
+  bells: bellsOf,
   [STOP]: stopOf,
   [RESTART]: restartOf,
   start: startOf,
@@ -511,7 +521,9 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   wake: (io, places, asked) => wake(io, places, asked.args[0]!),
   release: (io, places, asked) => release(io, places, asked.args[0]!),
   gate: (io, places, asked) => theGate(io, places, asked.member),
+  bells: (io, places, asked) => bells(io, places, asked),
   ls: (io, places) => ls(io, places),
+  crew: (io, places) => crew(io, places),
   [STOP]: (io, places, asked) => stop(io, places, asked.member),
   [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),
 }

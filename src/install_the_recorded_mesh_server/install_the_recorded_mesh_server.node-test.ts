@@ -183,8 +183,8 @@ test('a recorded tree names the server\'s integrity, the settings it reads and e
   assert.deepEqual(tree.settings, [SETTING])
   const paths = Object.keys(tree.files)
   assert.deepEqual(paths, [...paths].sort())
-  assert.ok(paths.includes(`node_modules/${MESH_SERVER_PACKAGE}/dist/index.js`), paths.join(' '))
-  assert.ok(paths.includes(`node_modules/${DEPENDENCY}/${MARK_FILE}`), paths.join(' '))
+  assert.ok(paths.includes(`${DEPENDENCIES}/${MESH_SERVER_PACKAGE}/dist/index.js`), paths.join(' '))
+  assert.ok(paths.includes(`${DEPENDENCIES}/${DEPENDENCY}/${MARK_FILE}`), paths.join(' '))
   for (const path of paths) assert.match(tree.files[path] ?? '', /^sha512-[A-Za-z0-9+/]+=*$/, path)
 })
 
@@ -228,7 +228,7 @@ const readingDependency: FakePackage = {
   ...dependencyOf(RECORDED_MARK),
   files: { ...dependencyOf(RECORDED_MARK).files, [READING_FILE]: `const home = process.env.${KEPT}\nconst built = process.env[name + '_PREBUILD']\n` },
 }
-const READING_PATH = `node_modules/${DEPENDENCY}/${READING_FILE}`
+const READING_PATH = `${DEPENDENCIES}/${DEPENDENCY}/${READING_FILE}`
 
 async function readingRegistry(t: TestContext): Promise<FakeRegistry> {
   const registry = await fakeNpmRegistry([serverOf(RECORDED_MARK), readingDependency])
@@ -249,7 +249,7 @@ test('a reviewed read is recorded by package with its file, and a computed read 
   const recording = recordingAt(registry.registry, [SETTING], { [DEPENDENCY]: [KEPT] })
   const tree = recordMeshTree({ tarball: registry.tarballOf(MESH_SERVER_PACKAGE), recording, scratch: scratch(t, 'record') })
   assert.deepEqual(tree.environment_reads[DEPENDENCY], { reads: { [KEPT]: [READING_PATH] }, computed: [READING_PATH] })
-  assert.deepEqual(tree.environment_reads[MESH_SERVER_PACKAGE]?.reads[SETTING], [`node_modules/${MESH_SERVER_PACKAGE}/dist/index.js`])
+  assert.deepEqual(tree.environment_reads[MESH_SERVER_PACKAGE]?.reads[SETTING], [`${DEPENDENCIES}/${MESH_SERVER_PACKAGE}/dist/index.js`])
 })
 
 test('a recorded tree whose read is no longer reviewed is not started, naming the package, the name and the file', async (t) => {
@@ -496,7 +496,7 @@ test('an installed file changed, removed or added since the install refuses the 
   const changed = join(installed, DEPENDENCY, MARK_FILE)
   appendFileSync(changed, '// edited\n')
   const changedRefusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
-  assert.ok(changedRefusal.includes(`node_modules/${DEPENDENCY}/${MARK_FILE}`), changedRefusal)
+  assert.ok(changedRefusal.includes(`${DEPENDENCIES}/${DEPENDENCY}/${MARK_FILE}`), changedRefusal)
 
   writeFileSync(changed, `${RECORDED_MARK}\n`)
   assert.ok('config' in placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }), 'the recorded bytes put back pass again')
@@ -504,5 +504,5 @@ test('an installed file changed, removed or added since the install refuses the 
   const planted = join(installed, MESH_SERVER_PACKAGE, 'dist', 'preload.js')
   writeFileSync(planted, 'evil()\n')
   const plantedRefusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
-  assert.ok(plantedRefusal.includes(`node_modules/${MESH_SERVER_PACKAGE}/dist/preload.js`), plantedRefusal)
+  assert.ok(plantedRefusal.includes(`${DEPENDENCIES}/${MESH_SERVER_PACKAGE}/dist/preload.js`), plantedRefusal)
 })

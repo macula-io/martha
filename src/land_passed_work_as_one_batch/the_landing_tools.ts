@@ -18,6 +18,7 @@ import {
   type TheBatch,
   type TheFastForward,
 } from './land_passed_work_as_one_batch.ts'
+import { OWNER_YES, type TheApprovingDeclaration } from './the_owners_yes_to_a_landing.ts'
 
 /** What `land_batch` takes: the clone, the packages, and whether the call is a dry run (martha#339). */
 export const LAND_BATCH_TOOL = {
@@ -40,7 +41,13 @@ export const FAST_FORWARD_TOOL = {
   description: FAST_FORWARD_DESCRIPTION,
   inputSchema: {
     type: 'object',
-    properties: { path: A_CLONE, base: A_BASE, tip: A_TIP, packages: { ...THE_PACKAGES, minItems: 1 } },
+    properties: {
+      path: A_CLONE,
+      base: A_BASE,
+      tip: A_TIP,
+      packages: { ...THE_PACKAGES, minItems: 1 },
+      [OWNER_YES]: { type: 'integer', minimum: 0, description: 'The id of the ask the owner said yes to, when the declaration grants approve_landing to the owner' },
+    },
     required: ['path', 'base', 'tip', 'packages'],
   },
 }
@@ -67,7 +74,12 @@ export async function landTheBatchOver(host: RangeCheckHost, member: string, ask
 
 /** `fast_forward_after_the_owners_yes`: the default branch moved onto the approved tip (martha#256), the range read as
  *  verify_range reads it, before the launch is asked for the processes it acts with (martha#443 part 5 r=2). */
-export async function fastForwardOntoTheApprovedTipOver(host: RangeCheckHost, member: string, asked: TheFastForward): Promise<AToolAnswer> {
-  const moved = await fastForwardAfterTheOwnersYes(host, member, asked)
+export async function fastForwardOntoTheApprovedTipOver(
+  host: RangeCheckHost,
+  member: string,
+  asked: TheFastForward,
+  declaration: TheApprovingDeclaration,
+): Promise<AToolAnswer> {
+  const moved = await fastForwardAfterTheOwnersYes(host, member, asked, declaration)
   return 'told' in moved ? { answer: moved.told } : { refused: moved.refused }
 }

@@ -17,8 +17,10 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
 import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, OWNERS_ACT_NEEDS_A_TERMINAL, SAID_BY, startedLine, USAGE } from './run_the_martha_command.ts'
+import { CLEAR_THE_TERMINAL, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, USAGE } from './run_the_martha_command.ts'
+import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, SAID_BY } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { MEMBER_SWITCH } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
+import { A_MUTE_NEEDS_THE_OWNERS_TERMINAL, BELLS_HEARD, BELLS_MUTED, THE_BELLS_FILE, THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { NOT_IN_A_MEMBER } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
@@ -176,6 +178,82 @@ test('martha gate prints one line per declared member, and --member an unknown n
   assert.match(unknown.said, /does not know nobody/)
   assert.equal(martha(place, 'gate', MEMBER_SWITCH).status, EXIT_USAGE)
 })
+
+test('martha bells lists every declared member, and says the declaration\'s own switch rather than a mute (martha#371)', (t) => {
+  const place = placeFor(t)
+  const rings = aCrewWithItsBells(place, true)
+  const listed = martha(place, 'bells')
+  assert.equal(listed.status, EXIT_DONE, listed.said)
+  for (const member of SOLO_MEMBERS) assert.match(listed.out, new RegExp(`^${member.name}: rings$`, 'm'), listed.out)
+
+  writeFileSync(rings, JSON.stringify({ ...JSON.parse(readFileSync(rings, 'utf8')), house_rules: { owner_bell: false } }))
+  const silent = martha(place, 'bells')
+  assert.equal(silent.status, EXIT_DONE, silent.said)
+  for (const member of SOLO_MEMBERS) assert.match(silent.out, new RegExp(`^${member.name}: rings nothing \\(the declaration turns owner_bell off\\)$`, 'm'), silent.out)
+
+  const mutedWhileOff = marthaOnATerminal(place, {}, 'bells', 'builder', BELLS_MUTED)
+  assert.equal(mutedWhileOff.status, EXIT_DONE, mutedWhileOff.said)
+  assert.match(martha(place, 'bells').out, /^builder: rings nothing \(the declaration turns owner_bell off\); muted since .* by Ada Owner /m, 'a mute made while the declaration is off is still named')
+})
+
+test('martha bells with no terminal is refused, so a member\'s shell cannot silence the bell that warns the owner (martha#371)', (t) => {
+  const place = placeFor(t)
+  aCrewWithItsBells(place, true)
+  const run = martha(place, 'bells', 'builder', BELLS_MUTED)
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.err.includes(A_MUTE_NEEDS_THE_OWNERS_TERMINAL), run.err)
+  assert.equal(existsSync(theBellsFile(place)), false, 'nothing was written')
+})
+
+test('martha bells mutes one member on the owner\'s terminal and lifts it, and keeps both flips (martha#371)', (t) => {
+  const place = placeFor(t)
+  aCrewWithItsBells(place, true)
+
+  const muted = marthaOnATerminal(place, {}, 'bells', 'builder', BELLS_MUTED)
+  assert.equal(muted.status, EXIT_DONE, muted.said)
+  assert.match(muted.said, /builder's bell is muted/)
+  const listed = martha(place, 'bells')
+  assert.match(listed.out, /^builder: muted since .* by Ada Owner /m, listed.out)
+  assert.match(listed.out, /^reviewer: rings$/m, 'the other member still rings')
+
+  const again = marthaOnATerminal(place, {}, 'bells', 'builder', BELLS_MUTED)
+  assert.equal(again.status, EXIT_DONE, again.said)
+  assert.match(again.said, /already muted, so nothing was written/)
+
+  const heard = marthaOnATerminal(place, {}, 'bells', 'builder', BELLS_HEARD)
+  assert.equal(heard.status, EXIT_DONE, heard.said)
+  assert.match(heard.said, /builder's bell rings again/)
+  assert.match(martha(place, 'bells').out, /^builder: rings$/m)
+  assert.equal(readFileSync(theBellsFile(place), 'utf8').split('\n').filter((line) => line !== '').length, 2, 'both flips are kept')
+})
+
+test('martha bells refuses a member the declaration does not know, and writes nothing (martha#371)', (t) => {
+  const place = placeFor(t)
+  aCrewWithItsBells(place, true)
+  const run = marthaOnATerminal(place, {}, 'bells', 'nobody', BELLS_MUTED)
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.match(run.said, /does not know nobody/)
+  assert.equal(existsSync(theBellsFile(place)), false, 'nothing was written')
+})
+
+test('martha bells takes no words, or one member and one of its two ways (martha#371)', (t) => {
+  const place = placeFor(t)
+  aCrewWithItsBells(place, true)
+  for (const args of [['bells', 'builder'], ['bells', 'builder', 'louder'], ['bells', 'builder', BELLS_MUTED, 'more'], ['bells', '--all']]) {
+    assert.equal(martha(place, ...args).status, EXIT_USAGE, args.join(' '))
+  }
+})
+
+/** A crew with something to ring, its declaration's own switch on the way the owner asked for it. */
+function aCrewWithItsBells(place: Place, declared: boolean): string {
+  assert.equal(martha(place, 'init').status, 0)
+  const file = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), house_rules: { owner_bell: declared } }))
+  return file
+}
+
+/** The file the owner's mutes are kept in, in the crew's own place. */
+const theBellsFile = (place: Place): string => join(place.home, 'state', STATE_ROOT_NAME, CREWS_PLACE, crewKeyOf(place.root), THE_BELLS_PLACE, THE_BELLS_FILE)
 
 test('martha approve whose input is no terminal refuses, so a member\'s shell cannot approve', (t) => {
   const place = placeFor(t)
@@ -465,6 +543,55 @@ test('#312: martha stop with nothing running says so and ends done; a name the c
   const stranger = marthaWith(place, runtimeOf(place), STOP, 'nobody')
   assert.equal(stranger.status, EXIT_REFUSED)
   assert.match(stranger.err, /nobody is not on this crew \(its members are /)
+})
+
+// --- martha crew (martha#572) --------------------------------------------------------------------------------------
+
+/** How long `martha crew` may take to draw its first frame before the test gives up on it. */
+const FIRST_FRAME_MS = 20_000
+
+test('#572: martha crew takes no argument', (t) => {
+  const place = placeFor(t)
+  assert.equal(marthaWith(place, runtimeOf(place), 'crew', 'Terra').status, EXIT_USAGE)
+  assert.ok(USAGE.includes('| martha crew |'), USAGE)
+})
+
+test('#572: martha crew clears the terminal and draws the header and every declared member, in the declaration order', async (t) => {
+  const place = placeFor(t)
+  assert.equal(martha(place, 'init').status, 0)
+  const declaration = JSON.parse(readFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as { members: { name: string }[] }
+  const names = declaration.members.map((member) => member.name)
+  const strip = spawn(process.execPath, [MARTHA, 'crew'], {
+    cwd: place.root,
+    env: { PATH: process.env.PATH, HOME: place.home, XDG_STATE_HOME: join(place.home, 'state'), GIT_CONFIG_NOSYSTEM: '1', ...runtimeOf(place) },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  t.after(() => strip.kill('SIGKILL'))
+  let out = ''
+  let err = ''
+  strip.stderr.on('data', (chunk: Buffer) => void (err += chunk.toString('utf8')))
+  const drawn = await new Promise<boolean>((resolve) => {
+    const giveUp = setTimeout(() => resolve(false), FIRST_FRAME_MS)
+    strip.stdout.on('data', (chunk: Buffer) => {
+      out += chunk.toString('utf8')
+      if (out.split('\n').length > names.length + 1) {
+        clearTimeout(giveUp)
+        resolve(true)
+      }
+    })
+    strip.on('exit', () => {
+      clearTimeout(giveUp)
+      resolve(false)
+    })
+  })
+  const ended = new Promise((resolve) => strip.on('close', resolve))
+  strip.kill('SIGTERM')
+  await ended
+  assert.ok(drawn, `martha crew drew no whole frame: out ${JSON.stringify(out)} err ${JSON.stringify(err)}`)
+  assert.ok(out.startsWith(CLEAR_THE_TERMINAL), `the frame does not open by clearing the terminal: ${JSON.stringify(out)}`)
+  const [header, ...lines] = out.slice(CLEAR_THE_TERMINAL.length).trimEnd().split('\n')
+  assert.equal(header, `0/${names.length} online · 0 waiting · 0 need you`)
+  assert.deepEqual(lines, names.map((name) => `${name}: idle ·  0/1`), out)
 })
 
 // --- martha restart (martha#312) ------------------------------------------------------------------------------------

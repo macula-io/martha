@@ -82,7 +82,7 @@ test('a .npmrc in the tree does not choose the shell npm runs scripts with', { s
 })
 
 test('every bin name gets a link inside its package, and the run calls each one', { skip: unavailable }, async (t) => {
-  const tool = (name: string) => ({ path: `node_modules/tool/bin/${name}`, executable: false, bytes: Buffer.from(`#!/bin/sh\necho ${name}-ran\n`) })
+  const tool = (name: string) => ({ path: `${DEPENDENCIES}/tool/bin/${name}`, executable: false, bytes: Buffer.from(`#!/bin/sh\necho ${name}-ran\n`) })
   const run = runDirectory(t, {
     packages: [tool('one'), tool('two')],
     bin_links: [

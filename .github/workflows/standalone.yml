@@ -1,0 +1,74 @@
+# Standalone Martha (martha#547, package S3): Martha runs from one download with its own Node, on Linux and macOS,
+# with no Node on the user's machine.
+#
+# On each platform a standalone release is assembled from the commit under test (carry_marthas_own_node/
+# assemble_a_standalone_martha.ts: the tree, the pinned Node held to nodejs.org's sha256, and the command), and
+# prove_a_standalone_martha.sh runs it alone: `martha --version`, `martha init`, and the checks Martha relies on (file
+# sync, child process groups, Unix sockets, npm beside node, a start with --import), with a decoy node first on PATH
+# that fails the job if anything reaches for a node other than the release's own.
+#
+# The single-executable trial runs on each platform too, with the release's own Node: it exits 0 while a Node single
+# executable still fails a check Martha relies on, and 1, failing this job, the day it passes them all, because the
+# reason for carrying a pinned Node is then gone.
+#
+# The pin job re-records the_node_runtime.json from nodejs.org's SHASUMS256.txt for the pinned version, and fails if
+# a byte of it differs: no hash in the pin was typed by hand.
+
+name: standalone
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  standalone:
+    name: standalone Martha runs alone (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # linux-x64, linux-arm64, darwin-arm64, darwin-x64: the four platforms of carry_marthas_own_node/the_node_runtime.ts.
+        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The Node that runs the assembler only; the release carries and is proven with its own pinned Node.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: assemble the standalone release of this platform
+        id: assemble
+        run: echo "tarball=$(node carry_marthas_own_node/assemble_a_standalone_martha.ts "$RUNNER_TEMP/standalone")" >> "$GITHUB_OUTPUT"
+      - name: the release runs alone
+        run: carry_marthas_own_node/prove_a_standalone_martha.sh "${{ steps.assemble.outputs.tarball }}"
+      - name: the single-executable trial's own tool, from its lock
+        working-directory: carry_marthas_own_node/try_a_single_executable
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: a single executable still fails a check Martha relies on
+        env:
+          TARBALL: ${{ steps.assemble.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          release="${TARBALL%.tar.gz}"
+          "$release/node/bin/node" carry_marthas_own_node/try_a_single_executable/try_a_single_executable.ts "$RUNNER_TEMP/sea-trial"
+
+  pin:
+    name: the pinned Node is nodejs.org's
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: re-record the pin and compare
+        run: |
+          set -euo pipefail
+          node carry_marthas_own_node/record_the_node_runtime.ts "$(jq -r .version carry_marthas_own_node/the_node_runtime.json)"
+          git diff --exit-code -- carry_marthas_own_node/the_node_runtime.json

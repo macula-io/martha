@@ -21,9 +21,11 @@ import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { appendToTheChannel, readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { readLedger, ledgerStreamOf, noteRecovery } from '../log_ledger/log_ledger.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { addresseesOf, CREW_SAY_DESCRIPTION, NOBODY_TO_REPORT_TO, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
+import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 
 const ROSTER = ['Builder', 'Reviewer', 'Supervisor'] as const
 
@@ -368,4 +370,61 @@ test('#512 slice 2: the same words sent before the send began are not taken for 
   assert.ok('refused' in sent, `the earlier message was taken for this one: ${JSON.stringify(sent)}`)
   assert.ok(sent.refused.includes(`the crew channel found no message from ${earlier.member} with this text`), `the look did not say it found nothing: ${sent.refused}`)
   assert.equal((await readTheChannel(host)).length, 1, 'the channel holds more than the earlier message')
+})
+
+// --- a message that names a path a reboot deletes (martha#314) --------------------------------
+
+/** A root this test declares, and a machine root it hands in: neither is a machine's own, so the case runs anywhere. */
+const SCRATCH = '/var/scratch'
+const RUNTIME = '/run/user/1000'
+
+/** The crew's tools over a declaration of this test's, and the machine roots a launch would supply, if any. */
+function crewOverADeclaration(t: { after(fn: () => void): void }, declaration: unknown, machineRoots?: readonly string[]) {
+  const home = mkdtempSync(join(tmpdir(), 'martha-314-say-'))
+  t.after(() => removeTheTree(home))
+  const { host } = hostForTests({ now: 1_000, documents: { [join(home, DECLARATION_DIRECTORY, DECLARATION_FILE)]: JSON.stringify(declaration) } })
+  return crewToolsOver({
+    member: 'Builder',
+    ledger: { clock: host.clock, stores: { rows: host.stores.rows } },
+    beats: NO_BEATS,
+    root: home,
+    documents: host.stores.documents,
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'crew-files')) },
+    ...(machineRoots === undefined ? {} : { volatile_roots: machineRoots }),
+  })
+}
+
+test('#314: a message citing a path a reboot deletes is sent, and its sender is told so as it lands', async (t) => {
+  const crew = crewOverADeclaration(t, { ...DECLARATION, volatile_paths: [SCRATCH] })
+  const answered = await crew.answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: `the verdict is in ${SCRATCH}/v.md` }, 'session-314')
+
+  assert.ok('answer' in answered, `the send citing a volatile path was not answered: ${JSON.stringify(answered)}`)
+  assert.match(answered.answer, /^sent as message 0 to Reviewer\./, 'the send was not confirmed to the sender')
+  assert.match(answered.answer, new RegExp(`${SCRATCH}/v\\.md does not survive a reboot`), `the sender was not told the path goes: ${answered.answer}`)
+  assert.ok(answered.answer.includes(WRITE_MY_HANDOVER_TOOL), `the note does not send the sender to the handover tool: ${answered.answer}`)
+})
+
+test('#314: the roots a crew declares are the ones the note reads, and a root it leaves out is an ordinary path', async (t) => {
+  const crew = crewOverADeclaration(t, { ...DECLARATION, volatile_paths: [SCRATCH] }, [RUNTIME])
+  const cited = await crew.answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: `in ${RUNTIME}/s and ${SCRATCH}/v` }, 'session-314')
+  assert.ok('answer' in cited, `the send was not answered: ${JSON.stringify(cited)}`)
+  assert.match(cited.answer, new RegExp(`${SCRATCH}/v does not survive`), `the declared root was not read: ${cited.answer}`)
+  assert.doesNotMatch(cited.answer, new RegExp(RUNTIME), 'a root the crew leaves out reached the note')
+})
+
+test('#314: a crew that declares no root is warned on the machine roots the launch hands in', async (t) => {
+  const crew = crewOverADeclaration(t, DECLARATION, [RUNTIME])
+  const answered = await crew.answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: `the log is at ${join(RUNTIME, RELAY_SOCKET_NAME)}` }, 'session-314')
+  assert.ok('answer' in answered, `the send was not answered: ${JSON.stringify(answered)}`)
+  assert.ok(
+    answered.answer.includes(`${join(RUNTIME, RELAY_SOCKET_NAME)} does not survive`),
+    `the machine root was not read: ${answered.answer}`,
+  )
+})
+
+test('#314: a message that cites no path a reboot deletes is answered exactly as before', async (t) => {
+  const crew = crewOverADeclaration(t, { ...DECLARATION, volatile_paths: [SCRATCH] }, [RUNTIME])
+  const answered = await crew.answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: 'a hand-off, in words' }, 'session-314')
+  assert.ok('answer' in answered, `the plain send was not answered: ${JSON.stringify(answered)}`)
+  assert.doesNotMatch(answered.answer, /does not survive a reboot/, `a plain send carried a note: ${answered.answer}`)
 })

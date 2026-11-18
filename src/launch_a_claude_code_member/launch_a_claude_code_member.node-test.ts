@@ -79,6 +79,25 @@ import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exac
 import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
+// --- the run this file is (martha#559) --------------------------------------------
+
+/**
+ * The run these tests are: a pipe this process holds open for as long as it exists, however it ends. Every launcher a
+ * test starts reads the other end by path (prove_the_core/a_launcher_ends_with_its_run.ts), so a run killed by a shell
+ * timeout or by --test-force-exit leaves no launcher, no shell, no terminal and no home behind — which is what let
+ * enough of them pile up on one machine that this file stopped reporting there at all.
+ */
+const RUN_THIS_FILE_IS = keepTheLifelineIn(mkdtempSync(join(tmpdir(), 'martha-cc-run-')))
+
+/** The pipe's path: the end of the run this file is, as a launcher reads it. */
+const THE_RUNS_END = RUN_THIS_FILE_IS.path
+
+// Taken down with the process: nothing else is this run's end, so it closes however the run goes.
+process.once('exit', () => {
+  RUN_THIS_FILE_IS.close()
+  removeTheTree(dirname(THE_RUNS_END))
+})
+
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
   markdown_kinds: RECORDED_HOST.markdown_kinds,
@@ -2516,6 +2535,26 @@ async function noProcessCarries(relay_root: string, alsoGone: readonly number[])
   ])
 }
 
+/** Whether a process's command line names this home: false for one the kernel will not say, which is one already gone. */
+function namesTheHome(pid: number, home: string): boolean {
+  try {
+    return readFileSync(`${PROC_ROOT}/${pid}/cmdline`, 'utf8').includes(home)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Every process of this user, but this test's own, whose command line names this place's home: a launcher names its
+ * script there, its shell names the launcher, the terminal `script` names the shell, and a member started on the
+ * terminal names its own fake host there. One look, taken over the processes that exist when it begins.
+ */
+function pidsNamingTheHome(home: string): number[] {
+  return readdirSync(PROC_ROOT)
+    .map(Number)
+    .filter((pid) => Number.isInteger(pid) && pid > 1 && pid !== process.pid && namesTheHome(pid, home))
+}
+
 /**
  * Kills every process of this user whose command line names this place's home, and waits a moment for them to go: a
  * launcher names its script there, and that script is the one file of the place a running process holds open. Used by the
@@ -2523,16 +2562,7 @@ async function noProcessCarries(relay_root: string, alsoGone: readonly number[])
  * (martha#216 r=3).
  */
 async function killWhateverNamesTheHome(home: string): Promise<void> {
-  for (const entry of readdirSync(PROC_ROOT)) {
-    const pid = Number(entry)
-    if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) continue
-    let line = ''
-    try {
-      line = readFileSync(`${PROC_ROOT}/${pid}/cmdline`, 'utf8')
-    } catch {
-      continue
-    }
-    if (!line.includes(home)) continue
+  for (const pid of pidsNamingTheHome(home)) {
     try {
       process.kill(pid, 'SIGKILL')
     } catch {
@@ -2609,6 +2639,10 @@ test('the removal names a process that outlasts its wait (martha#216)', async ()
  * how a test asks whether a launch that never got a member still ends by itself
  * (#472): the interval that keeps this one up is the only thing between a refused
  * launch and a process that exits, so a test that keeps the interval proves nothing.
+ *
+ * It is the run's, too (#559): the run's end is read from the pipe `runEndsAt` names, and when it comes this process
+ * stops its member, ends the shell that waits on it, removes the home and ends itself. `runEndsAt` is the run this file
+ * is unless a test plays a run of its own and is killed to see it happen.
  */
 /** The owner's arguments a launcher process passes unless told otherwise: one prompt, answered and printed. */
 const OWNER_PROMPT_ARGS = ['-p', 'the owner prompt']
@@ -2622,18 +2656,21 @@ function launcherProcess(
   deadlines: SessionStartDeadlines = {},
   args: readonly string[] = OWNER_PROMPT_ARGS,
   staysUp = true,
+  runEndsAt: string = THE_RUNS_END,
 ): string {
   // A member runs here, in a process this one does not own: the place's own hook leaves the removal to this test, which
   // alone can wait for that process before the home goes (martha#216).
   place.aMemberStartsHere()
   const script = join(place.home, 'launcher.ts')
   const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
+  const endsWithItsRunModule = new URL('../../prove_the_core/a_launcher_ends_with_its_run.ts', import.meta.url).href
   writeFileSync(
     script,
     [
       `import { launchClaudeCodeMember } from ${JSON.stringify(launchModule)}`,
+      `import { endTheLauncherWhenItsRunGoes } from ${JSON.stringify(endsWithItsRunModule)}`,
       `const place = ${JSON.stringify(place)}`,
-      'const started = await launchClaudeCodeMember({',
+      'const starting = launchClaudeCodeMember({',
       "  member_name: 'Mercury',",
       `  node_id: ${JSON.stringify(NODE_ID)},`,
       `  place: { host: ${JSON.stringify(CLAUDE_CODE)}, launch_dir: place.checkout, stop_dir: place.home, approved_fingerprints: place.approved, snapshot_root: place.snapshot_root },`,
@@ -2649,6 +2686,10 @@ function launcherProcess(
       `  stdio: ${JSON.stringify(stdio)},`,
       '  tellOwner: () => undefined,',
       '})',
+      // Declared before the launch is waited on: a run that goes while a member is being admitted is answered as soon as
+      // the launch settles, rather than never (#559).
+      `endTheLauncherWhenItsRunGoes({ run_ends_at: ${JSON.stringify(runEndsAt)}, home: place.home, shell_noted_at: ${JSON.stringify(join(place.home, 'terminal', 'shell'))}, the_member: async () => { const made = await starting; return made.started ? made : undefined } })`,
+      'const started = await starting',
       "if (started.started) process.once('SIGUSR2', () => started.stop('the test said so'))",
       "process.stdout.write(started.started ? `started ${started.pid}\\n` : `refused: ${started.refusal}\\n`)",
       "if (started.started) { const stopped = await started.stopped; process.stdout.write(`stopped ${stopped.signal ?? 'by itself'}\\n${stopped.stopped_because === null ? '' : `because ${stopped.stopped_because}\\n`}`) }",
@@ -3266,15 +3307,13 @@ const untilOnTerminal = (terminal: Pick<OwnersTerminal, 'shown' | 'launcherEnd'>
     return `the launcher ended with status ${ended.code} and started nothing${ended.said === '' ? '' : `; it said: ${ended.said}`}`
   })
 
-/** The owner's terminal with the launch started, not waited on: for a launch that may start no member. */
-function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit<OwnersTerminal, 'launcher'> & { launcher(): number } {
-  const fake = fakeTerminalClaude(place, how.exitsAfterMs)
-  const notes = join(place.home, 'terminal')
-  mkdirSync(notes)
-  const note = (name: string) => join(notes, name)
-  const launcher = how.launcher_script ?? launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines, how.args)
-  const stderr = how.stderrTo === undefined ? '' : ` 2> '${how.stderrTo}'`
-  const shell = [
+/**
+ * The shell the owner's terminal runs (martha#559): it notes itself, the terminal and its settings, then starts the
+ * launcher, notes its pid and waits on it, notes its status, and ends on `read finished` — which is what holds a shell
+ * that has waited its launcher out open, exactly as the owner's own shell holds it.
+ */
+function theShellATerminalRuns(note: (name: string) => string, launcher: string, stderr: string): string {
+  return [
     `echo $$ > '${note('shell')}'`,
     `readlink ${PROC_ROOT}/$$/fd/0 > '${note('tty')}'`,
     `stty -g > '${note('before')}'`,
@@ -3284,6 +3323,17 @@ function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit
     `'${process.execPath}' '${launcher}' < /dev/tty${stderr} & launcher=$!; echo $launcher > '${note('launcher')}'; wait $launcher; echo $? > '${note('ended')}'`,
     'read finished',
   ].join('; ')
+}
+
+/** The owner's terminal with the launch started, not waited on: for a launch that may start no member. */
+function terminalLaunch(t: TestContext, place: Place, how: TerminalLaunch): Omit<OwnersTerminal, 'launcher'> & { launcher(): number } {
+  const fake = fakeTerminalClaude(place, how.exitsAfterMs)
+  const notes = join(place.home, 'terminal')
+  mkdirSync(notes)
+  const note = (name: string) => join(notes, name)
+  const launcher = how.launcher_script ?? launcherProcess(place, how.command ?? fake.command, 'inherit', how.inherited ?? {}, how.mesh_trees, how.deadlines, how.args)
+  const stderr = how.stderrTo === undefined ? '' : ` 2> '${how.stderrTo}'`
+  const shell = theShellATerminalRuns(note, launcher, stderr)
   const runner = spawn(PTY_RUNNER, ['-qec', shell, '/dev/null'], { stdio: ['pipe', 'pipe', 'inherit'] })
   let shown = ''
   runner.stdout.on('data', (chunk: Buffer) => void (shown += chunk.toString()))
@@ -4209,4 +4259,164 @@ test('with two exact-pin mesh servers, the launch hands the relay no reading: on
   assert.equal(heard[0]?.wordless_answers, undefined, 'a launch with two mesh servers picked one of them to read its answers by')
   started.stop('the test is over')
   await started.stopped
+})
+
+test('a run killed hard takes its launcher, its shell, its member and its home with it (#559)', async (t) => {
+  // The run is a pipe, not a signal: nothing in the chain below it is signalled by the kill — the launcher is three
+  // processes away, behind `script` and a shell that is only waiting on it — and nothing has to be. What a shell timeout
+  // or --test-force-exit does to a suite is done here to one run of this file's own.
+  const place = placeFor(t)
+  const fake = fakeTerminalClaude(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-cc-the-run-'))
+  const notes = join(place.home, 'terminal')
+  mkdirSync(notes)
+  const note = (name: string) => join(notes, name)
+  const launcher = launcherProcess(place, fake.command, 'inherit', {}, undefined, {}, OWNER_PROMPT_ARGS, true, join(runtime, 'lifeline'))
+  const theRun = join(runtime, 'the-run.ts')
+  // The run: it keeps the lifeline's other end open and starts the owner's terminal on the launcher, as this file does.
+  writeFileSync(
+    theRun,
+    [
+      `import { spawn } from 'node:child_process'`,
+      `import { keepTheLifelineIn } from ${JSON.stringify(new URL('../end_a_launch_when_its_run_ends/keep_the_lifeline_in.ts', import.meta.url).href)}`,
+      `keepTheLifelineIn(${JSON.stringify(runtime)})`,
+      // The terminal's own input is a pipe this run keeps open and never writes: a shell that has waited its launcher
+      // out is held by `read finished` until it is ended, exactly as the owner's terminal holds it.
+      `spawn(${JSON.stringify(PTY_RUNNER)}, ['-qec', ${JSON.stringify(theShellATerminalRuns(note, launcher, ''))}, '/dev/null'], { stdio: ['pipe', 'ignore', 'inherit'] })`,
+      `process.stdout.write('the run is up\\n')`,
+      'setInterval(() => undefined, 1 << 30)',
+      '',
+    ].join('\n'),
+  )
+  const run = spawn(process.execPath, [theRun], { stdio: ['ignore', 'pipe', 'inherit'] })
+  t.after(async () => {
+    if (run.exitCode === null && run.signalCode === null) run.kill('SIGKILL')
+    await killGroupsCarrying(place.relay_root)
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  await until('the run to start its launcher\'s member', () => textIn(fake.readyFile) !== '', t)
+  const member = Number(textIn(fake.readyFile))
+  const shell = Number(textIn(note('shell')))
+  const launcherPid = Number(textIn(note('launcher')))
+  assert.equal(isAlive(member), true, 'the member runs before the kill')
+  assert.equal(isAlive(shell), true, 'the shell waits on the launcher before the kill')
+  assert.equal(isAlive(launcherPid), true, 'the launcher runs before the kill')
+  assert.ok(pidsNamingTheHome(place.home).length >= 3, `the launcher, its shell and the member all name the home: ${pidsNamingTheHome(place.home).join(', ')}`)
+  run.kill('SIGKILL')
+  // Nothing is signalled to anything below the run: every one of them ends because the pipe's other end closed.
+  await until(
+    'the home the run made to go, and every process that named it',
+    () => !existsSync(place.home) && pidsNamingTheHome(place.home).length === 0,
+    t,
+    () => `still named by ${pidsNamingTheHome(place.home).join(', ')}`,
+  )
+  assert.equal(isAlive(member), false, 'the member did not outlive the run that started it')
+  assert.equal(isAlive(shell), false, 'nor did the shell that waited on its launcher')
+  assert.equal(isAlive(launcherPid), false, 'nor did the launcher itself')
+  assert.equal(existsSync(join(runtime, 'lifeline')), true, 'the run\'s own pipe is the launcher\'s to read, and never to remove')
+})
+
+test('a launcher whose run was already gone ends at once, taking its member and its home (#559)', async (t) => {
+  // The other side of the same rule: a run killed while a test was still starting a launcher leaves a pipe whose other
+  // end is already closed. A launcher that read that as a live run would wait for a signal that is never coming, which
+  // is the orphan itself.
+  const place = placeFor(t)
+  const marker = join(place.home, 'the-questions-may-be-answered')
+  const fake = fakeHostUnderARun(place, { waitFor: marker, parked: join(place.home, 'the-launcher-is-parked') })
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-cc-the-run-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // The run this launcher is told about is over before the launcher starts: the pipe it reads has no writer left.
+  lifeline.closeTheRunsEnd()
+  const launcher = spawn(process.execPath, [launcherProcess(place, fake.command, 'ignore', {}, undefined, {}, OWNER_PROMPT_ARGS, true, lifeline.path)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  // Held on its questions, so the launch has not settled when this run's end has already come: the launcher is answered
+  // as soon as the launch settles, and not a moment before.
+  await until('the launcher to be parked on its questions', () => existsSync(join(place.home, 'the-launcher-is-parked')), t, () => said)
+  writeFileSync(marker, '')
+  await until('the launcher to end by itself', () => launcher.exitCode !== null || launcher.signalCode !== null, t, () => said)
+  assert.equal(await ended, 0, `the launcher did not end by itself: ${JSON.stringify(said)}`)
+  const started = /^started (\d+)$/m.exec(said)
+  if (started !== null) {
+    // A launcher that ends before it can print is not failed for it: what it owes a run already gone is stated below,
+    // and where it did print, the member it named is the one that must be gone.
+    assert.equal(isAlive(Number(started[1])), false, 'the member the launcher started did not outlive it')
+    assert.ok(said.includes(`because ${THE_RUN_IS_GONE}`), `not the run's end that stopped it: ${JSON.stringify(said)}`)
+  }
+  assert.equal(existsSync(place.home), false, 'nor did the home the run made for it')
+  assert.deepEqual(pidsNamingTheHome(place.home), [], 'and nothing names the home any more')
+  assert.equal(existsSync(lifeline.path), true, 'the run\'s own pipe is the launcher\'s to read, and never to remove')
+})
+
+test('a run that goes off the owner\'s terminal takes its member with it, and ends only the pid that is its own shell (#559)', async (t) => {
+  // Off a terminal there is no hangup to fall back on, so the member ends only because the launcher stopped it — which is
+  // what the mid-way test cannot tell apart from the terminal's own hangup.
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-cc-the-run-'))
+  const lifeline = keepTheLifelineIn(runtime)
+  // A pid a stale note might name: it is not this launcher's shell, and nothing but that check keeps it alive.
+  const foreign = spawn(process.execPath, ['-e', 'setInterval(() => undefined, 1 << 30)'], { stdio: 'ignore' })
+  const foreignPid = foreign.pid
+  if (foreignPid === undefined) assert.fail('the foreign process did not start')
+  mkdirSync(join(place.home, 'terminal'), { recursive: true })
+  writeFileSync(join(place.home, 'terminal', 'shell'), String(foreignPid))
+  const launcher = spawn(process.execPath, [launcherProcess(place, fake.command, 'ignore', {}, undefined, {}, OWNER_PROMPT_ARGS, true, lifeline.path)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    foreign.kill('SIGKILL')
+    lifeline.close()
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to start its member', () => /^started \d+$/m.test(said), t)
+  const member = Number(/^started (\d+)$/m.exec(said)?.[1])
+  assert.equal(isAlive(member), true, 'the member runs before the run goes')
+  lifeline.closeTheRunsEnd()
+  await until('the launcher to end by itself', () => launcher.exitCode !== null || launcher.signalCode !== null, t, () => said)
+  assert.equal(await ended, 0, `the launcher did not end by itself: ${JSON.stringify(said)}`)
+  assert.equal(isAlive(member), false, 'the member was stopped by the launcher, with no terminal to hang it up')
+  // The launcher's own exit would kill the member's group anyway, without a reason: what this pins is that the run's
+  // end stopped it first, with the product's own reason, and waited for it before the home went.
+  assert.ok(said.includes(`because ${THE_RUN_IS_GONE}`), `the member was stopped with the run's own reason: ${JSON.stringify(said)}`)
+  assert.equal(isAlive(foreignPid), true, 'a pid the note holds that is not this launcher\'s shell was left alone')
+  assert.equal(existsSync(place.home), false, 'the home the run made went with it')
+})
+
+test('a launcher told a run\'s end it cannot even open ends at once, taking its home (#559)', async (t) => {
+  // The pipe is gone rather than closed — a run killed between making the lifeline and starting the launcher leaves
+  // this. A path that cannot be opened is the run gone, never a reason to wait for it.
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const runtime = mkdtempSync(join(tmpdir(), 'martha-cc-the-run-'))
+  const neverMade = join(runtime, 'no-such-run')
+  const launcher = spawn(process.execPath, [launcherProcess(place, fake.command, 'ignore', {}, undefined, {}, OWNER_PROMPT_ARGS, true, neverMade)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const ended = new Promise<number | null>((resolve) => launcher.once('exit', (code) => resolve(code)))
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+    removeTheTree(runtime)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to end by itself', () => launcher.exitCode !== null || launcher.signalCode !== null, t, () => said)
+  assert.equal(await ended, 0, `the launcher did not end by itself: ${JSON.stringify(said)}`)
+  assert.equal(existsSync(place.home), false, 'the home the run made went with it')
 })
