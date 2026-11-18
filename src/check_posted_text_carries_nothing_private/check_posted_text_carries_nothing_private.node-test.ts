@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -14,11 +14,13 @@ import { test } from 'node:test'
 import {
   familiesFrom,
   privateHitsIn,
+  SYNTHETIC,
   type Hit,
   type Resolve,
   type Rules,
 } from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
 import { rulesOf } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
+import { PUBLIC_TEXT_PATTERNS } from '../check_nothing_private_gets_in/public_text.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { postedTextSources } from './posted_text.ts'
 import { standInPage } from './plant_every_surface.ts'
@@ -255,4 +257,57 @@ test('a full page is followed to the last one', async () => {
   const { call, asked } = calling(answers)
   await readPostedText(call, REPO)
   assert.ok(asked.some((request) => request.path === standInPage(ROUTES.issueComments(REPO), 2)), 'the second page was not read')
+})
+
+// The page's promise to a member who writes an example (martha#615). What it offers must be a
+// form the check accepts by a rule of its own; a spelling the check merely fails to match is not
+// a form, and a member following such an example writes the same name without the brackets and
+// meets a red run. The page is read here rather than restated, so the promise and the check
+// cannot drift apart again.
+const THE_PAGE = readFileSync(join(import.meta.dirname, '../../docs/nothing-private-gets-in.md'), 'utf8')
+
+/** The paragraph in which the page makes that promise, as its own lines. */
+const thePromisesParagraphIn = (page: string): string => {
+  const lines = page.split('\n')
+  const at = lines.findIndex((line) => line.startsWith('Legitimate text passes by its form'))
+  assert.ok(at !== -1, 'the page no longer makes the promise this test reads, so it would prove nothing')
+  const after = lines.slice(at)
+  const ends = after.findIndex((line, offset) => offset > 0 && line.trim() === '')
+  return (ends === -1 ? after : after.slice(0, ends)).join('\n')
+}
+
+/** Whether the check accepts `value` by a form of its own, rather than by failing to match it. */
+const acceptedByAForm = (value: string): boolean =>
+  new RegExp(SYNTHETIC.home_dir).test(value) || new RegExp(PUBLIC_TEXT_PATTERNS.allow_home).test(value)
+
+test('every home path the page offers as legitimate is a form the check accepts', () => {
+  const offered = [...thePromisesParagraphIn(THE_PAGE).matchAll(/`(\/home\/[^`]+)`/g)].map((found) => found[1] ?? '')
+  assert.ok(offered.length > 0, 'the promise offers no home path, so this test would prove nothing')
+  const unaccepted = offered.filter((value) => !acceptedByAForm(value))
+  assert.deepEqual(
+    unaccepted,
+    [],
+    `the page offers ${unaccepted.join(', ')}, which is no form: it passes only because the check does not match it, and the same name without the brackets is refused`,
+  )
+})
+
+// A name nobody declared, drawn here so this file carries no such value: the page says an
+// invented name is refused exactly as a real one is, because nothing tells the two apart.
+const anInventedName = () => `a${randomBytes(4).toString('hex')}`
+
+test('a home path under an invented name is refused, say the page and the check alike', async () => {
+  const invented = anInventedName()
+  assert.deepEqual(
+    await wheresOf(answersWith('issue comment', `a home path at /home/${invented}`)),
+    ['issue #170 comment 6765201999:1'],
+    'an invented home name passed: the page tells a member it will be refused',
+  )
+})
+
+test('a repository under an invented owner is refused, say the page and the check alike', async () => {
+  const invented = anInventedName()
+  const reservesNothing: Resolve = async () => 'not_public'
+  const hits = await privateHitsIn(await sourcesOf(answersWith('issue comment', `see ${invented}/widget#1`)), strict, reservesNothing)
+  assert.deepEqual(hits.map((hit) => hit.where), ['issue #170 comment 6765201999:1'], 'an invented owner passed')
+  assert.match(hits[0]?.what ?? '', /^a repository that is not public/)
 })

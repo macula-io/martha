@@ -30,6 +30,8 @@ import {
 import { theAcceptanceOf } from '../keep_the_package_contract/the_acceptance_of_a_package.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { SHORT_SHA, THE_REDO_SCRIPT } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { OWNER_YES, aQuestionTooLong, theLandingQuestion } from '../land_passed_work_as_one_batch/the_owners_yes_to_a_landing.ts'
+import { QUEUE_ASK } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { theAsksTheOwnerSaidYesTo } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { readTheOriginACloneHas } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
@@ -128,12 +130,25 @@ export async function verifyRange(host: RangeCheckHost, range: TheRange): Promis
   if ('refused' in ci) return ci
   const acceptance = await theAcceptanceAtTheTip(host, settled.ok, work.ok, ci.ok)
   if ('refused' in acceptance) return acceptance
-  return { told: [shape.ok.commits, shape.ok.stat, '', theLine(settled.ok, shape.ok, work.ok, ci.ok, acceptance.ok)].join('\n') }
+  const line = theLine(settled.ok, shape.ok, work.ok, ci.ok, acceptance.ok)
+  return { told: [shape.ok.commits, shape.ok.stat, ...theOwnersQuestion(settled.ok, range.packages), '', line].join('\n') }
+}
+
+/**
+ * The question the owner says yes to before this range lands (martha#605), when the range lands packages: the one the
+ * fast-forward checks the owner's yes against, built by the same function, so the member queues what will be checked.
+ */
+function theOwnersQuestion(settled: SettledRange, packages: readonly string[] | undefined): readonly string[] {
+  if (packages === undefined) return []
+  const landing = { repo: settled.repo, default_branch: settled.default_branch, tip: settled.tip, packages }
+  const too_long = aQuestionTooLong(landing)
+  if (too_long !== undefined) return ['', `No landing of this range can be asked about: ${too_long}`]
+  return ['', `The owner's question for this landing; queue it with ${QUEUE_ASK} word for word, and name its id as ${OWNER_YES}:`, theLandingQuestion(landing)]
 }
 
 /** What `verify_range` says it is for, as the launcher answers the mod's ask (martha#256). */
 export const VERIFY_RANGE_DESCRIPTION =
-  'Checks a range before the owner says yes: the base is the origin default branch tip, the tip descends from it, no conflict marker is committed, and, with packages, one --no-ff merge per package at the head its reviewer passed. Reads the CI runs on the tip and answers one menu line.'
+  'Checks a range before the owner says yes, for a role the declaration allows assign_work: the base is the origin default branch tip, the tip descends from it, no conflict marker is committed, and, with packages, one --no-ff merge per package at the head its reviewer passed. Reads the CI runs on the tip and answers one menu line.'
 
 /** The range a call of `verify_range` names, or why it names none: a path, two ends and, when it was given, the packages. */
 export function theRangeACallNames(args: Readonly<Record<string, unknown>>): Step<TheRange> {
