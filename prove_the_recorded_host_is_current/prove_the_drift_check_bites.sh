@@ -16,15 +16,10 @@ OUT="$(mktemp)"
 trap 'rm -f "${OUT}"' EXIT
 
 # Each run is bounded the way the suite's are (martha#56, martha#683): a time limit per test, force-exit, and the guard
-# that fails a file leaving something running. The last two are read from prove_the_core/every_test_run_ends.ts, never
-# restated, and the run starts from the repository's top, where the guard's path holds.
+# that fails a file leaving something running. All three come from their one definition (the_runs_bounds.sh), and the
+# run starts from the repository's top, where the guard's path holds.
 cd "${REPO}"
-BOUNDS="./prove_the_core/every_test_run_ends.ts"
-RUN_TIMEOUT_MS=300000
-mapfile -t bounds < <(node --input-type=module -e "import { FORCE_EXIT_FLAG, GUARD_FLAG } from '${BOUNDS}'; console.log(FORCE_EXIT_FLAG); console.log(GUARD_FLAG)")
-FORCE_EXIT_FLAG="${bounds[0]:-}"
-GUARD_FLAG="${bounds[1]:-}"
-[[ -n "${FORCE_EXIT_FLAG}" && -n "${GUARD_FLAG}" ]] || { echo "prove_the_drift_check_bites: ${BOUNDS} gave no FORCE_EXIT_FLAG and GUARD_FLAG" >&2; exit 2; }
+source "${REPO}/prove_the_relay_loads/the_runs_bounds.sh"
 
 status=0
 node --test --test-timeout="${RUN_TIMEOUT_MS}" "${FORCE_EXIT_FLAG}" "${GUARD_FLAG}" --test-reporter=spec "${TESTS}" > "${OUT}" 2>&1 || status=$?
