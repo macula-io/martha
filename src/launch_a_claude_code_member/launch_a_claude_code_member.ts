@@ -168,7 +168,8 @@ import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journa
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { aFolderOfTheScan, aTickOfTheRowsWork } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
+import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
+import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { theEnvironmentAMemberIsGiven } from '../give_a_member_its_environment/the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
@@ -658,7 +659,8 @@ export async function launchClaudeCodeMember(asking: ClaudeCodeMemberLaunch): Pr
  */
 function aTickOfWorkFor(launch: ClaudeCodeMemberLaunch, misses: string): () => void {
   const beats = dashboardRowsIn(launch.places.dashboard)
-  return aTickOfTheRowsWork(aFolderOfTheMisses(misses, launch.member_name, beats), aFolderOfTheScan(launch.leftovers?.workspace, launch.member_name, beats))
+  const scan: TheScanOfTheWorkspace = (workspace) => theDriftInTheWorkspace({ files: thisMachine.stores.files, processes: thisMachine.processes, workspace })
+  return aTickOfTheRowsWork(aFolderOfTheMisses(misses, launch.member_name, beats), aFolderOfTheScan(launch.leftovers?.workspace, launch.member_name, beats, scan))
 }
 
 /** The launch itself, on a run that has said whether it is still there. */

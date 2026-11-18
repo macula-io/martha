@@ -6,11 +6,11 @@
 // waits for a tick on which it can be taken, exactly as a miss does.
 //
 // This is a slice and not the program `npm run check:workspace-layout` runs (../check_the_workspace_layout), which an
-// adapter may not import: the launch reports what the same scan finds, it does not run that program.
+// adapter may not import: the launch reports what the same scan finds, it does not run that program. The scan itself is
+// the caller's: a slice reads no setting (no_setting_outside_the_declaration), so the launch hands it this machine's
+// tree and processes through the scan it builds.
 
-import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
-import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { theRowWithTheLine, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The one line the scan leaves, when it found something: the first drift is the one a reader fixes first, and the row
@@ -27,12 +27,8 @@ const theScanLine = (lines: readonly string[]): string | null => {
 const THE_SCAN_FAILED = 'the workspace could not be scanned: run npm run check:workspace-layout by hand'
 
 /** A scan of the workspace a launch was given: the drift lines it found, or a rejection the launch reports and goes on
- * past. Testable through the folder below, which takes one in place of the scan it runs. */
+ * past. The caller builds it, because the tree and the processes it asks are a setting this slice may not read. */
 export type TheScanOfTheWorkspace = (workspace: TheWorkspace) => Promise<readonly string[]>
-
-/** The scan a launch runs: the slice, over this machine's tree and git, with the places the crew declared. */
-const theScanOf: TheScanOfTheWorkspace = (workspace: TheWorkspace) =>
-  theDriftInTheWorkspace({ files: thisMachine.stores.files, processes: thisMachine.processes, workspace })
 
 /** Nothing to fold: a crew that declared no layout, or a launch given none. */
 const NOTHING_TO_FOLD = (): void => {}
@@ -44,7 +40,7 @@ export function aFolderOfTheScan(
   workspace: TheWorkspace | undefined,
   member: string,
   beats: DashboardStore,
-  scan: TheScanOfTheWorkspace = theScanOf,
+  scan: TheScanOfTheWorkspace,
 ): () => void {
   if (workspace === undefined) return NOTHING_TO_FOLD
   let line: string | null = null

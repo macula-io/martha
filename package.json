@@ -105,7 +105,7 @@
       "src/watch_the_crew_tools_a_launch_served"
     ],
     "decisionFiles": [
-      "src/launch_a_claude_code_member/remember_own_write_of_a_call.ts"
+      "src/remember_the_members_own_write/remember_own_write_of_a_call.ts"
     ],
     "hostCeilings": {
       "src/answer_the_relay": 313,
@@ -137,7 +137,7 @@
       "src/keep_the_crews_files_as_directories": 155,
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
-      "src/launch_a_claude_code_member": 505,
+      "src/launch_a_claude_code_member": 435,
       "src/launch_a_goose_member": 257,
       "src/linux_process_identity": 309,
       "src/list_stop_and_restart_the_crew": 99,
