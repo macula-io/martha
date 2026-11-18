@@ -146,23 +146,30 @@ test('a windows place the crew store refuses is a check that could not be made, 
   }
 })
 
-test('a state root this check cannot list is a check that could not be made, never a pass (martha#658)', () => {
-  const run = scratch()
-  try {
-    aLostMembersWindow(theWindowsPlace(run.state_root, run.checkout))
-    const crews = join(run.state_root, CREWS_PLACE)
-    chmodSync(crews, 0o000)
+// Two ways a look is stopped: the crews directory is seen but cannot be listed, and the state root cannot even be
+// entered, so whether the crews directory is there at all cannot be told. Neither may read as a machine with no state.
+for (const [stopped, lockedOf] of [
+  ['a crews directory it cannot list', (state_root: string) => join(state_root, CREWS_PLACE)],
+  ['a state root it cannot enter', (state_root: string) => state_root],
+] as const) {
+  test(`${stopped} is a check that could not be made, never a pass (martha#658)`, () => {
+    const run = scratch()
     try {
-      const { status, err } = ranOver(run.state_root)
-      assert.equal(status, 2, err)
-      assert.match(err, new RegExp(`^${NAME}: could not be made: `))
+      aLostMembersWindow(theWindowsPlace(run.state_root, run.checkout))
+      const locked = lockedOf(run.state_root)
+      chmodSync(locked, 0o000)
+      try {
+        const { status, err } = ranOver(run.state_root)
+        assert.equal(status, 2, err)
+        assert.match(err, new RegExp(`^${NAME}: could not be made: `))
+      } finally {
+        chmodSync(locked, 0o700)
+      }
     } finally {
-      chmodSync(crews, 0o700)
+      run.remove()
     }
-  } finally {
-    run.remove()
-  }
-})
+  })
+}
 
 test('a machine with no state root is a clean reading, and the gate makes nothing there (martha#658)', () => {
   const run = scratch()
