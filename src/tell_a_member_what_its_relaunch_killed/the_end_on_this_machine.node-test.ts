@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readFileSync, statSync } from 'node:fs'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -49,8 +49,10 @@ const A_SERVERS_PID = 602
 
 const NO_CHECKOUT = join(tmpdir(), 'no-checkout-of-ours-at-all')
 
+// The machine's own path to the fixture, resolved: git answers `worktree list` with the place it resolved, so a
+// TMPDIR reached through a link (the CI job that runs the suite under one) would otherwise disagree with itself.
 const scratch = (t: TestContext): string => {
-  const dir = mkdtempSync(join(tmpdir(), 'martha-an-end-'))
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'martha-an-end-')))
   t.after(() => removeTheTree(dir))
   return dir
 }
