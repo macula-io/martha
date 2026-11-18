@@ -28,20 +28,20 @@
 
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname } from 'node:path'
 import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
-import { handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import type { HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
-import type { CrewStore, DocumentStore, RowStore } from '../host_contract/host_contract.ts'
+import { handoverStampsIn, keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
+import { readingOnly, type CrewStore, type DocumentStore, type HandoverStampStore, type Refused, type RowStore } from '../host_contract/host_contract.ts'
 import { LIFECYCLE_PLACE, watchForAStop, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
+import { machineRootsFrom } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { readingOnly } from '../host_contract/host_contract.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
+import { THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { DeclarationRefused, declareCrew, OWNER_BELL, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
@@ -102,23 +102,22 @@ const STATE_PLACES = [THE_PLACES_A_STATE_ROOT_KEEPS.records_place, 'snapshots', 
 function closedRelayRoot(relay_root: string): string | undefined {
   if (fs.lstatSync(relay_root, { throwIfNoEntry: false }) === undefined) fs.mkdirSync(relay_root, { recursive: true, mode: STATE_DIRECTORY_MODE })
   const found = fs.lstatSync(relay_root)
-  const closed = found.isDirectory() && found.uid === process.getuid?.() && (found.mode & PERMISSION_BITS) === STATE_DIRECTORY_MODE
-  return closed ? undefined : `${NOT_STARTED}: ${relay_root} is not a directory of this user's that only this user may enter.`
+  return found.isDirectory() && found.uid === process.getuid?.() && (found.mode & PERMISSION_BITS) === STATE_DIRECTORY_MODE ? undefined : `${NOT_STARTED}: ${relay_root} is not a directory of this user's that only this user may enter.`
 }
 
 /** The launcher's places in Martha's state, and the relay root for its sockets; or why one cannot be used. */
 export function launcherPlacesOf(state: MarthaState, relay_root: string, root: string): MemberPlaces | { readonly refusal: string } {
   const rows = crewRowsDirectory(state.state_root, root)
   if ('refusal' in rows) return rows
-  // The crew's own folders a launch keeps — the dashboard's row, and the gate's audit folder (martha#321) — then the
-  // places this checkout keeps in Martha's state.
-  const made = [crewSubdirectory(state.state_root, root, CREW_ROW_PLACE), crewSubdirectory(state.state_root, root, GATE_AUDIT_PLACE), ...STATE_PLACES.map((name) => stateSubdirectory(state, name))]
+  // The crew's own folders a launch keeps — the dashboard's row, the gate's audit folder (martha#321) and the owner's
+  // mutes of a member's bells (martha#371) — then the places this checkout keeps in Martha's state.
+  const made = [crewSubdirectory(state.state_root, root, CREW_ROW_PLACE), crewSubdirectory(state.state_root, root, GATE_AUDIT_PLACE), crewSubdirectory(state.state_root, root, THE_BELLS_PLACE), ...STATE_PLACES.map((name) => stateSubdirectory(state, name))]
   const refused = made.find((place) => 'refusal' in place)
   if (refused !== undefined && 'refusal' in refused) return refused
-  const [dashboard, gate_audit, launch_records, snapshot_root, mesh_servers, relay_journal] = made.map((place) => ('path' in place ? place.path : ''))
+  const [dashboard, gate_audit, bells, launch_records, snapshot_root, mesh_servers, relay_journal] = made.map((place) => ('path' in place ? place.path : ''))
   const unsafe = closedRelayRoot(relay_root)
   if (unsafe !== undefined) return { refusal: unsafe }
-  return { rows: rows.path, dashboard: dashboard!, gate_audit: gate_audit!, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
+  return { rows: rows.path, dashboard: dashboard!, gate_audit: gate_audit!, bells: bells!, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
 }
 
 export interface MemberStartRequest {
@@ -321,6 +320,8 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         // workspace places: nothing that acts runs inside the member's session (martha#256).
         processes: thisMachine.processes,
         settings: ready.settings,
+        // What a reboot deletes on this machine, read here and ruled on by ../tell_a_citer_of_a_volatile_path (martha#314).
+        volatile_roots: machineRootsFrom(tmpdir(), process.env['XDG_RUNTIME_DIR']),
         models: CLAUDE_CODE_MODELS,
         launched_on: ready.model ?? '',
         spawn: CLAUDE_CODE_SUBAGENT_SPAWN,

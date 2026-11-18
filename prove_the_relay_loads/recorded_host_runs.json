@@ -44,5 +44,17 @@
     "file": "src/hear_every_turn_the_model_runs/every_turn_on_the_recorded_host.node-test.ts",
     "cases": 6,
     "proves": "the launcher hears every main turn the model runs, one the mod's timer submitted included, each recorded once, and a paste, a background agent's delivered answer and a slash command are no turn of unnamed source (martha#440)"
+  },
+  {
+    "file": "src/pin_what_a_read_carries/pin_what_a_read_carries.node-test.ts",
+    "name_pattern": "the control shows the text the table says a host attaches",
+    "cases": 1,
+    "proves": "which instruction text a host attaches to a member's session: the control shows the ownership table's texts, and a session Martha starts shows none of them (martha#165)"
+  },
+  {
+    "file": "src/drive_the_recorded_host/a_muted_bell_on_the_recorded_host.node-test.ts",
+    "name_pattern": "the owner's mute silences a launched member",
+    "cases": 1,
+    "proves": "the owner's mute silences one member's bell on the terminal it rings on, and the same member unmuted rings (martha#371)"
   }
 ]

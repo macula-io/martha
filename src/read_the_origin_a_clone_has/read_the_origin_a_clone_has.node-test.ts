@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { CLONES } from '../declare_crew/declare_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -56,7 +57,7 @@ test('#256: an origin URL is read in each of the four forms git writes one in', 
     `ssh://git@github.com/${ORG_AND_NAME}.git`,
     `https://github.com/${ORG_AND_NAME}.git`,
     `file:///clones/${ORG_AND_NAME}`,
-    `/clones/${ORG_AND_NAME}`,
+    `/${CLONES}/${ORG_AND_NAME}`,
   ]
   for (const form of forms) assert.equal(repoOfTheOrigin(form), ORG_AND_NAME, `${form} was not read as ${ORG_AND_NAME}`)
 })

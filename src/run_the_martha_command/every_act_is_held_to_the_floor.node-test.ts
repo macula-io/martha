@@ -16,7 +16,8 @@ import { test } from 'node:test'
 
 import { floorRecordOf, launchBelowTheFloor, RELEASES } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, actOf, EXIT_DONE, EXIT_REFUSED, SAID_BY } from './run_the_martha_command.ts'
+import { EXIT_DONE, EXIT_REFUSED, SAID_BY } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
+import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, actOf } from './run_the_martha_command.ts'
 
 const REPOSITORY = join(import.meta.dirname, '..', '..')
 

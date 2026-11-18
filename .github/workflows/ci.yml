@@ -293,6 +293,23 @@ jobs:
       - run: npm ci
       - run: npm run --silent check:no-member-outlives-its-run
 
+  # No launcher outlives its run (martha#559): a launch test's `script -qec ... launcher.ts` pair is a terminal held
+  # open, and a run killed hard leaves them piled up until the next launch test stops reporting. The job is a run over a
+  # machine that holds none, and answers 0. That it BITES is a test's, and so is every line of the rule: a kernel the
+  # test plants holds a killed run's chain and must be named, and the same chain under a live runner must not be —
+  # prove_the_core/the_launchers_a_run_left.node-test.ts, which the suite runs.
+  no-launcher-outlives-its-run:
+    name: no launcher outlives its run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:no-launcher-outlives-its-run
+
   # Martha's names are its own (martha#468): no file, folder, tool, marker or variable of Martha's may be a name
   # crew-code also gives something, or a person reading a path, a transcript or a tool name cannot tell which crew a
   # thing belongs to. It runs as a job and as a node test, so no range gate reads green while the check did not run.
@@ -584,6 +601,82 @@ jobs:
           npm run --silent check:base-tests -- --base "$base" --head "$head" --repository "$repo"
       - name: every test the base passed is still at the tip
         run: npm run --silent check:base-tests -- --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # The C4 pictures are drawn at release, not carried by every pull request
+  # (martha#627): the only change that may touch one is the version-bump pull
+  # request, and that change must leave every picture what
+  # architecture/c4_diagrams.ts draws. The release reads --tree as its backstop:
+  # a stale picture on a tagged tree means the bump's check was bypassed.
+  #
+  # Both planted repositories prove the reads bite as the job runs them, and exit 1
+  # is required rather than any non-zero: exit 2 is "could not look", which must
+  # never read as a bite. Nothing here spells a picture's path — the generator
+  # names the pictures, and the fixtures ask it.
+  #
+  # The shas are the event's own. On a push whose `before` is all zeros (a branch's
+  # first push) the check answers exit 2 -- it could not look -- which is right and
+  # must not be "fixed" into a pass.
+  pictures:
+    name: the pictures change only with the version
+    runs-on: ubuntu-latest
+    env:
+      BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+      HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: the tree read bites
+        run: |
+          repo="${{ runner.temp }}/pictures-tree-self-test"
+          mkdir -p "$repo"
+          node --input-type=module -e "import('$GITHUB_WORKSPACE/architecture/c4_diagrams.ts').then((module) => { for (const file of module.THE_PICTURES_THE_C4_DRAWS) console.log(file) })" > "$repo/pictures.txt"
+          while read -r file; do
+            mkdir -p "$repo/$(dirname "$file")"
+            printf 'not the picture the generator draws\n' > "$repo/$file"
+          done < "$repo/pictures.txt"
+          picture="$(awk 'NR == 1' "$repo/pictures.txt")"
+          status=0
+          npm run --silent check:pictures -- --tree --repository "$repo" > "$repo/verdict.txt" 2>&1 || status=$?
+          if [ "$status" -ne 1 ]; then cat "$repo/verdict.txt"; exit 1; fi
+          grep -q "$picture is not what" "$repo/verdict.txt"
+      - name: the range read passes a change that touches no picture, and bites one that does
+        run: |
+          repo="${{ runner.temp }}/pictures-range-self-test"
+          mkdir -p "$repo"
+          git -C "$repo" init -q
+          git -C "$repo" config user.email planted@example.invalid
+          git -C "$repo" config user.name planted
+          printf '{"version":"1.0.0"}\n' > "$repo/package.json"
+          node --input-type=module -e "import('$GITHUB_WORKSPACE/architecture/c4_diagrams.ts').then((module) => { for (const file of module.THE_PICTURES_THE_C4_DRAWS) console.log(file) })" > "$repo/pictures.txt"
+          while read -r file; do
+            mkdir -p "$repo/$(dirname "$file")"
+            printf 'not the picture the generator draws\n' > "$repo/$file"
+          done < "$repo/pictures.txt"
+          picture="$(awk 'NR == 1' "$repo/pictures.txt")"
+          git -C "$repo" add -A
+          git -C "$repo" commit -q -m base
+          base="$(git -C "$repo" rev-parse HEAD)"
+          printf 'the work\n' > "$repo/a_change.txt"
+          git -C "$repo" add -A
+          git -C "$repo" commit -q -m 'a change that touches no picture'
+          untouched="$(git -C "$repo" rev-parse HEAD)"
+          npm run --silent check:pictures -- --base "$base" --head "$untouched" --repository "$repo"
+          printf 'another rendering\n' > "$repo/$picture"
+          git -C "$repo" add -A
+          git -C "$repo" commit -q -m 'a change that touches a picture without the version'
+          touched="$(git -C "$repo" rev-parse HEAD)"
+          status=0
+          npm run --silent check:pictures -- --base "$untouched" --head "$touched" --repository "$repo" > "$repo/verdict.txt" 2>&1 || status=$?
+          if [ "$status" -ne 1 ]; then cat "$repo/verdict.txt"; exit 1; fi
+          grep -q "$picture changed in a change that does not bump the version" "$repo/verdict.txt"
+      - name: no picture is touched but by the version, and every picture is what the generator draws
+        run: npm run --silent check:pictures -- --base "$BASE_SHA" --head "$HEAD_SHA"
 
   # No literal restates a value the tree defines (martha#289, the rule decided
   # 2026-11-05: no literal restating a value the code already defines, tests

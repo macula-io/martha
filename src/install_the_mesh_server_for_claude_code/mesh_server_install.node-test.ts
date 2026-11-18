@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { MESH_SERVER_PACKAGE } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
 import { PINNED_TRANSPORT, meshServerInstallsIn } from './mesh_server_install.ts'
 
@@ -41,7 +42,7 @@ for (const spec of [MESH_SERVER_PACKAGE, `${MESH_SERVER_PACKAGE}@latest`, `${MES
 
 test('a server started from an installed copy of the package is refused: a path pins no version', () => {
   const read = meshServerInstallsIn(
-    config({ macula: { command: 'node', args: [`node_modules/${MESH_SERVER_PACKAGE}/dist/index.js`] } }),
+    config({ macula: { command: 'node', args: [`${DEPENDENCIES}/${MESH_SERVER_PACKAGE}/dist/index.js`] } }),
     MESH_SERVER_PACKAGE,
   )
   assert.ok('refusal' in read && read.refusal.includes('macula'), JSON.stringify(read))
