@@ -210,8 +210,10 @@ async function startARun(line: number, options: Options, launchedAt: number): Pr
     const { sessionId, currentMode } = await handOver(acp, place, remaining)
     return { line, options, place, proxy, acp, child, tracePath, sessionId, currentMode, pace, cap }
   } catch (error) {
-    // A launch with no handshake leaves nothing of its own behind: not its group, not the proxy's port.
+    // A launch with no handshake leaves nothing of its own behind: not its group, not the proxy's port. What crossed
+    // before the kill is kept as endARun keeps it: the explicit close is the fallback for the pipe's `end` (martha#694).
     await killTheGroup(child).catch(() => undefined)
+    acp.closeTheExchange()
     await proxy.stop().catch(() => undefined)
     theLaunchInHand = undefined
     throw error

@@ -18,6 +18,7 @@ import { after, test } from 'node:test'
 
 import { THE_LAUNCH_BOUND_KEY } from './the_cap_a_line_gets.ts'
 import { THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS } from './drive_the_trial.ts'
+import { THE_TRANSCRIPT } from './the_evidence_says_why.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const theDriverRun = promisify(execFile)
@@ -86,6 +87,16 @@ const A_STAND_IN_ENGINE = aStandInEngine(false)
 /** An engine that starts and then says nothing at all: the launch never shakes hands (PR 733 R2). */
 const AN_ENGINE_THAT_NEVER_ANSWERS = `#!${process.execPath}
 import { createInterface } from 'node:readline'
+createInterface({ input: process.stdin }).on('line', () => undefined)
+`
+
+/** What an engine that never answers had written when the kill cut it off: a message without its newline. */
+const A_MESSAGE_CUT_OFF = '{"jsonrpc":"2.0","method":"session/update","params":{"cut":"off"'
+
+/** An engine that writes a message the kill cuts before its newline, then never answers the handshake. */
+const AN_ENGINE_CUT_OFF_MID_MESSAGE = `#!${process.execPath}
+import { createInterface } from 'node:readline'
+process.stdout.write(${JSON.stringify(A_MESSAGE_CUT_OFF)})
 createInterface({ input: process.stdin }).on('line', () => undefined)
 `
 
@@ -247,4 +258,12 @@ test('a turn the launch\'s end cuts reads not-observed, with the arithmetic, so 
   } finally {
     await model.stop()
   }
+})
+
+test('a launch whose handshake fails keeps the message the kill cut off, as every other kill path does (PR 733, martha#694)', async () => {
+  const { evidence } = await theDriverFor(1, aLaunchLeaving(HANDSHAKE_LEFT_MS), 'http://127.0.0.1:9', AN_ENGINE_CUT_OFF_MID_MESSAGE)
+  const kept = readFileSync(join(evidence, 'line-1', THE_TRANSCRIPT), 'utf8').split('\n').filter((line) => line !== '')
+    .map((line) => JSON.parse(line) as { direction: string; message: unknown })
+  const received = kept.filter(({ direction }) => direction === 'received').map(({ message }) => message)
+  assert.deepEqual(received, [{ text: A_MESSAGE_CUT_OFF }], 'the message without its newline is in the transcript, once')
 })
