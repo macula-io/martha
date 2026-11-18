@@ -123,7 +123,7 @@
       "src/read_a_kernel_and_a_home": 133,
       "src/refuse_a_member_writing_owner_memory": 586,
       "src/refuse_settings_that_turn_hooks_off": 203,
-      "src/row_streams_directory": 159,
+      "src/row_streams_directory": 164,
       "src/run_an_owner_signed_command": 562,
       "src/run_the_martha_command": 400,
       "src/run_the_nodes_own_npm_alone": 165,
