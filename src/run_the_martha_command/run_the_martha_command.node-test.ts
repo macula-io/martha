@@ -5,10 +5,10 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
@@ -684,4 +684,21 @@ test('#619: a launch record whose pid is above this act but whose start time is 
   launchRecordsDirectory(records).keep('builder', { member_name: 'builder', node_id: 'ab'.repeat(32), pid: process.pid, process_started_at: 'another-boot:1' })
   const run = marthaOnATerminal(place, {}, 'approve')
   assert.ok(!run.said.includes("this runs inside builder's session"), run.said)
+})
+
+test('#619: martha bells shows each flip the owner typed with its terminal, and a line written straight into the file as written without the martha command', (t) => {
+  const place = placeFor(t)
+  aCrewWithItsBells(place, true)
+  // A flip made before Martha recorded where acts are typed: it is history, before the cutover the next act takes.
+  mkdirSync(dirname(theBellsFile(place)), { recursive: true, mode: 0o700 })
+  appendFileSync(theBellsFile(place), `${JSON.stringify({ member: 'builder', bells: BELLS_HEARD, by: 'Ada Owner', at: '2026-11-01T00:00:00.000Z' })}\n`, { mode: 0o600 })
+  const flipped = marthaOnATerminal(place, {}, 'bells', 'builder', BELLS_MUTED)
+  assert.equal(flipped.status, EXIT_DONE, flipped.said)
+  // A member's shell, writing the bells file itself: no martha command, so no entry in the log names its line.
+  appendFileSync(theBellsFile(place), `${JSON.stringify({ member: 'builder', bells: BELLS_HEARD, by: 'Ada Owner', at: '2026-11-18T12:00:00.000Z' })}\n`, { mode: 0o600 })
+  const listed = martha(place, 'bells')
+  assert.equal(listed.status, EXIT_DONE, listed.said)
+  assert.match(listed.out, /line 1: history before /, listed.out)
+  assert.match(listed.out, /line 2: typed at \/dev\/pts\/\d+ \(session \d+\)/, listed.out)
+  assert.match(listed.out, /line 3: WRITTEN WITHOUT THE MARTHA COMMAND/, listed.out)
 })
