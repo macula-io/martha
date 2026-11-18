@@ -103,7 +103,7 @@ export const SPEND_FIELD = 'spend'
  * row, and nothing else. When a window opens and closes is the window slice's business
  * (../keep_a_members_crew_tools_window); the row only carries what a reader flags.
  */
-export const CREW_TOOLS_FIELD = 'crew_tools'
+export const CREW_TOOLS_FIELD = 'served_tools'
 
 /** What the row says of the member's crew tools: held, lost since a time, or nothing known. */
 export type CrewToolsOnARow = { readonly state: 'held' } | { readonly state: 'unknown' } | { readonly state: 'lost'; readonly since: number }
@@ -159,7 +159,7 @@ export interface DashboardRow {
    * Whether the member holds its crew tools (martha#658): absent on a row written before the field existed, which a
    * reader takes as nothing known, never as held.
    */
-  readonly crew_tools?: CrewToolsOnARow
+  readonly served_tools?: CrewToolsOnARow
 }
 
 /** The file one member's row is kept in: never a path, and never a dot a person or git could steer with. */

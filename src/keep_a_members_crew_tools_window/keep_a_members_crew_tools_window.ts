@@ -18,17 +18,19 @@
 
 import type { CrewPlace, Refused, ServedToolsCause, ServedToolsHeld } from '../host_contract/host_contract.ts'
 import type { CrewToolsOnARow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
+import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { readTheGitCallsInAShellLine } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 
 /** The place in the crew's store that keeps each member's window, one file per member. */
-export const CREW_TOOLS_PLACE = 'crew_tools'
+export const CREW_TOOLS_PLACE = 'served_tools_windows'
 
 /** The crew's raw stream of windows opened and closed, apart from any package's ledger: a loss is no package's act. */
-export const CREW_TOOLS_STREAM = 'member_crew_tools'
+export const CREW_TOOLS_STREAM = 'member_served_tools'
 
 /** The stream's word for a window opened, and for one closed. */
-export const CREW_TOOLS_LOST = 'crew_tools_lost'
-export const CREW_TOOLS_BACK = 'crew_tools_back'
+export const CREW_TOOLS_LOST = 'served_tools_lost'
+export const CREW_TOOLS_BACK = 'served_tools_back'
 
 /** What closed a window: the session that lost the tools, its refresh, or a later launch of the member. */
 export const SAME_SESSION = 'same_session'
@@ -36,7 +38,7 @@ export const REFRESH = 'refresh'
 export const RELAUNCH = 'relaunch'
 export type ClosedBy = typeof SAME_SESSION | typeof REFRESH | typeof RELAUNCH
 
-/** The git commands a window counts as milestones the member owes a crew_log for, each with the window field it counts in. */
+/** The git commands a window counts as milestones the member owes a logged milestone for, each with the window field it counts in. */
 export const COUNTED_GIT_COMMANDS = { push: 'pushes', merge: 'merges' } as const
 type CountedField = (typeof COUNTED_GIT_COMMANDS)[keyof typeof COUNTED_GIT_COMMANDS]
 
@@ -135,10 +137,10 @@ export function theBackLineOf(window: ACrewToolsWindow): string {
 /** What a successor is handed at its start while its member's window is open: the window, and the beats it owes. */
 export function theOwedLineOf(window: ACrewToolsWindow): string {
   const milestones = window.pushes + window.merges
-  const each = milestones === 0 ? 'no crew_log' : `one crew_log for each of ${String(window.pushes)} push(es) and ${String(window.merges)} merge(s)`
+  const each = milestones === 0 ? `no ${LOG_A_MILESTONE}` : `one ${LOG_A_MILESTONE} for each of ${String(window.pushes)} push(es) and ${String(window.merges)} merge(s)`
   return (
     `Your session ${window.session} lost its crew tools at ${timeOf(window.from)} and ran ${String(window.turns)} turn(s) without them. ` +
-    `You owe one report_progress now, and ${each} it made in that time.`
+    `You owe one ${REPORT_WHERE_THE_WORK_STANDS} now, and ${each} it made in that time.`
   )
 }
 

@@ -132,13 +132,13 @@ test('#320: a part another slice composed is drawn under the members, and the ro
 
 test('a lost window is carried and flagged beside the state; a row that says nothing of the tools reads unknown (martha#658)', () => {
   const since = Date.parse('2026-11-18T05:48:30.000Z')
-  const seen = seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - 1_000, { crew_tools: { state: 'lost', since } }), Uranus: beat('Uranus', NOW - 1_000) }, NOW)
-  assert.deepEqual(seen.rows[0]!.crew_tools, { state: 'lost', since })
+  const seen = seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - 1_000, { served_tools: { state: 'lost', since } }), Uranus: beat('Uranus', NOW - 1_000) }, NOW)
+  assert.deepEqual(seen.rows[0]!.served_tools, { state: 'lost', since })
   assert.equal(theCrewToolsFlag(seen.rows[0]!), 'crew tools lost since 05:48Z')
   assert.ok(thePaneLine(seen.rows[0]!).startsWith('Vesta: working, crew tools lost since 05:48Z · '), thePaneLine(seen.rows[0]!))
-  assert.deepEqual(seen.rows[1]!.crew_tools, { state: 'unknown' }, 'a row written before the field existed')
-  assert.deepEqual(seen.rows[2]!.crew_tools, { state: 'unknown' }, 'a member that never beat')
+  assert.deepEqual(seen.rows[1]!.served_tools, { state: 'unknown' }, 'a row written before the field existed')
+  assert.deepEqual(seen.rows[2]!.served_tools, { state: 'unknown' }, 'a member that never beat')
   assert.equal(theCrewToolsFlag(seen.rows[1]!), null)
-  assert.equal(theCrewToolsFlag({ crew_tools: { state: 'held' } }), null)
+  assert.equal(theCrewToolsFlag({ served_tools: { state: 'held' } }), null)
   assert.ok(!thePaneLine(seen.rows[1]!).includes('crew tools'))
 })

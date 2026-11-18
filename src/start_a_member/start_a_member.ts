@@ -64,7 +64,7 @@ import {
 import {
   HOOK_SETTINGS_CHECK_MS,
   launchClaudeCodeMember,
-  type ClaudeCodeMemberLaunch,
+  type CrewToolsOfALaunch,
   type LauncherPlaces,
   type MemberStarted,
 } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
@@ -335,7 +335,7 @@ type TheChannel = { readonly clock: { now(): number }; readonly stores: { readon
  * The crew's tools for one launch of this member (martha#254): over the crew's places, the sessions the launch shares,
  * and what the launch hands of the member, its own config folder and the crew tools it watches (martha#658).
  */
-function theCrewToolsOfALaunch(request: MemberStartRequest, ready: TheReadyStart, crewStores: ReturnType<typeof theCrewsStores>, channel: TheChannel): NonNullable<ClaudeCodeMemberLaunch['crew_tools']> {
+function theCrewToolsOfALaunch(request: MemberStartRequest, ready: TheReadyStart, crewStores: ReturnType<typeof theCrewsStores>, channel: TheChannel): CrewToolsOfALaunch {
   return (sessions, member) =>
     crewToolsOver({
       member: request.member,

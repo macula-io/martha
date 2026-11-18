@@ -28,7 +28,7 @@ export interface CrewRow {
   /** When the member last reported its progress (martha#319); null when it never reported. */
   readonly reported_at: number | null
   /** Whether it holds its crew tools (martha#658); unknown for a row that never said, never held. */
-  readonly crew_tools: CrewToolsOnARow
+  readonly served_tools: CrewToolsOnARow
 }
 
 /** What a row that says nothing of the crew tools reads as: nothing known. */
@@ -38,8 +38,8 @@ const NOTHING_KNOWN: CrewToolsOnARow = { state: 'unknown' }
  * The flag a loss raises (martha#658), in the row's own time words: the strip and the free list both say it beside the
  * state, so a member working without its tools reads as working, crew tools lost.
  */
-export function theCrewToolsFlag(row: Pick<CrewRow, 'crew_tools'>): string | null {
-  return row.crew_tools.state === 'lost' ? `crew tools lost since ${new Date(row.crew_tools.since).toISOString().slice(11, 16)}Z` : null
+export function theCrewToolsFlag(row: Pick<CrewRow, 'served_tools'>): string | null {
+  return row.served_tools.state === 'lost' ? `crew tools lost since ${new Date(row.served_tools.since).toISOString().slice(11, 16)}Z` : null
 }
 
 /** What the pane's header counts. */
@@ -79,7 +79,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
       at: null,
       quiet_for: null,
       reported_at: null,
-      crew_tools: NOTHING_KNOWN,
+      served_tools: NOTHING_KNOWN,
     }
   }
   const quiet_for = Math.max(0, now - beat.at)
@@ -100,7 +100,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
     at: beat.at,
     quiet_for,
     reported_at: beat.reported_at ?? null,
-    crew_tools: beat.crew_tools ?? NOTHING_KNOWN,
+    served_tools: beat.served_tools ?? NOTHING_KNOWN,
   }
 }
 

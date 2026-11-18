@@ -171,9 +171,9 @@ test('a member that needs the owner is flagged needs-you on its row (Uranus r=1)
 
 test('a member working without its crew tools is flagged with the time they went; held or unknown raises nothing (martha#658)', () => {
   const since = Date.parse('2026-11-18T05:48:00.000Z')
-  const crew = theCrewWith({ ...everyoneFree(), Vesta: freeBeat('Vesta', { crew_tools: { state: 'lost', since } }), Uranus: freeBeat('Uranus', { crew_tools: { state: 'held' } }) })
+  const crew = theCrewWith({ ...everyoneFree(), Vesta: freeBeat('Vesta', { served_tools: { state: 'lost', since } }), Uranus: freeBeat('Uranus', { served_tools: { state: 'held' } }) })
   const rows = seeWhoIsFree(crew)
-  assert.deepEqual(rows.find((row) => row.member === 'Vesta')?.flags, [theCrewToolsFlag({ crew_tools: { state: 'lost', since } })])
+  assert.deepEqual(rows.find((row) => row.member === 'Vesta')?.flags, [theCrewToolsFlag({ served_tools: { state: 'lost', since } })])
   assert.deepEqual(rows.find((row) => row.member === 'Uranus')?.flags, [])
   assert.deepEqual(rows.find((row) => row.member === 'Terra')?.flags, [])
 })

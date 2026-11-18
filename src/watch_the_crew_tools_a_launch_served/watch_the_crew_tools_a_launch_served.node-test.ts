@@ -38,7 +38,7 @@ const lineOf = (record: object): string => `${JSON.stringify(record)}\n`
 function aConfig(t: TestContext): { readonly config_dir: string; readonly transcript: string; readonly root: string } {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'martha-658-watch-')))
   t.after(() => removeTheTree(root))
-  const config_dir = join(root, 'config')
+  const config_dir = join(root, 'the-launch-config')
   const folder = join(config_dir, 'projects', PROJECT_FOLDER)
   mkdirSync(folder, { recursive: true })
   return { config_dir, transcript: join(folder, `${SESSION}.jsonl`), root }

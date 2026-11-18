@@ -397,7 +397,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
         try {
           // A heartbeat says nothing of its own but the crew tools (martha#658), and a look at them that failed still beats.
           const heeded = heedTheCrewTools(held, state.session).catch(() => undefined)
-          void heeded.then((tools) => writeRow(held, state, (row) => (tools === undefined ? row : { ...row, crew_tools: tools }))).catch(() => undefined)
+          void heeded.then((tools) => writeRow(held, state, (row) => (tools === undefined ? row : { ...row, served_tools: tools }))).catch(() => undefined)
         } catch {
           // A beat the disk would not take is the next beat's business: the row it could not write stays readable.
         }

@@ -5,6 +5,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { CrewPlace, ServedToolsHeld } from '../host_contract/host_contract.ts'
+import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
+import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import {
   aShellLineCounted,
   aTurnCounted,
@@ -106,8 +108,8 @@ test('the words carry the window, the time, the counts and the remedy', () => {
   const notice = theNoticeOf(window)
   for (const part of [MEMBER, LOST_IN, new Date(FROM).toISOString(), `martha restart ${MEMBER}`, 'left its configuration']) assert.ok(notice.includes(part), part)
   const owed = theOwedLineOf(window)
-  for (const part of ['4 turn(s)', '2 push(es)', '1 merge(s)', 'report_progress']) assert.ok(owed.includes(part), part)
-  assert.ok(theOwedLineOf(opened()).includes('no crew_log'))
+  for (const part of ['4 turn(s)', '2 push(es)', '1 merge(s)', REPORT_WHERE_THE_WORK_STANDS]) assert.ok(owed.includes(part), part)
+  assert.ok(theOwedLineOf(opened()).includes(`no ${LOG_A_MILESTONE}`))
   const back = theBackLineOf({ ...window, to: BACK, closed_by: REFRESH })
   for (const part of [MEMBER, new Date(BACK).toISOString(), REFRESH]) assert.ok(back.includes(part), part)
 })

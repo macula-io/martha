@@ -200,6 +200,9 @@ export interface LauncherPlaces {
   readonly bells?: string
 }
 
+/** How a launch builds its crew's tools: over its sessions, its member's own config folder and the crew tools it watches (martha#658). */
+export type CrewToolsOfALaunch = (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch }) => CrewTools
+
 export interface ClaudeCodeMemberLaunch {
   readonly member_name: string
   readonly node_id: string
@@ -245,7 +248,7 @@ export interface ClaudeCodeMemberLaunch {
    * The crew's tools, over this member's crew place (martha#254); a launch with none answers no tool. They are handed
    * the member's own config folder (martha#602), where the host's model command saves a switch, before the host starts.
    */
-  readonly crew_tools?: (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch }) => CrewTools
+  readonly crew_tools?: CrewToolsOfALaunch
   /**
    * What this launch raises every turn the host took in to (martha#253): the crew channel's carrier builds one and
    * reads it, so a message counts as taken in only once the host raised it back. A launch given none raises nothing.
