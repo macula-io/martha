@@ -22,6 +22,7 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { WORKFLOW } from '../../prove_the_core/the_installer_jobs_steps.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { EXCEPTIONS } from './the_exceptions.ts'
 
@@ -51,7 +52,7 @@ function plantedTree(t: TestContext, { scripts, workflows, excused = true }: Pla
   t.after(() => removeTheTree(root))
   const declared = excused ? Object.fromEntries(EXCEPTIONS.map(({ script }) => [script, 'node an_excused_check.ts'])) : {}
   mkdirSync(join(root, WORKFLOWS), { recursive: true })
-  writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: { ...declared, ...scripts } }))
+  writeFileSync(join(root, MANIFEST), JSON.stringify({ scripts: { ...declared, ...scripts } }))
   for (const [name, text] of Object.entries(workflows)) writeFileSync(join(root, WORKFLOWS, name), text)
   return root
 }
@@ -98,10 +99,10 @@ test('4: a check run as node <its entry> is run, and an on: written as a list is
   assert.deepEqual(theCommand('--root', root), { status: 0, out: [passed(1)], err: [] })
 })
 
-test('5: a run written in a comment line is not a run', (t) => {
+test('5: a comment line is never read: a run in one is not a run, and an undeclared name in one is not named', (t) => {
   const root = plantedTree(t, {
     scripts: { 'check:a': 'node a.ts' },
-    workflows: { 'ci.yml': aWorkflow(ON_EVERY_PULL_REQUEST, aJob('gate', '# - run: npm run --silent check:a', '- run: npm test')) },
+    workflows: { 'ci.yml': aWorkflow(ON_EVERY_PULL_REQUEST, aJob('gate', '# - run: npm run --silent check:a', '# npm run --silent check:an-old-name', '- run: npm test')) },
   })
   assert.deepEqual(theCommand('--root', root), { status: 1, out: [], err: findings(unrun('check:a')) })
 })
@@ -140,7 +141,7 @@ test('8: an exception the tree no longer bears out is a finding: one a pull requ
 
 test('9: a package.json or a workflow that cannot be read is a check that could not be made, exit 2', (t) => {
   const manifest = plantedTree(t, { scripts: {}, workflows: { 'ci.yml': aWorkflow(ON_EVERY_PULL_REQUEST, aJob('gate', '- run: npm test')) } })
-  writeFileSync(join(manifest, 'package.json'), '{ not json')
+  writeFileSync(join(manifest, MANIFEST), '{ not json')
   const first = theCommand('--root', manifest)
   assert.equal(first.status, 2, first.err.join('\n'))
   assert.match(first.err.join('\n'), /^the check could not be made: /)

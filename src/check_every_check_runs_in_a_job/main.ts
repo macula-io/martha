@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 import { WORKFLOW } from '../../prove_the_core/the_installer_jobs_steps.ts'
+import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CHECK_PREFIX, judgeTheChecks, type Judged } from './judge_the_checks.ts'
 import { readAWorkflow } from './read_a_workflow.ts'
 import { EXCEPTIONS, type ExcusedCheck } from './the_exceptions.ts'
@@ -24,7 +25,6 @@ const NAME = 'check_every_check_runs_in_a_job'
 
 /** The workflows' folder, from the repository's top. */
 const WORKFLOWS = dirname(WORKFLOW)
-const MANIFEST = 'package.json'
 const A_WORKFLOW = /\.ya?ml$/
 
 const option = (name: string): string | undefined => {
