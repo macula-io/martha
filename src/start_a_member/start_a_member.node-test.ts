@@ -599,12 +599,6 @@ test('a declaration naming a reviewer model this host runs starts the member, an
   )
 })
 
-/**
- * A reviewer member through the start itself (martha#541 package 6b, r=3 amendment C): the crew's reviewer rule is
- * asked by `martha start`, not only by the slice that composes it, and the owner's own arguments reach that rule. The
- * reviewer as init writes it declares no model, so a crew that holds reviews to one cannot start it; declared on the
- * reviewer model it starts; and the owner's own model switch on it is refused before the host runs, whatever it names.
- */
 /** Why a start refused, or '' for one that started. */
 const refusalOf = (started: MemberStarted): string => (started.started ? '' : started.refusal)
 
@@ -614,6 +608,12 @@ const refusedNaming = (refusal: string, words: readonly string[]): void => {
   for (const word of words) assert.ok(refusal.includes(word), `the refusal does not name ${word}: ${refusal}`)
 }
 
+/**
+ * A reviewer member through the start itself (martha#541 package 6b, r=3 amendment C): the crew's reviewer rule is
+ * asked by `martha start`, not only by the slice that composes it, and the owner's own arguments reach that rule. The
+ * reviewer as init writes it declares no model, so a crew that holds reviews to one cannot start it; declared on the
+ * reviewer model it starts; and the owner's own model switch on it is refused before the host runs, whatever it names.
+ */
 test('#541 6b: martha start holds a reviewer member to the reviewer model, and the owner\'s model switch never reaches its host (mutants: the rule not asked at the start; the owner\'s arguments not handed to it)', async (t) => {
   const [review_model = '', another_model = ''] = CLAUDE_CODE_MODELS.names
   assert.notEqual(review_model, another_model, 'the recorded host names fewer than two models, so this test could tell no two apart')
