@@ -274,11 +274,12 @@ test('the engine runs in its own process group, with the launch\'s own root, hom
   )
   // A red run says what the file held: its size and its names in the order written, which tells a file read
   // half-written from an engine handed less. Never its values: were the environment inherited, they would be
-  // the owner's, and no test output carries those (martha#92).
+  // the owner's, and no test output carries those (martha#92). So each is compared to a boolean: assert.equal
+  // would print both sides, in its diff and as the error's `actual`, whatever message it is given.
   const held = `the engine's environment file held ${Buffer.byteLength(written)} bytes, naming ${JSON.stringify(Object.keys(environment))}`
-  assert.equal(environment['HOME'], made.places.home, held)
-  assert.equal(environment['PATH'], THE_PATH_A_LAUNCH_GIVES, held)
-  assert.equal(environment[FACTS.path_root_variable], made.places.root, held)
+  assert.ok(environment['HOME'] === made.places.home, `HOME is not the launch's home; ${held}`)
+  assert.ok(environment['PATH'] === THE_PATH_A_LAUNCH_GIVES, `PATH is not the one a launch gives; ${held}`)
+  assert.ok(environment[FACTS.path_root_variable] === made.places.root, `${FACTS.path_root_variable} is not the launch's root; ${held}`)
   // Whatever prefix the engine's own settings carry, no other variable of the owner's with it reaches the engine.
   const prefix = FACTS.path_root_variable.slice(0, FACTS.path_root_variable.indexOf('_') + 1)
   assert.deepEqual(Object.keys(environment).filter((key) => key.startsWith(prefix)), [FACTS.path_root_variable])
