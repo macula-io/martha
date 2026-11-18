@@ -23,6 +23,7 @@ import { VERIFY_RANGE_TOOL, verifyTheRangeOver } from '../check_a_range_before_t
 import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { THE_CHANNEL_READ_ASK, theChannelReadAsk } from '../keep_the_crew_channel/the_channel_read.ts'
 import { LOG_A_MILESTONE_TOOL, NOTE_WHAT_BECAME_TOOL, WHAT_WAS_SENT_TOOL, logTheMilestone, noteTheActsOutcome, whatTheMemberSent } from '../keep_the_ledger/the_ledger_tools.ts'
+import { RELEASE_THE_FILES_TOOL, releaseTheFilesAKilledRunLeft, thePathsOf } from '../release_what_a_killed_run_left/release_what_a_killed_run_left.ts'
 import { KEEP_THE_CONTRACT_TOOL, keepTheContract } from '../keep_the_package_contract/the_contract_tools.ts'
 import { theNewestContractOrWhy } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import { THE_OWNERS_TODO_ASK, addAnAct, closeAnAct } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -317,6 +318,7 @@ export interface CrewTools extends TheReviewRule {
 const THE_TOOLS = [
   REPORT_PROGRESS_TOOL,
   LOG_A_MILESTONE_TOOL,
+  RELEASE_THE_FILES_TOOL,
   WHAT_WAS_SENT_TOOL,
   NOTE_WHAT_BECAME_TOOL,
   KEEP_THE_CONTRACT_TOOL,
@@ -534,10 +536,9 @@ async function theOwnersTodoList(places: CrewToolPlaces, args: Readonly<Record<s
  * processes runs no check, and a member the table does not let keep the list sweeps nothing.
  */
 function sweepTheOwnersList(places: CrewToolPlaces): () => void {
-  const processes = places.processes
-  if (processes === undefined) return () => undefined
+  if (places.processes === undefined) return () => undefined
   // The declaration is read again at each sweep, so an edited table takes effect without a relaunch.
-  return startSweeping({ ledger: places.ledger, root: places.root, member: places.member, processes, settings: () => theSettingsOrRefusal(places) })
+  return startSweeping({ ledger: places.ledger, root: places.root, member: places.member, processes: places.processes, settings: () => theSettingsOrRefusal(places) })
 }
 
 /** How often the mod is to read the crew channel, as the declaration gives it. */
@@ -584,9 +585,7 @@ function theRowAfterTheTurn(
   act: TheAct,
   spend: readonly AUnitOnARow[] | undefined,
 ): DashboardRow {
-  const host = { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd }
-  const refresh = act.refresh === undefined ? {} : { refresh: act.refresh }
-  return { ...row, ...refresh, needs: theNeedsAfter(state, row), session: question.session_id, host, [SPEND_FIELD]: spend }
+  return { ...row, ...(act.refresh === undefined ? {} : { refresh: act.refresh }), needs: theNeedsAfter(state, row), session: question.session_id, host: { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd }, [SPEND_FIELD]: spend }
 }
 
 /** The row's `needs` after this turn (martha#359): what the owner's file said, or its own line taken away again. */
@@ -721,7 +720,7 @@ const theParkAsked = (places: CrewToolPlaces, declared: CrewDeclared, args: Read
 })
 
 /** Who may resume a paused package (martha#512): who this crew's nudges go to, or nobody when its declaration cannot be read. */
-const whoMayResume = async (places: CrewToolPlaces): Promise<readonly string[]> => {
+const whoMayResume = async (places: CrewToolPlaces) => {
   const declared = await crewOrRefusal(places)
   return 'refused' in declared ? [] : theNudgesGoTo(declared.settings)
 }
@@ -746,6 +745,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
   }
   return {
     [REPORT_PROGRESS_TOOL.name]: declaring(places, async (declared, args) => reportProgressOver(theProgressAsked(places, state, declared), args)),
+    [RELEASE_THE_FILES_TOOL.name]: async (args) => releaseTheFilesAKilledRunLeft({ crew: places.stores.crew, member: places.member, paths: thePathsOf(args['paths']) }),
     [LOG_A_MILESTONE_TOOL.name]: async (args) => logTheMilestone(ledger, { package: textOf(args['package']), event: args['event'], note: args['note'] }, async () => whoMayResume(places)),
     [WHAT_WAS_SENT_TOOL.name]: async (args) => whatTheMemberSent(ledger, textOf(args['package'])),
     [NOTE_WHAT_BECAME_TOOL.name]: async (args) => noteTheActsOutcome(ledger, { package: textOf(args['package']), announced_at: args['announced_at'], succeeded: args['succeeded'], detail: args['detail'] }),

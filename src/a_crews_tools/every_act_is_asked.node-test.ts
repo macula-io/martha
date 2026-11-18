@@ -37,6 +37,7 @@ import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL } from '../park_and_wake_a_membe
 import { LIST_ASKS_TOOL, QUEUE_ASK_TOOL, SETTLE_ASKS_TOOL, TAKE_ASKS_TOOL } from '../queue_the_owners_asks/the_ask_tools.ts'
 import { WHO_IS_FREE_TOOL } from '../see_who_is_free/who_is_free_tool.ts'
 import { UNHELD_WORK_TOOL } from '../find_the_unheld_work/unheld_work_tool.ts'
+import { RELEASE_THE_FILES_TOOL } from '../release_what_a_killed_run_left/release_what_a_killed_run_left.ts'
 import { RESTART_A_MEMBER_TOOL } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { LIFECYCLE_PLACE, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { REPORT_PROGRESS_TOOL } from '../report_where_the_work_stands/report_progress_tool.ts'
@@ -211,6 +212,7 @@ const EVERY_CREW_TOOL: Readonly<Record<string, ALedgerLine>> = {
   [STANDING_CLOSE_TOOL.name]: { asks: ['assign_work'] },
   [STANDING_TOOL.name]: { ungated: 'reads the standing items' },
   [WAIT_FOR_CI_TOOL.name]: { ungated: 'reads CI runs; it changes nothing' },
+  [RELEASE_THE_FILES_TOOL.name]: { ungated: "releases paths the caller's own record holds as leftovers, after the caller has looked at them; it writes only the caller's own release list" },
 }
 
 test('#607: the ledger names every tool the crew registers, and no tool the crew does not', () => {
