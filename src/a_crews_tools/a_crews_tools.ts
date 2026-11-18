@@ -395,9 +395,11 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     startBeating(): () => void {
       const timer = setInterval(() => {
         try {
-          // A heartbeat says nothing of its own but the crew tools (martha#658), and a look at them that failed still beats.
-          const heeded = heedTheCrewTools(held, state.session).catch(() => undefined)
-          void heeded.then((tools) => writeRow(held, state, (row) => (tools === undefined ? row : { ...row, served_tools: tools }))).catch(() => undefined)
+          // A heartbeat says nothing of its own: it is the row as this session last left it, at this moment's beat.
+          writeRow(held, state, (row) => row)
+          // The crew tools (martha#658) are looked at once the beat has landed, so a look that fails leaves the beat as it was.
+          const heeded = held.served_tools === undefined ? undefined : heedTheCrewTools(held, state.session)
+          void heeded?.then((tools) => tools === undefined || writeRow(held, state, (row) => ({ ...row, served_tools: tools }))).catch(() => undefined)
         } catch {
           // A beat the disk would not take is the next beat's business: the row it could not write stays readable.
         }
