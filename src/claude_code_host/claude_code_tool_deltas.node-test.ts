@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, closeSync, mkdirSync, openSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, mkdirSync, openSync, realpathSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
@@ -217,4 +217,21 @@ test('a descriptor opened through a folder that is a link is not the expected fi
   const fd = openSync(through, 'r')
   t.after(() => closeSync(fd))
   assert.equal(theDescriptorIsAt(fd, through), false, 'a descriptor reached through a linked folder passed as the expected path')
+})
+
+test('an ancestor of the config folder swapped for a link is refused at the open, by the kernel\'s word', (t) => {
+  // The race the walk's comment names, sequenced: O_NOFOLLOW guards only each path's last part, so after the swap the
+  // walk passes and the file opens from the look-alike tree; only the descriptor check stands between it and a read.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'martha-658-ancestor-')))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const session_id = '0a1b2c3d-0000-4000-8000-000000000002'
+  for (const tree of ['real', 'other']) {
+    mkdirSync(join(root, tree, 'launch-config', 'projects', 'f'), { recursive: true })
+    writeFileSync(join(root, tree, 'launch-config', 'projects', 'f', `${session_id}.jsonl`), `${lineOf(tree === 'real' ? ADDED : WITHDRAWN)}\n`)
+  }
+  const config_dir = join(root, 'real', 'launch-config')
+  const where = { config_dir, session_id, transcript_path: join(config_dir, 'projects', 'f', `${session_id}.jsonl`), uid: process.getuid?.() ?? 0 }
+  renameSync(join(root, 'real'), join(root, 'real-moved'))
+  symlinkSync(join(root, 'other'), join(root, 'real'))
+  assert.match(String((openTheTranscript(where) as { refused: string }).refused), /what opened is not .*a folder on the way was swapped for a link/)
 })

@@ -22,7 +22,12 @@ import { basename, dirname, join, relative, sep } from 'node:path'
 
 /** What a launch knows of the transcript it may read. */
 export interface WhereTheTranscriptIs {
-  /** The host config folder the launch gave the member (its CLAUDE_CONFIG_DIR). */
+  /**
+   * The host config folder the launch gave the member (its CLAUDE_CONFIG_DIR), as its REAL path: resolved once by the
+   * launch where it made the folder. The kernel names the opened file with every link resolved, so a config folder
+   * under a linked ancestor (a linked home) given as spelled would never match, and the session would read unknown for
+   * good.
+   */
   readonly config_dir: string
   /** The session id the host reported in the same SessionStart input. */
   readonly session_id: string
