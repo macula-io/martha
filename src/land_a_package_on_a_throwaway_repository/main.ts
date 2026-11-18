@@ -5,7 +5,8 @@
 //   node src/land_a_package_on_a_throwaway_repository/main.ts reach <owner id>       < every page of GET /user/repos, as one JSON list
 //   node src/land_a_package_on_a_throwaway_repository/main.ts delete <made.json>      < GET /repositories/<id>'s answer
 //   node src/land_a_package_on_a_throwaway_repository/main.ts clean-start <start.json> < every path under the home, one per line
-//   node src/land_a_package_on_a_throwaway_repository/main.ts redact <token file>     < a text bound for the kept record
+//   node src/land_a_package_on_a_throwaway_repository/main.ts redact <token file>     < a transcript bound for the kept record
+//   node src/land_a_package_on_a_throwaway_repository/main.ts screen <placed|not-placed> < a member's screen bound for the kept record
 //
 // Exit 0 the guard holds, 1 it refuses, naming why on standard error, 2 it could not look. `redact` writes the text,
 // redacted, to standard output either way, and exits 1 when a token had reached it. `expiry` exits 0 with a note on
@@ -19,7 +20,7 @@ import { readFileSync } from 'node:fs'
 
 import { whatTheStartWouldLoad, type TheStart } from './a_clean_start.ts'
 import { whatTheRunMadeIn, whyNotDelete } from './the_delete_guard.ts'
-import { redactTheToken, THE_TOKEN_REACHED_THE_RECORD } from './the_kept_record.ts'
+import { keepAScreen, redactTheToken, THE_TOKEN_REACHED_THE_RECORD, TOKEN_NOT_PLACED, TOKEN_PLACED } from './the_kept_record.ts'
 import { theTokensExpiry } from './the_tokens_expiry.ts'
 import { whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 
@@ -85,7 +86,13 @@ const expiry = (argument: string, input: string): Said => {
   return said.note === undefined ? holds : { code: 0, out: `note: ${said.note}\n` }
 }
 
-const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact }
+/** A member's screen for the kept record: none once the token is placed, as it was before (r=2 item 2). */
+const screen = (argument: string, input: string): Said => {
+  if (argument !== TOKEN_PLACED && argument !== TOKEN_NOT_PLACED) return couldNotLook(`'${argument}' is neither ${TOKEN_PLACED} nor ${TOKEN_NOT_PLACED}`)
+  return { code: 0, out: keepAScreen(input, argument === TOKEN_PLACED).text }
+}
+
+const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact, screen }
 
 /** What the guard named by `args` says of `input`. Anything it cannot read is exit 2, never a pass. */
 export function runTheGuard(args: readonly string[], input: string): Said {

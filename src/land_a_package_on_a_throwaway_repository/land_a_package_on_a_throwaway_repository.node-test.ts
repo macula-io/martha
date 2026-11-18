@@ -11,7 +11,7 @@ import { test } from 'node:test'
 import { whatTheStartWouldLoad, INSTRUCTION_FILES, LOADED_FOLDERS, type TheStart } from './a_clean_start.ts'
 import { whatTheRunMadeIn, whyNotDelete, type WhatTheRunMade } from './the_delete_guard.ts'
 import { runTheGuard } from './main.ts'
-import { flattened, redactTheToken, REDACTED, THE_TOKEN_REACHED_THE_RECORD, WITHHELD } from './the_kept_record.ts'
+import { flattened, keepAScreen, redactTheToken, REDACTED, SCREEN_DROPPED, THE_TOKEN_REACHED_THE_RECORD, TOKEN_NOT_PLACED, TOKEN_PLACED, WITHHELD } from './the_kept_record.ts'
 import { NEAR_DAYS, NO_EXPIRY_NOTE, theTokensExpiry } from './the_tokens_expiry.ts'
 import { A_USER_ACCOUNT, whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -158,6 +158,35 @@ test('a fine-grained token the run was not given, wrapped after its prefix, is w
 test('a screen with no token, wrapped or not, is kept as it was', () => {
   const screen = 'line one\r\n\u001b[1mbold\u001b[0m line two'
   assert.deepEqual(redactTheToken(screen, TOKEN), { text: screen, reached: false })
+})
+
+// --- r=2 item 2: no screen is kept once the token is placed -------------------------------------------------------------
+
+/** Whether any run of eight of the token's characters is in a kept text: enough of it to be worth anything to a reader. */
+const holdsAPieceOfTheToken = (kept: string): boolean =>
+  Array.from({ length: TOKEN.length - 7 }, (_, at) => TOKEN.slice(at, at + 8)).some((piece) => flattened(kept).replace(/\s/g, '').includes(piece))
+
+/** The reviewer's first row: a wrap inside the prefix, the next line padded by the gutter the TUI draws. */
+const PADDED_WRAP = `  \u23bf  ${TOKEN.slice(0, 9)}\r\n     ${TOKEN.slice(9)}\r\n`
+
+/** Tonight's shape: the TUI redrew only the cells that changed, so letters are missing between cursor moves. */
+const CELLS_DROPPED = `${TOKEN.slice(0, 6)}\u001b[3C${TOKEN.slice(9, 20)}\u001b[2C${TOKEN.slice(22)}`
+
+test("once the token is placed, a screen is not kept at all: the padded wrap and the dropped cells keep no piece of it", () => {
+  for (const screen of [PADDED_WRAP, CELLS_DROPPED]) {
+    const kept = keepAScreen(screen, true)
+    assert.deepEqual(kept, { text: SCREEN_DROPPED, reached: false }, JSON.stringify(screen))
+    assert.equal(holdsAPieceOfTheToken(kept.text), false)
+  }
+  assert.equal(holdsAPieceOfTheToken(PADDED_WRAP), true, 'the screen did hold the token, so dropping it is what keeps it out')
+})
+
+test('before the token is placed a screen is kept as it was, and the screen guard says which, by name', () => {
+  const screen = 'line one\r\n\u001b[1mbold\u001b[0m line two'
+  assert.deepEqual(keepAScreen(screen, false), { text: screen, reached: false })
+  assert.deepEqual(runTheGuard(['screen', TOKEN_PLACED], PADDED_WRAP), { code: 0, out: SCREEN_DROPPED })
+  assert.deepEqual(runTheGuard(['screen', TOKEN_NOT_PLACED], screen), { code: 0, out: screen })
+  assert.equal(runTheGuard(['screen', 'yes'], screen).code, 2)
 })
 
 // --- R1: the reach of the run's calls -------------------------------------------------------------------------------

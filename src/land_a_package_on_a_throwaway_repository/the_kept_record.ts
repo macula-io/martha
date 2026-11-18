@@ -65,3 +65,23 @@ export function redactTheToken(text: string, token: string): KeptText {
   const kept = withoutTheToken.replace(FINE_GRAINED_TOKEN, REDACTED)
   return { text: kept, reached: kept !== text }
 }
+
+/**
+ * What stands for a member's screen once the token is in the container (martha#639, r=2 item 2, the reviewer's way (a)).
+ * A screen's bytes never promise to hold a string whole: the terminal pads a wrapped line with its gutter, and redraws
+ * only the cells that changed, so `echo "exit=$?"` reached a kept screen as `choxit=$?"`. No search over those bytes
+ * can say the token is not there, so from the moment the token is placed no screen is kept at all, only the
+ * transcripts, which are JSON lines holding whole strings that redactTheToken reads as written.
+ */
+export const SCREEN_DROPPED = "[the member's screen is not kept: the token is in this run, and a screen's bytes cannot be held to show it whole]"
+
+/** Whether the token is in the run's container yet, as the run's bash names it. */
+export const TOKEN_PLACED = 'placed'
+export const TOKEN_NOT_PLACED = 'not-placed'
+
+/**
+ * A member's screen as the kept record may hold it: dropped whole, with the line saying why, once the token is placed;
+ * as it was before then, since no token is in the container to show.
+ */
+export const keepAScreen = (screen: string, tokenPlaced: boolean): KeptText =>
+  tokenPlaced ? { text: SCREEN_DROPPED, reached: false } : { text: screen, reached: false }
