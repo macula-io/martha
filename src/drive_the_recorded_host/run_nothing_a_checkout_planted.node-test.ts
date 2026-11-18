@@ -35,7 +35,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { shortRelayRoot } from './short_relay_root.ts'
 import { hostAnswers } from './host_stand_in.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The first git that runs hooks named in config (`hook.<name>.command`). */
 const CONFIG_HOOKS_SINCE: readonly [number, number] = [2, 54]
@@ -247,7 +247,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string): void {
       mkdirSync(dir, { mode: 0o700 })
       return dir
     }
-    const member = join(place.home, 'claude')
+    const member = join(place.home, CLAUDE)
     const done = join(place.home, 'done')
     const empty = join(place.home, 'empty')
     writeFileSync(

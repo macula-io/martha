@@ -133,7 +133,7 @@ function fakeClaude(place: Place): { readonly command: string; readonly ran: str
   mkdirSync(dir)
   const ran = join(dir, 'ran')
   const args = join(dir, 'args')
-  const command = join(dir, 'claude')
+  const command = join(dir, CLAUDE)
   writeFileSync(command, ['#!/bin/sh', ...hostAnswers(), `: > '${ran}'`, `printf '%s\\n' "$@" > '${args}'`, 'exec sleep 600', ''].join('\n'), { mode: 0o700 })
   return { command, ran, args }
 }
@@ -147,7 +147,7 @@ function aClaudeThatWritesEachCall(place: Place): { readonly command: string; re
   const dir = join(place.home, 'fake-each-call')
   mkdirSync(dir)
   const args = join(dir, 'args')
-  const command = join(dir, 'claude')
+  const command = join(dir, CLAUDE)
   writeFileSync(
     command,
     ['#!/bin/sh', ...hostAnswers(), `{ printf '%s\\n' "$@"; echo '---'; } >> '${args}'`, 'exec sleep 600', ''].join('\n'),
@@ -177,7 +177,7 @@ function aHostWritingIn(place: Place): { readonly command: string; readonly chil
   mkdirSync(dir)
   mkdirSync(join(place.home, 'written'))
   const child = join(dir, 'child')
-  const command = join(dir, 'claude')
+  const command = join(dir, CLAUDE)
   const theChild =
     'const fs = require("node:fs");const home = process.argv[1];' +
     'for (;;) { try { fs.writeFileSync(`${home}/written/now`, String(process.pid)) } catch { /* the home is going */ } }'

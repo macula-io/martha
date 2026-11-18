@@ -32,7 +32,7 @@ import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts
 import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /**
  * Where a run derived from this home and checkout reads the crew's streams (martha#254): the same place the launcher
@@ -218,8 +218,8 @@ export function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, bas
   const claude = theRecordedHostAt(run.claude)
   const bin = join(run.home, 'bin')
   mkdirSync(bin, { recursive: true })
-  rmSync(join(bin, 'claude'), { force: true })
-  symlinkSync(claude, join(bin, 'claude'))
+  rmSync(join(bin, CLAUDE), { force: true })
+  symlinkSync(claude, join(bin, CLAUDE))
   return {
     HOME: run.home,
     PATH: [bin, join(process.execPath, '..'), '/usr/bin', '/bin'].join(':'),

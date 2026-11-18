@@ -78,7 +78,7 @@ import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reac
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
@@ -1298,7 +1298,7 @@ function fakeClaude(
     ranFile: join(dir, 'ran'),
     callsFile: join(dir, 'calls'),
   }
-  const command = join(dir, 'claude')
+  const command = join(dir, CLAUDE)
   writeFileSync(
     command,
     [
@@ -1639,8 +1639,8 @@ test('the member, its load check, its version check and its session init all run
   const fake = fakeClaude(place)
   const onPath = join(place.home, 'on-path')
   mkdirSync(onPath)
-  symlinkSync(fake.command, join(onPath, 'claude'))
-  const launch = memberLaunch(place, 'claude')
+  symlinkSync(fake.command, join(onPath, CLAUDE))
+  const launch = memberLaunch(place, CLAUDE)
   const started = await aMemberStartedIn(t, place, { ...launch, inherited: { ...launch.inherited, PATH: `${onPath}:${process.env.PATH ?? ''}` } })
   if (!started.started) assert.fail(started.refusal)
   await until('the fake host to start', () => existsSync(fake.childFile) && readFileSync(fake.childFile, 'utf8').trim() !== '', t)
@@ -1665,7 +1665,7 @@ function fakeClaudeThatSaysHowItStarted(place: Place): { readonly command: strin
   mkdirSync(dir)
   const argsFile = join(dir, 'args')
   const envFile = join(dir, 'env')
-  const command = join(dir, 'claude')
+  const command = join(dir, CLAUDE)
   writeFileSync(
     command,
     [
@@ -2771,7 +2771,7 @@ function fakeHostUnderARun(
   const dir = join(place.home, 'fake-run')
   mkdirSync(dir)
   const files = { argsFile: join(dir, 'args'), readyFile: join(dir, 'ready'), childFile: join(dir, 'child') }
-  const command = join(dir, 'claude')
+  const command = join(dir, CLAUDE)
   writeFileSync(
     command,
     [
@@ -3197,7 +3197,7 @@ function fakeTerminalClaude(place: Place, exitsAfterMs = 0): {
     pidPipeFile: join(dir, 'held-the-pid-pipe'),
     argsFile: join(dir, 'args'),
   }
-  const command = join(dir, 'claude')
+  const command = join(dir, CLAUDE)
   writeFileSync(
     command,
     [

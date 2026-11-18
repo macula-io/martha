@@ -14,7 +14,7 @@ export const CLAUDE_CODE = 'claude-code' as const
 export const CLAUDE = 'claude'
 
 /** What an owner installs to have that command: the host's own install line, said by a start that cannot find it. */
-export const CLAUDE_INSTALL = 'Claude Code, with npm install -g @anthropic-ai/claude-code'
+export const CLAUDE_INSTALL = `Claude Code, with npm install -g @anthropic-ai/${CLAUDE_CODE}`
 
 /**
  * The folder Claude Code keeps its own files in, under what holds them: the home when CLAUDE_CONFIG_DIR says nothing, a

@@ -16,6 +16,7 @@ import {
   HANDOVER_CEILING_MINUTES_LEAST,
   HANDOVER_CEILING_MINUTES_MOST,
   HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
+  HOST,
   DECLARATION_DIRECTORY,
   PERSON_MINUTES,
   REVIEW_MINUTES,
@@ -478,7 +479,7 @@ test('#541: a declaration that names no host at all reads as the host every rele
 
 test('#541: a host Martha does not know is refused by its field, naming the hosts it knows, at the top level and on a member', async () => {
   for (const [declaration, field] of [
-    [{ ...solo, host: 'a-host-nothing-runs' }, 'host'],
+    [{ ...solo, host: 'a-host-nothing-runs' }, HOST],
     [{ ...team, members: [{ name: 'Lead', role: 'supervisor', host: 'a-host-nothing-runs' }] }, 'members[0].host'],
   ] as const) {
     await assert.rejects(declare(declaration).settings, (error: unknown) => {
