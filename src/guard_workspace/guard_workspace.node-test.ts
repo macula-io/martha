@@ -14,7 +14,14 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { readTheGitCallsInAShellLine } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
-import { refuseACallInTheWorkspace, refuseARefUpdate, type TheFacts, type TheWorkspace } from './guard_workspace.ts'
+import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import {
+  refuseACallInTheWorkspace,
+  refuseARefUpdate,
+  theWorkspaceTheCrewDeclared,
+  type TheFacts,
+  type TheWorkspace,
+} from './guard_workspace.ts'
 
 /** The crew's places: two directories nothing else in the tree names, so a test never borrows a constant's words. */
 const CLONES = '/place/a'
@@ -44,6 +51,23 @@ const refusedWith = (line: string, directory: string | null, member: string, say
   assert.ok(refusal !== undefined, `${line} was not refused`)
   assert.match(refusal, says)
 }
+
+/** A declaration carrying only what this slice reads: the layout switch, its places, and the members. */
+const settingsWith = (layout: { readonly on: boolean; readonly clones: string | null; readonly worktrees: string | null }): CrewSettings =>
+  ({
+    house_rules: { workspace_layout: layout.on, clones: layout.clones, worktrees: layout.worktrees },
+    members: [{ name: 'Hygiea' }, { name: 'Uranus' }],
+  }) as unknown as CrewSettings
+
+test('a crew that turned no layout on is guarded by nothing, and one that did names its places and its members', () => {
+  assert.equal(theWorkspaceTheCrewDeclared(settingsWith({ on: false, clones: CLONES, worktrees: WORKTREES })), undefined)
+  assert.equal(theWorkspaceTheCrewDeclared(settingsWith({ on: true, clones: null, worktrees: WORKTREES })), undefined)
+  assert.deepEqual(theWorkspaceTheCrewDeclared(settingsWith({ on: true, clones: CLONES, worktrees: WORKTREES })), {
+    clones: CLONES,
+    worktrees: WORKTREES,
+    members: ['Hygiea', 'Uranus'],
+  })
+})
 
 // --- a clone stays on its default branch --------------------------------------------
 

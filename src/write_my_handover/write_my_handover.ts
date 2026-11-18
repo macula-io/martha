@@ -16,7 +16,8 @@ import { join } from 'node:path'
 
 import { stampHandover } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { MEMBER_NAME } from '../declare_crew/declare_crew.ts'
-import type { CrewPlace, HandoverStamp, HandoverStampStore, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
+import type { CrewPlace, CrewStore, HandoverStamp, HandoverStampStore, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
+import { theTellingOnTheNextStart } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
@@ -225,6 +226,17 @@ export function theResumePrompt(resuming: { readonly member: string; readonly fi
     `You are ${resuming.member}. Martha just refreshed this session. Read your handover at ${resuming.file}: it is what ` +
     `your predecessor left you, and it is the only place your work stands. Then carry on with the packages it names.${acts}${contract}${telling}`
   )
+}
+
+/**
+ * The resume prompt a member reads on its next start, with what a killed run left in it (#693): the telling is read here,
+ * from the one function both resume prompts read it from, so a caller hands in the crew's store and the clock alone.
+ */
+export function theResumePromptWithItsTelling(
+  resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined; readonly crew: CrewStore; readonly now_ms: number },
+): string {
+  const telling = theTellingOnTheNextStart({ crew: resuming.crew, member: resuming.member, now_ms: resuming.now_ms })
+  return theResumePrompt({ member: resuming.member, file: resuming.file, acts: resuming.acts, contract: resuming.contract, telling: telling.telling })
 }
 
 /**

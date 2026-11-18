@@ -389,6 +389,21 @@ export async function declareCrew(documents: DocumentStore, root: string, models
 }
 
 /**
+ * The declaration, or why there is none to read: a refusal from `declareCrew` said as the one line an owner reads, with
+ * the command that fixes a missing file, and anything that is not a refusal thrown on. The words a caller puts in front
+ * of it are the caller's own, so the reason is returned bare.
+ */
+export async function declareACrewOrWhy(documents: DocumentStore, root: string, models: ModelVocabulary): Promise<CrewSettings | string> {
+  try {
+    return await declareCrew(documents, root, models)
+  } catch (error) {
+    if (!(error instanceof DeclarationRefused)) throw error
+    const fix = error.field === null && error.message.endsWith('is missing') ? ' Run martha init to declare a crew here.' : ''
+    return `${error.message}.${fix}`
+  }
+}
+
+/**
  * The declaration's text, or a refusal saying why there is none. A checkout still holding crew-code's declaration is
  * refused by name (martha#468): its file is not read, only told apart from an empty one, so a person who finds their
  * crew stopped learns which file Martha looked for instead.

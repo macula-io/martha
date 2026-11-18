@@ -83,6 +83,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'tell_the_member_a_line',
     'read_what_claude_code_says_of_an_agent',
     'read_what_claude_code_records_of_its_tools',
+    'a_launch_end_on_this_machine',
   ])
 })
 

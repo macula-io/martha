@@ -21,13 +21,13 @@ import { RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_director
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { theRowWithNothingSaid, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { theMissesLine } from '../guard_workspace/guard_workspace.ts'
 import {
   foldTheMisses,
   MISSES_FILE_NAME,
   NOTHING_FOLDED_YET,
   putTheGuardIn,
   theMissesFileIn,
-  theMissesLine,
   thePathWithTheGuardFirst,
   THE_GUARD_DIRECTORY_MODE,
   THE_HOOKS_DIRECTORY_NAME,

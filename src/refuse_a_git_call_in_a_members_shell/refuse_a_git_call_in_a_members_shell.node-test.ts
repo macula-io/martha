@@ -12,12 +12,11 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { refuseAGitCallInAMembersShell, theWorkspaceTheCrewDeclared } from './refuse_a_git_call_in_a_members_shell.ts'
+import { refuseAGitCallInAMembersShell } from './refuse_a_git_call_in_a_members_shell.ts'
 
 /** The member making the call, and the one whose branch is not theirs to delete. */
 const MEMBER = 'Hygiea'
@@ -98,21 +97,4 @@ test('a call that is no shell, or a shell line that names no git, is judged by n
   assert.equal(await refusalOf(fixture, 'Read', { command: `cd ${fixture.clone} && git checkout main` }), undefined)
   assert.equal(await refusalOf(fixture, CLAUDE_CODE_SHELL_TOOL, { command: 'ls -la' }), undefined)
   assert.equal(await refusalOf(fixture, CLAUDE_CODE_SHELL_TOOL, {}), undefined)
-})
-
-/** A declaration carrying only what this slice reads: the layout switch, its places, and the members. */
-const settingsWith = (layout: { readonly on: boolean; readonly clones: string | null; readonly worktrees: string | null }): CrewSettings =>
-  ({
-    house_rules: { workspace_layout: layout.on, clones: layout.clones, worktrees: layout.worktrees },
-    members: [{ name: MEMBER }, { name: OTHER }],
-  }) as unknown as CrewSettings
-
-test('a crew that turned no layout on is guarded by nothing, and one that did names its places and its members', () => {
-  assert.equal(theWorkspaceTheCrewDeclared(settingsWith({ on: false, clones: '/place/a', worktrees: '/place/b' })), undefined)
-  assert.equal(theWorkspaceTheCrewDeclared(settingsWith({ on: true, clones: null, worktrees: '/place/b' })), undefined)
-  assert.deepEqual(theWorkspaceTheCrewDeclared(settingsWith({ on: true, clones: '/place/a', worktrees: '/place/b' })), {
-    clones: '/place/a',
-    worktrees: '/place/b',
-    members: [MEMBER, OTHER],
-  })
 })

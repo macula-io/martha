@@ -105,6 +105,7 @@ import { type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
 import { meshServerEnvironments } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
+import { whatTheLaunchSupplied } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { knownSettingsOf, type MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -474,16 +475,7 @@ function wordlessAnswersOf(
   const environments = Object.values(
     meshServerEnvironments({ serverConfig: new TextDecoder().decode(carried), hostEnvironment: { ...starting.env, ...ready.settingsEnv } }),
   )
-  const env = environments.length === 1 ? environments[0] : undefined
-  if (env === undefined) return {}
-  return {
-    wordless_answers: {
-      node_id: launch.node_id,
-      env,
-      home: env['HOME'] ?? ready.hookSettings.home,
-      host_version: RECORDED_HOST.host_version,
-    },
-  }
+  return whatTheLaunchSupplied(environments, { node_id: launch.node_id, home: ready.hookSettings.home, host_version: RECORDED_HOST.host_version })
 }
 
 /**

@@ -8,7 +8,8 @@
 // It fails open, as the guard it sits behind does: no directory to ask, a git that will not answer, or a record nobody can
 // read (rule 3 says such a record is said and not judged) refuses nothing. A commit is refused only on the bytes.
 
-import type { Processes } from '../host_contract/host_contract.ts'
+import type { CrewStore, Processes } from '../host_contract/host_contract.ts'
+import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import {
   theDigestOf,
@@ -17,6 +18,7 @@ import {
   type IWhatACommitWouldCarry,
   type WhatAKilledRunLeft,
 } from './tell_a_member_what_its_relaunch_killed.ts'
+import { theLeftoverRecordOf } from './the_telling_on_every_start.ts'
 
 /** A commit about to run: where, the record it is judged on, and the paths a member has already released. */
 export interface ACommitToJudge {
@@ -60,4 +62,25 @@ export async function theRefusalOfTheCommit(commit: ACommitToJudge): Promise<str
   if (commit.directory === null) return undefined
   const carrying = await whatTheCommitWouldCarry(commit.processes, commit.directory)
   return carrying.length === 0 ? undefined : theRefusalOfACommit(commit.record, carrying, commit.released)
+}
+
+/** The calls about to run, the host that asks git for them, the member making them, and the crew's kept record. */
+export interface TheCallsToJudge {
+  readonly calls: readonly AGitCall[]
+  readonly processes: Pick<Processes, 'run'>
+  /** The crew's own store, where what the member's last launch left is kept; absent, no commit is judged. */
+  readonly leftovers?: CrewStore
+  readonly member: string
+}
+
+/**
+ * What a commit among these calls would ship that a killed run left, or undefined when none would (martha#693): the
+ * member's kept record judged against the bytes the index holds for the paths the commit would carry.
+ */
+export async function theLeftoversRefusal(incoming: TheCallsToJudge): Promise<string | undefined> {
+  const commit = incoming.calls.find((call) => call.command === 'commit')
+  if (incoming.leftovers === undefined || commit === undefined) return undefined
+  const kept = theLeftoverRecordOf(incoming.leftovers, incoming.member)
+  // A record nobody can read is said and judged nothing on (rule 3), and a place that cannot be asked is not a refusal.
+  return kept === undefined || 'refusal' in kept || 'unreadable' in kept ? undefined : theRefusalOfTheCommit({ processes: incoming.processes, directory: commit.directory, record: kept.record })
 }

@@ -42,7 +42,7 @@ import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cros
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { GATE_AUDIT_PLACE } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
 import { THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
-import { DeclarationRefused, declareCrew, OWNER_BELL, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { declareACrewOrWhy, OWNER_BELL, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
@@ -87,7 +87,7 @@ import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { theApprovalInUse, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { theWorkspaceTheCrewDeclared } from '../refuse_a_git_call_in_a_members_shell/refuse_a_git_call_in_a_members_shell.ts'
+import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
 import { theGitGuardPlacesOf, type TheGitGuardPlaces } from '../guard_the_git_a_member_runs/the_git_guard_places_of_a_crew.ts'
 
 /** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
@@ -156,13 +156,8 @@ export interface MemberStartRequest {
 
 /** The declaration, or why there is none to start from. */
 async function settingsOf(request: MemberStartRequest): Promise<CrewSettings | string> {
-  try {
-    return await declareCrew(request.documents, request.root, CLAUDE_CODE_MODELS)
-  } catch (error) {
-    if (!(error instanceof DeclarationRefused)) throw error
-    const fix = error.field === null && error.message.endsWith('is missing') ? ' Run martha init to declare a crew here.' : ''
-    return `${NOT_STARTED}: ${error.message}.${fix}`
-  }
+  const declared = await declareACrewOrWhy(request.documents, request.root, CLAUDE_CODE_MODELS)
+  return typeof declared === 'string' ? `${NOT_STARTED}: ${declared}` : declared
 }
 
 

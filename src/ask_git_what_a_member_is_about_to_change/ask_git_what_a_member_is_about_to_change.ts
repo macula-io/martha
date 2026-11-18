@@ -27,13 +27,12 @@
 // rules that need a fact do not fire.
 
 import type { CrewStore, HostContract } from '../host_contract/host_contract.ts'
-import { refuseACallInTheWorkspace, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
+import { refuseACallInTheWorkspace, theCloneOf, theWorktreeListedAt, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
-import { theLeftoverRecordOf } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
-import { theRefusalOfTheCommit } from '../tell_a_member_what_its_relaunch_killed/the_commit_that_carries_what_a_killed_run_left.ts'
+import { theLeftoversRefusal } from '../tell_a_member_what_its_relaunch_killed/the_commit_that_carries_what_a_killed_run_left.ts'
 import { realpathSync } from 'node:fs'
-import { isAbsolute, join, sep } from 'node:path'
+import { isAbsolute } from 'node:path'
 
 /** A call to judge: the git calls it makes, the member making it, the crew's places, and the host that runs git. */
 export interface AQuestionAboutACall {
@@ -66,9 +65,6 @@ const THE_DEFAULT_BRANCH = ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD
 /** The argument git takes to list a repository's worktrees with the branch each is on. */
 const LIST_WORKTREES = ['worktree', 'list', '--porcelain']
 
-/** Whether a directory stands in a place or under it: the place itself, or a path past the separator that ends it. */
-const isUnder = (directory: string, place: string): boolean => directory === place || directory.startsWith(`${place}${sep}`)
-
 /**
  * The path a place really is, with every link resolved, or the path as it was given when it cannot be read (martha#79).
  *
@@ -91,20 +87,6 @@ const theCallResolved = (call: AGitCall): AGitCall => ({
   directory: call.directory === null ? null : thePathItself(call.directory),
   args: call.args.map((word) => (isAbsolute(word) ? thePathItself(word) : word)),
 })
-
-/** The clone a directory lands in, as `worktree_open` lays one out: `<clones>/<org>/<repo>`, the first two words past it. */
-function theCloneOf(directory: string | null, clones: string | null): string | null {
-  if (directory === null || clones === null || !isUnder(directory, clones)) return null
-  const [org, repo] = directory.slice(clones.length + 1).split(sep)
-  return org === undefined || org === '' || repo === undefined || repo === '' ? null : join(clones, org, repo)
-}
-
-/** Where the worktrees of the repository a call touches can be listed: the worktree it names, or the place it runs in. */
-function theWorktreeListedAt(call: AGitCall): string | null {
-  if (call.command !== 'worktree') return call.directory
-  const named = call.args.slice(1).find((word) => !word.startsWith('-'))
-  return named !== undefined && isAbsolute(named) ? named : call.directory
-}
 
 /** The words git printed, one line each, or none when it could not be run or did not end well. */
 async function linesGitPrinted(host: AQuestionAboutACall['host'], cwd: string, args: readonly string[]): Promise<readonly string[]> {
@@ -149,23 +131,6 @@ async function theFactsOf(host: AQuestionAboutACall['host'], clone: string | nul
   return { branches, defaultBranch, worktrees }
 }
 
-/** The command a call stages and ships what the index holds: the one a killed run's leftovers would go out in. */
-const COMMIT = 'commit'
-
-/**
- * What a commit among the calls would ship that a killed run left, or undefined when none would (martha#693): the
- * member's kept record judged against the bytes the index holds for the paths the commit would carry.
- */
-async function theLeftoversRefusal(request: AQuestionAboutACall, calls: readonly AGitCall[]): Promise<string | undefined> {
-  const crew = request.leftovers
-  const commit = calls.find((call) => call.command === COMMIT)
-  if (crew === undefined || commit === undefined) return undefined
-  const kept = theLeftoverRecordOf(crew, request.member)
-  // A record nobody can read is said and judged nothing on (rule 3), and a place that cannot be asked is not a refusal.
-  if (kept === undefined || 'refusal' in kept || 'unreadable' in kept) return undefined
-  return theRefusalOfTheCommit({ processes: request.host.processes, directory: commit.directory, record: kept.record })
-}
-
 /** The refusal a call meets, asking git what it needs to know: undefined when the layout holds, or cannot be looked at. */
 export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutACall): Promise<string | undefined> {
   const { host, member } = request
@@ -180,5 +145,7 @@ export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutAC
   const clone = calls.map((call) => theCloneOf(call.directory, workspace.clones)).find((found) => found !== null) ?? null
   const where = calls.map(theWorktreeListedAt).find((found) => found !== null) ?? clone
   const guarded: AGuardedCall = { calls, workspace, member, facts: await theFactsOf(host, clone, where) }
-  return refuseACallInTheWorkspace(guarded) ?? (await theLeftoversRefusal(request, calls))
+  const refused = refuseACallInTheWorkspace(guarded)
+  if (refused !== undefined) return refused
+  return theLeftoversRefusal({ calls, processes: host.processes, ...(request.leftovers === undefined ? {} : { leftovers: request.leftovers }), member })
 }

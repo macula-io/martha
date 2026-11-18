@@ -15,7 +15,6 @@
 // slice may not name it (../claude_code_host imports are an adapter's business).
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { CrewStore, HostContract } from '../host_contract/host_contract.ts'
 import { askGitWhatAMemberIsAboutToChange } from '../ask_git_what_a_member_is_about_to_change/ask_git_what_a_member_is_about_to_change.ts'
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
@@ -31,17 +30,6 @@ export interface AToolCallToGuard {
   readonly input: Readonly<Record<string, unknown>>
   /** The crew's own store, where what the member's last launch left is kept: a commit carrying it is refused (#693). */
   readonly leftovers?: CrewStore
-}
-
-/**
- * The places the crew declared for its clones and worktrees, with its members' names; undefined when it turned no
- * workspace layout on. A crew that declared none is guarded by nothing: the guard refuses breaks of a layout, and
- * there is none to break.
- */
-export function theWorkspaceTheCrewDeclared(settings: CrewSettings): TheWorkspace | undefined {
-  const { workspace_layout: on, clones, worktrees } = settings.house_rules
-  if (on !== true || clones === null || worktrees === null) return undefined
-  return { clones, worktrees, members: settings.members.map((member) => member.name) }
 }
 
 /** The line the member's shell is about to run, when the call is that shell's and it names one. */
