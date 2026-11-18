@@ -13,8 +13,9 @@
 
 import { admitsInCrewRoom, admitsInSharedRoom, type DeliveryGate } from '../admit_a_room_message/admit_a_room_message.ts'
 import { admitsAnAskToTheOwner } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
-import { admitsLaunch, type LaunchGate } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { admitsLaunch, ENGINE_FAMILIES, type LaunchGate } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { passesOnlySwitchesThatLoadNoConfig, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { startsACommand, THE_COMMAND_STARTS } from '../speak_acp_to_an_agent/the_acp_client.ts'
 import { UNHELD_WORK_PATH } from '../find_the_unheld_work/unheld_work_path.ts'
 
 /**
@@ -98,6 +99,26 @@ export const ASK_GATES = {
 export type KnownAskGate = keyof typeof ASK_GATES
 
 /**
+ * A turn the launcher would send a host: its text, and whether the gate passes it on. The command gate below reads the
+ * text alone, because what makes a turn a command is its first character and nothing else the launcher holds.
+ */
+export type CommandGate = (text: string) => boolean
+
+/** Whether a turn is text the engine's model sees: a turn that starts a command is not one (martha#541, shape 2). */
+export const refusesASentCommand: CommandGate = (text) => !startsACommand(text)
+
+/**
+ * The command gates a row may use: what keeps a turn out of the engine's command path (martha#541, shape 2). The check
+ * drives the function behind the name once per question — a turn starting a command each way is refused, and an
+ * ordinary turn, one that merely holds the character later, is admitted — so a gate that admits everyone is caught.
+ */
+export const COMMAND_GATES = {
+  'a-command-is-not-a-turn': refusesASentCommand,
+} as const satisfies Record<string, CommandGate>
+
+export type KnownCommandGate = keyof typeof COMMAND_GATES
+
+/**
  * The path gates a row may name: a control that checks every path a member's
  * own file tools name (martha#168). The function behind the name is built where
  * the machine is reachable, in the host adapter that holds the guard
@@ -141,6 +162,9 @@ export type KnownPathGate = 'nothing-a-later-git-run-reads'
  *   path, by the gate the row names: the owner's memory and instructions, and
  *   what a later git run of the owner's reads (martha#168). `also` names the
  *   controls that stand on the same path beside it, each judged by its own rule.
+ * - `refused-as-a-command` — a turn the launcher would send a host whose text starts a command the host runs instead of
+ *   handing it to the model is refused before it is sent, so no path text can arrive on becomes a command
+ *   (martha#541, shape 2). Only a `delivered` row may declare it, and the check drives the gate once per question.
  */
 export type Control =
   | { readonly kind: 'delivery-gate'; readonly gate: KnownDeliveryGate }
@@ -156,6 +180,7 @@ export type Control =
    */
   | { readonly kind: 'approved-text'; readonly gate: KnownLaunchGate; readonly residual: string }
   | { readonly kind: 'refused-before-launch'; readonly gate: KnownArgumentGate }
+  | { readonly kind: 'refused-as-a-command'; readonly gate: KnownCommandGate }
   | { readonly kind: 'check_every_path_is_gated'; readonly gate: KnownPathGate; readonly also: readonly Control[] }
   | { readonly kind: 'none' }
 
@@ -197,6 +222,23 @@ export const INSTRUCTION_TEXT_WORDING = {
   /** Whether a host loads an AGENTS.md at all is not observed, so that text is not pinned. */
   not_observed: 'Whether the host loads an AGENTS.md is not observed',
 } as const
+
+/**
+ * What one of the engine's launched rows leaves open (martha#541): the launch gate is the one C1 and C2 stand on — Martha
+ * decides on a checkout whose files the owner approved by content and by this checkout's tree, with the engine's own
+ * config root and home made for the launch — told once, and naming the family the row is about.
+ */
+const theEnginesResidual = (family: string): string =>
+  `Martha decides on the checkout's ${family} by content with the checkout's tree before the engine starts, and starts it with a config root and a home of its own, so its own settings are the ones written there (../launch_a_goose_member, prepareLaunch), and checks the launch again before every tool call and after it. What is left: a host the owner starts by hand loads these before any of Martha runs, as C1 and C2 say; a file git ignores and does not track is outside the approval; a folder changed while a session runs, which the next check refuses and the running session has already read; and C1 and C2's own list, which stands unchanged.`
+
+/** One of the engine's launched rows: the same launch gate as C1 and C2, over one family of the engine's own files. */
+const anEngineLaunchRow = (id: string, family: readonly string[], what: string): InboundPath => ({
+  id,
+  what,
+  klass: 'launched',
+  control: { kind: 'launch-gate', gate: 'owner-approved-launch-config', residual: theEnginesResidual(family.join(', ')) },
+  attestation: 'none',
+})
 
 export const INBOUND_PATHS: readonly InboundPath[] = [
   {
@@ -379,6 +421,13 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
   {
+    id: 'A24',
+    what: `a turn the launcher sends the engine over ACP (martha#541, shape 2): text whose first non-blank character is ${THE_COMMAND_STARTS.join(' or ')} is a command the engine runs rather than a turn for its model, so the client refuses it before it is sent (startsACommand, ../speak_acp_to_an_agent), whichever path it arrived on — a room, a ring, another session or the owner's own paste. Not closed: a command the member writes into a shell of its own, which is A13's path and the shell gate's; and a host the owner starts by hand (C1, C2)`,
+    klass: 'delivered',
+    control: { kind: 'refused-as-a-command', gate: 'a-command-is-not-a-turn' },
+    attestation: 'none',
+  },
+  {
     id: 'B1',
     what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65), and confined by the launcher's resolve hook to loading node's own modules and files of that tree (martha#73). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment read that names no literal key, which the scan lists when it reads by a computed key and does not see when it never names the environment at all, and either way does not refuse (martha#72); and whatever the tree's own code chooses to do, since the hook confines resolution only (a process.dlopen on an absolute path, or a node child or worker started with its own arguments, for example), which is that code's choice, compared file by file",
     klass: 'fetched',
@@ -481,6 +530,20 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     },
     attestation: 'none',
   },
+  anEngineLaunchRow('C3', ENGINE_FAMILIES.plugins,
+    `the engine's plugins a checkout carries (${ENGINE_FAMILIES.plugins.join(', ')}): a plugin is code the engine runs, its hooks among them, and no tool call of the member's stands in front of that (martha#541; the trial plants one here and one in the owner's home, a marker in each)`),
+  anEngineLaunchRow('C4', ENGINE_FAMILIES.settings,
+    `the engine's settings a checkout carries (${ENGINE_FAMILIES.settings.join(' and ')}), the family the trial plants its settings markers in: an engine that reads the checkout's own copy obeys the extensions, providers and switches named there (martha#541)`),
+  anEngineLaunchRow('C5', ENGINE_FAMILIES.skills,
+    `the skills a checkout gives the engine (${ENGINE_FAMILIES.skills.join(', ')}): each is a family the trial plants a marker in, and a host that reads one offers its model what the skill describes (martha#541)`),
+  anEngineLaunchRow('C6', ENGINE_FAMILIES.agents,
+    `the agents a checkout defines for the engine (${ENGINE_FAMILIES.agents.join(', ')}): a family the trial plants a marker in, and a host that reads one runs it as an agent of its own, frontmatter and instruction text both (martha#541)`),
+  anEngineLaunchRow('C7', ENGINE_FAMILIES.recipes,
+    `the recipes a checkout gives the engine (${ENGINE_FAMILIES.recipes.join(' and ')}): a family the trial plants a marker in, and one a host reads to start a session from a named prompt with its own extensions and parameters (martha#541)`),
+  anEngineLaunchRow('C8', ENGINE_FAMILIES.checks,
+    `the checks a checkout gives the engine (${ENGINE_FAMILIES.checks.join(', ')}): a family the trial plants a marker in, the design listing it among the checkout's files that would start code (martha#541)`),
+  anEngineLaunchRow('C9', ENGINE_FAMILIES.review,
+    `the review file a checkout gives the engine (${ENGINE_FAMILIES.review.join(', ')}): a family the trial plants a marker in, the design listing it among the checkout's files that would start code (martha#541)`),
 ]
 
 /**
