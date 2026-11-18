@@ -6,6 +6,9 @@
 // is taken only when its id and its kind are both the once-answer wanted. When no such option is offered, the answer is
 // a cancel, which ACP defines as "the call does not run". There is no fallback to another option: the first option
 // the engine offers is allow_always (martha#677).
+//
+// This is Goose-shaped: it takes an option only when its id equals its kind, as Goose builds them. An engine whose
+// option ids differ from their kinds is cancelled on every call; its adapter must map the ids before this is asked.
 
 /** The two answers Martha may give, as ACP names their kinds. Any other kind saves a rule past the client. */
 export const ALLOW_ONCE = 'allow_once'

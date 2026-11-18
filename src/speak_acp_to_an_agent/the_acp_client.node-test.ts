@@ -168,3 +168,74 @@ test('a second turn on a session whose turn is still running is refused, and the
     assert.deepEqual(heardFor(await first), { heard: ALLOW_ONCE, runs: 1, saves: 0 })
   })
 })
+
+/** A gate that holds the first call until released, and answers every later one at once; it counts what it was asked. */
+function aHeldGate(later: 'allow' | 'reject' = 'allow'): { decide: Decide; askedNow: Promise<void>; release: (decision: 'allow') => void; asked: string[] } {
+  const asked: string[] = []
+  let release: (decision: 'allow') => void = () => undefined
+  let firstAsked: () => void = () => undefined
+  const askedNow = new Promise<void>((settle) => { firstAsked = settle })
+  const decide: Decide = (request) => {
+    asked.push(request.toolCallId)
+    if (asked.length > 1) return later
+    return new Promise((settle) => { release = settle; firstAsked() })
+  }
+  return { decide, askedNow, release: (decision) => release(decision), asked }
+}
+
+/** Lets every answer already decided reach the wire. */
+const drained = (): Promise<void> => new Promise((settle) => setImmediate(settle))
+
+test('a cancel answers the call still waiting on the gate cancelled, and the gate\'s late allow is never sent', async () => {
+  const gate = aHeldGate()
+  await withTheAgent({ turns: [[{ call: A_CALL }]] }, gate.decide, async (client) => {
+    const { sessionId } = await client.newSession('/')
+    const turn = client.prompt(sessionId, 'go')
+    await gate.askedNow
+    client.cancel(sessionId)
+    gate.release('allow')
+    const ended = await turn
+    assert.deepEqual(heardFor(ended), { heard: 'cancelled', runs: 0, saves: 0 })
+    assert.deepEqual(ended.asked.map((asked) => asked.answered), [{ outcome: 'cancelled' }])
+    await drained()
+    assert.match(client.notes.join('\n'), /the decision for call-1 came after its turn was cancelled, and was dropped/)
+  })
+})
+
+test('a call asked about after the cancel, while the turn still runs, is cancelled without asking the gate', async () => {
+  const gate = aHeldGate()
+  const SECOND = { ...A_CALL, id: 'call-2' }
+  await withTheAgent({ turns: [[{ call: A_CALL }, { call: SECOND }]] }, gate.decide, async (client) => {
+    const { sessionId } = await client.newSession('/')
+    const turn = client.prompt(sessionId, 'go')
+    await gate.askedNow
+    client.cancel(sessionId)
+    gate.release('allow')
+    const ended = await turn
+    assert.deepEqual(ended.toolCalls.map((call) => call.rawOutput), [{ heard: 'cancelled', runs: 0, saves: 0 }, { heard: 'cancelled', runs: 0, saves: 0 }])
+    assert.deepEqual(gate.asked, [A_CALL.id])
+  })
+})
+
+test('a request cancelled while the gate decides gets one answer, never a second', async () => {
+  const gate = aHeldGate()
+  await withTheAgent({ turns: [[{ call: A_CALL }]] }, gate.decide, async (client, child) => {
+    const answers: unknown[] = []
+    const stdin = child.stdin
+    assert.ok(stdin !== null)
+    const write = stdin.write.bind(stdin) as (line: string) => boolean
+    stdin.write = ((line: string) => {
+      const message = JSON.parse(line) as { method?: unknown; id?: unknown }
+      if (message.method === undefined) answers.push(message.id)
+      return write(line)
+    }) as typeof stdin.write
+    const { sessionId } = await client.newSession('/')
+    const turn = client.prompt(sessionId, 'go')
+    await gate.askedNow
+    client.cancel(sessionId)
+    gate.release('allow')
+    await turn
+    await drained()
+    assert.equal(answers.length, 1)
+  })
+})

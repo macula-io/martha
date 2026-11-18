@@ -12,7 +12,10 @@
 // - a decision that throws, or a request it cannot read, is a refusal, never an allow;
 // - it declares no file or terminal capability, and any other request the agent makes is answered "method not found";
 // - a prompt whose first non-blank character would start an engine command (`!` or `/`) is never sent (#541 shape 2);
-// - when the agent's output ends, every request still waiting fails by name, so no turn waits forever.
+// - when the agent's output ends, every request still waiting fails by name, so no turn waits forever;
+// - a cancelled turn runs no further call: every permission request still waiting on the gate is answered cancelled at
+//   once (ACP: the client MUST), the gate's late decision is dropped so each request has one answer, and a request
+//   that arrives after the cancel, while the turn still runs, is cancelled without asking the gate.
 
 import type { ChildProcess } from 'node:child_process'
 import type { Readable, Writable } from 'node:stream'
@@ -89,10 +92,20 @@ interface Pending {
   readonly fail: (error: Error) => void
 }
 
+/** A permission request the gate has not decided yet; `answered` turns true once the agent has its one answer. */
+interface AWaitingRequest {
+  readonly id: unknown
+  readonly request: APermissionRequest
+  readonly offered: readonly string[]
+  answered: boolean
+}
+
 interface ATurnBeingHeard {
   text: string
   readonly toolCalls: Map<string, AToolCall>
   readonly asked: APermissionAnswered[]
+  readonly waiting: Set<AWaitingRequest>
+  cancelled: boolean
 }
 
 type Json = Record<string, unknown>
@@ -177,7 +190,7 @@ export class AcpClient {
   async prompt(sessionId: string, text: string): Promise<ATurn> {
     if (startsACommand(text)) throw new Error(`a turn may not start with ${THE_COMMAND_STARTS.join(' or ')}: the engine would run it as a command (martha#541 shape 2)`)
     if (this.#turns.has(sessionId)) throw new Error(`session ${sessionId} already has a turn running`)
-    const turn: ATurnBeingHeard = { text: '', toolCalls: new Map(), asked: [] }
+    const turn: ATurnBeingHeard = { text: '', toolCalls: new Map(), asked: [], waiting: new Set(), cancelled: false }
     this.#turns.set(sessionId, turn)
     try {
       const answer = objectOf(await this.#ask(ACP.prompt, { sessionId, prompt: [{ type: 'text', text }] }))
@@ -187,9 +200,17 @@ export class AcpClient {
     }
   }
 
-  /** Asks the agent to stop the session's turn; the turn still ends with the agent's answer to its prompt. */
+  /**
+   * Asks the agent to stop the session's turn; the turn still ends with the agent's answer to its prompt. Every
+   * permission request of the turn still waiting on the gate is answered cancelled now, and every later one of this
+   * turn is cancelled without asking the gate.
+   */
   cancel(sessionId: string): void {
     this.#send({ jsonrpc: '2.0', method: ACP.cancel, params: { sessionId } })
+    const turn = this.#turns.get(sessionId)
+    if (turn === undefined) return
+    turn.cancelled = true
+    for (const waiting of turn.waiting) this.#answer(turn, waiting, { outcome: 'cancelled' })
   }
 
   /** Ends the agent's input: the launcher's way of saying the connection is over. */
@@ -268,22 +289,39 @@ export class AcpClient {
       this.#send({ jsonrpc: '2.0', id, error: { code: METHOD_NOT_FOUND, message: `the client has no ${method}` } })
       return
     }
-    const answered = await this.#answerPermission(params)
-    this.#send({ jsonrpc: '2.0', id, result: { outcome: answered } })
+    await this.#answerPermission(id, params)
   }
 
-  /** The outcome for one permission request: the gate's decision as a once-answer, a cancel for anything unread. */
-  async #answerPermission(params: Json): Promise<TheOutcome> {
+  /** One permission request answered once: the gate's decision as a once-answer, a cancel for anything unread. */
+  async #answerPermission(id: unknown, params: Json): Promise<void> {
     const request = requestOf(params)
     const turn = request === undefined ? undefined : this.#turns.get(request.sessionId)
     if (request === undefined || turn === undefined) {
       this.notes.push(`a permission request outside a turn, or naming no call, was cancelled: ${JSON.stringify(params).slice(0, 200)}`)
-      return { outcome: 'cancelled' }
+      this.#send({ jsonrpc: '2.0', id, result: { outcome: { outcome: 'cancelled' } } })
+      return
     }
-    const offered = optionsOf(params)
-    const answered = answerOnce(offered, await this.#decided(request))
-    turn.asked.push({ ...request, offered: offered.map((option) => textOf(option.optionId)), answered })
-    return answered
+    const offeredOptions = optionsOf(params)
+    const waiting: AWaitingRequest = { id, request, offered: offeredOptions.map((option) => textOf(option.optionId)), answered: false }
+    if (turn.cancelled) {
+      this.#answer(turn, waiting, { outcome: 'cancelled' })
+      return
+    }
+    turn.waiting.add(waiting)
+    const decision = await this.#decided(request)
+    if (waiting.answered) {
+      this.notes.push(`the decision for ${request.toolCallId} came after its turn was cancelled, and was dropped`)
+      return
+    }
+    this.#answer(turn, waiting, answerOnce(offeredOptions, decision))
+  }
+
+  /** Sends a permission request its one answer, and keeps it in the turn's record. */
+  #answer(turn: ATurnBeingHeard, waiting: AWaitingRequest, answered: TheOutcome): void {
+    waiting.answered = true
+    turn.waiting.delete(waiting)
+    turn.asked.push({ ...waiting.request, offered: waiting.offered, answered })
+    this.#send({ jsonrpc: '2.0', id: waiting.id, result: { outcome: answered } })
   }
 
   async #decided(request: APermissionRequest): Promise<ADecision> {

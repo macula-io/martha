@@ -9,6 +9,7 @@ import type { ChildProcess } from 'node:child_process'
 import type { Readable, Writable } from 'node:stream'
 
 import { answerOnce, type AnOfferedOption, type TheOutcome } from '../src/speak_acp_to_an_agent/answer_a_permission_once.ts'
+import { METHOD_NOT_FOUND } from '../src/speak_acp_to_an_agent/the_acp_client.ts'
 
 /** A permission request as Goose asks it: which tool, and the answers it offers. */
 export interface Asked {
@@ -122,7 +123,7 @@ export class GooseOverAcp {
   #answerServerRequest(rpc: Rpc): void {
     if (rpc.method !== 'session/request_permission') {
       this.notes.push(`unexpected request from goose: ${rpc.method ?? ''}`)
-      this.#reply(rpc.id ?? 0, { code: -32601, message: `the trial has no answer for ${rpc.method ?? ''}` })
+      this.#refuse(rpc.id ?? 0, { code: METHOD_NOT_FOUND, message: `the trial has no answer for ${rpc.method ?? ''}` })
       return
     }
     const body = (rpc.params ?? {}) as PermissionParams
@@ -146,5 +147,10 @@ export class GooseOverAcp {
 
   #reply(id: number, outcome: unknown): void {
     this.#stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, result: { outcome } })}\n`)
+  }
+
+  /** A JSON-RPC error for a request the trial has no answer for, never a success that carries one. */
+  #refuse(id: number, error: { readonly code: number; readonly message: string }): void {
+    this.#stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, error })}\n`)
   }
 }
