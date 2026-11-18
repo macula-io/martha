@@ -50,5 +50,11 @@ export function withoutTheCrewsState(
   )
 }
 
-/** The crew's state a member is handed: the launcher's own state home, resolved from the root the launch keeps its state in. */
+/**
+ * The crew's state a member is handed: the launcher's own state home, resolved from the root the launch keeps its state in.
+ *
+ * The root's own folder is the state home only because every root a launch keeps is built by `stateRootOf`, whose last
+ * segment is STATE_ROOT_NAME: the one place that makes a root is run_the_martha_command, and it hands the launch that
+ * root. A root built to another shape would leave this the folder the root merely sits in.
+ */
 export const theCrewsStateAMemberIsGiven = (state_root: string): Readonly<Record<string, string>> => ({ [STATE_HOME_VARIABLE]: dirname(state_root) })
