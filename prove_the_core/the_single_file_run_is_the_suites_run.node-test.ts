@@ -227,7 +227,9 @@ interface Throwaway {
 
 /**
  * A repository of its own under `where`: the single-file run's files at the paths it expects, a test script that states
- * bounds and two unsets this repository never states, and one case its glob picks. Answers the planted file's path.
+ * bounds and two unsets this repository never states, and one case its glob picks. Answers the planted file's path as a
+ * member spells it, from the repository's top — never the temporary directory's own spelling, which CI reaches through
+ * a link (the runner reads a path against the repository it runs in).
  */
 function theThrowawayRepository(where: string, planted: Throwaway): string {
   const manifest = { name: 'a-run-of-one-file', private: true, type: 'module', scripts: { test: planted.testScript, 'test:file': THE_RUNNER } }
@@ -245,7 +247,7 @@ function theThrowawayRepository(where: string, planted: Throwaway): string {
   writeFileSync(join(where, THE_THROWAWAY_PLANTED), THE_THROWAWAY_FILE)
   const made = spawnSync('git', ['init', '--quiet', where], { encoding: 'utf8' })
   assert.equal(made.status, 0, `${NAME}: a throwaway repository could not be made: ${made.stderr}`)
-  return join(where, THE_THROWAWAY_PLANTED)
+  return THE_THROWAWAY_PLANTED
 }
 
 /** The single-file run in a repository of its own, with the caller's arguments after the npm script's own `--`. */
