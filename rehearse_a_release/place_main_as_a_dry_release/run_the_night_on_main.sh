@@ -29,7 +29,8 @@
 # the proof's: the packer's NOT_PACKABLE is 3, and the proof's 3 is "the registry carries no release". So a packer that
 # refused or could not run is PACK_FAILED, and a tree whose installer is ahead of its tag is NOT_PACKABLE_TONIGHT,
 # reported as "not packable", never as a pass. Before the proof runs the driver checks that each of its codes is above
-# DRY_PASSED, so a proof that grows a code cannot quietly take one of them.
+# DRY_PASSED, the proof's highest code today, so a proof whose DRY_PASSED moves up to one of them is refused. A code the
+# proof adds above its DRY_PASSED is not seen by that check: the proof's own Exit: line is where a new code is written.
 set -euo pipefail
 
 PACK_FAILED=6
