@@ -36,8 +36,13 @@ function aFreshDirectory(): string {
   return directory
 }
 
-/** The engine, as far as the driver can tell: the handshake, and one prompt answered after asking the model. */
-const A_STAND_IN_ENGINE = `#!/usr/bin/env node
+/**
+ * The engine, as far as the driver can tell: the handshake, and one prompt answered after asking the model.
+ *
+ * Its shebang names the node that runs these tests, not `/usr/bin/env node`: a launch gets a PATH of the system's
+ * own, and on a runner node lives outside it, so an engine found through PATH is one the launch cannot start.
+ */
+const A_STAND_IN_ENGINE = `#!${process.execPath}
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -71,6 +76,12 @@ createInterface({ input: process.stdin }).on('line', (line) => {
       result(message.id, { stopReason: 'end_turn' })
     })
 })
+`
+
+/** An engine that starts and then says nothing at all: the launch never shakes hands (PR 733 R2). */
+const AN_ENGINE_THAT_NEVER_ANSWERS = `#!${process.execPath}
+import { createInterface } from 'node:readline'
+createInterface({ input: process.stdin }).on('line', () => undefined)
 `
 
 /** A model that answers a chat after `chatMs` and the model-info request at once, as the provider sends them. */
@@ -133,10 +144,12 @@ function aForkSaying(minutes: string): string {
 }
 
 /** Runs the driver for one line, and hands back what the launch left behind. */
-async function theDriverFor(line: number, minutes: string, modelUrl: string): Promise<{ evidence: string; refused: string }> {
+async function theDriverFor(
+  line: number, minutes: string, modelUrl: string, engineSource = A_STAND_IN_ENGINE,
+): Promise<{ evidence: string; refused: string }> {
   const work = aFreshDirectory()
   const engine = join(work, 'a-stand-in-engine.mjs')
-  writeFileSync(engine, A_STAND_IN_ENGINE)
+  writeFileSync(engine, engineSource)
   chmodSync(engine, 0o755)
   const evidence = join(work, 'evidence')
   // A home of its own for the driver and the stand-in engine: one that does not exist is a home nothing runs in.
@@ -173,6 +186,15 @@ test('the driver carries a line to its own verdict under the bound its model set
   } finally {
     await model.stop()
   }
+})
+
+test('the driver writes a fail by name when the engine never shakes hands, rather than leaving no result (martha#732)', async () => {
+  // A launch of a little over the room its own end needs: what is left for the handshake is that much and no more.
+  const { evidence } = await theDriverFor(1, '0.4', 'http://127.0.0.1:9', AN_ENGINE_THAT_NEVER_ANSWERS)
+  const result = JSON.parse(readFileSync(join(evidence, 'line-1', 'result.json'), 'utf8')) as { verdict: string; say: string }
+  assert.equal(result.verdict, 'fail', 'a launch that never shook hands is a fail that is never launched again')
+  assert.match(result.say, /the engine answered no handshake within the \d+ ms left of the launch/,
+    'the refusal says what was left, not only that nothing came')
 })
 
 test('the driver refuses, by name and with the arithmetic, a line whose model paced too slowly for what is left (martha#732)', async () => {

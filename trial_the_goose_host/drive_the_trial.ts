@@ -132,6 +132,34 @@ async function shakeHands(acp: GooseOverAcp, place: Place): Promise<{ sessionId:
   return { sessionId, currentMode: created.modes?.currentModeId ?? 'no mode reported' }
 }
 
+/**
+ * The engine never answered the handshake, inside what was left of the launch (PR 733 R2). A stall before the
+ * first answer is the worst place to stall: the runner's own `timeout` would reap the launch and no result would
+ * ever be written, so the run reads as a failure the fork never relaunches rather than as one it knows about.
+ */
+export class TheEngineNeverAnsweredTheHandshake extends Error {
+  readonly ms: number
+  constructor(ms: number) {
+    super(ms <= 0
+      ? 'the launch had no room left for the engine to shake hands in, less than the room its own end needs'
+      : `the engine answered no handshake within the ${String(ms)} ms left of the launch`)
+    this.name = 'TheEngineNeverAnsweredTheHandshake'
+    this.ms = ms
+  }
+}
+
+/** The handshake, bounded by what is left of the launch, refused by name rather than left to the runner. */
+async function handOver(acp: GooseOverAcp, place: Place, remaining: () => number): Promise<{ sessionId: string; currentMode: string }> {
+  const left = remaining()
+  if (left <= 0) throw new TheEngineNeverAnsweredTheHandshake(left)
+  try {
+    return await withTimeout(shakeHands(acp, place), left)
+  } catch (error) {
+    if (error instanceof NoAnswerInTime) throw new TheEngineNeverAnsweredTheHandshake(left)
+    throw error
+  }
+}
+
 async function startARun(line: number, options: Options): Promise<Running> {
   const place = aPlaceFor(line, options.evidence, options.launch)
   if (line === 1) plant(place.ownerHome, HOME_MARKERS)
@@ -161,8 +189,16 @@ async function startARun(line: number, options: Options): Promise<Running> {
   theLaunchInHand = { root: place.root, into: evidenceForLine }
   const child = startGoose(place, options, line, tracePath)
   const acp = new GooseOverAcp(child, keep)
-  const { sessionId, currentMode } = await shakeHands(acp, place)
-  return { line, options, place, proxy, acp, child, tracePath, sessionId, currentMode, pace, cap }
+  try {
+    const { sessionId, currentMode } = await handOver(acp, place, remaining)
+    return { line, options, place, proxy, acp, child, tracePath, sessionId, currentMode, pace, cap }
+  } catch (error) {
+    // A launch with no handshake leaves nothing of its own behind: not its group, not the proxy's port.
+    await killTheGroup(child).catch(() => undefined)
+    await proxy.stop().catch(() => undefined)
+    theLaunchInHand = undefined
+    throw error
+  }
 }
 
 function trialOf(running: Running): Trial {
@@ -297,7 +333,18 @@ export function theObservationOfALineThatThrew(error: unknown): Observation {
 
 async function runLine(line: number, options: Options): Promise<void> {
   const evidenceForLine = join(options.evidence, `line-${line}`)
-  const running = await startARun(line, options)
+  mkdirSync(evidenceForLine, { recursive: true })
+  let running: Running
+  try {
+    running = await startARun(line, options)
+  } catch (error) {
+    // A launch that never got as far as its line still leaves a verdict behind (PR 733 R2): a launch with no
+    // result reads as a failure the fork never relaunches, and a kind of failure nobody can read.
+    const observation = theObservationOfALineThatThrew(error)
+    writeFileSync(join(evidenceForLine, 'result.json'), JSON.stringify({ line, ...observation }, null, 2))
+    console.log(`line ${line}: ${observation.verdict} — ${observation.say}`)
+    return
+  }
   const observation = await conduct(running)
   const { trace, groupLeft, engineLogs } = await endARun(running)
   const verdict = theVerdictKeptWithItsExchange(line, verdictOf(line, running.currentMode, observation, trace, groupLeft), evidenceForLine)
