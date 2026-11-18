@@ -4,10 +4,11 @@ import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { ARGUMENT_GATES, ASK_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { ARGUMENT_GATES, ASK_GATES, COMMAND_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   admitsLaunch,
+  CLAUDE_CODE_FILES,
   fingerprintOf,
   LAUNCH_FILES_OF_HOST,
   type LaunchGate,
@@ -57,13 +58,14 @@ const coverageOf = (
   argument: Parameters<typeof gapsInGateCoverage>[4] = ARGUMENT_GATES,
   path: Readonly<Record<string, PathGate>> = PATH_GATES,
   ask: Parameters<typeof gapsInGateCoverage>[7] = ASK_GATES,
-) => gapsInGateCoverage(paths, refuses, delivery, launch, argument, path, undefined, ask)
+  command: Parameters<typeof gapsInGateCoverage>[8] = COMMAND_GATES,
+) => gapsInGateCoverage(paths, refuses, delivery, launch, argument, path, undefined, ask, command)
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 22 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 23 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 10 }, (_, index) => `B${index + 1}`),
-    ...Array.from({ length: 2 }, (_, index) => `C${index + 1}`),
+    ...Array.from({ length: 9 }, (_, index) => `C${index + 1}`),
   ]
   const seen = INBOUND_PATHS.map((path) => path.id).sort()
   assert.deepEqual(seen, [...expected].sort())
@@ -233,6 +235,41 @@ test('an ask gate on the wrong kind of row is a gap, since an ask is text put in
   )
 })
 
+// --- the turn a launcher hands an engine (martha#541) ---------------------------
+//
+// A turn whose text would start an engine command is refused before it is sent, so no path text arrives on becomes a
+// command. The gate is driven once per question, so one that admits every turn, or answers only one question right, is
+// a gap like any other.
+
+test('a command gate that admits every turn is not a control', () => {
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, undefined, { 'a-command-is-not-a-turn': () => true })
+  assert.deepEqual(gaps.map((gap) => gap.path), ['A23'])
+  assert.match(gaps[0]?.why ?? '', /admits a turn starting with/)
+})
+
+test('a command gate that refuses every turn is caught too', () => {
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, undefined, { 'a-command-is-not-a-turn': () => false })
+  assert.deepEqual(gaps.map((gap) => gap.path), ['A23'])
+  assert.match(gaps[0]?.why ?? '', /refuses an ordinary turn/)
+})
+
+test('a command gate that reads the first character alone, not the blank before it, is caught', () => {
+  const first = (text: string): boolean => !['!', '/'].includes(text.charAt(0))
+  const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, undefined, { 'a-command-is-not-a-turn': first })
+  assert.deepEqual(gaps.map((gap) => gap.path), ['A23'])
+  assert.match(gaps[0]?.why ?? '', /admits a turn starting with .* after blank space/)
+})
+
+test('a row naming a command gate nobody has built is named', () => {
+  const invented = { id: 'A98', what: 'a command gate someone will write later', klass: 'delivered', control: { kind: 'refused-as-a-command', gate: 'a-gate-someone-will-write-later' }, attestation: 'none' } as unknown as InboundPath
+  assert.deepEqual(coverageOf([...INBOUND_PATHS, invented], gateRefuses).map((gap) => gap.path), ['A98'])
+})
+
+test('a command gate on a path that puts no text into a turn is a gap', () => {
+  const fetched = { id: 'B98', what: 'text read by a tool, where this is not the control', klass: 'fetched', control: { kind: 'refused-as-a-command', gate: 'a-command-is-not-a-turn' }, attestation: 'none' } as unknown as InboundPath
+  assert.deepEqual(coverageOf([...INBOUND_PATHS, fetched], gateRefuses).map((gap) => gap.path), ['B98'])
+})
+
 // --- code the host starts by itself (issue #16) --------------------------------
 
 // The rows the launch gate stands on: code the host starts by itself, and the text handed from bytes the owner
@@ -364,7 +401,7 @@ test('a launch gate that refuses everyone is caught too', () => {
 // right. Each is the real gate with one rule taken out, so only that rule's
 // probe can catch it.
 
-const [SERVERS] = LAUNCH_FILES_OF_HOST['claude-code']
+const [SERVERS] = CLAUDE_CODE_FILES
 
 test('a gate that approves by file name, not content, is caught', () => {
   const by_name: LaunchGate = (request) =>

@@ -32,7 +32,7 @@ import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_throu
 import { fakeNpmRegistry, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
-import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, HOSTS, readLaunchState, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, readLaunchState, startedWithOf, theRowOfHost, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE, streamDirectoryNameOf } from '../row_streams_directory/row_streams_directory.ts'
 import { CREW_ROWS_PLACE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { STATE_HOME_VARIABLE } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
@@ -1650,7 +1650,7 @@ test('the member, its load check, its version check and its session init all run
   // The member's start is preceded by the questions the launcher asks its host: the relay's load check, its version,
   // the session init the styles folder is read from, which runs on the switches a member starts on (#154), and print
   // mode with no prompt, which is where the host says what it makes of the rules the launch wrote (#226).
-  const [firstSwitch] = HOSTS['claude-code'].project_config_off.args
+  const [firstSwitch] = theRowOfHost(CLAUDE_CODE).project_config_off.args
   assert.deepEqual(calls.map((line) => line.split(' ')[1]), ['plugin', '--version', firstSwitch, '--print', '-p'])
   for (const line of calls) assert.equal(line.split(' ')[0], realpathSync(fake.command), line)
 })
