@@ -10,8 +10,10 @@
 // The epochs persist across processes (EpochStore's rule): a file that is there and does not parse is refused
 // whole, so no open succeeds on it, never read as "nothing opened yet".
 //
-// The residual is the state directory's own: a member runs as the owner's OS user and can write here
-// (martha#1 decision 2; ../keep_martha_state_outside_the_checkout).
+// The residual is the state directory's own: a member runs as the owner's OS user and can write here with its shell
+// (martha#1 decision 2; ../keep_martha_state_outside_the_checkout). Its file tools are denied here, and `pin-key` and
+// `keep-shapes` typed from inside a member are refused (martha#619), but those are speed bumps, not a wall: a member
+// that sets out to could still pin a key of its own, and with it sign shapes that run anything with a clean shell.
 
 import { basename, join } from 'node:path'
 

@@ -7,7 +7,7 @@
   },
   {
     "file": "src/drive_the_recorded_host/own_writes_on_the_recorded_host.node-test.ts",
-    "cases": 5,
+    "cases": 6,
     "proves": "a member's own writes do not stop it and an outsider's change does (martha#132)"
   },
   {

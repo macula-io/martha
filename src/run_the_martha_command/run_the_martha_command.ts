@@ -31,7 +31,7 @@ import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } f
 import { declareCrew, OWNER_BELL } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readApprovals, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -51,6 +51,15 @@ import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
+import { whyAnOwnersActIsRefusedInsideAMember, type AProcessAbove } from '../refuse_an_owner_act_from_inside_a_member/refuse_an_owner_act_from_inside_a_member.ts'
+import { ancestorsUnder, PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
+import { launchRecordsUnder } from '../read_a_kernel_and_a_home/launch_records_under_a_state_root.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
+import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { keepWhereItWasTyped, linesOf, seenFromThisProcess, theCutoverTakenOnce, theRecordFilesOf, whatTheOwnerReadsOf } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
 
 /** The line `martha start` prints once the member is up: its name and its pid. */
 export const startedLine = (member: string, pid: number | string): string => `${member} started, pid ${pid}`
@@ -77,6 +86,8 @@ export interface CommandIo {
   err(line: string): void
   /** Writes bytes to stdout as they are: a signed run's output, which must reach the host unchanged (martha#129). */
   outBytes(bytes: Buffer): void
+  /** The processes above this one, the parent first (martha#619); this process's own, from /proc, unless a test gives its own. */
+  readonly ancestors?: () => readonly AProcessAbove[]
 }
 
 /** The places every act needs. */
@@ -131,6 +142,10 @@ async function approve(io: CommandIo, places: Places): Promise<number> {
   const outcome = await approveConfig({ ...places, terminal: io.terminal, documents, tellOwner, now: () => new Date() })
   if (outcome.kind === 'refused') return refused(io, outcome.refusal)
   io.out(outcome.kind === 'nothing' ? NOTHING_TO_APPROVE : `Approved: fingerprint ${outcome.fingerprint}.`)
+  for (const [what, act] of [['Your approvals, and where each was typed (martha#619):', 'approve'], ['Your pinned keys, and where each was typed:', 'pin-key']] as const) {
+    const lines = whatTheOwnerReadsOf(places, act, theFirstApprovalAt(places))
+    if (lines.length > 0) [what, ...lines].forEach((line) => io.out(line))
+  }
   return EXIT_DONE
 }
 
@@ -334,7 +349,13 @@ async function release(io: CommandIo, places: Places, member: string): Promise<n
 async function bells(io: CommandIo, places: Places, asked: Asked): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
-  return theBellsTold(io, { members: crew.settings.members.map((one) => one.name), declared: crew.settings.house_rules[OWNER_BELL], owner: crew.settings.owner }, { directory: crew.launcher.bells!, lines: { append: appendStateLine, read: readStateFile } }, theFlipNamed(asked.member, asked.args[0]))
+  const told = theBellsTold(io, { members: crew.settings.members.map((one) => one.name), declared: crew.settings.house_rules[OWNER_BELL], owner: crew.settings.owner }, { directory: crew.launcher.bells!, lines: { append: appendStateLine, read: readStateFile } }, theFlipNamed(asked.member, asked.args[0]))
+  // Reading the bells shows where each flip was typed (martha#619); a flip says only what it did.
+  if (asked.member === undefined) {
+    const lines = whatTheOwnerReadsOf(places, 'bells', theFirstApprovalAt(places))
+    if (lines.length > 0) ['Every flip, and where it was typed:', ...lines].forEach((line) => io.out(line))
+  }
+  return told
 }
 
 /**
@@ -508,18 +529,71 @@ async function actOfPlaces(asked: Asked, io: CommandIo): Promise<number> {
 /** The acts that work inside a project: the owner's two, and the four that read or start a member. */
 async function actIn(asked: Asked, places: Places, io: CommandIo): Promise<number> {
   const act = ACTS_IN_A_PROJECT[asked.act]
-  return act === undefined ? start(io, places, asked.member!, asked.args) : act(io, places, asked)
+  if (isAnOwnersOwnAct(asked, act)) {
+    const inside = theMemberThisRunsInside(io, places, asked.act)
+    if (inside !== undefined) return refused(io, inside)
+  }
+  if (act === undefined) return start(io, places, asked.member!, asked.args)
+  return isAnOwnersOwnAct(asked, act) ? await recordedWhereItWasTyped(io, places, asked, act) : act(io, places, asked)
+}
+
+/** When the owner first approved this project, as the approvals record it; undefined when none can be read. */
+function theFirstApprovalAt(places: Places): string | undefined {
+  const read = readApprovals(places.state)
+  return 'approvals' in read ? read.approvals[0]?.approved_at : undefined
+}
+
+/**
+ * An owner's act that writes a record, made, then its lines named in the log of where the owner's acts were typed
+ * (martha#619): the record first, the entries after it, and only for an act that ended done.
+ */
+async function recordedWhereItWasTyped(io: CommandIo, places: Places, asked: Asked, act: (io: CommandIo, places: Places, asked: Asked) => Promise<number>): Promise<number> {
+  const file = theRecordFilesOf(places)[asked.act]
+  const at = new Date().toISOString()
+  if (file !== undefined) theCutoverTakenOnce(places, at)
+  const before = file === undefined ? 0 : linesOf(file).length
+  const done = await act(io, places, asked)
+  if (done !== EXIT_DONE || file === undefined) return done
+  const unkept = keepWhereItWasTyped(places, asked.act, before, at, seenFromThisProcess())
+  if (unkept !== undefined) io.err(`The act is made, but where it was typed is not kept: ${unkept}`)
+  return done
+}
+
+/** The acts only the owner makes, each of which already asks for a terminal (martha#619). */
+const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Places, asked: Asked) => Promise<number>>> = {
+  'pin-key': (io, places, asked) => pinKey(io, places, asked.args[0]!),
+  'keep-shapes': (io, places, asked) => keepShapes(io, places, asked.args[0]!),
+  approve: (io, places) => approve(io, places),
+  release: (io, places, asked) => release(io, places, asked.args[0]!),
+}
+
+/** Whether an act is the owner's own: one of theirs, `start` (every word no act takes), or a flip of a member's bells. */
+const isAnOwnersOwnAct = (asked: Asked, act: ((io: CommandIo, places: Places, asked: Asked) => Promise<number>) | undefined): boolean =>
+  act === undefined || Object.hasOwn(THE_OWNERS_OWN_ACTS, asked.act) || (act === ACTS_IN_A_PROJECT['bells'] && asked.member !== undefined)
+
+/**
+ * Why an owner's act is refused here, inside a member (martha#619): read once, at the verb's entry, over the launch
+ * records of the state root this act writes into; or undefined. A state root whose records this will not vouch for is
+ * a refusal too, since what cannot be read cannot clear the act.
+ */
+function theMemberThisRunsInside(io: CommandIo, places: Places, act: string): string | undefined {
+  const records = launchRecordsUnder(THE_PLACES_A_STATE_ROOT_KEEPS)(places.home, absolute(io.env['XDG_STATE_HOME']))
+  if ('cannot_tell' in records) return `martha ${act} cannot tell whether it runs inside a member: ${records.cannot_tell}`
+  return whyAnOwnersActIsRefusedInsideAMember({
+    act,
+    env: io.env,
+    ancestors: (io.ancestors ?? (() => ancestorsUnder(PROC_ROOT, process.pid)))(),
+    launches: records.projects.flatMap((project) => launchesIn({ all: () => project.rows })),
+    member_marks: { relay_socket_variable: RELAY_SOCKET_VARIABLE, config_dir_variable: CONFIG_DIR_VARIABLE, member_config_folder: MEMBER_CONFIG_FOLDER },
+  })
 }
 
 /** Each act that works inside a project but `start`, which every other word falls to, by its word. */
 const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places, asked: Asked) => Promise<number>>> = {
-  'pin-key': (io, places, asked) => pinKey(io, places, asked.args[0]!),
-  'keep-shapes': (io, places, asked) => keepShapes(io, places, asked.args[0]!),
+  ...THE_OWNERS_OWN_ACTS,
   init: (io, places) => init(io, places),
-  approve: (io, places) => approve(io, places),
   todo: (io, places) => todo(io, places),
   wake: (io, places, asked) => wake(io, places, asked.args[0]!),
-  release: (io, places, asked) => release(io, places, asked.args[0]!),
   gate: (io, places, asked) => theGate(io, places, asked.member),
   bells: (io, places, asked) => bells(io, places, asked),
   ls: (io, places) => ls(io, places),

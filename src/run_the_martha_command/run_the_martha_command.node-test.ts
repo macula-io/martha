@@ -5,10 +5,10 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
@@ -39,6 +39,12 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
+import { NOT_A_WALL } from '../refuse_an_owner_act_from_inside_a_member/refuse_an_owner_act_from_inside_a_member.ts'
+import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
+import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
+import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
 
@@ -618,4 +624,81 @@ test('#312 test 9: martha restart of a member that is not running starts nothing
   const stranger = marthaWith(place, runtimeOf(place), RESTART, 'nobody')
   assert.equal(stranger.status, EXIT_REFUSED)
   assert.match(stranger.err, /nobody is not on this crew \(its members are /)
+})
+
+/**
+ * A member's launch, recorded in the place's own state root as the launcher records one (martha#619), whose host is
+ * `pid`: the process above a `martha` this test runs, so the act runs inside that member as a member's shell would.
+ */
+function aMemberLaunchedAs(place: Place, member: string, pid: number): void {
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok(!('refusal' in state), 'refusal' in state ? state.refusal : '')
+  const records = join(state.directory, THE_PLACES_A_STATE_ROOT_KEEPS.records_place)
+  mkdirSync(records, { recursive: true, mode: THE_PLACES_A_STATE_ROOT_KEEPS.only_its_owner_may_enter })
+  const process_started_at = linuxProcessIdentities.identityOf(pid)
+  assert.ok(process_started_at !== null, `the test could not read process ${pid}`)
+  launchRecordsDirectory(records).keep(member, { member_name: member, node_id: 'ab'.repeat(32), pid, process_started_at })
+}
+
+test("#619: martha approve under a terminal a member's shell made (script), with a member's host above it, is refused naming the member", (t) => {
+  const place = placeFor(t)
+  // This test's own process stands as the member's host: script, then martha, run below it, as a member's shell would.
+  aMemberLaunchedAs(place, 'builder', process.pid)
+  const run = marthaOnATerminal(place, {}, 'approve')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.said.includes("this runs inside builder's session") && run.said.includes(NOT_A_WALL), run.said)
+})
+
+test('#619: each owner-only act refuses inside a member, and an act that only reads is not refused there (mutant: the walk or the act list removed)', (t) => {
+  const place = placeFor(t)
+  aMemberLaunchedAs(place, 'builder', process.pid)
+  // A stand-in claude that ends at once, so an act this lets through starts nothing real and ends the case quickly.
+  const claude = claudeThatEnds(place, t)
+  for (const words of [['approve'], ['release', 'builder'], ['pin-key', 'a-key'], ['keep-shapes', 'a-list'], ['bells', 'builder', BELLS_MUTED], ['start', 'builder']]) {
+    const run = marthaOnATerminal(place, claude.env, ...words)
+    assert.ok(run.said.includes("this runs inside builder's session"), `martha ${words.join(' ')}: ${run.said}`)
+  }
+  for (const words of [['ls'], ['bells']]) {
+    const run = marthaOnATerminal(place, claude.env, ...words)
+    assert.ok(!run.said.includes("this runs inside builder's session"), `martha ${words.join(' ')} only reads, and was refused: ${run.said}`)
+  }
+})
+
+test("#619: an owner-only act with a member's relay socket or its own config folder in the environment is refused, and the owner's own terminal is not", (t) => {
+  const place = placeFor(t)
+  const socket = marthaOnATerminal(place, { [RELAY_SOCKET_VARIABLE]: join(place.home, 'a-socket') }, 'approve')
+  assert.ok(socket.said.includes(RELAY_SOCKET_VARIABLE) && socket.said.includes(NOT_A_WALL), socket.said)
+  const folder = marthaOnATerminal(place, { [CONFIG_DIR_VARIABLE]: join(place.home, 'snapshots', 'launch-1', MEMBER_CONFIG_FOLDER) }, 'approve')
+  assert.ok(folder.said.includes(MEMBER_CONFIG_FOLDER) && folder.said.includes(NOT_A_WALL), folder.said)
+  // The owner's own terminal: no member's mark, and no member's launch above it.
+  const owners = marthaOnATerminal(place, {}, 'approve')
+  assert.ok(!owners.said.includes(NOT_A_WALL), owners.said)
+})
+
+test('#619: a launch record whose pid is above this act but whose start time is not that process\'s does not refuse it (a reused pid)', (t) => {
+  const place = placeFor(t)
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok(!('refusal' in state))
+  const records = join(state.directory, THE_PLACES_A_STATE_ROOT_KEEPS.records_place)
+  mkdirSync(records, { recursive: true, mode: THE_PLACES_A_STATE_ROOT_KEEPS.only_its_owner_may_enter })
+  launchRecordsDirectory(records).keep('builder', { member_name: 'builder', node_id: 'ab'.repeat(32), pid: process.pid, process_started_at: 'another-boot:1' })
+  const run = marthaOnATerminal(place, {}, 'approve')
+  assert.ok(!run.said.includes("this runs inside builder's session"), run.said)
+})
+
+test('#619: martha bells shows each flip the owner typed with its terminal, and a line written straight into the file as written without the martha command', (t) => {
+  const place = placeFor(t)
+  aCrewWithItsBells(place, true)
+  // A flip made before Martha recorded where acts are typed: it is history, before the cutover the next act takes.
+  mkdirSync(dirname(theBellsFile(place)), { recursive: true, mode: 0o700 })
+  appendFileSync(theBellsFile(place), `${JSON.stringify({ member: 'builder', bells: BELLS_HEARD, by: 'Ada Owner', at: '2026-11-01T00:00:00.000Z' })}\n`, { mode: 0o600 })
+  const flipped = marthaOnATerminal(place, {}, 'bells', 'builder', BELLS_MUTED)
+  assert.equal(flipped.status, EXIT_DONE, flipped.said)
+  // A member's shell, writing the bells file itself: no martha command, so no entry in the log names its line.
+  appendFileSync(theBellsFile(place), `${JSON.stringify({ member: 'builder', bells: BELLS_HEARD, by: 'Ada Owner', at: '2026-11-18T12:00:00.000Z' })}\n`, { mode: 0o600 })
+  const listed = martha(place, 'bells')
+  assert.equal(listed.status, EXIT_DONE, listed.said)
+  assert.match(listed.out, /line 1: history before /, listed.out)
+  assert.match(listed.out, /line 2: typed at \/dev\/pts\/\d+ \(session \d+\)/, listed.out)
+  assert.match(listed.out, /line 3: WRITTEN WITHOUT THE MARTHA COMMAND/, listed.out)
 })

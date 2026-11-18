@@ -134,6 +134,7 @@ export function ownerMemoryOf(
     member_env: hostEnv,
     home: hostHome(hostEnv),
     launch_dir: launch.place.launch_dir,
+    martha_state_root: launch.places.state_root,
     settings_files: [
       join(managed.dir, managed.file),
       ...dropInFiles(join(managed.dir, managed.drop_in)),
