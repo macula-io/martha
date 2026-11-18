@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { test, type TestContext } from 'node:test'
+import { after, test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theEnvironmentOfALaunch } from '../launch_a_goose_member/launch_a_goose_member.ts'
@@ -36,6 +36,15 @@ const scratch = (t: TestContext): string => {
   t.after(() => removeTheTree(directory))
   return directory
 }
+
+// This file's own process gets a home and a config folder of its own, before any test runs. The keeper and the
+// reader are called here in-process with a scratch environment, and a regression that fell back to this process's
+// environment would otherwise keep a file in the owner's own config folder, which every later check on that machine
+// then reads as the families (the mutant resolve_from_process_env did exactly that).
+const OWN = mkdtempSync(join(tmpdir(), 'martha-731-own-'))
+process.env['HOME'] = join(OWN, 'home')
+process.env['XDG_CONFIG_HOME'] = join(OWN, 'xdg-config')
+after(() => removeTheTree(OWN))
 
 /** A family drawn at run time: lowercase letters only, so it is no everyday word and no real family. */
 const aFamily = (): string => `q${[...randomBytes(9)].map((byte) => String.fromCharCode(97 + (byte % 26))).join('')}`
