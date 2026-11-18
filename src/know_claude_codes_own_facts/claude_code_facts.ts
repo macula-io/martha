@@ -8,6 +8,15 @@
 export const CLAUDE_CODE = 'claude-code' as const
 
 /**
+ * The command an install puts on the owner's path, which a launch of this host starts and a start of a member looks
+ * for there (martha#541): the one spelling of it, so no call site writes the name a second time.
+ */
+export const CLAUDE = 'claude'
+
+/** What an owner installs to have that command: the host's own install line, said by a start that cannot find it. */
+export const CLAUDE_INSTALL = 'Claude Code, with npm install -g @anthropic-ai/claude-code'
+
+/**
  * The folder Claude Code keeps its own files in, under what holds them: the home when CLAUDE_CONFIG_DIR says nothing, a
  * project, and the managed folder, whose markdown folders the recorded loader joins under it.
  */

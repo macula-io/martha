@@ -27,6 +27,8 @@ import {
   NUDGES,
   OWNER,
   RESTART_MEMBER,
+  THE_ENGINES_HOST,
+  theHostOfMember,
   STRICT_GATE,
   VOLATILE_PATHS,
   WORKTREES,
@@ -41,6 +43,7 @@ import {
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // A made-up project root: this repository is public, so no real path appears here.
 const root = '/martha-project'
@@ -116,7 +119,7 @@ const without = (key: string, from: Record<string, unknown>) =>
 test('a solo declaration gives typed settings', async () => {
   const settings = await declare(solo).settings
   assert.equal(settings.owner, 'Ann')
-  assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null }])
+  assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null, host: null }])
   assert.equal(settings.mode.name, SOLO_MODE)
   for (const act of ACTS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
   assert.deepEqual(settings.paths, {
@@ -296,7 +299,7 @@ test('every act a table does not name is the owner\'s alone, so a crew file writ
 
 test('a field that is not an object is refused with its shape, naming every key it takes', async () => {
   const shapes: [unknown, string, readonly string[]][] = [
-    [{ ...team, members: ['Lead'] }, 'members[0]', ['name', 'role', 'model?']],
+    [{ ...team, members: ['Lead'] }, 'members[0]', ['name', 'role', 'model?', 'host?']],
     [{ ...team, mode: 'team' }, 'mode', Object.keys(team.mode)],
     [{ ...team, mode: { ...team.mode, may: [] } }, 'mode.may', Object.keys(team.mode.may)],
   ]
@@ -372,7 +375,7 @@ test('two members whose names differ only in case are one name twice', async () 
 
 test('a model of null is the host\'s own model, the same as leaving the key out', async () => {
   const settings = await declare({ ...team, members: [{ name: 'Lead', role: 'builder', model: null }] }).settings
-  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null }])
+  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null, host: null }])
 })
 
 test('the owner\'s name is trimmed', async () => {
@@ -446,6 +449,48 @@ test('#374: the declaration v0.1.0 wrote declares, and its channel_read_seconds 
   const settings = await declareCrew(store, root, HOST_MODELS)
   assert.equal(settings.channel_read_seconds, CHANNEL_READ_SECONDS_WHEN_UNNAMED)
 })
+
+// --- the host each member runs on (martha#541 package 5) --------------------------------------------------------
+
+test('#541: a member runs on the host it names, else the crew\'s, and the crew\'s is where a member names none (mutant: the member\'s host read as the crew\'s)', async () => {
+  const settings = await declare({
+    ...team,
+    host: THE_ENGINES_HOST,
+    members: [{ name: 'Lead', role: 'supervisor', host: CLAUDE_CODE }, { name: 'Builder1', role: 'builder' }],
+  }).settings
+  assert.equal(settings.members[0]!.host, CLAUDE_CODE)
+  assert.equal(theHostOfMember(settings, settings.members[0]!), CLAUDE_CODE, 'the member\'s own host did not win over the crew\'s')
+  assert.equal(settings.members[1]!.host, null)
+  assert.equal(theHostOfMember(settings, settings.members[1]!), THE_ENGINES_HOST, 'a member naming none did not take the crew\'s host')
+})
+
+test('#541: a declaration that names no host at all reads as the host every release before this one ran (mutant: refuse it)', async () => {
+  const settings = await declare(solo).settings
+  assert.equal(settings.host, CLAUDE_CODE)
+  assert.equal(settings.members[0]!.host, null)
+  assert.equal(theHostOfMember(settings, settings.members[0]!), CLAUDE_CODE)
+  // A file an earlier release's init wrote is the same case, and still declares.
+  const { store } = storeOf({ [declaration_path]: DECLARED_BY_V0_1_0_TEXT })
+  const old = await declareCrew(store, root, HOST_MODELS)
+  assert.equal(old.host, CLAUDE_CODE)
+  for (const member of old.members) assert.equal(theHostOfMember(old, member), CLAUDE_CODE)
+})
+
+test('#541: a host Martha does not know is refused by its field, naming the hosts it knows, at the top level and on a member', async () => {
+  for (const [declaration, field] of [
+    [{ ...solo, host: 'a-host-nothing-runs' }, 'host'],
+    [{ ...team, members: [{ name: 'Lead', role: 'supervisor', host: 'a-host-nothing-runs' }] }, 'members[0].host'],
+  ] as const) {
+    await assert.rejects(declare(declaration).settings, (error: unknown) => {
+      assert.ok(error instanceof DeclarationRefused)
+      assert.equal(error.field, field)
+      assert.ok(error.message.includes(THE_ENGINES_HOST), error.message)
+      assert.ok(error.message.includes(CLAUDE_CODE), error.message)
+      return true
+    })
+  }
+})
+
 
 test('#253: the interval a crew declares is the one its settings carry', async () => {
   assert.equal((await declare({ ...solo, channel_read_seconds: 7 }).settings).channel_read_seconds, 7)

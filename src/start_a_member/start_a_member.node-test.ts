@@ -17,7 +17,7 @@ import { test, type TestContext } from 'node:test'
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { CREW_TOOL_NAMES, NO_ACTING_PLACE, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, REVIEW_MODEL, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, REVIEW_MODEL, ROLE_TEXTS_DIRECTORY, STRICT_GATE, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { SOLO_MEMBERS, SOLO_MODE, soloDeclaration } from '../declare_crew/declare_crew.ts'
 import {
@@ -48,7 +48,8 @@ import { POLL_MS, until } from '../drive_the_recorded_host/wait_until_the_event.
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { SWITCHES_THAT_LOAD_NO_CONFIG } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
-import { approvedPlace, launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
+import { launcherPlacesOf, NOT_A_TERMINAL, startMember, type MemberStartRequest } from './start_a_member.ts'
+import { approvedPlace } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { declareCrew } from '../declare_crew/declare_crew.ts'
 import { crewStateDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { stopTheCrew } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
@@ -59,7 +60,7 @@ import { MODEL_PLACE, theModelMarker, type ModelMarker } from '../switch_a_membe
 import { crewSubdirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import { CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER, CLAUDE_INSTALL, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
@@ -249,9 +250,8 @@ function requestFor(place: Place, command: string, member: string, lines: string
     is_terminal: true,
     state: place.state,
     places,
-    command,
-    // HOME is the place's own, so the owner's user settings file the launcher reads is the test's.
-    inherited: { PATH: process.env.PATH, HOME: place.home },
+    // The fake host is found where a launch finds it: on the path the start inherits, before the machine's own.
+    inherited: { PATH: `${dirname(command)}:${process.env.PATH ?? ''}`, HOME: place.home },
     stdio: 'ignore',
     documents,
     tellOwner: (line) => void lines.push(line),
@@ -259,11 +259,36 @@ function requestFor(place: Place, command: string, member: string, lines: string
 }
 
 const declared = async (place: Place): Promise<void> => {
-  const outcome = await declareSoloCrew({ root: place.root, owner: 'Ada Owner', origin: null, state: place.state, documents, models: HOST_MODELS })
+  const outcome = await declareSoloCrew({ root: place.root, owner: 'Ada Owner', origin: null, state: place.state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(outcome.declared, outcome.declared ? '' : outcome.refusal)
 }
 
 const yes = { is_terminal: true, ask: () => Promise.resolve('yes') }
+
+test('#541: a member the declaration names the engine for is refused by name, and no other host is started (mutant: the table keyed by the crew\'s host)', async (t) => {
+  const declaration = { ...soloDeclaration('Ada Owner'), members: [{ name: 'builder', role: 'builder' }, { name: 'reviewer', role: 'reviewer', host: THE_ENGINES_HOST }] }
+  const place = placeFor(t, { [join(DECLARATION_DIRECTORY, DECLARATION_FILE)]: JSON.stringify(declaration) })
+  const fake = fakeClaude(place)
+  // The reviewer is the member that names the engine; the builder, and the crew, name none.
+  const started = await startedOn(place, requestFor(place, fake.command, 'reviewer', []))
+  assert.equal(started.started, false)
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(THE_ENGINES_HOST), refusal)
+  assert.ok(refusal.includes(CLAUDE_CODE), refusal)
+  assert.equal(existsSync(fake.ran), false, 'a member naming the engine was started on Claude Code')
+})
+
+test('#541: a host whose command is not on the path is refused, naming the install, with nothing started', async (t) => {
+  const place = placeFor(t, {})
+  await declared(place)
+  const fake = fakeClaude(place)
+  const started = await startedOn(place, { ...requestFor(place, fake.command, BUILDER!.name, []), inherited: { PATH: join(place.home, 'a-path-with-nothing'), HOME: place.home } })
+  assert.equal(started.started, false)
+  const refusal = started.started ? '' : started.refusal
+  assert.ok(refusal.includes(CLAUDE), refusal)
+  assert.ok(refusal.includes(CLAUDE_INSTALL), refusal)
+  assert.equal(existsSync(fake.ran), false, 'a host that is not installed started a member')
+})
 
 test('start with no declaration starts nothing, naming the file and the command that writes one', async (t) => {
   const place = placeFor(t, {})
@@ -485,7 +510,7 @@ test('the launch a member is started as keeps its own writes: a write under that
   assert.equal(approved.kind, 'approved')
   const kept = readApprovals(place.state)
   assert.ok('approvals' in kept)
-  const started_on = approvedPlace(requestFor(place, join(place.home, 'claude'), BUILDER!.name, []), kept.approvals[0])
+  const started_on = approvedPlace(BUILDER!.name, kept.approvals[0], place.state)
   const since = started_on.since_approval
   assert.ok(since !== undefined, 'a member started on an approval is started on its own launch')
   // The store the launcher is handed is this launch's, so a write carrying this launch id is kept, and comes back.

@@ -16,7 +16,7 @@ import { join } from 'node:path'
 
 import { keepTheCrewsFilesAsDirectories } from '../src/keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { ownersSettingsIn } from '../src/owners_settings_directory/owners_settings_directory.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL } from '../src/declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, REVIEW_MODEL, THE_HOST_A_MEMBER_RAN_ON } from '../src/declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../src/declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CREW_ROWS_PLACE, openState } from '../src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { dashboardRowsIn } from '../src/dashboard_rows_directory/dashboard_rows_directory.ts'
@@ -73,7 +73,7 @@ async function theCrewTools(): Promise<ReturnType<typeof crewToolsOver>> {
   for (const made of [root, join(its.home, 'row'), join(its.home, CREW_ROWS_PLACE), its.config_dir]) mkdirSync(made, { recursive: true })
   const state = openState(join(its.home, 'state'), root)
   if ('refusal' in state) throw new Error(state.refusal)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: { kind: CLOSED_VOCABULARY, names: [its.own_model, its.review_model] } })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: { kind: CLOSED_VOCABULARY, names: [its.own_model, its.review_model] }, host: THE_HOST_A_MEMBER_RAN_ON })
   if (!declared.declared) throw new Error(declared.refusal)
   declareTheModels(root, its)
   return crewToolsOver({
