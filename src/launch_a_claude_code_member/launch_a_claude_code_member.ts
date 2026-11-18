@@ -232,8 +232,11 @@ export interface ClaudeCodeMemberLaunch {
   readonly trust_answer_deadline_ms?: number
   /** The member's signed runs (martha#129): `martha start` gives them; without them the member runs no shape. */
   readonly signed_runs?: SignedRuns
-  /** The crew's tools, over this member's crew place (martha#254); a launch with none answers no tool. */
-  readonly crew_tools?: (sessions: { readonly of: (session_id: string) => HostSession | undefined }) => CrewTools
+  /**
+   * The crew's tools, over this member's crew place (martha#254); a launch with none answers no tool. They are handed
+   * the member's own config folder (martha#602), where the host's model command saves a switch, before the host starts.
+   */
+  readonly crew_tools?: (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string }) => CrewTools
   /**
    * What this launch raises every turn the host took in to (martha#253): the crew channel's carrier builds one and
    * reads it, so a message counts as taken in only once the host raised it back. A launch given none raises nothing.
@@ -312,13 +315,16 @@ export interface LaunchMade extends ReadyLaunch, WhatTheRunWatches {
 function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extract<PreparedLaunch, { readonly allow: true }>): Record<string, string> | string {
   const owners = userSettingsPath(launch.inherited)
   if ('refusal' in owners) return owners.refusal
-  const memberConfig = join(prepared.snapshot_dir, MEMBER_CONFIG_FOLDER)
+  const memberConfig = membersConfigFolderOf(prepared)
   const env = { ...launchEnvironment(launch.inherited, prepared.switches, CLAUDE_CODE), ...theMembersConfigEnvironment(memberConfig) }
   // The key answered yes is the one the member is handed, read from the environment it starts with.
   const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir, env[API_KEY_VARIABLE])
   if (!made.made) return made.refusal
   return env
 }
+
+/** The member's own config folder for a launch: decided once, from the launch's snapshot directory, and read by both its users. */
+const membersConfigFolderOf = (prepared: Extract<PreparedLaunch, { readonly allow: true }>): string => join(prepared.snapshot_dir, MEMBER_CONFIG_FOLDER)
 
 /** Step 1: the launch gate, the mesh server version, and the settings files' env; or the refusal. */
 function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
@@ -466,8 +472,10 @@ function wordlessAnswersOf(
  * sessions are this launch's own, handed over so a handover is stamped with the session it came from and a refreshed
  * session inherits the one it was cleared from (martha#255).
  */
-function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSession>): { readonly crew?: CrewTools } {
-  return launch.crew_tools === undefined ? {} : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }) }
+function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSession>, ready: ReadyLaunch): { readonly crew?: CrewTools } {
+  return launch.crew_tools === undefined
+    ? {}
+    : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared) }) }
 }
 
 /** What this launch raises turns to, or nothing: a launch given none raises nothing (martha#253). */
@@ -593,7 +601,7 @@ async function servedRelay(
     hookSettings: ready.hookSettings,
     ownerMemory,
     ...(launch.signed_runs === undefined ? {} : { signed_runs: launch.signed_runs }),
-    ...crewOf(launch, sessions),
+    ...crewOf(launch, sessions, ready),
     // The crew text this launch hands every session it starts (martha#306), composed once from the approved bytes.
     crew_text: ready.crew_text,
     ...wordlessAnswersOf(launch, ready, starting),

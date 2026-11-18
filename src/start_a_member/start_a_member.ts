@@ -70,6 +70,7 @@ import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import type { MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
+import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { finishTheOwnersDefaultAtLaunch, type OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -233,12 +234,21 @@ function theCrewsStores(state: MarthaState, root: string): { readonly crew: Crew
  * the host's own answer about which settings file it reads, made once in ../claude_code_host (martha#65, martha#75), so
  * a config directory the host refuses is refused here by that same line rather than by a second opinion.
  */
-function ownersDefaultPlaceOf(request: MemberStartRequest): OwnersDefaultPlace | Refused {
-  const settings = userSettingsPath(request.inherited)
+function settingsPlaceOf(env: Readonly<Record<string, string | undefined>>, request: MemberStartRequest): OwnersDefaultPlace | Refused {
+  const settings = userSettingsPath(env)
   return 'refusal' in settings
     ? settings
     : { config_dir: dirname(settings.path), file: settings.path, store: ownersSettingsIn(settings.path, request.state.state_root) }
 }
+
+/**
+ * The file a member's switch is guarded in while it runs (martha#602): the settings file in the member's own config
+ * folder, which is where the host's model command saves it, and the lock named by that folder. The owner's own file is
+ * never written by a member's host any more, so the owner's default stays where the owner left it by construction;
+ * the owner's file is read only at launch, to finish a switch a launch from before martha#602 left open.
+ */
+const theMembersSwitchPlace = (request: MemberStartRequest, config_dir: string): OwnersDefaultPlace | Refused =>
+  settingsPlaceOf(theMembersConfigEnvironment(config_dir), request)
 
 /**
  * Where a stop or a restart of this crew's members is asked (martha#312): the crew's lifecycle requests, the launcher's
@@ -261,13 +271,12 @@ function theRestartPlaceOf(request: MemberStartRequest): { readonly lifecycle?: 
 }
 
 /**
- * Where the owner's default lives, after finishing any switch a killed launch left unfinished (martha#359, step 7): the
- * owner's file must be right before any new session reads it, and the line that needs the owner goes to the terminal.
+ * Finishes any switch a killed launch left unfinished (martha#359, step 7): the owner's file must be right before any
+ * new session reads it, and the line that needs the owner goes to the terminal.
  */
-async function finishAnySwitchBeforeTheHostStarts(request: MemberStartRequest, crewStores: ReturnType<typeof theCrewsStores>): Promise<OwnersDefaultPlace | Refused> {
-  const owners = ownersDefaultPlaceOf(request)
-  for (const told of await finishTheOwnersDefaultAtLaunch({ member: request.member, host: { stores: { crew: crewStores.crew } }, owners, beats: dashboardRowsIn(request.places.dashboard) })) request.tellOwner(told)
-  return owners
+async function finishAnySwitchBeforeTheHostStarts(request: MemberStartRequest, crewStores: ReturnType<typeof theCrewsStores>): Promise<void> {
+  const owners = settingsPlaceOf(request.inherited, request)
+  for (const told of await finishTheOwnersDefaultAtLaunch({ member: request.member, host: { stores: { crew: crewStores.crew } }, owners, beats: dashboardRowsIn(request.places.dashboard), stillThere: fs.existsSync })) request.tellOwner(told)
 }
 
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
@@ -283,7 +292,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   }
   const { snapshot_root, ...places } = request.places
   const crewStores = theCrewsStores(request.state, request.root)
-  const owners = await finishAnySwitchBeforeTheHostStarts(request, crewStores)
+  await finishAnySwitchBeforeTheHostStarts(request, crewStores)
   // One raising for this launch, and one channel carrier: the carrier counts a handed message taken in when the mod
   // reports the member's next main turn started (martha#253).
   const turns = turnsRaised()
@@ -303,7 +312,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     tellOwner: (line) => request.tellOwner(line),
     ...(request.hear_relay_place === undefined ? {} : { hearRelayPlace: request.hear_relay_place }),
     turns,
-    crew_tools: (sessions) =>
+    crew_tools: (sessions, member) =>
       crewToolsOver({
         member: request.member,
         ledger: channel,
@@ -325,7 +334,9 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
         models: CLAUDE_CODE_MODELS,
         launched_on: ready.model ?? '',
         spawn: CLAUDE_CODE_SUBAGENT_SPAWN,
-        owners_settings: owners, // the owner's own settings file, and the lock that guards it (martha#359)
+        // The settings file the host's model command saves a switch into, and the lock that guards it (martha#359): the
+        // member's own since martha#602. The owner's file was finished above, before the host started.
+        owners_settings: theMembersSwitchPlace(request, member.config_dir),
         ...theRestartPlaceOf(request),
       }),
     signed_runs: signedRunsOf(
