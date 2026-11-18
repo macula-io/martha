@@ -133,7 +133,7 @@ OWNER_SESSION_ENDED="${CONTAINER_HOME}/.owner-session-ended"
 HOST_CREDENTIALS="${CONTAINER_HOME}/.claude/.credentials.json"
 # The members are the installed release's solo crew, read from its own declaration in the container, never typed
 # here and never read from this checkout (martha#635): the export that lists them, in the module that declares it.
-SOLO_CREW_IN_A_TREE='src/declare_a_solo_crew/declare_a_solo_crew.ts'
+SOLO_CREW_IN_A_TREE='src/declare_crew/declare_crew.ts'
 SOLO_CREW_EXPORT='SOLO_MEMBERS'
 # The owner's turn for each role, keyed by the role's name. The keys are the only place a role is named in this file:
 # every word that names a member (its started line, its failures, its kept record, its ok line) is the name the
