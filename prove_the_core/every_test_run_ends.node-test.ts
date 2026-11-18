@@ -19,6 +19,7 @@ import {
   TIMEOUT_FLAG,
   testRunBoundOf,
   testRunFlagsOf,
+  withoutTheTestContext,
 } from './every_test_run_ends.ts'
 
 const repository = join(import.meta.dirname, '..')
@@ -71,8 +72,6 @@ test('a test script that does not bound its run is named, each way it falls shor
   })
 })
 
-/** The variable node --test sets in each test file's process. */
-const TEST_CONTEXT_VARIABLE = 'NODE_TEST_CONTEXT'
 /** How long the hung test may run here: short, so the check is quick. */
 const SHORT_TIMEOUT_MS = 1000
 /** How long the whole run may take before the check calls it hung and stops it. */
@@ -96,7 +95,7 @@ async function runWithTheScriptsFlags(t: TestContext, folder: string, files: rea
     cwd: join(repository, folder),
     // Without the variable node --test sets in each file's process: with it, a
     // nested node --test reports to this run instead of running as npm test does.
-    env: Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== TEST_CONTEXT_VARIABLE)),
+    env: withoutTheTestContext(process.env),
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
