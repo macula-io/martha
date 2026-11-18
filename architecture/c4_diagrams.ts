@@ -786,6 +786,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
     { col: 0, kind: 'b-cmp', name: 'guard_workspace, read_the_git_calls_in_a_shell_line', names: ['guard_workspace', 'read_the_git_calls_in_a_shell_line', 'ask_git_what_a_member_is_about_to_change', 'check_the_workspace_matches_its_layout'], type: '[the workspace guard]', code: true,
       desc: ['What the workspace\'s layout refuses of', 'a git call: read_the_git_calls_in_a_', 'shell_line reads each call and the', 'directory it runs in, ask_git_what_a_', 'member_is_about_to_change asks git what', 'a call is about to move, and guard_', 'workspace refuses a call that leaves a', 'clone\'s branch or touches another', 'member\'s worktree or branch; check_the_', 'workspace_matches_its_layout names the', 'drift in a workspace. Declared here,', 'and nothing enforces it yet: the slices', 'are drawn, the launch does not call', 'them (martha#562)'] },
+    { col: 1, kind: 'b-cmp', name: 'speak_acp_to_an_agent', names: ['speak_acp_to_an_agent'], type: '[an ACP agent, as its client]', code: true,
+      desc: ['Martha as the client of an engine it', 'drives over ACP on stdio (martha#541):', 'sessions, prompts, each tool call\'s', 'updates and the turn\'s end; a call is', 'answered allow_once or reject_once', 'from the gate\'s decision, else', 'cancelled. Not yet wired to a launch'] },
   ],
 ]
 
