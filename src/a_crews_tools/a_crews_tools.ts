@@ -705,11 +705,14 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [WRITE_MY_HANDOVER_SCHEMA.name]: async (args) =>
       theHandoverToolOver(theHandoverAsked(places, state, theRootsInForce(places.settings?.volatile_paths ?? [], places.volatile_roots ?? [])), args),
     [REFRESH_THIS_SESSION]: async (args) => theRefreshAskedOf(places, args),
-    [VERIFY_RANGE_TOOL.name]: (args) => actingOn(theRangeACallNames(args), (on, asked) => verifyTheRangeOver(actingHost(on), asked)),
+    [VERIFY_RANGE_TOOL.name]: (args) =>
+      actingOn(theRangeACallNames(args), async (on, asked) =>
+        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), { member: places.member, declaration: on.settings }, asked)),
     [LAND_BATCH_TOOL.name]: (args) =>
       actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry)),
     [FAST_FORWARD_TOOL.name]: (args) =>
-      actingOn(theFastForwardACallNames(args), (on, asked) => fastForwardOntoTheApprovedTipOver(actingHost(on), places.member, asked)),
+      actingOn(theFastForwardACallNames(args), async (on, asked) =>
+        on.settings === undefined ? { refused: NO_ACTING_PLACE } : fastForwardOntoTheApprovedTipOver(actingHost(on), places.member, asked, on.settings)),
     [WORKTREE_OPEN_TOOL.name]: async (args) => aWorktreeTool(places, openAWorktree, args),
     [WORKTREE_FINISH_TOOL.name]: async (args) => aWorktreeTool(places, finishAWorktree, args),
     [OWNER_TODO_ADD_TOOL.name]: declaring(places, async (declared, args) => keepTheOwnersList(theOwnersListAsked(places, declared.settings), () => addAnAct(places.ledger, args, places.member))),

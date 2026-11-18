@@ -42,6 +42,9 @@ import { SIGNER, release, removeEvenReadOnly, serveRegistry, sigstoreStandIn, tr
 import { TOP } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+// Where the core reads a process's identity on this machine: the start time, boot included, from /proc (martha#628).
+// Read through a computed path, so the installer's typecheck does not follow it into src, as the tests do.
+const PROCESSES_ON_THIS_MACHINE = fileURLToPath(new URL('../../src/linux_process_identity/files_and_processes_on_this_machine.ts', import.meta.url))
 // A release mode: read-only, as place_the_release leaves it.
 const READ_ONLY = 0o555
 // What an install may write under the box's home, and the folders on the way to them.
@@ -105,6 +108,63 @@ class StepFailed extends Error {}
 
 /** @param {unknown} error */
 const reason = (error) => error instanceof Error ? error.message : String(error)
+
+/**
+ * This machine's processes as the core's identity module holds them: `identityOf(pid)`, the process's start time and
+ * boot, or null when the kernel no longer holds that pid; and `signalGroup(pid, identity, signal)`, which reads,
+ * compares and signals in one call. The installer restates neither the /proc read nor the field it comes from
+ * (martha#628).
+ * @typedef {{ readonly identityOf: (pid: number) => string | null, readonly signalGroup: (pid: number, identity: string, signal: 'SIGTERM' | 'SIGKILL') => { readonly signalled: boolean } }} ProcessesOnThisMachine
+ */
+
+/** @type {ProcessesOnThisMachine | undefined} */
+let processesOnThisMachine
+
+/**
+ * The processes of this machine, loaded once. Exported so a test drives the same reader a run does, and never a copy of
+ * it.
+ * @returns {Promise<ProcessesOnThisMachine>}
+ */
+export async function theProcessesOnThisMachine () {
+  processesOnThisMachine ??= /** @type {ProcessesOnThisMachine} */ ((await import(PROCESSES_ON_THIS_MACHINE)).thisMachine.processes)
+  return processesOnThisMachine
+}
+
+/**
+ * Sends `signal` to `pid` only while the kernel still holds the process `identity` names: a pid the kernel has handed to
+ * another process answers `kill` exactly as the one we started does, so nothing signals on a pid alone (martha#628).
+ * Nothing is sent when the identity is missing, gone or no longer matches, or when the process has ended since the
+ * comparison.
+ * @param {ProcessesOnThisMachine} processes
+ * @param {number} pid
+ * @param {string | null} identity
+ * @param {NodeJS.Signals} signal
+ * @returns {boolean} whether the signal was sent
+ */
+function signalIfStillTheOne (processes, pid, identity, signal) {
+  if (identity === null || processes.identityOf(pid) !== identity) return false
+  try {
+    process.kill(pid, signal)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Signals the process group a member leads, only while its leader is still the process the member holds: the core's
+ * module reads, compares and signals in one call, so a pid the kernel has handed on is never signalled (martha#628).
+ * A member with no pid, or one whose start time this run never held, is not signalled at all: with no identity the
+ * module's own comparison has nothing to refuse, and a pid of 0 would reach this run's process group.
+ * @param {ProcessesOnThisMachine} processes
+ * @param {number} pid
+ * @param {string | null} identity
+ * @param {'SIGTERM' | 'SIGKILL'} signal
+ */
+function signalItsGroup (processes, pid, identity, signal) {
+  if (!pid || identity === null) return false
+  return processes.signalGroup(pid, identity, signal).signalled
+}
 
 /** @param {AbortSignal | undefined} signal */
 const interruptedBy = (signal) => `interrupted by ${String(signal?.reason)}`
@@ -190,7 +250,10 @@ function checkTheDisk ({ box, expected, installed, places }) {
 
 /**
  * A member as `martha start` runs it on its terminal: its pid once it is named, and how it ended once it has.
- * @typedef {{ name: string, child: import('node:child_process').ChildProcess, pid: number, said: string, ended: string, exited: Promise<string> }} Member
+ * `identity` and `childIdentity` are the start times the kernel held for that pid and for the wrapper when each was
+ * named: what the tear-down signals on, so a pid the kernel has since given to another process is never signalled
+ * (martha#628).
+ * @typedef {{ name: string, child: import('node:child_process').ChildProcess, pid: number, said: string, ended: string, exited: Promise<string>, identity: string | null, childIdentity: string | null }} Member
  */
 
 /**
@@ -208,22 +271,23 @@ function checkTheDisk ({ box, expected, installed, places }) {
  *   signal: interrupts the run; see INTERRUPTS.
  */
 export async function proveACleanInstall ({ log = console.log, signedFor, plant = {}, signal } = {}) {
+  const processes = await theProcessesOnThisMachine()
   /** @type {Running} */
   const running = { members: [] }
-  const stepsPassed = await runTheSteps({ run: { log, signal }, signedFor, plant, running })
-  const passed = await tearDown(log, running, plant) && stepsPassed
+  const stepsPassed = await runTheSteps({ run: { log, signal }, signedFor, plant, running, processes })
+  const passed = await tearDown(log, running, plant, processes) && stepsPassed
   log(passed ? `passed; ${STOOD_IN}` : 'failed')
   return { passed, ...whereTheyWere(running), members: running.members.map(({ name, pid }) => ({ name, pid })) }
 }
 
 /**
  * Every step before the tear-down; true when each passed and nothing interrupted the run.
- * @param {{ run: Run, signedFor?: string, plant: Plant, running: Running }} steps
+ * @param {{ run: Run, signedFor?: string, plant: Plant, running: Running, processes: ProcessesOnThisMachine }} steps
  */
-async function runTheSteps ({ run, signedFor, plant, running }) {
+async function runTheSteps ({ run, signedFor, plant, running, processes }) {
   try {
     running.work = mkdtempSync(join(tmpdir(), WORK_PREFIX))
-    await installAndStart({ run, signedFor, plant, work: running.work, running })
+    await installAndStart({ run, signedFor, plant, work: running.work, running, processes })
   } catch (error) {
     if (!(error instanceof StepFailed)) run.log(`FAIL run: ${reason(error)}`)
     return false
@@ -244,9 +308,9 @@ function whereTheyWere ({ work, registry, relayRoot }) {
 
 /**
  * The steps before the tear-down; whatever starts is kept in `running` the moment it does, so the tear-down finds it.
- * @param {{ run: Run, signedFor?: string, plant: Plant, work: string, running: Running }} run
+ * @param {{ run: Run, signedFor?: string, plant: Plant, work: string, running: Running, processes: ProcessesOnThisMachine }} run
  */
-async function installAndStart ({ run, signedFor, plant, work, running }) {
+async function installAndStart ({ run, signedFor, plant, work, running, processes }) {
   const box = join(work, 'box')
   const { version, tar } = await step(run, 'pack', () => packTheCommittedTree(join(work, 'expected')))
   const r = release({ version, gzipped: gzipSync(tar) })
@@ -264,7 +328,7 @@ async function installAndStart ({ run, signedFor, plant, work, running }) {
   const onDisk = { box, expected: join(work, 'expected'), installed, places }
   plant.onDisk?.(onDisk)
   await step(run, 'on disk', () => checkTheDisk(onDisk))
-  await startTheCrew({ run, work, box, places, installed, plant, running })
+  await startTheCrew({ run, work, box, places, installed, plant, running, processes })
 }
 
 /**
@@ -277,9 +341,9 @@ const fromTheRelease = ({ release }, ...path) => import(join(release, TOP, 'src'
 
 /**
  * `martha init`, `martha approve`, then every member of the solo crew started and stopped again, each a step.
- * @param {{ run: Run, work: string, box: string, places: import('../place_the_release/place_the_release.mjs').Places, installed: { release: string }, plant: Plant, running: Running }} on
+ * @param {{ run: Run, work: string, box: string, places: import('../place_the_release/place_the_release.mjs').Places, installed: { release: string }, plant: Plant, running: Running, processes: ProcessesOnThisMachine }} on
  */
-async function startTheCrew ({ run, work, box, places, installed, plant, running }) {
+async function startTheCrew ({ run, work, box, places, installed, plant, running, processes }) {
   const { hostAnswers } = await fromTheRelease(installed, 'drive_the_recorded_host', 'host_stand_in.ts')
   const { newShortRelayRoot } = await fromTheRelease(installed, 'drive_the_recorded_host', 'short_relay_root.ts')
   const { RELAY_PLUGIN_DIR } = await fromTheRelease(installed, 'ask_the_host_what_it_loads', 'what_the_host_loads.ts')
@@ -292,9 +356,9 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
   await step(run, 'init', () => said(owner.run('init')))
   await step(run, 'approve', () => said(owner.onATerminal('approve')))
   for (const { name } of SOLO_MEMBERS) {
-    await step(run, `start ${name}`, () => startMember({ owner, name, startedLine, host, plant, log: run.log, relay: { installed: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, files: RELAY_FILES, copyName: RELAY_COPY_NAME, root: running.relayRoot ?? '' }, running, signal: run.signal }))
+    await step(run, `start ${name}`, () => startMember({ owner, name, startedLine, host, plant, log: run.log, relay: { installed: plant.relay?.(RELAY_PLUGIN_DIR) ?? RELAY_PLUGIN_DIR, files: RELAY_FILES, copyName: RELAY_COPY_NAME, root: running.relayRoot ?? '' }, running, signal: run.signal, processes }))
   }
-  for (const member of running.members) await step(run, `stop ${member.name}`, () => stopMember(member, plant))
+  for (const member of running.members) await step(run, `stop ${member.name}`, () => stopMember(member, plant, processes))
 }
 
 /** @param {string} word */
@@ -437,10 +501,10 @@ function notACopyOf (copy, { installed, files, copyName, root }) {
 /**
  * `martha start <name>` on its terminal, kept in `running` at once; up once it names the member's pid, the pid is
  * alive and its host was started with a copy of the release's relay.
- * @param {{ owner: ReturnType<typeof theOwner>, name: string, startedLine: (member: string, pid: number | string) => string, host: ReturnType<typeof standInHost>, plant: Plant, log: (line: string) => void, relay: Relay, running: Running, signal?: AbortSignal }} start
+ * @param {{ owner: ReturnType<typeof theOwner>, name: string, startedLine: (member: string, pid: number | string) => string, host: ReturnType<typeof standInHost>, plant: Plant, log: (line: string) => void, relay: Relay, running: Running, signal?: AbortSignal, processes: ProcessesOnThisMachine }} start
  */
-async function startMember ({ owner, name, startedLine, host, plant, log, relay, running, signal }) {
-  const member = runningMember(name, owner.startOnATerminal('start', name))
+async function startMember ({ owner, name, startedLine, host, plant, log, relay, running, signal, processes }) {
+  const member = runningMember(name, owner.startOnATerminal('start', name), processes)
   running.members.push(member)
   // The start is in flight and nothing of it is named yet: a test that names this step interrupts here, so the state
   // it asserts is the state the run is in (martha#189).
@@ -448,6 +512,8 @@ async function startMember ({ owner, name, startedLine, host, plant, log, relay,
   const started = startedPattern(startedLine, name)
   const named = await waitFor(`${name} to be named started`, () => member.said.replace(TERMINAL_LINE_END, '\n').match(started), member, signal)
   member.pid = Number(named[1])
+  // The start time the kernel holds for this pid now: a signal later reaches this process, or nothing (martha#628).
+  member.identity = processes.identityOf(member.pid)
   const noted = await waitFor(`${name}'s host to note its arguments`, () => existsSync(host.argsOf(member.pid)) && readFileSync(host.argsOf(member.pid), 'utf8').split('\n'), member, signal)
   const args = plant.hostArgs?.(noted) ?? noted
   if (!answers(member.pid, plant)) throw new Error(`${name}, pid ${member.pid}, is not alive`)
@@ -458,13 +524,17 @@ async function startMember ({ owner, name, startedLine, host, plant, log, relay,
 }
 
 /**
+ * A member as the run makes one, with the start time the kernel holds for its wrapper held from the moment it is
+ * spawned: the tear-down's walk is entered on that record, so a case that pins it must drive this line and not a copy
+ * of it (martha#628 r=2). Exported for that case, as stopMember and killEveryMember are.
  * @param {string} name
  * @param {import('node:child_process').ChildProcess} child
+ * @param {ProcessesOnThisMachine} processes
  * @returns {Member}
  */
-function runningMember (name, child) {
+export function runningMember (name, child, processes) {
   /** @type {Member} */
-  const member = { name, child, pid: 0, said: '', ended: '', exited: Promise.resolve('') }
+  const member = { name, child, pid: 0, said: '', ended: '', exited: Promise.resolve(''), identity: null, childIdentity: processes.identityOf(Number(child.pid)) }
   const hear = (/** @type {Buffer} */ chunk) => { member.said += chunk.toString('utf8') }
   child.stdout?.on('data', hear)
   child.stderr?.on('data', hear)
@@ -519,12 +589,18 @@ async function endsInTime (pid, plant) {
 
 /**
  * Stops a member as its owner would, by signalling its process group, and checks that it and its `martha start` end.
+ * A member with no pid, or one whose pid the kernel has since handed to another process, is refused by name: a signal
+ * to pid 0 reaches this run's own process group, and one to a reused pid reaches a stranger's (martha#628). Exported
+ * for the cases that drive those refusals, as killEveryMember is.
  * @param {Member} member
  * @param {Plant} plant
+ * @param {ProcessesOnThisMachine} processes
  */
-async function stopMember (member, plant) {
+export async function stopMember (member, plant, processes) {
   if (member.ended) throw new Error(`${member.name} had already ended (${member.ended})`)
-  process.kill(-member.pid, 'SIGTERM')
+  if (!member.pid) throw new Error(`${member.name} was never named with a pid (${String(member.pid)}), so nothing was signalled to it`)
+  if (member.identity === null) throw new Error(`${member.name}, pid ${member.pid}, was never recorded with a start time, so its group was not signalled`)
+  if (!signalItsGroup(processes, member.pid, member.identity, 'SIGTERM')) throw new Error(`${member.name}, pid ${member.pid}, is no longer the process this run recorded, so its group was not signalled`)
   const ended = await endOf(member)
   if (!ended) throw new Error(`martha start for ${member.name} did not end within ${MEMBER_WAIT_MS} ms`)
   if (!await endsInTime(member.pid, plant)) throw new Error(`${member.name}, pid ${member.pid}, is still alive after ${MEMBER_WAIT_MS} ms`)
@@ -537,11 +613,12 @@ async function stopMember (member, plant) {
  * @param {(line: string) => void} log
  * @param {Running} running
  * @param {Plant} plant
+ * @param {ProcessesOnThisMachine} processes
  */
-async function tearDown (log, { work, registry, relayRoot, members }, plant) {
+async function tearDown (log, { work, registry, relayRoot, members }, plant, processes) {
   try {
     await step({ log }, 'tear down', async () => {
-      const refusals = [...await killEveryMember(members, plant), ...await stopTheRegistry(registry, plant), ...removeTheBox(work), ...removeTheBox(relayRoot)]
+      const refusals = [...await killEveryMember(members, plant, processes), ...await stopTheRegistry(registry, plant), ...removeTheBox(work), ...removeTheBox(relayRoot)]
       const root = relayRoot ? `; relay root ${relayRoot}` : ''
       if (refusals.length) throw new Error(`${refusals.join('; ')}${root}`)
       const crew = members.length ? `${members.length} members ended, ` : ''
@@ -560,13 +637,14 @@ async function tearDown (log, { work, registry, relayRoot, members }, plant) {
  * Exported for the case that drives that refusal through the list the tear-down fails on, not the walk alone.
  * @param {Member[]} members
  * @param {Plant} plant
+ * @param {ProcessesOnThisMachine} processes
  * @returns {Promise<string[]>} which did not end, if any
  */
-export async function killEveryMember (members, plant) {
+export async function killEveryMember (members, plant, processes) {
   const refusals = []
   for (const member of members) {
     member.child.stdin?.end()
-    if (!member.ended) refusals.push(...killEvenIfGone(member))
+    if (!member.ended) refusals.push(...killEvenIfGone(member, processes))
     if (!member.ended && !await endOf(member)) refusals.push(`martha start for ${member.name} did not end`)
     if (member.pid && !await endsInTime(member.pid, plant)) refusals.push(`${member.name}, pid ${member.pid}, is still alive after ${MEMBER_WAIT_MS} ms`)
   }
@@ -580,25 +658,47 @@ export async function killEveryMember (members, plant) {
 export const NOTHING_MATCHED = 1
 
 /**
- * The child pids `pgrep` names for `pid`, or a refusal when the question could not be asked: a status of 2 or 3 (a
- * usage or a system error) and a `pgrep` that is not there each read as "no children" if they are not told apart from
+ * The pids `pgrep` names when asked `ask`, or a refusal when the question could not be asked: a status of 2 or 3 (a
+ * usage or a system error) and a `pgrep` that is not there each read as "none" if they are not told apart from
  * `NOTHING_MATCHED`, and a tear-down would then report a run it never reached as ended (martha#590 r=2).
+ * @param {string[]} ask
+ * @param {string} what the question, as a refusal names it
+ * @param {string[]} refusals
+ * @returns {number[]}
+ */
+function pidsNamedBy (ask, what, refusals) {
+  const ran = spawnSync('pgrep', ask, { encoding: 'utf8' })
+  if (ran.error) {
+    refusals.push(`${what} could not be read: ${reason(ran.error)}`)
+    return []
+  }
+  if (ran.status === NOTHING_MATCHED) return []
+  if (ran.status !== 0) {
+    refusals.push(`${what} could not be read: pgrep ended with status ${String(ran.status)}`)
+    return []
+  }
+  return ran.stdout.trim().split('\n').filter((pid) => pid !== '').map(Number)
+}
+
+/**
+ * The child pids `pgrep` names for `pid`, read as `pidsNamedBy` reads every question.
  * @param {number} pid
  * @param {string[]} refusals
  * @returns {number[]}
  */
 function childrenOf (pid, refusals) {
-  const ran = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' })
-  if (ran.error) {
-    refusals.push(`the children of pid ${pid} could not be read: ${reason(ran.error)}`)
-    return []
-  }
-  if (ran.status === NOTHING_MATCHED) return []
-  if (ran.status !== 0) {
-    refusals.push(`the children of pid ${pid} could not be read: pgrep ended with status ${String(ran.status)}`)
-    return []
-  }
-  return ran.stdout.trim().split('\n').filter((child) => child !== '').map(Number)
+  return pidsNamedBy(['-P', String(pid)], `the children of pid ${pid}`, refusals)
+}
+
+/**
+ * The pids still in the process group `pgid`, read as `childrenOf` reads the children: a group whose leader has ended
+ * keeps its orphans, and a tear-down that asks nothing about it reports a run it never reached as ended (martha#628 r=1).
+ * @param {number} pgid
+ * @param {string[]} refusals
+ * @returns {number[]}
+ */
+function groupOf (pgid, refusals) {
+  return pidsNamedBy(['-g', String(pgid)], `the processes left in the group of pid ${pgid}`, refusals)
 }
 
 /**
@@ -611,16 +711,27 @@ function childrenOf (pid, refusals) {
  * A process that is already gone is skipped, and nothing under it can be walked, because it is no longer anyone's
  * child. A process that could not be frozen or read is a refusal, never a silent stop: the tear-down fails by name on
  * it rather than reporting a run as ended that it never reached.
+ *
+ * Every stop is sent only while the kernel still holds the process whose start time was read for it a moment before:
+ * a pid the kernel has handed on is another process's now, and neither it nor anything under it is walked (martha#628).
+ *
+ * A wrapper with a pid the run holds no start time for is refused by name rather than walked: the wrapper is this
+ * process's own child until it is reaped, so a run that never held its start time cannot vouch for what is under it
+ * (martha#628 r=2).
  * @param {number | undefined} pid
- * @returns {{ frozen: number[], refusals: string[] }}
+ * @param {string | null} identity the start time the kernel held for `pid` when it was recorded
+ * @param {ProcessesOnThisMachine} processes
+ * @returns {{ frozen: { pid: number, identity: string }[], refusals: string[] }}
  */
-function frozenUnder (pid) {
-  /** @type {number[]} */
+function frozenUnder (pid, identity, processes) {
+  /** @type {{ pid: number, identity: string }[]} */
   const frozen = []
   /** @type {string[]} */
   const refusals = []
-  /** @param {number} at */
-  const walk = (at) => {
+  /** @param {number} at @param {string} itsIdentity */
+  const walk = (at, itsIdentity) => {
+    // The pid the question was asked about a moment ago may already be another process's: nothing of it is ours.
+    if (processes.identityOf(at) !== itsIdentity) return
     try {
       process.kill(at, 'SIGSTOP')
     } catch (error) {
@@ -629,10 +740,15 @@ function frozenUnder (pid) {
       if (/** @type {{ code?: unknown }} */ (error)?.code !== 'ESRCH') refusals.push(`pid ${at} could not be frozen: ${reason(error)}`)
       return
     }
-    frozen.push(at)
-    for (const child of childrenOf(at, refusals)) walk(child)
+    frozen.push({ pid: at, identity: itsIdentity })
+    for (const child of childrenOf(at, refusals)) {
+      // Its start time is held from the moment `pgrep` names it, so the kill that follows is the same process's.
+      const childIdentity = processes.identityOf(child)
+      if (childIdentity !== null) walk(child, childIdentity)
+    }
   }
-  if (pid) walk(pid)
+  if (pid && identity !== null) walk(pid, identity)
+  else if (pid) refusals.push(`the wrapper, pid ${pid}, was never recorded with a start time, so nothing under it was walked`)
   return { frozen, refusals }
 }
 
@@ -641,22 +757,25 @@ function frozenUnder (pid) {
  * the member's own process group where one was named. Every process under the wrapper is frozen before any of them is
  * killed, so a run that forks while it is walked cannot put a child out of reach: a run killed only with its wrapper
  * goes on writing where it was, which is a relay root made again after the tear-down removed it (martha#590).
+ *
+ * Nothing here signals a pid alone: each kill is sent only while the kernel still holds the process whose start time
+ * was held for it, so a pid the kernel has handed on is never killed, and a group is only signalled when its leader is
+ * still the process the member holds (martha#628).
+ *
+ * A group that was not signalled is not left silent either: its leader has ended or its number leads another process's
+ * group now, and the orphans left in it are beyond the walk, so whatever is still in it is refused by name. Killing it
+ * is wrong, because the group may be a stranger's; a run the tear-down never reached must not read as ended
+ * (martha#628 r=1).
  * @param {Member} member
+ * @param {ProcessesOnThisMachine} processes
  * @returns {string[]} what could not be done, if anything: the tear-down fails on it by name
  */
-export function killEvenIfGone (member) {
-  const { frozen, refusals } = frozenUnder(member.child.pid)
-  for (const pid of frozen) {
-    try {
-      process.kill(pid, 'SIGKILL')
-    } catch {
-      // That process is already gone.
-    }
-  }
-  try {
-    if (member.pid) process.kill(-member.pid, 'SIGKILL')
-  } catch {
-    // Its group is already gone.
+export function killEvenIfGone (member, processes) {
+  const { frozen, refusals } = frozenUnder(member.child.pid, member.childIdentity, processes)
+  for (const { pid, identity } of frozen) signalIfStillTheOne(processes, pid, identity, 'SIGKILL')
+  if (!signalItsGroup(processes, member.pid, member.identity, 'SIGKILL') && member.pid) {
+    const left = groupOf(member.pid, refusals)
+    if (left.length) refusals.push(`${member.name}, pid ${member.pid}, was not signalled: its group still holds ${left.length} process(es) (${left.join(', ')}), and its leader is not the process this run recorded`)
   }
   member.child.kill('SIGKILL')
   return refusals

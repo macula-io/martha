@@ -2,13 +2,14 @@
 //        node src/redo_the_generated_files_of_a_merge/main.ts --repository <path> --classify <path> <base> <ours> <theirs>
 //        node src/redo_the_generated_files_of_a_merge/main.ts --repository <path> --judge <merge-sha>
 //
-// Redoes the files a merge of two passed heads clashed in, when those are the ones nobody wrote by hand (martha#381): the
-// C4 picture is drawn again by the program that draws it, and package.json's host ceilings are merged — each at its base
-// plus what each review added — instead of taken from one side, while everything outside the map is what git's own merge
-// of the two sides writes there (martha#410). Any other path in the clash is left as it is and named.
+// Redoes the files a merge of two passed heads clashed in, when those are the ones nobody wrote by hand (martha#381,
+// martha#627): package.json's host ceilings are merged — each at its base plus what each review added — instead of
+// taken from one side, while everything outside the map is what git's own merge of the two sides writes there
+// (martha#410). Any other path in the clash is left as it is and named, a C4 picture included: since martha#627 a
+// picture is drawn at release and no change carries one, so a clash in it is a change nobody expected.
 //
 // Prints, on one line, the words a landing's commit records of the redo, such as
-// `assets/c4-context.svg (picture); package.json martha.hostCeilings (measured)`.
+// `package.json martha.hostCeilings (measured)`.
 // Exit 0 the clash was redone and nothing is unsettled; 1 it was not, in the words a landing prints when it stops; 2 it
 // could not be done. It never settles a path it does not name.
 //
@@ -19,7 +20,6 @@
 // - `--judge` takes one landing merge that clashed, and passes it, exit 0, only when it is what the redo makes and
 //   nothing more (./judge_a_landing_merge.ts); refused, exit 1, by name. The range gate asks it.
 
-import { spawnSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 
 import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -29,10 +29,7 @@ import { judgeALandingMerge } from './judge_a_landing_merge.ts'
 import { thePackageJsonOfAMerge, type ThePackageJsonAMergeBrings } from './the_ceilings_a_merge_brings.ts'
 import {
   aClashNotRedone,
-  aPictureRedone,
-  isAPictureRedrawn,
   noThreeStages,
-  THE_PICTURES_REDRAWN_AS,
   THE_WORDS_BETWEEN,
   theManifestAsGitNamesIt,
   theManifestIn,
@@ -55,14 +52,6 @@ function unsettledIn(repository: string): Step<readonly string[]> {
   return { ok: said.split('\n').filter((clashed) => clashed !== '') }
 }
 
-/** The pictures redrawn over the merged tree, or why they would not be. */
-function redrawThePictures(repository: string): Step<true> {
-  const [command, program] = THE_PICTURES_REDRAWN_AS
-  const ran = spawnSync(command, [program], { cwd: repository, encoding: 'utf8' })
-  if (ran.status !== 0) return { refused: `the picture would not be redrawn: ${saidBy(program, ran)}` }
-  return { ok: true }
-}
-
 /** package.json as the merge brings it: each ceiling at its base plus both raises, or why not. */
 function theManifestMerged(repository: string, the_manifest: string): Step<ThePackageJsonAMergeBrings> {
   const stages = [1, 2, 3].map((at) => gitSaid(repository, ['show', `:${String(at)}:${the_manifest}`]))
@@ -75,23 +64,22 @@ function theManifestMerged(repository: string, the_manifest: string): Step<ThePa
 
 /** Every path the clash left that the landing does not redo, in the order git named them. */
 function thePathsNotRedone(settled: readonly string[], the_manifest: string): readonly string[] {
-  return settled.filter((clashed) => clashed !== the_manifest && !isAPictureRedrawn(clashed))
+  return settled.filter((clashed) => clashed !== the_manifest)
 }
 
-/** A clash a landing redoes: the manifest among the paths, when it is one of them, and the pictures. */
+/** A clash a landing redoes: the manifest, when it is one of the clashed paths. Nothing else is redone. */
 interface TheClash {
   readonly manifest: string | undefined
-  readonly pictures: readonly string[]
 }
 
-/** The clash, split into the manifest and the pictures, or why it is not one a landing redoes. */
+/** The clash, as the manifest when that is the only path in it, or why it is not one a landing redoes. */
 function theClashIn(repository: string): Step<TheClash> {
   const settled = unsettledIn(repository)
   if ('refused' in settled) return settled
   const the_manifest = theManifestAsGitNamesIt(repository)
   const others = thePathsNotRedone(settled.ok, the_manifest)
   if (others.length > 0) return { refused: aClashNotRedone(others) }
-  return { ok: { manifest: settled.ok.includes(the_manifest) ? the_manifest : undefined, pictures: settled.ok.filter(isAPictureRedrawn) } }
+  return { ok: { manifest: settled.ok.includes(the_manifest) ? the_manifest : undefined } }
 }
 
 /** The redone paths marked settled in the index, so git no longer counts them unmerged. */
@@ -103,15 +91,13 @@ function thePathsSettled(repository: string, paths: readonly string[]): Step<tru
 
 /** The paths redone over the merged tree, with the words a landing's commit records of them. */
 function theClashRedone(repository: string, clash: TheClash): Step<readonly string[]> {
-  const drawn = clash.pictures.length === 0 ? { ok: true as const } : redrawThePictures(repository)
-  if ('refused' in drawn) return drawn
   const merged = clash.manifest === undefined ? { ok: undefined } : theManifestMerged(repository, clash.manifest)
   if ('refused' in merged) return merged
   if (merged.ok !== undefined) writeFileSync(theManifestIn(repository), merged.ok.text)
-  const settled = thePathsSettled(repository, [...clash.pictures, ...(clash.manifest === undefined ? [] : [clash.manifest])])
+  const settled = thePathsSettled(repository, clash.manifest === undefined ? [] : [clash.manifest])
   if ('refused' in settled) return settled
   const recorded = merged.ok === undefined ? [] : [merged.ok.recorded]
-  return { ok: [...clash.pictures.map(aPictureRedone), ...recorded] }
+  return { ok: [...recorded] }
 }
 
 /** Nothing the redo does not name is left unsettled: every path still in the clash is one it redid. */

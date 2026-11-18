@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { readLedger, type LedgerHost } from '../log_ledger/log_ledger.ts'
-import { OWNER_ASKS_STREAM, ASK_QUEUED, ASKS_SETTLED } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { OWNER_ASKS_STREAM, ASK_QUEUED, ASKS_SETTLED, OWNER_YES } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theLineToHandAtStart } from '../hand_a_member_its_crew_text/the_start_line.ts'
 import { theResumePrompt } from '../write_my_handover/write_my_handover.ts'
@@ -108,7 +108,7 @@ test('a brief\'s block is read whole: its goal, each criterion with its evidence
   assert.deepEqual(contract.acceptance, [
     { criterion: 'a brief with no contract is refused', evidence: { kind: 'test', of: 'src/keep_the_package_contract/keep_the_package_contract.node-test.ts' } },
     { criterion: 'the contract is handed at every start', evidence: { kind: 'ci', of: 'CI' } },
-    { criterion: 'the owner said the evidence is enough', evidence: { kind: 'owner_yes', of: '12' } },
+    { criterion: 'the owner said the evidence is enough', evidence: { kind: OWNER_YES, of: '12' } },
   ])
   assert.deepEqual(contract.allowed, ['push', 'handoff'])
   assert.deepEqual(contract.budget, { minutes: 120, 'tool calls': 30 })
