@@ -279,10 +279,10 @@ for (const direnv of direnvs.length === 0 ? [undefined] : direnvs) {
   for (const [name, group] of Object.entries(DOOR_GROUPS)) checkoutTests(direnv, `${name}; ${which}`, group)
 }
 
-/** The body a stand-in posts for its session's start: the shape the launcher's own tests answer with. */
 /** How a launched member ended, as the launcher tells it. */
 type StopOf = Awaited<(MemberStarted & { started: true })['stopped']>
 
+/** The body a stand-in posts for its session's start: the shape the launcher's own tests answer with. */
 const THE_STAND_INS_SESSION_START = { session_id: 'the-stand-ins', source: 'startup', hook_event_name: 'SessionStart', transcript_path: '/nowhere' }
 
 /**
