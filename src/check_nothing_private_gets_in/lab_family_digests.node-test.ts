@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -205,6 +205,15 @@ test('the kept file spells no family, is only its owner\'s, and keeping it again
   assert.notDeepEqual(after.key, before.key)
   assert.notDeepEqual([...after.digests], [...before.digests])
   assert.equal(labNamesIn(`${families[0]}07`, after).length, 1)
+})
+
+test('a config folder already there, opened wider, is narrowed to its owner alone when the families are kept (martha#731)', (t) => {
+  const { env } = aMachine(t, undefined)
+  const folder = dirname(labFamiliesFileIn(env)!)
+  mkdirSync(folder, { recursive: true, mode: 0o755 })
+  chmodSync(folder, 0o755)
+  assert.ok('kept' in keepLabFamilies(env, JSON.stringify([aFamily()]), randomBytes(KEY_BYTES)))
+  assert.equal(statSync(folder).mode & 0o777, 0o700)
 })
 
 test('only plain lowercase families, no longer than a machine name allows, are kept (martha#731)', (t) => {

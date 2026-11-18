@@ -10,7 +10,7 @@
 // That is a speed bump, not a wall: a member that sets out to can make a terminal
 // of its own. What the file is, and what it is not: ../check_nothing_private_gets_in/lab_family_digests.ts.
 
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 import { familiesToKeep, keptFileText } from '../check_nothing_private_gets_in/lab_family_digests.ts'
@@ -32,6 +32,8 @@ export const keepLabFamilies = (env: AnEnvironment, raw: string, key: Buffer): K
   const writing = `${file}.${process.pid}.writing`
   try {
     mkdirSync(dirname(file), { recursive: true, mode: FOLDER_MODE })
+    // A folder already there keeps its mode through mkdirSync: one opened wider is narrowed.
+    chmodSync(dirname(file), FOLDER_MODE)
     writeFileSync(writing, keptFileText(families, key), { mode: FILE_MODE, flag: 'wx' })
     renameSync(writing, file)
   } catch (error) {
