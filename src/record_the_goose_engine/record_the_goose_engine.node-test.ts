@@ -11,9 +11,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test, type TestContext } from 'node:test'
 
-import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
-import { engineFilesSaying } from '../know_the_goose_engines_facts/an_engine_source_from_its_facts.ts'
+import { engineFilesSaying, theOtherKindOf } from '../know_the_goose_engines_facts/an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { ENGINE_PARTS, ENGINE_PLACES, type EngineFacts } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -24,9 +23,7 @@ const { [NOTE]: _ignoredWhy, engine_commit: RECORDED_COMMIT, ...RECORDED_FACTS }
 /** A commit that is not the recorded one: the commit is where facts were read, not a fact. */
 const ANOTHER_COMMIT = [...RECORDED_COMMIT].reverse().join('')
 /** The recorded subagent vocabulary turned the other way: closed when it is open, open when it is closed. */
-const OTHER_SUBAGENT_MODELS: ModelVocabulary = RECORDED_FACTS.subagent_models.kind === OPEN_VOCABULARY
-  ? { kind: CLOSED_VOCABULARY, names: ['a-listed-model', 'another-listed-model'] }
-  : { kind: OPEN_VOCABULARY, names: [] }
+const OTHER_SUBAGENT_MODELS = theOtherKindOf(RECORDED_FACTS.subagent_models)
 
 /** Writes a tree that says `facts` under a fresh directory the test removes, and returns the directory. */
 function aCheckoutSaying(t: TestContext, facts: EngineFacts, drop: string | undefined = undefined): string {

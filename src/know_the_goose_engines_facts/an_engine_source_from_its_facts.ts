@@ -9,7 +9,7 @@
 
 import { dirname, join } from 'node:path'
 
-import { CLOSED_VOCABULARY } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { ENGINE_PLACES, GOOSE_CRATE, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
@@ -35,6 +35,13 @@ function platformExtensionMap(extensions: readonly PlatformExtension[]): Readonl
   ].join(''))
   const map = `let mut map = HashMap::new();\n\n${inserts.join('\n')}`
   return Object.assign({ [ENGINE_PLACES.platform_extensions]: map }, ...keyed.map(({ files }) => files)) as Record<string, string>
+}
+
+/** `models` turned to the other kind, closed when it is open and open when it is closed: the drift a test plants. */
+export function theOtherKindOf(models: ModelVocabulary): ModelVocabulary {
+  return models.kind === OPEN_VOCABULARY
+    ? { kind: CLOSED_VOCABULARY, names: ['a-listed-model', 'another-listed-model'] }
+    : { kind: OPEN_VOCABULARY, names: [] }
 }
 
 /** The delegate tool's schema as the engine writes it, its `model` a list when the vocabulary is closed. */

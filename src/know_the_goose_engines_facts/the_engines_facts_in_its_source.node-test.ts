@@ -4,9 +4,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
-import { anEngineSourceSaying, engineFilesSaying } from './an_engine_source_from_its_facts.ts'
+import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
 import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
@@ -14,9 +13,7 @@ import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, type EngineFacts } from './
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
 
 /** The recorded subagent vocabulary turned the other way: closed when it is open, open when it is closed. */
-const OTHER_SUBAGENT_MODELS: ModelVocabulary = RECORDED_FACTS.subagent_models.kind === OPEN_VOCABULARY
-  ? { kind: CLOSED_VOCABULARY, names: ['a-listed-model', 'another-listed-model'] }
-  : { kind: OPEN_VOCABULARY, names: [] }
+const OTHER_SUBAGENT_MODELS = theOtherKindOf(RECORDED_FACTS.subagent_models)
 
 test('a tree that says the recorded facts reads back as exactly those facts, every part read', () => {
   const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS)))
