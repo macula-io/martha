@@ -32,6 +32,21 @@ The contract also holds the words a host uses to say where a turn came from
 (`Arrival`, `TurnSource`, `TurnOrigin`). The publish gate's slices read them
 from here. The contract file imports nothing, and a test holds it to that.
 
+It also holds the words a host's adapter hands the core what its host reported
+in, so that one entry answers every host
+([`src/answer_what_a_host_reports`](../src/answer_what_a_host_reports/answer_what_a_host_reports.ts),
+#541):
+
+| Word | What it carries | Answered with |
+|---|---|---|
+| `AStartingSession` | the session, the outcome its host's own table gives the start event (`SessionStartOutcome`: `fresh`, `same_id` or `inherits`; none for an event the table does not declare, which has lost its record), and the predecessor the host names | `TheAnswerToAStart`: refused and why, or taken with what the session is handed as it starts |
+| `ArrivingTurn` | a turn's text, and its `Arrival` | `TheAnswerToATurn`: kept, or refused and why; a refused turn is never raised |
+| `AReviewTheHostSawFail` | the session, the turn's text, and the origin kind the engine stamped on it | nothing: a review the host reports failed is named on the owner's row and to the member, only for a session the entry holds |
+
+The entry never reads a host's own table. The adapter turns the host's event
+into its outcome and its prompt origin into an `Arrival`, and it hands the
+envelope its host writes for a failed agent to the launch as a value.
+
 The core imports nothing but its own slices and Node's standard library. A
 test reads every script file under `src/` (TypeScript and JavaScript, every
 extension) and names any other import, including a dynamic import whose name is
