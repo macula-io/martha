@@ -292,17 +292,9 @@ function aStoreThatRefusesTheAppendAt(refused: number, asItRefuses: () => void =
   }
 }
 
-/** The adapter a batch's two heads grow, and the picture they redraw: what a landing may redo, and what it may not. */
+/** The adapter a batch's two heads grow, and the C4 picture the release draws: neither is a file a landing redraws. */
 const AN_ADAPTER = 'src/an_adapter'
 const THE_PICTURE = 'assets/c4-context.svg'
-const REDRAWN = 'the picture, redrawn over the merged tree\n'
-
-/** A stand-in for the C4 program inside a fixture: it draws the picture into the tree it is run in, where the real one does. */
-const A_STAND_IN_FOR_THE_C4_PROGRAM = [
-  "import { writeFileSync } from 'node:fs'",
-  "import { join } from 'node:path'",
-  `writeFileSync(join(import.meta.dirname, '..', 'assets', 'c4-context.svg'), ${JSON.stringify(REDRAWN)})`,
-].join('\n')
 
 /** `n` lines the linter counts as code, under `name`, so a planted tree's count is a number the test knows. */
 const codeLines = (name: string, n: number): string =>
@@ -831,13 +823,12 @@ test('#381: two heads that both grow one adapter land together, its ceiling at t
   assert.ok(runs.npm.some((ran) => ran.args.includes('test')), 'a redone landing pushed without the suite')
 })
 
-test('#381: two heads that clash only in the picture and the ceilings land both, the picture redrawn from the merged tree', async (t) => {
+test('#381 #627: two heads that clash in the picture land the first, the second left out naming the picture, which no landing redraws', async (t) => {
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, {
     'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
     [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
     [THE_PICTURE]: 'the picture as the base draws it\n',
-    'architecture/c4_diagrams.ts': A_STAND_IN_FOR_THE_C4_PROGRAM,
   })
   const ours = aBranchWriting(fixture, 'passed0', base, {
     [`${AN_ADAPTER}/two.ts`]: codeLines('c', 1),
@@ -854,32 +845,29 @@ test('#381: two heads that clash only in the picture and the ceilings land both,
   const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
-  assert.ok('told' in landed, `a batch that clashes only in generated files was refused: ${wordsOf(landed)}`)
-  const branch = theLandBranchesOnOrigin(fixture)[0] ?? ''
-  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${branch}`)
-  assert.deepEqual(theMergesOf(fixture, branch, 2), [ours, theirs], 'the batch is not one merge per head, in order')
+  const words = aBatchLeftOneOut(fixture, landed, base, [ours], { package: at(packages, 1), pr: 282 })
+  // Since martha#627 the release draws the picture and no change carries one: a landing has no drawing to choose
+  // between two of them, so the head that brings the second is the builder's to settle.
   assert.ok(
-    runs.programs.some((ran) => ran.args[0] === THE_REDO_PROGRAM),
-    'the landing did not run the program that redoes the generated files',
+    words.includes(`clashes in ${THE_PICTURE}, which a landing does not redo`),
+    `the answer did not name the picture a builder has to settle, nor say a landing does not redo it: ${words}`,
   )
-  assert.equal(inTheOrigin(fixture, 'show', `${tip}:${THE_PICTURE}`), REDRAWN.trim(), 'the tip holds a picture the landing did not draw')
-  assert.equal(theCeilingOnTheTip(fixture, tip), 5, 'the tip does not hold the count the merged tree measures: 2 + 1 + 2')
-  assert.match(
-    inTheOrigin(fixture, 'log', '-1', '--format=%B', tip),
-    /Redone-generated: assets\/c4-context\.svg \(picture\); package\.json martha\.hostCeilings \(measured\)/,
-    'the landing commit does not say what it redid',
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${theLandBranchesOnOrigin(fixture)[0] ?? ''}`)
+  assert.equal(
+    inTheOrigin(fixture, 'show', `${tip}:${THE_PICTURE}`),
+    'the picture as ours draws it',
+    'the tip holds a picture a landing drew: the release draws them now, and a landing refuses one it did not draw',
   )
-  assert.equal(gitIn(fixture.clone, 'status', '--porcelain'), '', 'the clone was left holding a change after a redone landing')
-  assert.deepEqual(theLandBranchesIn(fixture.clone), [], 'a redone landing kept its land branch in the clone')
+  // The redo program is still asked, and it is what refuses: a picture is not a path it redraws.
+  assert.ok(runs.programs.some((ran) => ran.args[0] === THE_REDO_PROGRAM), 'the landing refused a clash without asking the redo program what it settles')
 })
 
-test('#381 #339: a clash that also touches a source file leaves that head out, naming the path it will not settle', async (t) => {
+test('#381 #339: a clash that also touches a source file leaves that head out, naming every path it will not settle', async (t) => {
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, {
     'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
     [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
     [THE_PICTURE]: 'the picture as the base draws it\n',
-    'architecture/c4_diagrams.ts': A_STAND_IN_FOR_THE_C4_PROGRAM,
   })
   const ours = aBranchWriting(fixture, 'passed0', base, {
     [`${AN_ADAPTER}/one.ts`]: `${codeLines('a', 2)}export const ours = 1\n`,
@@ -897,7 +885,10 @@ test('#381 #339: a clash that also touches a source file leaves that head out, n
 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
   const words = aBatchLeftOneOut(fixture, landed, base, [ours], { package: at(packages, 1), pr: 282 })
-  assert.ok(words.includes(`clashes in ${AN_ADAPTER}/one.ts, which a landing does not redo`), `the answer did not name the path a builder has to settle: ${words}`)
+  assert.ok(
+    words.includes(`clashes in ${THE_PICTURE}, ${AN_ADAPTER}/one.ts, which a landing does not redo`),
+    `the answer did not name every path a builder has to settle: ${words}`,
+  )
 })
 
 test('#381 #339: a package.json that differs outside the ceilings is not a generated file: that head is left out, named', async (t) => {
@@ -1202,14 +1193,14 @@ test('#339 T1: a head that clashes with three landings on main is named, each pa
   assert.ok(words.includes(`- clashes by hand: ${at(packages, 0)} (PR 281): `), `the dry run did not name the head that clashes by hand: ${words}`)
   assert.ok(words.includes(`${ONE_TOOL_FILE}, ${ONE_EXCEPTIONS_FILE} with PR 376`), `the two source files are not named with the landing that brought them: ${words}`)
   assert.ok(words.includes(`${A_RELAY_SCRIPT} with PR 396`), `the relay script is not named with the landing that brought it: ${words}`)
-  assert.ok(words.includes(`(it would redo ${THE_PICTURE} (picture))`), `the picture is not said to be redone: ${words}`)
-  assert.ok(!words.includes(`${THE_PICTURE} with`), `the picture, which the redo redraws, was named as a clash by hand: ${words}`)
+  assert.ok(words.includes(`${THE_PICTURE} with PR 392`), `the picture is not named with the landing that brought it, as a clash a builder settles since martha#627: ${words}`)
   assert.equal(whatTheCloneHolds(fixture), before, 'the dry run changed a ref, HEAD or the status of the clone')
   assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'the dry run pushed a land branch')
 })
 
-test('#339 T2: two heads that clash only in the picture are answered lands, picture redone, and nothing is written (mutants: ignore the generated list; write the branch)', async (t) => {
-  // The shape of PR 335 and PR 333 at 7283107: both redrew the picture, and nothing else of theirs clashes.
+test('#339 T2: two heads that clash only in the picture are answered left out, the picture named, since no landing redraws one (mutants: take a picture for generated; write the branch)', async (t) => {
+  // The shape of PR 335 and PR 333 at 7283107: both redrew the picture, and nothing else of theirs clashes. Since
+  // martha#627 the release draws it, so the second head is a builder's to settle by hand, not a drawing to choose.
   const fixture = aRepository(t)
   const base = theBaseTreeOfABatch(fixture, { [THE_PICTURE]: 'base\n' })
   const ours = aBranchWriting(fixture, 'passed0', base, { [THE_PICTURE]: 'ours\n', 'ours.txt': 'ours\n' })
@@ -1219,10 +1210,12 @@ test('#339 T2: two heads that clash only in the picture are answered lands, pict
   const before = whatTheCloneHolds(fixture)
 
   const forecast = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
+  const words = refusedLanding(forecast)
   assert.equal(whatTheCloneHolds(fixture), before, 'the dry run changed a ref, HEAD or the status of the clone while it chained a merge')
-  assert.ok('told' in forecast, `a batch that clashes only in the picture was refused by the dry run: ${wordsOf(forecast)}`)
-  assert.ok(forecast.told.includes(`- lands: ${at(packages, 0)} (PR 281)`), `the first head is not answered lands: ${forecast.told}`)
-  assert.ok(forecast.told.includes(`- lands, redone: ${at(packages, 1)} (PR 282): ${THE_PICTURE} (picture) (a forecast:`), `the second head is not answered lands, redone, as a forecast: ${forecast.told}`)
+  assert.ok(
+    words.includes(`- clashes by hand: ${at(packages, 1)} (PR 282): ${THE_PICTURE} with PR 281`),
+    `the second head is not answered left out with the picture named as a clash by hand: ${words}`,
+  )
 })
 
 /** Two heads whose package.json differ from the base in the ceilings, and in `scripts` when the test asks. */
