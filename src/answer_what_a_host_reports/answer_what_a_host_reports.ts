@@ -44,7 +44,6 @@ import {
 import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { approvedStartTreeOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { type HostSession, rememberSession, takeInTurn } from '../take_in_a_turn/take_in_a_turn.ts'
 
@@ -95,8 +94,11 @@ export interface ThePlacesAHostReportsOver {
    * by the gate's own call, so the entry carries the place without naming the audit, which only its five places may.
    */
   readonly audit?: ToolCall['audit']
-  /** The member's signed runs (martha#129); a member without them runs no shape. */
-  readonly signed_runs?: SignedRuns | undefined
+  /**
+   * The member's signed runs (martha#129); a member without them runs no shape. Only the half the entry calls is named
+   * here: the signed runs are host glue, which no slice imports, and the adapter hands its own table in.
+   */
+  readonly signed_runs?: { callAllowed(tool: string, input: Readonly<Record<string, unknown>>): void } | undefined
   /**
    * Why a call's input writes the owner's settings files (martha#122), or undefined: the adapter's own decision, closed
    * over the files its host reads, the launch's directory and the owner's home. Asked first of all.
