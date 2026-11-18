@@ -89,6 +89,8 @@ const digestOf = (layer) => `sha256:${createHash('sha256').update(layer).digest(
 export async function placeADryRelease ({ steps, layer, version, sha, home, xdgDataHome, nodeVersion }) {
   steps.checkNodeVersion(nodeVersion ?? process.versions.node)
   const places = steps.placesOnThisMachine(home, xdgDataHome)
+  // The machine's floor is read before anything is placed, where installRelease reads it (martha#659).
+  const held = await steps.machineFloor(places)
   let declared = ''
   const release = await steps.placeRelease({
     releases: places.releases,
@@ -97,7 +99,7 @@ export async function placeADryRelease ({ steps, layer, version, sha, home, xdgD
     accept: async (/** @type {string} */ tree) => { declared = await steps.declaredFloor(tree, version) }
   })
   await steps.swapLink(release, places.current)
-  const floor = steps.higherFloor(await steps.machineFloor(places), declared)
+  const floor = steps.higherFloor(held, declared)
   await steps.holdTheFloor(places, floor)
   const command = await steps.linkCommand({ release, places })
   const lines = [
