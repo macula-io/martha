@@ -22,7 +22,7 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { reviewSpawnsRemembered, type TheReportTheHostWrites, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { sessionRecordsIn, type SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { answersOver, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
 
 /** A host this file makes up: its own names for the envelope it writes when an agent fails. */
@@ -84,10 +84,33 @@ function aCrew(says: TheCrewSays): CrewTools {
   }
 }
 
+/** The sessions whose next flush, or next check, of their record fails once, as a full disk would refuse it. */
+interface FailingOnce {
+  readonly flush: Set<string>
+  readonly check: Set<string>
+}
+
+/** The record `records` keeps, but a session named in `failing` has its next flush or check refused, once. */
+function recordsFailingOnce(records: SessionRecords, failing: FailingOnce): SessionRecords {
+  const once = async (sessions: Set<string>, session_id: string, work: () => Promise<void>): Promise<void> => {
+    if (sessions.delete(session_id)) throw Object.assign(new Error('the disk is full'), { code: 'ENOSPC' })
+    return work()
+  }
+  return {
+    load: (session_id) => records.load(session_id),
+    get store() {
+      return records.store
+    },
+    flush: (session_id) => once(failing.flush, session_id, () => records.flush(session_id)),
+    check: (session_id) => once(failing.check, session_id, () => records.check(session_id)),
+  }
+}
+
 interface AnEntry {
   readonly answers: TheAnswersOfOneLaunch
   readonly told: Told
   readonly reviews: TheReviewSpawns
+  readonly failing: FailingOnce
 }
 
 function anEntry(t: TestContext, says: TheCrewSays = {}): AnEntry {
@@ -100,8 +123,9 @@ function anEntry(t: TestContext, says: TheCrewSays = {}): AnEntry {
   mkdirSync(rows, { mode: 0o700 })
   const told: Told = { rows: [], member: [] }
   const reviews = reviewSpawnsRemembered()
+  const failing: FailingOnce = { flush: new Set(), check: new Set() }
   const answers = answersOver({
-    records: sessionRecordsIn(rowStreamsDirectory(rows)),
+    records: recordsFailingOnce(sessionRecordsIn(rowStreamsDirectory(rows)), failing),
     launch: { host: CLAUDE_CODE, launch_dir: checkout, stop_dir: home, approved_fingerprints: [] },
     machine: thisMachine,
     binder: bindNothing,
@@ -112,7 +136,7 @@ function anEntry(t: TestContext, says: TheCrewSays = {}): AnEntry {
     failed_review_report: A_MADE_UP_REPORT,
     told: { theRow: (line) => void told.rows.push(line), theMember: async (line) => void told.member.push(line) },
   })
-  return { answers, told, reviews }
+  return { answers, told, reviews, failing }
 }
 
 /** The inbound paths a session's record holds, in the order it took them in. */
@@ -208,4 +232,47 @@ test('#541 1b: a turn whose origin is not the host\'s report names nothing, what
   await answers.aReviewTheHostSawFail({ session_id: 'session-a', text: theEnvelopeFor(THE_REVIEWS_CALL), origin_kind: 'typed-by-the-owner' })
 
   assert.deepEqual(told, { rows: [], member: [] }, 'a turn the engine never stamped as its report named a review failed')
+})
+
+/** A session the entry started, whose record then could not be kept for a turn: the reason the entry gave. */
+async function aSessionBrokenByAKeep(entry: AnEntry, session_id: string): Promise<string> {
+  await entry.answers.aSessionStarted({ session_id, outcome: 'fresh' })
+  entry.failing.flush.add(session_id)
+  const answer = await entry.answers.aTurnArrived(session_id, { text: 'a ring', arrival: { source: 'ring' } })
+  assert.ok('refused' in answer, 'a turn whose record could not be kept was answered kept')
+  return answer.refused
+}
+
+test('#541 1b: a session whose record could not be kept is refused a new start, with that reason, and no record is begun', async (t) => {
+  const entry = anEntry(t)
+  const why = await aSessionBrokenByAKeep(entry, 'session-a')
+
+  // The disk takes the record again from here, so only the entry's own memory of the break can refuse this start.
+  const again = await entry.answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+
+  assert.deepEqual(again, { refused: why }, 'a session this launch can no longer vouch for was started again from a clean record, dropping what it took in')
+  assert.equal(entry.answers.holds('session-a'), false, 'the refused start began a record for the session')
+})
+
+test('#541 1b: a turn in a session whose record could not be kept is refused with that reason, not as one never started (martha#593)', async (t) => {
+  const entry = anEntry(t)
+  const why = await aSessionBrokenByAKeep(entry, 'session-a')
+
+  const next = await entry.answers.aTurnArrived('session-a', { text: 'hello', arrival: { source: 'owner_typed' } })
+
+  assert.deepEqual(next, { refused: why }, 'the owner was not told why the session stopped being answered for')
+})
+
+test('#541 1b: a record that can no longer be vouched for breaks its session, so the next turn is refused with that reason (martha#593)', async (t) => {
+  const entry = anEntry(t)
+  await entry.answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+  const session = entry.answers.named('session-a')
+  assert.equal(typeof session, 'object', 'the entry holds no session it just started')
+  entry.failing.check.add('session-a')
+
+  const why = typeof session === 'object' ? await entry.answers.vouchFor(session) : session
+  assert.equal(typeof why, 'string', 'a record the store could not check was vouched for')
+
+  assert.equal(entry.answers.brokenBecause('session-a'), why, 'the session stayed live after its record was found untrustworthy')
+  assert.deepEqual(await entry.answers.aTurnArrived('session-a', { text: 'hello', arrival: { source: 'owner_typed' } }), { refused: why })
 })

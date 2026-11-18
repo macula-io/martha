@@ -497,10 +497,13 @@ async function sessionStarted(state: RelayState, body: Body): Promise<RelayReply
   return answered(answer.taken === '' ? TAKEN : { taken: 1, handed: answer.taken })
 }
 
-/** The host's start in the contract's words: the outcome its own table gives the event, never the event's name (martha#541). */
+/**
+ * The host's start in the contract's words: the outcome its own table gives the event, never the event's name
+ * (martha#541). The hook names no predecessor (`sessionStartOf` reads only the event and the session), so none is
+ * passed on: the one start that inherits is the crew's refresh, and the entry makes that one itself.
+ */
 function aStartingSessionOf(reported: SessionStart): AStartingSession {
-  const outcome = outcomeOfAStart(CLAUDE_CODE_SESSION_EVENTS, reported.event)
-  return reported.predecessor_id === undefined ? { session_id: reported.session_id, outcome } : { session_id: reported.session_id, outcome, predecessor_id: reported.predecessor_id }
+  return { session_id: reported.session_id, outcome: outcomeOfAStart(CLAUDE_CODE_SESSION_EVENTS, reported.event) }
 }
 
 async function promptSubmitted(state: RelayState, body: Body): Promise<RelayReply> {
