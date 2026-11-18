@@ -230,7 +230,7 @@ test('#607: the ledger names every tool the crew registers, and no tool the crew
  */
 const ASKED_BY_THE_CORE: readonly string[] = [HOLD_REVIEWS]
 
-test("#607: every act the table can grant is asked by some tool or read by the core, and a tool asks only acts the table has", () => {
+test("#607: every act the table can grant is asked by some tool, and a tool asks only acts the table has", () => {
   const asked = new Set(Object.values(EVERY_CREW_TOOL).flatMap((line) => ('asks' in line ? line.asks : [])))
   for (const act of ACTS) assert.ok(asked.has(act) || ASKED_BY_THE_CORE.includes(act), `act ${act} is asked by no tool and read by nothing`)
   for (const act of asked) assert.ok((ACTS as readonly string[]).includes(act), `a tool says it asks ${act}, which is not an act the table has`)
