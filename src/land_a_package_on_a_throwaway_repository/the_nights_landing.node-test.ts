@@ -53,7 +53,7 @@ const PUSHED_AT = SETTLED_AT + 5_000
 
 /** The owner_asks stream: ask 0 queued, taken, and settled with `yes`. */
 const theAsks = (yes: readonly number[] = [0], at = SETTLED_AT, question = QUESTION): readonly StoredRow[] => [
-  { position: 0, row: { kind: ASK_QUEUED, question, asked_by: 'ada', since: SETTLED_AT - 90_000 } },
+  { position: 0, row: { kind: ASK_QUEUED, question, asked_by: 'ada', since: SETTLED_AT - 73_000 } },
   { position: 1, row: { kind: ASKS_TAKEN, asks: [0], at: at - 1_000, by: 'owner', session: 's' } },
   { position: 2, row: { kind: ASKS_SETTLED, batch: 1, yes, at, by: 'owner' } },
 ]
