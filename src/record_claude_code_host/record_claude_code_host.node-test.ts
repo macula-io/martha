@@ -178,6 +178,13 @@ function guardModules(guard: GuardCalls, fileGuard: GuardCalls = FILE_GUARD, mem
   return [importing(guard.guard_calls), ...modulesOf(guard, MANAGED_EXPORTS), fileGuardModule(fileGuard, memory), ...modulesOf(fileGuard, FILE_MODE_EXPORTS)].join('')
 }
 
+/** The two places the host reads its sign-in store variable (martha#602), in the shapes it spells them. */
+const signInParts = (variable: string): string =>
+  [
+    `function i5(){let n=process.env.${variable};if(n!==void 0)return(n||s(u(),".claude")).normalize("NFC");return Ye()}`,
+    `function TNe(n=""){let e=process.env.${variable},t=e!==void 0?!e:!process.env.CLAUDE_CONFIG_DIR,r=e;return r}`,
+  ].join(';')
+
 
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
   session_start_schema: RECORDED_HOST.session_start_schema,  prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
@@ -195,6 +202,7 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   ...RULE_PARTS,
   ...DIALOG_PARTS,
   ...REPORT_PARTS,
+  sign_in_store_variable: signInParts(RECORDED_HOST.sign_in_store_variable),
   // Last, so the import of what the managed-folder guard calls is in the loader's module, before the first module of
   // its own; the memory guard restated by hand sits in a module of its own among them (martha#438).
   guards: guardModules(GUARD),
@@ -262,10 +270,28 @@ test('a host the recorder cannot read fails the check, naming the part', (t) => 
   assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: prompt origins\n`)
 })
 
+test('a host that picks its sign-in store by another variable fails the check naming the field, and one whose two rules disagree cannot be read (martha#602)', (t) => {
+  const renamed = check(hostHolding(t, { ...RECORDED_PARTS, sign_in_store_variable: signInParts('ANOTHER_STORE_DIR') }), RECORDED_HOST.host_version)
+  assert.equal(renamed.status, 1)
+  assert.equal(renamed.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: sign_in_store_variable\n`)
+  const disagreeing = signInParts(RECORDED_HOST.sign_in_store_variable).replace(/(process\.env\.)[A-Z_]+(,)/, '$1ANOTHER_STORE_DIR$2')
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, sign_in_store_variable: disagreeing }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: sign-in store\n`)
+})
+
+/**
+ * A folder kind no host loads, planted to make the markdown folders differ. It was `output-styles` until 2.1.327 began
+ * loading that one itself, and a planted kind the host already loads adds nothing, so the check stayed green
+ * (martha#624). The test below holds it outside the recording, so a host that ships it fails there by name.
+ */
+const A_KIND_NO_HOST_LOADS = 'planted-kind-no-host-loads'
+
 test('a host whose frontmatter pattern, markdown folders or output-style schema differ fails the check, naming the field (martha#146)', (t) => {
+  assert.ok(!RECORDED_HOST.markdown_kinds.includes(A_KIND_NO_HOST_LOADS), `the recorded host loads ${A_KIND_NO_HOST_LOADS}, so planting it changes nothing; plant another kind`)
   for (const [field, planted] of [
     ['frontmatter_pattern', MARKDOWN_PARTS.frontmatter_pattern?.replace('\\s*\\n(', '[ \\t]*\\n(')],
-    ['markdown_kinds', `${MARKDOWN_PARTS.markdown_kinds ?? ''};Wq("output-styles",0)`],
+    ['markdown_kinds', `${MARKDOWN_PARTS.markdown_kinds ?? ''};Wq("${A_KIND_NO_HOST_LOADS}",0)`],
     ['output_style_schema', MARKDOWN_PARTS.output_style_schema?.replace('"force-for-plugin":', 'hooks:Jq().optional(),"force-for-plugin":')],
   ] as const) {
     assert.notEqual(planted, MARKDOWN_PARTS[field], `the planted ${field} differs`)

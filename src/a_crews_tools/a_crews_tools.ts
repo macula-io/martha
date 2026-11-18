@@ -24,7 +24,7 @@ import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/c
 import { THE_CHANNEL_READ_ASK, theChannelReadAsk } from '../keep_the_crew_channel/the_channel_read.ts'
 import { LOG_A_MILESTONE_TOOL, NOTE_WHAT_BECAME_TOOL, WHAT_WAS_SENT_TOOL, logTheMilestone, noteTheActsOutcome, whatTheMemberSent } from '../keep_the_ledger/the_ledger_tools.ts'
 import { KEEP_THE_CONTRACT_TOOL, keepTheContract } from '../keep_the_package_contract/the_contract_tools.ts'
-import { theNewestContractOf } from '../keep_the_package_contract/keep_the_package_contract.ts'
+import { theNewestContractOrWhy } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import { THE_OWNERS_TODO_ASK, addAnAct, closeAnAct } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { OWNER_TODO_ADD_TOOL, OWNER_TODO_DONE_TOOL, keepTheOwnersList, startSweeping, theOwnersTodoAsk } from '../keep_the_owners_todo_list/the_todo_tools.ts'
 import { closeAStandingItem, recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
@@ -413,18 +413,17 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
   }
 }
 
-/** Why the ledger could not answer, in its own words: an error's message, or whatever was thrown. */
-const theWordsOfAReason = (why: unknown): string => (why instanceof Error ? why.message : String(why))
-
 /**
- * What the package this member holds says about this call (martha#513 slice 2), read from the two places that already
- * know it: the member's own dashboard row says which package it holds, and the package's ledger says which contract it
- * is on.
+ * What the package this member holds says about this call (martha#513 slice 2, martha#597), read from the two places
+ * that already know it: the member's own dashboard row says which package it holds, and the package's ledger says which
+ * contract it is on.
  *
- * The acts are read first and the ledger only for an act: a contract refuses nothing that is no act, so a call that is
- * none is answered without a read at all. A ledger that cannot answer for the contract comes back as that rather than
- * as a throw, so one unreadable row refuses the act it cannot judge and never the member's every call — its handover
- * among them (round 2).
+ * A package with no version at all answers "none recorded", whatever the call is: none of its work runs until a
+ * contract is kept (martha#597), so the act table is not consulted first for it — a call that is no act is refused too.
+ * A ledger that cannot answer for the contract comes back as that rather than as a throw, and keeps slice 2's rule: one
+ * unreadable row refuses the act it cannot judge and never the member's every call, its handover among them. For a
+ * readable ledger, the acts are read first and the version's own acts are answered only for an act: a contract refuses
+ * nothing that is no act.
  */
 async function theContractTheMemberHolds(
   places: CrewToolPlaces,
@@ -433,16 +432,16 @@ async function theContractTheMemberHolds(
 ): Promise<TheContractHanded> {
   const held_package = places.beats.read(places.member)?.holds ?? ''
   if (held_package === '') return undefined
-  if (theActsOfACall(call, held_package, names.ownNameOf).length === 0) return undefined
-  try {
-    const newest = await theNewestContractOf(places.ledger, held_package)
-    if (newest === undefined) return undefined
-    const { version, contract } = newest
-    const allowed: readonly AContractAct[] = contract.kind === 'bounded' ? CONTRACT_ACTS.filter((act) => contract.allowed.includes(act)) : []
-    return { package: held_package, version, kind: contract.kind, allowed }
-  } catch (why) {
-    return { package: held_package, why: theWordsOfAReason(why) }
+  const read = await theNewestContractOrWhy(places.ledger, held_package)
+  if ('why' in read) {
+    return theActsOfACall(call, held_package, names.ownNameOf).length === 0 ? undefined : { package: held_package, why: read.why }
   }
+  const newest = read.newest
+  if (newest === undefined) return { package: held_package }
+  if (theActsOfACall(call, held_package, names.ownNameOf).length === 0) return undefined
+  const { version, contract } = newest
+  const allowed: readonly AContractAct[] = contract.kind === 'bounded' ? CONTRACT_ACTS.filter((act) => contract.allowed.includes(act)) : []
+  return { package: held_package, version, kind: contract.kind, allowed }
 }
 
 /**
@@ -706,11 +705,14 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [WRITE_MY_HANDOVER_SCHEMA.name]: async (args) =>
       theHandoverToolOver(theHandoverAsked(places, state, theRootsInForce(places.settings?.volatile_paths ?? [], places.volatile_roots ?? [])), args),
     [REFRESH_THIS_SESSION]: async (args) => theRefreshAskedOf(places, args),
-    [VERIFY_RANGE_TOOL.name]: (args) => actingOn(theRangeACallNames(args), (on, asked) => verifyTheRangeOver(actingHost(on), asked)),
+    [VERIFY_RANGE_TOOL.name]: (args) =>
+      actingOn(theRangeACallNames(args), async (on, asked) =>
+        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), { member: places.member, declaration: on.settings }, asked)),
     [LAND_BATCH_TOOL.name]: (args) =>
       actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry)),
     [FAST_FORWARD_TOOL.name]: (args) =>
-      actingOn(theFastForwardACallNames(args), (on, asked) => fastForwardOntoTheApprovedTipOver(actingHost(on), places.member, asked)),
+      actingOn(theFastForwardACallNames(args), async (on, asked) =>
+        on.settings === undefined ? { refused: NO_ACTING_PLACE } : fastForwardOntoTheApprovedTipOver(actingHost(on), places.member, asked, on.settings)),
     [WORKTREE_OPEN_TOOL.name]: async (args) => aWorktreeTool(places, openAWorktree, args),
     [WORKTREE_FINISH_TOOL.name]: async (args) => aWorktreeTool(places, finishAWorktree, args),
     [OWNER_TODO_ADD_TOOL.name]: declaring(places, async (declared, args) => keepTheOwnersList(theOwnersListAsked(places, declared.settings), () => addAnAct(places.ledger, args, places.member))),

@@ -1,0 +1,49 @@
+# Engine drift (macula-io/martha#541, package 10): the committed recording of the Goose engine still says what the
+# engine's source says at the tip of the fork, macula-apps/martha-engine. Any fact that differs fails, the version
+# alone included, naming the fact. A fork commit that moves no fact passes; the log names both commits.
+#
+# When it runs: daily, by hand, on every push to main, and on PRs that touch the recording, its reader, its recorder or
+# this check. Not on every PR: a fork landing is an event in nobody's change, and it must not turn every open PR red.
+# THE FIX IS A RE-RECORD, NOT A RETRY:
+#   npm run record:goose-engine -- <a checkout of the engine> <its commit>
+# then a PR with whatever the named facts call for. prove_the_recorded_engine_is_current.sh says how.
+#
+# A failed scheduled or main run stays red, and that is the whole signal: it names the versions, the commits and the
+# facts that differ, and the Supervisor routes the re-record. The job opens no issue and writes nothing: its token is
+# read-only (the same rule as host-drift.yml, martha#139).
+#
+# That the check can fail at all, and that it reads the engine's real source at the recorded commit, is proven on
+# every PR by ci.yml's `engine-drift-bites` job.
+
+name: engine drift
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'src/know_the_goose_engines_facts/**'
+      - 'src/record_the_goose_engine/**'
+      - 'prove_the_recorded_engine_is_current/**'
+      - '.github/workflows/engine-drift.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: the recording says what the engine says
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm ci
+      - name: the recording matches the tip of the engine fork
+        run: prove_the_recorded_engine_is_current/prove_the_recorded_engine_is_current.sh "${{ runner.temp }}/engine-drift"

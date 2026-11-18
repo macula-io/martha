@@ -66,6 +66,13 @@ export function streamDirectoryNameOf(stream: string): string {
   return `${STREAM_MARK}${Buffer.from(stream, 'utf8').toString('base64url')}`
 }
 
+/** The stream a directory under the rows directory holds, or undefined for a name no stream is kept under. */
+export function streamOfDirectoryName(name: string): string | undefined {
+  if (!name.startsWith(STREAM_MARK)) return undefined
+  const stream = Buffer.from(name.slice(STREAM_MARK.length), 'base64url').toString('utf8')
+  return streamDirectoryNameOf(stream) === name ? stream : undefined
+}
+
 /** The file a row at this position is kept in. */
 export function rowFileNameOf(position: number): string {
   return `${position}${ROW_SUFFIX}`

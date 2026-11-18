@@ -326,6 +326,8 @@ export interface TheOwnersDefaultAtLaunch {
    * have to undo made no switch, so there is no record to finish. */
   readonly owners: OwnersDefaultPlace | Refused
   readonly beats: DashboardStore
+  /** Whether a config folder a record names is still there: a member's own folder goes with its launch (martha#602). */
+  readonly stillThere: (config_dir: string) => boolean
 }
 
 /**
@@ -345,6 +347,13 @@ export async function finishTheOwnersDefaultAtLaunch(at: TheOwnersDefaultAtLaunc
   if (current.kind === 'unreadable') return []
   const marker = current.kind === 'switched' ? current.marker : current.last_marker
   if (marker === null || marker.settings === undefined) return []
+  // A record on a folder that is gone has nothing left to put back: above all a switch guarded in a member's own config
+  // folder (martha#602) that a killed launch left open, since that folder goes with its launch. It is closed rather than
+  // told to the owner at every launch after it.
+  if (!at.stillThere(marker.settings.config_dir)) {
+    theOwnersDefaultKept(at.host, at.member, marker, null)
+    return []
+  }
   const after = await finishAnUnfinishedSwitch(at.owners, marker.settings)
   theOwnersDefaultKept(at.host, at.member, marker, after.record)
   if (after.why === '') return []

@@ -74,8 +74,14 @@ export const HANDOVER_CEILING_MINUTES_MOST = 60
  */
 export const RESTART_MEMBER = 'restart_member'
 
+/**
+ * The act whose yes a landing on a default branch stands on (martha#605): granted to the owner, the landing needs an ask
+ * the owner said yes to; granted to a role, a member of that role says it by landing.
+ */
+export const APPROVE_LANDING = 'approve_landing'
+
 /** The acts a mode's table assigns, in business words. */
-export const ACTS = ['assign_work', 'approve_landing', 'resume_parked_work', OFFER_OWNER_ASKS, RESTART_MEMBER] as const
+export const ACTS = ['assign_work', APPROVE_LANDING, 'resume_parked_work', OFFER_OWNER_ASKS, RESTART_MEMBER] as const
 export type Act = (typeof ACTS)[number]
 
 /**
@@ -207,7 +213,8 @@ const noLayout = (why: string): WhatACheckoutProves => ({ layout: null, said: `N
  */
 export function workspaceLayoutOf(root: string, repo: string | undefined, origin: string | null): WhatACheckoutProves {
   if (repo === undefined) {
-    const why = origin === null ? `${root} names no origin remote` : `the origin of ${root}, ${JSON.stringify(origin)}, names no repository as org/name`
+    // The origin is not quoted back: it can carry a token in its userinfo, and this line is printed.
+    const why = origin === null ? `${root} names no origin remote` : `the origin of ${root} names no repository as org/name`
     return noLayout(why)
   }
   if (`${basename(dirname(root))}/${basename(root)}` !== repo) return noLayout(`${root} does not sit at <clones>/${repo}`)
@@ -253,7 +260,9 @@ export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = 
  * the same two names, so a crew overrides a shipped text by putting a file of the same name in the same place.
  */
 export const ROLE_TEXTS_DIRECTORY = 'roles'
-export const MODE_TEXTS_DIRECTORY = 'modes'/** A member's name: what a crew calls it, and what its branches start with. */
+export const MODE_TEXTS_DIRECTORY = 'modes'
+
+/** A member's name: what a crew calls it, and what its branches start with. */
 export const MEMBER_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
 
 /** The one rule member names are compared by (martha#528), held in ./member_names.ts so a slice this one imports can use it. */

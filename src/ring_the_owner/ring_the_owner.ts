@@ -115,15 +115,20 @@ const ASKING = 'needs-you'
  * "needs you", the notification's own close when the change is out of it and takes a shown notification down (martha#574,
  * T5), and nothing at all on every other beat (martha#313 test 6), with the bells off (test 7), or with no terminal of the
  * owner's to ring (test 7). A close is not a bell: the bell rings once, on the way in.
+ *
+ * The owner's own mute (martha#371) silences the way in, and only the way in: a member muted while its ask is open still
+ * has its notification taken down when the ask is answered, because a mute is a silence and never a notification left
+ * standing on the owner's desktop with no way to explain itself.
  */
 export function theBellsFor(
   before: DashboardRow | null,
   after: DashboardRow,
   bells: TheBellsSwitch,
   onTheOwnersTerminal: boolean,
+  muted: boolean,
 ): string {
   if (!onTheOwnersTerminal) return ''
-  if (isTheFirstChangeIntoAsking(before, after)) return bellBytes(bells, after)
+  if (isTheFirstChangeIntoAsking(before, after)) return muted ? '' : bellBytes(bells, after)
   if (isTheChangeOutOfAsking(before, after)) return bells.notify ? theCloseOf(before.member) : ''
   return ''
 }

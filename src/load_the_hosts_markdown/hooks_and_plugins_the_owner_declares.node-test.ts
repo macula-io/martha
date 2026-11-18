@@ -7,8 +7,8 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { SYNC_OFF_SETTING, HOOKS_SPELLINGS, hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, PLUGIN_DIRS_VARIABLE, pluginDirsIn, SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CONFIG_DIR_VARIABLE, SYNC_OFF_SETTING, HOOKS_SPELLINGS, hooksAndPluginsDeclaredIn, hooksInFrontmatterOf, PLUGIN_DIRS_VARIABLE, pluginDirsIn, SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from './hooks_and_plugins_the_owner_declares.ts'
+import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch, markdownFolders } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { USER_SETTINGS_FILE } from './settings_env_reaching_servers.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -37,6 +37,20 @@ test(`a plugin folder in the file's env (${PLUGIN_DIRS_VARIABLE}) is refused, na
   const refusal = hooksAndPluginsDeclaredIn(file({ env: { [PLUGIN_DIRS_VARIABLE]: '/somewhere/plugins' } }))
   assert.ok(refusal?.includes(USER) && refusal.includes(PLUGIN_DIRS_VARIABLE), refusal ?? 'no refusal')
   assert.equal(hooksAndPluginsDeclaredIn(file({ env: { [PLUGIN_DIRS_VARIABLE]: '  ' } })), undefined)
+})
+
+test(`a file's env naming ${CONFIG_DIR_VARIABLE} or the sign-in store variable is refused, set at all, naming the file and each (martha#602)`, () => {
+  const store = CLAUDE_CODE_SIGN_IN_STORE_VARIABLE
+  for (const [env, named] of [
+    [{ [CONFIG_DIR_VARIABLE]: `/owner/${CLAUDE_FOLDER}` }, [CONFIG_DIR_VARIABLE]],
+    [{ [store]: `/owner/${CLAUDE_FOLDER}` }, [store]],
+    // Empty still counts: an empty sign-in store variable is itself a choice of store, and the member's is the launcher's.
+    [{ [CONFIG_DIR_VARIABLE]: '', [store]: '' }, [CONFIG_DIR_VARIABLE, store]],
+  ] as const) {
+    const refusal = hooksAndPluginsDeclaredIn(file({ env }))
+    assert.ok(refusal?.includes(USER) && named.every((name) => refusal.includes(`env.${name}`)), refusal ?? `no refusal for ${JSON.stringify(env)}`)
+  }
+  assert.equal(hooksAndPluginsDeclaredIn(file({ env: { [`${CONFIG_DIR_VARIABLE}_NOT`]: '/x' } })), undefined)
 })
 
 test('a hooks or enabledPlugins value of no known shape is refused, naming the file and the key', () => {

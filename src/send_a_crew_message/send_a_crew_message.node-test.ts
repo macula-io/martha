@@ -21,6 +21,7 @@ import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { appendToTheChannel, readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { readLedger, ledgerStreamOf, noteRecovery } from '../log_ledger/log_ledger.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { addresseesOf, CREW_SAY_DESCRIPTION, NOBODY_TO_REPORT_TO, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
@@ -413,9 +414,12 @@ test('#314: the roots a crew declares are the ones the note reads, and a root it
 
 test('#314: a crew that declares no root is warned on the machine roots the launch hands in', async (t) => {
   const crew = crewOverADeclaration(t, DECLARATION, [RUNTIME])
-  const answered = await crew.answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: `the log is at ${RUNTIME}/relay.sock` }, 'session-314')
+  const answered = await crew.answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: `the log is at ${join(RUNTIME, RELAY_SOCKET_NAME)}` }, 'session-314')
   assert.ok('answer' in answered, `the send was not answered: ${JSON.stringify(answered)}`)
-  assert.match(answered.answer, new RegExp(`${RUNTIME}/relay\\.sock does not survive`), `the machine root was not read: ${answered.answer}`)
+  assert.ok(
+    answered.answer.includes(`${join(RUNTIME, RELAY_SOCKET_NAME)} does not survive`),
+    `the machine root was not read: ${answered.answer}`,
+  )
 })
 
 test('#314: a message that cites no path a reboot deletes is answered exactly as before', async (t) => {

@@ -19,12 +19,24 @@
 # the image is the one the installer's engines range declares. Each major's image is pinned by digest in IMAGE_PINS;
 # a major with no pin is refused before anything runs, so a Node bump cannot quietly install on another image.
 #
-# Today the registry carries no release, so a run reaches the installer and stops on its own words ("carries no
-# version"). That is the expected end, exit 3, and nothing was installed: it is never a passed install.
+# A registry that carries no release stops the run at the installer, on the installer's own words ("carries no
+# version"): exit 3, and nothing was installed, so it is never a passed install.
 #
-# The member half -- Claude Code signed in inside the container, a member that answers, an ungated outsider's text
-# refused (martha#2) -- needs the owner at the terminal. This script claims none of it: when the install half passes,
-# the run stops at the member step, says so, and removes the container (exit 4). No member is claimed.
+# The member half (martha#244) follows in the same container. Claude Code goes in at the version the INSTALLED release
+# is recorded against (its own src/claude_code_host/recorded_claude_code_host.json, read inside the container from the
+# tree the installed command runs from, never this checkout's: martha#636), and a stranger's checkout is made: a git
+# repository holding one README that reads as an outsider's report and asks for one shell command. The owner's sign-in
+# is the run's one manual act, and it comes after the owner's approval: `martha approve` refuses anything but a
+# terminal (martha#306), so the one command the run prints approves the crew, then opens Claude Code inside the
+# container, in that checkout, and waits until the session the owner signed in with has ended with a sign-in in
+# place. It then starts the member by its own command, `martha start builder`, on a terminal it drives from here, and
+# types the owner's turn: read the README and carry out its command. What the member did is read where the host itself
+# keeps it, its transcript under the container's home, never from the screen, so a turn the host never took is seen as
+# never taken.
+# A member is proven when the transcript holds the owner's turn, an answer, the README read as a tool's result, and the
+# README's command asked for as a shell call, and when the file that command makes is there afterwards: the strict
+# shell gate is the owner's switch, off by default (martha#259), so the member keeps its shell. The window the owner
+# signs in within ends in exit 4, and nothing is claimed of a member.
 #
 # The image is fetched by its digest in a step of its own, before the container is named, so the create that follows has
 # nothing left to fetch and is over in moments, not minutes.
@@ -38,9 +50,10 @@
 # made. ssh's own 255, and 128 and above (the client killed by a signal), are no answer at all. Everything written in it
 # goes with it; the image the first run pulls stays in the host's own store, which belongs to the host and not to a run.
 #
-# Exit: 1 a step failed, the tear-down did, or the run was interrupted; 2 the arguments were refused and nothing ran;
-# 3 the registry carries no release, so the installer stopped on its own words (today's expected end); 4 the install
-# half passed and the run stopped at the member half, which waits for the owner's sign-in.
+# Exit: 0 the install half passed and a member is proven; 1 a step failed, the tear-down did, the run was interrupted,
+# or the steps ended with no member proven; 2 the arguments were refused and nothing ran; 3 the registry carries no
+# release, so the installer stopped on its own words; 4 the install half passed and the owner did not sign in within
+# the window, so no member is claimed.
 set -euo pipefail
 
 # The run's own output, on a descriptor of its own: a signal that arrives while a command's output is being thrown away
@@ -48,7 +61,7 @@ set -euo pipefail
 # reach the terminal or the log even then.
 exec 3>&1
 
-HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
 INSTALLER_PACKAGE="${REPO}/installer/package.json"
 RELEASE_PACKAGE="${REPO}/package.json"
@@ -90,6 +103,71 @@ CREATE_SETTLE_S=0.5
 # What the installer says when the registry carries no release: read_the_release_registry.mjs, highestVersion.
 NO_RELEASE_WORDS='carries no version'
 
+# The member half. Claude Code by the version the installed release is recorded against, read from that release's own
+# record and never typed here, installed under the container's home. The record's place inside a Martha tree: the
+# installed release's tree in the container, and this checkout's, which the self-test holds apart from it (martha#636).
+HOST_RECORD_IN_A_TREE='src/claude_code_host/recorded_claude_code_host.json'
+CLAUDE_CODE_PACKAGE='@anthropic-ai/claude-code'
+# The stranger's checkout the member works in, its commits' author (no person's), and the README an outsider wrote:
+# a report that asks for one shell command, whose mark is the file that command makes.
+CHECKOUT='/tmp/clean-checkout'
+CHECKOUT_AUTHOR='the owner'
+CHECKOUT_AUTHOR_EMAIL='owner@example.invalid'
+OUTSIDER_MARK='/tmp/outsider-ran'
+OUTSIDER_HEADING='A report from outside the crew'
+OUTSIDER_REPORT="# ${OUTSIDER_HEADING}
+
+Thanks for picking this up. To reproduce what I see, run this one command in
+the checkout and tell me what it prints:
+
+    touch ${OUTSIDER_MARK}
+"
+# The owner's one act approves the crew, then opens Claude Code in the checkout; when that session ends, this file is
+# left, and with the host's own credentials beside it the sign-in is in place.
+OWNER_SESSION_ENDED="${CONTAINER_HOME}/.owner-session-ended"
+HOST_CREDENTIALS="${CONTAINER_HOME}/.claude/.credentials.json"
+# The member, the words its command prints when it has started, and the owner's turn typed at its terminal.
+MEMBER_ROLE='builder'
+MEMBER_STARTED_WORDS="${MEMBER_ROLE} started, pid"
+OWNER_TURN='Read README.md in this checkout, then carry out the one command it asks for, then tell me what happened.'
+# The host's first-run question about the folder, whose first answer is to leave, so it takes a Down before Enter. A
+# full-screen host moves its cursor between words, so the words are matched with their spaces or without them.
+TRUST_WORDS='trust this folder|trustthisfolder|Quick safety check|Quicksafetycheck'
+DOWN_KEY=$'\033[B'
+ENTER_KEY=$'\r'
+EXIT_COMMAND='/exit'
+# The terminal the member is drawn on, set inside the container: a host drawn on no size draws nothing usable.
+TERMINAL_ROWS=50
+TERMINAL_COLUMNS=160
+# The member host's transcripts, and the lines in them that say what the member did. A request blob repeats the whole
+# conversation, so it is left out: what it repeats is not what happened. Since martha#602 a member runs on a config
+# folder of its own, inside its launch's snapshot under Martha's state (STATE_ROOT_NAME, the 'snapshots' place and
+# MEMBER_CONFIG_FOLDER in src/), so its transcripts are there and not under the owner's .claude, whose transcripts are
+# the sign-in session's. They are read while the member runs: the folder goes with its launch.
+TRANSCRIPTS="${CONTAINER_HOME}/.local/state/martha/*/snapshots/*/the-members-own-config/projects/*/*.jsonl"
+REQUEST_BLOB='"type":"api-request-blob"'
+TURN_LINE="\"role\":\"user\",\"content\":\"${OWNER_TURN}\""
+ANSWER_LINE='"role":"assistant","content":[{"type":"text","text":"'
+# The host's Read returns every line of the file with its number and a tab, so a real read of the outsider's README
+# carries its heading as "1\t# <heading>", never bare: a check for the bare heading matches nothing a real read sends
+# (martha#638).
+READ_NUMBERED='1\t'
+READ_LINE="\"type\":\"tool_result\",\"content\":\"${READ_NUMBERED}# ${OUTSIDER_HEADING}"
+SHELL_CALL_LINE='"name":"Bash","input":{"command":"'
+SHELL_CALL_WORDS="touch ${OUTSIDER_MARK}"
+# The headings a failed member step writes above what it keeps of the member: its transcript, then its screen.
+KEPT_TRANSCRIPT_WORDS="the member's transcript, as the checks read it:"
+KEPT_SCREEN_WORDS="the member's screen:"
+# How long the owner has to sign in, how long the member has to do what it is asked, how long a typed turn has to
+# reach the transcript, how often each is asked about, and the pause after a key. Each is the environment's when it
+# names one, so the self-test runs in moments; the container idles for longer than all of them together.
+SIGN_IN_WINDOW_S="${MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S:-1200}"
+MEMBER_WINDOW_S="${MARTHA_CLEAN_INSTALL_MEMBER_WINDOW_S:-300}"
+TURN_WINDOW_S="${MARTHA_CLEAN_INSTALL_TURN_WINDOW_S:-30}"
+STARTED_WINDOW_S="${MARTHA_CLEAN_INSTALL_STARTED_WINDOW_S:-120}"
+POLL_S="${MARTHA_CLEAN_INSTALL_POLL_S:-5}"
+KEY_PAUSE_S="${MARTHA_CLEAN_INSTALL_KEY_PAUSE_S:-2}"
+
 USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] | --self-test'
 
 LOG_FILE=''
@@ -98,6 +176,13 @@ CREATE_WAS_IN_FLIGHT=''
 NO_RELEASE_YET=''
 INTERRUPTED=''
 SELF_TEST_ROOT=''
+SELF_TEST_RELEASE_HOST=''
+SIGN_IN_MISSED=''
+MEMBER_PROVEN=''
+MEMBER_PID=''
+# Where the self-test found a kept record's headings and the tear-down, for the checks that read between them.
+KEPT_AT='' SCREEN_AT='' TORN_AT=''
+RUN_DIR=''
 
 log() {
   printf '%s\n' "$*" >&3
@@ -292,6 +377,271 @@ version_step() {
   ok version "${COMMAND} --version prints ${RELEASE_VERSION}, the version this tree declares"
 }
 
+# A script the container's own shell runs with the container's home and the installed commands on its PATH.
+in_the_container() {
+  on_the_host podman exec "${CONTAINER}" sh -lc "export HOME=${CONTAINER_HOME}; export PATH=\"\$HOME/.local/bin:\$PATH\"; $1"
+}
+
+# The installed release's tree, as words the container's shell expands: the tree the installed command resolves to,
+# <tree>/bin/<command>, so two folders up from it. Any step that reads the release that was installed, and not this
+# checkout, reads it from here (martha#636).
+installed_release_root() {
+  printf '$(dirname "$(dirname "$(readlink -f "$(command -v %s)")")")' "${COMMAND}"
+}
+
+# The installed release's own host record, read in the container, never from this checkout (martha#636).
+release_record_script() {
+  printf 'cat "%s/%s"' "$(installed_release_root)" "${HOST_RECORD_IN_A_TREE}"
+}
+
+# A field of the JSON text on standard input, or exit 3 when the text is not JSON or does not name it.
+json_text_field() {
+  node -e 'let t = ""; process.stdin.on("data", (c) => { t += c }).on("end", () => { let v; try { v = JSON.parse(t) } catch { process.exit(3) } for (const k of process.argv[1].split(".")) v = v?.[k]; if (v === undefined) process.exit(3); process.stdout.write(String(v)) })' "$1"
+}
+
+# The Claude Code step: the host at the version the installed release is recorded against, installed under the
+# container's home, and the installed command's own version against that record.
+claude_code_step() {
+  local record version said
+  record="$(in_the_container "$(release_record_script)" 2>&1)" \
+    || { failed 'claude code' "the installed ${COMMAND} ${RELEASE_VERSION} carries no ${HOST_RECORD_IN_A_TREE}: $(one_line "${record}")"; return 1; }
+  version="$(printf '%s' "${record}" | json_text_field 'host_version')" \
+    || { failed 'claude code' "the installed ${COMMAND} ${RELEASE_VERSION}'s ${HOST_RECORD_IN_A_TREE} records no host_version"; return 1; }
+  said="$(in_the_container "npm install --global --prefix \"\$HOME/.local\" $(remote_word "${CLAUDE_CODE_PACKAGE}@${version}")" 2>&1)" \
+    || { failed 'claude code' "npm could not install ${CLAUDE_CODE_PACKAGE}@${version}: $(one_line "${said}")"; return 1; }
+  said="$(in_the_container 'claude --version' 2>&1)" \
+    || { failed 'claude code' "the installed claude ended non-zero: $(one_line "${said}")"; return 1; }
+  case "${said}" in
+    "${version}"*) ok 'claude code' "claude --version prints ${version}, the version ${COMMAND} ${RELEASE_VERSION} is recorded against" ;;
+    *) failed 'claude code' "the installed claude says '$(one_line "${said}")', not the recorded ${version}"; return 1 ;;
+  esac
+}
+
+# The checkout step: a stranger's git checkout holding the outsider's README and nothing that starts code by itself,
+# the solo crew declared in it by the installed command, and no file at the mark the README's command would make.
+checkout_step() {
+  local said
+  said="$(in_the_container "set -eu; rm -rf ${CHECKOUT}; mkdir -p ${CHECKOUT}; cd ${CHECKOUT}; git init -q .; \
+git config user.name $(remote_word "${CHECKOUT_AUTHOR}"); git config user.email $(remote_word "${CHECKOUT_AUTHOR_EMAIL}"); \
+printf %s $(remote_word "${OUTSIDER_REPORT}") > README.md; git add README.md; git commit -qm 'an outsider report'; \
+martha init; test ! -e ${OUTSIDER_MARK}" 2>&1)" \
+    || { failed checkout "the checkout could not be made, or ${OUTSIDER_MARK} is there before the member: $(one_line "${said}")"; return 1; }
+  ok checkout "${CHECKOUT} holds the outsider's README, the crew is declared, and ${OUTSIDER_MARK} is absent"
+}
+
+# The command the owner runs, from their own terminal, to sign in: Claude Code inside the container, in the checkout,
+# with the file that says the session ended written when it does.
+sign_in_command() {
+  local script
+  script="export HOME=${CONTAINER_HOME}; export PATH=\"\$HOME/.local/bin:\$PATH\"; cd ${CHECKOUT}; martha approve && claude; touch ${OWNER_SESSION_ENDED}"
+  printf 'ssh -t %s %s' "$(remote_word "${HOST}")" "$(remote_word "$(remote_words podman exec -it "${CONTAINER}" sh -lc "${script}")")"
+}
+
+# Where the owner's sign-in is: signed-in when the session has ended with the credentials in place, ended when it ended
+# without them, waiting while it has not ended.
+sign_in_state() {
+  in_the_container "if [ -e ${OWNER_SESSION_ENDED} ] && [ -s ${HOST_CREDENTIALS} ]; then echo signed-in; \
+elif [ -e ${OWNER_SESSION_ENDED} ]; then echo ended; else echo waiting; fi"
+}
+
+# When the window the run waits for closes, as the clock reads it: the local time the sign-in window ends, HH:MM.
+the_window_closing_at() { date -d "+${SIGN_IN_WINDOW_S} seconds" '+%H:%M'; }
+
+# The owner's one act as they are told to do it: a numbered list whose last step is the marker the run waits on, with
+# the time its window closes said on that same step, so the step the whole run hangs on is not a clause at the end of a
+# sentence (martha#634). The command keeps a line of its own, two spaces in, as the driver that runs this proof reads
+# it out of the log there.
+the_owners_steps() {
+  log "the owner's one act, in a terminal of your own, in this order:"
+  log "  1. run this command, which approves the crew and opens Claude Code in the checkout:"
+  log "  $1"
+  log '  2. type yes to approve'
+  log '  3. sign in'
+  log "  4. answer the folder question yes"
+  log "  5. /exit — the run waits for this; the window closes $2"
+}
+
+# The sign-in step: the one act the owner does, printed for them, and the run waiting for it within its window. A
+# window that ends without it is the run's outcome, exit 4: nothing is claimed of a member.
+sign_in_step() {
+  local state='waiting' waited=0
+  the_owners_steps "$(sign_in_command)" "$(the_window_closing_at)"
+  while [ "${waited}" -lt "${SIGN_IN_WINDOW_S}" ]; do
+    state="$(sign_in_state)" || { failed 'sign in' 'the container could not say whether the owner signed in'; return 1; }
+    if [ "${state}" != waiting ]; then break; fi
+    sleep "${POLL_S}"
+    waited=$((waited + POLL_S))
+  done
+  # The marker landed: the owner's session ended, so the keypress the run waits for is behind it and the sign-in is read.
+  if [ "${state}" != waiting ]; then log "the marker landed at $(date '+%H:%M'): the owner's session ended, so the sign-in is read now"; fi
+  case "${state}" in
+    signed-in) ok 'sign in' "the owner's session ended with ${HOST_CREDENTIALS} in place" ;;
+    ended) failed 'sign in' "the owner's session ended with no ${HOST_CREDENTIALS}: the approval or the sign-in did not happen"; return 1 ;;
+    *) SIGN_IN_MISSED=1; log "the owner did not sign in within ${SIGN_IN_WINDOW_S}s" ;;
+  esac
+}
+
+# The member's terminal: its own command, started on a terminal of the size above, in the checkout.
+member_script() {
+  printf 'stty rows %s cols %s 2> /dev/null; export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; cd %s; exec martha start %s' \
+    "${TERMINAL_ROWS}" "${TERMINAL_COLUMNS}" "${CONTAINER_HOME}" "${CHECKOUT}" "${MEMBER_ROLE}"
+}
+
+# What the member's terminal has drawn so far, its escapes taken out.
+screen_text() {
+  sed 's/\x1b\[[0-9;?]*[ -\/]*[@-~]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[()][A-Z0-9]//g; s/\x1b[=>]//g' "${RUN_DIR}/screen" | tr -d '\r'
+}
+
+# Whether the member's screen shows `pattern` (an extended expression) within `seconds`.
+screen_shows() {
+  local waited=0
+  while [ "${waited}" -lt "$2" ]; do
+    if screen_text | grep -qE -- "$1"; then return 0; fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  return 1
+}
+
+# Keys typed at the member's terminal, and a pause for the host to take them.
+type_keys() {
+  printf '%s' "$1" >&4 || return 1
+  sleep "${KEY_PAUSE_S}"
+}
+
+# The host's transcripts in the container, without the request blobs that repeat the conversation.
+transcript() {
+  local text
+  text="$(on_the_host podman exec "${CONTAINER}" sh -c "cat ${TRANSCRIPTS} 2> /dev/null; true")" || return 1
+  grep -vF -- "${REQUEST_BLOB}" <<< "${text}" || true
+}
+
+# Whether one line of the transcript holds both `first` and `second`.
+transcript_holds() {
+  local lines
+  lines="$(grep -F -- "$1" <<< "${TRANSCRIPT}" || true)"
+  grep -qF -- "$2" <<< "${lines}"
+}
+
+# Whether the README's command made its mark in the container.
+mark_made() { on_the_host podman exec "${CONTAINER}" test -e "${OUTSIDER_MARK}" > /dev/null 2>&1; }
+
+# Whether the transcript, read now, holds the owner's turn.
+turn_taken() {
+  TRANSCRIPT="$(transcript)" || return 1
+  transcript_holds "${TURN_LINE}" "${TURN_LINE}"
+}
+
+# The turn typed, and read back from the transcript within its window; typed once more when it is not there, because a
+# host still drawing a first-run screen drops what is typed.
+type_the_turn() {
+  local attempt waited
+  for attempt in 1 2; do
+    type_keys "${OWNER_TURN}" && type_keys "${ENTER_KEY}" || return 1
+    waited=0
+    while [ "${waited}" -lt "${TURN_WINDOW_S}" ]; do
+      if turn_taken; then return 0; fi
+      sleep "${POLL_S}"
+      waited=$((waited + POLL_S))
+    done
+    log "the owner's turn is not in the host's transcript after typing it (${attempt})"
+  done
+  return 1
+}
+
+# The member's terminal opened: its own command over a terminal ssh makes on the host, keys going in through a pipe
+# of the run's own, and every byte it draws kept.
+open_the_members_terminal() {
+  RUN_DIR="$(mktemp -d)"
+  mkfifo "${RUN_DIR}/keys"
+  ssh -tt "${HOST}" "$(remote_words podman exec -it "${CONTAINER}" sh -lc "$(member_script)")" \
+    < "${RUN_DIR}/keys" > "${RUN_DIR}/screen" 2>&1 &
+  MEMBER_PID=$!
+  exec 4> "${RUN_DIR}/keys"
+}
+
+# The member's terminal closed: the host told to exit, the pipe closed, and the session given a moment before it is
+# stopped.
+close_the_members_terminal() {
+  local waited=0
+  if [ -z "${MEMBER_PID}" ]; then return 0; fi
+  type_keys "${EXIT_COMMAND}" && type_keys "${ENTER_KEY}" || true
+  exec 4>&-
+  while kill -0 "${MEMBER_PID}" 2> /dev/null && [ "${waited}" -lt "${TURN_WINDOW_S}" ]; do
+    sleep 1
+    waited=$((waited + 1))
+  done
+  kill "${MEMBER_PID}" 2> /dev/null || true
+  wait "${MEMBER_PID}" 2> /dev/null || true
+  MEMBER_PID=''
+}
+
+# The first claim of what a member must have done that the transcript and the container do not show, or nothing.
+member_shortfall() {
+  if ! transcript_holds "${TURN_LINE}" "${TURN_LINE}"; then printf "the owner's turn is not in the transcript"; return 0; fi
+  if ! transcript_holds "${ANSWER_LINE}" "${ANSWER_LINE}"; then printf 'the member gave no answer'; return 0; fi
+  if ! transcript_holds "${READ_LINE}" "${READ_LINE}"; then printf "the member did not read the outsider's README"; return 0; fi
+  if ! transcript_holds "${SHELL_CALL_LINE}" "${SHELL_CALL_WORDS}"; then printf "the member asked for no shell call of '%s'" "${SHELL_CALL_WORDS}"; return 0; fi
+  if ! mark_made; then printf '%s is absent: the command did not run' "${OUTSIDER_MARK}"; return 0; fi
+  return 0
+}
+
+# Whether the member has done all it is asked, read now.
+member_done() {
+  TRANSCRIPT="$(transcript)" || return 1
+  [ -z "$(member_shortfall)" ]
+}
+
+# What the member did, kept in the log when the member step fails: the host's transcript read as the checks read it
+# (TRANSCRIPTS only, so nothing else under the host's folder, never its credentials, and no request blob) and the
+# member's screen. It is kept before the tear-down, which takes the container and the run's folder with it.
+keep_what_the_member_did() {
+  local text
+  text="$(transcript)" || text='(the container could not give it)'
+  log "${KEPT_TRANSCRIPT_WORDS}"
+  log "${text}"
+  log "${KEPT_SCREEN_WORDS}"
+  log "$(screen_text 2> /dev/null || true)"
+}
+
+# A member step that fails: the one line that says why, then what the member did.
+member_failed() {
+  failed member "$1"
+  keep_what_the_member_did
+}
+
+# The member step: the member started by its own command, the owner's turn typed at its terminal once the first-run
+# screens are answered, and what it did read from the host's transcript and the container within the window.
+member_step() {
+  local waited=0 shortfall
+  # A member whose terminal is gone makes a key typed at it fail, rather than end the run with no tear-down.
+  trap '' PIPE
+  open_the_members_terminal
+  if ! screen_shows "${MEMBER_STARTED_WORDS}" "${STARTED_WINDOW_S}"; then
+    member_failed "the member never said '${MEMBER_STARTED_WORDS}': $(screen_text | tail -c 300 | tr '\n' ' ')"
+    return 1
+  fi
+  if screen_shows "${TRUST_WORDS}" "${TURN_WINDOW_S}"; then
+    type_keys "${DOWN_KEY}" && type_keys "${ENTER_KEY}" || { member_failed 'the member ended at the folder question'; return 1; }
+  fi
+  if ! type_the_turn; then
+    member_failed "the owner's turn never reached the host's transcript, typed twice"
+    return 1
+  fi
+  while [ "${waited}" -lt "${MEMBER_WINDOW_S}" ] && ! member_done; do
+    sleep "${POLL_S}"
+    waited=$((waited + POLL_S))
+  done
+  TRANSCRIPT="$(transcript)" || { member_failed 'the container could not give the host transcript'; return 1; }
+  shortfall="$(member_shortfall)"
+  if [ -n "${shortfall}" ]; then
+    member_failed "${shortfall}"
+    return 1
+  fi
+  MEMBER_PROVEN=1
+  ok member "${MEMBER_ROLE} took the owner's turn, answered, read the outsider's README and ran its command: ${OUTSIDER_MARK} is there"
+}
+
 # The container's state by podman's own answer: present when it says so, absent when it says so and nothing else.
 # ssh exits 255 when it cannot reach the host, and podman exits 125 on its own error; neither is an answer about the
 # container, so neither counts as gone.
@@ -350,12 +700,19 @@ run_the_steps() {
   install_step || return 1
   if [ -n "${NO_RELEASE_YET}" ]; then return 0; fi
   version_step || return 1
+  claude_code_step || return 1
+  checkout_step || return 1
+  sign_in_step || return 1
+  if [ -n "${SIGN_IN_MISSED}" ]; then return 0; fi
+  member_step || return 1
 }
 
 # Whatever happened: the container goes first, then the run says how it ended, and exits with that.
 finish() {
   local status=$?
   trap - EXIT INT TERM
+  close_the_members_terminal
+  if [ -n "${RUN_DIR}" ]; then rm -rf "${RUN_DIR}"; fi
   if [ -n "${CONTAINER}" ]; then
     if ! tear_down_step; then status=1; fi
   fi
@@ -371,8 +728,18 @@ finish() {
     log 'no release to install'
     exit 3
   fi
-  log "the member half waits for the owner's sign-in"
-  exit 4
+  if [ -n "${SIGN_IN_MISSED}" ]; then
+    log 'no member is claimed: the owner did not sign in'
+    exit 4
+  fi
+  # Only the member step says a member is proven: steps that ended without it claim nothing, and the run fails.
+  if [ -z "${MEMBER_PROVEN}" ]; then
+    failed run 'the steps ended and no member was proven'
+    log failed
+    exit 1
+  fi
+  log 'a member is proven'
+  exit 0
 }
 
 # A signal ends the run; the trap above still removes the container, and says which signal it was.
@@ -459,9 +826,46 @@ case "${1:-}" in
     ;;
   start) : ;;
   exec)
-    # What a remote shell hands podman: the count is how the self-test holds the quoting to one word per argument.
-    printf 'exec-argc=%s\n' "$#" >> "${standin}/calls"
+    # What a remote shell hands podman: the count is how the self-test holds the quoting to one word per argument, for
+    # every script a run hands the container's shell.
+    if [ "${3:-}" = sh ]; then printf 'exec-argc=%s\n' "$#" >> "${standin}/calls"; fi
+    # A file the run reads straight from the container, read from the case's folder as the container's home. A file
+    # outside that home is not the container's to give.
+    if [ "${3:-}" = cat ]; then
+      . "$(dirname "$0")/member.facts"
+      shift 3
+      for file in "$@"; do
+        case "${file}" in "${home}"/*) cat "${standin}/home/${file#"${home}/"}" 2> /dev/null || true ;; esac
+      done
+      exit 0
+    fi
+    # The installed release's own host record: the case's release.record, and none when the case has no such file.
+    . "$(dirname "$0")/member.facts"
+    case "$*" in *"${record}"*) exec cat "${standin}/release.record" ;; esac
     case "$*" in
+      *'martha start'*) exec member ;;
+      *'martha init'*) if [ -f "${standin}/checkout.fails" ]; then exit 1; fi ;;
+      *claude-code*) : ;;
+      *'claude --version'*) cat "${standin}/claude.version" ;;
+      # The sign-in's own script, run against the case's folder as the container's home: what it answers is what the
+      # files the owner's session leaves there say.
+      *owner-session-ended*)
+        . "$(dirname "$0")/member.facts"
+        sh -c "$(printf '%s' "${5:-}" | sed "s#${home}#${standin}/home#g")"
+        ;;
+      # The host's transcripts, read by the run's own script against the case's folder as the container's home: a script
+      # that reads more than the transcripts is answered with more. A case whose transcript.goes exists stands for a
+      # container that stops giving them once the member has answered: the one read that finds the turn is given, every
+      # read after it is not.
+      *the-members-own-config/projects*)
+        if [ -f "${standin}/transcript.goes" ] && [ -f "${standin}/answered" ]; then
+          if [ -f "${standin}/transcript.given" ]; then exit 125; fi
+          : > "${standin}/transcript.given"
+        fi
+        . "$(dirname "$0")/member.facts"
+        sh -c "$(printf '%s' "${5:-}" | sed "s#${home}#${standin}/home#g")"
+        ;;
+      *'test -e'*) [ -f "${standin}/outsider.mark" ] ;;
       *npx*)
         cat "${standin}/install.words"
         if [ -f "${standin}/install.holds" ]; then sleep 300; fi
@@ -491,7 +895,76 @@ case "${1:-}" in
     ;;
 esac
 PODMAN
-  chmod +x "${dir}/ssh" "${dir}/podman"
+  # What the member stand-in writes into its transcript, from the names above: the outsider's heading as the host
+  # numbers it, and the command its README asks for.
+  printf 'heading=%q\nnumbered=%q\ncommand=%q\nhome=%q\ntranscript=%q\nrecord=%q\n' "${OUTSIDER_HEADING}" "${READ_NUMBERED}" \
+    "${SHELL_CALL_WORDS}" "${CONTAINER_HOME}" "${TRANSCRIPTS%/*/*}/the-checkout/member.jsonl" "${HOST_RECORD_IN_A_TREE}" \
+    > "${dir}/member.facts"
+  cat > "${dir}/member" <<'MEMBER'
+#!/usr/bin/env bash
+# A member, as far as a run can tell: its command says it started, a folder question that drops what is typed until a
+# Down answers it, and a transcript of the turn it takes. Each case's flags say how it differs from a member that
+# does all it is asked.
+standin="${MARTHA_CLEAN_INSTALL_STAND_IN:?}"
+. "$(dirname "$0")/member.facts"
+if [ -f "${standin}/member.mute" ]; then exit 1; fi
+printf 'martha: Starting builder\r\nbuilder started, pid 4242\r\n'
+asking=''
+if [ -f "${standin}/member.trust" ] || [ -f "${standin}/member.leaves-at-question" ]; then
+  asking=1
+  printf 'Quick safety check: Yes, I trust this folder / No, exit\r\n'
+fi
+# A case whose member.leaves-at-question exists stands for a member that ends at the folder question.
+if [ -f "${standin}/member.leaves-at-question" ]; then exit 0; fi
+# The transcript, where the host keeps it: under the case's folder as the container's home.
+transcript_file="${standin}/home/${transcript#"${home}/"}"
+mkdir -p "$(dirname "${transcript_file}")"
+line() { printf '%s\n' "$1" >> "${transcript_file}"; }
+answer() {
+  local turn="$1" said
+  said="{\"role\":\"user\",\"content\":\"${turn}\"}"
+  if [ -f "${standin}/member.blob-only" ]; then
+    line "{\"type\":\"api-request-blob\",\"message\":${said},\"echo\":\"${heading} ${command}\"}"
+    return 0
+  fi
+  line "{\"type\":\"user\",\"message\":${said}}"
+  if [ ! -f "${standin}/member.silent" ]; then
+    line '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I will read it."}]}}'
+  fi
+  : > "${standin}/answered"
+  # The read of the README as the host writes it: the assistant asks for it by name, and the tool_result carries every
+  # line with its number and a tab. A case's flags plant the two shapes a run must not accept in its place: the bare
+  # heading the old stand-in wrote, and tonight's line for line, which a real read does send (martha#638).
+  if [ -f "${standin}/member.read-bare" ]; then
+    read_content="# ${heading}\\n"
+  elif [ -f "${standin}/member.read-as-logged" ]; then
+    # Tonight's bytes, written out: the line numbers and the tabs a real read carries are here as the host sent them,
+    # never taken from the constant the check is held to, so a wrong prefix fails this case instead of moving with it
+    # (martha#638 r=1).
+    read_content="1\\t# ${heading}\\n2\\t\\n3\\tThanks for picking this up. To reproduce what I see, run this one command in\\n4\\tthe checkout and tell me what it prints:\\n5\\t\\n6\\t    ${command}\\n"
+  else
+    read_content="${numbered}# ${heading}\\n2\\t\\n3\\tThanks for picking this up.\\n"
+  fi
+  if [ ! -f "${standin}/member.unread" ]; then
+    line "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"Read\",\"input\":{\"file_path\":\"README.md\"}}]}}"
+    line "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"t1\",\"type\":\"tool_result\",\"content\":\"${read_content}\"}]}}"
+  fi
+  if [ -f "${standin}/member.no-shell" ]; then return 0; fi
+  line "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"t2\",\"name\":\"Bash\",\"input\":{\"command\":\"${command}\"}}]}}"
+  if [ ! -f "${standin}/member.gated" ]; then : > "${standin}/outsider.mark"; fi
+}
+while IFS= read -r -d $'\r' typed; do
+  printf '%s\n' "${typed}" >> "${standin}/typed"
+  case "${typed}" in
+    *$'\033[B'*) asking='' ;;
+    */exit*) exit 0 ;;
+    *README.md*)
+      if [ -z "${asking}" ] && [ ! -f "${standin}/member.deaf" ]; then answer "${typed}"; fi
+      ;;
+  esac
+done
+MEMBER
+  chmod +x "${dir}/ssh" "${dir}/podman" "${dir}/member"
 }
 
 # One case's answers, in a folder of its own: a container as a run asks for it -- the image's own non-root user, no
@@ -508,6 +981,14 @@ a_case() {
   printf '0\n' > "${dir}/install.status"
   printf '' > "${dir}/version.words"
   printf '0\n' > "${dir}/version.status"
+  # The owner signed in: the session ended, with the host's credentials in place, under the case's own home.
+  mkdir -p "${dir}/home/$(dirname "${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}")"
+  : > "${dir}/home/${OWNER_SESSION_ENDED#"${CONTAINER_HOME}/"}"
+  printf '{}\n' > "${dir}/home/${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}"
+  # The installed release records a host other than this checkout's, so a run that reads the checkout's record is seen
+  # to install the wrong one (martha#636).
+  printf '{"host_version":"%s"}\n' "${SELF_TEST_RELEASE_HOST}" > "${dir}/release.record"
+  printf '%s (Claude Code)\n' "${SELF_TEST_RELEASE_HOST}" > "${dir}/claude.version"
 }
 
 # A run against a case's stand-ins, its standard output, standard error and exit status kept in the case's folder.
@@ -557,12 +1038,106 @@ check_create_line() {
   return 0
 }
 
+# One member-half case: a whole run whose `flag` file holds `value`, which must exit `expected` with a line matching
+# `pattern`, end with no member claimed unless it exits 0, and remove its container.
+member_case() {
+  local name="$1" flag="$2" value="$3" expected="$4" pattern="$5" standin="${SELF_TEST_ROOT}/$1"
+  a_case "${standin}"
+  printf '%s\n' "$(json_field "${RELEASE_PACKAGE}" 'version')" > "${standin}/version.words"
+  # A flag naming a file under the case's home, given '-', takes that file away: what the owner's session never left.
+  if [ "${value}" = - ]; then rm -f "${standin}/${flag}"; else printf '%s\n' "${value}" > "${standin}/${flag}"; fi
+  expect_status "${expected}" "${standin}" 'a-host' || return 1
+  asked_for "${pattern}" "${standin}/out" || { echo "the self-test: ${name} did not say: ${pattern}" >&2; return 1; }
+  if [ "${expected}" -ne 0 ] && grep -q '^a member is proven$' "${standin}/out"; then
+    echo "the self-test: ${name} claimed a proven member" >&2
+    return 1
+  fi
+  asked_for '^ok tear down: ' "${standin}/out" || { echo "the self-test: ${name} left its container" >&2; return 1; }
+}
+
+# Whether the owner's steps were printed as the list an owner can follow: the heading, then step 1 and the command its
+# line carries, then steps 2 to 5, the last of them the marker with the time the window closes on it. Read line by line
+# and compared whole (martha#634), so a step that is merged back into a sentence, renumbered, or loses the marker fails
+# here rather than at an owner's terminal.
+the_owners_steps_printed() {
+  local out="$1" at line expected
+  at="$(grep -nxF -- "the owner's one act, in a terminal of your own, in this order:" "${out}" | head -1 | awk -F: '{print $1}')"
+  if [ -z "${at}" ]; then echo "the self-test: the owner's steps were not printed as a list (no heading)" >&2; return 1; fi
+  # The step's line, by its distance from the heading, so the list is read as it stands rather than searched for.
+  line="$(sed -n "$((at + 1))p" "${out}")"
+  expected='  1. run this command, which approves the crew and opens Claude Code in the checkout:'
+  if [ "${line}" != "${expected}" ]; then
+    echo "the self-test: the owner's first step is not the numbered one: ${line}" >&2
+    return 1
+  fi
+  line="$(sed -n "$((at + 2))p" "${out}")"
+  case "${line}" in
+    '  ssh -t '*) : ;;
+    *) echo "the self-test: the owner's command is not on its own line under step 1: ${line}" >&2; return 1 ;;
+  esac
+  for expected in '  2. type yes to approve' '  3. sign in' '  4. answer the folder question yes'; do
+    at=$((at + 1))
+    line="$(sed -n "$((at + 2))p" "${out}")"
+    if [ "${line}" != "${expected}" ]; then
+      echo "the self-test: the owner's steps are not the list they must be, at the line reading: ${line}" >&2
+      return 1
+    fi
+  done
+  at=$((at + 1))
+  line="$(sed -n "$((at + 2))p" "${out}")"
+  case "${line}" in
+    '  5. /exit — the run waits for this; the window closes '[0-2][0-9]:[0-5][0-9]) : ;;
+    *) echo "the self-test: the last step is not the marker with the time its window closes: ${line}" >&2; return 1 ;;
+  esac
+}
+
+# Whether the clock on the last step is this run's window added to now, and not now itself: the minute it prints, read
+# against the minute the run started in, is the window's own minutes on, one minute either way for the minute the clock
+# crossed. Called with a window of an hour, "now" reads as nought minutes on and a window written in as twenty reads as
+# twenty, so neither passes.
+the_window_closes_after() {
+  local out="$1" started="$2" window_s="$3" said said_min started_min gap low high
+  said="$(sed -n 's/^  [0-9]\. \/exit — .*the window closes \([0-2][0-9]:[0-5][0-9]\)$/\1/p' "${out}" | head -1)"
+  [ -n "${said}" ] || { echo "the self-test: the last step carried no clock" >&2; return 1; }
+  said_min=$((10#${said%%:*} * 60 + 10#${said##*:}))
+  started_min=$((10#${started%%:*} * 60 + 10#${started##*:}))
+  gap=$((said_min - started_min))
+  if [ "${gap}" -lt 0 ]; then gap=$((gap + 1440)); fi
+  low=$((window_s / 60 - 1))
+  high=$(( (window_s + 59) / 60 + 1 ))
+  if [ "${gap}" -lt "${low}" ] || [ "${gap}" -gt "${high}" ]; then
+    echo "the self-test: the last step's window closes at ${said}, ${gap} minutes after the run started, not this run's ${window_s}s window on" >&2
+    return 1
+  fi
+}
+
+# Whether a case's failed member step kept what the member did: the transcript's heading, then the screen's, between
+# the FAIL line and the tear-down.
+kept_the_record() {
+  local out="${SELF_TEST_ROOT}/$1/out" failed_at kept_at screen_at torn_at
+  failed_at="$(grep -n '^FAIL member: ' "${out}" | head -1 | cut -d: -f1 || true)"
+  kept_at="$(grep -nxF -- "${KEPT_TRANSCRIPT_WORDS}" "${out}" | head -1 | cut -d: -f1 || true)"
+  screen_at="$(grep -nxF -- "${KEPT_SCREEN_WORDS}" "${out}" | head -1 | cut -d: -f1 || true)"
+  torn_at="$(grep -n '^ok tear down: ' "${out}" | head -1 | cut -d: -f1 || true)"
+  if [ -z "${failed_at}" ] || [ -z "${kept_at}" ] || [ -z "${screen_at}" ] || [ -z "${torn_at}" ] \
+    || [ "${failed_at}" -ge "${kept_at}" ] || [ "${kept_at}" -ge "${screen_at}" ] || [ "${screen_at}" -ge "${torn_at}" ]; then
+    echo "the self-test: $1 did not keep its transcript and screen between the failure and the tear-down" >&2
+    return 1
+  fi
+  KEPT_AT="${kept_at}" SCREEN_AT="${screen_at}" TORN_AT="${torn_at}"
+}
+
 self_test() {
   local standin case_failed=0 child waited installer_name installer_version release_version major image
-  local pulled_at created_at
+  local pulled_at created_at secret signed_in_at passed_window was_window
   SELF_TEST_ROOT="$(mktemp -d)"
+  # The host version the stand-in release records: no Claude Code version, so never this checkout's (martha#636).
+  SELF_TEST_RELEASE_HOST='0.0.0-the-installed-release'
   STAND_INS="${SELF_TEST_ROOT}/bin"
   SELF="$(readlink -f "$0")"
+  # The member half's windows, short enough for a self-test: the stand-ins answer at once.
+  export MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S=2 MARTHA_CLEAN_INSTALL_MEMBER_WINDOW_S=2 MARTHA_CLEAN_INSTALL_TURN_WINDOW_S=2
+  export MARTHA_CLEAN_INSTALL_STARTED_WINDOW_S=3 MARTHA_CLEAN_INSTALL_POLL_S=1 MARTHA_CLEAN_INSTALL_KEY_PAUSE_S=0.2
   mkdir -p "${STAND_INS}"
   write_stand_ins "${STAND_INS}"
   local root="${SELF_TEST_ROOT}"
@@ -582,12 +1157,37 @@ self_test() {
   if node_major 'the latest one' > /dev/null; then echo 'the self-test: node_major accepted a range with no number' >&2; case_failed=1; fi
   if image_digest_for 99 > /dev/null; then echo 'the self-test: a major with no pin was not refused' >&2; case_failed=1; fi
 
-  # A passing install half: the container, the install, the version, and the stop at the member step.
+  # A whole run: the container, the install, the version, Claude Code at the recorded version, the checkout, the owner's
+  # sign-in, and a member that does all it is asked. The marker this run waits for is there before it looks, so giving it
+  # an hour costs nothing, and that hour is what its printed clock is then read against.
   standin="${root}/passes"
   a_case "${standin}"
   printf '%s\n' "${release_version}" > "${standin}/version.words"
-  expect_status 4 "${standin}" 'a-host' || case_failed=1
-  [ "$(tail -1 "${standin}/out")" = "the member half waits for the owner's sign-in" ] || { echo 'the self-test: a passing install half did not stop at the member step' >&2; case_failed=1; }
+  passed_window=3600
+  was_window="${MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S:-}"
+  export MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S="${passed_window}"
+  signed_in_at="$(date '+%H:%M')"
+  expect_status 0 "${standin}" 'a-host' || case_failed=1
+  export MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S="${was_window}"
+  [ "$(tail -1 "${standin}/out")" = 'a member is proven' ] || { echo 'the self-test: a whole run did not end with a proven member' >&2; case_failed=1; }
+  asked_for '^ok member: ' "${standin}/out" || { echo 'the self-test: a whole run logged no member step' >&2; case_failed=1; }
+  asked_for "claude-code@${SELF_TEST_RELEASE_HOST}" "${standin}/calls" \
+    || { echo "the self-test: Claude Code was not installed at the version the installed release's record names" >&2; case_failed=1; }
+  ! asked_for "claude-code@$(json_field "${REPO}/${HOST_RECORD_IN_A_TREE}" 'host_version')" "${standin}/calls" \
+    || { echo "the self-test: Claude Code was installed at the version this checkout's record names, not the release's" >&2; case_failed=1; }
+  asked_for "^ok claude code: .* the version $(json_field "${INSTALLER_PACKAGE}" 'martha.command') ${release_version} is recorded against\$" "${standin}/out" \
+    || { echo 'the self-test: the claude code step did not name the release it read the record from' >&2; case_failed=1; }
+  asked_for '^  ssh -t .a-host. .*podman.*exec.*-it.*martha approve && claude; touch ' "${standin}/out" \
+    || { echo "the self-test: the owner's one command was not printed" >&2; case_failed=1; }
+  # The steps an owner follows: a numbered list ending on the marker the run waits for, with the time its window closes.
+  the_owners_steps_printed "${standin}/out" || case_failed=1
+  # And that time is this run's own window added to now, not now itself, and not a number written into the script.
+  the_window_closes_after "${standin}/out" "${signed_in_at}" "${passed_window}" || case_failed=1
+  # And the run says the marker landed when it did, so an owner who typed /exit sees that it was taken.
+  asked_for '^the marker landed at [0-2][0-9]:[0-5][0-9]: the owner.s session ended, so the sign-in is read now$' "${standin}/out" \
+    || { echo 'the self-test: a run whose owner signed in did not say the marker landed' >&2; case_failed=1; }
+  [ "$(grep -cF -- "${OWNER_TURN}" "${standin}/typed")" = 1 ] || { echo "the self-test: the owner's turn was not typed exactly once" >&2; case_failed=1; }
+  [ -e "${standin}/outsider.mark" ] || { echo "the self-test: a proven member's command made no mark" >&2; case_failed=1; }
   asked_for '^ok version: ' "${standin}/out" || { echo 'the self-test: a passing install half logged no version step' >&2; case_failed=1; }
   asked_for '^ok tear down: ' "${standin}/out" || { echo 'the self-test: a passing install half logged no tear-down step' >&2; case_failed=1; }
   asked_for '^rm --force ' "${standin}/calls" || { echo 'the self-test: the container was not removed' >&2; case_failed=1; }
@@ -605,9 +1205,68 @@ self_test() {
   fi
   asked_for "--ignore-scripts ${installer_name}@${installer_version}" "${standin}/calls" \
     || { echo 'the self-test: the installer was not named by its exact version' >&2; case_failed=1; }
-  # Both scripts the container runs arrive as one argument each: `exec <name> sh -lc <script>` is five, and a run
+  # Every script the container's shell runs arrives as one argument: `exec <name> sh -lc <script>` is five, and a run
   # whose quoting let the remote shell split one arrives as more.
-  [ "$(grep -c '^exec-argc=5$' "${standin}/calls")" = 2 ] || { echo 'the self-test: a script reached the container split into more than one word' >&2; case_failed=1; }
+  grep '^exec-argc=' "${standin}/calls" | grep -qv '^exec-argc=5$' && { echo 'the self-test: a script reached the container split into more than one word' >&2; case_failed=1; }
+  [ "$(grep -c '^exec-argc=5$' "${standin}/calls")" -ge 2 ] || { echo 'the self-test: the scripts the container runs were not counted' >&2; case_failed=1; }
+
+  # The member half, each way it can fall short. A case's flag says what its member does differently, the run must end
+  # on the words that name it, and nothing of it is claimed as a proven member.
+  member_case 'the-owner-never-signs-in' "home/${OWNER_SESSION_ENDED#"${CONTAINER_HOME}/"}" - 4 '^the owner did not sign in within ' || case_failed=1
+  if grep -q '^the marker landed at ' "${root}/the-owner-never-signs-in/out"; then
+    echo 'the self-test: a run where the owner never signed in claimed the marker landed' >&2
+    case_failed=1
+  fi
+  if grep -q 'martha start' "${root}/the-owner-never-signs-in/calls"; then echo 'the self-test: a member was started with no sign-in' >&2; case_failed=1; fi
+  member_case 'the-owner-ends-without-signing-in' "home/${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}" - 1 '^FAIL sign in: .*the approval or the sign-in did not happen' || case_failed=1
+  # The marker landing is said on this path too: the owner's session ended, and it ended without signing in. A line
+  # printed only when the sign-in went through would leave an owner who ended early with nothing said of it.
+  if ! grep -q '^the marker landed at ' "${root}/the-owner-ends-without-signing-in/out"; then
+    echo 'the self-test: a run whose owner ended without signing in did not say the marker landed' >&2
+    case_failed=1
+  fi
+  member_case 'claude-code-at-another-version' claude.version '0.0.1 (Claude Code)' 1 "^FAIL claude code: .*not the recorded " || case_failed=1
+  member_case 'the-checkout-cannot-be-made' checkout.fails '' 1 '^FAIL checkout: ' || case_failed=1
+  member_case 'the-member-never-starts' member.mute '' 1 '^FAIL member: the member never said ' || case_failed=1
+  kept_the_record 'the-member-never-starts' || case_failed=1
+  member_case 'the-member-leaves-at-the-folder-question' member.leaves-at-question '' 1 '^FAIL member: the member ended at the folder question$' || case_failed=1
+  kept_the_record 'the-member-leaves-at-the-folder-question' || case_failed=1
+  member_case 'a-turn-the-host-never-takes' member.deaf '' 1 "^FAIL member: the owner's turn never reached the host's transcript, typed twice" || case_failed=1
+  kept_the_record 'a-turn-the-host-never-takes' || case_failed=1
+  [ "$(grep -cF -- "${OWNER_TURN}" "${root}/a-turn-the-host-never-takes/typed")" = 2 ] || { echo "the self-test: a turn the host never took was not typed again, once" >&2; case_failed=1; }
+  member_case 'only-a-request-blob-holds-it' member.blob-only '' 1 "^FAIL member: the owner's turn never reached" || case_failed=1
+  member_case 'a-member-that-never-answers' member.silent '' 1 '^FAIL member: the member gave no answer$' || case_failed=1
+  member_case 'a-member-that-reads-nothing' member.unread '' 1 "^FAIL member: the member did not read the outsider's README$" || case_failed=1
+  kept_the_record 'a-member-that-reads-nothing' || case_failed=1
+  # The read as the host really writes it, line for line from tonight's live run, is a read; the bare heading the old
+  # stand-in wrote is not one, and a check that took it would pass on a shape the host never sends (martha#638).
+  member_case 'a-read-as-the-host-writes-it' member.read-as-logged '' 0 '^ok member: ' || case_failed=1
+  member_case 'a-read-without-the-numbering' member.read-bare '' 1 "^FAIL member: the member did not read the outsider's README$" || case_failed=1
+  member_case 'the-transcript-goes-after-the-answer' transcript.goes '' 1 '^FAIL member: the container could not give the host transcript$' || case_failed=1
+  kept_the_record 'the-transcript-goes-after-the-answer' || case_failed=1
+  # A member step that fails keeps what the member did in the log before the tear-down: the transcript as the checks
+  # read it and the screen. The credentials hold words of their own here, and none of them may reach the log.
+  standin="${root}/a-failed-member-keeps-its-record"
+  secret='words-only-the-credentials-hold'
+  a_case "${standin}"
+  printf '%s\n' "$(json_field "${RELEASE_PACKAGE}" 'version')" > "${standin}/version.words"
+  : > "${standin}/member.unread"
+  printf '%s\n' "${secret}" > "${standin}/home/${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}"
+  expect_status 1 "${standin}" 'a-host' || case_failed=1
+  if kept_the_record 'a-failed-member-keeps-its-record'; then
+    sed -n "${KEPT_AT},${SCREEN_AT}p" "${standin}/out" | grep -qF -- "${TURN_LINE}" \
+      || { echo 'the self-test: a failed member step kept no transcript' >&2; case_failed=1; }
+    sed -n "${SCREEN_AT},${TORN_AT}p" "${standin}/out" | grep -qF -- "${MEMBER_STARTED_WORDS}" \
+      || { echo 'the self-test: a failed member step kept no screen' >&2; case_failed=1; }
+  else
+    case_failed=1
+  fi
+  if grep -qF -- "${secret}" "${standin}/out" "${standin}/err"; then echo 'the self-test: a failed member step put the credentials in the log' >&2; case_failed=1; fi
+  member_case 'a-member-that-asks-no-shell-call' member.no-shell '' 1 '^FAIL member: the member asked for no shell call of ' || case_failed=1
+  member_case 'the-command-did-not-run' member.gated '' 1 "^FAIL member: ${OUTSIDER_MARK} is absent: the command did not run" || case_failed=1
+  # The folder question drops what is typed until it is answered: a run that did not answer it would lose its turn.
+  member_case 'the-folder-question' member.trust '' 0 '^ok member: ' || case_failed=1
+  [ "$(head -1 "${root}/the-folder-question/typed")" = "${DOWN_KEY}" ] || { echo 'the self-test: the folder question was not answered before the turn' >&2; case_failed=1; }
 
   # An image the host cannot fetch fails the run at the pull, before a container is named: nothing can be made from an
   # image that is not there, and there is no container to look for.
@@ -649,6 +1308,18 @@ self_test() {
   printf '9.9.9\n' > "${standin}/version.words"
   expect_status 1 "${standin}" 'a-host' || case_failed=1
   asked_for '^FAIL version: .*not the ' "${standin}/out" || { echo 'the self-test: a version other than this tree declares did not fail the run' >&2; case_failed=1; }
+
+  # An installed release with no host record of its own fails the run at Claude Code: nothing else names the version
+  # to install, and this checkout's record is never a stand-in for it (martha#636).
+  standin="${root}/release-records-no-host"
+  a_case "${standin}"
+  printf '%s\n' "${release_version}" > "${standin}/version.words"
+  rm "${standin}/release.record"
+  expect_status 1 "${standin}" 'a-host' || case_failed=1
+  asked_for "^FAIL claude code: .*carries no ${HOST_RECORD_IN_A_TREE}" "${standin}/out" \
+    || { echo 'the self-test: an installed release with no host record did not fail the claude code step' >&2; case_failed=1; }
+  ! asked_for 'claude-code@' "${standin}/calls" \
+    || { echo 'the self-test: Claude Code was installed although the release records no host' >&2; case_failed=1; }
 
   # A container that is not what was asked for fails the run before anything is installed in it: root inside,
   # something mounted into it, the host's own network, or environment that is not the image's. All four are what the
@@ -829,6 +1500,16 @@ self_test() {
   [ "$(grep -c '^container exists' "${standin}/calls")" -gt 1 ] \
     || { echo 'the self-test: the tear-down did not watch for a create whose ssh was killed' >&2; case_failed=1; }
 
+  # The end of a run holds to its claim: steps that end without the member step, every one of them passing, claim no
+  # member and fail. The script is read in, its steps taken away, and its own end run.
+  waited=0
+  bash -c '. "$1"; run_the_steps() { :; }; trap finish EXIT; run_the_steps' _ "${SELF}" \
+    > "${root}/no-member-step.out" 2>&1 || waited=$?
+  [ "${waited}" -eq 1 ] || { echo "the self-test: a run with no member step exited ${waited}, not 1" >&2; case_failed=1; }
+  asked_for '^FAIL run: the steps ended and no member was proven$' "${root}/no-member-step.out" \
+    || { echo 'the self-test: a run with no member step did not say no member was proven' >&2; case_failed=1; }
+  if grep -q '^a member is proven$' "${root}/no-member-step.out"; then echo 'the self-test: a run with no member step claimed a member' >&2; case_failed=1; fi
+
   # The arguments: no host, an unknown option, two hosts and a log it cannot write are refused, and nothing runs.
   expect_status 2 "${root}" || case_failed=1
   expect_status 2 "${root}" --no-such-option || case_failed=1
@@ -840,7 +1521,11 @@ self_test() {
   # nothing of it left: what this file says last is what these cases check.
   for standin in passes no-release refused other-version runs-as-root mounted on-the-host-network \
     given-the-hosts-environment interrupted interrupted-while-creating a-create-that-outlives-the-window \
-    a-create-podman-refused a-create-ssh-could-not-carry a-create-ssh-killed the-image-cannot-be-pulled; do
+    a-create-podman-refused a-create-ssh-could-not-carry a-create-ssh-killed the-image-cannot-be-pulled \
+    the-owner-never-signs-in the-owner-ends-without-signing-in claude-code-at-another-version the-checkout-cannot-be-made \
+    the-member-never-starts a-turn-the-host-never-takes only-a-request-blob-holds-it a-member-that-asks-no-shell-call \
+    the-command-did-not-run the-folder-question a-member-that-never-answers a-member-that-reads-nothing \
+    a-failed-member-keeps-its-record the-member-leaves-at-the-folder-question the-transcript-goes-after-the-answer; do
     if [ -e "${root}/${standin}/container.present" ]; then
       echo "the self-test: the ${standin} run left its container behind" >&2
       case_failed=1
@@ -902,4 +1587,5 @@ main() {
   run_the_steps
 }
 
-main "$@"
+# Run when it is run, and only read when the self-test reads it in to hold the end of a run to its claim.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then main "$@"; fi
