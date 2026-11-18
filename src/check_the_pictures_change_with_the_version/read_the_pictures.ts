@@ -2,7 +2,8 @@
 //
 // The pictures come from the tree the run was pointed at, and the drawn bytes come from the generator itself, so
 // nothing here restates a picture or a path: both are ../../architecture/c4_diagrams.ts's to name. A range's paths and
-// its two versions come from git, and a git that cannot answer is a run that could not look, never a clean one.
+// its two versions come from its merge base in git, and a git that cannot answer is a run that could not look, never
+// a clean one.
 
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -30,14 +31,23 @@ export const thePicturesAt = (repository: string): readonly APicture[] => {
 /** package.json as git names it in this repository: never spelled here, because the declaration names it. */
 const theManifestAsGitNamesIt = (repository: string): string => relative(repository, manifestPathOf(repository))
 
-/** What a range states of itself: its paths, and its two versions; undefined when git would not say. */
+/**
+ * Where a change begins: the commit the two ends last shared, never the base tip's own tree. A branch cut before a
+ * release bump would otherwise read main's bump as its own, in reverse, and a downgrade counts as a bump too — so a
+ * change that touches no picture would be held to pictures it never touched (martha#627 r=2).
+ */
+const theMergeBaseOf = (repository: string, base: string, head: string): string | undefined => gitSaid(repository, ['merge-base', base, head])
+
+/** What a range states of itself, read from its merge base: its paths, and its two versions; undefined when git would not say. */
 export const theChangeFrom = (repository: string, base: string, head: string): AChange | undefined => {
-  const paths = gitSaid(repository, ['diff', '--name-only', base, head])
+  const from = theMergeBaseOf(repository, base, head)
+  if (from === undefined) return undefined
+  const paths = gitSaid(repository, ['diff', '--name-only', from, head])
   if (paths === undefined) return undefined
   const the_manifest = theManifestAsGitNamesIt(repository)
   return {
     paths: paths.split('\n').filter((path) => path !== ''),
-    versionAtBase: theVersionAt(repository, the_manifest, base),
+    versionAtBase: theVersionAt(repository, the_manifest, from),
     versionAtHead: theVersionAt(repository, the_manifest, head),
   }
 }

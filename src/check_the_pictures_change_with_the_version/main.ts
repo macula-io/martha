@@ -52,8 +52,13 @@ const theRangeRead = (repository: string, base: string, head: string): number =>
   if (unread.length > 0) return couldNotLook(unread.join(', '))
   const refusals = theRefusalsOfAChange(change, thePicturesAt(repository))
   if (refusals.length > 0) return refused(refusals)
-  const bumped = bumpsTheVersion(change) ? 'the version is bumped, and' : 'no picture is touched, and'
-  console.log(`${NAME}: ${bumped} the pictures are what the generator draws`)
+  // The pictures are only judged where the version is bumped: nothing is drawn for a change that touches none, and
+  // the line says that rather than claiming pictures it never read (martha#627 r=2).
+  console.log(
+    bumpsTheVersion(change)
+      ? `${NAME}: the version is bumped, and every picture is what the generator draws`
+      : `${NAME}: no picture is touched and the version is not bumped, so there is nothing here to draw`,
+  )
   return 0
 }
 

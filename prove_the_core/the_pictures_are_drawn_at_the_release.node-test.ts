@@ -30,6 +30,13 @@ const aTreeOfPictures = (draws: (file: string) => string): string => {
 const checked = (repository: string) =>
   spawnSync('node', [PROGRAM, '--tree', '--repository', repository], { encoding: 'utf8' })
 
+/** A git command in the planted repository, which must end well. */
+const gitIn = (repository: string, ...args: readonly string[]): string => {
+  const ran = spawnSync('git', args, { cwd: repository, encoding: 'utf8' })
+  assert.equal(ran.status, 0, `git ${args.join(' ')} failed: ${ran.stderr}`)
+  return ran.stdout.trim()
+}
+
 test('a tree whose committed pictures are what the generator draws passes', () => {
   const directory = aTreeOfPictures((file) => DIAGRAMS.map((make) => make()).find((diagram) => diagram.file === file)!.svg())
   try {
@@ -59,6 +66,40 @@ test('a picture the tree does not hold at all is refused, never read as current'
     const ran = checked(directory)
     assert.equal(ran.status, 1, 'a tree with no pictures passed the release check')
     assert.match(ran.stderr, /assets\//, 'the refusal names no picture')
+  } finally {
+    removeTheTree(directory)
+  }
+})
+
+test('a change cut before the release bump is read from its merge base, never from the base tip', () => {
+  // The shape of a branch cut before a release: main then bumps the version and draws the picture, and the branch
+  // touches the model alone. Read two-dot against main's new tip, that change would look like a bump of its own, in
+  // reverse — a downgrade counts — with main's redraw as its own picture, and the pictures it never touched are stale.
+  const directory = aTreeOfPictures((file) => `the picture ${file} held before the model changed\n`)
+  try {
+    gitIn(directory, 'init', '-q', '-b', 'main')
+    gitIn(directory, 'config', 'user.email', 'planted@example.invalid')
+    gitIn(directory, 'config', 'user.name', 'planted')
+    writeFileSync(join(directory, 'package.json'), '{"version":"1.0.0"}\n')
+    writeFileSync(join(directory, 'the_model.ts'), 'the model, as the work was cut from it\n')
+    gitIn(directory, 'add', '-A')
+    gitIn(directory, 'commit', '-q', '-m', 'the tree the work was cut from')
+    gitIn(directory, 'checkout', '-q', '-b', 'work')
+    writeFileSync(join(directory, 'the_model.ts'), 'the model, as the work changed it\n')
+    gitIn(directory, 'add', '-A')
+    gitIn(directory, 'commit', '-q', '-m', 'a change to the model alone')
+    const work = gitIn(directory, 'rev-parse', 'HEAD')
+    gitIn(directory, 'checkout', '-q', 'main')
+    writeFileSync(join(directory, 'package.json'), '{"version":"1.1.0"}\n')
+    writeFileSync(join(directory, 'assets', DIAGRAMS[0]().file), 'the picture as that release drew it\n')
+    gitIn(directory, 'add', '-A')
+    gitIn(directory, 'commit', '-q', '-m', 'the release bump, and the picture it draws')
+    const released = gitIn(directory, 'rev-parse', 'HEAD')
+    gitIn(directory, 'checkout', '-q', 'work')
+
+    const ran = spawnSync('node', [PROGRAM, '--base', released, '--head', work, '--repository', directory], { encoding: 'utf8' })
+    assert.equal(ran.status, 0, `a change that touches no picture was refused because main had moved: ${ran.stderr}`)
+    assert.match(ran.stdout, /no picture is touched/, 'the pass line reads as though the pictures were judged')
   } finally {
     removeTheTree(directory)
   }
