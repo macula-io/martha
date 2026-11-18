@@ -10,7 +10,8 @@
 // 4. package.json, when it is one of them, is outside martha.hostCeilings what merging the two reviewed heads writes
 //    there (martha#410), which is the same three-way rule the redo applies and the dry run forecasts.
 //
-// What the redone files hold is judged where it already is: the C4 test pins the picture to its generator, and CI's
+// What the redone files hold is judged where it already is: the release pins the pictures to their generator
+// (martha#627), and CI's
 // exact check:host-ceilings pins the map's numbers. A merge resolved by hand, a redo line that names a source path, or a
 // merge with no redo line is refused by name.
 
