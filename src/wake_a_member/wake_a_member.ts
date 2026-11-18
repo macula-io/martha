@@ -26,6 +26,7 @@ import {
   type ThePark,
 } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
+import { theTellingOnTheNextStart } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 
 /** What this slice asks of a host: the crew's own store, and the stamps the host keeps its handovers' times in. */
 export interface WakeHost {
@@ -73,11 +74,13 @@ export const THE_WAKE_CLEARS_THE_PARK = 'woken from its handover by the owner'
 
 /**
  * The prompt a woken member is started on: its handover's path, and what to do with it. It names the file and never
- * quotes the handover, so the only handover a successor reads is the one the host wrote and stamped.
+ * quotes the handover, so the only handover a successor reads is the one the host wrote and stamped. `telling` is what a
+ * killed run left, from the one function both resume prompts read it from (#693).
  */
-export const theResumePrompt = (handover: AHandover, member: string): string =>
+export const theResumePrompt = (handover: AHandover, member: string, telling?: string): string =>
   `${member}, you are resuming from your handover at ${handover.file}. Read it first: it is what your predecessor left you. ` +
-  'Then carry on with the packages it names, and check what became of anything it says was sent and never concluded before you send it again.'
+  'Then carry on with the packages it names, and check what became of anything it says was sent and never concluded before you send it again.' +
+  (telling === undefined ? '' : ` ${telling}`)
 
 /**
  * Wakes `member`: reads its park and its newest handover, starts it on the resume prompt, then clears its park — or says
@@ -92,7 +95,11 @@ export async function wakeAMember(host: WakeHost, waking: Waking, start: TheStar
   if ('refusal' in park) return park
   const handover = theHandoverForAWake(host, waking.member)
   if ('refusal' in handover) return handover
-  const asked = await start({ member: waking.member, prompt: theResumePrompt(handover, waking.member) })
+  const telling = theTellingOnTheNextStart({ crew: host.stores.crew, member: waking.member, now_ms: Date.now() })
+  const asked = await start({
+    member: waking.member,
+    prompt: theResumePrompt(handover, waking.member, telling.telling),
+  })
   if (!asked.started) return { refusal: asked.refusal ?? `${waking.member} was not started, and nothing says why.`, told_by_the_start: true }
   return { member: waking.member, handover, park: clearedThePark(host, waking, park) }
 }

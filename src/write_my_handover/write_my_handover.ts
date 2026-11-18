@@ -212,17 +212,18 @@ export function whatBecameOfTheHandover(reading: TheHandoverRead): HandoverVerdi
  * The prompt the successor resumes on: its handover's file, the acts of its package that were sent and never concluded —
  * so it checks them instead of sending them twice (martha#254's read) — and the package's contract, which it is handed
  * again because a successor is held to the same version its predecessor was (martha#513). The file is named, never
- * quoted.
+ * quoted. `telling` is what a killed run left, from the one function both resume prompts read it from (#693).
  */
-export function theResumePrompt(resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined }): string {
+export function theResumePrompt(resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined; readonly telling?: string | undefined }): string {
   const acts =
     resuming.acts.length === 0
       ? ''
       : ` Before you send anything again, check what became of these acts of your package, which were sent and never concluded: ${resuming.acts.join('; ')}.`
   const contract = resuming.contract === undefined ? '' : `\n\n${resuming.contract}`
+  const telling = resuming.telling === undefined ? '' : `\n\n${resuming.telling}`
   return (
     `You are ${resuming.member}. Martha just refreshed this session. Read your handover at ${resuming.file}: it is what ` +
-    `your predecessor left you, and it is the only place your work stands. Then carry on with the packages it names.${acts}${contract}`
+    `your predecessor left you, and it is the only place your work stands. Then carry on with the packages it names.${acts}${contract}${telling}`
   )
 }
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { MINUTE_MS, WORKTREES } from '../declare_crew/declare_crew.ts'
 import { shownSafely } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 
 import {
@@ -23,7 +24,7 @@ import {
 
 /** The moment the launch ended, and the moment a command it killed was started: every test reads these, none types them. */
 const ENDED_AT = 1_794_998_400_000
-const STARTED_AT = ENDED_AT - 60_000
+const STARTED_AT = ENDED_AT - MINUTE_MS
 
 /** A record, with whatever this test wants different about it. */
 const aRecord = (different: Partial<WhatAKilledRunLeft> = {}): WhatAKilledRunLeft => ({
@@ -69,7 +70,7 @@ test('the telling names the commands that were running and the files that differ
 })
 
 test('a file in a worktree is told with its worktree, so two trees with one path cannot be confused', () => {
-  const inATree = { ...A_FILE, worktree: '/work/worktrees/a' }
+  const inATree = { ...A_FILE, worktree: `/work/${WORKTREES}/a` }
   const told = theTellingOf(
     aRecord({ dirty: [inATree], leftovers: [{ ...inATree, mtime_ms: STARTED_AT, command_line: 'c', started_at_ms: STARTED_AT }] }),
   )
@@ -306,8 +307,8 @@ test(`the record keeps ${KEPT_IN_A_RECORD} leftovers, dropping the oldest and sa
 })
 
 test('a worktree found gone is told as gone, with its path', () => {
-  const told = theTellingOf(aRecord({ dirty: [A_FILE] }), [], ['/work/worktrees/gone'])
+  const told = theTellingOf(aRecord({ dirty: [A_FILE] }), [], [`/work/${WORKTREES}/gone`])
   assert.ok(told !== undefined)
   assert.match(told, /gone/)
-  assert.match(told, /"\/work\/worktrees\/gone"/)
+  assert.ok(told.includes(JSON.stringify(`/work/${WORKTREES}/gone`)))
 })

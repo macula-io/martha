@@ -19,6 +19,7 @@ import type { TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { isAStorm, parkAMember, parkedPlace, theNewestHandover, theParkOf, theStormLine, type AHandover, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { sendACrewMessage } from '../send_a_crew_message/send_a_crew_message.ts'
+import { theTellingOnTheNextStart } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import {
   THE_HANDOVER_WRITTEN,
@@ -378,7 +379,20 @@ async function resume(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh
   const spend = await theSpendPartOfTheStart(places.ledger, held, now)
   const held_to = [contract, spend].filter((part) => part !== null && part !== undefined).join('\n\n')
   keepTheFlow(place, places.member, theFlowAbandoned(flow, 'resumed at a new session', now))
-  return { act: 'prompt', text: theResumePrompt({ member: places.member, file, acts, contract: held_to === '' ? undefined : held_to }), refresh: { phase: 'resumed', reason: `resumed from ${file}` } }
+  // What a killed run left, from the one function both resume prompts read it from (#693): the clear that this flow ran
+  // took no record of its own, so what is told here is the last launch end's.
+  const telling = theTellingOnTheNextStart({ crew: places.stores.crew, member: places.member, now_ms: now })
+  return {
+    act: 'prompt',
+    text: theResumePrompt({
+      member: places.member,
+      file,
+      acts,
+      contract: held_to === '' ? undefined : held_to,
+      telling: telling.telling,
+    }),
+    refresh: { phase: 'resumed', reason: `resumed from ${file}` },
+  }
 }
 
 /** The acts of `package` that were sent and never concluded, as the ledger's own line names them. */
