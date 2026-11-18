@@ -29,7 +29,8 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 
-import { manifestPathOf, refuseKeysDeclaredTwice } from '../../prove_the_core/declared_in_package_json.ts'
+import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
+import { refuseKeysDeclaredTwice } from '../../prove_the_core/keys_declared_twice.ts'
 import { describe } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { describeASlice } from './the_core_slices_under_the_cap.ts'
 import { judgeTheTree, type Judged } from './judge_the_tree.ts'

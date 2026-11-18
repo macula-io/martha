@@ -28,7 +28,8 @@
 
 import { basename } from 'node:path'
 
-import { aKeyDeclaredTwiceInWords, keysDeclaredTwice, manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { aKeyDeclaredTwiceInWords, keysDeclaredTwice } from '../../prove_the_core/keys_declared_twice.ts'
 import {
   ceilingsOf,
   CEILINGS_NAME,

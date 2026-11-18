@@ -12,7 +12,8 @@
 // The core's slices are held the same way (martha#415), with one difference: a single cap, martha.sliceCap, bounds every
 // core slice, and martha.sliceCeilings holds only the few slices measured above it, each at its exact count.
 
-import { refuseKeysDeclaredTwice, type Manifest } from './declared_in_package_json.ts'
+import { type Manifest } from './declared_in_package_json.ts'
+import { refuseKeysDeclaredTwice } from './keys_declared_twice.ts'
 
 /** Where the ceilings stand, as package.json names them: the words a landing's commit records of a ceiling it brought. */
 export const CEILINGS_NAME = 'martha.hostCeilings'

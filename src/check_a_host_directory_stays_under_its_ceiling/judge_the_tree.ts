@@ -9,7 +9,8 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { CORE, keysDeclaredTwice, manifestTextOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { CORE, manifestTextOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { keysDeclaredTwice } from '../../prove_the_core/keys_declared_twice.ts'
 import { ceilingsOf, sliceCapOf, sliceCeilingsOf } from '../../prove_the_core/the_host_ceilings.ts'
 import { theLinterLints } from '../../prove_the_core/the_linter_lints_it.ts'
 import { codeLinesOfDirectory } from './a_host_directorys_code_lines.ts'
