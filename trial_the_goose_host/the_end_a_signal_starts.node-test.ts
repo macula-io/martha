@@ -81,6 +81,42 @@ const anEngineThatKeepsStill = (lingerMs: number): string => [
 ].join('\n')
 
 /**
+ * An engine that shakes hands and then keeps still: it answers `initialize` and `session/new`, so the line gets a turn
+ * of its own, and answers no turn, so the line's own bound is what ends it. On TERM it writes the line the copy has to
+ * catch and lingers `lingerMs` before ending, so the signal's end is still waiting for this group when the line reaches
+ * its own end (martha#737's guard after `conduct`).
+ */
+const anEngineThatAnswersThenKeepsStill = (lingerMs: number): string => [
+  `#!${process.execPath}`,
+  "import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'",
+  "import { createInterface } from 'node:readline'",
+  "const root = process.env.GOOSE_PATH_ROOT ?? ''",
+  "const logs = root + '/state/logs/cli/2026-11-18'",
+  'mkdirSync(logs, { recursive: true })',
+  "const log = logs + '/engine.log'",
+  "appendFileSync(log, 'the engine started\\n')",
+  "process.on('SIGTERM', () => {",
+  "  appendFileSync(log, 'the engine was told to end\\n')",
+  `  setTimeout(() => process.exit(0), ${lingerMs})`,
+  '})',
+  'const answers = {',
+  '  initialize: { protocolVersion: 1 },',
+  "  'session/new': { sessionId: 'a-session', modes: { currentModeId: 'default' } },",
+  '}',
+  "createInterface({ input: process.stdin }).on('line', (line) => {",
+  '  const asked = JSON.parse(line)',
+  "  if (asked.method === 'session/prompt') return",
+  "  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: asked.id, result: answers[asked.method] ?? {} }) + '\\n')",
+  '})',
+  // Held open as a running engine is, and the group written last so a case that sees it knows the handler is in place.
+  'setInterval(() => undefined, 1_000)',
+  "const stat = readFileSync('/proc/self/stat', 'utf8')",
+  "const group = stat.slice(stat.lastIndexOf(') ') + 2).split(' ')[2] ?? String(process.pid)",
+  "writeFileSync((process.env.HOME ?? '.') + '/the-group', group + '\\n')",
+  '',
+].join('\n')
+
+/**
  * A fork checkout carrying the launch's bound where the runner's pins.env carries it, and the source the launch reads
  * its extension map from. The map declares the engine's skills extension, which is what the launch insists an engine
  * say before it will start one: these cases are about the end of a launch, so nothing else is declared.
@@ -255,6 +291,28 @@ test('the line in progress writes no verdict while the signal\'s end is still ru
     assert.deepEqual(linesIn(copied), ['the engine started', 'the engine was told to end'], 'one kill, kept once')
     assert.ok(!existsSync(join(it.evidence, 'line-1', 'result.json')),
       `the line in progress wrote no verdict over the launch the signal ended: ${said}`)
+    assert.deepEqual(survivorsIn(group), [], 'nothing of the launch outlived it')
+  } finally {
+    it.driver.kill('SIGKILL')
+  }
+})
+
+test('a line that reaches its own end while the signal ends the launch writes no verdict, and kills nothing twice (martha#737)', async () => {
+  // The handshake is answered and the turn is never, so the line's own bound ends it inside the window the signal's end
+  // spends waiting for this engine to die: the end the guard after `conduct` exists for, with no result written over it.
+  const it = launchOf(1, aLaunchLeaving(3_000), anEngineThatAnswersThenKeepsStill(6_000))
+  try {
+    const group = await theGroupOf(it)
+    const transcript = join(it.evidence, 'line-1', THE_TRANSCRIPT)
+    await until("the line's first turn to be sent", () => (readFileSync(transcript, 'utf8').includes('"session/prompt"') ? true : undefined))
+    it.driver.kill('SIGTERM')
+    const { signal, said } = await it.done
+    assert.equal(signal, 'SIGTERM', `the launch still ends the way the runner killed it: ${said}`)
+    const copied = copiedEngineLog(it.evidence, 1)
+    assert.ok(existsSync(copied), `the end kept the engine's logs: ${said}`)
+    assert.deepEqual(linesIn(copied), ['the engine started', 'the engine was told to end'], 'one kill reached the engine, so one end ran')
+    assert.ok(!existsSync(join(it.evidence, 'line-1', 'result.json')),
+      `the line that reached its own end wrote no verdict over the launch the signal ended: ${said}`)
     assert.deepEqual(survivorsIn(group), [], 'nothing of the launch outlived it')
   } finally {
     it.driver.kill('SIGKILL')
