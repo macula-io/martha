@@ -18,20 +18,25 @@
 #    The driver never reads, copies or passes the live token; the proof reads its own.
 #
 # The run has one temp folder, given to the packer and the proof as TMPDIR, and the EXIT trap removes it, so a temp
-# file a signal strands between a child's mktemp and its rm goes with it. A signal stops the child as well.
+# file a signal strands between a child's mktemp and its rm goes with it. A signal stops the child as well: a Ctrl-C
+# reaches the child through the process group, and its own INT trap runs; a TERM to the driver alone is passed on.
 #
-# Exit: the proof's own exit, with DRY_PASSED for a dry pass, never 0. A proof that exits 0 on a dry layer claims a
-# release's pass, which a dry run never is, so that is FAILED. The packer's exits are not passed through, because its
-# codes collide with the proof's: the packer's NOT_PACKABLE is 3, and the proof's 3 is "the registry carries no
-# release". So a packer that refused or could not run is PACK_FAILED, and a tree whose installer is ahead of its tag
-# is NOT_PACKABLE_TONIGHT, reported as "not packable", never as a pass. REFUSED: the arguments or the checkouts were
-# refused, and nothing was packed. Each code is defined once, below, outside the proof's own range.
+# Exit: the proof's own exit, 1 to DRY_PASSED, with DRY_PASSED for a dry pass, never 0; or one of the driver's own codes
+# below, each above the proof's highest, DRY_PASSED, so an exit says by its number alone whose it is. The proof's 2 (it
+# refused its arguments) comes after pack_exit=0 in run.txt; the driver's REFUSED is the driver refusing its own, before
+# anything was packed. A proof that exits 0 on a dry layer claims a release's pass, which a dry run never is, so that is
+# FAILED, and so is a run a signal stopped. The packer's exits are not passed through, because its codes collide with
+# the proof's: the packer's NOT_PACKABLE is 3, and the proof's 3 is "the registry carries no release". So a packer that
+# refused or could not run is PACK_FAILED, and a tree whose installer is ahead of its tag is NOT_PACKABLE_TONIGHT,
+# reported as "not packable", never as a pass. Before the proof runs the driver checks that each of its codes is above
+# DRY_PASSED, so a proof that grows a code cannot quietly take one of them.
 set -euo pipefail
 
-FAILED=1
-REFUSED=2
 PACK_FAILED=6
 NOT_PACKABLE_TONIGHT=7
+REFUSED=8
+FAILED=9
+STOP_GRACE_SECONDS=20
 NIGHT_FOLDER_NAME=night
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -42,11 +47,12 @@ USAGE='usage: run_the_night_on_main.sh <ssh-host> --evidence <folder> [--sha <sh
 
 refuse() { printf 'night: %s\n' "$1" >&2; exit "${REFUSED}"; }
 
-# The digits of `NAME=<digits>` on exactly one line of a script, or nothing.
+# The digits of NAME in a script: exactly one line starts `NAME=`, and it is `NAME=<digits>`; otherwise nothing. The
+# same rule as read_a_scripts_constant.mjs, which the tests read the codes with.
 a_scripts_constant() {
   local lines
-  lines="$(sed -n "s/^$2=\\([0-9][0-9]*\\)\$/\\1/p" "$1")"
-  [[ -n "${lines}" && "${lines}" != *$'\n'* ]] && printf '%s\n' "${lines}"
+  lines="$(sed -n "/^$2=/p" "$1")"
+  [[ -n "${lines}" && "${lines}" != *$'\n'* && "${lines}" =~ ^$2=([0-9]+)$ ]] && printf '%s\n' "${BASH_REMATCH[1]}"
 }
 
 HOST="${1:-}"
@@ -72,6 +78,9 @@ PROOF="${PROOF_TREE}/${PROOF_REL}"
 [[ -z "$(git -C "${PROOF_TREE}" status --porcelain)" ]] || refuse "the proof tree ${PROOF_TREE} is not clean"
 DRY_PASSED="$(a_scripts_constant "${PROOF}" DRY_PASSED)" || refuse "the proof in ${PROOF_TREE} defines no DRY_PASSED, so it takes no --dry-layer"
 NOT_PACKABLE="$(a_scripts_constant "${PACKER}" NOT_PACKABLE)" || refuse "the packer defines no NOT_PACKABLE"
+for code in "${PACK_FAILED}" "${NOT_PACKABLE_TONIGHT}" "${REFUSED}" "${FAILED}"; do
+  ((code > DRY_PASSED)) || refuse "the driver's code ${code} is not above the proof's DRY_PASSED ${DRY_PASSED}, so an exit could not say whose it is"
+done
 
 git -C "${REPO}" fetch --quiet origin || refuse "git could not fetch origin in ${REPO}"
 [[ -n "${SHA}" ]] || SHA="$(git -C "${REPO}" rev-parse origin/main)"
@@ -85,8 +94,17 @@ mkdir -p "${RUN}"
 RUN_TMP="$(mktemp -d)"
 CHILD=''
 trap 'rm -rf "${RUN_TMP}"' EXIT
+# A child asked to stop gets STOP_GRACE_SECONDS to clean up behind its own TERM trap (the proof removes its container),
+# and is then killed, so a child that ignores TERM or hangs in its trap cannot hold the driver past the bound. The kill
+# reaches the child only: what it started and did not stop is its own to leave.
 stop() {
-  if [[ -n "${CHILD}" ]]; then kill -TERM "${CHILD}" 2> /dev/null || true; wait "${CHILD}" 2> /dev/null || true; fi
+  if [[ -n "${CHILD}" ]]; then
+    kill -TERM "${CHILD}" 2> /dev/null || true
+    local tenths=0
+    while kill -0 "${CHILD}" 2> /dev/null && ((tenths < STOP_GRACE_SECONDS * 10)); do sleep 0.1; tenths=$((tenths + 1)); done
+    kill -KILL "${CHILD}" 2> /dev/null || true
+    wait "${CHILD}" 2> /dev/null || true
+  fi
   printf 'night: stopped by a signal; evidence %s\n' "${RUN}" >&2
   printf 'interrupted=%s\n' "$(date -Is)" >> "${RUN}/run.txt"
   exit "${FAILED}"
@@ -94,9 +112,11 @@ stop() {
 trap stop INT TERM
 
 # A child in the background, its standard input this run's own, and waited for, so a signal reaches the trap at once
-# rather than after the child ends. Its exit is in CHILD_EXIT.
+# rather than after the child ends. Its exit is in CHILD_EXIT. Bash starts a background child of a script with SIGINT
+# ignored, and a signal ignored when a program starts cannot be trapped, so the proof would never see a Ctrl-C: the
+# subshell puts INT back to its default before it execs the child, and the child's own INT trap then works.
 run_child() {
-  TMPDIR="${RUN_TMP}" "$@" 0<&0 &
+  (trap - INT; TMPDIR="${RUN_TMP}" exec "$@") 0<&0 &
   CHILD=$!
   local rc=0
   wait "${CHILD}" || rc=$?
