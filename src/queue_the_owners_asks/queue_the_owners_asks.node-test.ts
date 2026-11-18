@@ -419,6 +419,16 @@ test('#608: a ticked option carrying an ask\'s line under a label that does not 
   assert.equal(await rowsIn(host), rows)
 })
 
+test('#608: a ticked option whose label opens with an ask\'s id but carries words the member wrote is not that ask: the whole label is matched (mutant: the label matched by its opening)', async () => {
+  const host = aHost()
+  const { asks, batch, rows } = await twoAsksTaken(host)
+  const [docs] = asks.map(theOptionOf)
+  const rewritten = { label: '0. Yes order lunch', description: docs?.description ?? '' }
+  theOwnerPicks(host, 'session-lead', [rewritten], [rewritten.label])
+  assert.equal(REFUSED(await settling(host, LEAD, batch, [0])), '0 is not an option the owner picked in the menu. Nothing was settled.')
+  assert.equal(await rowsIn(host), rows)
+})
+
 test('#608: an ask whose option would stand for two asks is skipped at the take, naming its label (mutant: the take-time rule removed)', async () => {
   const host = aHost()
   TOLD(await queueAnAsk(host.host, { ask: 'Land the docs, then publish?' }, BUILDER))

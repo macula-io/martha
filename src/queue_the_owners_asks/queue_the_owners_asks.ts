@@ -518,17 +518,18 @@ function theMenuTheSettleStandsOn(menus: TheOwnersMenus | undefined, batch: ABat
 
 /**
  * Why the ids a settle names are not what the owner picked, or undefined when every one is (martha#608). Each id must be
- * an option the owner picked whose label opens with that id and whose description is that ask's own line, exactly as
- * the take printed it; and no picked option may stand for two asks.
+ * an option the owner picked whose label and description are that ask's own, exactly as the take printed them
+ * (theOptionOf); and no picked option may stand for two asks.
  */
 function theTicksTheMenuDoesNotHold(yes: readonly number[], picked: readonly APostedOption[], asks: readonly AnAsk[]): string | undefined {
   const two = picked.find((option) => aLabelForTwoAsks(option.label))
   if (two !== undefined) return `the owner picked ${JSON.stringify(two.label)}, which stands for more than one ask, so it settles none. Nothing was settled.`
   for (const id of yes) {
-    const option = picked.find((one) => one.label.startsWith(theIdOpening(id)))
-    if (option === undefined) return `${String(id)} is not an option the owner picked in the menu. Nothing was settled.`
     const ask = asks.find((one) => one.id === id)
-    if (ask === undefined || option.description !== theLineOf(ask)) {
+    // The whole label, never its opening: the owner reads the label, so one the member wrote after the id is not this ask.
+    const option = ask === undefined ? undefined : picked.find((one) => one.label === theOptionOf(ask).label)
+    if (ask === undefined || option === undefined) return `${String(id)} is not an option the owner picked in the menu. Nothing was settled.`
+    if (option.description !== theLineOf(ask)) {
       return `the option the owner picked for ${String(id)} does not carry ask ${String(id)}'s own line as its description, so it is not that ask. Nothing was settled.`
     }
   }
