@@ -5,7 +5,8 @@
 // has recorded. A test process holding a real member's state must not pass it on to what it launches, so the member is
 // handed none of it: the rule is the slice's (../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of),
 // and what this composes for it is what only a host adapter can read — where the root the launching process names is,
-// how a home's state root is found, and which sessions the crew has recorded, one file per session in its rows place.
+// how a home's state root is found, and which sessions the crew has recorded: one append-only stream per session under
+// its rows place, named and decoded by the row store's own names (../row_streams_directory).
 //
 // The environment is built in this order: what it inherits without the crew's state, the gate's switches, the member's
 // own config folder, and the launcher's own state home last, so neither an inherited value nor a switch can point a
@@ -17,6 +18,8 @@ import { join } from 'node:path'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { streamOfDirectoryName } from '../row_streams_directory/row_streams_directory.ts'
+import { SESSION_RECORD_STREAM } from '../session_records_in_rows/session_records_in_rows.ts'
 import {
   STATE_HOME_VARIABLE,
   theCrewsStateAMemberIsGiven,
@@ -26,13 +29,19 @@ import {
 
 import { launchEnvironment, type Host, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 
-/** A file's name without the suffix that says what it holds. */
-const nameWithoutItsSuffix = (name: string): string => name.slice(0, name.lastIndexOf('.') === -1 ? name.length : name.lastIndexOf('.'))
+/** The session id a stream directory under the crew's rows holds, or undefined for any other stream. */
+function theSessionIn(entry: string): string | undefined {
+  const stream = streamOfDirectoryName(entry)
+  return stream !== undefined && stream.startsWith(SESSION_RECORD_STREAM) ? stream.slice(SESSION_RECORD_STREAM.length) : undefined
+}
 
-/** The session ids a crew has recorded: one file per session directly in its rows place. */
+/** The session ids a crew has recorded: one append-only stream per session under its rows place. */
 function sessionIdsRecordedIn(rows: string): ReadonlySet<string> {
   try {
-    return new Set(readdirSync(rows).map(nameWithoutItsSuffix))
+    return new Set(readdirSync(rows).flatMap((entry) => {
+      const session = theSessionIn(entry)
+      return session === undefined ? [] : [session]
+    }))
   } catch {
     // No rows place yet, or one this user cannot read: then the crew has recorded no session a member could be handed.
     return new Set()

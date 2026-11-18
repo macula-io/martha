@@ -24,6 +24,8 @@ import { STATE_HOME_VARIABLE } from '../src/refuse_launch_of_unapproved_config/t
 import { theEnvironmentAMemberIsGiven } from '../src/launch_a_claude_code_member/the_environment_a_member_is_given.ts'
 import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
 import { STATE_ROOT_NAME, CREWS_PLACE } from '../src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { streamDirectoryNameOf } from '../src/row_streams_directory/row_streams_directory.ts'
+import { sessionRecordStreamOf } from '../src/session_records_in_rows/session_records_in_rows.ts'
 
 import { FORCE_EXIT_FLAG, GUARD_FLAG, TIMEOUT_FLAG, withoutTheTestContext } from './every_test_run_ends.ts'
 import {
@@ -160,15 +162,15 @@ test("a process handed a record is named by it, so the check above bites (martha
 test("a launched member is handed neither the crew state a test planted in its own environment nor a session id the crew recorded (martha#683)", async (t) => {
   const home = mkdtempSync(join(tmpdir(), 'martha-683-launch-home-'))
   t.after(() => removeTheTree(home))
-  // What the test process itself holds: a state home of its own, and the record of a session in it.
+  // What the test process itself holds: a state home of its own, and the stream a session of its is recorded in.
   const planted = join(home, 'a-state-home-the-test-planted')
-  const plantedRecord = join(planted, STATE_ROOT_NAME, CREWS_PLACE, 'a-crew', 'rows', 'a-session.json')
-  // Where the launch keeps its own crew state, and the session it has recorded there.
+  const plantedRecord = join(planted, STATE_ROOT_NAME, CREWS_PLACE, 'a-crew', 'rows', streamDirectoryNameOf(sessionRecordStreamOf(randomUUID())))
+  // Where the launch keeps its own crew state, and the session it has recorded there: one stream per session, under the
+  // names the row store really gives them.
   const crewStateRoot = join(home, 'the-crews-state', STATE_ROOT_NAME)
   const rows = join(crewStateRoot, CREWS_PLACE, 'a-crew', 'rows')
-  mkdirSync(rows, { recursive: true })
   const sessionId = randomUUID()
-  writeFileSync(join(rows, `${sessionId}.json`), '{}\n')
+  mkdirSync(join(rows, streamDirectoryNameOf(sessionRecordStreamOf(sessionId))), { recursive: true })
 
   const inherited: Record<string, string> = {
     HOME: home,
