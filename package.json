@@ -132,7 +132,7 @@
       "src/install_the_pinned_installer": 122,
       "src/install_the_recorded_mesh_server": 310,
       "src/keep_martha_state_outside_the_checkout": 418,
-      "src/keep_where_owners_acts_were_typed": 94,
+      "src/keep_where_owners_acts_were_typed": 101,
       "src/keep_the_crews_files_as_directories": 155,
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
@@ -149,7 +149,7 @@
       "src/refuse_settings_that_turn_hooks_off": 203,
       "src/row_streams_directory": 164,
       "src/run_an_owner_signed_command": 562,
-      "src/run_the_martha_command": 454,
+      "src/run_the_martha_command": 451,
       "src/run_the_nodes_own_npm_alone": 165,
       "src/serve_the_relay_to_a_launch": 235,
       "src/start_a_member": 167,
@@ -158,8 +158,7 @@
       "src/sweep_leftover_launch_directories": 153,
       "src/ask_git_what_a_member_is_about_to_change": 78,
       "src/tell_the_member_a_line": 42,
-      "src/a_launch_end_on_this_machine": 119,
-      "src/watch_the_crew_tools_a_launch_served": 94
+      "src/a_launch_end_on_this_machine": 119
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",

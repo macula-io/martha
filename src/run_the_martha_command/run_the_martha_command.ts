@@ -60,7 +60,7 @@ import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cros
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { keepWhereItWasTyped, linesOf, seenFromThisProcess, theCutoverTakenOnce, theRecordFilesOf, whatTheOwnerReadsOf } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
+import { keepWhereItWasTyped, linesOf, seenFromThisProcess, theCutoverTakenOnce, theListingsAfterTheEntryIsKept, theRecordFilesOf, whatTheOwnerReadsOf } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
 
 /** The line `martha start` prints once the member is up: its name and its pid. */
 export const startedLine = (member: string, pid: number | string): string => `${member} started, pid ${pid}`
@@ -143,18 +143,6 @@ async function approve(io: CommandIo, places: Places): Promise<number> {
   if (outcome.kind === 'refused') return refused(io, outcome.refusal)
   io.out(outcome.kind === 'nothing' ? NOTHING_TO_APPROVE : `Approved: fingerprint ${outcome.fingerprint}.`)
   return EXIT_DONE
-}
-
-/**
- * What the owner is shown of their own acts once the act's line is named in the log of where acts were typed
- * (martha#765): read after the entry is kept, never inside the act, or the line the act just wrote would be shown as
- * one no act of theirs recorded writing.
- */
-function theListingsThatReadTheLog(io: CommandIo, places: Places): void {
-  for (const [what, act] of [['Your approvals, and where each was typed (martha#619):', 'approve'], ['Your pinned keys, and where each was typed:', 'pin-key']] as const) {
-    const lines = whatTheOwnerReadsOf(places, act, theFirstApprovalAt(places))
-    if (lines.length > 0) [what, ...lines].forEach((line) => io.out(line))
-  }
 }
 
 /**
@@ -551,14 +539,6 @@ function theFirstApprovalAt(places: Places): string | undefined {
 }
 
 /**
- * What an act shows the owner of the log its line is named in, printed once that line is kept and never before
- * (martha#765). An act absent here shows no listing.
- */
-const THE_LISTINGS_THAT_READ_THE_LOG: Readonly<Record<string, (io: CommandIo, places: Places) => void>> = {
-  approve: theListingsThatReadTheLog,
-}
-
-/**
  * An owner's act that writes a record, made, then its lines named in the log of where the owner's acts were typed
  * (martha#619): the record first, the entries after it, and only for an act that ended done. What the act shows the
  * owner of that log is printed here, once the entry is kept, never inside the act (martha#765).
@@ -571,13 +551,9 @@ async function recordedWhereItWasTyped(io: CommandIo, places: Places, asked: Ask
   const done = await act(io, places, asked)
   if (done !== EXIT_DONE || file === undefined) return done
   const unkept = keepWhereItWasTyped(places, asked.act, before, at, seenFromThisProcess())
-  if (unkept !== undefined) {
-    // The line is in the record and not in the log, so a listing now would call the owner's own act forged. The error
-    // says what happened instead; the next `martha` that reads the log will say the same of the line.
-    io.err(`The act is made, but where it was typed is not kept: ${unkept}`)
-    return done
-  }
-  THE_LISTINGS_THAT_READ_THE_LOG[asked.act]?.(io, places)
+  if (unkept !== undefined) io.err(`The act is made, but where it was typed is not kept: ${unkept}`)
+  // Kept, so the listing can be read: an entry that could not be kept would show the owner's own act as forged.
+  else if (asked.act === 'approve') for (const line of theListingsAfterTheEntryIsKept(places, theFirstApprovalAt(places))) io.out(line)
   return done
 }
 
