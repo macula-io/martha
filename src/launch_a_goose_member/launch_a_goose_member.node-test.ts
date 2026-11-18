@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { ENGINE_FAMILIES, fingerprintOf, readLaunchState, theTextAStartLoads, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { AGENTS_MD_FILE, ENGINE_FAMILIES, ENGINE_HINTS_FILE, fingerprintOf, readLaunchState, theTextAStartLoads, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
@@ -28,6 +28,7 @@ import {
 import {
   A_LAUNCHS_FOLDERS_MODE,
   THE_PATH_A_LAUNCH_GIVES,
+  THE_ROOT_OF_A_LAUNCH,
   launchTheGooseEngine,
   startTheEngine,
   theConfigFileOf,
@@ -354,14 +355,15 @@ test("the launch records a checkout's own hint files, each with the source it is
   const place = { host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: checkout, stop_dir: dir }
   assert.deepEqual(theTextAStartLoads(place, thisMachine), [], 'a checkout holding no hint file recorded one')
 
-  writeFileSync(join(checkout, '.goosehints'), 'a hint\n')
-  writeFileSync(join(checkout, 'AGENTS.md'), 'an agents file\n')
+  writeFileSync(join(checkout, ENGINE_HINTS_FILE), 'a hint\n')
+  writeFileSync(join(checkout, AGENTS_MD_FILE), 'an agents file\n')
   writeFileSync(join(checkout, 'README.md'), 'not a hint\n')
   const found = theTextAStartLoads(place, thisMachine)
-  // The names are the engine's own, spelled as its source spells them: a rename here fails by name.
+  // The names are the gate's own constants, read from it and never spelled again here; what this pins is the
+  // record: both files found at the checkout, in that order, each with the source it is, and no other file.
   assert.deepEqual(found.map((one) => ({ file: one.file, source: one.source })), [
-    { file: '.goosehints', source: 'checkout_file' },
-    { file: 'AGENTS.md', source: 'checkout_file' },
+    { file: ENGINE_HINTS_FILE, source: 'checkout_file' },
+    { file: AGENTS_MD_FILE, source: 'checkout_file' },
   ])
   for (const one of found) assert.equal(one.at, join(checkout, one.file), 'the record names a file at a path nobody can point at')
 })
@@ -373,9 +375,9 @@ test('a hint file above the checkout, up to the git root, is recorded, and one a
   git(repository, 'init', '-q', '.')
   const checkout = join(repository, 'work', 'checkout')
   mkdirSync(checkout, { recursive: true })
-  writeFileSync(join(repository, '.goosehints'), 'a hint above the checkout\n')
-  writeFileSync(join(home, '.goosehints'), 'a hint above the git root\n')
-  assert.deepEqual(theTextAStartLoads({ host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: checkout, stop_dir: home }, thisMachine).map((one) => one.at), [join(repository, '.goosehints')])
+  writeFileSync(join(repository, ENGINE_HINTS_FILE), 'a hint above the checkout\n')
+  writeFileSync(join(home, ENGINE_HINTS_FILE), 'a hint above the git root\n')
+  assert.deepEqual(theTextAStartLoads({ host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: checkout, stop_dir: home }, thisMachine).map((one) => one.at), [join(repository, ENGINE_HINTS_FILE)])
 })
 
 test('a launch on a checkout the owner has not approved is refused before anything is made (martha#541)', async (t) => {
@@ -388,7 +390,7 @@ test('a launch on a checkout the owner has not approved is refused before anythi
   assert.ok('refusal' in refused, 'an unapproved checkout started an engine')
   assert.match(refused.refusal, /approv/i)
   assert.deepEqual(readdirSync(place.snapshot_root), [], 'a refused launch left a snapshot behind')
-  assert.equal(existsSync(join(root, 'goose-root')), false, 'a refused launch made its root')
+  assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch made its root')
 })
 
 test('a place naming another host is refused, and an approved launch records its hints before the engine starts (martha#541)', async (t) => {
@@ -396,12 +398,12 @@ test('a place naming another host is refused, and an approved launch records its
   const wrongHost = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place: { ...place, host: 'opencode' }, model: A_MODEL })
   assert.ok('refusal' in wrongHost, 'a place for another host started the engine')
 
-  writeFileSync(join(checkout, '.goosehints'), 'a hint\n')
-  writeFileSync(join(checkout, 'AGENTS.md'), 'an agents file\n')
+  writeFileSync(join(checkout, ENGINE_HINTS_FILE), 'a hint\n')
+  writeFileSync(join(checkout, AGENTS_MD_FILE), 'an agents file\n')
   const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL })
   assert.ok('engine' in launch, 'the launch was refused')
   t.after(() => launch.engine.stop())
-  assert.deepEqual(launch.text_a_start_loads.map((one) => one.file), ['.goosehints', 'AGENTS.md'])
+  assert.deepEqual(launch.text_a_start_loads.map((one) => one.file), [ENGINE_HINTS_FILE, AGENTS_MD_FILE])
   const ended = await launch.end()
   assert.equal(ended.stopped, true)
   assert.deepEqual(readdirSync(place.snapshot_root), [], "the gate's snapshot was left behind")
