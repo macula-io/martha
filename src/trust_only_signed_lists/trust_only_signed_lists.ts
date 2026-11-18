@@ -3,10 +3,10 @@
 // This exists so code that can write a file as a member's user cannot add a node
 // id to a list a gate checks against, and so get its text acted on.
 //
-// Every gate in this repository compares against a list: the crew room's roster
-// and the shared room's (../admit_a_room_message), the policy that says whose
-// text a session may act on (../refuse_execution_after_ungated_text), and the
-// supervisors who may act (../who_may_act). Kept as plain files, each can be
+// Every gate in this repository that trusts node ids compares against a list: the
+// crew room's roster and the shared room's (../admit_a_room_message), and the
+// policy that says whose text a session may act on
+// (../refuse_execution_after_ungated_text). Kept as plain files, each can be
 // rewritten by one command run as the member's user, and every gate then admits
 // whoever was added. So each list is a document the owner signs, and it is
 // opened from the signed bytes on every read, never from a copy.
@@ -64,7 +64,6 @@ import { createHash } from 'node:crypto'
 import { isNodeId, type RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import { MEMBER_NAME, type SignedMember } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import type { Roster } from '../who_may_act/who_may_act.ts'
 import { SK_ED25519, parseSshPublicKey, verifySshSignature } from './ssh_signature.ts'
 
 /** The namespace the owner signs trust lists in: `ssh-keygen -Y sign -n <this>`. */
@@ -75,7 +74,6 @@ export const LIST_FIELD = {
   martha_roster: 'member_node_ids',
   shared_roster: 'member_node_ids',
   policy: 'may_send_executable_text',
-  supervisors: 'supervisor_node_ids',
   members: 'members',
 } as const
 
@@ -338,11 +336,6 @@ export function trustedRoomRosters(crew: OpenedList, shared: OpenedList): RoomRo
 /** The policy the shell gate reads, from its opened list. */
 export function trustedPolicy(policy: OpenedList): Policy {
   return { may_send_executable_text: policy.node_ids }
-}
-
-/** The supervisors who may act, from their opened list. */
-export function trustedSupervisors(supervisors: OpenedList): Roster {
-  return { supervisor_node_ids: supervisors.node_ids }
 }
 
 /** The members the launcher may bind a sender to, from their opened list. */
