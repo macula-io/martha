@@ -52,12 +52,16 @@ export const WORKTREE_FINISH_TOOL = {
 /** What the two tools answer: what the worktree's own slice said, told or refused. */
 type AToolAnswer = { readonly answer: string } | { readonly refused: string }
 
-/** `worktree_open` and `worktree_finish`, over the request the launcher built. */
+/**
+ * `worktree_open` and `worktree_finish`, over the request the launcher built; or the refusal of a place that can act in
+ * none (martha#256), answered as it is, so the tools slice keeps only the table (martha#710).
+ */
 export async function theWorktreeToolOver(
-  request: WorktreesRequest,
+  request: WorktreesRequest | { readonly refused: string },
   act: (request: WorktreesRequest, args: Readonly<Record<string, unknown>>) => Promise<WorktreeAnswer>,
   args: Readonly<Record<string, unknown>>,
 ): Promise<AToolAnswer> {
+  if ('refused' in request) return request
   const answer = await act(request, args)
   return 'told' in answer ? { answer: answer.told } : { refused: answer.refused }
 }

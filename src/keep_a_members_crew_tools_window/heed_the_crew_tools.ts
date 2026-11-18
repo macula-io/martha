@@ -48,6 +48,12 @@ export interface ACallInASession {
   readonly call: ACallForTheWindow
 }
 
+/**
+ * What holds the watch over the crew tools its host served (martha#710): the places a launch's crew tools run on, and
+ * the tools a launch builds over them, which must carry the same watch so a builder that leaves it out cannot compile.
+ */
+export type HoldingTheWatch<T> = T & { readonly served_tools: TheServedToolsWatch }
+
 /** The places a member's window is kept and told over: a structural part of the crew's tool places. */
 export interface TheWindowPlaces {
   readonly member: string

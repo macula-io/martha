@@ -153,7 +153,7 @@ export function gapsInGateCoverage(
   config_stand_in?: (probe: ConfigPathProbe) => PathProbe,
   ask_gates: Readonly<Record<string, AskGate>> = ASK_GATES,
 ): readonly Gap[] {
-  const gaps: Gap[] = []
+  const gaps: Gap[] = [...gapsOfSharedIds(paths)]
   const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates, ask: ask_gates }
 
   for (const path of paths) {
@@ -162,6 +162,18 @@ export function gapsInGateCoverage(
   }
 
   return gaps
+}
+
+/**
+ * One gap per id that more than one row holds, naming every such row's `what` in register order (martha#758).
+ * Packages add rows in parallel and each picks the next number by hand, so two can pick the same one.
+ */
+function gapsOfSharedIds(paths: readonly InboundPath[]): readonly Gap[] {
+  const rows_by_id = new Map<string, string[]>()
+  for (const path of paths) rows_by_id.set(path.id, [...(rows_by_id.get(path.id) ?? []), path.what])
+  return [...rows_by_id]
+    .filter(([, whats]) => whats.length > 1)
+    .map(([id, whats]) => ({ path: id, why: `the id is held by ${String(whats.length)} rows: ${whats.join('; ')}` }))
 }
 
 /** Every gate a row may name, by kind. */
