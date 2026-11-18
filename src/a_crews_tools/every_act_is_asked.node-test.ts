@@ -59,7 +59,12 @@ const GRANTED = 'Lead'
 const UNGRANTED = 'Builder1'
 const ANOTHER = 'Builder2'
 const BUILDER_ROLE = 'builder'
-const team = {
+/**
+ * The crew, its table built for one row: `act` granted to the granted role alone, and every other act to the ungranted
+ * role alone. A handler that read another act's grant would then let the ungranted member through, or refuse the granted
+ * one, and its row fails (martha#607 r=2).
+ */
+const teamFor = (act: Act) => ({
   version: DECLARATION_VERSION,
   owner: 'Ann',
   members: [
@@ -67,15 +72,15 @@ const team = {
     { name: UNGRANTED, role: BUILDER_ROLE, model: 'model-b' },
     { name: ANOTHER, role: BUILDER_ROLE, model: 'model-b' },
   ],
-  mode: { name: 'team', roles: [SUPERVISOR, BUILDER_ROLE], may: Object.fromEntries(ACTS.map((act) => [act, [SUPERVISOR]])) },
+  mode: { name: 'team', roles: [SUPERVISOR, BUILDER_ROLE], may: Object.fromEntries(ACTS.map((one) => [one, [one === act ? SUPERVISOR : BUILDER_ROLE]])) },
   channel_read_seconds: 30,
-}
-const documents = {
+})
+const documentsFor = (act: Act) => ({
   read: async (path: string): Promise<string> => {
-    if (path === join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)) return JSON.stringify(team)
+    if (path === join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)) return JSON.stringify(teamFor(act))
     throw Object.assign(new Error(`no document at ${path}`), { code: 'ENOENT' })
   },
-}
+})
 
 /** Processes that run nothing: a granted call that gets past its grant fails here, never on a real git or gh. */
 const NOTHING_RUNS = 'this test runs no process'
@@ -85,9 +90,6 @@ const processes = {
   identityOf: () => null,
   signalGroup: () => assert.fail('no row signals a process'),
 } as unknown as NonNullable<Parameters<typeof crewToolsOver>[0]['processes']>
-
-// The acting tools read the declaration the launcher parsed, as a launch hands it; the others read it from documents.
-const settings = await declareCrew(documents, root, [])
 
 const crew = keepTheCrewsFilesAsDirectories(join(home, 'the-crew-store'))
 const rows = rowStreamsDirectory(join(home, CREW_ROWS_PLACE))
@@ -101,7 +103,13 @@ const lifecycle: StoppingHost = {
   wait: async () => assert.fail('no row waits for a member'),
 }
 
-function theToolsOf(member: string): CrewTools {
+/**
+ * A member's tools under the table built for `act`. The acting tools read the declaration the launcher parsed, as a
+ * launch hands it; the others read it from documents. Both are the same table.
+ */
+async function theToolsOf(member: string, act: Act): Promise<CrewTools> {
+  const documents = documentsFor(act)
+  const settings = await declareCrew(documents, root, [])
   return crewToolsOver({
     member,
     ledger: { clock: { now: () => 1_000 }, stores: { rows } },
@@ -158,9 +166,9 @@ const wordsOf = (said: { readonly answer: string } | { readonly refused: string 
 
 for (const row of ROWS) {
   test(`#607: ${row.handler}, through ${row.tool}, refuses a role the table does not grant ${row.act}, and not one it grants`, async () => {
-    const ungranted = await theToolsOf(UNGRANTED).answer(row.tool, row.args, `session-${UNGRANTED}`)
+    const ungranted = await (await theToolsOf(UNGRANTED, row.act)).answer(row.tool, row.args, `session-${UNGRANTED}`)
     assert.ok(refusedForTheGrant(UNGRANTED, ungranted), `${row.handler} let ${UNGRANTED} take ${row.act} through ${row.tool}: ${wordsOf(ungranted)}`)
-    const granted = await theToolsOf(GRANTED).answer(row.tool, row.args, `session-${GRANTED}`)
+    const granted = await (await theToolsOf(GRANTED, row.act)).answer(row.tool, row.args, `session-${GRANTED}`)
     assert.ok(!refusedForTheGrant(GRANTED, granted), `${row.handler} refused ${GRANTED}, whose role the table grants ${row.act}: ${wordsOf(granted)}`)
   })
 }
