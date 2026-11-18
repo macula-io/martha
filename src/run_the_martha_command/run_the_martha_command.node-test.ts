@@ -308,6 +308,15 @@ test('martha approve whose input is no terminal refuses, so a member\'s shell ca
   allSaidByMartha(run.err)
 })
 
+test('#765: martha approve shows the approval it just made as typed at the owner\'s terminal, never as written without the martha command', (t) => {
+  const place = placeFor(t)
+  writeFileSync(join(place.root, '.mcp.json'), JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } }))
+  const run = marthaOnATerminalTyping('yes\n', place, {}, 'approve')
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.match(run.said, /line 1: typed at \/dev\/pts\/\d+ \(session \d+\)/, run.said)
+  assert.ok(!run.said.includes('WRITTEN WITHOUT THE MARTHA COMMAND'), `the owner's own yes was shown as forged: ${run.said}`)
+})
+
 test('martha --version prints the version package.json carries, and nothing else', (t) => {
   const run = martha(placeFor(t, { checkout: false }), '--version')
   assert.equal(run.status, 0)
@@ -317,11 +326,16 @@ test('martha --version prints the version package.json carries, and nothing else
 
 /** bin/martha run on a terminal of its own, as the owner runs it: util-linux script gives it one. */
 function marthaOnATerminal(place: Place, env: Readonly<Record<string, string>>, ...args: string[]) {
+  return marthaOnATerminalTyping('', place, env, ...args)
+}
+
+/** bin/martha run on a terminal of its own, with `typed` written at it as the owner types an answer. */
+function marthaOnATerminalTyping(typed: string, place: Place, env: Readonly<Record<string, string>>, ...args: string[]) {
   const words = [process.execPath, MARTHA, ...args].map((word) => `'${word.replaceAll("'", "'\\''")}'`).join(' ')
   const run = spawnSync('script', ['--quiet', '--return', '--command', words, '/dev/null'], {
     cwd: place.root,
     encoding: 'utf8',
-    input: '',
+    input: typed,
     env: { PATH: process.env.PATH, HOME: place.home, XDG_STATE_HOME: join(place.home, 'state'), GIT_CONFIG_NOSYSTEM: '1', ...env },
   })
   return { status: run.status, said: `${run.stdout}${run.stderr}`.replaceAll('\r\n', '\n') }
