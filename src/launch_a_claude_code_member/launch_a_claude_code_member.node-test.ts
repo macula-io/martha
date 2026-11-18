@@ -23,7 +23,8 @@ import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_TOOL_RESULT_ROWS, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { register, type RelayCatch, type RelayEngine, type RelayHook } from '../claude_code_relay/hooks/register.ts'
 import { heardRan, RELAY_ORIGIN, RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH, type Ran, type Refused, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { ROW_NOT_DURABLE, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
+import { ROW_NOT_DURABLE, type HandoverStamp, type HandoverStampStore, type Row, type RowStore, type TurnSource } from '../host_contract/host_contract.ts'
+import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { linuxProcessIdentities, PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -4388,4 +4389,62 @@ test('a launcher told a run\'s end it cannot even open ends at once, taking its 
   await until('the launcher to end by itself', () => launcher.exitCode !== null || launcher.signalCode !== null, t, () => said)
   assert.equal(await ended, 0, `the launcher did not end by itself: ${JSON.stringify(said)}`)
   assert.equal(existsSync(place.home), false, 'the home the run made went with it')
+})
+
+// --- the crew tools read the launch's own sessions map (martha#669) ------------------
+
+test('the crew tools a launch hands over read the sessions map its relay keeps, so a handover is stamped with its session (martha#669)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  // The stamps the launch's crew tools write, kept here rather than on disk: what a handover was stamped with is
+  // this case's question, and the handover file itself is proved in its own slice.
+  const stamped: HandoverStamp[] = []
+  const stamps: HandoverStampStore = {
+    read: () => undefined,
+    write: (_file, stamp) => {
+      stamped.push(stamp)
+      return undefined
+    },
+  }
+  const handed: CrewTools[] = []
+  const started = await aMemberStartedIn(t, place, {
+    ...memberLaunch(place, fake.command, place.approved),
+    // Exactly the shape the launcher's own wiring uses: the crew tools are built over the accessor the launcher
+    // hands over, and that accessor is the thing under test.
+    crew_tools: (sessions) => {
+      const crew = crewToolsOver({
+        member: 'Mercury',
+        ledger: { clock: { now: () => 5_000 }, stores: { rows: rowStreamsDirectory(place.rows) } },
+        beats: dashboardRowsIn(place.dashboard),
+        root: place.checkout,
+        documents: { read: async (path) => readFileSync(path, 'utf8') },
+        stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')) },
+        stamps,
+        sessions,
+      })
+      handed.push(crew)
+      return crew
+    },
+  })
+  if (!started.started) assert.fail(started.refusal)
+
+  // A session really starts in this launch, through the relay the member's host talks to.
+  await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
+  const posted = await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(start('startup')),
+    socketPath: readFileSync(fake.envFile, 'utf8'),
+  })
+  assert.equal(posted.text, '{"taken":1}', 'the launch took the session start')
+
+  const crew = handed[0]
+  if (crew === undefined) assert.fail('the launch handed no crew tools over')
+  // The handover comes from the session that just started. It is stamped with that session only if the crew tools
+  // read the map the launch's relay keeps: were they handed a map of their own, this call would be refused as one
+  // from a session the launch does not know, and no handover would be stamped.
+  const answered = await crew.answer(WRITE_MY_HANDOVER_TOOL, { content: 'The next session carries on from here.' }, SESSION)
+  assert.equal('refused' in answered ? answered.refused : '', '', 'the launch knows the session that started in it')
+  assert.equal(stamped.length, 1, 'the handover was stamped')
+  assert.equal(stamped[0]?.predecessor_id, SESSION, 'the stamp names the session the handover came from')
 })
