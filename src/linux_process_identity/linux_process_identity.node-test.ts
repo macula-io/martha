@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import fs, { chmodSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import fs, { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -28,7 +28,7 @@ import {
   keyOf,
   launchRecordsDirectory,
 } from './launch_records_directory.ts'
-import { linuxProcessIdentities, procProcessIdentities, startTimeIn } from './process_identity_from_proc.ts'
+import { ancestorsUnder, linuxProcessIdentities, parentIn, procProcessIdentities, startTimeIn } from './process_identity_from_proc.ts'
 
 // Synthetic node ids and pids, never a real one: this repository is public.
 const PLUTO = { member_name: 'Pluto', node_id: 'a'.repeat(64), pid: 4101 }
@@ -302,4 +302,33 @@ test('end to end on Linux: this process launched as a member binds, through the 
   assert.deepEqual(recordMemberLaunch(store, linuxProcessIdentities, { ...PLUTO, pid: process.pid }), { recorded: true })
 
   assert.equal(binderOverLaunches(store, linuxProcessIdentities, signedMembers)({ sending_pid: process.pid }), PLUTO.node_id)
+})
+
+/** A /proc of our own where each process names its parent, in one boot (martha#619). */
+function aProcOfParents(t: TestContext, parents: Readonly<Record<number, number>>): string {
+  const root = scratch(t)
+  for (const [pid, parent] of Object.entries(parents)) {
+    const fields_after_command = Array.from({ length: 20 }, (_, index) => `${index + 3}`)
+    fields_after_command[1] = String(parent)
+    fields_after_command[19] = STARTED
+    mkdirSync(join(root, pid))
+    writeFileSync(join(root, pid, 'stat'), `${pid} (a (shell)) ${fields_after_command.join(' ')}\n`)
+  }
+  mkdirSync(join(root, 'sys', 'kernel', 'random'), { recursive: true })
+  writeFileSync(join(root, 'sys', 'kernel', 'random', 'boot_id'), `${BOOT}\n`)
+  return root
+}
+
+test('#619: the processes above one are its parent first, up to pid 1, and never the process itself (mutant: the walk starting at the process)', (t) => {
+  const root = aProcOfParents(t, { 300: 200, 200: 100, 100: 1, 1: 0 })
+  const above = ancestorsUnder(root, 300)
+  assert.deepEqual(above.map((one) => one.pid), [200, 100, 1])
+  assert.ok(above.every((one) => one.identity !== null), 'a process the walk saw has no identity')
+  assert.equal(parentIn(readFileSync(join(root, '300', 'stat'), 'utf8')), 200, 'a command name with spaces and brackets moved the parent field')
+})
+
+test('#619: a walk that meets a loop or a process the kernel will not show stops there, and a line with no command is no parent', (t) => {
+  assert.deepEqual(ancestorsUnder(aProcOfParents(t, { 7: 8, 8: 7 }), 7).map((one) => one.pid), [8])
+  assert.deepEqual(ancestorsUnder(aProcOfParents(t, { 9: 42 }), 9).map((one) => ({ pid: one.pid, identity: one.identity })), [{ pid: 42, identity: null }])
+  assert.equal(parentIn('not a stat line'), null)
 })
