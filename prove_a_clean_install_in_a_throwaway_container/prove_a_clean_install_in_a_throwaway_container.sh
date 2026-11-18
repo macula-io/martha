@@ -1040,20 +1040,22 @@ the_owners_steps_printed() {
   esac
 }
 
-# Whether the clock on the last step is the window this run actually waits, and not a number written into the script:
-# a self-test run waits two seconds, so the time printed sits within a few minutes of now, where a window written in as
-# twenty minutes would sit twenty on. One minute either way is allowed for the minute the run started in.
-the_window_closes_soon() {
-  local out="$1" said now said_min now_min gap
+# Whether the clock on the last step is this run's window added to now, and not now itself: the minute it prints, read
+# against the minute the run started in, is the window's own minutes on, one minute either way for the minute the clock
+# crossed. Called with a window of an hour, "now" reads as nought minutes on and a window written in as twenty reads as
+# twenty, so neither passes.
+the_window_closes_after() {
+  local out="$1" started="$2" window_s="$3" said said_min started_min gap low high
   said="$(sed -n 's/^  [0-9]\. \/exit — .*the window closes \([0-2][0-9]:[0-5][0-9]\)$/\1/p' "${out}" | head -1)"
   [ -n "${said}" ] || { echo "the self-test: the last step carried no clock" >&2; return 1; }
-  now="$(date '+%H:%M')"
   said_min=$((10#${said%%:*} * 60 + 10#${said##*:}))
-  now_min=$((10#${now%%:*} * 60 + 10#${now##*:}))
-  gap=$((said_min - now_min))
-  if [ "${gap}" -lt -1 ]; then gap=$((gap + 1440)); fi
-  if [ "${gap}" -lt -1 ] || [ "${gap}" -gt 5 ]; then
-    echo "the self-test: the last step's window closes at ${said}, ${gap} minutes from now, not the window this run waits" >&2
+  started_min=$((10#${started%%:*} * 60 + 10#${started##*:}))
+  gap=$((said_min - started_min))
+  if [ "${gap}" -lt 0 ]; then gap=$((gap + 1440)); fi
+  low=$((window_s / 60 - 1))
+  high=$(( (window_s + 59) / 60 + 1 ))
+  if [ "${gap}" -lt "${low}" ] || [ "${gap}" -gt "${high}" ]; then
+    echo "the self-test: the last step's window closes at ${said}, ${gap} minutes after the run started, not this run's ${window_s}s window on" >&2
     return 1
   fi
 }
@@ -1076,7 +1078,7 @@ kept_the_record() {
 
 self_test() {
   local standin case_failed=0 child waited installer_name installer_version release_version major image
-  local pulled_at created_at secret
+  local pulled_at created_at secret signed_in_at passed_window was_window
   SELF_TEST_ROOT="$(mktemp -d)"
   STAND_INS="${SELF_TEST_ROOT}/bin"
   SELF="$(readlink -f "$0")"
@@ -1103,11 +1105,17 @@ self_test() {
   if image_digest_for 99 > /dev/null; then echo 'the self-test: a major with no pin was not refused' >&2; case_failed=1; fi
 
   # A whole run: the container, the install, the version, Claude Code at the recorded version, the checkout, the owner's
-  # sign-in, and a member that does all it is asked.
+  # sign-in, and a member that does all it is asked. The marker this run waits for is there before it looks, so giving it
+  # an hour costs nothing, and that hour is what its printed clock is then read against.
   standin="${root}/passes"
   a_case "${standin}"
   printf '%s\n' "${release_version}" > "${standin}/version.words"
+  passed_window=3600
+  was_window="${MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S:-}"
+  export MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S="${passed_window}"
+  signed_in_at="$(date '+%H:%M')"
   expect_status 0 "${standin}" 'a-host' || case_failed=1
+  export MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S="${was_window}"
   [ "$(tail -1 "${standin}/out")" = 'a member is proven' ] || { echo 'the self-test: a whole run did not end with a proven member' >&2; case_failed=1; }
   asked_for '^ok member: ' "${standin}/out" || { echo 'the self-test: a whole run logged no member step' >&2; case_failed=1; }
   asked_for "claude-code@$(json_field "${HOST_RECORD}" 'host_version')" "${standin}/calls" \
@@ -1116,8 +1124,8 @@ self_test() {
     || { echo "the self-test: the owner's one command was not printed" >&2; case_failed=1; }
   # The steps an owner follows: a numbered list ending on the marker the run waits for, with the time its window closes.
   the_owners_steps_printed "${standin}/out" || case_failed=1
-  # And that time is this run's own window, not a number written into the script.
-  the_window_closes_soon "${standin}/out" || case_failed=1
+  # And that time is this run's own window added to now, not now itself, and not a number written into the script.
+  the_window_closes_after "${standin}/out" "${signed_in_at}" "${passed_window}" || case_failed=1
   # And the run says the marker landed when it did, so an owner who typed /exit sees that it was taken.
   asked_for '^the marker landed at [0-2][0-9]:[0-5][0-9]: the owner.s session ended, so the sign-in is read now$' "${standin}/out" \
     || { echo 'the self-test: a run whose owner signed in did not say the marker landed' >&2; case_failed=1; }
@@ -1154,6 +1162,12 @@ self_test() {
   fi
   if grep -q 'martha start' "${root}/the-owner-never-signs-in/calls"; then echo 'the self-test: a member was started with no sign-in' >&2; case_failed=1; fi
   member_case 'the-owner-ends-without-signing-in' "home/${HOST_CREDENTIALS#"${CONTAINER_HOME}/"}" - 1 '^FAIL sign in: .*the approval or the sign-in did not happen' || case_failed=1
+  # The marker landing is said on this path too: the owner's session ended, and it ended without signing in. A line
+  # printed only when the sign-in went through would leave an owner who ended early with nothing said of it.
+  if ! grep -q '^the marker landed at ' "${root}/the-owner-ends-without-signing-in/out"; then
+    echo 'the self-test: a run whose owner ended without signing in did not say the marker landed' >&2
+    case_failed=1
+  fi
   member_case 'claude-code-at-another-version' claude.version '0.0.1 (Claude Code)' 1 "^FAIL claude code: .*not the recorded " || case_failed=1
   member_case 'the-checkout-cannot-be-made' checkout.fails '' 1 '^FAIL checkout: ' || case_failed=1
   member_case 'the-member-never-starts' member.mute '' 1 '^FAIL member: the member never said ' || case_failed=1
