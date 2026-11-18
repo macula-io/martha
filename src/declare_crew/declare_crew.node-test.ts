@@ -39,6 +39,7 @@ import {
   type WorkspaceLayout,
 } from './declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
+import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 
 // A made-up project root: this repository is public, so no real path appears here.
 const root = '/martha-project'
@@ -557,6 +558,16 @@ test('#611: a checkout whose origin is missing, or names no repository, proves n
   })
   assert.deepEqual(workspaceLayoutOf(A_CHECKOUT, undefined, 'not a url'), {
     layout: null,
-    said: `No workspace layout: the origin of ${A_CHECKOUT}, "not a url", names no repository as org/name. ${LAYOUT_TO_ADD}`,
+    said: `No workspace layout: the origin of ${A_CHECKOUT} names no repository as org/name. ${LAYOUT_TO_ADD}`,
   })
+})
+
+test('#611 r=2: the line names no origin URL, so a token in its userinfo is never printed', () => {
+  // init prints this line, and an origin can carry a credential: `https://x-access-token:<token>@github.com/` names no
+  // repository, so it lands on the branch above — the one a leak would be printed from.
+  const aTokenInTheOrigin = 'https://x-access-token:ghs_plantedtoken@github.com/'
+  const proved = workspaceLayoutOf(A_CHECKOUT, repoOfTheOrigin(aTokenInTheOrigin), aTokenInTheOrigin)
+  assert.equal(proved.layout, null, 'an origin naming no repository proves no layout')
+  assert.equal(proved.said, `No workspace layout: the origin of ${A_CHECKOUT} names no repository as org/name. ${LAYOUT_TO_ADD}`)
+  assert.ok(!proved.said.includes('ghs_plantedtoken'), `the token in the origin reached the line init prints: ${proved.said}`)
 })

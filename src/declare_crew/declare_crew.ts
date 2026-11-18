@@ -213,7 +213,8 @@ const noLayout = (why: string): WhatACheckoutProves => ({ layout: null, said: `N
  */
 export function workspaceLayoutOf(root: string, repo: string | undefined, origin: string | null): WhatACheckoutProves {
   if (repo === undefined) {
-    const why = origin === null ? `${root} names no origin remote` : `the origin of ${root}, ${JSON.stringify(origin)}, names no repository as org/name`
+    // The origin is not quoted back: it can carry a token in its userinfo, and this line is printed.
+    const why = origin === null ? `${root} names no origin remote` : `the origin of ${root} names no repository as org/name`
     return noLayout(why)
   }
   if (`${basename(dirname(root))}/${basename(root)}` !== repo) return noLayout(`${root} does not sit at <clones>/${repo}`)
