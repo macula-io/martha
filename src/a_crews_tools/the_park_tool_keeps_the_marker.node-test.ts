@@ -48,7 +48,7 @@ async function aCrewOfTools(member: string): Promise<ACrew> {
   mkdirSync(root, { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: HOST_MODELS })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   const tools = crewToolsOver({
     member,

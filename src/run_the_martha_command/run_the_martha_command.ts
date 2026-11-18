@@ -136,9 +136,13 @@ const version = (): string => releaseVersionOf(releaseTree(), (path) => readFile
 
 async function init(io: CommandIo, places: Places): Promise<number> {
   const owner = gitSays(places.root, 'config', 'user.name') ?? null
-  const declared = await declareSoloCrew({ root: places.root, owner, state: places.state, documents, models: CLAUDE_CODE_MODELS })
+  // The origin is what says whether the checkout's path can prove a workspace layout (martha#611), so it is read
+  // here, where Martha's own git runs, and handed on as a value the declaration slice reads.
+  const origin = gitSays(places.root, 'remote', 'get-url', 'origin') ?? null
+  const declared = await declareSoloCrew({ root: places.root, owner, origin, state: places.state, documents, models: CLAUDE_CODE_MODELS })
   if (!declared.declared) return refused(io, declared.refusal)
   io.out(`Declared a solo crew in ${declared.declaration}: ${declared.settings.members.map((member) => member.name).join(', ')}.`)
+  io.out(declared.workspace)
   return EXIT_DONE
 }
 

@@ -30,8 +30,13 @@ import {
   STRICT_GATE,
   VOLATILE_PATHS,
   WORKTREES,
+  WORKSPACE_LAYOUT,
+  WORKTREES_BESIDE_CLONES,
+  LAYOUT_TO_ADD,
   declareCrew,
+  workspaceLayoutOf,
   type CrewSettings,
+  type WorkspaceLayout,
 } from './declare_crew.ts'
 import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 
@@ -319,7 +324,7 @@ test('every declared switch is read from the one list, so a new rule is neither 
   // refused, as the tests below say, so each is named here with them.
   const places = { clones: `/crew-place/${CLONES}`, worktrees: `/crew-place/${WORKTREES}` }
   const windows = { [STALLED_MINUTES]: 60, [REVIEW_MINUTES]: 45, [PERSON_MINUTES]: 30 }
-  const withIt = (name: string) => (name === 'workspace_layout' ? places : name === NUDGES ? windows : {})
+  const withIt = (name: string) => (name === WORKSPACE_LAYOUT ? places : name === NUDGES ? windows : {})
   for (const name of HOUSE_RULE_SWITCHES) {
     const named = await declare({ ...solo, house_rules: { ...withIt(name), [name]: true } }).settings
     assert.equal(named.house_rules[name], true, name)
@@ -514,4 +519,44 @@ test('#319 B: a backlog names at least one organisation or owner/repo, and a who
 test('#319 B: a declaration without a backlog has none, and one with it reads its places and window, 0 included', async () => {
   assert.equal((await declare(solo).settings).backlog, null)
   assert.deepEqual((await declare({ ...solo, [BACKLOG]: { places: ['macula-io', 'macula-io/macula'], idle_minutes: 0 } }).settings).backlog, { places: ['macula-io', 'macula-io/macula'], idle_minutes: 0 })
+})
+
+/** A checkout of a made-up repository under a made-up home: this repository is public, so no real path appears here. */
+const A_HOME = '/a-home'
+const A_CLONES = join(A_HOME, CLONES)
+const A_WORKTREES = join(A_HOME, WORKTREES_BESIDE_CLONES)
+const A_ORIGIN = join(A_HOME, 'remote', 'acme', 'widget.git')
+const A_CHECKOUT = join(A_CLONES, 'acme', 'widget')
+const ITS_LAYOUT: WorkspaceLayout = { [CLONES]: A_CLONES, [WORKTREES]: A_WORKTREES }
+
+test('#611: a checkout at <clones>/org/name keeps its clones in <clones> and its worktrees beside them', () => {
+  assert.deepEqual(workspaceLayoutOf(A_CHECKOUT, 'acme/widget', A_ORIGIN), {
+    layout: ITS_LAYOUT,
+    said: `Workspace layout declared: clones ${A_CLONES}, worktrees ${A_WORKTREES}.`,
+  })
+  assert.deepEqual(workspaceLayoutOf(join(A_HOME, 'deeper', 'place', 'acme', 'widget'), 'acme/widget', A_ORIGIN).layout, {
+    [CLONES]: join(A_HOME, 'deeper', 'place'),
+    [WORKTREES]: join(A_HOME, 'deeper', WORKTREES_BESIDE_CLONES),
+  })
+})
+
+test('#611: a checkout the origin does not place under <clones>/org/name proves no layout, and says which', () => {
+  const project = join(A_HOME, 'project')
+  const elsewhere = join(A_CLONES, 'other', 'widget')
+  assert.deepEqual(workspaceLayoutOf(project, 'acme/widget', A_ORIGIN), {
+    layout: null,
+    said: `No workspace layout: ${project} does not sit at <clones>/acme/widget. ${LAYOUT_TO_ADD}`,
+  })
+  assert.equal(workspaceLayoutOf(elsewhere, 'acme/widget', A_ORIGIN).layout, null)
+})
+
+test('#611: a checkout whose origin is missing, or names no repository, proves no layout, and says which', () => {
+  assert.deepEqual(workspaceLayoutOf(A_CHECKOUT, undefined, null), {
+    layout: null,
+    said: `No workspace layout: ${A_CHECKOUT} names no origin remote. ${LAYOUT_TO_ADD}`,
+  })
+  assert.deepEqual(workspaceLayoutOf(A_CHECKOUT, undefined, 'not a url'), {
+    layout: null,
+    said: `No workspace layout: the origin of ${A_CHECKOUT}, "not a url", names no repository as org/name. ${LAYOUT_TO_ADD}`,
+  })
 })
