@@ -1,17 +1,20 @@
 // On the recorded host, a member's model switch leaves the owner's own default for new sessions alone (martha#359).
 //
-// The host's `/model` command says so itself: "Set model to … and saved as your default for new sessions". This is the
-// end-to-end proof that Martha undoes it — the real `martha` command, the real Claude Code at the recorded version, the
-// real relay, mod and launcher, and only the model a stand-in (./drive_the_recorded_host.ts). Without the recorded host
-// these tests are skipped, as the rest of this file's neighbours are.
+// The host's `/model` command says so itself: "Set model to … and saved as your default for new sessions". Since
+// martha#602 a member runs on a config folder of its own, so that save lands in the member's folder and the owner's
+// file is never the host's to write: the owner's default stays where the owner left it by construction, and these cases
+// pin that the owner's settings file is byte for byte what it was, or still absent. The real `martha` command, the real
+// Claude Code at the recorded version, the real relay, mod and launcher, and only the model a stand-in
+// (./drive_the_recorded_host.ts). Without the recorded host these tests are skipped, as the rest of this file's
+// neighbours are.
 //
-// What only this test can prove: the file the host really wrote is the file Martha puts back. The mechanism's own tests
+// What only this test can prove: the file the host really writes is not the owner's. The mechanism's own tests
 // (../a_crews_tools/a_switch_leaves_the_owners_default_alone) write the host's save themselves, and could agree with a
 // mistake about what the host writes; here the bytes before and after are the host's own work.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -58,7 +61,7 @@ interface Project {
  * A checkout whose crew declares its own models and whose config the owner approved, and the owner's own settings file
  * in their config folder — the one the host's `/model` command saves a default into.
  */
-function approvedProjectWithModels(t: TestContext, ownersSettings: Record<string, unknown>): Project {
+function approvedProjectWithModels(t: TestContext, ownersSettings: Record<string, unknown> | undefined): Project {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-model-default-host-')))
   t.after(() => removeTheTree(home))
   const checkout = join(home, 'project')
@@ -73,7 +76,7 @@ function approvedProjectWithModels(t: TestContext, ownersSettings: Record<string
   git(checkout, 'commit', '-q', '-m', 'start')
   const place = { claude: recordedHost(), home, checkout }
   firstRunDone(home, checkout)
-  writeTheOwnersSettings(home, ownersSettings)
+  if (ownersSettings !== undefined) writeTheOwnersSettings(home, ownersSettings)
   const declared = marthaOnATerminal(place, ['init'])
   assert.equal(declared.exit_code, 0, plainTextOf(declared.shown))
   declareTheModels(checkout)
@@ -183,4 +186,25 @@ test('on the recorded host a switch leaves an owner with no model where they wer
   )
   assert.equal(theOwnersSettingsNow(project), before, `the owner's default moved: ${join(project.home, CLAUDE_FOLDER, USER_SETTINGS_FILE)} gained a model the owner never chose`)
   assert.equal(theRecordOf(project).settings, undefined, 'the record of what the switch did to the owner\'s default outlived the restore')
+})
+
+test('on the recorded host a switch by a member whose owner has no config folder leaves none: the switch is made and no owner file appears (martha#602)', { skip: RECORDED_HOST_SKIP }, async (t) => {
+  const project = approvedProjectWithModels(t, undefined)
+  const owners = join(project.home, CLAUDE_FOLDER)
+  assert.equal(existsSync(owners), false, 'the test meant an owner with no config folder, and one is there before the member starts')
+  const seen = await whatTheRunSaw(() =>
+    driveTheRecordedHost({
+      claude: recordedHost(),
+      ...project,
+      member: MEMBER,
+      owner_turn: OWNER_TURN,
+      requests: 2,
+      silence_ms: SWITCH_SILENCE_MS,
+      script: ({ number }) => (number === 1 ? theSwitch : { text: 'Done.' }),
+    }),
+  )
+  // The switch is made: the host answers its own model command, which a guard that needed the owner's folder refused.
+  assert.match(drawnWithoutGaps(seen.shown), /SetmodeltoOpus/i, `the host never answered the model command:\n${plainTextOf(seen.shown).slice(-3000)}`)
+  assert.equal(existsSync(join(owners, USER_SETTINGS_FILE)), false, `the owner's default moved: ${join(owners, USER_SETTINGS_FILE)} appeared, holding a model the owner never chose`)
+  assert.equal(theRecordOf(project).settings, undefined, 'the record of what the switch did outlived the restore')
 })

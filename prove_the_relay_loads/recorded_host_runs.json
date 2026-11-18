@@ -37,7 +37,7 @@
   },
   {
     "file": "src/drive_the_recorded_host/a_switch_does_not_move_the_owners_default.node-test.ts",
-    "cases": 2,
+    "cases": 3,
     "proves": "a member's switch in this host leaves the owner's own default alone (martha#359)"
   },
   {

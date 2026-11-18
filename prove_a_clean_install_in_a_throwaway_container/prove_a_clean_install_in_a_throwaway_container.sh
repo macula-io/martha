@@ -139,9 +139,12 @@ EXIT_COMMAND='/exit'
 # The terminal the member is drawn on, set inside the container: a host drawn on no size draws nothing usable.
 TERMINAL_ROWS=50
 TERMINAL_COLUMNS=160
-# The host's transcripts, and the lines in them that say what the member did. A request blob repeats the whole
-# conversation, so it is left out: what it repeats is not what happened.
-TRANSCRIPTS="${CONTAINER_HOME}/.claude/projects/*/*.jsonl"
+# The member host's transcripts, and the lines in them that say what the member did. A request blob repeats the whole
+# conversation, so it is left out: what it repeats is not what happened. Since martha#602 a member runs on a config
+# folder of its own, inside its launch's snapshot under Martha's state (STATE_ROOT_NAME, the 'snapshots' place and
+# MEMBER_CONFIG_FOLDER in src/), so its transcripts are there and not under the owner's .claude, whose transcripts are
+# the sign-in session's. They are read while the member runs: the folder goes with its launch.
+TRANSCRIPTS="${CONTAINER_HOME}/.local/state/martha/*/snapshots/*/the-members-own-config/projects/*/*.jsonl"
 REQUEST_BLOB='"type":"api-request-blob"'
 TURN_LINE="\"role\":\"user\",\"content\":\"${OWNER_TURN}\""
 ANSWER_LINE='"role":"assistant","content":[{"type":"text","text":"'
@@ -854,7 +857,7 @@ case "${1:-}" in
       # that reads more than the transcripts is answered with more. A case whose transcript.goes exists stands for a
       # container that stops giving them once the member has answered: the one read that finds the turn is given, every
       # read after it is not.
-      *.claude/projects*)
+      *the-members-own-config/projects*)
         if [ -f "${standin}/transcript.goes" ] && [ -f "${standin}/answered" ]; then
           if [ -f "${standin}/transcript.given" ]; then exit 125; fi
           : > "${standin}/transcript.given"

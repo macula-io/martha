@@ -27,9 +27,18 @@
 // Read by the settings watch of ../refuse_settings_that_turn_hooks_off (martha#122)
 // at launch and for the member's whole life, so a hook written into one of
 // these files while a member runs stops it too.
+//
+// A file's env that names the config folder or the sign-in store is refused too (martha#602, T4): the member starts
+// with a config folder of its own, and the host applies a settings file's env, so such a value could point the member
+// back at the owner's folder, whose hooks and plugins would then load unrecorded.
+
+import { CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 
 /** The variable from which Claude Code loads plugin folders, when it is set and not blank. */
 export const PLUGIN_DIRS_VARIABLE = 'CLAUDE_CODE_PLUGIN_DIRS'
+
+/** The variable that names the folder Claude Code reads its user settings, global config and user scope from. */
+export const CONFIG_DIR_VARIABLE = 'CLAUDE_CONFIG_DIR'
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const isOff = (value: unknown): boolean => value === undefined || value === false || value === null
@@ -66,6 +75,13 @@ function pluginDirsOf(env: unknown): Declared {
   return isObject(env) && loadsPlugins(env[PLUGIN_DIRS_VARIABLE]) ? { declares: `a plugin folder in env.${PLUGIN_DIRS_VARIABLE}` } : undefined
 }
 
+/** A file's env naming the folder the member's host reads its config or its sign-in from, set at all (martha#602). */
+function configFoldersOf(env: unknown): Declared {
+  if (!isObject(env)) return undefined
+  const named = [CONFIG_DIR_VARIABLE, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE].filter((name) => Object.hasOwn(env, name))
+  return named.length > 0 ? { declares: `env.${named.join(' and env.')}, which would move the member's host off its own config folder` } : undefined
+}
+
 /** Why one of the owner's user or managed settings files declares a hook or a plugin, naming the file and each; or undefined. */
 export function hooksAndPluginsDeclaredIn(file: HookSettingsFile): string | undefined {
   if (file.text === undefined) return undefined
@@ -76,7 +92,7 @@ export function hooksAndPluginsDeclaredIn(file: HookSettingsFile): string | unde
     return undefined
   }
   if (!isObject(parsed)) return undefined
-  const found = [hooksOf(parsed.hooks), pluginsOf(parsed.enabledPlugins), pluginDirsOf(parsed.env)].filter((one) => one !== undefined)
+  const found = [hooksOf(parsed.hooks), pluginsOf(parsed.enabledPlugins), pluginDirsOf(parsed.env), configFoldersOf(parsed.env)].filter((one) => one !== undefined)
   const unknown = found.flatMap((one) => ('unknown' in one ? [one.unknown] : []))
   if (unknown.length > 0) {
     return `${file.path} sets ${unknown.join(' and ')} in a shape the host's settings do not take, so whether it declares a hook or a plugin cannot be told; fix or remove it`

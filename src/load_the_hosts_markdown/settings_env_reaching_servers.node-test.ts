@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { CLAUDE_CODE_OWN_VARIABLES, environmentFromSettings, userSettingsPath, USER_SETTINGS_FILE } from './settings_env_reaching_servers.ts'
-import { PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
+import { CONFIG_DIR_VARIABLE, PLUGIN_DIRS_VARIABLE } from './hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const ALLOWED = ['HOME', 'PATH', 'MACULA_MESH_REALMS']
@@ -80,6 +80,6 @@ for (const [shape, configDir] of [
   test(`a CLAUDE_CONFIG_DIR that is ${shape} is refused, naming the variable: which settings file the host reads cannot be told`, () => {
     const read = userSettingsPath({ HOME: '/owner', CLAUDE_CONFIG_DIR: configDir })
     assert.ok('refusal' in read, JSON.stringify(read))
-    assert.ok(read.refusal.includes('CLAUDE_CONFIG_DIR') && read.refusal.includes(JSON.stringify(configDir)), read.refusal)
+    assert.ok(read.refusal.includes(CONFIG_DIR_VARIABLE) && read.refusal.includes(JSON.stringify(configDir)), read.refusal)
   })
 }
