@@ -294,10 +294,27 @@ test('5b. the packer and the proof share one temp folder under the given TMPDIR,
   assert.deepEqual(readdirSync(night.parentTmp), [])
 })
 
+/**
+ * The line the real packer prints when it packs main's installer, with these values in it. The packer's echo is found
+ * by the two values it carries, never by its words, so a packer that rewords the line fails 5c here rather than leaving
+ * the driver reading for a line no packer prints, and every night quietly installing the published installer
+ * (martha#695, Venus r=2).
+ * @param {string} sha @param {string} tarball @param {string} digest
+ */
+function thePackersPackedLine(sha, tarball, digest) {
+  const echo = 'echo "'
+  const template = readFileSync(PACKER, 'utf8').split('\n').map((line) => line.trim())
+    .find((line) => line.startsWith(echo) && line.includes('${MAIN_TARBALL}') && line.includes('${MAIN_DIGEST}'))
+  assert.ok(template !== undefined, 'the packer prints no line naming its tarball and its digest')
+  const line = template.slice(echo.length, -1).replaceAll('${SHA}', sha).replaceAll('${MAIN_TARBALL}', tarball).replaceAll('${MAIN_DIGEST}', digest)
+  assert.doesNotMatch(line, /\$/, `the packer's packed line holds a value this test does not fill: ${line}`)
+  return line
+}
+
 test('5c. a night whose packer packed main\'s installer hands the proof that tarball and its digest; one that packed none hands neither (mutant: the tarball not passed)', (t) => {
   const tarball = 'main-installer-abc1234.tgz'
   const digest = `sha256:${'a'.repeat(64)}`
-  const drifted = aNight(t, { packerMore: `printf '%s\\n' "dry: main's installer at abc1234 packed as ${tarball} (${digest})"` })
+  const drifted = aNight(t, { packerMore: `printf '%s\\n' "${thePackersPackedLine('abc1234', tarball, digest)}"` })
   const outcome = drive(drifted, withEvidence(drifted), { STAND_IN_PROOF_EXIT: String(PLANTED_DRY_PASSED) })
   const args = recorded(drifted.record, 'proof.args') ?? []
   const at = args.indexOf('--dry-installer')
