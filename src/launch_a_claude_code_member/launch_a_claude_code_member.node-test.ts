@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { connect, createServer } from 'node:net'
@@ -33,7 +33,9 @@ import { fakeNpmRegistry, type FakeRegistry } from '../run_the_nodes_own_npm_alo
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, HOSTS, readLaunchState, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { rowStreamsDirectory, STREAM_DIRECTORY_MODE, streamDirectoryNameOf } from '../row_streams_directory/row_streams_directory.ts'
+import { CREW_ROWS_PLACE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { STATE_HOME_VARIABLE } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
@@ -3145,6 +3147,75 @@ test('a launcher killed hard leaves its directory behind, and the next launch ta
   const after = readdirSync(place.relay_root)
   assert.equal(after.length, 1, 'the leftover went, and this launch has its own')
   assert.notEqual(after[0], leftover, 'the directory left here is this launch\'s, not the one it swept')
+})
+
+// --- the crew's state a member is kept out of (martha#683) ----------------------
+
+/** The variable a launch marks its inherited environment with, so a read of the kernel's record is known to be that one. */
+const WHAT_I_WAS_GIVEN = 'MARTHA_683_WHAT_I_WAS_GIVEN'
+
+/** What the kernel holds for `pid` as its environment, or nothing when the process went while it was looked at. */
+function theEnvironmentTheKernelHoldsOrNothing(pid: number): Record<string, string> | undefined {
+  try {
+    const entries = readFileSync(`${PROC_ROOT}/${pid}/environ`, 'utf8')
+      .split('\0')
+      .filter((entry) => entry.includes('='))
+      .map((entry) => [entry.slice(0, entry.indexOf('=')), entry.slice(entry.indexOf('=') + 1)] as const)
+    return Object.fromEntries(entries)
+  } catch {
+    return undefined
+  }
+}
+
+/** What the kernel holds for `pid`, once its environment carries `marker`: an answer from a process inside `exec` is empty (#85). */
+async function theEnvironmentTheKernelHolds(pid: number, marker: string): Promise<Record<string, string>> {
+  for (let tried = 0; tried < 500; tried += 1) {
+    const held = theEnvironmentTheKernelHoldsOrNothing(pid)
+    if (held?.[marker] !== undefined) return held
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+  }
+  throw new Error(`/proc/${pid}/environ never showed ${marker}`)
+}
+
+test("a launched member is handed neither the crew state the launch inherited nor a session the crew recorded (martha#683)", async (t) => {
+  const place = placeFor(t)
+  const fake = fakeHostUnderARun(place)
+  // What the launch inherits: a state home planted in it, a path inside this launch's own crew state, and the id of a
+  // session this crew has recorded, kept the way its row store keeps one.
+  const planted = join(place.home, 'a-state-home-the-launch-inherited')
+  const sessionId = randomUUID()
+  mkdirSync(join(place.rows, streamDirectoryNameOf(sessionRecordStreamOf(sessionId))), { mode: STREAM_DIRECTORY_MODE })
+  const plantedRecord = join(place.state_root, CREWS_PLACE, 'a-crew', CREW_ROWS_PLACE)
+  const inherited = {
+    [STATE_HOME_VARIABLE]: planted,
+    MARTHA_683_PLANTED_RECORD: plantedRecord,
+    MARTHA_683_PLANTED_SESSION: sessionId,
+    [WHAT_I_WAS_GIVEN]: 'given',
+  }
+  const launcher = spawn(process.execPath, [launcherProcess(place, fake.command, 'ignore', inherited)], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const ended = new Promise<NodeJS.Signals | null>((resolve) => launcher.once('exit', (_code, by) => resolve(by)))
+  // Before any assertion: a test that fails must not leave the member running.
+  t.after(async () => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
+    await ended
+    await killGroupsCarrying(place.relay_root)
+  })
+  thePlaceGoesWithItsProcesses(t, place)
+  let said = ''
+  launcher.stdout?.on('data', (chunk: Buffer) => void (said += chunk.toString()))
+  await until('the launcher to start its member', () => said.includes('started') && existsSync(fake.readyFile), t, () => said, () => REFUSED_LINE.exec(said)?.[0])
+  const member = Number(readFileSync(fake.readyFile, 'utf8').trim())
+  // The environment the launcher really started its member with, read from the kernel: nothing is filtered here.
+  const held = await theEnvironmentTheKernelHolds(member, WHAT_I_WAS_GIVEN)
+  assert.equal(
+    held[STATE_HOME_VARIABLE],
+    dirname(place.state_root),
+    "the member is handed the launcher's own state home, never the one the launch inherited",
+  )
+  assert.equal(held.MARTHA_683_PLANTED_RECORD, undefined, "a path inside the crew's state root is not handed on")
+  assert.equal(held.MARTHA_683_PLANTED_SESSION, undefined, 'a session id the crew recorded is not handed on')
+  launcher.kill('SIGTERM')
+  assert.equal(await ended, 'SIGTERM', 'the signal still ends the launcher')
 })
 
 // --- a member on the owner's own terminal (martha#54) ---------------------------

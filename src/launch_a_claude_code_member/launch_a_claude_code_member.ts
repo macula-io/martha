@@ -51,10 +51,12 @@
 //      owner's arguments go first, then the launch gate's
 //      switches and the relay's copy. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
-//      environment is `launchEnvironment(inherited, switches, host)`, then the
-//      settings that keep a checkout from running its hooks, install scripts
-//      and .envrc through the member's own commands (martha#24), plus the
-//      socket's path. Its PATH starts with the launch's own `git` guard, and
+//      environment is `theEnvironmentAMemberIsGiven(inherited, switches, crew, config, host)`
+//      (./the_environment_a_member_is_given.ts): what it inherits without the crew's
+//      state, the switches, the member's own config folder and the launcher's own
+//      state home, then the settings that keep a checkout from running its hooks,
+//      install scripts and .envrc through the member's own commands (martha#24),
+//      plus the socket's path. Its PATH starts with the launch's own `git` guard, and
 //      git is pointed at the guard's hooks (../guard_the_git_a_member_runs,
 //      martha#562), so the member's every git meets the workspace rules. Before it starts, each mesh server entry of the approved
 //      copy is rewritten to start its recorded tree by path, installed or
@@ -111,7 +113,6 @@ import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execu
 import {
   CLAUDE_SERVERS,
   CLAUDE_SETTINGS,
-  launchEnvironment,
   prepareLaunch,
   startedWithOf,
   type PreparedLaunch,
@@ -164,7 +165,8 @@ import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/re
 import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
-import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -339,7 +341,13 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
   const owners = userSettingsPath(launch.inherited)
   if ('refusal' in owners) return owners.refusal
   const memberConfig = membersConfigFolderOf(prepared)
-  const env = { ...launchEnvironment(launch.inherited, prepared.switches, CLAUDE_CODE), ...theMembersConfigEnvironment(memberConfig) }
+  const env = theEnvironmentAMemberIsGiven({
+    inherited: launch.inherited,
+    switches: prepared.switches,
+    crew: { state_root: launch.places.state_root, rows: launch.places.rows },
+    member_config: memberConfig,
+    host: CLAUDE_CODE,
+  })
   // The key answered yes is the one the member is handed, read from the environment it starts with.
   const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir, env[API_KEY_VARIABLE])
   if (!made.made) return made.refusal
