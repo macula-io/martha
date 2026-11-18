@@ -1,7 +1,7 @@
 // Parking and waking, as martha#255 states them: part 1's marker, and part 2's three answers and its unpark.
 //
 // The park is a marker that outlives the session, and who may park another member is answered from the declaration the
-// launcher started its member from rather than from who_may_act (r=3). Waking reads the newest handover by the time the
+// launcher started its member from rather than from a node id (r=3). Waking reads the newest handover by the time the
 // host stamped it, never by the file's own name.
 //
 // Part 2 gives both reads a caller, so neither may answer `undefined` for two different facts: the store says nothing

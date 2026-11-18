@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -22,13 +21,11 @@ import {
   trustedPolicy,
   trustedRoomRosters,
   trustedMembers,
-  trustedSupervisors,
 } from './trust_only_signed_lists.ts'
 import { binderOverLaunches, type MemberLaunch } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { admitsInCrewRoom } from '../admit_a_room_message/admit_a_room_message.ts'
 import { refuseExecutionAfterUngatedText } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { actorFromCallingSession, refuseActionFromAnUnverifiedActor } from '../who_may_act/who_may_act.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 
 // Synthetic node ids and crew names, never real ones: this repository is public.
@@ -288,16 +285,6 @@ test('a refused policy lets no sender text reach the shell', () => {
   assert.equal(refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session, policy: policy(signed_policy) }).allow, true)
   const unsigned = open({ kind: 'policy', document, signature: undefined })
   assert.equal(refuseExecutionAfterUngatedText({ tool: CLAUDE_CODE_SHELL_TOOL, session, policy: policy(unsigned) }).allow, false)
-})
-
-test('a refused supervisor list lets nobody act as supervisor', () => {
-  const document = documentOf('supervisors', [member])
-  const actor = actorFromCallingSession({ node_id: member, display_name: null })
-  const decide = (opened: ReturnType<typeof open>) =>
-    refuseActionFromAnUnverifiedActor({ action: RESTART_MEMBER, actor, roster: trustedSupervisors(opened) }).allow
-
-  assert.equal(decide(open({ kind: 'supervisors', document, signature: signed(document) })), true)
-  assert.equal(decide(open({ kind: 'supervisors', document, signature: undefined })), false)
 })
 
 // --- round 2: one epoch, one list; one byte string, one reading ---------------
