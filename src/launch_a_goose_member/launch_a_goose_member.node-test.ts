@@ -7,7 +7,7 @@
 // test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -87,10 +87,12 @@ test('the config root names the model, the asking mode and the slash switch, and
   assert.equal(theValueOf(config, THE_PROVIDER_SETTING), A_MODEL.provider)
   assert.equal(theValueOf(config, THE_MODEL_SETTING), A_MODEL.model)
   assert.equal(theValueOf(config, FACTS.mode.setting), THE_MODE_THAT_ASKS_THE_CLIENT)
-  // The switch is written as the opposite of what the engine does when it is unset, so the engine's own
-  // default is never what decides it.
-  const slash = theValueOf(config, FACTS.slash_commands.setting)
-  assert.equal(slash, String(!FACTS.slash_commands.when_unset))
+  // Slash commands are off, and the setting turns them on: off is `false` whatever the engine's own default
+  // is, so both defaults a recording can carry write the same word.
+  for (const when_unset of [true, false]) {
+    const facts = { ...FACTS, slash_commands: { ...FACTS.slash_commands, when_unset } }
+    assert.equal(theValueOf(theConfigOfALaunch(facts, A_MODEL), FACTS.slash_commands.setting), 'false', `with the engine's default ${String(when_unset)}`)
+  }
   for (const [key, value] of Object.entries(A_MODEL.settings)) assert.equal(theValueOf(config, key), value)
 
   // One `enabled` line for every extension the pinned build declares, and true for the kept one alone.
@@ -197,6 +199,19 @@ test('the permission store sits in the engine\'s config folder beside its config
   const unreadable = thePermissionStoreIsStillEmpty(made.places.root)
   assert.equal(unreadable.empty, false, 'a store that cannot be read is not an empty one')
   assert.match(unreadable.empty ? '' : unreadable.refusal, new RegExp(store.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+
+  // A store that is there and cannot be read, and one that is a directory, are not stores this launch never
+  // wrote: only a store that is not there is. Both are refused, naming the code that says why.
+  writeFileSync(store, `${JSON.stringify({ permissions: {} })}\n`)
+  chmodSync(store, 0o000)
+  const unreadableFile = thePermissionStoreIsStillEmpty(made.places.root)
+  assert.equal(unreadableFile.empty, false, 'a store the user may not read was read as empty')
+  assert.match(unreadableFile.empty ? '' : unreadableFile.refusal, /EACCES/)
+  rmSync(store)
+  mkdirSync(store)
+  const aDirectory = thePermissionStoreIsStillEmpty(made.places.root)
+  assert.equal(aDirectory.empty, false, 'a directory in the store\'s place was read as empty')
+  assert.match(aDirectory.empty ? '' : aDirectory.refusal, /EISDIR/)
 })
 
 /** A stand-in engine: it says what it was run with, in files a test reads, and sleeps until it is killed. */

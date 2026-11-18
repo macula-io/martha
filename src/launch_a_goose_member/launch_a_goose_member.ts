@@ -75,6 +75,12 @@ export const THE_EXTENSION_A_MEMBER_KEEPS = 'developer'
 /** The mode in which the engine brings every tool call to its client instead of running it. */
 export const THE_MODE_THAT_ASKS_THE_CLIENT = 'approve'
 
+/**
+ * What the engine's slash-commands switch is set to: the setting turns them on, so off is `false` in every
+ * recording, whatever the engine would do with a config that does not name it (martha#541, shape 2 and 3).
+ */
+export const SLASH_COMMANDS_OFF = false
+
 /** The config key the engine reads the provider from. */
 export const THE_PROVIDER_SETTING = 'GOOSE_PROVIDER'
 
@@ -205,9 +211,9 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
     aLine(THE_PROVIDER_SETTING, model.provider),
     aLine(THE_MODEL_SETTING, model.model),
     aLine(facts.mode.setting, THE_MODE_THAT_ASKS_THE_CLIENT),
-    // Written as the opposite of what the engine does when the setting is unset, so the engine's own
-    // default is never what decides it.
-    aLine(facts.slash_commands.setting, facts.slash_commands.when_unset === false),
+    // Not the opposite of the engine's default: the setting turns slash commands ON, so off is `false`
+    // whether the engine would have them on or off in a config that does not name it.
+    aLine(facts.slash_commands.setting, SLASH_COMMANDS_OFF),
     ...Object.entries(model.settings).map(([setting, value]) => aLine(setting, value)),
     aLine(THE_EXTENSIONS_SETTING, ''),
     ...switches,
@@ -294,20 +300,26 @@ export type ThePermissionStoreRead = { readonly empty: true } | { readonly empty
 export function thePermissionStoreIsStillEmpty(root: string): ThePermissionStoreRead {
   const store = thePermissionStoreOf(root)
   const written = theStoresText(store)
-  if (written === undefined) return { empty: true }
-  const value = theStoresValue(written)
+  if ('absent' in written) return { empty: true }
+  if ('why' in written) return aStoreRefusal(store, written.why)
+  const value = theStoresValue(written.text)
   if ('why' in value) return aStoreRefusal(store, value.why)
   const saved = theSavedRulesIn(value.held)
   if ('why' in saved) return aStoreRefusal(store, saved.why)
   return saved.rules === 0 ? { empty: true } : aStoreRefusal(store, 'holds a saved permission')
 }
 
-/** The store's text, or undefined when the engine never wrote a store at all. */
-function theStoresText(store: string): string | undefined {
+/**
+ * The store's text, nothing at all when the engine never wrote a store, or why it cannot be read. Only a
+ * store that is not there is "never written": an unreadable file, a directory in its place, or any other
+ * failure to read it is a store this launch cannot vouch for, so it is refused rather than read as empty.
+ */
+function theStoresText(store: string): { readonly text: string } | { readonly absent: true } | { readonly why: string } {
   try {
-    return readFileSync(store, 'utf8')
-  } catch {
-    return undefined
+    return { text: readFileSync(store, 'utf8') }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { absent: true }
+    return { why: `cannot be read (${(error as NodeJS.ErrnoException).code ?? (error instanceof Error ? error.message : String(error))})` }
   }
 }
 
