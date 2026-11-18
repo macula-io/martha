@@ -29,6 +29,9 @@ export type OriginRead = { readonly origin: TheOrigin } | { readonly refused: st
 
 const GIT_SUFFIX = '.git'
 
+/** The repository a checkout's origin names, or undefined when it names no origin or one this slice cannot read. */
+export const repoOfTheCheckout = (origin: string | null): string | undefined => (origin === null ? undefined : repoOfTheOrigin(origin))
+
 /**
  * The repository an origin URL names, `org/name`; undefined when the URL names none this can read. The last two
  * segments are taken, and the whole of what is left is held to REPO, so a URL carrying `..`, an empty segment or

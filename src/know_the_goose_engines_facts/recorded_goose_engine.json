@@ -111,5 +111,9 @@
       "OPENAI_TIMEOUT"
     ],
     "default_base_path": "v1/chat/completions"
+  },
+  "subagent_models": {
+    "kind": "any_name",
+    "names": []
   }
 }

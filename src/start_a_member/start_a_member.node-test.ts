@@ -60,9 +60,10 @@ import { crewSubdirectory } from '../keep_martha_state_outside_the_checkout/keep
 import { THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
-const HOST_MODELS = ['opus', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 
 const SERVERS = JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } })
 const documents = { read: (path: string) => readFile(path, 'utf8') }
@@ -547,7 +548,7 @@ test("the declaration's strict gate is what the member's relay is handed, and of
  * member starts, so a vocabulary this launcher forgot is a crew that cannot start its reviewer.
  */
 test('a declaration naming a reviewer model this host runs starts the member, and the crew carries that model (#315)', async (t) => {
-  const [review_model] = CLAUDE_CODE_MODELS
+  const [review_model] = CLAUDE_CODE_MODELS.names
   assert.ok(review_model !== undefined && review_model !== '', 'the recorded host names no model, so this test could hold no review to one')
   const place = placeFor(t, {})
   await declared(place)

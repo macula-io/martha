@@ -30,12 +30,10 @@ import {
   soloDeclaration,
   workspaceLayoutOf,
   type CrewSettings,
+  type ModelVocabulary,
 } from '../declare_crew/declare_crew.ts'
 import { nodeIdsFor, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
-
-/** The repository a checkout's origin names, or undefined when it names no origin or one this slice cannot read. */
-const repoOfTheCheckout = (origin: string | null): string | undefined => (origin === null ? undefined : repoOfTheOrigin(origin))
+import { repoOfTheCheckout } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 
 export interface SoloCrewRequest {
   /** The project's absolute path. */
@@ -47,7 +45,7 @@ export interface SoloCrewRequest {
   readonly state: MarthaState
   readonly documents: DocumentStore
   /** The models the host runs (martha#315), as its adapter records them: what the declaration is read back against. */
-  readonly models: readonly string[]
+  readonly models: ModelVocabulary
 }
 
 export type SoloCrewDeclared =

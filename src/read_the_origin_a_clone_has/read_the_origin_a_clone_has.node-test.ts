@@ -17,7 +17,7 @@ import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contr
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { readTheOriginACloneHas, repoOfTheOrigin } from './read_the_origin_a_clone_has.ts'
+import { readTheOriginACloneHas, repoOfTheCheckout, repoOfTheOrigin } from './read_the_origin_a_clone_has.ts'
 
 const ORG_AND_NAME = 'acme/widget'
 
@@ -65,6 +65,11 @@ test('#256: an origin URL is read in each of the four forms git writes one in', 
 test('#256: a URL that names no repository is refused rather than shortened into one', () => {
   const nameless = ['', 'nonsense', 'https://github.com/acme', 'https://github.com/acme/..', 'nonsense/acme wid']
   for (const url of nameless) assert.equal(repoOfTheOrigin(url), undefined, `${JSON.stringify(url)} was taken for a repository`)
+})
+
+test('#611: a checkout with no origin remote names no repository, and one that has one is read as before', () => {
+  assert.equal(repoOfTheCheckout(null), undefined, 'no origin remote is no repository')
+  assert.equal(repoOfTheCheckout(`git@github.com:${ORG_AND_NAME}.git`), ORG_AND_NAME)
 })
 
 test('#256: a clone is of the repository and the default branch its origin names', async (t) => {

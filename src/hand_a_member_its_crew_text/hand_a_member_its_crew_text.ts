@@ -25,6 +25,7 @@ import { crewTextFilesOf, DeclarationRefused, declareCrew, DECLARATION_DIRECTORY
 export { crewTextFilesOf }
 import type { DocumentStore, FileTree } from '../host_contract/host_contract.ts'
 import { CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
+import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /**
  * Where Martha's own texts ship, inside this slice. `import.meta.dirname` is the one way a slice may know its own
@@ -143,7 +144,7 @@ function textIn(files: Pick<FileTree, 'kindOf' | 'bytesOf'>): ReadAText {
  * than being shown an approval that quietly holds no crew text (martha#306, r=2). It is read with the models the host
  * offers, as a member's own start reads it, so an approval and a start can never disagree about the declaration.
  */
-export async function crewTextFilesToApprove(documents: DocumentStore, root: string, models: readonly string[]): Promise<readonly string[]> {
+export async function crewTextFilesToApprove(documents: DocumentStore, root: string, models: ModelVocabulary): Promise<readonly string[]> {
   try {
     return crewTextFilesOf(await declareCrew(documents, root, models))
   } catch (error) {
