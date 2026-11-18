@@ -6,12 +6,13 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { DIAGRAMS, THE_C4_DIAGRAMS_PROGRAM } from '../architecture/c4_diagrams.ts'
+import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const PROGRAM = join(import.meta.dirname, '../src/check_the_pictures_change_with_the_version/main.ts')
 
@@ -35,7 +36,7 @@ test('a tree whose committed pictures are what the generator draws passes', () =
     const ran = checked(directory)
     assert.equal(ran.status, 0, `the release check refused a tree that carries the pictures it draws: ${ran.stderr}`)
   } finally {
-    rmSync(directory, { recursive: true, force: true })
+    removeTheTree(directory)
   }
 })
 
@@ -48,7 +49,7 @@ test('a stale picture is refused by name, with the command that redraws it', () 
     assert.match(ran.stderr, new RegExp(first.replace(/[.]/g, '\\.')), 'the refusal does not name the stale file')
     assert.ok(ran.stderr.includes(THE_C4_DIAGRAMS_PROGRAM), 'the refusal does not name the command that redraws it')
   } finally {
-    rmSync(directory, { recursive: true, force: true })
+    removeTheTree(directory)
   }
 })
 
@@ -59,6 +60,6 @@ test('a picture the tree does not hold at all is refused, never read as current'
     assert.equal(ran.status, 1, 'a tree with no pictures passed the release check')
     assert.match(ran.stderr, /assets\//, 'the refusal names no picture')
   } finally {
-    rmSync(directory, { recursive: true, force: true })
+    removeTheTree(directory)
   }
 })
