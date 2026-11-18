@@ -23,7 +23,7 @@
 // whole tree, and says so.
 //
 // The coincidences each slice declares in its own `coincidences.ts` are read from
-// the tree in both modes (../../prove_the_core/the_coincidences_a_slice_declares.ts),
+// the tree in both modes (../../prove_the_core/a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts),
 // never imported. An entry the reader cannot read, an entry about a file outside its
 // own slice, and a list that no longer matches the tree are each an error, never a
 // pass. The entries belong to this checkout: a tree brought here with `--root` is
@@ -38,9 +38,9 @@ import {
   lineOfAMarkerNotHeld,
   lineOfAnExceptionNotHeld,
   type MarkerNotHeld,
-} from '../../prove_the_core/no_literal_restates_a_value.ts'
-import { coreSources } from '../../prove_the_core/core_sources.ts'
-import { coincidencesIn, lineOfAnUnreadableCoincidence, type DeclaredCoincidence } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
+} from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
+import { coreSources } from '../../prove_the_core/read_the_manifest_and_the_linter/core_sources.ts'
+import { coincidencesIn, lineOfAnUnreadableCoincidence, type DeclaredCoincidence } from '../../prove_the_core/a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts'
 import { entriesOutsideTheirSlice, lineOfAnEntryOutsideItsSlice } from './a_slice_excuses_only_its_own_files.ts'
 import { summaryOf, verdictOf } from './judge_a_change.ts'
 import { CORE } from './the_core_the_check_reads.ts'

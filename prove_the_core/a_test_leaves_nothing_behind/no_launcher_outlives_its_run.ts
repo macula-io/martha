@@ -1,6 +1,6 @@
 // No launcher outlives its run (martha#559), over this machine's kernel:
 //
-//   node prove_the_core/no_launcher_outlives_its_run.ts [--proc <dir>] [--temp <dir>]
+//   node prove_the_core/a_test_leaves_nothing_behind/no_launcher_outlives_its_run.ts [--proc <dir>] [--temp <dir>]
 //
 // Exit 0 looked, and found none; 1 one or more found, each named with the home it was started from; 2 the check could
 // not be made. It never passes because it could not look.
@@ -33,7 +33,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 
-import { PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
+import { PROC_ROOT } from '../../src/linux_process_identity/process_identity_from_proc.ts'
 import {
   A_LAUNCH_HOME_PREFIX,
   parentIn,

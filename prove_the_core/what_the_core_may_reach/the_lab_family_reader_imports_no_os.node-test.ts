@@ -12,9 +12,9 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { test } from 'node:test'
 
-import { moduleReferencesOf, type ModuleReference } from './parse_a_source.ts'
+import { moduleReferencesOf, type ModuleReference } from '../read_a_source/parse_a_source.ts'
 
-const REPOSITORY = join(import.meta.dirname, '..')
+const REPOSITORY = join(import.meta.dirname, '../..')
 const READER = join(REPOSITORY, 'src', 'check_nothing_private_gets_in', 'read_lab_family_digests.ts')
 const HOME_FROM_THE_SYSTEM = ['node:os', 'os']
 // node:module holds createRequire, and with it a load no import shows.

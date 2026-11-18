@@ -9,11 +9,11 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { coreSources } from './core_sources.ts'
-import { codeFoldersOf, manifestOf } from './declared_in_package_json.ts'
+import { coreSources } from '../read_the_manifest_and_the_linter/core_sources.ts'
+import { codeFoldersOf, manifestOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { importsOfACoincidenceFile, IMPORTS_A_COINCIDENCE_FILE } from './only_a_coincidence_file_imports_one.ts'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 const source = (path: string, text: string) => ({ path, text: `${text}\n` })
 const named = (...sources: { path: string; text: string }[]) =>
   importsOfACoincidenceFile(sources).map((finding) => `${finding.path}:${finding.line}: ${finding.why}`)

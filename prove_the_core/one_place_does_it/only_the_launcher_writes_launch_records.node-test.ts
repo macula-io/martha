@@ -12,10 +12,10 @@ import {
   launchRecordWritesOutsideTheLauncher,
   type PlantedSource,
 } from './only_the_launcher_writes_launch_records.ts'
-import { manifestOf, programsAndTheirPartsOf, testSuffixesOf } from './declared_in_package_json.ts'
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { manifestOf, programsAndTheirPartsOf, testSuffixesOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 
 // The host glue package.json declares: directories under src/ that implement the
 // contract on a real machine, so they are not slices (#42).

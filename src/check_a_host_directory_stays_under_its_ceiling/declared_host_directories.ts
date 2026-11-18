@@ -7,7 +7,7 @@
 // nowhere else, and each directory is reported with the list that named it, so a
 // failure can say which one to look at.
 
-import type { Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import type { Manifest } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
 
 /** The lists a host directory is declared in, named as package.json names them. */
 export const HOST_LISTS = ['hostAdapters', 'hostGlue'] as const

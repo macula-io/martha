@@ -1,5 +1,5 @@
 {
-  "_why": "Planted slice sources for prove_the_core/no_setting_outside_the_declaration. Each caught case lists the lines a finding must name. They live in JSON so that no walk of the core's code reads them as code.",
+  "_why": "Planted slice sources for prove_the_core/what_the_core_may_reach/no_setting_outside_the_declaration. Each caught case lists the lines a finding must name. They live in JSON so that no walk of the core's code reads them as code.",
   "caught": {
     "the plain reads (review r=1)": [
       {
@@ -223,7 +223,7 @@
         ]
       },
       {
-        "text": "import { x } from '../../prove_the_core/core_sources.ts'\n",
+        "text": "import { x } from '../../prove_the_core/read_the_manifest_and_the_linter/core_sources.ts'\n",
         "lines": [
           1
         ]

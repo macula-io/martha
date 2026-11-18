@@ -4,9 +4,9 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { ROW_STREAM_MOVED, readingOnly } from './host_contract.ts'
-import { coreSources } from '../../prove_the_core/core_sources.ts'
+import { coreSources } from '../../prove_the_core/read_the_manifest_and_the_linter/core_sources.ts'
 import { SCANNED_EXTENSIONS, isScannedSource } from './core_source.ts'
-import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
+import { moduleReferencesOf } from '../../prove_the_core/read_a_source/parse_a_source.ts'
 import { hostForTests } from './host_for_tests.ts'
 import { claudeCodeToolNames, openCodeToolNames } from './tool_names_for_tests.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
@@ -29,7 +29,7 @@ test('the host contract has exactly the five parts decided on #1', () => {
 
 // The crew's own store is #254 R1's, reached here rather than by a path a slice names
 // (martha#255): a slice keeps a handover or a park marker through it and never imports
-// the glue that writes one, which prove_the_core/only_the_launcher_writes_launch_records
+// the glue that writes one, which prove_the_core/one_place_does_it/only_the_launcher_writes_launch_records
 // holds it to. The title gained "the crew's own (#255)" for it: the base's copy named the
 // five stores and said nothing else was there, which is no longer true of this contract.
 // The commit that carries this comment names the title it replaced, in the trailer the
@@ -67,7 +67,7 @@ test('readingOnly keeps only the reading member of whatever store it is given', 
 
 const sourcesUnder = coreSources
 
-// Which imports the core may make is judged in prove_the_core/imports_beyond_the_core.ts,
+// Which imports the core may make is judged in prove_the_core/what_the_core_may_reach/imports_beyond_the_core.ts,
 // from the syntax tree; what is pinned here is the walk and the contract's own imports.
 
 test('the scan reads every kind of script file, not only .ts', () => {

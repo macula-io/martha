@@ -23,8 +23,8 @@
 import { constants, existsSync, openSync, readFileSync, readSync, rmSync } from 'node:fs'
 import process from 'node:process'
 
-import { PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
-import { THE_RUN_IS_GONE } from '../src/end_a_launch_when_its_run_ends/the_run_lifeline.ts'
+import { PROC_ROOT } from '../../src/linux_process_identity/process_identity_from_proc.ts'
+import { THE_RUN_IS_GONE } from '../../src/end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 
 /** How often a launcher asks whether its run is still there: often enough that a killed run leaves nothing for long. */
 const POLL_FOR_THE_END_MS = 200

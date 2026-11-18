@@ -7,9 +7,9 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { callOrderIn, namesImportedFrom, stepsIn } from './the_order_a_function_calls_in.ts'
+import { callOrderIn, namesImportedFrom, stepsIn } from '../read_a_source/the_order_a_function_calls_in.ts'
 
-const REPO = join(import.meta.dirname, '..')
+const REPO = join(import.meta.dirname, '../..')
 const HARNESS = join(REPO, 'rehearse_a_release', 'place_main_as_a_dry_release', 'dry_release.mjs')
 const INSTALL = join(REPO, 'installer', 'install_a_release', 'install_a_release.mjs')
 const COMMAND = join(REPO, 'installer', 'bin', 'martha-install.mjs')

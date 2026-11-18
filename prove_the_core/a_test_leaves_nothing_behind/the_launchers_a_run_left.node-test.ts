@@ -12,8 +12,8 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
-import { PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { PROC_ROOT } from '../../src/linux_process_identity/process_identity_from_proc.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 import {
   A_LAUNCH_HOME_PREFIX,
@@ -29,7 +29,7 @@ import {
 } from './the_launchers_a_run_left.ts'
 
 /** The check under test, as a program of its own: the one the npm script and CI run. */
-const THE_CHECK = 'prove_the_core/no_launcher_outlives_its_run.ts'
+const THE_CHECK = 'prove_the_core/a_test_leaves_nothing_behind/no_launcher_outlives_its_run.ts'
 
 /** The moment the rule reads these as: a fixed one, so a test says nothing about how long it took to run. */
 const NOW = Date.UTC(2026, 10, 17, 6, 0, 0)

@@ -9,8 +9,8 @@
 
 import { basename } from 'node:path'
 
-import type { CoreSource } from '../src/host_contract/core_source.ts'
-import { moduleReferencesIn, parseSource } from './parse_a_source.ts'
+import type { CoreSource } from '../../src/host_contract/core_source.ts'
+import { moduleReferencesIn, parseSource } from '../read_a_source/parse_a_source.ts'
 import { COINCIDENCE_FILE, isACoincidenceFile } from './the_coincidences_a_slice_declares.ts'
 
 /** Why an importer is named, in the words the test prints. */

@@ -14,7 +14,7 @@ import { test } from 'node:test'
 import { UNREADABLE, unboundedRunsIn, type AShippedFile } from './every_run_of_the_tests_is_bounded.ts'
 
 /** The repository this check reads. */
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 
 /** Every tracked file of the repository, by its path from the top. */
 function theTrackedFiles(): string[] {
@@ -58,7 +58,7 @@ const A_RUN = (keep: readonly string[]): string => {
     'node --test',
     keep.includes('timeout') ? '--test-timeout=60000' : '',
     keep.includes('force-exit') ? '--test-force-exit' : '',
-    keep.includes('guard') ? '--import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts' : '',
+    keep.includes('guard') ? '--import=./prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts' : '',
     "'src/**/*.node-test.ts'",
   ]
   return words.filter((word) => word !== '').join(' ')
@@ -131,7 +131,7 @@ test("a page of prose is read inside its code blocks, and a sentence that names 
 })
 
 test('a package script is one line, and a page outside a code block runs nothing (martha#683)', () => {
-  const manifest = 'node prove_the_core/no_test_output_carries_the_environment.ts node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts "src/**/*.node-test.ts"'
+  const manifest = 'node prove_the_core/no_test_reaches_a_secret/no_test_output_carries_the_environment.ts node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts "src/**/*.node-test.ts"'
   assert.deepEqual(unboundedRunsIn([{ path: 'package.json#scripts.test', text: manifest, kind: 'a package script' }]), [])
   const bare = 'node --test "src/**/*.node-test.ts"'
   assert.equal(unboundedRunsIn([{ path: 'package.json#scripts.test', text: bare, kind: 'a package script' }]).length, 1)
@@ -157,7 +157,7 @@ const theRunsNamedIn = (script: string): string[] =>
   unboundedRunsIn([{ path: 'a_script.sh', text: script }]).map((run) => `${run.line}: ${run.text}`)
 
 /** The bound run's own flags, so a case can plant a run that states all three. */
-const BOUNDED = '--test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts'
+const BOUNDED = '--test-timeout=60000 --test-force-exit --import=./prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts'
 
 /** Scripts the shell runs the runner in, each with the line it is named by (martha#727's design, r=1, r=2 and A-C). */
 const RUNS: ReadonlyArray<{ readonly name: string; readonly script: string; readonly line: number; readonly text?: string }> = [

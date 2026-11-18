@@ -1,6 +1,6 @@
 // The unused rule bites where the compiler cannot see (martha#171). eslint.config.mjs names it once, for the
 // files no tsconfig includes and for a catch binding the compiler never looks at; CI runs it over the whole tree
-// (`npm run lint`), and this proves that run is not vacuous, the way prove_the_core/structure_stays_flat.node-test.ts
+// (`npm run lint`), and this proves that run is not vacuous, the way prove_the_core/read_the_manifest_and_the_linter/structure_stays_flat.node-test.ts
 // proves the structural floor is not.
 //
 // The compiler's half (noUnusedLocals and noUnusedParameters in tsconfig.json and installer/tsconfig.json) is not
@@ -13,7 +13,7 @@ import { test } from 'node:test'
 
 import { ESLint } from 'eslint'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 const eslint = new ESLint({ cwd: repository })
 const ERROR = 2
 

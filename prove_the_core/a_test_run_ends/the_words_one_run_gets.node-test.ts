@@ -13,7 +13,7 @@ import { test } from 'node:test'
 
 import { theGlobPicking, theSuiteCommandOf } from './the_words_one_run_gets.ts'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 const theReader = join(import.meta.dirname, 'the_words_one_run_gets.ts')
 
 /** What the reader answers when it is run the way the runner runs it. */
@@ -55,7 +55,7 @@ test('#723: the reader answers the suite\'s own words, picks a file the suite ru
   const unsets = theAnswer('unsets')
   assert.equal(unsets.status, 0, unsets.err)
   for (const name of unsets.out.trim().split('\n')) assert.match(name, /^[A-Z][A-Z0-9_]*$/)
-  const picked = theAnswer('picks', 'prove_the_core/parse_a_source.node-test.ts')
+  const picked = theAnswer('picks', 'prove_the_core/read_a_source/parse_a_source.node-test.ts')
   assert.equal(picked.status, 0, picked.err)
   assert.equal(picked.out.trim(), 'prove_the_core/**/*.node-test.ts')
   const refused = theAnswer('picks', 'CONTRIBUTING.md')

@@ -47,7 +47,7 @@ import { setTimeout as after } from 'node:timers/promises'
 import { stripVTControlCharacters } from 'node:util'
 
 /** The module npm test runs node --test through, as the test script names it. */
-export const RUNNER = './prove_the_core/no_test_output_carries_the_environment.ts'
+export const RUNNER = './prove_the_core/no_test_reaches_a_secret/no_test_output_carries_the_environment.ts'
 /** The variable the planted value is given under. */
 export const PLANTED_VARIABLE = 'MARTHA_PLANTED_SECRET'
 /** How many random bytes the planted value carries: never in any output by chance. */

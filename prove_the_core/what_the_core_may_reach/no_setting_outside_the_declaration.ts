@@ -55,7 +55,7 @@ import { dirname, join, normalize, sep } from 'node:path'
 
 import ts from 'typescript'
 
-import { isInAType, isUsedAsAValue, lineOf, moduleReferencesIn, nodesOf, parseSource } from './parse_a_source.ts'
+import { isInAType, isUsedAsAValue, lineOf, moduleReferencesIn, nodesOf, parseSource } from '../read_a_source/parse_a_source.ts'
 
 /** The Node modules a slice may import: pure computation that reads no setting and no machine state. */
 export const NODE_MODULES_A_SLICE_MAY_IMPORT = ['node:path', 'node:crypto'] as const

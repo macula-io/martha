@@ -89,7 +89,7 @@ import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_gua
 
 /**
  * The run these tests are: a pipe this process holds open for as long as it exists, however it ends. Every launcher a
- * test starts reads the other end by path (prove_the_core/a_launcher_ends_with_its_run.ts), so a run killed by a shell
+ * test starts reads the other end by path (prove_the_core/a_test_leaves_nothing_behind/a_launcher_ends_with_its_run.ts), so a run killed by a shell
  * timeout or by --test-force-exit leaves no launcher, no shell, no terminal and no home behind — which is what let
  * enough of them pile up on one machine that this file stopped reporting there at all.
  */
@@ -2685,7 +2685,7 @@ function launcherProcess(
   place.aMemberStartsHere()
   const script = join(place.home, 'launcher.ts')
   const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
-  const endsWithItsRunModule = new URL('../../prove_the_core/a_launcher_ends_with_its_run.ts', import.meta.url).href
+  const endsWithItsRunModule = new URL('../../prove_the_core/a_test_leaves_nothing_behind/a_launcher_ends_with_its_run.ts', import.meta.url).href
   writeFileSync(
     script,
     [

@@ -46,10 +46,10 @@ import { dirname, join, relative, sep } from 'node:path'
 
 import ts from 'typescript'
 
-import { coreSources } from './core_sources.ts'
-import { moduleReferencesOf } from './parse_a_source.ts'
-import { isTestFile } from './declared_in_package_json.ts'
-import { isACoincidenceFile } from './the_coincidences_a_slice_declares.ts'
+import { coreSources } from '../read_the_manifest_and_the_linter/core_sources.ts'
+import { moduleReferencesOf } from '../read_a_source/parse_a_source.ts'
+import { isTestFile } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { isACoincidenceFile } from '../a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts'
 
 /** The slices under src/ that may write launch records, besides the host glue. */
 export const LAUNCH_RECORD_WRITERS = ['attribute_a_cross_session_sender', 'host_contract'] as const

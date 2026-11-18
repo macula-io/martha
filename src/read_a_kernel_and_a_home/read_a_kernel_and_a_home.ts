@@ -6,7 +6,7 @@
 // read, is find_a_member_a_run_left_behind's to decide. This is the machine's side of that question, on Linux.
 //
 // This is a host adapter, not machine glue: glue may import only the host contract and its own files
-// (prove_the_core/no_setting_outside_the_declaration), and this folder composes linux_process_identity's readings of a
+// (prove_the_core/what_the_core_may_reach/no_setting_outside_the_declaration), and this folder composes linux_process_identity's readings of a
 // process tree with the crew state's own conventions, which is what an adapter is for.
 
 import { readFileSync, readdirSync, readlinkSync, statSync } from 'node:fs'

@@ -25,10 +25,10 @@ import { sep } from 'node:path'
 
 import ts from 'typescript'
 
-import type { CoreSource } from '../src/host_contract/core_source.ts'
-import { lineOf, nodesOf, parseSource } from './parse_a_source.ts'
-import { isTestFile } from './declared_in_package_json.ts'
-import { isACoincidenceFile } from './the_coincidences_a_slice_declares.ts'
+import type { CoreSource } from '../../src/host_contract/core_source.ts'
+import { lineOf, nodesOf, parseSource } from '../read_a_source/parse_a_source.ts'
+import { isTestFile } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { isACoincidenceFile } from '../a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts'
 
 /** A minifier's name, as a pattern spells it: the word characters and the dollar, one or more. */
 const A_MINIFIERS_NAME = /\[(?:\\w\$|\$\\w)\]\+/

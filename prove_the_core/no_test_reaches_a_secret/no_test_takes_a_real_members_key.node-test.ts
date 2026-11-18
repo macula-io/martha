@@ -19,15 +19,15 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
-import { STATE_HOME_VARIABLE } from '../src/refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
-import { theEnvironmentAMemberIsGiven } from '../src/launch_a_claude_code_member/the_environment_a_member_is_given.ts'
-import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
-import { STATE_ROOT_NAME, CREWS_PLACE } from '../src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { streamDirectoryNameOf } from '../src/row_streams_directory/row_streams_directory.ts'
-import { sessionRecordStreamOf } from '../src/session_records_in_rows/session_records_in_rows.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { STATE_HOME_VARIABLE } from '../../src/refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
+import { theEnvironmentAMemberIsGiven } from '../../src/launch_a_claude_code_member/the_environment_a_member_is_given.ts'
+import { CLAUDE_CODE } from '../../src/know_claude_codes_own_facts/claude_code_facts.ts'
+import { STATE_ROOT_NAME, CREWS_PLACE } from '../../src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { streamDirectoryNameOf } from '../../src/row_streams_directory/row_streams_directory.ts'
+import { sessionRecordStreamOf } from '../../src/session_records_in_rows/session_records_in_rows.ts'
 
-import { FORCE_EXIT_FLAG, GUARD_FLAG, TIMEOUT_FLAG, withoutTheTestContext } from './every_test_run_ends.ts'
+import { FORCE_EXIT_FLAG, GUARD_FLAG, TIMEOUT_FLAG, withoutTheTestContext } from '../a_test_run_ends/every_test_run_ends.ts'
 import {
   isASessionRecord,
   linesNamingTheCrewsHome,
@@ -38,7 +38,7 @@ import {
 } from './no_test_takes_a_real_members_key.ts'
 
 /** The repository this check reads, which is where the test script runs its files and holds the guard's path. */
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 
 /** The folders whose sources the suite runs: the tests and everything they import. */
 const THE_SUITE_RUNS = ['src', 'prove_the_core', 'architecture', 'carry_marthas_own_node', 'rehearse_a_release'] as const

@@ -17,7 +17,7 @@
 // Nothing here reads the machine: the processes are handed to it, so the same rule is pinned by a test that has no
 // processes of its own.
 
-import { MINUTE_MS } from '../src/declare_crew/declare_crew.ts'
+import { MINUTE_MS } from '../../src/declare_crew/declare_crew.ts'
 
 /** The prefix a test's throwaway home is made with: one name, read by the tests that make one and by this rule. */
 export const A_LAUNCH_HOME_PREFIX = 'martha-cc-launch-'

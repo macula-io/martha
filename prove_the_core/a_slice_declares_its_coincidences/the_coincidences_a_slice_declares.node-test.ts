@@ -27,7 +27,7 @@ const refusals = (...sources: { path: string; text: string }[]) => coincidencesI
 test('an entry is read through an import, a renamed import, a constant of the file, and a reason another slice owns', () => {
   const declared = source(
     IN_A_SLICE,
-    "import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'",
+    "import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'",
     "import { TOOL, TOOL as RENAMED } from '../a_tool/a_tool.ts'",
     "import { SHARED } from '../a_owner/coincidences.ts'",
     "const MINE = 'the-own-word'",

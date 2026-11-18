@@ -11,8 +11,8 @@ import {
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import type { Arrival } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
-import { coreSources } from '../../prove_the_core/core_sources.ts'
-import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
+import { coreSources } from '../../prove_the_core/read_the_manifest_and_the_linter/core_sources.ts'
+import { moduleReferencesOf } from '../../prove_the_core/read_a_source/parse_a_source.ts'
 import { beginSession, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import {

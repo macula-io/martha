@@ -10,8 +10,8 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import type { CoreSource } from '../src/host_contract/core_source.ts'
-import { coreSources } from './core_sources.ts'
+import type { CoreSource } from '../../src/host_contract/core_source.ts'
+import { coreSources } from '../read_the_manifest_and_the_linter/core_sources.ts'
 import {
   removalsWithoutARetry,
   removalsWithoutTheirRetry,
@@ -20,7 +20,7 @@ import {
   THE_RETRY_OPTIONS,
 } from './removals_without_a_retry.ts'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 
 const planted = (text: string, path = 'src/planted/planted.node-test.ts'): CoreSource => ({ path, text })
 

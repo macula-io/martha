@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { test } from 'node:test'
 
-import { coreSources } from './core_sources.ts'
-import { CORE, escaped, isTestFile, manifestOf, programsAndTheirPartsOf, testSuffixesOf } from './declared_in_package_json.ts'
+import { coreSources } from '../read_the_manifest_and_the_linter/core_sources.ts'
+import { CORE, escaped, isTestFile, manifestOf, programsAndTheirPartsOf, testSuffixesOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import {
   adapterReachesBeyondItsKind,
   glueReachesBeyondTheContract,
@@ -13,9 +13,9 @@ import {
   slicesImportingPrograms,
   type Source,
 } from './no_setting_outside_the_declaration.ts'
-import { COINCIDENCE_FILE, isACoincidenceFile } from './the_coincidences_a_slice_declares.ts'
+import { COINCIDENCE_FILE, isACoincidenceFile } from '../a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 const src = join(repository, CORE)
 const manifest = manifestOf(repository)
 

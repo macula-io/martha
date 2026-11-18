@@ -10,12 +10,12 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { memberNameKey, sameMemberName } from '../src/declare_crew/declare_crew.ts'
-import { coreSources } from './core_sources.ts'
-import { CORE, manifestOf, testSuffixesOf } from './declared_in_package_json.ts'
+import { memberNameKey, sameMemberName } from '../../src/declare_crew/declare_crew.ts'
+import { coreSources } from '../read_the_manifest_and_the_linter/core_sources.ts'
+import { CORE, manifestOf, testSuffixesOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { THE_ONE_RULE, theFoldTold, theFoldsNamedIn } from './one_place_folds_a_member_name.ts'
 
-const repository = join(dirname(fileURLToPath(import.meta.url)), '..')
+const repository = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const test_suffixes = testSuffixesOf(manifestOf(repository))
 
 const source = (path: string, text: string): { path: string; text: string } => ({ path, text })

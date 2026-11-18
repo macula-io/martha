@@ -9,9 +9,9 @@ import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
-import { manifestOf, PACKAGES, testCommandsOf } from './declared_in_package_json.ts'
-import { testRunFlagsOf } from './every_test_run_ends.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { manifestOf, PACKAGES, testCommandsOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { testRunFlagsOf } from '../a_test_run_ends/every_test_run_ends.ts'
 import {
   environmentLeakReportOf,
   FAILING_TESTS_HEADING,
@@ -24,7 +24,7 @@ import {
   RUNNER,
 } from './no_test_output_carries_the_environment.ts'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 /** How long a nested run may take before the check calls it hung and stops it. */
 const RUN_DEADLINE_MS = 30_000
 

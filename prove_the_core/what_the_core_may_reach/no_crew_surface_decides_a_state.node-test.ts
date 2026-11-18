@@ -11,9 +11,9 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import ts from 'typescript'
 
-import { lineOf, nodesOf, parseSource } from './parse_a_source.ts'
+import { lineOf, nodesOf, parseSource } from '../read_a_source/parse_a_source.ts'
 
-const SRC = join(import.meta.dirname, '..', 'src')
+const SRC = join(import.meta.dirname, '../..', 'src')
 
 /** The surfaces that draw the reader's answer. */
 const SURFACES: readonly string[] = ['draw_the_crew_strip', 'title_a_members_tab']

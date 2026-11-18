@@ -11,8 +11,8 @@
 // A new fold anywhere is named by file and line; one more in a declared file changes its count and is named too, and a
 // declared file that folds less than it says is named, so the list cannot go stale.
 
-import type { CoreSource } from '../src/host_contract/core_source.ts'
-import { isTestFile } from './declared_in_package_json.ts'
+import type { CoreSource } from '../../src/host_contract/core_source.ts'
+import { isTestFile } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 
 /** The one file a member's name is folded in: the rule the declaration owns. */
 export const THE_ONE_RULE = 'declare_crew/member_names.ts'
@@ -100,4 +100,4 @@ export function theFoldsNamedIn(sources: readonly CoreSource[], scan: TheFoldSca
 /** What one finding is told: where it stands, and where the rule is. */
 export const theFoldTold = (fold: AFoldNamed): string =>
   `${fold.path}${fold.line === 0 ? '' : `:${String(fold.line)}`}: ${fold.why}. Compare member names with sameMemberName or memberNameKey from ` +
-  `declare_crew; a fold of something that is not a member's name is declared, with its count and reason, in prove_the_core/one_place_folds_a_member_name.ts.`
+  `declare_crew; a fold of something that is not a member's name is declared, with its count and reason, in prove_the_core/one_place_does_it/one_place_folds_a_member_name.ts.`

@@ -11,8 +11,8 @@
 // their own slices. It reads every script file under src/ that is not a test, so a poll moved into a helper is still
 // named where it stands.
 
-import type { CoreSource } from '../src/host_contract/core_source.ts'
-import { isTestFile } from './declared_in_package_json.ts'
+import type { CoreSource } from '../../src/host_contract/core_source.ts'
+import { isTestFile } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 
 /** The one directory a GitHub read of package B is made from: the slice that spends the crew's budget. */
 export const THE_ONE_PLACE = 'spend_the_github_budget'

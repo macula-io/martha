@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { CLAUDE_CODE_ANSWER_FIELDS } from '../src/read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
-import { coreSources } from './core_sources.ts'
-import { manifestOf, programsAndTheirPartsOf, testSuffixesOf } from './declared_in_package_json.ts'
+import { CLAUDE_CODE_ANSWER_FIELDS } from '../../src/read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
+import { coreSources } from '../read_the_manifest_and_the_linter/core_sources.ts'
+import { manifestOf, programsAndTheirPartsOf, testSuffixesOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { CUTS_A_BUNDLE, hostReadsInTheCore, lineOfAHostRead, READS_AN_ANSWER, type WhatIsNotASlice } from './no_host_bundle_read_in_the_core.ts'
-import { declaredHostGlue } from './only_the_launcher_writes_launch_records.ts'
+import { declaredHostGlue } from '../one_place_does_it/only_the_launcher_writes_launch_records.ts'
 
-const repository = join(import.meta.dirname, '..')
+const repository = join(import.meta.dirname, '../..')
 const manifest = manifestOf(repository)
 
 /** What the tree declares is no slice, and the fields the Claude Code host's answers carry. */
