@@ -31,6 +31,9 @@ import process from 'node:process'
 // every_launch_switches_the_hosts_auto_updater_off.node-test.ts by name (martha#474).
 import { HOSTS } from '../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
+// The host draws its screen a word at a time, moving the cursor where the spaces would be, so every screen this probe
+// matches is read plainly: the one reader both probes use (#693).
+import { AT_ITS_PROMPT, says } from '../prove_the_core/a_screen_drawn_in_pieces.ts'
 
 /** The host, at the version the adapter was recorded from: the same variable the recorded-host tests read. */
 const HOST = process.env.MARTHA_RECORDED_HOST
@@ -39,6 +42,9 @@ const OUT = process.argv[2] ?? mkdtempSync(join(tmpdir(), 'martha-dialog-order-'
 const STAND_IN_KEY = `sk-ant-api03-${'0'.repeat(80)}`
 const COMMAND = 'touch probe-touched.txt'
 const PROMPT_SHOWN = 'Waiting for permission'
+/** How long the host is given to draw each screen this probe types at: its banner, then the dialog it answers. */
+const WELCOME_WAIT_MS = 60000
+const DIALOG_WAIT_MS = 45000
 
 /** The plugin the host runs: every event the relay can hear, each written to the log with the moment it arrived. */
 const PLUGIN = (logdir) => `// PROBE
@@ -137,8 +143,38 @@ const settles = async (held, ms) => {
   return false
 }
 
-/** Whether the host has said `needle` on its screen yet, given everything it has drawn so far. */
-const waitFor = (shown, needle, ms) => settles(() => shown().includes(needle), ms)
+/** Whether the host has said `phrase` on its screen yet, given everything it has drawn so far. */
+const waitFor = (shown, phrase, ms) => settles(() => says(shown(), phrase), ms)
+
+/** Every screen this probe needs and may never see, each said by name so a run that cannot happen says so. */
+const NEVER_DRAWN = Object.freeze({
+  prompt: `the host never reached its prompt: no screen said "${AT_ITS_PROMPT}" within ${WELCOME_WAIT_MS / 1000}s`,
+  dialog: `the permission dialog was never drawn: no screen said "${PROMPT_SHOWN}" within ${DIALOG_WAIT_MS / 1000}s`,
+})
+
+/** The screen this run needed and never saw, or undefined when it saw both. */
+const theScreenItLacked = (welcomed, asking) => {
+  if (!welcomed) return NEVER_DRAWN.prompt
+  if (!asking) return NEVER_DRAWN.dialog
+  return undefined
+}
+
+/**
+ * The owner's answer given to the dialog, and whether the call ran. It is a keystroke into a terminal that draws its own
+ * timings: the dialog has been drawn but the prompt takes its input a moment later, and a Return that lands too early is
+ * dropped, so the answer is given again if the call has not answered a third of a minute later.
+ */
+const answerTheDialog = async (child, places, mark) => {
+  const hasRun = () => readdirSync(places.logdir).some((name) => name.endsWith('-post-tool-use.json'))
+  for (const attempt of [1, 2]) {
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+    child.stdin.write('\r')
+    if (attempt === 1) mark('answered')
+    if (await settles(hasRun, attempt === 1 ? 20000 : 45000)) break
+    mark(`answered-again-${attempt}`)
+  }
+  return hasRun()
+}
 
 /** The host, driven: one owner's turn, one permission answered, and the marks this script made along the way. */
 async function driveTheHost(out, places, base_url) {
@@ -152,29 +188,24 @@ async function driveTheHost(out, places, base_url) {
   child.stderr.on('data', (chunk) => (drawn += chunk.toString('utf8')))
   const marks = []
   const mark = (what) => marks.push({ what, at: Date.now() })
-  await waitFor(() => drawn, 'for shortcuts', 60000)
-  await new Promise((resolve) => setTimeout(resolve, 2000))
-  child.stdin.write('run the probe command\r')
-  const asking = await waitFor(() => drawn, PROMPT_SHOWN, 45000)
-  mark(asking ? 'asked' : 'no-dialog')
-  // Answering is a keystroke into a terminal that draws its own timings: the dialog has been drawn but the prompt
-  // takes its input a moment later, and a Return that lands too early is dropped. So the answer is given again if the
-  // call has not answered a third of a minute later; the second Return is the one the dialog was waiting for.
-  const hasRun = () => readdirSync(places.logdir).some((name) => name.endsWith('-post-tool-use.json'))
-  for (const attempt of [1, 2]) {
-    if (!asking) break
-    await new Promise((resolve) => setTimeout(resolve, 1200))
-    child.stdin.write('\r')
-    if (attempt === 1) mark('answered')
-    if (await settles(hasRun, attempt === 1 ? 20000 : 45000)) break
-    mark(`answered-again-${attempt}`)
+  // Each step needs the one before it: before the banner is drawn the host has nothing to take a message, so a run that
+  // cannot get past a screen stops there and says which screen it lacked rather than typing into nothing.
+  const welcomed = await waitFor(() => drawn, AT_ITS_PROMPT, WELCOME_WAIT_MS)
+  if (!welcomed) {
+    mark('the-prompt-banner-never-drawn')
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+    child.stdin.write('run the probe command\r')
   }
-  mark(hasRun() ? 'ran' : 'never-ran')
+  const asking = welcomed && (await waitFor(() => drawn, PROMPT_SHOWN, DIALOG_WAIT_MS))
+  mark(!welcomed ? 'not-asked' : asking ? 'asked' : 'no-dialog')
+  const ran = asking && (await answerTheDialog(child, places, mark))
+  mark(ran ? 'ran' : 'never-ran')
   child.stdin.write('/exit\r')
   await new Promise((resolve) => setTimeout(resolve, 2000))
   child.kill('SIGKILL')
   writeFileSync(join(out, 'screen.log'), drawn)
-  return { marks, t0 }
+  return { marks, t0, missing: theScreenItLacked(welcomed, asking) }
 }
 
 /** Every event the host raised, in the order it raised them. */
@@ -204,18 +235,24 @@ if (HOST === undefined || HOST === '') {
 } else {
   const places = setUp(OUT)
   const server = await standInModel()
-  const { marks, t0 } = await driveTheHost(OUT, places, `http://127.0.0.1:${server.address().port}`)
+  const { marks, t0, missing } = await driveTheHost(OUT, places, `http://127.0.0.1:${server.address().port}`)
   server.close()
   const entries = theOrder(places)
   writeFileSync(join(OUT, 'ordering.log'), entries.map((entry) => `${new Date(entry.at).toISOString()} +${String(entry.at - t0).padStart(6)}ms  ${entry.tag}  ${JSON.stringify(entry.payload)}`).join('\n') + '\n')
   writeFileSync(join(OUT, 'marks.log'), marks.map((mark) => `${new Date(mark.at).toISOString()} +${String(mark.at - t0).padStart(6)}ms  ${mark.what}`).join('\n') + '\n')
   process.stdout.write(`${readFileSync(join(OUT, 'ordering.log'), 'utf8')}--- marks\n${readFileSync(join(OUT, 'marks.log'), 'utf8')}`)
-  const checked = checkTheOrder(entries, marks)
-  const failed = checked.outOfOrder.length > 0 || checked.between.length > 0 || !Object.values(checked.said).every((yes) => yes)
-  process.stdout.write(
-    failed
-      ? `FAIL: the host did not raise its events in the order the owner's row relies on.\n  missing or out of order: ${JSON.stringify(checked.outOfOrder)}\n  between the answer and the run: ${JSON.stringify(checked.between)}\n  heard: ${JSON.stringify(checked.said)}\n  the evidence: ${OUT}\n`
-      : `PASS: the call is posted, then checked, then asked about; the owner answers; and nothing the row could close on is raised before the call's own answer. The row closes on that answer.\n  between the answer and the run: nothing${checked.alsoRaised.length === 0 ? '' : ` (also raised there, and opens nothing: ${JSON.stringify(checked.alsoRaised)})`}\n  the evidence: ${OUT}\n`,
-  )
-  process.exitCode = failed ? 1 : 0
+  // A run that never reached the dialog says which screen it lacked, never that the order was wrong: the two are
+  // different answers, and only one of them is this probe's.
+  if (missing !== undefined) {
+    process.stderr.write(`the probe could not run: ${missing}\n  the evidence: ${OUT}\n`)
+  } else {
+    const checked = checkTheOrder(entries, marks)
+    const failed = checked.outOfOrder.length > 0 || checked.between.length > 0 || !Object.values(checked.said).every((yes) => yes)
+    process.stdout.write(
+      failed
+        ? `FAIL: the host did not raise its events in the order the owner's row relies on.\n  missing or out of order: ${JSON.stringify(checked.outOfOrder)}\n  between the answer and the run: ${JSON.stringify(checked.between)}\n  heard: ${JSON.stringify(checked.said)}\n  the evidence: ${OUT}\n`
+        : `PASS: the call is posted, then checked, then asked about; the owner answers; and nothing the row could close on is raised before the call's own answer. The row closes on that answer.\n  between the answer and the run: nothing${checked.alsoRaised.length === 0 ? '' : ` (also raised there, and opens nothing: ${JSON.stringify(checked.alsoRaised)})`}\n  the evidence: ${OUT}\n`,
+    )
+    process.exitCode = failed ? 1 : 0
+  }
 }
