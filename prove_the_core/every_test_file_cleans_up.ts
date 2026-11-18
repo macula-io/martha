@@ -62,10 +62,6 @@ export const leakReportOf = (file: string, left: readonly string[]): string =>
  */
 export const NEVER_LEFT_IN_THE_TEMP_DIRECTORY = ['martha-472-link-'] as const
 
-/** Every name in the temp directory carrying one of those prefixes, whoever left it. */
-export const leftoversInTheTempDirectory = (): string[] =>
-  readdirSync(tmpdir()).filter((name) => NEVER_LEFT_IN_THE_TEMP_DIRECTORY.some((prefix) => name.startsWith(prefix)))
-
 /**
  * The names this run could have left: each prefix with this process's own pid. Judging only these is what keeps the
  * check sound while files run side by side — another file's link is made and removed inside its own run, and one

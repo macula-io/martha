@@ -4,14 +4,14 @@
 
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { escaped, manifestOf, PACKAGES, type Manifest } from './declared_in_package_json.ts'
-import { leakReportOf, leftBehind, leftoverReportOf, leftoversInTheTempDirectory, leftRunning } from './every_test_file_cleans_up.ts'
+import { leakReportOf, leftBehind, leftoverReportOf, leftRunning, NEVER_LEFT_IN_THE_TEMP_DIRECTORY } from './every_test_file_cleans_up.ts'
 import {
   FORCE_EXIT_FLAG,
   GUARD_FLAG,
@@ -87,9 +87,10 @@ type Run = { readonly ended: { code: number | null } | 'hung'; readonly output: 
 /**
  * Runs `files` as npm test in `folder` runs its files, from there, with that test
  * script's own flags (the timeout shortened so the check does not wait the full
- * bound), in a process group of its own that `t` kills after itself, whatever happens.
+ * bound), in a process group of its own that `t` kills after itself, whatever happens. With `temp`, the run's temp
+ * directory is that one, so what its files leave there is the caller's alone to find and remove.
  */
-async function runWithTheScriptsFlags(t: TestContext, folder: string, files: readonly string[]): Promise<Run> {
+async function runWithTheScriptsFlags(t: TestContext, folder: string, files: readonly string[], temp?: string): Promise<Run> {
   const flags = testRunFlagsOf(manifestOf(join(repository, folder))).map((flag) =>
     flag.startsWith(`${TIMEOUT_FLAG}=`) ? `${TIMEOUT_FLAG}=${SHORT_TIMEOUT_MS}` : flag,
   )
@@ -97,7 +98,7 @@ async function runWithTheScriptsFlags(t: TestContext, folder: string, files: rea
     cwd: join(repository, folder),
     // Without the variable node --test sets in each file's process: with it, a
     // nested node --test reports to this run instead of running as npm test does.
-    env: withoutTheTestContext(process.env),
+    env: { ...withoutTheTestContext(process.env), ...(temp === undefined ? {} : { TMPDIR: temp }) },
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -171,13 +172,11 @@ for (const folder of PACKAGES) {
 
 for (const folder of PACKAGES) {
   test(`with the test script's own flags in ${folder}, a file that leaves a link in the temp directory fails by name, and the link goes`, async (t) => {
-    // This file's own process is judged by the same guard, so what the planted run leaves is removed after `t`: a link
-    // named by that run's pid, which nothing else here makes.
-    const before = leftoversInTheTempDirectory()
-    t.after(() => {
-      for (const name of leftBehind(before, leftoversInTheTempDirectory())) rmSync(join(tmpdir(), name), { force: true })
-    })
-    const { ended, output, flags } = await runWithTheScriptsFlags(t, folder, [LEAVES_A_LINK, REMOVES_ITS_LINK])
+    // The planted run gets a temp directory of its own, removed whole after `t`: what it leaves is gone, and nothing in
+    // the shared temp directory is touched. A link there of the same prefix may be another run's, live (martha#724).
+    const temp = mkdtempSync(join(tmpdir(), 'martha-724-planted-run-'))
+    t.after(() => rmSync(temp, { recursive: true, force: true }))
+    const { ended, output, flags } = await runWithTheScriptsFlags(t, folder, [LEAVES_A_LINK, REMOVES_ITS_LINK], temp)
 
     assert.notEqual(ended, 'hung', `the run did not end within ${RUN_DEADLINE_MS} ms with the flags ${JSON.stringify(flags)}`)
     if (ended === 'hung') return
@@ -192,6 +191,12 @@ for (const folder of PACKAGES) {
     assert.match(output, new RegExp(`✖ ${escaped(plantedPath(LEAVES_A_LINK, folder))}`), 'the file that leaves a link is failed')
     assert.doesNotMatch(output, new RegExp(escaped(REMOVES_ITS_LINK)), 'the file that removes its link is neither failed nor blamed')
     assert.match(output, /ℹ fail 1\n/, 'one file fails, no more')
+    const [prefix] = NEVER_LEFT_IN_THE_TEMP_DIRECTORY
+    assert.equal(
+      readdirSync(temp).filter((name) => name.startsWith(prefix)).length,
+      1,
+      'the planted run made its links in its own temp directory, and the one it left is there',
+    )
   })
 }
 
