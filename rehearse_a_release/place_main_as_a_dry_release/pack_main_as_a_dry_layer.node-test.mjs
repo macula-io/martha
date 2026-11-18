@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, relative } from 'node:path'
 import process from 'node:process'
@@ -16,6 +16,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { installerRef, NAMES } from '../../installer/keep_the_names_in_one_place/names.mjs'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = join(HERE, '..', '..')
@@ -41,7 +42,7 @@ const git = (dir, ...args) => {
  */
 function aRepository (t, { tagged }) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'martha-dry-pack-')))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
   const dir = join(root, 'repo')
   mkdirSync(dir)
   git(dir, 'init', '--quiet')
