@@ -29,6 +29,7 @@ import {
   RECORDED_HOST,
 } from './recorded_claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLOSED_VOCABULARY, hostRuns } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 // Synthetic ids only: this repository is public.
 const OTHER_MEMBER_SOCKET = 'uds:/run/user/1000/cc-socks/4102.sock'
@@ -368,7 +369,10 @@ test('the models a crew may name are of the host this repository records (martha
       `${RECORDED_HOST.host_version}. Re-read the Agent schema's model field on ${RECORDED_HOST.host_version} and ` +
       'record that version with it.',
   )
-  assert.ok(CLAUDE_CODE_MODELS.length > 0, 'the host runs no model this repository can name, so a crew could declare no reviewer model')
+  assert.ok(CLAUDE_CODE_MODELS.names.length > 0, 'the host runs no model this repository can name, so a crew could declare no reviewer model')
+  // The host's field is a union of these names, so a name outside them is one it never runs (martha#541, package 6).
+  assert.deepEqual(CLAUDE_CODE_MODELS, { kind: CLOSED_VOCABULARY, names: RECORDED_MODELS.aliases })
+  assert.equal(hostRuns(CLAUDE_CODE_MODELS, CLAUDE_CODE_MODELS.names.join('-')), false, 'a name the host never listed is run as if it were open')
   // The field names the reviewer-model rule reads are the host's own, as its Agent schema declares them.
   assert.deepEqual(
     [CLAUDE_CODE_SUBAGENT_SPAWN.type_field, CLAUDE_CODE_SUBAGENT_SPAWN.description_field, CLAUDE_CODE_SUBAGENT_SPAWN.model_field],

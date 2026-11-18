@@ -19,9 +19,10 @@
 // the launcher hands in.
 
 import { theContractACrewHolds, type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
-import { answerToolCall, type ApprovedLaunch, type ToolCall } from '../answer_a_tool_call/answer_a_tool_call.ts'
+import { answerToolCall, whatTheCrewRefusesOfACall, type ApprovedLaunch, type ToolCall } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { startSessionAs } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
+import { agentsToHold, runOf, type AgentRun, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
 import { noteTheCallCounted, theSpendACrewHolds } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
 import type {
   ACalledTool,
@@ -82,7 +83,7 @@ export interface ThePlacesAHostReportsOver {
    * The agents the host started under this launch's sessions (martha#170). One table, made once by the launcher: a
    * called tool writes it here, and the adapter's agent start, stop and result read it until they move (PR 3).
    */
-  readonly agents: TheAgentRuns
+  readonly agents: TheRunTable
   /** Who may send executable text, as the launch's policy says. */
   readonly policy: Policy
   /** How the host names a called tool: its `host.tools`. */
@@ -111,55 +112,8 @@ export interface ThePlacesAHostReportsOver {
   refusesAWriteToTheOwnersMemory(tool: string, input: Readonly<Record<string, unknown>>): string | undefined
 }
 
-/**
- * One agent the host started under a member's session (martha#170), and whether it may be vouched for.
- *
- * The host stamps the agent's id on its start and stop, and on every tool call the agent makes under the member's own
- * session id; the member's own calls carry none. So the launcher can name an agent and count what it did, which is
- * what "vouched" needs: seen to start, seen to stop, every call it made answered here, and nothing those calls read
- * that the gate counts.
- */
-export interface AgentRun {
-  readonly session_id: string
-  /** The tool calls the agent made, by the host's id for each. */
-  readonly calls_seen: Set<string>
-  /** Those of them this launcher answered. */
-  readonly calls_answered: Set<string>
-  /** Whether this launcher saw the host say the agent started; a call with an id but no start is not vouched. */
-  started: boolean
-  stopped: boolean
-  /**
-   * The rows its own calls recorded: text it read that the gate counts, and so text its answer may quote. An agent that
-   * read outside the approved tree is not vouched for even with every call answered (martha#170, the design's case 7).
-   */
-  readonly calls_recorded: string[]
-}
-
-/** The agents of one launch, by the id the host stamps. */
-export type TheAgentRuns = Map<string, AgentRun>
-
-/** The table of one launch's agents, made once by the launcher. */
-export const agentRunsKept = (): TheAgentRuns => new Map<string, AgentRun>()
-
-/** The run kept for an agent, made on first sight: a call with an id it never saw start is still one. */
-export function runOf(agents: TheAgentRuns, session_id: string, agent_id: string): AgentRun {
-  const existing = agents.get(agent_id)
-  if (existing !== undefined) return existing
-  const run: AgentRun = { session_id, calls_seen: new Set(), calls_answered: new Set(), started: false, stopped: false, calls_recorded: [] }
-  agents.set(agent_id, run)
-  return run
-}
-
-/**
- * Whether an agent may be vouched for: seen to start, seen to stop, every call it made answered here, and nothing those
- * calls read that the gate counts — an agent's answer is its own work on the member's own inputs only if it read no
- * text from outside them.
- */
-export function vouchedRun(run: AgentRun | undefined): boolean {
-  return (
-    run !== undefined && run.started && run.stopped && run.calls_recorded.length === 0 && [...run.calls_seen].every((id) => run.calls_answered.has(id))
-  )
-}
+/** The table of one launch's agents, made once by the launcher: the entry's call writes it, the adapter's agent handlers read it. */
+export const agentRunsKept = (): TheRunTable => new Map<string, AgentRun>()
 
 /**
  * One launch's answers, as the adapter reaches them while its handlers have not all moved: the record, the sessions,
@@ -385,24 +339,13 @@ async function aToolCalledIn(held: TheSessionsHeld, call: ACalledTool): Promise<
 }
 
 /** A call an agent made, noted on its run as one of the calls "every call it made" counts; the member's own note nothing. */
-function noteTheAgentsCall(agents: TheAgentRuns, session: HostSession, call: ACalledTool): void {
+function noteTheAgentsCall(agents: TheRunTable, session: HostSession, call: ACalledTool): void {
   if (call.agent_id === undefined) return
   const run = runOf(agents, session.id, call.agent_id)
   if (call.call_id !== undefined) run.calls_seen.add(call.call_id)
 }
 
-/**
- * The agents whose run stands between a member and its shell (martha#170): only for the member's own calls, because an
- * agent's own calls are the ones being recorded. A run the launcher never saw start is named as one.
- */
-function agentsToHold(agents: TheAgentRuns, session: HostSession, call: ACalledTool): readonly string[] {
-  if (call.agent_id !== undefined) return []
-  return [...agents.entries()]
-    .filter(([, run]) => run.session_id === session.id && !run.stopped)
-    .map(([id, run]) => (run.started ? id : `an agent this launcher never saw start (${id})`))
-}
-
-/** Why this call is refused before it runs, or undefined: the owner's settings, their memory, the gate, the crew's reviewer-model rule, a held end. */
+/** Why this call is refused before it runs, or undefined: the owner's settings, their memory, the gate, then what the crew refuses beside it (the reviewer-model rule, the workspace guard's first seam, a held end). */
 async function theDenialOfACall(places: ThePlacesAHostReportsOver, session: HostSession, call: ACalledTool): Promise<string | undefined> {
   const settings = places.refusesAWriteToTheOwnersSettings(call.input)
   if (settings !== undefined) return settings
@@ -416,17 +359,14 @@ async function theDenialOfACall(places: ThePlacesAHostReportsOver, session: Host
     launch: places.launch,
     names: places.names,
     host: places.machine,
-    agents_running: agentsToHold(places.agents, session, call),
+    agents_running: agentsToHold(places.agents, session.id, call.agent_id),
     ...(places.gate === undefined ? {} : { gate: places.gate }),
     audit: places.audit,
     contract: await theContractACrewHolds(places.crew, { tool: call.tool, input: call.input }, places.names),
     spend: await theSpendACrewHolds(places.crew, session.id),
   })?.deny
   if (verdict !== undefined) return verdict
-  // The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role
-  // may not make is refused after the gate has allowed it, and never in place of the gate's own answer. A held end of
-  // the turn (martha#311 ruling D) is asked last of all, so it only turns a yes into a no.
-  return (await places.crew?.refusesTheSubagent({ tool: call.tool, input: call.input })) ?? places.crew?.ends.deniesACall(session.id)
+  return whatTheCrewRefusesOfACall(places.crew, call, session.id)
 }
 
 /**

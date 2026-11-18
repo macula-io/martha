@@ -13,7 +13,7 @@
 // | session_started (the settings SessionStart hook's input) | the outcome `CLAUDE_CODE_SESSION_EVENTS` gives `sessionStartOf(input)`'s event, handed to the entry's `aSessionStarted`: it starts the session, takes in each source the launch hands the model by itself (`handed_at_start`, martha#121) and the crew's start line, keeps the record, and answers what the session is handed (martha#541) |
 // | prompt_submitted (`text`, the engine's `origin`, `command`, `isMeta`) | `arrivalOfPrompt(kinds, origin.kind, whatAPromptCarries(body))`, handed to the entry's `aTurnArrived`, which takes it in and keeps the record; a kept turn is then heard, raised, and handed back as `aReviewTheHostSawFail` with the origin the engine stamped (martha#390, martha#541) |
 // | the mod's `a_turn_started` ask (a main turn's `turnId` and `text`; martha#440) | the crew's answer first, which is the carrier's decision on the crew message the turn took in; then `hearAMainTurnStart`: that message, if `prompt_submitted` never heard it, `takeInTurn` as a plugin's prompt; a turn with no message that no heard prompt started (its text, or a slash command's line), `takeInTurn` from an unknown origin and one journal line `A_TURN_OF_UNNAMED_SOURCE`; each then keeps the record and tells the screen a turn started |
-// | tool_called (the engine's call) | the call in the contract's words (`ACalledTool`), handed to the entry's `aToolCalled`, which reads the session's stored record back, asks the two refusals this adapter closes over its own files (the owner's settings, martha#122; their memory, martha#136), then `answerToolCall`, and counts an allowed call (martha#513, martha#541); an allowed call is answered `{allow: 1}` and closes the dialog it raised (martha#313) |
+// | tool_called (the engine's call) | the call in the contract's words (`ACalledTool`), handed to the entry's `aToolCalled`, which reads the session's stored record back, asks the two refusals this adapter closes over its own files (the owner's settings, martha#122; their memory, martha#136), then `answerToolCall`, then beside the gate the crew's reviewer rule and the workspace guard's first seam (martha#562: the shell line read into its git calls), and counts an allowed call (martha#513, martha#541); an allowed call is answered `{allow: 1}` and closes the dialog it raised (martha#313) |
 // | tool_answered (the same call, after it ran, with the host's answer) | the member's own write kept (martha#132), then `recheckLaunchPassingOwnWrites(launch)`, the settings files read again for a key that turns the relay off (martha#122) or a hook or plugin the owner's user or managed settings now declare (martha#121), then for an MCP tool `takeInTurn(session, { source: sourceOfAMeshToolResult(ownName) }, binder)`: a ring's answer on A5, what answering a ring returns on A4, any other result on B2 — except a `mesh_hello` or `mesh_goodbye` answer whose every leaf came from this launch (`wordsInAMeshAnswer`), which takes nothing in and keeps the member's shell (B9, martha#251); and for one of the host's own `takeInToolResult(session, { tool, input, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch, approved_start, host }, binder)`, where `approved_start` is the checkout's tree read when the relay was made, kept only when that state is one the owner approved (martha#127), except a `martha run <name>` whose answer is exactly the one its receipt builds, which records nothing (martha#129) |
 //
 // Failing closed, per event, so the relay never chooses (Mars's point 3):
@@ -37,15 +37,7 @@
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import type { ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
-import {
-  agentRunsKept,
-  answersOver,
-  runOf,
-  vouchedRun,
-  type TheAgentRuns,
-  type TheAnswersOfOneLaunch,
-  type ThePlacesAHostReportsOver,
-} from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
+import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch, type ThePlacesAHostReportsOver } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 /** What a session is handed as it starts: the entry's since martha#541, and named here still for the tests that import it. */
 export { handedAtThisStart } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, outcomeOfAStart, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
@@ -60,7 +52,7 @@ import { namesTheOwnersSettings, type HookSettingsWatch } from '../refuse_settin
 import type { ACalledTool, Arrival, AStartingSession, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { keepWhatTheReviewResolvedTo } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
-import { theAgentInAToolResult } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { agentIdOf, agentOfAResult, noteAnAgentsAnswer, noteWhatItsCallsRead, runOf, vouchedRun, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
 /** Whether a tool hands an agent's answer back: the host's own table places every one of these on the subagent row. */
 const isAnAgentsAnswerTool = (tool: string): boolean => CLAUDE_CODE_TOOL_RESULT_ROWS[tool]?.reads === 'an_agents_answer'
 import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
@@ -87,6 +79,7 @@ import { rememberOwnWriteOfCall } from '../launch_a_claude_code_member/remember_
 import type { JournalAnswer, RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { theGitCallJudged, theRefTransactionJudged, type AGuardsAnswer } from '../guard_the_git_a_member_runs/judge_a_guards_question.ts'
 
 /** What the launcher sends back, or that it is stopping the member and sends nothing. */
 export type RelayReply =
@@ -103,6 +96,16 @@ export interface MemberRelay {
   answerTool(body: unknown): Promise<Answered | Refused>
   /** `martha run <name>` asks for a signed shape (martha#129); answered outside the event queue, as a run takes long. */
   run(body: unknown): Promise<Ran | Refused>
+  /**
+   * The `git` the launch put first on the member's PATH asks about a call it is about to run (martha#562, seam b).
+   * Answered outside the event queue: the shim is a program waiting in the member's shell.
+   */
+  judgeAGitCall(body: unknown): Promise<AGuardsAnswer>
+  /**
+   * The clone's `reference-transaction` hook asks about the refs a transaction would update (martha#562, seam c), for a
+   * delete that reached git past the shell and past the shim. Answered outside the event queue, as the shim's is.
+   */
+  judgeARefTransaction(body: unknown): Promise<AGuardsAnswer>
 }
 
 export interface MemberRelayPlace {
@@ -239,51 +242,11 @@ interface RelayState {
    * The agents this host has started under a session, by the id the host stamps (martha#170): the same table the entry
    * writes a called tool into, made once here.
    */
-  readonly agents: TheAgentRuns
+  readonly agents: TheRunTable
   /** What this launch hears of its turns, every main turn start the mod reports included (martha#440). */
   readonly everyTurn: HearingEveryTurn
   /** The review calls this launcher allowed, by the host's id for the call, and what it resolved to (martha#390). */
   readonly reviews: TheReviewSpawns
-}
-
-/** The agent a call names, if the host stamped one: absent for the member's own calls. */
-function agentIdOf(call: Body): string | undefined {
-  const id = call['agent_id']
-  return isText(id) ? id : undefined
-}
-
-/** How this launcher knows the agent a tool result hands back (martha#170). */
-function agentStateOf(state: RelayState, id: unknown): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } | undefined {
-  if (!isText(id)) return undefined
-  const run = state.agents.get(id)
-  if (run === undefined) return { id, state: 'unknown' }
-  if (vouchedRun(run)) return { id, state: 'vouched' }
-  return { id, state: run.stopped ? 'unknown' : 'running' }
-}
-
-/**
- * The agent a tool result belongs to, however the host names it (martha#170).
- *
- * The host stamps the id on the answer for the member's own call (`tool_response.agentId`). When the *agent* makes
- * the call it stamps the id on the call instead and the answer carries none: a real `SubagentHandback` is the agent's
- * own report to its caller, its output is `{success, message}`, and the only id is the one on the call.
- *
- * The id on the call is looked up in the launcher's own run table, exactly as the answer's id is: whatever the call
- * carries, the answer is placed by what this launcher knows of that agent and never by the fact that a call named one.
- * A run it holds and has not seen stop places the answer as a running agent's, whatever brought the run into being:
- * it records nothing, and the `SubagentStop` decides. An id it has no run of, or one whose run stopped without being
- * vouched, is unknown and records on B7 at once.
- * So a handback cannot be used to hand text into the turn and be done with it: vouched, it is the agent's own work on
- * the member's own inputs; anything else, the shell closes on its text.
- */
-function agentOfAResult(
-  state: RelayState,
-  call: { readonly agent_id: string | undefined },
-  answer: unknown,
-): { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' } | undefined {
-  const fromTheAnswer = theAgentInAToolResult(answer)
-  if (fromTheAnswer !== undefined) return agentStateOf(state, fromTheAnswer)
-  return call.agent_id === undefined ? undefined : agentStateOf(state, call.agent_id)
 }
 
 /** The launcher's answers for one member. */
@@ -348,6 +311,8 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     },
     run: async (body) => (place.signed_runs === undefined ? { refused: NO_SIGNED_RUNS } : place.signed_runs.run(body)),
     answerTool: async (body) => answerAToolAndHearItsTurn(state, body, inOrder),
+    judgeAGitCall: async (body) => theGitCallJudged(place.crew, body),
+    judgeARefTransaction: async (body) => theRefTransactionJudged(place.crew, body),
   }
 
   /** One event, answered; never throws, so the journal's answer line is written whatever the event did. */
@@ -442,7 +407,7 @@ function arrivalOfAMeshToolResult(own_name: string, input: unknown, answer: unkn
  * The entry's places for this launch: the record, the launch the owner approved, and the machine the launch gate reads
  * the checkout through. The same values this relay answers with, so the entry reads nothing the adapter does not.
  */
-const placesOfTheEntry = (place: MemberRelayPlace, reviews: TheReviewSpawns, agents: TheAgentRuns): ThePlacesAHostReportsOver => ({
+const placesOfTheEntry = (place: MemberRelayPlace, reviews: TheReviewSpawns, agents: TheRunTable): ThePlacesAHostReportsOver => ({
   records: place.records,
   launch: place.launch,
   machine: thisMachine,
@@ -516,34 +481,6 @@ function callOf(body: Body): { readonly tool: string; readonly input: Body; read
   const { tool, ...input } = call
   const id = call['tool_use_id']
   return { tool, input, agent_id: agentIdOf(call), id: isText(id) ? id : undefined }
-}
-
-/** That same call, answered here. */
-function noteCallAnswered(state: RelayState, agent_id: string, call: unknown): void {
-  const run = state.agents.get(agent_id)
-  const id = isBody(call) && isText(call['tool_use_id']) ? call['tool_use_id'] : undefined
-  if (run !== undefined && id !== undefined) run.calls_answered.add(id)
-}
-
-/** The rows an agent's own call recorded: text it read from outside the member's own inputs (martha#170). */
-function noteItsCallsRecorded(state: RelayState, agent_id: string, recorded: readonly string[]): void {
-  state.agents.get(agent_id)?.calls_recorded.push(...recorded)
-}
-
-/** That same call, answered here, back with the agent it belonged to (martha#170). */
-function noteAnAgentsAnswer(state: RelayState, body: Body): string | undefined {
-  const agent_id = agentIdOf((body['call'] ?? {}) as Body)
-  if (agent_id !== undefined) noteCallAnswered(state, agent_id, body['call'])
-  return agent_id
-}
-
-/**
- * The rows an agent's answered call read, kept on its run: an agent that read text the gate counts is not vouched for,
- * and its answer records B7 when it stops (martha#170, the design's case 7). A call with no agent, or one that read
- * nothing, keeps nothing.
- */
-function noteWhatItsCallsRead(state: RelayState, agent_id: string | undefined, recorded: readonly string[]): void {
-  if (agent_id !== undefined && recorded.length > 0) noteItsCallsRecorded(state, agent_id, recorded)
 }
 
 /** The host says an agent started under this session (martha#170): only this makes an agent one it saw start. */
@@ -634,7 +571,7 @@ async function theReportOfARanTool(state: RelayState, body: Body): Promise<Relay
   // with the posted options and the host's own answer, which say what the owner picked (martha#608).
   place.crew?.noteTheCallsAnswer({ tool: call.tool, input: call.input, answer: body.answer }, session.id)
   // An agent's own call, answered here: what "every call it made was answered" counts (martha#170).
-  const answering = noteAnAgentsAnswer(state, body)
+  const answering = noteAnAgentsAnswer(state.agents, body)
   closeTheDialogsTheCallAnswered(place, session, body, call)
   // The receipt is single use: taken now, whatever the answer, so a later call takes none of it (martha#129).
   const kept = place.signed_runs?.callAnswered(call.tool, call.input, body.answer)
@@ -644,7 +581,7 @@ async function theReportOfARanTool(state: RelayState, body: Body): Promise<Relay
   // output is text the owner vouched for, so the shell stays. Every other result records, as #127 leaves it.
   if (kept !== undefined && kept.why === undefined) return answered(TAKEN)
   const { reply, recorded } = await recordToolResult(state, session, call, body.answer)
-  noteWhatItsCallsRead(state, answering, recorded)
+  noteWhatItsCallsRead(state.agents, answering, recorded)
   return reply
 }
 
@@ -679,7 +616,7 @@ async function recordToolResult(
   answer: unknown,
 ): Promise<{ readonly reply: RelayReply; readonly recorded: readonly string[] }> {
   const { place } = state
-  const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state, call, answer) : undefined
+  const agent = isAnAgentsAnswerTool(call.tool) ? agentOfAResult(state.agents, call, answer) : undefined
   // A mesh tool's own session answer may carry nothing of anyone else's (martha#251): read first, so an answer whose
   // every leaf came from this launch takes nothing in and the member keeps the shell it needs for the ring it was
   // about to make. Every other answer, this tool's included when the launch cannot say what it supplied, records on

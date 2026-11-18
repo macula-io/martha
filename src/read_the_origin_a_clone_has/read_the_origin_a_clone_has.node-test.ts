@@ -17,7 +17,7 @@ import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contr
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { readTheOriginACloneHas, repoOfTheOrigin } from './read_the_origin_a_clone_has.ts'
+import { readTheOriginACloneHas, repoOfTheCheckout, repoOfTheOrigin } from './read_the_origin_a_clone_has.ts'
 
 const ORG_AND_NAME = 'acme/widget'
 
@@ -67,6 +67,11 @@ test('#256: a URL that names no repository is refused rather than shortened into
   for (const url of nameless) assert.equal(repoOfTheOrigin(url), undefined, `${JSON.stringify(url)} was taken for a repository`)
 })
 
+test('#611: a checkout with no origin remote names no repository, and one that has one is read as before', () => {
+  assert.equal(repoOfTheCheckout(null), undefined, 'no origin remote is no repository')
+  assert.equal(repoOfTheCheckout(`git@github.com:${ORG_AND_NAME}.git`), ORG_AND_NAME)
+})
+
 test('#256: a clone is of the repository and the default branch its origin names', async (t) => {
   const { clone } = aClone(t)
   assert.deepEqual(await toldBy(clone), { origin: { repo: ORG_AND_NAME, default_branch: 'origin/main' } })
@@ -81,14 +86,27 @@ test('#256: a clone with no origin remote is refused, with the command that give
   assert.match(told.refused, /git remote add origin/)
 })
 
-test('#256: an origin that names no repository is refused, naming what it says', async (t) => {
+test('#256: an origin that names no repository is refused, and the URL it gave is not quoted back', async (t) => {
   const { clone } = aClone(t)
   const nameless = 'https://github.com/acme'
   gitIn(clone, 'remote', 'set-url', 'origin', nameless)
   const told = await toldBy(clone)
   assert.ok('refused' in told, `an origin that names no repository was taken for one: ${JSON.stringify(told)}`)
   assert.match(told.refused, /names no repository as org\/name/)
-  assert.match(told.refused, new RegExp(nameless.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.ok(!told.refused.includes(nameless), `the origin URL reached the refusal: ${told.refused}`)
+})
+
+test('#670: a refusal names no origin URL, so a token in its userinfo is never printed', async (t) => {
+  const { clone } = aClone(t)
+  // An origin can carry a credential in its userinfo, and this one names no repository — exactly the branch a leak would
+  // be printed from. The token is made up, at the example host this repository's own text rules accept.
+  const withAToken = 'https://x-access-token:ghs_plantedtoken@example.invalid/'
+  gitIn(clone, 'remote', 'set-url', 'origin', withAToken)
+  const told = await toldBy(clone)
+  assert.ok('refused' in told, 'an origin that names no repository was taken for one')
+  assert.equal(told.refused, `the origin of ${clone} names no repository as org/name: run git remote set-url origin <url> there, then try again.`)
+  assert.ok(!told.refused.includes('ghs_plantedtoken'), `the token in the origin reached the refusal: ${told.refused}`)
+  assert.ok(!told.refused.includes(withAToken), `the origin URL reached the refusal: ${told.refused}`)
 })
 
 test('#256: a clone that keeps no ref for its origin\'s head is refused, with the command that sets it', async (t) => {

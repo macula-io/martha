@@ -24,7 +24,8 @@ import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { sessionRecordsIn, type SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
-import { agentRunsKept, answersOver, runOf, type TheAgentRuns, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
+import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
+import { runOf, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
 
 /** The made-up host's names: a called tool is its own name, as a host with no tool servers names it. */
 const A_MADE_UP_HOSTS_NAMES: ToolNames = { ownNameOf: (called) => called }
@@ -110,7 +111,7 @@ interface AnEntry {
   readonly answers: TheAnswersOfOneLaunch
   readonly seen: Seen
   readonly reviews: TheReviewSpawns
-  readonly agents: TheAgentRuns
+  readonly agents: TheRunTable
   readonly failing_check: Set<string>
 }
 
