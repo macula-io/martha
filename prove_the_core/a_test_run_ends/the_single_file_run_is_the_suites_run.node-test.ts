@@ -165,7 +165,7 @@ const ANOTHER_PLANTED_NAME_TO_UNSET = 'ANOTHER_PLANTED_NAME_TO_UNSET'
 const THE_READER_PATH = 'prove_the_core/a_test_run_ends/the_words_one_run_gets.ts'
 
 /** The reader's own answers, kept beside a failing one so the one a throwaway plants still says the command. */
-const THE_ANSWERING_READER = 'prove_the_core/the_words_one_run_gets_that_answers.ts'
+const THE_ANSWERING_READER = 'prove_the_core/a_test_run_ends/the_words_one_run_gets_that_answers.ts'
 
 /** The glob the throwaway repository's own test script runs. */
 const THE_THROWAWAY_GLOB = 'prove_the_core/**/*.node-test.ts'
