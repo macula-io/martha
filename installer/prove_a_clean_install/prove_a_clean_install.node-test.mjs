@@ -16,7 +16,7 @@ import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WOR
 
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
-const SOLO_CREW = fileURLToPath(new URL('../../src/declare_a_solo_crew/declare_a_solo_crew.ts', import.meta.url))
+const SOLO_CREW = fileURLToPath(new URL('../../src/declare_crew/declare_crew.ts', import.meta.url))
 const { SOLO_MEMBERS } = /** @type {{ SOLO_MEMBERS: ReadonlyArray<{ name: string }> }} */ (await import(SOLO_CREW))
 // The line `martha start` prints once a member is up, as the committed tree makes it; computed for the same reason.
 const COMMAND = fileURLToPath(new URL('../../src/run_the_martha_command/run_the_martha_command.ts', import.meta.url))

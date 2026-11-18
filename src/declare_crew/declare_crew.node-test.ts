@@ -38,7 +38,7 @@ import {
   type CrewSettings,
   type WorkspaceLayout,
 } from './declare_crew.ts'
-import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 
 // A made-up project root: this repository is public, so no real path appears here.
 const root = '/martha-project'

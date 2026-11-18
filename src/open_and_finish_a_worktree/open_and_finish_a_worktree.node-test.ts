@@ -12,7 +12,7 @@
 // on origin too; and that the deletion of that branch is an outward act kept in the package's ledger before it
 // runs, so a successor knows whether it was sent (martha#25).
 
-import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'

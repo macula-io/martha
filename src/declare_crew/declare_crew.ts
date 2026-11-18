@@ -216,15 +216,44 @@ export function workspaceLayoutOf(root: string, repo: string | undefined, origin
   return { layout, said: `Workspace layout declared: clones ${layout.clones}, worktrees ${layout.worktrees}.` }
 }
 
+/** The mode a solo crew is declared in: a name for people to read. */
+export const SOLO_MODE = 'solo'
+
+/** The members of a solo crew, each in the role it is named after. */
+export const SOLO_MEMBERS = [
+  { name: 'builder', role: 'builder' },
+  { name: 'reviewer', role: 'reviewer' },
+] as const
+
+/**
+ * A solo crew's declaration (martha#98): the owner may do every act, how often its sessions read the crew channel
+ * (martha#253) is the one value a writer sets and this reader reads a missing field as (martha#374), and the layout
+ * its checkout proves (martha#611) is declared when one was given. The shape lives beside the reader so that what a
+ * writer emits and what this slice accepts cannot drift; `martha init` writes it (../declare_a_solo_crew), and the
+ * two places of a layout are written together or not at all, as a layout naming one without the other is refused here.
+ */
+export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = null) {
+  return {
+    version: DECLARATION_VERSION,
+    owner,
+    members: SOLO_MEMBERS,
+    mode: {
+      name: SOLO_MODE,
+      roles: SOLO_MEMBERS.map((member) => member.role),
+      may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])),
+    },
+    ...(layout === null ? {} : { house_rules: { [WORKSPACE_LAYOUT]: true, [CLONES]: layout.clones, [WORKTREES]: layout.worktrees } }),
+    channel_read_seconds: CHANNEL_READ_SECONDS_WHEN_UNNAMED,
+  }
+}
+
 /**
  * The two directories a role's text and a mode's text sit in (martha#306), named once here because two trees use the
  * same layout: a crew writes its own under its crew directory, and Martha ships the ones a crew has not written under
  * the same two names, so a crew overrides a shipped text by putting a file of the same name in the same place.
  */
 export const ROLE_TEXTS_DIRECTORY = 'roles'
-export const MODE_TEXTS_DIRECTORY = 'modes'
-
-/** A member's name: what a crew calls it, and what its branches start with. */
+export const MODE_TEXTS_DIRECTORY = 'modes'/** A member's name: what a crew calls it, and what its branches start with. */
 export const MEMBER_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/
 
 /** The one rule member names are compared by (martha#528), held in ./member_names.ts so a slice this one imports can use it. */

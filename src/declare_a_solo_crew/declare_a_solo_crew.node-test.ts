@@ -17,7 +17,8 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { nodeIdsFor, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { openAWorktree } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { declareSoloCrew, SOLO_MEMBERS } from './declare_a_solo_crew.ts'
+import { declareSoloCrew } from './declare_a_solo_crew.ts'
+import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
 const HOST_MODELS = ['opus', 'fable']

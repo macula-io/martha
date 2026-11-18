@@ -1,8 +1,9 @@
 // `martha init`: declare a solo crew of two in a project that has none (martha#98).
 //
 // This exists so a stranger gets a crew without writing its declaration by hand: a builder and a reviewer, and
-// the owner, who may do every act. It is written in the shape declareCrew reads (../declare_crew) and read back
-// through it before init says it is done, so init can never leave a declaration the crew would refuse.
+// the owner, who may do every act. The declaration's shape is the reader's (../declare_crew, soloDeclaration), and
+// the file is read back through the reader before init says it is done, so init can never leave a declaration the
+// crew would refuse.
 //
 // It declares only in a real directory of the checkout: a declaration directory that is a link is refused by name,
 // so a checkout cannot point init at a place outside it.
@@ -13,75 +14,28 @@
 //
 // It declares the crew's workspace layout too, when the checkout can prove one (martha#611): a member's
 // `worktree_open` refuses a crew that names no layout (../open_and_finish_a_worktree), so a declaration with none
-// would leave the owner editing `house_rules` by hand before the crew can do anything with a worktree. The layout
-// is read from the checkout itself — a clone at `<clones>/<org>/<name>` whose origin names that same `org/name` —
-// and never guessed: a checkout that does not sit there is declared with no layout, and init says so and says what
-// to add.
+// would leave the owner editing `house_rules` by hand before the crew can do anything with a worktree. What a
+// checkout proves is the core's answer (../declare_crew, workspaceLayoutOf); this slice reads git where git has to
+// be read and composes the two.
 
 import fs from 'node:fs'
 import { join } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import {
-  ACTS,
-  CHANNEL_READ_SECONDS_WHEN_UNNAMED,
-  CLONES,
   DECLARATION_DIRECTORY,
   DECLARATION_FILE,
-  DECLARATION_VERSION,
   DeclarationRefused,
   declareCrew,
-  OWNER,
-  WORKSPACE_LAYOUT,
-  WORKTREES,
+  soloDeclaration,
   workspaceLayoutOf,
   type CrewSettings,
-  type WorkspaceLayout,
 } from '../declare_crew/declare_crew.ts'
 import { nodeIdsFor, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 
-/** The mode a solo crew is declared in: a name for people to read. */
-export const SOLO_MODE = 'solo'
-
-/** The members of a solo crew, each in the role it is named after. */
-export const SOLO_MEMBERS = [
-  { name: 'builder', role: 'builder' },
-  { name: 'reviewer', role: 'reviewer' },
-] as const
-
 /** The repository a checkout's origin names, or undefined when it names no origin or one this slice cannot read. */
 const repoOfTheCheckout = (origin: string | null): string | undefined => (origin === null ? undefined : repoOfTheOrigin(origin))
-
-/**
- * The `house_rules` a declaration carries for the layout its checkout proves, or none when it proves none: the two
- * places are written only when both are known, as the reader refuses a layout that names one without the other.
- */
-function theHouseRulesOf(layout: WorkspaceLayout | null): { house_rules?: Record<string, unknown> } {
-  if (layout === null) return {}
-  return { house_rules: { [WORKSPACE_LAYOUT]: true, [CLONES]: layout.clones, [WORKTREES]: layout.worktrees } }
-}
-
-/**
- * A solo crew's declaration: the owner may do every act, how often its sessions read the crew channel
- * (martha#253) is the one value this slice writes and the reader reads a missing field as (../declare_crew,
- * martha#374), so init and the reader cannot drift apart, and the workspace layout its checkout proves
- * (martha#611) is declared when one was given.
- */
-export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = null) {
-  return {
-    version: DECLARATION_VERSION,
-    owner,
-    members: SOLO_MEMBERS,
-    mode: {
-      name: SOLO_MODE,
-      roles: SOLO_MEMBERS.map((member) => member.role),
-      may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])),
-    },
-    ...(theHouseRulesOf(layout)),
-    channel_read_seconds: CHANNEL_READ_SECONDS_WHEN_UNNAMED,
-  }
-}
 
 export interface SoloCrewRequest {
   /** The project's absolute path. */

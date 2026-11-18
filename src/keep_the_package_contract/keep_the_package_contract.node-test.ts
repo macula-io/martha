@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { SOLO_MEMBERS, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { SOLO_MEMBERS, soloDeclaration } from '../declare_crew/declare_crew.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { readLedger, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { OWNER_ASKS_STREAM, ASK_QUEUED, ASKS_SETTLED } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
