@@ -13,7 +13,7 @@
 // still removes the asks the owner ticked, because the owner often answers hours later.
 //
 // Who may take and settle is the declaration's table, answered as the owner's list answers it (martha#316) and never
-// from ../who_may_act's node ids: a solo crew has none. The act is OFFER_OWNER_ASKS, and both tools are gated alike.
+// from a node id: a solo crew has none. The act is OFFER_OWNER_ASKS, and both tools are gated alike.
 //
 // A settle is refused unless a menu closed in the session that took the batch after it took it. The launcher sees that,
 // because its relay answers every tool call the host made, the menu tool included; the model's own word that it showed
