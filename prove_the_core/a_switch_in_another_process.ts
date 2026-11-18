@@ -72,7 +72,7 @@ async function theCrewTools(): Promise<ReturnType<typeof crewToolsOver>> {
   for (const made of [root, join(its.home, 'row'), join(its.home, CREW_ROWS_PLACE), its.config_dir]) mkdirSync(made, { recursive: true })
   const state = openState(join(its.home, 'state'), root)
   if ('refusal' in state) throw new Error(state.refusal)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', state, documents, models: [its.own_model, its.review_model] })
+  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: [its.own_model, its.review_model] })
   if (!declared.declared) throw new Error(declared.refusal)
   declareTheModels(root, its)
   return crewToolsOver({

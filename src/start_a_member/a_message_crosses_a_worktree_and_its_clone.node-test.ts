@@ -6,7 +6,7 @@
 // A says something to B from the worktree, B is handed it in the clone, and A reads that B took it in.
 
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
-import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'

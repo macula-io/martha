@@ -13,7 +13,7 @@ import { after, mock, test } from 'node:test'
 
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
-import { soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { soloDeclaration } from '../declare_crew/declare_crew.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import {
   ACT_ASKED_OF_OWNER,

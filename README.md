@@ -66,6 +66,16 @@ Start solo and move to team without changing tools.
 - a replacement for your own review: every push and every release still waits
   for a person's yes.
 
+## What keeps a member from acting as you
+
+A member runs as your own OS user. Martha refuses your own acts (`martha
+approve`, `release`, `bells`, `pin-key`, `keep-shapes`, `start`) when they are
+typed from inside a member, and refuses a member's file tools in Martha's own
+state. These are speed bumps, not a wall: a member that sets out to could still
+fake your yes, by making a terminal of its own outside its process tree or by
+writing Martha's state files directly. Martha draws no OS wall between a member
+and you; your review and your yes on every push and release are the line.
+
 ## A member keeps its shell
 
 A member is a trusted helper. By default it keeps its shell after it reads a
