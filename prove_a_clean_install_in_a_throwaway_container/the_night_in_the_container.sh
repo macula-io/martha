@@ -188,9 +188,11 @@ approve_command() {
   fi
 }
 
-# The owner's step that approves, in the words of the list: once, or on a night once for each crew place.
+# The owner's step that approves, in the words of the list: once, or on a night once for each crew place. The words
+# follow approve's own output and promise no yes: a crew place with no config that starts code asks nothing, as both
+# places did on night 1 (martha#639), and approve asks only on a terminal, so the run cannot learn which ahead of time.
 approve_step_words() {
-  if a_night; then printf '  2. type yes to approve, twice: the checkout, then the throwaway clone'; else printf '  2. type yes to approve'; fi
+  if a_night; then printf '  2. approve the checkout, then the throwaway clone: type yes where martha approve asks, nothing where it asks nothing'; else printf '  2. type yes to approve'; fi
 }
 
 # What still runs in the container, one command line a line: every process but the idle one, this listing and the
@@ -582,7 +584,8 @@ night_self_test() {
   [ "$(git -C "${standin}/home/${NIGHT_CLONES}/synthetic-bot/martha-live-x" remote get-url origin 2> /dev/null)" = 'https://github.com/synthetic-bot/martha-live-x.git' ] \
     || nfail "the clone's origin is not the repository's plain address"
   asked_for 'martha approve && cd .*martha-live-x && martha approve && cd ' "${standin}/out" || nfail 'the owner'"'"'s command does not approve both places'
-  asked_for '^  2. type yes to approve, twice: the checkout, then the throwaway clone$' "${standin}/out" || nfail 'the owner'"'"'s steps do not say yes twice'
+  asked_for '^  2. approve the checkout, then the throwaway clone: type yes where martha approve asks, nothing where it asks nothing$' "${standin}/out" \
+    || nfail 'the owner'"'"'s steps do not follow approve in both places'
   for name in "${SELF_TEST_MEMBERS[@]}"; do
     asked_for "tmux -L night new-session -d -s ${name} .*cd ${CONTAINER_HOME}/${NIGHT_CLONES}/synthetic-bot/martha-live-x; martha start " "${standin}/calls" \
       || nfail "${name} was not started again by its own command, in the clone, in tmux"
