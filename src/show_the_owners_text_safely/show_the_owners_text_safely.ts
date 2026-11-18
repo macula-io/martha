@@ -1,17 +1,9 @@
 // The text Martha shows the owner, shown safely (a pure move out of the command adapter, which is at its ceiling):
 // a terminal would act on some of what a path, a member's name or a kept approval may hold rather than show it.
-//
-// This process's own io is kept here too (another pure move out of the command adapter, for the same reason, martha#371):
-// the streams the owner's text is shown on, and the terminal the acts ask on, are the same two things this slice is about.
-
-import process from 'node:process'
-import { createInterface } from 'node:readline/promises'
-import { isatty } from 'node:tty'
-
-import type { OwnersTerminal } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
-import type { CommandIo } from '../run_the_martha_command/run_the_martha_command.ts'
 
 /** The lines an owner is shown, and nothing else: what this slice needs of the terminal, so it asks no adapter for it. */
+import type { CommandIo } from '../run_the_martha_command/run_the_martha_command.ts'
+
 export interface LinesShownToTheOwner {
   out(line: string): void
   err(line: string): void
@@ -38,26 +30,21 @@ export const showingSafely = <Shown extends LinesShownToTheOwner>(io: Shown): Sh
   err: (line: string) => io.err(shownSafely(line)),
 })
 
-/** The owner's terminal on this process's standard input; questions are asked on stderr. */
-export const terminalOfThisProcess: OwnersTerminal = {
-  is_terminal: isatty(0),
-  ask: async (question) => {
-    const asking = createInterface({ input: process.stdin, output: process.stderr })
-    try {
-      return await asking.question(question)
-    } finally {
-      asking.close()
-    }
-  },
-}
+/** The command ended as asked. */
+export const EXIT_DONE = 0
+/** The command refused, and said why. */
+export const EXIT_REFUSED = 1
+/** The command was not used in a way it knows. */
+export const EXIT_USAGE = 2
 
-/** This process's own io: its working directory, environment, terminal and standard streams. */
-export const ioOfThisProcess: CommandIo = {
-  cwd: process.cwd(),
-  env: process.env,
-  stdio: 'inherit',
-  terminal: terminalOfThisProcess,
-  out: (line) => void process.stdout.write(`${line}\n`),
-  outBytes: (bytes) => void process.stdout.write(bytes),
-  err: (line) => void process.stderr.write(`${line}\n`),
+/** What starts every line Martha shows the owner on stderr. */
+export const SAID_BY = 'martha:'
+
+/** How a line of Martha's own is told on the owner's stderr. */
+export const tellOwnerOn = (io: CommandIo) => (line: string): void => io.err(`${SAID_BY} ${line}`)
+
+/** The refusal, its words told on stderr, and the status a command that refused ends with. */
+export function refused(io: CommandIo, why: string): number {
+  tellOwnerOn(io)(why)
+  return EXIT_REFUSED
 }

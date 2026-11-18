@@ -26,6 +26,8 @@
 import { join } from 'node:path'
 
 import { sameMemberName } from '../declare_crew/declare_crew.ts'
+import { EXIT_DONE, refused } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
+import type { CommandIo } from '../run_the_martha_command/run_the_martha_command.ts'
 import type { Refused } from '../host_contract/host_contract.ts'
 
 /**
@@ -268,4 +270,24 @@ function theCrewsBells(asked: TheBellsAsked): TheBells {
     lines.push(aLineOfTheBells(member, asked.declared, mute))
   }
   return { shown: true, lines }
+}
+
+/** The crew's own bells, as a command reads them from its declaration. */
+export interface TheBellsOfACrew {
+  readonly members: readonly string[]
+  /** Whether the declaration rings any bell at all (`house_rules.owner_bell`). */
+  readonly declared: boolean | undefined
+  readonly owner: string
+}
+
+/**
+ * `martha bells [<member> muted|heard]` as the command runs it (martha#371): the answer printed where the owner reads it,
+ * and the status the command ends with. The command hands it the crew's bells, the place the flips are kept in, and the
+ * flip the owner named; a refusal is said in the command's own words, on its own stderr.
+ */
+export function theBellsTold(io: CommandIo, crew: TheBellsOfACrew, place: TheBellsPlace, flip: TheFlipAsked | undefined): number {
+  const kept = theBellsTheOwnerKeeps({ members: crew.members, declared: crew.declared ?? false, place, owner: crew.owner, onATerminal: io.terminal.is_terminal, ...(flip === undefined ? {} : { flip }) })
+  if (!kept.shown) return refused(io, kept.refusal)
+  kept.lines.forEach((line) => io.out(line))
+  return EXIT_DONE
 }
