@@ -21,7 +21,7 @@ import { userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
 import { HOME_MARKERS, CHECKOUT_MARKERS, aPlaceFor, plant, writeTheConfig, type Place } from './a_launch_the_trial_writes.ts'
-import { promptOver, withTimeout } from './a_turn_with_goose.ts'
+import { NoAnswerInTime, promptOver, withTimeout } from './a_turn_with_goose.ts'
 import { findingsIn, pathsIn, type TraceFindings } from './read_the_trace.ts'
 import { RecordingProxy } from './record_what_goose_sends.ts'
 import { GooseOverAcp } from './speak_acp_to_goose.ts'
@@ -193,9 +193,22 @@ function verdictOf(line: number, mode: string, observation: Observation, trace: 
   }
 }
 
+/**
+ * What a line that threw is recorded as (martha#612). A turn the cap ran out on observed nothing, so it is
+ * `not-observed` and the fork's check gives the line its second launch, within the owner's two. Every other error
+ * stays `fail`, a wrong answer above all, and is never launched again. A verdict a line reaches without throwing is its
+ * own (../the_nine_lines.ts): a new kind of second chance is one more branch here, or in the line that decides it.
+ */
+export function theObservationOfALineThatThrew(error: unknown): Observation {
+  if (error instanceof NoAnswerInTime) {
+    return { verdict: 'not-observed', say: `the line observed nothing: ${error.message}, so it may be launched again`, evidence: { no_answer_within_ms: error.ms } }
+  }
+  return { verdict: 'fail', say: `the line could not be run: ${error instanceof Error ? error.message : String(error)}`, evidence: {} }
+}
+
 async function runLine(line: number, options: Options): Promise<void> {
   const running = await startARun(line, options)
-  const observation = await conduct(running).catch((error: Error) => ({ verdict: 'fail' as const, say: `the line could not be run: ${error.message}`, evidence: {} }))
+  const observation = await conduct(running).catch(theObservationOfALineThatThrew)
   const { trace, groupLeft } = await endARun(running)
   const result = { line, ...verdictOf(line, running.currentMode, observation, trace, groupLeft), trace, groupLeft }
   const evidenceForLine = join(options.evidence, `line-${line}`)
