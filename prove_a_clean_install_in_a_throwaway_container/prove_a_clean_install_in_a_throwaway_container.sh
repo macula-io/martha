@@ -536,7 +536,7 @@ a_member() {
 # this run has, both ways, before the owner is asked for anything and before any member starts. A member the release
 # names with no turn here would be skipped or given another's turn, and a turn the release no longer names would be a
 # stale role; both fail by name, and nothing starts.
-crew_step() {
+solo_crew_step() {
   local said name
   said="$(in_the_container "$(solo_crew_script "$(installed_release_root)")" 2>&1)" \
     || { failed crew "the installed ${COMMAND} ${RELEASE_VERSION} gives no solo crew from ${SOLO_CREW_IN_A_TREE}: $(one_line "${said}")"; return 1; }
@@ -877,7 +877,7 @@ run_the_steps() {
   if [ -n "${NO_RELEASE_YET}" ]; then return 0; fi
   version_step || return 1
   claude_code_step || return 1
-  crew_step || return 1
+  solo_crew_step || return 1
   checkout_step || return 1
   sign_in_step || return 1
   if [ -n "${SIGN_IN_MISSED}" ]; then return 0; fi
