@@ -19,8 +19,7 @@
 // the launcher hands in.
 
 import { theContractACrewHolds, type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
-import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
-import type { GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
+import { answerToolCall, type ApprovedLaunch, type ToolCall } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { startSessionAs } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { noteTheCallCounted, theSpendACrewHolds } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
@@ -91,8 +90,11 @@ export interface ThePlacesAHostReportsOver {
   readonly names: ToolNames
   /** What the gate does to this member (martha#321); absent means enforced. */
   readonly gate?: GateMode | undefined
-  /** Where an audited member's would-be refusals are kept (martha#321); absent, an audited member's call is refused. */
-  readonly audit?: GateAuditPlace | undefined
+  /**
+   * Where an audited member's would-be refusals are kept (martha#321); absent, an audited member's call is refused. Typed
+   * by the gate's own call, so the entry carries the place without naming the audit, which only its five places may.
+   */
+  readonly audit?: ToolCall['audit']
   /** The member's signed runs (martha#129); a member without them runs no shape. */
   readonly signed_runs?: SignedRuns | undefined
   /**
