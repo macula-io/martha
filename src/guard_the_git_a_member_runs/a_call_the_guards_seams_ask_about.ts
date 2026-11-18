@@ -35,13 +35,7 @@ export async function refuseAGitCallFromThePath(request: ACallTheShimsGitWasHand
   const calls = isAbsolute(request.directory) ? theGitCallsOfAShim(request.args, { directory: request.directory }) : []
   return calls.length === 0
     ? undefined
-    : askGitWhatAMemberIsAboutToChange({
-        host: request.host,
-        calls,
-        workspace: request.workspace,
-        member: request.member,
-        ...(request.leftovers === undefined ? {} : { leftovers: request.leftovers }),
-      })
+    : askGitWhatAMemberIsAboutToChange({ host: request.host, calls, workspace: request.workspace, member: request.member, ...(request.leftovers === undefined ? {} : { leftovers: request.leftovers }) })
 }
 
 /**

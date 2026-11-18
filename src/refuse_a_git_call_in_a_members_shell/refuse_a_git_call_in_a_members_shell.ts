@@ -61,11 +61,5 @@ export async function refuseAGitCallInAMembersShell(call: AToolCallToGuard): Pro
   if (line === undefined) return undefined
   const calls = readTheGitCallsInAShellLine(line)
   if (calls.length === 0) return undefined
-  return askGitWhatAMemberIsAboutToChange({
-    host: call.host,
-    calls,
-    workspace: call.workspace,
-    member: call.member,
-    ...(call.leftovers === undefined ? {} : { leftovers: call.leftovers }),
-  })
+  return askGitWhatAMemberIsAboutToChange({ host: call.host, calls, workspace: call.workspace, member: call.member, ...(call.leftovers === undefined ? {} : { leftovers: call.leftovers }) })
 }

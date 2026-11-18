@@ -7,6 +7,7 @@
 // is told once while its leftovers still stand for the refusals.
 
 import type { CrewStore, Refused } from '../host_contract/host_contract.ts'
+import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 
 import {
   theKeptText,
@@ -17,6 +18,12 @@ import {
   type IReleasedPath,
   type WhatAKilledRunLeft,
 } from './tell_a_member_what_its_relaunch_killed.ts'
+
+/** What a launch hands its end, so the record can be read and kept (martha#693): the crew's store, and its layout. */
+export interface TheLeftoversALaunchKeeps {
+  readonly crew: CrewStore
+  readonly workspace: TheWorkspace | undefined
+}
 
 /** The crew's own place a member's record is kept under, one file per member. */
 export const LEFTOVER_RECORDS_PLACE = 'leftover-records'

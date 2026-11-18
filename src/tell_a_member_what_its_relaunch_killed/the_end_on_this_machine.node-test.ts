@@ -15,7 +15,7 @@ import { CLONES, WORKTREES } from '../declare_crew/declare_crew.ts'
 import type { CrewStore } from '../host_contract/host_contract.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { filesOnThisMachine, runNowOnThisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { bootTimeMsUnder, processesInGroupUnder, startedAtMs } from '../linux_process_identity/process_identity_from_proc.ts'
+import { bootTimeMsUnder, processesInGroupUnder, startedAtMs } from '../a_launch_end_on_this_machine/what_a_launch_end_reads.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   keepWhatTheEndLeft,

@@ -118,10 +118,9 @@ import {
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
-import type { CrewStore } from '../host_contract/host_contract.ts'
-import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import type { TheLeftoversALaunchKeeps } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
@@ -137,13 +136,13 @@ import {
 } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { hostThatRunsTheRelay, RELAY_PLUGIN_DIR, rulesTheHostMatches } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
 import {
-  cleanUpIfTheLauncherEnds,
   NOT_STARTED,
   startedMember,
   whatTheHostStartsWith,
   whenTheMemberStops,
   type Starting,
 } from '../end_a_launch/end_a_launch.ts'
+import { cleanUpIfTheLauncherEnds } from '../a_launch_end_on_this_machine/what_a_launch_end_reads.ts'
 import { killGroup, type TheRunsLifeline } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import { theLaunchItsRunAsks, told, watchItsRun, whatTheRunWatches, type WhatTheRunWatches } from '../end_a_launch_when_its_run_ends/watch_the_run_of_a_launch.ts'
 import {
@@ -271,10 +270,7 @@ export interface ClaudeCodeMemberLaunch {
    * member's trees (#693): the record the member's next start is told from, and the two refusals judge. A launch given
    * none keeps no record, and the refusals judge nothing (a test's launch, and a crew that declared no layout).
    */
-  readonly leftovers?: {
-    readonly crew: CrewStore
-    readonly workspace: TheWorkspace | undefined
-  }
+  readonly leftovers?: TheLeftoversALaunchKeeps
 }
 
 /** How a member's process ended. */
