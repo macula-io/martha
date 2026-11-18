@@ -310,6 +310,25 @@ jobs:
       - run: npm ci
       - run: npm run --silent check:no-launcher-outlives-its-run
 
+  # No restore of installer/ reaches a release (martha#695, T1): the dry packer restores installer/ from the tag its
+  # version was published at, inside a clone of its own, and that must never happen on the release path -- a release
+  # that restored its installer/ would ship a tree its tag does not hold while its pin named the published installer
+  # (martha#84). The job reads the release workflow, every script its run: lines name and every local uses: ./ action,
+  # and names the actions from other repositories as not read. That it BITES is a test's:
+  # prove_the_core/no_restore_reaches_the_release.node-test.ts plants the restore in a copy of the workflow, in a
+  # script it runs and in a local action, and each must exit 1 with the line printed.
+  no-restore-in-the-release:
+    name: no restore of installer/ in the release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:no-restore-in-the-release
+
   # No member works without its crew tools (martha#658 part 3): a session that lost its crew tools works on unseen, and
   # the launcher keeps an open window for its member until a later session holds them again. The job is a run over a
   # machine that holds no Martha state, and answers 0. That it BITES is a test's: a window kept through the crew's own

@@ -128,6 +128,8 @@ DRY_TEST_SUFFIX='.node-test.mjs'
 DRY_ROOT='/tmp/martha-dry'
 DRY_LAYER="${DRY_ROOT}/layer.tar.gz"
 DRY_PUBLISHED="${DRY_ROOT}/published"
+# Main's own installer, packed from main, beside the layer when main's installer/ is ahead of its tag (martha#695).
+DRY_MAIN_INSTALLER="${DRY_ROOT}/main-installer.tgz"
 DRY_PASSED=5
 
 # The member half. Claude Code by the version the installed release is recorded against, read from that release's own
@@ -215,11 +217,13 @@ STARTED_WINDOW_S="${MARTHA_CLEAN_INSTALL_STARTED_WINDOW_S:-120}"
 POLL_S="${MARTHA_CLEAN_INSTALL_POLL_S:-5}"
 KEY_PAUSE_S="${MARTHA_CLEAN_INSTALL_KEY_PAUSE_S:-2}"
 
-USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--dry-layer <layer .tar.gz> <sha>] | --self-test'
+USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--dry-layer <layer .tar.gz> <sha> [--dry-installer <tarball> <sha256:…>]] | --self-test'
 
 LOG_FILE=''
-# The dry run's layer and the sha it was packed from, when one is asked for; and the harness's own result line.
-DRY_LAYER_FILE='' DRY_SHA='' DRY_RESULT=''
+# The dry run's layer and the sha it was packed from, when one is asked for; main's own installer beside it when main's
+# installer/ has moved past its tag (martha#695, option A), with the digest it was packed at; and the harness's own
+# result line.
+DRY_LAYER_FILE='' DRY_SHA='' DRY_INSTALLER_FILE='' DRY_INSTALLER_DIGEST='' DRY_RESULT=''
 CONTAINER=''
 CREATE_WAS_IN_FLIGHT=''
 NO_RELEASE_YET=''
@@ -467,14 +471,27 @@ dry_step() {
     || { failed dry "the harness did not reach the container: $(one_line "${said}")"; return 1; }
   said="$(into_the_container "cat > ${DRY_LAYER}" < "${DRY_LAYER_FILE}" 2>&1)" \
     || { failed dry "the layer did not reach the container: $(one_line "${said}")"; return 1; }
-  said="$(in_the_container "npm install --prefix ${DRY_PUBLISHED} --ignore-scripts --no-audit --no-fund ${INSTALLER_NAME}@${INSTALLER_VERSION} && ln -s ${DRY_PUBLISHED}/node_modules/${INSTALLER_NAME} ${DRY_ROOT}/installer" 2>&1)" \
-    || { failed dry "the published installer was not put beside the harness: $(one_line "${said}")"; return 1; }
+  # Which installer goes beside the harness, and what the harness and the result line call it (martha#695, option A).
+  # Main's own is installed by the digest it was packed at, and the digest is checked here before anything is run on
+  # it: the tarball crossed the wire, and a reader is told it is main's, so it has to be main's.
+  local installer_said
+  if [ -n "${DRY_INSTALLER_FILE}" ]; then
+    said="$(into_the_container "cat > ${DRY_MAIN_INSTALLER}" < "${DRY_INSTALLER_FILE}" 2>&1)" \
+      || { failed dry "main's installer did not reach the container: $(one_line "${said}")"; return 1; }
+    said="$(in_the_container "printf '%s  %s\\n' '${DRY_INSTALLER_DIGEST#sha256:}' '${DRY_MAIN_INSTALLER}' | sha256sum -c - > /dev/null && npm install --prefix ${DRY_PUBLISHED} --ignore-scripts --no-audit --no-fund ${DRY_MAIN_INSTALLER} && ln -s ${DRY_PUBLISHED}/node_modules/${INSTALLER_NAME} ${DRY_ROOT}/installer" 2>&1)" \
+      || { failed dry "main's installer was not put beside the harness, or what arrived is not the tarball ${DRY_INSTALLER_DIGEST} names: $(one_line "${said}")"; return 1; }
+    installer_said="--main-installer ${DRY_INSTALLER_DIGEST}"
+  else
+    said="$(in_the_container "npm install --prefix ${DRY_PUBLISHED} --ignore-scripts --no-audit --no-fund ${INSTALLER_NAME}@${INSTALLER_VERSION} && ln -s ${DRY_PUBLISHED}/node_modules/${INSTALLER_NAME} ${DRY_ROOT}/installer" 2>&1)" \
+      || { failed dry "the published installer was not put beside the harness: $(one_line "${said}")"; return 1; }
+    installer_said="--published-installer ${INSTALLER_NAME}@${INSTALLER_VERSION}"
+  fi
   # The harness's standard output and its errors are kept apart: they reach this run on two pipes through podman and
   # ssh, so their order is not kept, and a warning node or the installer's code writes on stderr must never become the
   # run's result line. The result line is the harness's own last line on standard output; its errors go into the log,
   # and they are the words of a refusal.
   errors_file="$(mktemp)"
-  said="$(in_the_container "node ${DRY_ROOT}/${DRY_HARNESS}/${DRY_ENTRY} ${DRY_LAYER} ${RELEASE_VERSION} ${DRY_SHA}" 2> "${errors_file}")" \
+  said="$(in_the_container "node ${DRY_ROOT}/${DRY_HARNESS}/${DRY_ENTRY} ${DRY_LAYER} ${RELEASE_VERSION} ${DRY_SHA} ${installer_said}" 2> "${errors_file}")" \
     || status=$?
   errors="$(cat "${errors_file}")"
   rm -f "${errors_file}"
@@ -492,7 +509,13 @@ dry_step() {
     failed dry 'the harness ended 0 and said nothing, so there is no result line to give'
     return 1
   fi
-  ok dry "main at ${DRY_SHA} placed over the published ${INSTALLER_NAME}@${INSTALLER_VERSION} by the installer's own steps"
+  # The step's own line names the installer that ran, in the same words the result line uses: a pass with main's
+  # installer must never read as "the published installer works", or the other way round (martha#695, T3).
+  if [ -n "${DRY_INSTALLER_FILE}" ]; then
+    ok dry "main at ${DRY_SHA} placed by main's own installer (${DRY_INSTALLER_DIGEST}), by the installer's own steps"
+  else
+    ok dry "main at ${DRY_SHA} placed over the published ${INSTALLER_NAME}@${INSTALLER_VERSION} by the installer's own steps"
+  fi
 }
 
 # The installed release's tree, as words the container's shell expands: the tree the installed command resolves to,
@@ -2076,6 +2099,17 @@ main() {
         fi
         DRY_LAYER_FILE="$2"
         DRY_SHA="$3"
+        shift 3
+        ;;
+      --dry-installer)
+        # Main's own installer, packed from main, and the sha256 it was packed at: the run installs that tarball and
+        # says so, so it is only taken with a layer to place (martha#695, option A).
+        if [ -z "${DRY_LAYER_FILE}" ] || [ ! -f "${2:-}" ] || [ ! -r "${2:-}" ] || ! [[ "${3:-}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+          printf 'prove_a_clean_install_in_a_throwaway_container: --dry-installer takes a readable tarball and its sha256: digest, after --dry-layer (%s)\n' "${USAGE}" >&2
+          exit 2
+        fi
+        DRY_INSTALLER_FILE="$2"
+        DRY_INSTALLER_DIGEST="$3"
         shift 3
         ;;
       -*)

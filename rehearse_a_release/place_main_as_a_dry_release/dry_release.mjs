@@ -50,12 +50,39 @@ export const SKIPPED_STEPS = Object.freeze(['the registry', 'the downgrade rule'
 /** What every line a dry release prints starts with. */
 export const DRY = 'dry:'
 
+/** The two installers a dry run can exercise: main's own, or the published one (martha#695, option A). */
+export const MAINS_OWN_INSTALLER = 'main'
+export const THE_PUBLISHED_INSTALLER = 'published'
+
 /**
- * The dry release's result line: what it placed, from what, and what it did not run.
- * @param {string} sha
+ * Which installer the run exercised, in the words the result line says it by (martha#695, T3): main's own by the digest
+ * of the tarball that was packed from main, or the published one by its name and version. A reader must never have to
+ * guess which of the two was proven, and a run that cannot say is refused rather than reported.
+ * @param {{ origin: string, digest?: string, published?: string }} proven
  */
-export const dryResultLine = (sha) =>
-  `${DRY} main at ${sha}, not a release; the installer's ${SKIPPED_STEPS.join(', ')} steps not run`
+export const theInstallerThatRan = (proven) => {
+  if (proven.origin === MAINS_OWN_INSTALLER) {
+    if (typeof proven.digest !== 'string' || proven.digest === '') {
+      throw new Error(`a dry run that proves main's own installer names its digest, and none was given`)
+    }
+    return `main's own installer (${proven.digest})`
+  }
+  if (proven.origin === THE_PUBLISHED_INSTALLER) {
+    if (typeof proven.published !== 'string' || proven.published === '') {
+      throw new Error('a dry run that proves the published installer names its name and version, and none was given')
+    }
+    return `the published ${proven.published}`
+  }
+  throw new Error(`${String(proven.origin)} is not an installer a dry run proves`)
+}
+
+/**
+ * The dry release's result line: what it placed, from what, which installer it was placed by, and what it did not run.
+ * @param {string} sha
+ * @param {{ origin: string, digest?: string, published?: string }} proven
+ */
+export const dryResultLine = (sha, proven) =>
+  `${DRY} main at ${sha}, not a release, placed by ${theInstallerThatRan(proven)}; the installer's ${SKIPPED_STEPS.join(', ')} steps not run`
 
 /** The installer's own steps, as this harness calls them: each is the installer's exported function, unwrapped. */
 export const THE_INSTALLERS_STEPS = Object.freeze({
@@ -84,9 +111,9 @@ const digestOf = (layer) => `sha256:${createHash('sha256').update(layer).digest(
  * Main's layer placed by the installer's steps 1, 6 and 7, in installRelease's own order. `layer` is the gzipped tar,
  * `version` the version main's tree carries, `home` and `xdgDataHome` the places the installer itself would use.
  * Returns what was placed and every line to print, the result line last; a step that refuses throws its own words.
- * @param {{ steps: Steps, layer: Buffer, version: string, sha: string, home: string, xdgDataHome?: string, nodeVersion?: string }} request
+ * @param {{ steps: Steps, layer: Buffer, version: string, sha: string, home: string, xdgDataHome?: string, nodeVersion?: string, proven: { origin: string, digest?: string, published?: string } }} request
  */
-export async function placeADryRelease ({ steps, layer, version, sha, home, xdgDataHome, nodeVersion }) {
+export async function placeADryRelease ({ steps, layer, version, sha, home, xdgDataHome, nodeVersion, proven }) {
   steps.checkNodeVersion(nodeVersion ?? process.versions.node)
   const places = steps.placesOnThisMachine(home, xdgDataHome)
   // The machine's floor is read before anything is placed, where installRelease reads it (martha#659).
@@ -106,7 +133,7 @@ export async function placeADryRelease ({ steps, layer, version, sha, home, xdgD
     `${DRY} placed ${version} from main's layer: ${places.current} -> ${release}`,
     `${DRY} version floor ${floor}`,
     `${DRY} ${command}`,
-    dryResultLine(sha)
+    dryResultLine(sha, proven)
   ]
   return { release, command, floor, lines }
 }
