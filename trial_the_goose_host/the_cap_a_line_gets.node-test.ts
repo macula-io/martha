@@ -1,21 +1,22 @@
-// The bound a trial turn gets, made from the model's own pace (macula-io/martha#732).
+// The bound a trial turn gets, made from the model's own pace (macula-io/martha#732, PR 733 R1-R5).
 //
-// This exists because a fixed bound cost line 4 its verdict: the model spent 141 s of silence on one tool call,
-// the turn needed three requests, and a bound sized for one cut it off and read not-observed. The rule these
-// cases pin: a turn is bounded by the model's slowest answer so far times the requests the line's turn makes,
-// renewed on every answer, and a line whose requests cannot fit the launch's own bound is named with the
-// arithmetic instead of being launched to be cut off.
+// This exists because a fixed bound cost line 4 its verdict: the model spent 141 s of silence on one tool call
+// and a bound sized for one answer cut a turn that was still working. The rule these cases pin: a turn is cut
+// when the model goes quiet for longer than it has ever taken to answer, never for being long; only the model's
+// chat answers are measured, never the engine asking it which model it is; and a pace that cannot fit in what is
+// left of the launch is named with the arithmetic rather than launched to be reaped.
 
 import assert from 'node:assert/strict'
+import { createServer, request as sendRequest } from 'node:http'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { NoAnswerInTime, withinTheCap } from './a_turn_with_goose.ts'
+import { RecordingProxy } from './record_what_goose_sends.ts'
 import {
-  REQUESTS_IN_ONE_TURN, THE_LAUNCH_BOUND_KEY, TheModelPace, requestsOf, theCapFor, theLaunchesBoundMs,
-  whyALineCannotFitItsRequests,
+  THE_LAUNCH_BOUND_KEY, THE_MARGIN_OVER_A_ROUND_TRIP, TheModelPace, theCapFor, theLaunchesBoundMs, whyTheBoundCannotFit,
 } from './the_cap_a_line_gets.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
@@ -31,67 +32,107 @@ function aFreshDirectory(): string {
   return directory
 }
 
-/** A promise that never settles: a turn that stalls with nothing left to say. */
+/** A promise that never settles: a turn that stalls with nothing more to say. */
 const neverSettles = (): Promise<void> => new Promise(() => undefined)
 
-test('a line whose turn makes one request gets the model pace, and line 4 gets its three (martha#732)', () => {
+/** The idle bound for one round-trip, as the cap makes it. */
+const theIdleBound = (roundTripMs: number): number => roundTripMs + Math.round(roundTripMs * THE_MARGIN_OVER_A_ROUND_TRIP)
+
+/** A stand-in model: `api/show` answers at once, a chat answer takes `chatMs`, as the engine's own provider asks. */
+async function aStandInModel(chatMs: number): Promise<{ url: string; stop: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    request.resume()
+    request.on('end', () => {
+      const answer = (): void => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end('{"done":true}')
+      }
+      if ((request.url ?? '').includes('api/show')) answer()
+      else setTimeout(answer, chatMs)
+    })
+  })
+  await new Promise<void>((settle) => server.listen(0, '127.0.0.1', () => settle()))
+  const address = server.address()
+  const port = typeof address === 'object' && address !== null ? address.port : 0
+  return {
+    url: `http://127.0.0.1:${String(port)}`,
+    stop: () => new Promise<void>((settle) => server.close(() => settle())),
+  }
+}
+
+/** Asks the proxy for a path, and waits for its answer, the way the engine does. */
+function askThrough(url: string, path: string): Promise<number> {
+  const target = new URL(path, url)
+  return new Promise<number>((settle, fail) => {
+    const asking = sendRequest({ hostname: target.hostname, port: target.port, path: target.pathname, method: 'POST' }, (answer) => {
+      answer.resume()
+      answer.on('end', () => settle(answer.statusCode ?? 0))
+    })
+    asking.on('error', fail)
+    asking.end('{}')
+  })
+}
+
+test('only the model chat answers set the pace: the engine asking which model it is does not (PR 733 R1)', async () => {
+  const model = await aStandInModel(400)
   const pace = new TheModelPace()
+  const proxy = new RecordingProxy(model.url, { pace })
+  const port = await proxy.start()
+  const proxyUrl = `http://127.0.0.1:${String(port)}`
+  try {
+    await askThrough(proxyUrl, '/api/show')
+    assert.equal(pace.theSlowestAnswerSoFar(), 0, 'the model-info answer says nothing about how long an answer takes')
+    await askThrough(proxyUrl, '/v1/chat/completions')
+    assert.ok(pace.theSlowestAnswerSoFar() >= 350, `the chat answer set the pace: ${String(pace.theSlowestAnswerSoFar())} ms`)
+    assert.equal(proxy.answered.length, 2, 'both answers are still in the proxy own log for the evidence')
+  } finally {
+    await proxy.stop()
+    await model.stop()
+  }
+})
+
+test('the bound is the model own slowest answer plus its margin, and what is left of the launch before any (martha#732)', () => {
+  const pace = new TheModelPace()
+  assert.equal(theCapFor(pace, () => 600_000).ms(), 600_000, 'nothing is measured, so what is left of the launch is the bound')
   pace.noteAnAnswer(50_000)
-  assert.equal(requestsOf(4) > requestsOf(1), true, 'line 4 makes more requests than a one-request line')
-  assert.equal(theCapFor(4, pace, 600_000).ms(), requestsOf(4) * 50_000)
-  assert.equal(theCapFor(1, pace, 600_000).ms(), REQUESTS_IN_ONE_TURN * 50_000)
+  assert.equal(theCapFor(pace, () => 600_000).ms(), theIdleBound(50_000), 'measured, the bound is the idle one')
+  pace.noteAnAnswer(80_000)
+  assert.equal(theCapFor(pace, () => 600_000).ms(), theIdleBound(80_000), 'the slowest answer, not the last')
 })
 
-test('before an answer has landed the bound is the launch own (martha#732)', () => {
-  const cap = theCapFor(4, new TheModelPace(), 600_000)
-  assert.equal(cap.ms(), 600_000, 'nothing is measured yet, so the launch own bound is the only one there is')
-  assert.equal(cap.made().fits, true)
-})
-
-test('a line whose requests cannot fit the launch own bound is named with the arithmetic (martha#732)', () => {
+test('a bound the model paced too slow to fit in what is left is named with the arithmetic (PR 733 R4)', () => {
   const pace = new TheModelPace()
-  pace.noteAnAnswer(50_000)
-  const made = theCapFor(4, pace, 120_000).made()
-  assert.equal(made.fits, false, 'three requests at 50 s do not fit inside two minutes')
-  assert.match(whyALineCannotFitItsRequests(made) ?? '', /^3 requests at 50000 ms a round-trip is 150000 ms, beyond the 120000 ms bound$/)
+  pace.noteAnAnswer(200_000)
+  const made = theCapFor(pace, () => 60_000).made()
+  assert.equal(made.fits, false, '220 s of idle bound do not fit in the 60 s left of the launch')
+  assert.equal(made.ms, 60_000, 'the bound that runs is what is left, and that is recorded')
+  assert.match(whyTheBoundCannotFit(made) ?? '', /^a 200000 ms round-trip plus its 100000 ms margin is 300000 ms, beyond the 60000 ms left of the launch$/)
 })
 
-test('an answer that lands puts the turn under the pace it set, not the launch own bound (martha#732)', async () => {
+test('a turn is renewed on every answer, and a model gone quiet is cut at the bound it set (martha#732)', async () => {
   const pace = new TheModelPace()
-  // The launch's own bound to start under, as a turn begins; the answer that lands inside it is the model
-  // saying how long it takes, and that is what the turn waits under from then on.
-  const cap = theCapFor(4, pace, 600)
+  const cap = theCapFor(pace, () => 600_000)
   const startedAt = Date.now()
   const turn = withinTheCap(neverSettles(), cap)
   setTimeout(() => pace.noteAnAnswer(40), 10)
   await assert.rejects(turn, (error: unknown) => {
     assert.ok(error instanceof NoAnswerInTime)
-    assert.equal(error.ms, requestsOf(4) * 40, 'renewed: the bound is the answers so far, times the requests')
+    assert.equal(error.ms, theIdleBound(40), 'the bound is the model own answer plus its margin')
     return true
   })
-  const waited = Date.now() - startedAt
-  assert.ok(waited < 600, `the turn was cut at the pace it set (${String(waited)} ms), not left to the launch own bound`)
+  assert.ok(Date.now() - startedAt < 600_000, 'cut at the model own pace, not left to what is left of the launch')
 })
 
-test('a turn that stalls is cut at the pace the model itself set (martha#732)', async () => {
-  const pace = new TheModelPace()
-  const cap = theCapFor(1, pace, 10_000)
-  pace.noteAnAnswer(20)
-  await assert.rejects(withinTheCap(new Promise<void>(() => undefined), cap), (error: unknown) => {
-    assert.ok(error instanceof NoAnswerInTime)
-    assert.equal(error.ms, requestsOf(1) * 20, 'the bound is the model pace times the requests the turn makes')
-    return true
-  })
-})
-
-test('the launch own bound is read from the environment the runner exports, else from the fork pins (martha#732)', () => {
-  const fork = aFreshDirectory()
-  const pins = join(fork, 'martha', 'sync', 'pins.env')
-  mkdirSync(dirname(pins), { recursive: true })
-  writeFileSync(pins, `TRIAL_LINES=1,2,3\n${THE_LAUNCH_BOUND_KEY}=7\n`)
-  assert.equal(theLaunchesBoundMs(fork, {}), 7 * 60_000, 'the fork pins say it, so that is what it is')
-  assert.equal(theLaunchesBoundMs(fork, { [THE_LAUNCH_BOUND_KEY]: '9' }), 9 * 60_000,
-    'the runner exports it from the same pins, and the environment wins over the file it came from')
-  const noPins = aFreshDirectory()
-  assert.equal(theLaunchesBoundMs(noPins, {}), undefined, 'nothing says it, so nothing is invented')
+test('a bad launch bound is refused by name rather than becoming a bound of zero or of none (PR 733 R5)', () => {
+  const forkWith = (value: string): string => {
+    const fork = aFreshDirectory()
+    const pins = join(fork, 'martha', 'sync', 'pins.env')
+    mkdirSync(dirname(pins), { recursive: true })
+    writeFileSync(pins, `TRIAL_LINES=1,2,3\n${THE_LAUNCH_BOUND_KEY}=${value}\n`)
+    return fork
+  }
+  assert.equal(theLaunchesBoundMs(forkWith('7')), 7 * 60_000, 'a positive number of minutes is the bound')
+  assert.throws(() => theLaunchesBoundMs(forkWith('')), /says nothing of TRIAL_MINUTES_PER_LAUNCH|not a positive number/)
+  assert.throws(() => theLaunchesBoundMs(forkWith('x')), /not a positive number of minutes/)
+  assert.throws(() => theLaunchesBoundMs(aFreshDirectory()), /the launch's bound is defined there and nowhere else/)
 })

@@ -1,46 +1,41 @@
-// The bound one turn gets, made from what the model itself has been measured to take and from how many
-// requests the line's turn makes (macula-io/martha#732).
+// The bound one turn gets, made from what the model itself has been measured to take (macula-io/martha#732).
 //
 // This exists because a fixed bound is a guess about a model: the trial model spent 141 s of silence producing
-// one tool call, and a line whose turn makes three requests cannot finish inside a bound sized for one. A line
-// that worked then read not-observed, and its verdict was the bound's rather than the model's. The bound here is
-// the model's own slowest answer so far in this launch times the requests the line's turn makes, and it is
-// renewed every time an answer lands, so a turn that keeps working is never cut for being long.
+// one tool call, and a bound sized for one request cut a turn that was still working, so the line's verdict was
+// the bound's rather than the model's. The bound here is an idle one: the model's own slowest chat answer plus a
+// named margin, re-armed every time an answer lands, so a turn is cut when the model goes quiet for longer than
+// it has ever taken to answer, and never for being long. It is never more than what is left of the launch.
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-/** The requests one turn makes unless its line says otherwise: one prompt, one answer. */
-export const REQUESTS_IN_ONE_TURN = 1
-
-/**
- * The lines whose turn makes more than one model request, by the count their own code makes: line 4's turn asks
- * for the delegate, the subagent answers the model, and the main agent then answers again with the result.
- */
-export const THE_REQUESTS_EACH_LINE_MAKES: Readonly<Record<number, number>> = { 4: 3 }
-
-/** The requests a line's own turn makes. */
-export function requestsOf(line: number): number {
-  return THE_REQUESTS_EACH_LINE_MAKES[line] ?? REQUESTS_IN_ONE_TURN
-}
-
-/** The key the fork's pins.env defines the launch's bound under, and the runner exports into the launch. */
+/** The key the fork's pins.env defines the launch's bound under; the runner sources that file for `timeout`. */
 export const THE_LAUNCH_BOUND_KEY = 'TRIAL_MINUTES_PER_LAUNCH'
+
+/** A bound in minutes, as pins.env gives it: a positive number and nothing else. */
+const MINUTES = /^\d+(?:\.\d+)?$/
 
 const MS_IN_A_MINUTE = 60_000
 
-/** The model's own pace, measured request by request as the launch runs. */
+/**
+ * The margin a turn is allowed on top of a round-trip before the model counts as gone quiet: half again as long
+ * as its own slowest answer. A model that streams a long answer pauses between its pieces; a model that has
+ * stopped has stopped for longer than it has ever taken to finish one.
+ */
+export const THE_MARGIN_OVER_A_ROUND_TRIP = 0.5
+
+/** The model's own pace, measured chat answer by chat answer as the launch runs. */
 export class TheModelPace {
   #slowestMs = 0
   readonly #onEachAnswer: (() => void)[] = []
 
-  /** One request finished, having taken `ms`: it may be the slowest yet, and whatever was waiting is told. */
+  /** One chat answer finished, having taken `ms`: it may be the slowest yet, and whatever was waiting is told. */
   noteAnAnswer(ms: number): void {
     if (ms > this.#slowestMs) this.#slowestMs = ms
     for (const listen of this.#onEachAnswer) listen()
   }
 
-  /** The slowest answer this launch has measured, or 0 until one has landed. */
+  /** The slowest chat answer this launch has measured, or 0 until one has landed. */
   theSlowestAnswerSoFar(): number {
     return this.#slowestMs
   }
@@ -55,65 +50,89 @@ export class TheModelPace {
   }
 }
 
-/** What a turn is bounded by, and the values the bound was made of, for the line's result. */
-export interface TheCapALineGets {
-  readonly line: number
-  readonly requests: number
-  readonly pace: TheModelPace
-  /** The runner's bound for one launch, or Infinity when nothing says it. */
-  readonly boundMs: number
-  /** The bound for the turn in hand, now: the launch's own bound until an answer has been measured. */
-  ms(): number
-  /** The values this bound was made of, as the line's result.json records them. */
-  made(): TheCapMadeOf
-}
-
-/** What the bound was made of: the model's pace, the requests, the bound it fits in or does not. */
+/** What the bound was made of, as the line's result.json records it. */
 export interface TheCapMadeOf {
-  readonly requests: number
+  /** The model's slowest chat answer this launch measured, or 0 before any landed. */
   readonly roundTripMs: number
-  readonly boundMs: number
+  /** The margin allowed over it. */
+  readonly marginMs: number
+  /** What is left of the launch's own bound at this moment. */
+  readonly remainingMs: number
+  /** The bound that actually runs: the idle bound, or what is left of the launch, whichever is smaller. */
   readonly ms: number
-  /** Whether the line's requests fit: false is the arithmetic this issue is about, and the check names it. */
+  /** Whether the idle bound fits inside what is left: false is the arithmetic the check names. */
   readonly fits: boolean
 }
 
-/** The bound a line's turn gets: the model's slowest answer so far times the requests the turn makes. */
-export function theCapFor(line: number, pace: TheModelPace, boundMs: number): TheCapALineGets {
-  const requests = requestsOf(line)
-  const wanted = (): number => {
+/** What a turn is bounded by, and the values the bound was made of, for the line's result. */
+export interface TheCapALineGets {
+  readonly pace: TheModelPace
+  /** What is left of the launch's own bound, now. */
+  remaining(): number
+  /** The bound for the turn in hand, now: what is left of the launch until an answer has been measured. */
+  ms(): number
+  /** The values this bound was made of. */
+  made(): TheCapMadeOf
+}
+
+/** The bound a turn gets: the model's own slowest answer plus its margin, renewed on every answer. */
+export function theCapFor(pace: TheModelPace, remaining: () => number): TheCapALineGets {
+  const idle = (): number => {
     const roundTrip = pace.theSlowestAnswerSoFar()
-    return roundTrip === 0 ? boundMs : requests * roundTrip
+    return roundTrip === 0 ? Number.POSITIVE_INFINITY : roundTrip + Math.round(roundTrip * THE_MARGIN_OVER_A_ROUND_TRIP)
   }
   return {
-    line, requests, pace, boundMs,
-    ms: () => Math.min(wanted(), boundMs),
+    pace, remaining,
+    ms: () => Math.min(idle(), remaining()),
     made: () => {
-      const ms = wanted()
-      return { requests, roundTripMs: pace.theSlowestAnswerSoFar(), boundMs, ms, fits: ms <= boundMs }
+      const roundTrip = pace.theSlowestAnswerSoFar()
+      const wanted = idle()
+      const left = remaining()
+      return {
+        roundTripMs: roundTrip,
+        marginMs: roundTrip === 0 ? 0 : Math.round(roundTrip * THE_MARGIN_OVER_A_ROUND_TRIP),
+        remainingMs: left,
+        ms: Math.max(0, Math.min(wanted, left)),
+        fits: left > 0 && (roundTrip === 0 || wanted <= left),
+      }
     },
   }
 }
 
-/** Why a line cannot fit its requests in the bound it would get, in the words the check and the log use. */
-export function whyALineCannotFitItsRequests(made: TheCapMadeOf): string | undefined {
-  if (made.fits || made.roundTripMs === 0) return undefined
-  return `${String(made.requests)} requests at ${String(made.roundTripMs)} ms a round-trip is ${String(made.ms)} ms, beyond the ${String(made.boundMs)} ms bound`
+/** Why the bound the model set cannot fit in what is left of the launch, in the words the check and the log use. */
+export function whyTheBoundCannotFit(made: TheCapMadeOf): string | undefined {
+  if (made.fits) return undefined
+  if (made.remainingMs <= 0) return `the launch has ${String(made.remainingMs)} ms left, less than the room its own end needs`
+  const wanted = made.roundTripMs + made.marginMs
+  return `a ${String(made.roundTripMs)} ms round-trip plus its ${String(made.marginMs)} ms margin is ${String(wanted)} ms, beyond the ${String(made.remainingMs)} ms left of the launch`
 }
 
 /**
- * The bound the runner gives one launch, in milliseconds, read from where the runner defines it: the fork's
- * pins.env, keyed by THE_LAUNCH_BOUND_KEY, which the runner exports into the launch's environment. Undefined when
- * nothing says it — a trial run outside the fork — and then a turn is bounded by the model's pace alone.
+ * The model has paced itself too slowly for what is left of the launch: a turn under it would only be reaped by
+ * the runner, writing no result at all, so it is refused by name instead (PR 733 R2, R4).
  */
-export function theLaunchesBoundMs(gooseSource: string, environment: Readonly<Record<string, string | undefined>> = process.env): number | undefined {
-  const exported = environment[THE_LAUNCH_BOUND_KEY]
-  if (exported !== undefined) return Number(exported) * MS_IN_A_MINUTE
-  try {
-    const pins = readFileSync(join(gooseSource, 'martha', 'sync', 'pins.env'), 'utf8')
-    const found = new RegExp(`^${THE_LAUNCH_BOUND_KEY}=(.+)$`, 'm').exec(pins)?.[1]
-    return found === undefined ? undefined : Number(found) * MS_IN_A_MINUTE
-  } catch {
-    return undefined
+export class TheBoundCannotFitTheLaunch extends Error {
+  constructor(why: string) {
+    super(`the launch cannot give this turn the bound its model asks for: ${why}`)
+    this.name = 'TheBoundCannotFitTheLaunch'
   }
+}
+
+/**
+ * The bound the runner gives one launch, in milliseconds, read from the fork's pins.env — the same file the
+ * runner sources for its `timeout`, which is the only place it is defined. A value that is not a positive number
+ * of minutes is refused by name rather than turned into a bound of zero or of no bound at all.
+ */
+export function theLaunchesBoundMs(gooseSource: string): number {
+  const path = join(gooseSource, 'martha', 'sync', 'pins.env')
+  let pins: string
+  try {
+    pins = readFileSync(path, 'utf8')
+  } catch {
+    throw new Error(`no ${path}: the launch's bound is defined there and nowhere else`)
+  }
+  const found = new RegExp(`^${THE_LAUNCH_BOUND_KEY}=(.+)$`, 'm').exec(pins)?.[1]?.trim()
+  if (found === undefined) throw new Error(`${path} says nothing of ${THE_LAUNCH_BOUND_KEY}`)
+  if (!MINUTES.test(found)) throw new Error(`${path} gives ${THE_LAUNCH_BOUND_KEY} as '${found}', not a positive number of minutes`)
+  return Number(found) * MS_IN_A_MINUTE
 }

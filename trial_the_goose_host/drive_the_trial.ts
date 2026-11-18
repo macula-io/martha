@@ -25,12 +25,24 @@ import { NoAnswerInTime, promptOver, setTheCapInHand, withTimeout } from './a_tu
 import { findingsIn, pathsIn, type TraceFindings } from './read_the_trace.ts'
 import { RecordingProxy } from './record_what_goose_sends.ts'
 import { GooseOverAcp, type Exchange } from './speak_acp_to_goose.ts'
-import { TheModelPace, theCapFor, theLaunchesBoundMs, whyALineCannotFitItsRequests, type TheCapALineGets, type TheCapMadeOf } from './the_cap_a_line_gets.ts'
+import { TheModelPace, theCapFor, theLaunchesBoundMs, whyTheBoundCannotFit, type TheCapALineGets, type TheCapMadeOf } from './the_cap_a_line_gets.ts'
 import { THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_says_why.ts'
 import {
   lineEight, lineFive, lineFour, lineNine, lineOne, lineSix, lineThree, lineTwo, sevenAfterTheKill,
   type Line, type Observation, type Trial,
 } from './the_nine_lines.ts'
+
+/** How long the launch waits for its own process group to die once it asks it to (martha#732's room below). */
+export const THE_KILL_WAIT_MS = 20_000
+
+/**
+ * The room a turn leaves for the end of its launch (PR 733 R2): the group is killed and waited for, the proxy is
+ * stopped, the engine's logs are copied and the line's result is written. The kill's wait is the only term that
+ * is measured anywhere (THE_KILL_WAIT_MS); the rest are copies of files already on disk. A turn bounded by the
+ * whole launch would only ever fire after the runner's own `timeout` had killed node, which writes no result at
+ * all.
+ */
+export const THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS = THE_KILL_WAIT_MS
 
 interface Options {
   readonly goose: string
@@ -126,10 +138,13 @@ async function startARun(line: number, options: Options): Promise<Running> {
   if (line === 2) plant(place.checkout, CHECKOUT_MARKERS)
   const evidenceForLine = join(options.evidence, `line-${line}`)
   mkdirSync(evidenceForLine, { recursive: true })
-  // The model's pace is measured from the proxy's answers, into the launch's own evidence, and becomes the
-  // bound the line's turns are under (martha#732).
+  // The model's pace is measured from the proxy's chat answers, into the launch's own evidence, and becomes the
+  // bound the line's turns are under: an idle bound, inside what is left of the launch (martha#732).
   const pace = new TheModelPace()
-  const cap = theCapFor(line, pace, theLaunchesBoundMs(options.gooseSource) ?? Number.POSITIVE_INFINITY)
+  const launchedAt = Date.now()
+  const theLaunchesBound = theLaunchesBoundMs(options.gooseSource)
+  const remaining = (): number => theLaunchesBound - (Date.now() - launchedAt) - THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS
+  const cap = theCapFor(pace, remaining)
   const proxy = new RecordingProxy(options.ollama, { into: evidenceForLine, pace })
   const port = await proxy.start()
   writeTheConfig(place, options.model, `http://127.0.0.1:${port}`, options.gooseSource)
@@ -196,7 +211,7 @@ function survivorsIn(group: number): string[] {
   return (found.stdout ?? '').split('\n').map((one) => one.trim()).filter((one) => one !== '')
 }
 
-async function killTheGroup(child: ChildProcess, waitMs = 20000): Promise<string[]> {
+async function killTheGroup(child: ChildProcess, waitMs = THE_KILL_WAIT_MS): Promise<string[]> {
   const pid = child.pid ?? 0
   if (pid === 0) return ['the launch had no pid']
   try { process.kill(-pid, 'SIGTERM') } catch { /* it had already ended */ }
@@ -299,7 +314,7 @@ async function runLine(line: number, options: Options): Promise<void> {
  */
 function theCapTheLineHad(running: Running): TheCapMadeOf & { readonly whyNot: string | undefined } {
   const made = running.cap.made()
-  return { ...made, whyNot: whyALineCannotFitItsRequests(made) }
+  return { ...made, whyNot: whyTheBoundCannotFit(made) }
 }
 
 async function main(): Promise<void> {

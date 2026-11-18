@@ -11,6 +11,7 @@ import { createServer, request as sendRequest, type IncomingMessage, type Server
 import { URL } from 'node:url'
 
 import type { TheModelPace } from './the_cap_a_line_gets.ts'
+import { isAModelChat } from './a_turn_with_goose.ts'
 
 /** The proxy's own log in the launch's evidence: every request, how long the model took, and how it answered. */
 export const THE_PROXY_LOG = 'proxy.log'
@@ -97,13 +98,16 @@ export class RecordingProxy {
   }
 
   /**
-   * One answer landed: it is measured into the model's pace (which renews a turn's bound) and written to the
-   * proxy's own log, so the evidence says what the model took as well as what it was asked (martha#732).
+   * One answer landed: a chat answer is measured into the model's pace, which renews a turn's bound, and every
+   * answer is written to the proxy's own log, so the evidence says what the model took as well as what it was
+   * asked (martha#732). Only chat answers are measured: the engine asks the same endpoint what model it is
+   * (`api/show`) before it ever chats, and that answer is about a millisecond — measured, it would set a bound
+   * of about a millisecond for every turn (PR 733 R1).
    */
   #noteAnAnswer(path: string, status: number, startedAt: number): void {
     const answer = { path, status, ms: Date.now() - startedAt }
     this.answered.push(answer)
-    this.#books.pace?.noteAnAnswer(answer.ms)
+    if (isAModelChat(path)) this.#books.pace?.noteAnAnswer(answer.ms)
     if (this.#books.into === undefined) return
     appendFileSync(join(this.#books.into, THE_PROXY_LOG), `${JSON.stringify(answer)}\n`)
   }

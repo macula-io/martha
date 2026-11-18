@@ -4,6 +4,7 @@
 import type { Received } from './record_what_goose_sends.ts'
 import type { GooseOverAcp } from './speak_acp_to_goose.ts'
 import type { TheCapALineGets } from './the_cap_a_line_gets.ts'
+import { TheBoundCannotFitTheLaunch, whyTheBoundCannotFit } from './the_cap_a_line_gets.ts'
 
 /** A turn as it ended: why it stopped, and the text the member's model streamed. */
 export interface Turn {
@@ -42,9 +43,15 @@ export function withinTheCap<T>(work: Promise<T>, cap: TheCapALineGets | undefin
     let timer: ReturnType<typeof setTimeout> | undefined
     const arm = (): void => {
       if (timer !== undefined) clearTimeout(timer)
-      const ms = cap.ms()
-      if (!Number.isFinite(ms)) return
-      timer = setTimeout(() => fail(new NoAnswerInTime(ms)), ms)
+      const made = cap.made()
+      const why = whyTheBoundCannotFit(made)
+      if (why !== undefined) {
+        // Refused by name rather than run to be reaped by the runner, which would leave no result at all (R2, R4).
+        fail(new TheBoundCannotFitTheLaunch(why))
+        return
+      }
+      if (!Number.isFinite(made.ms)) return
+      timer = setTimeout(() => fail(new NoAnswerInTime(made.ms)), made.ms)
     }
     const stopListening = cap.pace.onEachAnswer(arm)
     const clear = (): void => {
@@ -94,9 +101,14 @@ export function textsOf(updates: readonly Record<string, unknown>[]): string {
   return said.join('')
 }
 
+/** Whether a recorded request is the model being asked to answer, rather than the engine asking about it. */
+export function isAModelChat(path: string): boolean {
+  return path.includes('chat/completions')
+}
+
 /** The bodies of the model requests the proxy recorded, oldest first. */
 export function chatsIn(received: readonly Received[]): string[] {
-  return received.filter((one) => one.path.includes('chat/completions')).map((one) => one.body)
+  return received.filter((one) => isAModelChat(one.path)).map((one) => one.body)
 }
 
 /** The tool names a model request offered. */
