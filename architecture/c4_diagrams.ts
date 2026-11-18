@@ -646,6 +646,14 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a model behind an OpenAI-compatible URL, answered from a script, for runs of the Goose engine with no model (martha#541); tests and npm run stand-in:openai-model load it, and no member ever does',
   },
   {
+    name: 'launch_a_goose_member',
+    why: "one Goose member's launch: its own root and home, the config root it writes, the engine in a process group of its own, and the permission store checked empty when the launch ends (martha#541 packages 7-8); nothing loads it until the one start call picks a member's host, and its tests do today",
+  },
+  {
+    name: 'stand_in_for_an_acp_agent',
+    why: 'an ACP agent on stdio answered from a script, offering the recorded Goose engine\'s permission answers, for the tests of speak_acp_to_an_agent (martha#541); tests and npm run stand-in:acp-agent load it, and no member ever does',
+  },
+  {
     name: 'check_no_member_outlives_its_run',
     why: 'a script run by hand, npm run check:no-member-outlives-its-run, over this machine\'s /proc; find_a_member_a_run_left_behind is what it reads with, and martha ls shows the same lines without loading the program',
   },
@@ -782,6 +790,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
     { col: 0, kind: 'b-cmp', name: 'guard_workspace, read_the_git_calls_in_a_shell_line', names: ['guard_workspace', 'read_the_git_calls_in_a_shell_line', 'ask_git_what_a_member_is_about_to_change', 'check_the_workspace_matches_its_layout', 'refuse_a_git_call_in_a_members_shell', 'guard_the_git_a_member_runs'], type: '[the workspace guard]', code: true,
       desc: ['What the workspace\'s layout refuses of', 'a git call: read_the_git_calls_in_a_', 'shell_line reads each call and the', 'directory it runs in, ask_git_what_a_', 'member_is_about_to_change asks git what', 'a call is about to move, and guard_', 'workspace refuses a call that leaves a', 'clone\'s branch or touches another', 'member\'s worktree or branch; check_the_', 'workspace_matches_its_layout names the', 'drift in a workspace, and refuse_a_git_', 'call_in_a_members_shell and guard_the_', 'git_a_member_runs are the seams that ask', 'it: the shell line a tool call carries,', 'the git first on the member\'s PATH, and', 'the clone\'s ref transaction, each read', 'and judged before it runs. A crew that', 'declared no layout is judged by none', 'of it (martha#562)'] },
+    { col: 1, kind: 'b-cmp', name: 'speak_acp_to_an_agent', names: ['speak_acp_to_an_agent'], type: '[an ACP agent, as its client]', code: true,
+      desc: ['Martha as the client of an engine it', 'drives over ACP on stdio (martha#541):', 'sessions, prompts, each tool call\'s', 'updates and the turn\'s end; a call is', 'answered allow_once or reject_once', 'from the gate\'s decision, else', 'cancelled. Not yet wired to a launch'] },
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'read_the_body_a_request_carries', names: ['read_the_body_a_request_carries'], type: '[a request to the launcher]', code: true,
