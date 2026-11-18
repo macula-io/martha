@@ -594,6 +594,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
   },
   {
+    name: 'land_a_package_on_a_throwaway_repository',
+    why: "the nightly live run's guards for its throwaway repository (martha#639); the command never loads them",
+  },
+  {
     name: 'declare_a_launch_probe',
     why: 'what one row of npm run probe:launch is, shared by its rows and its runner; the command never loads it',
   },
