@@ -288,6 +288,11 @@ export interface OwnerMemorySources {
   readonly settings_files: readonly string[]
   /** The places the host loads from the owner's user scope, from the recording and the member's own init (#154). */
   readonly user_scope: OwnerUserScope
+  /**
+   * Martha's own state root, denied whole (martha#619): the records of the owner's acts and the launcher's. Only a
+   * launch names it; a probe of the owner's folders has none to deny.
+   */
+  readonly martha_state_root?: string
 }
 
 /** The config dir an environment's host loads, or undefined when it cannot be told (userSettingsPath refuses it). */
@@ -391,7 +396,7 @@ function globalConfigFamiliesIn(launcher_env: Readonly<Record<string, string | u
 }
 
 /** Every place a member's file tool may not write, from what the launcher and the member's host resolve (rules 1, 2 and 5). */
-export function ownerMemoryPlaces({ launcher_env, member_env, home, launch_dir, settings_files, user_scope }: OwnerMemorySources): OwnerMemoryPlaces {
+export function ownerMemoryPlaces({ launcher_env, member_env, home, launch_dir, settings_files, user_scope, martha_state_root }: OwnerMemorySources): OwnerMemoryPlaces {
   const configDirs = unique([configDirOf(launcher_env), configDirOf(member_env)])
   const remote = launcher_env[REMOTE_MEMORY_ROOT]
   const override = launcher_env[MEMORY_FOLDER_OVERRIDE]
@@ -413,6 +418,7 @@ export function ownerMemoryPlaces({ launcher_env, member_env, home, launch_dir, 
       { what: user_scope.reported_output_styles_dir, issue: 'martha#154' },
       ...code.folders.map((what): DeniedPlace => ({ what, issue: 'martha#187' })),
       ...configDirs.map((dir): DeniedPlace => ({ what: join(dir, OWNER_RULES), issue: 'martha#136' })),
+      ...(martha_state_root === undefined ? [] : [{ what: martha_state_root, issue: 'martha#619' }]),
       ...(override !== undefined && override.trim() !== '' ? [{ what: asTheHostResolves(override, home, home), issue: 'martha#136' }] : []),
       ...settings_files.map((file): DeniedPlace | undefined => {
         const folder = memoryDirectoryIn(file, home)
