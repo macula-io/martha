@@ -141,6 +141,7 @@ box:
 | Left out | Why |
 |---|---|
 | `drive_the_recorded_host` | The harness the recorded-host tests drive: a recorded host stood up with a script, and the waits its runs need. No member ever loads it. |
+| `pin_what_a_read_carries` | The recorded-host case that pins which instruction text a host attaches to a member's session: a stand-in model, three arrangements, and the ownership table's own markers (martha#165). `node --test` and `ci.yml`'s relay job run it; no member ever loads it. |
 | `record_mesh_answers` | A script run by hand, `npm run record:mesh-answers`, when a version of the mesh server is recorded. The gate reads the answer shapes it wrote; the script itself never runs. |
 | `probe_launch_hosts` | A script run by hand, `npm run probe:launch`, to probe a coding tool's launch. The `martha` command never loads it. |
 | `declare_a_launch_probe` | What one row of `npm run probe:launch` is: its shape, the place it runs in, and the command builders its rows share. The rows and the runner both import it; the `martha` command never loads it. |
