@@ -147,8 +147,25 @@ export function entriesIn(directory: string): string[] {
   }
 }
 
-/** The line that fails `file` for what it left behind in its own temp directory. */
-export const leftoverReportOf = (file: string, left: readonly string[]): string =>
+/** The two shapes a recorded-host case and its runs make in a temporary directory: a case's home, and a run's runtime. */
+export const A_CASES_HOME = 'martha-model-host-'
+const A_RUNS_RUNTIME = /^m-[A-Za-z0-9]{6}$/
+
+/**
+ * Removes what appeared in `directory` since `before` was taken, where it is one of the two shapes a recorded-host
+ * case's own runs make: a case that stops a run on purpose can cut that run off before its own end reaches the
+ * directory it made, and the file still removes what it made, however far that run got (martha#724). A name that was
+ * already there when the file began, or that is neither shape, is left alone: what another process keeps in a shared
+ * directory is never a file's to remove, which is why this is the one removal by name left in this module.
+ */
+export function removeWhatAppearedIn(directory: string, before: ReadonlySet<string>): void {
+  for (const name of entriesIn(directory)) {
+    if (before.has(name)) continue
+    if (name.startsWith(A_CASES_HOME) || A_RUNS_RUNTIME.test(name)) removeTheTree(join(directory, name))
+  }
+}
+
+/** The line that fails `file` for what it left behind in its own temp directory. */export const leftoverReportOf = (file: string, left: readonly string[]): string =>
   `${file} left behind in the temp directory after its tests: ${left.join(', ')}. Remove it in t.after.`
 
 /** The same for the runtime directory the file was given, where its sockets and short paths go. */

@@ -68,7 +68,10 @@ test('a run\'s roots, and what it wrote in them, are gone when it ends', (t) => 
   const ran = throughTheWrapper(makesAndAnswers(where))
   assert.equal(ran.code, 0, ran.output)
   const [temp, runtime] = readFileSync(where, 'utf8').split('\n')
-  assert.ok(temp !== undefined && temp.startsWith(join(SYSTEM_TEMPORARY_DIRECTORY, RUN_ROOT_PREFIX)), `the run's temp root was ${temp}`)
+  // The temp root goes under the TMPDIR the run inherited, as given and never resolved (ci.yml runs the whole suite
+  // again under a long one reached through a link), and never under the system's own directory: the two are the same
+  // folder only where TMPDIR names none, which is why this reads the folder the run would have reached for itself.
+  assert.ok(temp !== undefined && temp.startsWith(join(tmpdir(), RUN_ROOT_PREFIX)), `the run's temp root was ${temp}`)
   assert.equal(existsSync(temp), false, 'the run\'s temp root is still there after the run ended')
   assert.ok(runtime !== undefined && runtime.includes(RUN_ROOT_PREFIX), `the run's runtime root was ${runtime}`)
   assert.equal(existsSync(runtime), false, 'the run\'s runtime root is still there after the run ended')
