@@ -10,11 +10,10 @@
 //
 // The diagrams draw the code that is in src/, not the design that is still to come:
 // every slice named in the Component diagram is a directory in src/, and a box drawn
-// for something not built says so. A box changes with the package that changes it, and
-// architecture/README.md's tables change beside it; the picture itself does not travel
-// with them, since it is DRAWN_AT_RELEASE
-// (../src/check_the_pictures_change_with_the_version). So this file's drawing and the
-// SVG in assets/ move together once, in the change that rule names.
+// for something not built says so. A box changes here with the package that changes it,
+// and architecture/README.md's tables change beside it. The SVG in assets/ does not: it
+// is DRAWN_AT_RELEASE (../src/check_the_pictures_change_with_the_version), so it catches
+// up with this file's drawing once, in the version-bump change that rule names.
 //
 // Colours are literal values in plain classes with a prefers-color-scheme dark
 // block, never CSS custom properties, which some renderers draw black.
