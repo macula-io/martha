@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+
 import type { ServedToolsHeld } from '../host_contract/host_contract.ts'
 import { RECORDED_HOST } from './recorded_claude_code_host.ts'
 import {
@@ -106,7 +108,7 @@ test('a line of another attachment type is not a tool delta', () => {
 /** A launch's config folder with one session's transcript in it, and the input that names it. */
 function aLaunch(t: { after(fn: () => void): void }) {
   const root = mkdtempSync(join(tmpdir(), 'martha-658-transcript-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
   const config_dir = join(root, 'launch-config')
   const folder = join(config_dir, 'projects', '-work-project')
   mkdirSync(folder, { recursive: true })
@@ -223,7 +225,7 @@ test('an ancestor of the config folder swapped for a link is refused at the open
   // The race the walk's comment names, sequenced: O_NOFOLLOW guards only each path's last part, so after the swap the
   // walk passes and the file opens from the look-alike tree; only the descriptor check stands between it and a read.
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'martha-658-ancestor-')))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
   const session_id = '0a1b2c3d-0000-4000-8000-000000000002'
   for (const tree of ['real', 'other']) {
     mkdirSync(join(root, tree, 'launch-config', 'projects', 'f'), { recursive: true })
