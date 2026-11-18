@@ -250,13 +250,22 @@ test('3. a packer that refused or could not run is PACK_FAILED, and the proof ne
   }
 })
 
-test('4. an installer ahead of its tag is NOT_PACKABLE_TONIGHT, said as not packable, and the proof never runs (mutant: a plain refusal)', (t) => {
+test('4. a tree whose installer/ names differ from its tag\'s is NOT_PACKABLE_TONIGHT, said in the packer\'s own words, and the proof never runs (mutant: a plain refusal)', (t) => {
+  const reason = 'installer/ at abc names a different martha.command than installer-v1.1.1 published (a against b); nothing was packed'
+  const night = aNight(t, { packerMore: `printf 'dry: not packable: ${reason}\\n' >&2` })
+  const outcome = drive(night, withEvidence(night), { STAND_IN_PACK_EXIT: String(NOT_PACKABLE) })
+  assert.equal(outcome.status, NOT_PACKABLE_TONIGHT, outcome.said)
+  assert.match(outcome.said, /not packable: installer\/ at abc names a different martha\.command/)
+  assert.equal(runTxt(outcome.run).get('result'), `not packable: ${reason}`)
+  assert.equal(recorded(night.record, 'proof.args'), undefined, 'the proof never ran')
+})
+
+test('4b. a packer that refuses with no words of its own is still said by what NOT_PACKABLE means now, never the old words', (t) => {
   const night = aNight(t)
   const outcome = drive(night, withEvidence(night), { STAND_IN_PACK_EXIT: String(NOT_PACKABLE) })
   assert.equal(outcome.status, NOT_PACKABLE_TONIGHT, outcome.said)
-  assert.match(outcome.said, /not packable: installer ahead of its tag/)
-  assert.equal(runTxt(outcome.run).get('result'), 'not packable: installer ahead of its tag')
-  assert.equal(recorded(night.record, 'proof.args'), undefined, 'the proof never ran')
+  assert.equal(runTxt(outcome.run).get('result'), "not packable: installer/ names differ from its tag's")
+  assert.doesNotMatch(outcome.said, /ahead of its tag/)
 })
 
 test('5. a dry pass is the proof\'s own DRY_PASSED, with the layer kept by its sha256 and the proof given what it needs (mutant: exit 0)', (t) => {
@@ -283,6 +292,22 @@ test('5b. the packer and the proof share one temp folder under the given TMPDIR,
   assert.equal(dirname(packerTmp ?? ''), night.parentTmp)
   assert.equal(existsSync(packerTmp ?? ''), false, 'the run\'s temp folder is gone')
   assert.deepEqual(readdirSync(night.parentTmp), [])
+})
+
+test('5c. a night whose packer packed main\'s installer hands the proof that tarball and its digest; one that packed none hands neither (mutant: the tarball not passed)', (t) => {
+  const tarball = 'main-installer-abc1234.tgz'
+  const digest = `sha256:${'a'.repeat(64)}`
+  const drifted = aNight(t, { packerMore: `printf '%s\\n' "dry: main's installer at abc1234 packed as ${tarball} (${digest})"` })
+  const outcome = drive(drifted, withEvidence(drifted), { STAND_IN_PROOF_EXIT: String(PLANTED_DRY_PASSED) })
+  const args = recorded(drifted.record, 'proof.args') ?? []
+  const at = args.indexOf('--dry-installer')
+  assert.ok(at !== -1, `the proof was not given main's installer: ${args.join(' ')}`)
+  assert.deepEqual(args.slice(at, at + 3), ['--dry-installer', tarball, digest])
+  assert.equal(runTxt(outcome.run).get('dry_installer'), `${tarball} ${digest}`)
+
+  const undrifted = aNight(t)
+  drive(undrifted, withEvidence(undrifted), { STAND_IN_PROOF_EXIT: String(PLANTED_DRY_PASSED) })
+  assert.equal((recorded(undrifted.record, 'proof.args') ?? []).includes('--dry-installer'), false, 'an undrifted night passes none')
 })
 
 test('6. a proof that exits 0 on a dry layer claims a release\'s pass, and the driver fails it (mutant: 0 passed through)', (t) => {

@@ -41,7 +41,7 @@ export const commentless = (text: string): string =>
 /** What a line does when it puts another ref's installer/ in the tree. */
 export const REWRITES_THE_INSTALLER: readonly RegExp[] = [
   /\bcheckout\b[^\n]*\binstaller\/?['"\s]*$/m,
-  /\brestore\b[^\n]*--source\b[^\n]*installer/,
+  /\brestore\b[^\n]*(?:--source\b|\s-s)[^\n]*installer/,
   /\bcheckout\b[^\n]*--\s+installer\b/,
   /\bgit\s+rm\b[^\n]*\binstaller\b/
 ]
@@ -83,11 +83,13 @@ export function theFilesIn(text: string, top: string): string[] {
 
 /**
  * What comes next from a text: the files of every local action it names, and the scripts its run lines name, each as a
- * path from the top and only when it is really there.
+ * path from the top and only when it is really there. A local `uses:` path that is itself a `.yml` or `.yaml` file is a
+ * workflow the release calls, not a folder holding an action, and it is read as it is (martha#695, Venus r=1 R3).
  * @param {string} code @param {string} top
  */
 export function theFilesAfter(code: string, top: string): string[] {
-  const actions = theActionsOf(code).local.flatMap((action) => ['action.yml', 'action.yaml'].map((name) => `${action}/${name}`))
+  const actions = theActionsOf(code).local.flatMap((action) =>
+    /\.ya?ml$/.test(action) ? [action] : ['action.yml', 'action.yaml'].map((name) => `${action}/${name}`))
   return [...actions.filter((at) => existsSync(join(top, at))), ...theFilesIn(code, top)]
 }
 

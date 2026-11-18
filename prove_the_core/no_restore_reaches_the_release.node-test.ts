@@ -82,6 +82,22 @@ test('a local action a step names is read like a script, and its own restore is 
   assert.ok(lines.some((line) => line.includes('pack_a_release/an_action/action.yml')), lines.join('\n'))
 })
 
+test('a local reusable workflow a step calls is read like a script, and a restore inside it is found', (t) => {
+  const top = aTree(t, {
+    [THE_RELEASE_WORKFLOW]: 'jobs:\n  pack:\n    uses: ./.github/workflows/pack.yml\n',
+    '.github/workflows/pack.yml': 'jobs:\n  pack:\n    steps:\n      - run: git checkout installer-v1.1.1 -- installer\n'
+  })
+  const [code, lines] = theGate(top, THE_RELEASE_WORKFLOW)
+  assert.equal(code, 1, lines.join('\n'))
+  assert.ok(lines.some((line) => line.includes('.github/workflows/pack.yml')), lines.join('\n'))
+})
+
+test('both forms of the restore source are read: --source, and the short -s that means the same', () => {
+  assert.deepEqual(whatIsWrongIn('git restore --source=installer-v1.1.1 -- installer'), ['git restore --source=installer-v1.1.1 -- installer'])
+  assert.deepEqual(whatIsWrongIn('git restore -s installer-v1.1.1 installer'), ['git restore -s installer-v1.1.1 installer'])
+  assert.deepEqual(whatIsWrongIn('git restore --staged installer/package.json'), [], 'a restore from the index names no other ref')
+})
+
 test('what a line says is not what a word in a comment says: the release\'s own reads of installer.json are clean', () => {
   assert.deepEqual(whatIsWrongIn('run: echo "installer/package.json"\njq -r .martha.pinFile installer/package.json'), [])
   assert.deepEqual(whatIsWrongIn('git archive HEAD installer'), [])

@@ -27,8 +27,12 @@ const REPO = join(HERE, '..', '..')
 const SCRIPT = join(HERE, 'pack_main_as_a_dry_layer.sh')
 const NAMES_MODULE = join(REPO, 'installer', 'keep_the_names_in_one_place', 'names.mjs')
 /** The files the script reads from the tree it packs, copied as they are. */
-const CARRIED = [SCRIPT, NAMES_MODULE, join(HERE, 'dry_restore.mjs'), join(REPO, 'installer', 'package.json'), join(REPO, 'package.json')]
-const NOT_PACKABLE = 'dry: not packable: installer ahead of its tag'
+const CARRIED = [SCRIPT, NAMES_MODULE, join(HERE, 'dry_restore.mjs'), join(REPO, 'installer', 'package.json'), join(REPO, 'package.json'), join(REPO, '.gitattributes')]
+/**
+ * The words the packer refuses a tree whose installer/ names differ from its tag's: its own opening, so the checks below
+ * cannot pass because they hold a line the packer stopped printing.
+ */
+const NOT_PACKABLE = 'dry: not packable: installer/ at'
 const NOT_PACKABLE_EXIT = aScriptsConstant(SCRIPT, 'NOT_PACKABLE')
 const COULD_NOT_RUN_EXIT = 2
 /** The installer file the tag holds, and what main's own installer says after a change, told apart in the tarball. */
@@ -163,13 +167,13 @@ test('the tarball is taken from the sha itself, so no order of the restore can r
   const tarball = join(root, `main-installer-${sha.slice(0, 7)}.tgz`)
   // A pack taken from the clone's own head instead of the sha, in the script's own order: the head is still the sha
   // when it runs, so the tarball is main's, and this is not what the case below is about.
-  const fromTheHead = aMutant(dir, 'git -C "${REPO}" archive "${SHA}" installer', 'git -C "${TREE}" archive HEAD installer')
+  const fromTheHead = aMutant(dir, 'git -C "${REPO}" archive "${SHA}:installer"', 'git -C "${TREE}" archive HEAD:installer')
   pack(root, dir, sha, { script: fromTheHead })
   assert.equal(inTheTarball(tarball, A_MODULE_IN_THE_TARBALL), MAINS_BODY, 'packed before the restore, the head is main')
   // And that same pack moved after the restore: this is the shape a tarball packed from the restored tree would have,
   // and it holds the tag's installer while the result line would still say main's.
   const afterTheRestore = aMutant(dir, [
-    ['git -C "${REPO}" archive "${SHA}" installer', 'git -C "${TREE}" archive HEAD installer'],
+    ['git -C "${REPO}" archive "${SHA}:installer"', 'git -C "${TREE}" archive HEAD:installer'],
     ['    packMainInstaller\n    restoreTheInstallersTag\n', '    restoreTheInstallersTag\n    packMainInstaller\n']
   ])
   pack(root, dir, sha, { script: afterTheRestore })
@@ -205,6 +209,9 @@ test('installer/ whose martha names differ from its tag\'s is not packable: noth
   const sha = git(dir, 'rev-parse', 'HEAD')
   const { status, said, packed } = pack(root, dir, sha)
   assert.equal(status, NOT_PACKABLE_EXIT, said)
+  // The words the cases above say must not appear: pinned here against the refusal the packer really prints, so a
+  // wording change to the packer fails this rather than quietly leaving those checks blind.
+  assert.match(said, new RegExp(NOT_PACKABLE), said)
   assert.ok(
     said.includes(`names a different martha.command than ${installerRef(NAMES.installerVersion)} published (a-command-the-tag-never-published against ${NAMES.command}); nothing was packed`),
     said,

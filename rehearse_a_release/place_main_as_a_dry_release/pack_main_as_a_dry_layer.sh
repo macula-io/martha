@@ -72,8 +72,11 @@ SUBJECT="$(node --input-type=module -e 'const { DRY_RESTORE_SUBJECT } = await im
 # bytes published, and a dry run of it exercises the published installer as it always did (martha#695, T6).
 packMainInstaller() {
   MAIN_TARBALL="${OUT_DIR}/main-installer-${SHA:0:7}.tgz"
-  mkdir -p "${WORK}/main-installer/tarball"
-  git -C "${REPO}" archive "${SHA}" installer | tar -x -C "${WORK}/main-installer" \
+  mkdir -p "${WORK}/main-installer/installer" "${WORK}/main-installer/tarball"
+  # `installer/` is export-ignore in this repository's .gitattributes, so `git archive <sha> installer` is an empty
+  # archive and the cd below would fail on exactly the tree this exists for. The tree object `<sha>:installer` is what
+  # carries the files, and an archive of it holds them with no `installer/` above them (martha#695, Venus r=1 R1).
+  git -C "${REPO}" archive "${SHA}:installer" | tar -x -C "${WORK}/main-installer/installer" \
     || { echo "dry: main's installer/ at ${SHA} could not be taken from the repository" >&2; exit 2; }
   (cd "${WORK}/main-installer/installer" && npm pack --ignore-scripts --pack-destination "${WORK}/main-installer/tarball" > /dev/null) \
     || { echo "dry: main's installer/ at ${SHA} could not be packed" >&2; exit 2; }
