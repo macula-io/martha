@@ -63,7 +63,7 @@ const coverageOf = (
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 23 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 24 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 10 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 9 }, (_, index) => `C${index + 1}`),
   ]
@@ -243,20 +243,20 @@ test('an ask gate on the wrong kind of row is a gap, since an ask is text put in
 
 test('a command gate that admits every turn is not a control', () => {
   const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, undefined, { 'a-command-is-not-a-turn': () => true })
-  assert.deepEqual(gaps.map((gap) => gap.path), ['A23'])
+  assert.deepEqual(gaps.map((gap) => gap.path), ['A24'])
   assert.match(gaps[0]?.why ?? '', /admits a turn starting with/)
 })
 
 test('a command gate that refuses every turn is caught too', () => {
   const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, undefined, { 'a-command-is-not-a-turn': () => false })
-  assert.deepEqual(gaps.map((gap) => gap.path), ['A23'])
+  assert.deepEqual(gaps.map((gap) => gap.path), ['A24'])
   assert.match(gaps[0]?.why ?? '', /refuses an ordinary turn/)
 })
 
 test('a command gate that reads the first character alone, not the blank before it, is caught', () => {
   const first = (text: string): boolean => !['!', '/'].includes(text.charAt(0))
   const gaps = coverageOf(INBOUND_PATHS, gateRefuses, undefined, undefined, undefined, undefined, undefined, { 'a-command-is-not-a-turn': first })
-  assert.deepEqual(gaps.map((gap) => gap.path), ['A23'])
+  assert.deepEqual(gaps.map((gap) => gap.path), ['A24'])
   assert.match(gaps[0]?.why ?? '', /admits a turn starting with .* after blank space/)
 })
 

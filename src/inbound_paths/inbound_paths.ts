@@ -421,7 +421,7 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
   {
-    id: 'A23',
+    id: 'A24',
     what: `a turn the launcher sends the engine over ACP (martha#541, shape 2): text whose first non-blank character is ${THE_COMMAND_STARTS.join(' or ')} is a command the engine runs rather than a turn for its model, so the client refuses it before it is sent (startsACommand, ../speak_acp_to_an_agent), whichever path it arrived on — a room, a ring, another session or the owner's own paste. Not closed: a command the member writes into a shell of its own, which is A13's path and the shell gate's; and a host the owner starts by hand (C1, C2)`,
     klass: 'delivered',
     control: { kind: 'refused-as-a-command', gate: 'a-command-is-not-a-turn' },
