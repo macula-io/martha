@@ -1,8 +1,9 @@
 // `martha init`: declare a solo crew of two in a project that has none (martha#98).
 //
 // This exists so a stranger gets a crew without writing its declaration by hand: a builder and a reviewer, and
-// the owner, who may do every act. It is written in the shape declareCrew reads (../declare_crew) and read back
-// through it before init says it is done, so init can never leave a declaration the crew would refuse.
+// the owner, who may do every act. The declaration's shape is the reader's (../declare_crew, soloDeclaration), and
+// the file is read back through the reader before init says it is done, so init can never leave a declaration the
+// crew would refuse.
 //
 // It declares only in a real directory of the checkout: a declaration directory that is a link is refused by name,
 // so a checkout cannot point init at a place outside it.
@@ -10,57 +11,39 @@
 // It never writes over a declaration: the file is created only when it does not exist (O_EXCL), so one the
 // owner wrote, or one a pull brought in, is left as it was and named. Each member's node id is made here too,
 // in Martha's state outside the checkout (../keep_martha_state_outside_the_checkout), never typed by the owner.
+//
+// It declares the crew's workspace layout too, when the checkout can prove one (martha#611): a member's
+// `worktree_open` refuses a crew that names no layout (../open_and_finish_a_worktree), so a declaration with none
+// would leave the owner editing `house_rules` by hand before the crew can do anything with a worktree. What a
+// checkout proves is the core's answer (../declare_crew, workspaceLayoutOf); this slice reads git where git has to
+// be read and composes the two.
 
 import fs from 'node:fs'
 import { join } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import {
-  ACTS,
-  CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   DECLARATION_DIRECTORY,
   DECLARATION_FILE,
-  DECLARATION_VERSION,
   DeclarationRefused,
   declareCrew,
-  OWNER,
+  soloDeclaration,
+  workspaceLayoutOf,
   type CrewSettings,
 } from '../declare_crew/declare_crew.ts'
 import { nodeIdsFor, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 
-/** The mode a solo crew is declared in: a name for people to read. */
-export const SOLO_MODE = 'solo'
-
-/** The members of a solo crew, each in the role it is named after. */
-export const SOLO_MEMBERS = [
-  { name: 'builder', role: 'builder' },
-  { name: 'reviewer', role: 'reviewer' },
-] as const
-
-/**
- * A solo crew's declaration: the owner may do every act, and how often its sessions read the crew channel
- * (martha#253) is the one value this slice writes and the reader reads a missing field as (../declare_crew,
- * martha#374), so init and the reader cannot drift apart.
- */
-export function soloDeclaration(owner: string) {
-  return {
-    version: DECLARATION_VERSION,
-    owner,
-    members: SOLO_MEMBERS,
-    mode: {
-      name: SOLO_MODE,
-      roles: SOLO_MEMBERS.map((member) => member.role),
-      may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])),
-    },
-    channel_read_seconds: CHANNEL_READ_SECONDS_WHEN_UNNAMED,
-  }
-}
+/** The repository a checkout's origin names, or undefined when it names no origin or one this slice cannot read. */
+const repoOfTheCheckout = (origin: string | null): string | undefined => (origin === null ? undefined : repoOfTheOrigin(origin))
 
 export interface SoloCrewRequest {
   /** The project's absolute path. */
   readonly root: string
   /** The owner's name, as git knows it; null when git has none. */
   readonly owner: string | null
+  /** The origin URL git reports in the checkout, as `git remote get-url origin` says it; null when it names none. */
+  readonly origin: string | null
   readonly state: MarthaState
   readonly documents: DocumentStore
   /** The models the host runs (martha#315), as its adapter records them: what the declaration is read back against. */
@@ -68,7 +51,7 @@ export interface SoloCrewRequest {
 }
 
 export type SoloCrewDeclared =
-  | { readonly declared: true; readonly settings: CrewSettings; readonly declaration: string }
+  | { readonly declared: true; readonly settings: CrewSettings; readonly declaration: string; readonly workspace: string }
   | { readonly declared: false; readonly refusal: string }
 
 const NO_OWNER =
@@ -101,11 +84,12 @@ function writeOnce(path: string, text: string): string | undefined {
 export async function declareSoloCrew(request: SoloCrewRequest): Promise<SoloCrewDeclared> {
   const owner = request.owner?.trim() ?? ''
   if (owner === '') return { declared: false, refusal: NO_OWNER }
+  const workspace = workspaceLayoutOf(fs.realpathSync(request.root), repoOfTheCheckout(request.origin), request.origin)
   const directory = join(request.root, DECLARATION_DIRECTORY)
   const declaration = join(directory, DECLARATION_FILE)
   const unmade = declarationDirectory(directory)
   if (unmade !== undefined) return { declared: false, refusal: unmade }
-  const unwritten = writeOnce(declaration, `${JSON.stringify(soloDeclaration(owner), null, 2)}\n`)
+  const unwritten = writeOnce(declaration, `${JSON.stringify(soloDeclaration(owner, workspace.layout), null, 2)}\n`)
   if (unwritten !== undefined) return { declared: false, refusal: unwritten }
 
   let settings: CrewSettings
@@ -117,5 +101,5 @@ export async function declareSoloCrew(request: SoloCrewRequest): Promise<SoloCre
   }
   const ids = nodeIdsFor(request.state, settings.members.map((member) => member.name))
   if ('refusal' in ids) return { declared: false, refusal: ids.refusal }
-  return { declared: true, settings, declaration }
+  return { declared: true, settings, declaration, workspace: workspace.said }
 }

@@ -48,9 +48,17 @@ martha init
 
 ```text
 Declared a solo crew in <your project>/.martha/martha.json: builder, reviewer.
+Workspace layout declared: clones <clones>, worktrees <worktrees>.
 ```
 
 `<your project>` is the checkout's absolute path as Martha prints it.
+
+The second line is the workspace layout your members open their worktrees in: a
+checkout at `<clones>/<org>/<name>`, cloned from an origin that names that same
+`<org>/<name>`, keeps its clones in `<clones>` and its worktrees in `worktrees`
+beside them. A checkout that does not sit there, or one with no origin, is
+declared with no layout, and the line says why and what to add to `house_rules`;
+edit the declaration by hand in that case before you approve it.
 
 It writes `.martha/martha.json` and never writes over one: if you already have a
 declaration it says so and exits 1. It takes the owner's name from git, so a

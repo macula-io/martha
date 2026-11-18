@@ -15,7 +15,7 @@ import { test, type TestContext } from 'node:test'
 import { NOT_A_TERMINAL } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
-import { SOLO_MEMBERS } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { CLEAR_THE_TERMINAL, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, USAGE } from './run_the_martha_command.ts'
 import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, SAID_BY } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
@@ -32,7 +32,7 @@ import { THE_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 import { notRunningToRestart } from '../stop_and_restart_a_member/restart_a_member.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
+import { CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, WORKTREES_BESIDE_CLONES } from '../declare_crew/declare_crew.ts'
 import { crewKeyOf } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { rowFileNameOf, theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -117,6 +117,43 @@ test('martha init writes the declaration once and refuses the second time', (t) 
   assert.ok(second.err.includes(file), second.err)
   allSaidByMartha(second.err)
   assert.equal(readFileSync(file, 'utf8'), written)
+})
+
+/**
+ * A place whose checkout sits at `<clones>/acme/widget`, its origin naming that same repository (martha#611): the
+ * shape `martha init` reads a workspace layout from, out of the checkout itself.
+ */
+function placeUnderItsOrigin(t: TestContext): Place {
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-command-')))
+  t.after(() => removeTheTree(home))
+  const remote = join(home, 'remote', 'acme')
+  mkdirSync(remote, { recursive: true })
+  execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch=main', join(remote, 'widget.git')])
+  mkdirSync(join(home, CLONES, 'acme'), { recursive: true })
+  const root = join(home, CLONES, 'acme', 'widget')
+  mkdirSync(root)
+  execFileSync('git', ['init', '-q', '.'], { cwd: root })
+  execFileSync('git', ['config', 'user.name', 'Ada Owner'], { cwd: root })
+  execFileSync('git', ['remote', 'add', 'origin', join(remote, 'widget.git')], { cwd: root })
+  return { home, root }
+}
+
+test('martha init declares the workspace layout its checkout proves, so a fresh owner edits no house_rules', (t) => {
+  const place = placeUnderItsOrigin(t)
+  const run = martha(place, 'init')
+  assert.equal(run.status, EXIT_DONE, run.said)
+  const clones = join(place.home, CLONES)
+  const worktrees = join(place.home, WORKTREES_BESIDE_CLONES)
+  const written = JSON.parse(readFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as { house_rules?: unknown }
+  assert.deepEqual(written.house_rules, { workspace_layout: true, clones, worktrees })
+  assert.ok(run.out.includes(`Workspace layout declared: clones ${clones}, worktrees ${worktrees}.`), run.out)
+})
+
+test('martha init says why it declared no layout for a checkout with no origin', (t) => {
+  const place = placeFor(t)
+  const run = martha(place, 'init')
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.ok(run.out.includes(`No workspace layout: ${place.root} names no origin remote.`), run.out)
 })
 
 test('martha start on a terminal with no declaration refuses, naming martha init', (t) => {

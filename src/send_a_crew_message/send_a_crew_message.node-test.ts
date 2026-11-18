@@ -5,7 +5,7 @@
 // and concluded in that package's ledger, so a member refreshed mid-send finds an act it never saw confirmed.
 
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER } from '../declare_crew/declare_crew.ts'
-import { SOLO_MODE } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { mkdtempSync } from 'node:fs'

@@ -18,7 +18,8 @@ import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { CREW_TOOL_NAMES, NO_ACTING_PLACE, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, REVIEW_MODEL, ROLE_TEXTS_DIRECTORY, STRICT_GATE } from '../declare_crew/declare_crew.ts'
-import { declareSoloCrew, SOLO_MEMBERS, SOLO_MODE, soloDeclaration } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { SOLO_MEMBERS, SOLO_MODE, soloDeclaration } from '../declare_crew/declare_crew.ts'
 import {
   STATE_ROOT_NAME,
   nodeIdsFor,
@@ -257,7 +258,7 @@ function requestFor(place: Place, command: string, member: string, lines: string
 }
 
 const declared = async (place: Place): Promise<void> => {
-  const outcome = await declareSoloCrew({ root: place.root, owner: 'Ada Owner', state: place.state, documents, models: HOST_MODELS })
+  const outcome = await declareSoloCrew({ root: place.root, owner: 'Ada Owner', origin: null, state: place.state, documents, models: HOST_MODELS })
   assert.ok(outcome.declared, outcome.declared ? '' : outcome.refusal)
 }
 
