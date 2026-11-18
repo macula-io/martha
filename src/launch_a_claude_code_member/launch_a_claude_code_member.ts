@@ -172,6 +172,12 @@ export const EMPTY_DIRECTORY_NAME = 'nothing'
 
 /** Where the launcher keeps a member's files: directories this user owns. */
 export interface LauncherPlaces {
+  /**
+   * Martha's own state root (martha#619): every record the owner's acts and the launcher keep. A member's file tools may
+   * not write under it, so it is denied in the member's settings and refused by the gate, as the owner's memory is. A
+   * member's shell can still write here, as the owner's own OS user: a speed bump, not a wall.
+   */
+  readonly state_root: string
   /** The crew's row streams, the session records among them, which every member of the crew shares (martha#254). */
   readonly rows: string
   /** The crew's dashboard rows, one file per member (martha#254). */

@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -25,6 +25,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
 import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'
@@ -155,4 +156,23 @@ test("a member's own CRLF Write where git normalises line ends as it adds (text=
   )
   assert.ok(!flat(ran.shown).includes(`${MEMBER} is stopped`), flat(ran.shown))
   assert.equal(readFileSync(join(project.checkout, 'notes.txt'), 'utf8'), 'one\r\ntwo\r\n')
+})
+
+test("one ordinary turn runs under the deny of Martha's state root, and a Write into that root is refused by name (martha#619)", { skip: RECORDED_HOST_SKIP }, async (t) => {
+  const project = approvedProject(t)
+  const planted = join(stateRootOf(project.home, undefined), 'approvals-a-member-planted.jsonl')
+  const ran = await run(project, 4, ({ number }) =>
+    [
+      { tool: WHOLE_FILE_TOOL, input: { file_path: join(project.checkout, 'hello.txt'), content: 'hello\n' } },
+      { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'git checkout -q -b first-task && git add hello.txt && git commit -q -m "the hello note"' } },
+      { tool: WHOLE_FILE_TOOL, input: { file_path: planted, content: '{"fingerprint":"a-members-own"}\n' } },
+    ][number - 1] ?? END,
+  )
+  // The ordinary turn: the member's own Write and its shell command, with its host keeping its own folder as it goes.
+  assert.equal(ran.exit_code, 0, flat(ran.shown))
+  assert.equal(git(project.checkout, 'log', '-1', '--format=%s', 'first-task'), 'the hello note')
+  // The write into Martha's state is refused, the model is told which rule refused it, and nothing was written.
+  const fourth = JSON.stringify(ran.requests[3]?.body['messages'] ?? null)
+  assert.ok(fourth.includes('martha#619'), fourth.slice(-2000))
+  assert.equal(existsSync(planted), false, "a member's Write landed in Martha's state")
 })

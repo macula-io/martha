@@ -24,6 +24,8 @@ import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cro
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SUBAGENT_SPAWN, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { THE_HOSTS_FAILED_REVIEW } from '../claude_code_host/the_failed_reviews_envelope.ts'
+import { CLAUDE_CODE_PROMPT_ORIGINS } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
+import { turnsRaised, type TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { holdingTheEnds } from '../end_a_running_turn/hold_the_end.ts'
 import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -113,7 +115,7 @@ function aCrewNamingItsReviewerModel(): CrewTools {
   }
 }
 
-function relayFor(places: Places, crew: CrewTools, telling: TheMembersTelling): MemberRelay {
+function relayFor(places: Places, crew: CrewTools, telling: TheMembersTelling, turns?: TurnRaising): MemberRelay {
   return memberRelay({
     records: sessionRecordsIn(rowStreamsDirectory(places.rows)),
     launch: { host: CLAUDE_CODE, launch_dir: places.checkout, stop_dir: places.home, approved_fingerprints: [] },
@@ -140,6 +142,7 @@ function relayFor(places: Places, crew: CrewTools, telling: TheMembersTelling): 
     }),
     crew,
     telling,
+    ...(turns === undefined ? {} : { turns }),
     stopMember: () => {},
   })
 }
@@ -185,4 +188,36 @@ test('#541 1a: the same envelope, on a turn this launcher kept, names the review
   assert.equal(told.rows.length, 1, 'the envelope named no review on the kept turn, so the refused half above proves nothing')
   assert.equal(told.member.length, 1)
   assert.ok(told.rows[0]?.includes(THE_RESOLVED_REVIEW_MODEL) === true, `the line did not name the model the call resolved to: ${told.rows[0]}`)
+})
+
+/** The origin the engine stamps on the owner’s own typing, read from the host’s table rather than restated. */
+const THE_OWNERS_ORIGIN = Object.entries(CLAUDE_CODE_PROMPT_ORIGINS.sources).find(([, source]) => source === 'owner_typed')?.[0]
+
+test('#541 1b: the envelope typed by the owner names no review: the report carries the origin the engine stamped', async (t) => {
+  assert.notEqual(THE_OWNERS_ORIGIN, undefined, 'the host names no origin for the owner’s typing')
+  const places = placesOf(t)
+  const told: Told = { rows: [], member: [] }
+  const relay = relayFor(places, aCrewNamingItsReviewerModel(), aTellingThatRecords(told))
+  await startedOn(relay, KEPT)
+  await allowedAReviewOn(relay, KEPT)
+
+  const taken = await relay.answer('prompt_submitted', { session_id: KEPT, text: THE_ENVELOPE, origin: { kind: THE_OWNERS_ORIGIN } })
+
+  assert.deepEqual(taken, { answered: true, body: { taken: 1 } })
+  assert.deepEqual(told, { rows: [], member: [] }, 'text the owner typed was read as the host’s report, so anyone who can type the envelope names a review failed')
+})
+
+test('#541 1b: a failed review is named only after its turn is raised', async (t) => {
+  const places = placesOf(t)
+  const happened: string[] = []
+  const turns = turnsRaised()
+  turns.onTurn(() => void happened.push('raised'))
+  const telling: TheMembersTelling = { theRow: () => void happened.push('told the row'), theMember: async () => void happened.push('told the member'), takeTheLineBack: () => {} }
+  const relay = relayFor(places, aCrewNamingItsReviewerModel(), telling, turns)
+  await startedOn(relay, KEPT)
+  await allowedAReviewOn(relay, KEPT)
+
+  await relay.answer('prompt_submitted', { session_id: KEPT, text: THE_ENVELOPE, origin: { kind: THE_HOSTS_FAILED_REVIEW.notification } })
+
+  assert.deepEqual(happened, ['raised', 'told the row', 'told the member'], 'a review was named failed in a turn not yet raised to the member')
 })

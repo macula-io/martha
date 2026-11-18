@@ -1,0 +1,140 @@
+{
+  "host_version": "2.1.327",
+  "how": "Recorded 2026-11-18 (martha#608 step 0): the recorded host, driven at its terminal with a stand-in model that called AskUserQuestion once. The owner ticked Green, then Plum before Apple (out of posted order), and typed Birch as the third question's Other answer; a second run pressed Esc. `answer` is the result the relay hands the launcher as a tool call's answer; `model_saw` is the tool_result the model got back.",
+  "input": {
+    "questions": [
+      {
+        "question": "Which colour?",
+        "header": "Colour",
+        "multiSelect": false,
+        "options": [
+          {
+            "label": "Red",
+            "description": "the first colour"
+          },
+          {
+            "label": "Green",
+            "description": "the second colour"
+          },
+          {
+            "label": "Blue",
+            "description": "the third colour"
+          }
+        ]
+      },
+      {
+        "question": "Which fruits?",
+        "header": "Fruits",
+        "multiSelect": true,
+        "options": [
+          {
+            "label": "Apple",
+            "description": "the first fruit"
+          },
+          {
+            "label": "Pear",
+            "description": "the second fruit"
+          },
+          {
+            "label": "Plum",
+            "description": "the third fruit"
+          }
+        ]
+      },
+      {
+        "question": "Which tree?",
+        "header": "Tree",
+        "multiSelect": false,
+        "options": [
+          {
+            "label": "Oak",
+            "description": "the first tree"
+          },
+          {
+            "label": "Elm",
+            "description": "the second tree"
+          }
+        ]
+      }
+    ]
+  },
+  "ticked": {
+    "answer": {
+      "ref": 1,
+      "result": {
+        "questions": [
+          {
+            "question": "Which colour?",
+            "header": "Colour",
+            "options": [
+              {
+                "label": "Red",
+                "description": "the first colour"
+              },
+              {
+                "label": "Green",
+                "description": "the second colour"
+              },
+              {
+                "label": "Blue",
+                "description": "the third colour"
+              }
+            ],
+            "multiSelect": false
+          },
+          {
+            "question": "Which fruits?",
+            "header": "Fruits",
+            "options": [
+              {
+                "label": "Apple",
+                "description": "the first fruit"
+              },
+              {
+                "label": "Pear",
+                "description": "the second fruit"
+              },
+              {
+                "label": "Plum",
+                "description": "the third fruit"
+              }
+            ],
+            "multiSelect": true
+          },
+          {
+            "question": "Which tree?",
+            "header": "Tree",
+            "options": [
+              {
+                "label": "Oak",
+                "description": "the first tree"
+              },
+              {
+                "label": "Elm",
+                "description": "the second tree"
+              }
+            ],
+            "multiSelect": false
+          }
+        ],
+        "answers": {
+          "Which colour?": "Green",
+          "Which fruits?": "Plum, Apple",
+          "Which tree?": "Birch"
+        },
+        "annotations": {}
+      },
+      "text": "The user answered: \"Which colour?\"=\"Green\", \"Which fruits?\"=\"Plum, Apple\", \"Which tree?\"=\"Birch\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.",
+      "isReadOnly": true
+    },
+    "model_saw": "The user answered: \"Which colour?\"=\"Green\", \"Which fruits?\"=\"Plum, Apple\", \"Which tree?\"=\"Birch\". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say."
+  },
+  "cancelled": {
+    "answer": {
+      "ref": 1,
+      "result": "Error: The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+      "text": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+      "isError": true
+    }
+  }
+}
