@@ -1,5 +1,6 @@
 // The nightly live run's guards for its throwaway repository, as the run's bash calls them (martha#639):
 //
+//   node src/land_a_package_on_a_throwaway_repository/main.ts who <owner id>         < GET /user's answer
 //   node src/land_a_package_on_a_throwaway_repository/main.ts reach <owner id>       < every page of GET /user/repos, as one JSON list
 //   node src/land_a_package_on_a_throwaway_repository/main.ts delete <made.json>      < GET /repositories/<id>'s answer
 //   node src/land_a_package_on_a_throwaway_repository/main.ts clean-start <start.json> < every path under the home, one per line
@@ -17,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { whatTheStartWouldLoad, type TheStart } from './a_clean_start.ts'
 import { whyNotDelete, type WhatTheRunMade } from './the_delete_guard.ts'
 import { redactTheToken, THE_TOKEN_REACHED_THE_RECORD } from './the_kept_record.ts'
-import { whyTheCallsReachTooFar } from './the_tokens_reach.ts'
+import { whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 
 const NAME = 'land_a_package_on_a_throwaway_repository'
 
@@ -34,11 +35,24 @@ const couldNotLook = (why: string): Said => ({ code: 2, err: `could not look: ${
 
 const readJson = (text: string): unknown => JSON.parse(text) as unknown
 
-const reach = (argument: string, input: string): Said => {
+/** The owner's numeric id an argument names, or undefined when it names none. */
+const ownerIdIn = (argument: string): number | undefined => {
   const owner = Number(argument)
-  if (!Number.isSafeInteger(owner) || owner <= 0) return couldNotLook(`'${argument}' is not an owner's numeric id`)
-  const why = whyTheCallsReachTooFar(readJson(input) as readonly unknown[], owner)
-  return why === undefined ? holds : refuses(why)
+  return Number.isSafeInteger(owner) && owner > 0 ? owner : undefined
+}
+
+const notAnId = (argument: string): Said => couldNotLook(`'${argument}' is not an owner's numeric id`)
+
+const verdictOf = (why: string | undefined): Said => (why === undefined ? holds : refuses(why))
+
+const who = (argument: string, input: string): Said => {
+  const owner = ownerIdIn(argument)
+  return owner === undefined ? notAnId(argument) : verdictOf(whyTheCallsAreNotTheBots(readJson(input), owner))
+}
+
+const reach = (argument: string, input: string): Said => {
+  const owner = ownerIdIn(argument)
+  return owner === undefined ? notAnId(argument) : verdictOf(whyTheCallsReachTooFar(readJson(input) as readonly unknown[], owner))
 }
 
 const deleteGuard = (argument: string, input: string): Said => {
@@ -58,7 +72,7 @@ const redact = (argument: string, input: string): Said => {
   return kept.reached ? { code: 1, err: THE_TOKEN_REACHED_THE_RECORD, out: kept.text } : { code: 0, out: kept.text }
 }
 
-const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { reach, delete: deleteGuard, 'clean-start': cleanStart, redact }
+const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact }
 
 /** What the guard named by `args` says of `input`. Anything it cannot read is exit 2, never a pass. */
 export function runTheGuard(args: readonly string[], input: string): Said {

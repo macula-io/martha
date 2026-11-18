@@ -23,6 +23,7 @@
     "check:no-launcher-outlives-its-run": "node prove_the_core/no_launcher_outlives_its_run.ts",
     "check:no-import-cycle": "node src/check_no_import_cycle/main.ts",
     "probe:launch": "node src/probe_launch_hosts/probe_hosts.ts",
+    "live-run:guards": "node src/land_a_package_on_a_throwaway_repository/main.ts",
     "record:mesh-tools": "node src/record_mesh_server_tools/record_mesh_server_tools.ts",
     "record:claude-code-host": "node src/record_claude_code_host/record_claude_code_host.ts",
     "lint": "eslint . --max-warnings=0",

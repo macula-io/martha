@@ -1,11 +1,12 @@
 // The nightly live run's GitHub calls reach only the throwaway owner (martha#639, R1).
 //
 // The run's host-side GitHub calls go through a config folder of its own, logged in with the throwaway token, under
-// `env -i`. Who the token answers as cannot tell that token from the owner's own login: a fine-grained token made by the
-// owner for an organisation answers `GET /user` as the owner, as the owner's full login does. What tells them apart is
-// what each can reach. So before the run makes anything it lists every repository its calls can see (`GET /user/repos`,
-// every page) and requires each one to belong to the throwaway owner, by the numeric id recorded at setup. The owner's
-// full login sees the organisation's real repositories and fails here by name.
+// `env -i`. Two checks run before the run makes anything, each against the bot's numeric id recorded at setup:
+//
+// - who: the throwaway owner is a separate bot account (DECIDED 2026-11-18, martha#639), and its token answers
+//   `GET /user` as the bot itself, a User. The owner's own login answers as the owner, and fails here by name.
+// - reach: every repository the calls can see (`GET /user/repos`, every page) belongs to the bot. A token that sees
+//   anything else, whoever it answers as, fails by naming the first repository outside.
 
 type Field = Readonly<Record<string, unknown>>
 
@@ -17,6 +18,21 @@ const ownerOf = (repository: unknown): { readonly full_name: string; readonly ow
   const owner = isObject(repository['owner']) ? repository['owner']['id'] : undefined
   const full_name = typeof repository['full_name'] === 'string' ? repository['full_name'] : '(a repository with no name)'
   return { full_name, owner_id: owner }
+}
+
+/** The kind of account GitHub calls a person's or a bot's: not an organisation. */
+export const A_USER_ACCOUNT = 'User'
+
+/**
+ * Why the run's calls are not the bot's, read from `GET /user`'s answer: another account, or not a user account; or
+ * undefined when they answer as the bot.
+ */
+export function whyTheCallsAreNotTheBots(user: unknown, owner_id: number): string | undefined {
+  if (!isObject(user) || typeof user['id'] !== 'number') return 'GitHub gave no account for the run\'s calls, so who they are was not read'
+  const login = typeof user['login'] === 'string' ? user['login'] : '(no login)'
+  if (user['id'] !== owner_id) return `the run's calls answer as ${login} (${user['id']}), not as the throwaway bot (${owner_id})`
+  if (user['type'] !== A_USER_ACCOUNT) return `the run's calls answer as ${login}, of type ${String(user['type'])}, not a user account`
+  return undefined
 }
 
 /**

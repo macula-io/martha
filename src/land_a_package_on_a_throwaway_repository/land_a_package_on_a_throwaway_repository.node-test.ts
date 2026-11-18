@@ -3,7 +3,7 @@
 // weaker guard would let through.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -12,8 +12,9 @@ import { whatTheStartWouldLoad, INSTRUCTION_FILES, LOADED_FOLDERS, type TheStart
 import { whyNotDelete, type WhatTheRunMade } from './the_delete_guard.ts'
 import { runTheGuard } from './main.ts'
 import { redactTheToken, REDACTED, THE_TOKEN_REACHED_THE_RECORD } from './the_kept_record.ts'
-import { whyTheCallsReachTooFar } from './the_tokens_reach.ts'
+import { A_USER_ACCOUNT, whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { SKILLS_KIND } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
@@ -109,6 +110,21 @@ test('no page, or a page that is not a list, is a reach not read', () => {
   assert.match(whyTheCallsReachTooFar([[repo('t/a', 4242)], { message: 'Bad credentials' }], 4242) ?? '', /^page 2 /)
 })
 
+test("calls that answer GET /user as the bot, a user account, are the bot's", () => {
+  assert.equal(whyTheCallsAreNotTheBots({ login: 'martha-live-bot', id: 4242, type: A_USER_ACCOUNT }, 4242), undefined)
+})
+
+test("calls that answer as the owner's own login fail by name, as do an organisation and no answer", () => {
+  assert.equal(
+    whyTheCallsAreNotTheBots({ login: 'the-owner', id: 1, type: A_USER_ACCOUNT }, 4242),
+    "the run's calls answer as the-owner (1), not as the throwaway bot (4242)",
+  )
+  assert.match(whyTheCallsAreNotTheBots({ login: 'an-org', id: 4242, type: 'Organization' }, 4242) ?? '', /not a user account$/)
+  assert.match(whyTheCallsAreNotTheBots({ message: 'Bad credentials' }, 4242) ?? '', /was not read$/)
+  assert.equal(runTheGuard(['who', '4242'], JSON.stringify({ login: 'the-owner', id: 1, type: A_USER_ACCOUNT })).code, 1)
+  assert.equal(runTheGuard(['who', 'the-bot'], '{}').code, 2)
+})
+
 // --- R3: a clean start ----------------------------------------------------------------------------------------------
 
 const HOME = '/tmp/martha-home'
@@ -169,7 +185,7 @@ test('a clone outside the home, or missing from the listing, is a start not read
 /** A folder of the test's own, removed when the test ends. */
 const aFolder = (t: { after: (fn: () => void) => void }): string => {
   const folder = mkdtempSync(join(tmpdir(), 'martha-639-'))
-  t.after(() => rmSync(folder, { recursive: true, force: true }))
+  t.after(() => removeTheTree(folder))
   return folder
 }
 
