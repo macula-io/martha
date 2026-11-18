@@ -151,7 +151,7 @@ test('the forms a public tree may write pass beside a real-shaped value that is 
 })
 
 test('a real scan\'s rules allow the synthetic forms, and the same rules with the allowance off refuse them', async () => {
-  const none = familiesFrom('[]', false)
+  const none = familiesFrom('[]', false, () => undefined)
   assert.deepEqual(await wheresOf(answersWith('issue comment', FORMS), rulesOf(none, true)), [])
   assert.deepEqual((await hitsOf(answersWith('issue comment', FORMS), rulesOf(none, false))).length, 3)
 })
@@ -163,7 +163,7 @@ test('a home path inside a fenced code block is refused like any other', async (
 })
 
 test('a lab machine family from the secret is refused and never printed', async () => {
-  const rules = rulesOf(familiesFrom('["synth"]', false), true)
+  const rules = rulesOf(familiesFrom('["synth"]', false, () => undefined), true)
   const hits = await hitsOf(answersWith('review', 'confirmed, I ran this on synth07'), rules)
   assert.deepEqual(hits, [{ where: 'pull 263 review 4810:1', what: 'a lab machine name (value withheld)' }])
   assert.ok(!JSON.stringify(hits).includes('synth07'), 'the family was printed')

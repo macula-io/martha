@@ -4,8 +4,9 @@
 // --test-force-exit ends the process through process.exit once every test and
 // hook is done. The exit is held here until stdout and stderr have handed on
 // what was written to them, and then for SETTLE_TURNS turns of the loop; then
-// what the file left running is judged: anything left fails the file, by its
-// name and what it left, on stderr and with exit code 1.
+// what the file left running, and what it left in the temp directory, is
+// judged: either fails the file, by its name and what it left, on stderr and
+// with exit code 1.
 //
 // It also ends the process when the run that started it is gone
 // (every_test_run_ends.ts: endWithTheRun, martha#683): force-exit bounds a run
@@ -15,9 +16,10 @@ import { relative } from 'node:path'
 import process from 'node:process'
 
 import { endWithTheRun } from './every_test_run_ends.ts'
-import { leakReportOf, leftRunning, SETTLE_TURNS } from './every_test_file_cleans_up.ts'
+import { leakReportOf, leftBehind, leftoverReportOf, leftRunning, SETTLE_TURNS, thisRunsLeavings } from './every_test_file_cleans_up.ts'
 
 const before = process.getActiveResourcesInfo()
+const made_before = thisRunsLeavings()
 const exit = process.exit.bind(process)
 // The run that started this file is gone once the runner is: end with it rather than outlive it for hours (martha#683).
 endWithTheRun(exit)
@@ -31,8 +33,14 @@ async function exitOnceSettled(code: Parameters<typeof process.exit>[0]): Promis
   await Promise.all([flushed(process.stdout), flushed(process.stderr)])
   for (let turns = 0; turns < SETTLE_TURNS; turns += 1) await turn()
   const left = leftRunning(before, process.getActiveResourcesInfo())
-  if (left.length === 0) exit(code)
-  process.stderr.write(`${leakReportOf(relative(process.cwd(), process.argv[1] ?? ''), left)}\n`)
+  const behind = leftBehind(made_before, thisRunsLeavings())
+  if (left.length === 0 && behind.length === 0) exit(code)
+  const file = relative(process.cwd(), process.argv[1] ?? '')
+  const lines = [
+    ...(left.length === 0 ? [] : [leakReportOf(file, left)]),
+    ...(behind.length === 0 ? [] : [leftoverReportOf(file, behind)]),
+  ]
+  process.stderr.write(`${lines.join('\n')}\n`)
   exit(1)
 }
 
