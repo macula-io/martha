@@ -35,8 +35,8 @@
     "redo:generated": "node src/redo_the_generated_files_of_a_merge/main.ts",
     "record:ring-results": "node src/record_ring_results/record_ring_results.ts",
     "record:mesh-answers": "node src/record_mesh_answers/record_mesh_answers.ts",
-    "watch:shell": "./watch_a_live_launch/watch_a_member_keep_its_shell.sh",
-    "watch:crew": "./watch_a_live_launch/watch_two_members_reach_each_other.sh"
+    "watch:shell": "./watch_a_live_launch/watch_a_member_keep_its_shell/watch_a_member_keep_its_shell.sh",
+    "watch:crew": "./watch_a_live_launch/watch_two_members_reach_each_other/watch_two_members_reach_each_other.sh"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

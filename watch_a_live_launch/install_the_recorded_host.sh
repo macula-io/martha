@@ -3,8 +3,8 @@
 # into <dir> when it is not there yet (the same install prove_the_relay_loads makes, from the recording and never from
 # a version typed here).
 #
-# The observations beside this script start a real member on the real host: a stand-in for the model is the only thing
-# this repository supplies. A run that found no host would observe nothing, so this refuses by name instead.
+# The observations in this folder's two watch folders start a real member on the real host: a stand-in for the model is
+# the only thing this repository supplies. A run that found no host would observe nothing, so this refuses by name instead.
 #
 # Exit: 0 and the binary's path on stdout, 2 the host could not be set up.
 set -euo pipefail
