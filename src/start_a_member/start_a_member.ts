@@ -66,7 +66,10 @@ import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config
 import { theApprovalInUse } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { theStartOfAHost, type AHostsLauncher } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 
-/** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
+/**
+ * Why start starts nothing: its input is no terminal. A member's shell tool has none, but a member that sets out to can
+ * make one of its own, so this is a speed bump, not a wall (martha#619): the refusal from inside a member stands beside it.
+ */
 export const NOT_A_TERMINAL =
   'martha start runs a member on your own terminal, and its input is not one. Run it yourself, in a terminal.'
 
