@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, mkdirSync, openSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
@@ -18,7 +18,7 @@ import {
   TOOL_DELTA_FIELDS,
   TOOL_DELTA_TYPE,
 } from './claude_code_tool_deltas.ts'
-import { LONGEST_TRANSCRIPT_LINE, letTheTranscriptGo, openTheTranscript, readTheNewLines, type AHeldTranscript } from './claude_code_transcript.ts'
+import { LONGEST_TRANSCRIPT_LINE, letTheTranscriptGo, openTheTranscript, theDescriptorIsAt, readTheNewLines, type AHeldTranscript } from './claude_code_transcript.ts'
 
 function theTwoRecorded(): readonly [RecordedToolDeltaLine, RecordedToolDeltaLine] {
   const [added, withdrawn] = RECORDED_TOOL_DELTAS.records
@@ -204,4 +204,17 @@ test('a file swapped in after the open is never read: the session reads it as mo
 test("a transcript or folder that is not the launch user's is refused", (t) => {
   const { where } = aLaunch(t)
   assert.match(String((openTheTranscript({ ...where, uid: where.uid + 1 }) as { refused: string }).refused), /is not a folder of the launch's user/)
+})
+
+test('a descriptor opened through a folder that is a link is not the expected file, by the kernel\'s word', (t) => {
+  const { where, folder } = aLaunch(t)
+  const real = opened(openTheTranscript(where))
+  t.after(() => letTheTranscriptGo(real))
+  assert.ok(theDescriptorIsAt(real.fd, where.transcript_path), 'the real transcript is not where it was opened')
+  const linked = `${folder}.link`
+  symlinkSync(folder, linked)
+  const through = join(linked, `${where.session_id}.jsonl`)
+  const fd = openSync(through, 'r')
+  t.after(() => closeSync(fd))
+  assert.equal(theDescriptorIsAt(fd, through), false, 'a descriptor reached through a linked folder passed as the expected path')
 })

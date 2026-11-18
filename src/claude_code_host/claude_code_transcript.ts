@@ -4,17 +4,20 @@
 // write. It is used only when it names `<session id>.jsonl` one folder down in the launch's own host config `projects`
 // tree, and every bound is checked on what was opened, never on the name before the open:
 //   - each folder from the config folder down is opened with O_DIRECTORY|O_NOFOLLOW and fstat'ed as a folder of the
-//     launch's uid. Node has no openat, so each one is reopened by its full path, and a race won between two of those
-//     opens can point the walk elsewhere. What closes that is below: the dev/ino compare and the typed-only read. A
-//     won race gains nothing beyond forging one's own transcript, which a shell call does anyway;
+//     launch's uid. Node has no openat, so each one is reopened by its full path, and O_NOFOLLOW covers only a path's
+//     last part: a folder swapped for a link between the walk and the file's open would be followed;
 //   - the file is opened O_RDONLY|O_NOFOLLOW|O_NONBLOCK (a symlink fails the open; a FIFO cannot hang the beat) and
 //     fstat'ed as a regular file of the launch's uid;
+//   - what closes the race is the kernel's own word for the opened descriptor: /proc/self/fd/<fd> must read back as
+//     exactly `<config>/projects/<folder>/<session id>.jsonl`, so a descriptor reached through a swapped folder is
+//     closed and refused. With that and the typed-only read, a won race gains nothing beyond forging one's own
+//     transcript, which a shell call does anyway;
 //   - the descriptor is kept, and every later read goes through it by offset, so the name is never opened again. The
 //     name is only lstat'ed to see that it still names the inode that was opened: when it does not, the host rotated
 //     the file or someone swapped it, and the session reads unknown.
 // Anything else is refused by name, and the session stays unknown.
 
-import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from 'node:fs'
+import { closeSync, constants, fstatSync, lstatSync, openSync, readlinkSync, readSync } from 'node:fs'
 import { basename, dirname, join, relative, sep } from 'node:path'
 
 /** What a launch knows of the transcript it may read. */
@@ -99,7 +102,26 @@ export function openTheTranscript(where: WhereTheTranscriptIs): AHeldTranscript 
   }
   const file = openedAs(where.transcript_path, FILE_FLAGS, 'file', where.uid)
   if ('refused' in file) return file
+  const expected = join(folders[folders.length - 1] ?? '', basename(where.transcript_path))
+  if (!theDescriptorIsAt(file.fd, expected)) {
+    closeSync(file.fd)
+    return REFUSED(`what opened is not ${expected}: a folder on the way was swapped for a link`)
+  }
   return { ...file, path: where.transcript_path, offset: 0, rest: '', skipping: false }
+}
+
+/** Where the kernel says an open descriptor is, on Linux, Martha's target; nowhere when it cannot say. */
+const THE_KERNELS_WORD = (fd: number): string | undefined => {
+  try {
+    return readlinkSync(`/proc/self/fd/${fd}`)
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether the open descriptor is the file at exactly `expected`, by the kernel's own word, links resolved. */
+export function theDescriptorIsAt(fd: number, expected: string): boolean {
+  return THE_KERNELS_WORD(fd) === expected
 }
 
 /** Whether the name still names the inode that was opened. */
