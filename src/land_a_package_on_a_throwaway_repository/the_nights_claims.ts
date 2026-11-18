@@ -114,17 +114,25 @@ const firstLineOf = (text: string): string => text.split('\n')[0] ?? ''
 /** When a record was written, or NaN when it carries no time the night can order by. */
 const whenOf = (record: TheRecord): number => (typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : Number.NaN)
 
+/** What a content block says to the crew: the text of a `say_to_the_crew` call, or undefined for any other block. */
+function theSayIn(block: Record<string, unknown> | undefined): string | undefined {
+  if (block?.['type'] !== 'tool_use' || typeof block['name'] !== 'string') return undefined
+  if (ownNameOfCalledTool(block['name']) !== SAY_TO_THE_CREW) return undefined
+  const text = (block['input'] as Record<string, unknown> | undefined)?.['text']
+  return typeof text === 'string' ? text : undefined
+}
+
 /** Every `say_to_the_crew` call in the records, by the first line of what it says. */
 function theSays(records: readonly TheRecord[]): readonly Seen[] {
-  const said: Seen[] = []
-  for (const record of records) {
+  const blocks = records.flatMap((record) => {
     const content = record.message?.content
-    if (record.message?.role !== 'assistant' || !Array.isArray(content)) continue
-    for (const block of content as readonly Record<string, unknown>[]) {
-      if (block?.['type'] !== 'tool_use' || typeof block['name'] !== 'string' || ownNameOfCalledTool(block['name']) !== SAY_TO_THE_CREW) continue
-      const text = (block['input'] as Record<string, unknown> | undefined)?.['text']
-      if (typeof text === 'string') said.push({ firstLine: firstLineOf(text), at: whenOf(record) })
-    }
+    if (record.message?.role !== 'assistant' || !Array.isArray(content)) return []
+    return (content as readonly Record<string, unknown>[]).map((block) => ({ record, block }))
+  })
+  const said: Seen[] = []
+  for (const { record, block } of blocks) {
+    const text = theSayIn(block)
+    if (text !== undefined) said.push({ firstLine: firstLineOf(text), at: whenOf(record) })
   }
   return said
 }
