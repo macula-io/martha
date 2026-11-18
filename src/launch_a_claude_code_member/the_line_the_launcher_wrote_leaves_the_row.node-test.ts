@@ -35,7 +35,7 @@ import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theRowWithNothingSaid, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { memberRelay, type MemberRelay, type TheMembersTelling } from '../answer_the_relay/answer_the_relay.ts'
-import { A_TELLING_THAT_DID_NOT_REACH, theMembersTelling } from './launch_a_claude_code_member.ts'
+import { A_TELLING_THAT_DID_NOT_REACH, theMembersTelling } from '../tell_the_member_a_line/tell_the_member_a_line.ts'
 import { readTheNewestRelayJournal, relayJournalKeptIn, RELAY_JOURNAL_PLACE } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -108,6 +108,7 @@ function aCrewWhoseReviewsRunOnItsReviewerModel(): CrewTools {
     theReviewModel: async () => THE_REVIEWER_MODEL,
     noteTheCallsAnswer: () => undefined,
     refusesTheSubagent: async () => undefined,
+    refusesTheGitIn: async () => undefined,
   }
 }
 

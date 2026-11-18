@@ -20,7 +20,9 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
-import { STATE_HOME_VARIABLE, theCrewsStateAMemberIsGiven, withoutTheCrewsState } from '../src/refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
+import { STATE_HOME_VARIABLE } from '../src/refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
+import { theEnvironmentAMemberIsGiven } from '../src/launch_a_claude_code_member/the_environment_a_member_is_given.ts'
+import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
 import { STATE_ROOT_NAME, CREWS_PLACE } from '../src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 import { FORCE_EXIT_FLAG, GUARD_FLAG, TIMEOUT_FLAG, withoutTheTestContext } from './every_test_run_ends.ts'
@@ -175,12 +177,16 @@ test("a launched member is handed neither the crew state a test planted in its o
     MARTHA_683_PLANTED_SESSION: sessionId,
     [WHAT_I_WAS_GIVEN]: 'given',
   }
-  const given = {
-    ...withoutTheCrewsState(inherited, { state_root: crewStateRoot, rows }),
-    ...theCrewsStateAMemberIsGiven(crewStateRoot),
-  }
-  const stringsOnly = Object.fromEntries(Object.entries(given).filter(([, value]) => value !== undefined)) as Record<string, string>
-  const member = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { env: stringsOnly, stdio: 'ignore' })
+  // The member's environment is built by the one function a launch builds it with, and nothing is filtered out of it
+  // here: what the kernel records below is exactly what a member is handed.
+  const given = theEnvironmentAMemberIsGiven({
+    inherited,
+    switches: { args: [], env: {}, env_dropped: [] },
+    crew: { state_root: crewStateRoot, rows },
+    member_config: join(home, 'a-member-config-folder'),
+    host: CLAUDE_CODE,
+  })
+  const member = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { env: given, stdio: 'ignore' })
   t.after(() => {
     member.kill('SIGKILL')
   })

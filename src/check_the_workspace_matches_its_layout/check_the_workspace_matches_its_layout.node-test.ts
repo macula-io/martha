@@ -115,6 +115,32 @@ test('one repository cloned twice is named with both of its clones', async (t) =
   assert.match((await theDriftInTheWorkspace(anInspectionOf(fixture))).join('\n'), /is cloned 2 times/)
 })
 
+test('#670: a double clone is named by its repository, not by an origin URL that can carry a token', async (t) => {
+  const fixture = aCleanWorkspace(t)
+  const second = join(fixture.clones, 'acme', 'widget-again')
+  gitIn(fixture.clones, 'clone', '--quiet', gitIn(fixture.clone, 'remote', 'get-url', 'origin'), second)
+  // Both clones name one origin: a URL with a credential in its userinfo, at the example host this repository may name.
+  const withAToken = 'https://x-access-token:ghs_plantedtoken@example.invalid/acme/widget.git'
+  for (const clone of [fixture.clone, second]) gitIn(clone, 'remote', 'set-url', 'origin', withAToken)
+  const lines = (await theDriftInTheWorkspace(anInspectionOf(fixture))).join('\n')
+  assert.match(lines, /is cloned 2 times/, `the double clone was not named: ${lines}`)
+  assert.ok(!lines.includes('ghs_plantedtoken'), `the token in the origin reached the drift: ${lines}`)
+  assert.match(lines, /acme\/widget is cloned 2 times/)
+})
+
+test('#670: a double clone of an origin that names no repository is named without that URL either', async (t) => {
+  const fixture = aCleanWorkspace(t)
+  const second = join(fixture.clones, 'acme', 'widget-again')
+  gitIn(fixture.clones, 'clone', '--quiet', gitIn(fixture.clone, 'remote', 'get-url', 'origin'), second)
+  // A URL that names no repository is the branch a fallback of the raw origin would print from.
+  const namelessWithAToken = 'https://x-access-token:ghs_plantedtoken@example.invalid/'
+  for (const clone of [fixture.clone, second]) gitIn(clone, 'remote', 'set-url', 'origin', namelessWithAToken)
+  const lines = (await theDriftInTheWorkspace(anInspectionOf(fixture))).join('\n')
+  assert.match(lines, /is cloned 2 times/, `the double clone was not named: ${lines}`)
+  assert.ok(!lines.includes('ghs_plantedtoken'), `the token in the origin reached the drift: ${lines}`)
+  assert.match(lines, /the origin of .*widget is cloned 2 times/)
+})
+
 test('a place spelled through a link drifts by nothing: the places are asked for the path itself (martha#79)', async (t) => {
   const fixture = aCleanWorkspace(t)
   gitIn(fixture.clone, 'worktree', 'add', '--quiet', '-b', 'uranus/9', join(fixture.worktrees, 'widget-9'))

@@ -51,10 +51,14 @@
 //      owner's arguments go first, then the launch gate's
 //      switches and the relay's copy. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
-//      environment is `launchEnvironment(inherited, switches, host)`, then the
-//      settings that keep a checkout from running its hooks, install scripts
-//      and .envrc through the member's own commands (martha#24), plus the
-//      socket's path. Before it starts, each mesh server entry of the approved
+//      environment is `theEnvironmentAMemberIsGiven(inherited, switches, crew, config, host)`
+//      (./the_environment_a_member_is_given.ts): what it inherits without the crew's
+//      state, the switches, the member's own config folder and the launcher's own
+//      state home, then the settings that keep a checkout from running its hooks,
+//      install scripts and .envrc through the member's own commands (martha#24),
+//      plus the socket's path. Its PATH starts with the launch's own `git` guard, and
+//      git is pointed at the guard's hooks (../guard_the_git_a_member_runs,
+//      martha#562), so the member's every git meets the workspace rules. Before it starts, each mesh server entry of the approved
 //      copy is rewritten to start its recorded tree by path, installed or
 //      compared file by file, with every variable of that environment and of
 //      the settings files' env emptied but the few the server needs (martha#65, ../install_the_recorded_mesh_server);
@@ -120,7 +124,8 @@ import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
-import { memberRelay, type MemberRelay, type MemberRelayPlace, type TheMembersTelling } from '../answer_the_relay/answer_the_relay.ts'
+import { memberRelay, type MemberRelay, type MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
+import { theMembersTelling } from '../tell_the_member_a_line/tell_the_member_a_line.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
   API_KEY_VARIABLE,
@@ -150,19 +155,19 @@ import {
 import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directory.ts'
 import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { theRowWithTheLine, theRowWithoutTheLineItWrote } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { keptBeatingWhileItRuns } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
+import { relayJournalKeptIn } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
+import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { theEnvironmentAMemberIsGiven } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
+import { theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
-import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -317,6 +322,8 @@ export interface LaunchMade extends ReadyLaunch, WhatTheRunWatches {
   readonly ownerMemory: OwnerMemoryPlaces
   /** The switches that name the settings the launch wrote, when no approved copy was carried (martha#136). */
   readonly settingsArgs: readonly string[]
+  /** The `git` first on the member's PATH, its hook, and the misses file it leaves (../guard_the_git_a_member_runs). */
+  readonly guard: TheGitGuard
 }
 
 /**
@@ -329,7 +336,13 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
   const owners = userSettingsPath(launch.inherited)
   if ('refusal' in owners) return owners.refusal
   const memberConfig = membersConfigFolderOf(prepared)
-  const env = theEnvironmentAMemberIsGiven({ inherited: launch.inherited, switches: prepared.switches, crew: { state_root: launch.places.state_root, rows: launch.places.rows }, member_config: memberConfig, host: CLAUDE_CODE })
+  const env = theEnvironmentAMemberIsGiven({
+    inherited: launch.inherited,
+    switches: prepared.switches,
+    crew: { state_root: launch.places.state_root, rows: launch.places.rows },
+    member_config: memberConfig,
+    host: CLAUDE_CODE,
+  })
   // The key answered yes is the one the member is handed, read from the environment it starts with.
   const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir, env[API_KEY_VARIABLE])
   if (!made.made) return made.refusal
@@ -409,7 +422,7 @@ async function placesAwayFromTheOwner(
 function launchDirectories(
   launch: ClaudeCodeMemberLaunch,
   ready: ReadyLaunch,
-): Pick<LaunchMade, 'relayDirectory' | 'emptyDirectory' | 'pluginDir'> | string {
+): Pick<LaunchMade, 'relayDirectory' | 'emptyDirectory' | 'pluginDir' | 'guard'> | string {
   // A launcher killed hard runs none of its own cleanup, so what another launch
   // left in the relay root is swept here, before this launch makes its own
   // directory; a launch still running is left alone (leftover_relay_directories.ts).
@@ -439,17 +452,11 @@ function launchDirectories(
     ready.removeSnapshot()
     return copy.refusal
   }
-  return { relayDirectory, emptyDirectory, pluginDir: copy.plugin_dir }
-}
-
-/**
- * The relay server, with the member's row kept fresh and the owner's list swept while it runs (martha#316), both left
- * alone once its launcher closes it.
- */
-function beatingWhileItRuns(crew: CrewTools | undefined, server: RelayServer): RelayServer {
-  if (crew === undefined) return server
-  const stops = [crew.startBeating(), crew.startSweeping()]
-  return { close: async () => { for (const stop of stops) stop(); await server.close() } }
+  // The guard's shim goes first on the member's PATH and its hook is where git looks for one (../guard_the_git_a_member_runs),
+  // so it is placed here, inside the directory the launch takes away whole.
+  const guard = theGuardOfTheLaunch(relayDirectory.directory, process.execPath, launch.inherited)
+  if ('refusal' in guard) { relayDirectory.remove(); ready.removeSnapshot(); return guard.refusal }
+  return { relayDirectory, emptyDirectory, pluginDir: copy.plugin_dir, guard }
 }
 
 /**
@@ -516,68 +523,6 @@ function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlac
   }
 }
 
-/**
- * Where a line of Martha's own is told: the member whose row and channel it goes to, and the two store directories those
- * are kept in. Named apart from the launch so the telling can be built and read on its own (martha#390 r=1).
- */
-export interface TheTellingPlaces {
-  readonly member: string
-  readonly dashboard: string
-  readonly rows: string
-  /** The launch's journal, where a telling that did not reach the member is written down rather than swallowed (martha#430). */
-  readonly journal?: RelayJournal
-}
-
-/** The journal's own name for a line of Martha's that the member's channel store refused (martha#430). */
-export const A_TELLING_THAT_DID_NOT_REACH = 'a telling that did not reach the member'
-
-/**
- * Where a line of Martha's own reaches this member (martha#390): the row the owner reads, and the member's own session,
- * which is handed the line through the crew's channel the way every crew message is. A row the store does not hold yet
- * is not made here: the line waits for a row there is, as the dialogs slice leaves it.
- *
- * The row's `needs` is one slot shared with every other line the owner is told (a model switch's, martha#359), and who
- * may write it, and whose line may be taken back, is the row's own rule in the core (../show_dashboard_beat,
- * `theRowWithTheLine` / `theRowWithoutTheLineItWrote`). This telling keeps only which line it wrote, so it can tell its
- * own from another owner's, and the store calls that put that line there and take it away.
- */
-export function theMembersTelling(places: TheTellingPlaces): TheMembersTelling {
-  const beats = dashboardRowsIn(places.dashboard)
-  // The line this telling last put in the row, so it can tell its own line from another owner's, and take back its own.
-  let wrote: string | null = null
-  return {
-    theRow: (line) => {
-      beats.change(places.member, (held) => {
-        if (held === null) return null
-        const next = theRowWithTheLine(held, { wrote, line, at: Date.now() })
-        // Nothing comes back when another owner's line stands there, and then the line is not this telling's to take back.
-        if (next === null) return null
-        wrote = line
-        return next
-      })
-    },
-    theMember: (line, call) =>
-      appendToTheChannel(
-        { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(places.rows) } },
-        // The program's own name, and never a member's: the word is spelled here rather than defined as a value, because
-        // eleven places in the tree spell it for something else — a repository, a state directory, an installed binary, a
-        // test's command word — and a constant of it would make every one of them stale at once (martha#390 r=4).
-        { from: 'martha', to: [places.member], text: line, sent_at: Date.now() },
-      ).then(
-        () => undefined,
-        // The member's half of the telling did not happen, and the journal is the only place a run can read that it did
-        // not (martha#430): the line says which review's call it was about, so a run can put the two halves together.
-        (why: unknown) => places.journal?.notedWhatItCouldNotFinish(A_TELLING_THAT_DID_NOT_REACH, why instanceof Error ? why.message : String(why), call),
-      ),
-    takeTheLineBack: () => {
-      const line = wrote
-      if (line === null) return
-      wrote = null
-      beats.change(places.member, (held) => (held === null ? null : theRowWithoutTheLineItWrote(held, line)))
-    },
-  }
-}
-
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
 async function servedRelay(
   launch: ClaudeCodeMemberLaunch,
@@ -626,16 +571,15 @@ async function servedRelay(
   const answering = memberRelay(place, sessions)
   // Any report of a session's start, taken or refused, shows the host runs the relay (the backstop, #104).
   const relay: MemberRelay = {
+    ...answering,
     answer: (event, body) => {
       if (event === 'session_started') sessionReported()
       return answering.answer(event, body)
     },
-    run: (body) => answering.run(body),
-    answerTool: (body) => answering.answerTool(body),
   }
 
   try {
-    return beatingWhileItRuns(place.crew, await serveTheRelay(relay, socket_path))
+    return keptBeatingWhileItRuns(place.crew, await serveTheRelay(relay, socket_path))
   } catch (error) {
     return `${NOT_STARTED}: its relay socket could not be served (${(error as NodeJS.ErrnoException).code ?? String(error)}).`
   }
@@ -675,10 +619,12 @@ function relayBackstop(deadline: { readonly ms: number; readonly why: string }, 
 /**
  * Reads the settings files the host reads again every `ms`, apart from any
  * hook, and stops the member the first time one sets a switch (martha#122 r=2);
- * returns what ends the watch.
+ * returns what ends the watch. `also` is work the same tick does, which is how a
+ * launch folds the misses its git guard left into the member's row (martha#562).
  */
-function watchHookSettings(watch: HookSettingsWatch, ms: number, stop: (why: string) => void): () => void {
+function watchHookSettings(watch: HookSettingsWatch, ms: number, stop: (why: string) => void, also?: () => void): () => void {
   const timer = setInterval(() => {
+    also?.()
     const why = watch.check()
     if (why === undefined) return
     clearInterval(timer)
@@ -754,7 +700,7 @@ async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeli
 
   const { launchRecords, recorded } = started
   const offLauncherEnd = cleanUpIfTheLauncherEnds(pid, made)
-  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop)
+  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop, aFolderOfTheMisses(made.guard.misses, launch.member_name, dashboardRowsIn(launch.places.dashboard)))
   const ended = (): string | null => (backstop.disarm(), unwatch(), itsRunWent.forgetTheRun(), stoppedBecause)
   const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd, ended)
   backstop.arm()

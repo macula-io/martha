@@ -34,6 +34,7 @@ import {
   refuseExecutionAfterUngatedText,
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { ToolNames } from '../host_contract/host_contract.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -230,4 +231,22 @@ function theAgentItWaitsOn(agents_running: readonly string[], tool: string): ARe
       'it stops.',
     why: `an agent this host started (${named}) has not stopped`,
   }
+}
+
+/**
+ * What the crew refuses of this call after the gate has allowed it, or undefined when it refuses nothing.
+ *
+ * The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role may
+ * not make is refused after the gate has allowed it, and never in place of the gate's own answer. The workspace guard's
+ * first seam is asked in the same place (martha#562), over the shell line the call carries, and a held end of the turn
+ * (martha#311 ruling D) is asked last of all, so it only turns a yes into a no.
+ */
+export async function whatTheCrewRefusesOfACall(
+  crew: CrewTools | undefined,
+  call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> },
+  session_id: string,
+): Promise<string | undefined> {
+  return (await crew?.refusesTheSubagent({ tool: call.tool, input: call.input }))
+    ?? (await crew?.refusesTheGitIn?.({ tool: call.tool, input: call.input }))
+    ?? crew?.ends.deniesACall(session_id)
 }

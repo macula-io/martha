@@ -102,6 +102,7 @@ import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
+import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
@@ -178,7 +179,7 @@ export interface CrewToolPlaces {
    * crew whose `review_model` the host cannot spell is refused by name. A place given none names no model, and a
    * declaration naming one is then refused — nothing here invents a model list.
    */
-  readonly models?: readonly string[]
+  readonly models?: ModelVocabulary
   /** The model this member was launched on (martha#315): what its row says until a switch is confirmed. */
   readonly launched_on?: string
   /**
@@ -214,6 +215,23 @@ export interface CrewToolPlaces {
    * no machine root, so the note then names only what the declaration names.
    */
   readonly volatile_roots?: readonly string[]
+  /**
+   * What the workspace guard refuses of a git call a member's shell is about to run (martha#562, seam a): the adapter
+   * that asks git hands the refusal here, so the relay asks the crew once. A place given none refuses nothing, and a
+   * crew that declared no workspace layout hands none.
+   */
+  readonly refusesTheGitCall?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of a git call the launch's own `git` was handed (martha#562, seam b): the words a
+   * member's shell gave the shim, and the directory it runs them in. A place given none refuses nothing, and a crew that
+   * declared no workspace layout hands none.
+   */
+  readonly refusesTheGitOnThePath?: (call: { readonly directory: string; readonly args: readonly string[] }) => Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of the refs a clone's transaction would update (martha#562, seam c): a delete of
+   * another member's branch that reached git past the shell and past the shim. A place given none refuses nothing.
+   */
+  readonly refusesTheRefUpdate?: (updates: readonly { readonly ref: string; readonly deletes: boolean }[]) => string | undefined
 }
 
 /** The tools a crew's member can call. */
@@ -271,6 +289,24 @@ export interface CrewTools extends TheReviewRule {
    * the ledger cannot read back comes back as that, so the act is refused and every other call still runs.
    */
   theContractInForce(call: AReadableCall, names: ToolNames): Promise<TheContractHanded>
+  /**
+   * What the workspace guard refuses of this call, before it runs (martha#562): the member's shell line read into its
+   * git calls and judged against the crew's declared layout. Undefined when nothing refuses it — a call that is no git
+   * call, or a crew that declared no layout. The asking is the adapter's, handed in by the place; a place given none
+   * refuses nothing.
+   */
+  refusesTheGitIn?(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of a git call the launch's own `git` was handed (martha#562, seam b): the same
+   * rules, asked from the shim's own words rather than from a shell line. Undefined when nothing refuses it, when the
+   * crew declared no layout, or when a launch handed no guard of this seam at all.
+   */
+  refusesTheGitOnThePath?(call: { readonly directory: string; readonly args: readonly string[] }): Promise<string | undefined>
+  /**
+   * What the workspace guard refuses of a clone's ref transaction (martha#562, seam c): the refs git would update, and
+   * whether each is a delete. Undefined when nothing refuses it, or when the crew declared no layout.
+   */
+  refusesTheRefUpdate?(updates: readonly { readonly ref: string; readonly deletes: boolean }[]): string | undefined
 }
 
 /** The tools, in the order the mod registers them, each as the slice that owns it defines it. */
@@ -411,6 +447,9 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
     ends: state.ends,
     theContractInForce: (call, names) => theContractTheMemberHolds(held, call, names),
+    refusesTheGitIn: async (call) => (held.refusesTheGitCall === undefined ? undefined : held.refusesTheGitCall(call)),
+    refusesTheGitOnThePath: async (call) => held.refusesTheGitOnThePath?.(call),
+    refusesTheRefUpdate: (updates) => held.refusesTheRefUpdate?.(updates),
   }
 }
 
@@ -885,7 +924,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     ...(places.stamps === undefined ? {} : { stamps: places.stamps }),
     root: places.root,
     documents: places.documents,
-    models: places.models ?? [],
+    models: places.models ?? NO_MODEL_NAMED,
     ledger: places.ledger,
     began_at: state.began_at,
     ends: state.ends,
@@ -895,7 +934,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
 /** The declaration, and the crew's names as a report's rules read them; or why it could not be read. */
 async function crewOrRefusal(places: CrewToolPlaces): Promise<CrewDeclared | { readonly refused: string }> {
   try {
-    const settings = await declareCrew(places.documents, places.root, places.models ?? [])
+    const settings = await declareCrew(places.documents, places.root, places.models ?? NO_MODEL_NAMED)
     return { crew: { owner: settings.owner, members: settings.members.map((member) => member.name) }, settings }
   } catch (error) {
     return { refused: `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}` }

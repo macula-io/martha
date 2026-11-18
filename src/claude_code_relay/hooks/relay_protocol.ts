@@ -144,7 +144,7 @@ const YES: Heard = { yes: true }
 /** Why the relay refuses when the answer is not one it knows. */
 export const MALFORMED = 'the launcher answered in a shape the relay does not know'
 
-function jsonObjectOf(text: string): Record<string, unknown> | undefined {
+export function jsonObjectOf(text: string): Record<string, unknown> | undefined {
   try {
     const value: unknown = JSON.parse(text)
     return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
@@ -153,16 +153,16 @@ function jsonObjectOf(text: string): Record<string, unknown> | undefined {
   }
 }
 
-const exactKeys = (value: Record<string, unknown>, keys: readonly string[]): boolean =>
+export const exactKeys = (value: Record<string, unknown>, keys: readonly string[]): boolean =>
   Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
 
-const isReason = (value: unknown): value is string => typeof value === 'string' && value.trim() !== ''
+export const isReason = (value: unknown): value is string => typeof value === 'string' && value.trim() !== ''
 
 /**
  * The largest answer the relay sends the launcher for a tool call (martha#129, design step 4.3). The launcher compares
  * the whole answer with the one a signed run's receipt builds, so it needs the answer itself; past this the relay
  * sends the call without it, and the call records A13 rather than a body the launcher stops the member over
- * (LARGEST_RELAY_BODY, in ../../serve_the_relay_to_a_launch/serve_the_relay.ts, is 32 MiB for the whole body).
+ * (LARGEST_RELAY_BODY, in ../../read_the_body_a_request_carries, is 32 MiB for the whole body).
  */
 export const LARGEST_RELAYED_ANSWER = 8 * 1024 * 1024
 

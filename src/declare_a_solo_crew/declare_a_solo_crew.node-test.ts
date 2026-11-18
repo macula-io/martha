@@ -19,9 +19,10 @@ import { openAWorktree } from '../open_and_finish_a_worktree/open_and_finish_a_w
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { declareSoloCrew } from './declare_a_solo_crew.ts'
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
-const HOST_MODELS = ['opus', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 
 const documents = { read: (path: string) => readFile(path, 'utf8') }
 
