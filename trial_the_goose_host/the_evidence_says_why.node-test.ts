@@ -6,11 +6,12 @@
 // handing the next reader a verdict that says nothing.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
+import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   NOT_OBSERVED, THE_ENGINE_LOGS, THE_TRANSCRIPT, messagesIn, refusalsIn, theRefusalOf, theVerdictKeptWithItsExchange,
 } from './the_evidence_says_why.ts'
@@ -27,7 +28,7 @@ function anEvidenceDirectory(): string {
 }
 
 after(() => {
-  for (const directory of made) rmSync(directory, { recursive: true, force: true })
+  for (const directory of made) removeTheTree(directory)
 })
 
 /** What the driver writes for a line: the one field the rule reads, and the verdict's own words. */
