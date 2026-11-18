@@ -82,8 +82,9 @@ exit "\${code}"
 
 /**
  * The stand-in proof: records its arguments, its TMPDIR and whether the --night folder was there when it started.
- * Held, it leaves a file in its TMPDIR and waits to be stopped: `catch-int` traps a Ctrl-C and says so, `ignore-term`
- * ignores a TERM, and anything else is ended by one.
+ * Held, it leaves a file in its TMPDIR and waits to be stopped: `catch-int` traps a Ctrl-C and says so, and ignores the
+ * TERM the driver sends on the same Ctrl-C, since a TERM trap running first can leave the INT trap never run;
+ * `ignore-term` ignores a TERM, and anything else is ended by one.
  * @param {{ constant: string, night: boolean, dryPassed: number }} options
  */
 const standInProof = ({ constant, night, dryPassed }) => `#!/usr/bin/env bash
@@ -101,7 +102,7 @@ if [ -n "\${STAND_IN_HOLD:-}" ]; then
   echo "$$" > "\${STAND_IN_RECORD}/proof.pid"
   if [ "\${STAND_IN_HOLD}" = catch-int ]; then
     trap ': > "\${STAND_IN_RECORD}/proof.caught-int"; kill "\${held}" 2> /dev/null; exit 1' INT
-    trap 'kill "\${held}" 2> /dev/null; exit 1' TERM
+    trap '' TERM
     sleep 300 &
     held=$!
     echo "\${held}" > "\${STAND_IN_RECORD}/proof.held.pid"
@@ -324,12 +325,15 @@ const alive = (pid) => {
   }
 }
 
-/** A process group killed, if it is still there. @param {number} group */
-const killTheGroup = (group) => {
+/**
+ * A process, or a process group when `target` is negative, killed if it is still there: one that ends between a check
+ * and the kill is no failure. @param {number} target
+ */
+const killWhatIsLeft = (target) => {
   try {
-    process.kill(-group, 'SIGKILL')
+    process.kill(target, 'SIGKILL')
   } catch {
-    // The group is gone already.
+    // It is gone already.
   }
 }
 
@@ -343,10 +347,10 @@ async function aHeldDriver (t, night, hold) {
   const group = driver.pid ?? assert.fail('the driver did not start')
   /** @type {Promise<number | null>} */
   const ended = new Promise((resolve) => driver.on('close', (code) => resolve(code)))
-  t.after(() => killTheGroup(group))
+  t.after(() => killWhatIsLeft(-group))
   await untilTheProofRuns(night.record)
   const proofPid = Number(recorded(night.record, 'proof.pid')?.[0])
-  t.after(() => alive(proofPid) && process.kill(proofPid, 'SIGKILL'))
+  t.after(() => killWhatIsLeft(proofPid))
   return { driver, group, ended, proofPid }
 }
 
@@ -376,7 +380,7 @@ test('8b. a Ctrl-C to the run\'s process group reaches the proof, whose own INT 
   const night = aNight(t)
   const { group, ended } = await aHeldDriver(t, night, 'catch-int')
   const held = Number(recorded(night.record, 'proof.held.pid')?.[0])
-  t.after(() => alive(held) && process.kill(held, 'SIGKILL'))
+  t.after(() => killWhatIsLeft(held))
   process.kill(-group, 'SIGINT')
   const code = await endedWithin(ended, STOPPED_WITHIN_MS)
   assert.notEqual(code, STILL_RUNNING, 'the driver ended soon after a Ctrl-C')
