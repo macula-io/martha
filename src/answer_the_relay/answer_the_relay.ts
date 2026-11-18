@@ -234,29 +234,20 @@ interface RelayState {
    * the owner approved (../answer_what_a_host_reports). A handler that has not moved yet asks it here.
    */
   readonly answers: TheAnswersOfOneLaunch
-  /**
-   * The agents this host has started under a session, by the id the host stamps (martha#170): the same table the entry
-   * writes a called tool into, made once here.
-   */
-  readonly agents: TheRunTable
   /** What this launch hears of its turns, every main turn start the mod reports included (martha#440). */
   readonly everyTurn: HearingEveryTurn
-  /** The review calls this launcher allowed, by the host's id for the call, and what it resolved to (martha#390). */
-  readonly reviews: TheReviewSpawns
 }
 
 /** The launcher's answers for one member. */
 export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostSession> = new Map<string, HostSession>()): MemberRelay {
-  // One table of the reviews this launch allowed and one of its agents, each made once: the entry's tool call writes
-  // both, and the handlers still here read them.
+  // One table of the reviews this launch allowed and one of its agents, each made once and handed to the entry, which
+  // writes and reads both.
   const reviews = reviewSpawnsRemembered()
   const agents = agentRunsKept()
   const state: RelayState = {
     place,
     answers: answersOver(placesOfTheEntry(place, reviews, agents), sessions),
-    agents,
     everyTurn: hearingEveryTurn({ keep: async (id, arrival) => state.answers.aTurnTheHostNeverRaised(id, arrival), ...place, now }),
-    reviews,
   }
   /**
    * Runs `work` after every piece of work already asked for, so it reads the record the one before it wrote. One queue

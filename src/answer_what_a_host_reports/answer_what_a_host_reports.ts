@@ -95,7 +95,7 @@ export interface ThePlacesAHostReportsOver {
   readonly crew_text?: string | undefined
   /**
    * The review calls this launch allowed, by the host's id for the call, and what each resolved to (martha#390). One
-   * table, made once by the launcher: the adapter's tool call still writes it, and the entry reads and forgets from it.
+   * table, made once by the launcher: the entry's tool call writes it, and its result reads and forgets from it.
    */
   readonly reviews: TheReviewSpawns
   /** The envelope this host writes when an agent fails, in its own names; absent, no report names a review. */
@@ -104,7 +104,7 @@ export interface ThePlacesAHostReportsOver {
   readonly told?: WhereTheFailedReviewIsTold | undefined
   /**
    * The agents the host started under this launch's sessions (martha#170). One table, made once by the launcher: a
-   * called tool writes it here, and the adapter's agent start, stop and result read it until they move (PR 3).
+   * called tool writes it here, and an agent's start, stop and result read it here too.
    */
   readonly agents: TheRunTable
   /** Who may send executable text, as the launch's policy says. */
@@ -180,7 +180,7 @@ export const NO_CREW_TOOLS = 'this launch was given no crew place, so it answers
 /** Why a result stops the member when the launch was given nowhere to record one. */
 export const NOWHERE_TO_RECORD = 'this launch was given nowhere to record a ran tool’s result, so nothing it ran can be answered for'
 
-/** The table of one launch's agents, made once by the launcher: the entry's call writes it, the adapter's agent handlers read it. */
+/** The table of one launch's agents, made once by the launcher: the entry's call writes it, its agent start, stop and result read it. */
 export const agentRunsKept = (): TheRunTable => new Map<string, AgentRun>()
 
 /**
