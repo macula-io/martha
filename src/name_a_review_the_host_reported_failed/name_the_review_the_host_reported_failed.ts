@@ -95,7 +95,6 @@ export function reviewSpawnsRemembered(): TheReviewSpawns {
   }
 }
 
-/** What the launcher reads a turn of the host's with: the turn's own kind, the crew's reviewer model, and the report. */
 /**
  * Keeps the model a review call this launch allowed resolved to (martha#390), as the host's adapter read it out of its
  * own answer: a call this launch never allowed, or an answer that names no model, keeps nothing. The one rule the entry
@@ -106,6 +105,7 @@ export function keepTheModelAReviewResolvedTo(spawns: TheReviewSpawns, call_id: 
   spawns.resolved(call_id, resolved_model)
 }
 
+/** What the launcher reads a turn of the host's with: the turn's own kind, the crew's reviewer model, and the report. */
 export interface HowTheTurnIsRead {
   /** The origin kind the engine stamped on the turn, as the host contract hands it over. */
   readonly origin_kind: string
