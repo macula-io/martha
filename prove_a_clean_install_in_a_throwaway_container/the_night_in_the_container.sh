@@ -65,8 +65,11 @@ NIGHT_TOKEN_DROP="${CONTAINER_HOME}/.night-token"
 # session runs after its command ends, so its last screen stays readable.
 NIGHT_TMUX_SOCKET='night'
 NIGHT_PANE_HOLD='exec sleep infinity'
-# What the processes of a stopped member look like to pgrep: its own command.
-NIGHT_MEMBER_PROCESS='martha start'
+# The container's own process list after the stop: pid, state, command line. Only the container's idle process (its
+# pid 1) and this listing itself may be there; any other process, a member's or a host's it started, is left over. A
+# zombie (state Z) has ended and holds nothing open: the idle process does not reap, so it is not counted.
+NIGHT_IDLE_PID=1
+NIGHT_PROCESS_LIST='ps -eo pid=,stat=,args='
 
 NIGHT_DIR=''
 NIGHT_CLONE=''
@@ -188,19 +191,33 @@ approve_step_words() {
   if a_night; then printf '  2. type yes to approve, twice: the checkout, then the throwaway clone'; else printf '  2. type yes to approve'; fi
 }
 
-# The members stopped: every terminal of the proof closed, and no member process left in the container.
+# What still runs in the container, one command line a line: every process but the idle one, this listing and the
+# zombies. Exit 2 with the reason when the container cannot list its processes.
+night_left_processes() {
+  local listed
+  # shellcheck disable=SC2086 # the listing is a command and its words
+  listed="$(on_the_host podman exec "${CONTAINER}" ${NIGHT_PROCESS_LIST} 2>&1)" \
+    || { printf 'the container could not list its processes: %s' "$(one_line "${listed}")"; return 2; }
+  awk -v idle="${NIGHT_IDLE_PID}" -v self="${NIGHT_PROCESS_LIST}" '
+    $1 != idle && $2 !~ /^Z/ { $1 = $1; line = $0; sub(/^[^ ]+ [^ ]+ /, "", line); if (line != self) print line }' <<< "${listed}"
+}
+
+# The members stopped: every terminal of the proof closed, and nothing left running in the container but its idle
+# process, so no member and no host session a member started outlives the stop.
 night_stop_step() {
-  local waited=0
+  local waited=0 left
   close_every_terminal
-  while on_the_host podman exec "${CONTAINER}" pgrep -f "${NIGHT_MEMBER_PROCESS}" > /dev/null 2>&1; do
+  while :; do
+    left="$(night_left_processes)" || { failed 'night stop' "${left}"; return 1; }
+    if [ -z "${left}" ]; then break; fi
     if [ "${waited}" -ge "${TURN_WINDOW_S}" ]; then
-      failed 'night stop' "a '${NIGHT_MEMBER_PROCESS}' process is still running in the container"
+      failed 'night stop' "still running in the container after the stop: $(one_line "${left}")"
       return 1
     fi
     sleep 1
     waited=$((waited + 1))
   done
-  ok 'night stop' "every member stopped, and no '${NIGHT_MEMBER_PROCESS}' process is left"
+  ok 'night stop' 'every member stopped: nothing runs in the container but its idle process'
 }
 
 # The clean-start step: the container's own listing of the home judged before any member starts in the clone, and
@@ -266,10 +283,11 @@ night_restart_step() {
 }
 
 # The script that takes the token on its standard input into a 0600 file, logs gh in from it, removes it, sets gh as
-# git's credential helper, and says who gh answers as.
+# git's credential helper, and says who gh answers as. The file goes on every way out: a failed login ends the
+# script under `set -e`, and its EXIT trap still removes the file.
 night_token_script() {
-  printf 'set -eu; umask 077; export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; cat > %s; gh auth login --with-token --insecure-storage < %s; rm -f %s; gh auth setup-git; gh api user --jq .id' \
-    "${CONTAINER_HOME}" "${NIGHT_TOKEN_DROP}" "${NIGHT_TOKEN_DROP}" "${NIGHT_TOKEN_DROP}"
+  printf 'set -eu; umask 077; export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; trap "rm -f %s" EXIT; cat > %s; gh auth login --with-token --insecure-storage < %s; rm -f %s; gh auth setup-git; gh api user --jq .id' \
+    "${CONTAINER_HOME}" "${NIGHT_TOKEN_DROP}" "${NIGHT_TOKEN_DROP}" "${NIGHT_TOKEN_DROP}" "${NIGHT_TOKEN_DROP}"
 }
 
 # The token step: the token on standard input at every hop, gh logged in from it in the container, and gh there
@@ -374,6 +392,13 @@ while [ $# -gt 0 ]; do
     *) shift; break ;;
   esac
 done
+# The container's process list: its idle process, a zombie, what the case's night.left holds, and the listing itself.
+if [ "${1:-}" = ps ]; then
+  printf '    1 Ss   the-idle-process\n   88 Z    [claude] <defunct>\n'
+  cat "${standin}/night.left" 2> /dev/null || true
+  printf '   99 R    %s\n' "$*"
+  exit 0
+fi
 case "${words}" in
   *'cat > /root/night-debs/'*)
     [ "${user}" = root ] || exit 1
@@ -396,7 +421,6 @@ case "${words}" in
     PATH="${here}:${PATH}" sh -c "$(printf '%s' "${@: -1}" | in_home)"
     ;;
   *'find . -mindepth 1'*) sh -c "$(printf '%s' "${@: -1}" | in_home)" ;;
-  *'pgrep -f'*) [ -f "${standin}/night.member-left" ] ;;
   *' find '*' -xdev'*)
     # A case whose night.plants-in-clone exists stands for a file in the clone the run did not put there; the file
     # names the clone, in the case's folder.
@@ -424,14 +448,27 @@ case "${words}" in
     done > "${standin}/tmux.${name}.keys"
     ;;
   *'.night-token'*)
+    # The token script itself, in the case's home, with the stand-in gh first on its PATH.
     [ -n "${input}" ] || exit 1
-    cat > "${standin}/container.token"
-    cat "${standin}/night.gh.id" 2> /dev/null || printf '4242\n'
+    PATH="${here}/night-bin:${PATH}" sh -c "$(printf '%s' "${@: -1}" | in_home)"
     ;;
   *) exit 99 ;;
 esac
 NIGHTPODMAN
-  chmod +x "${dir}/throwaway" "${dir}/curl" "${dir}/martha" "${dir}/night-podman"
+  mkdir -p "${dir}/night-bin"
+  cat > "${dir}/night-bin/gh" << 'GH'
+#!/usr/bin/env bash
+# gh in the container, as far as the token script can tell: the login keeps what it reads (or fails, when the case's
+# night.gh-login-fails exists), and `api user` answers the case's id.
+standin="${MARTHA_CLEAN_INSTALL_STAND_IN:?}"
+case "${1:-} ${2:-}" in
+  'auth login') [ ! -f "${standin}/night.gh-login-fails" ] || exit 1; cat > "${standin}/container.token" ;;
+  'auth setup-git') ;;
+  'api user') cat "${standin}/night.gh.id" 2> /dev/null || printf '4242\n' ;;
+  *) exit 1 ;;
+esac
+GH
+  chmod +x "${dir}/throwaway" "${dir}/curl" "${dir}/martha" "${dir}/night-podman" "${dir}/night-bin/gh"
 }
 
 # A night case: the proof's own case, its setup files (a bot with id 4242, a token nobody else holds) and its pins
@@ -498,7 +535,15 @@ night_self_test() {
   [ "$(grep -c $'\033\[B' "${standin}/typed" 2> /dev/null)" = "$((2 * ${#SELF_TEST_MEMBERS[@]}))" ] \
     || nfail "the folder question was not answered for each member in the clone"
   [ "$(cat "${standin}/container.token" 2> /dev/null)" = "${NIGHT_SELF_TEST_TOKEN}" ] || nfail 'the token did not reach the container on standard input'
+  [ ! -e "${standin}/home/${NIGHT_TOKEN_DROP#"${CONTAINER_HOME}/"}" ] || nfail "the token's file was left in the home"
   if grep -qF -- "${NIGHT_SELF_TEST_TOKEN}" "${standin}/calls" "${standin}/out" "${standin}/err"; then nfail 'the token was an argument, or reached the log'; fi
+
+  # gh in the container will not log in: named, and the token's file still goes from the home.
+  standin="${root}/night-login-fails"; night_case "${standin}" night.gh-login-fails
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for '^FAIL night token: gh in the container would not log in' "${standin}/out" || nfail 'a failed gh login was not named'
+  [ ! -e "${standin}/home/${NIGHT_TOKEN_DROP#"${CONTAINER_HOME}/"}" ] || nfail "a failed gh login left the token's file in the home"
+  night_closed_after_tear_down "${standin}" || failures=$((failures + 1))
 
   # A pinned file whose bytes are not its pin: refused by name before any container is made, and the repository goes.
   standin="${root}/night-bad-bytes"; night_case "${standin}"
@@ -518,11 +563,18 @@ night_self_test() {
   if grep -q 'new-session' "${standin}/calls"; then nfail 'a member was started in an unclean clone'; fi
   night_closed_after_tear_down "${standin}" || failures=$((failures + 1))
 
-  # A member process left after the stop: named, and no token placed.
-  standin="${root}/night-member-left"; night_case "${standin}" night.member-left
+  # A member's own process left after the stop, and apart from it a host session alone (a claude a member started,
+  # outliving its martha): each named by its command line, and no token placed.
+  standin="${root}/night-member-left"; night_case "${standin}"
+  printf '   57 Sl   node %s/.local/bin/martha start builder\n' "${CONTAINER_HOME}" > "${standin}/night.left"
   night_expect 1 "${standin}" || failures=$((failures + 1))
-  asked_for "^FAIL night stop: a '${NIGHT_MEMBER_PROCESS}' process is still running" "${standin}/out" || nfail 'a member left running was not named'
+  asked_for "^FAIL night stop: still running in the container after the stop: .*martha start builder" "${standin}/out" || nfail 'a member left running was not named'
   [ ! -e "${standin}/container.token" ] || nfail 'a token was placed with a member left running'
+  standin="${root}/night-host-left"; night_case "${standin}"
+  printf '   58 Sl   claude\n' > "${standin}/night.left"
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for "^FAIL night stop: still running in the container after the stop: claude$" "${standin}/out" || nfail 'a host session left running was not named'
+  [ ! -e "${standin}/container.token" ] || nfail 'a token was placed with a host session left running'
 
   # R1 in the container: gh there answers as another account.
   standin="${root}/night-other-account"; night_case "${standin}"
@@ -547,7 +599,7 @@ night_self_test() {
   # --night with no run folder is refused with the arguments.
   expect_status 2 "${root}" 'a-host' --night || failures=$((failures + 1))
 
-  for standin in night-ready night-bad-bytes night-unclean-start night-member-left night-other-account night-no-sign-in; do
+  for standin in night-ready night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
     if [ -e "${root}/${standin}/container.present" ]; then nfail "the ${standin} run left its container behind"; fi
   done
   return $((failures > 0))
