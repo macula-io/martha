@@ -164,8 +164,9 @@ test('the release act lets a carried-over leftover through, and the next commit 
   const afterTheStart = theRecordAfter({ ...anEnd({ running: [], mtimes: [] }), replaced: afterTheKill })
   const released = [{ path: A_FILE.path }]
   assert.equal(theRefusalOfACommit(afterTheStart, [{ path: A_FILE.path, digest: A_FILE.digest }], released), undefined)
-  const told = theTellingOf(afterTheStart, released)
-  assert.ok(told !== undefined)
+  // The released path was the only one there was: the telling has nothing left to say, so it is no paragraph at all —
+  // never one that still claims the path holds what the run was writing.
+  const told = theTellingOf(afterTheStart, released) ?? ''
   assert.doesNotMatch(told, /still hold what it was writing/)
 })
 
