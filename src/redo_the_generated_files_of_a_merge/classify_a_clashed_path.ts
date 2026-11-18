@@ -1,16 +1,17 @@
 // One path a merge clashed in, classified the way the redo would treat it (martha#339).
 //
 // A batch's dry run asks this before anything is merged, and the range gate's judge asks it of every path a landing
-// merge clashed in, so the two read one rule, the one the redo itself applies: a picture the C4 program draws is redone;
-// package.json is redone only when merging its three stages clashes nowhere outside martha.hostCeilings (martha#410),
-// which is decided on the stages' text and never by its name; any other path is a clash a builder settles by hand.
+// merge clashed in, so the two read one rule, the one the redo itself applies: package.json is redone only when
+// merging its three stages clashes nowhere outside martha.hostCeilings (martha#410), which is decided on the stages'
+// text and never by its name; any other path — a C4 picture among them, since martha#627 draws them at release and no
+// change carries one — is a clash a builder settles by hand.
 //
 // A stage is a blob id the repository holds, and is absent when one side added or removed the file, so it has none.
 
 import type { TheStages } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
 import { thePackageJsonOfAMerge } from './the_ceilings_a_merge_brings.ts'
 import { gitSaid } from './git_in_the_repository.ts'
-import { aClashNotRedone, aPictureRedone, isAPictureRedrawn, noThreeStages, theManifestAsGitNamesIt } from './the_generated_files.ts'
+import { aClashNotRedone, noThreeStages, theManifestAsGitNamesIt } from './the_generated_files.ts'
 
 type Step<T> = { readonly ok: T } | { readonly refused: string }
 
@@ -36,11 +37,11 @@ export function theManifestStages(repository: string, the_manifest: string, stag
 }
 
 /**
- * What the redo records of one clashed path, when it redoes it: `<path> (picture)`, or package.json's own recorded words.
- * Refused, in the words a landing prints when it stops, when the path is one a builder settles.
+ * What the redo records of one clashed path, when it redoes it: package.json's own recorded words. Refused, in the
+ * words a landing prints when it stops, when the path is one a builder settles — which every path but the manifest is,
+ * a picture included.
  */
 export function classifyAClashedPath(repository: string, path: string, stages: TheStages): Step<string> {
-  if (isAPictureRedrawn(path)) return { ok: aPictureRedone(path) }
   const the_manifest = theManifestAsGitNamesIt(repository)
   if (path !== the_manifest) return { refused: aClashNotRedone([path]) }
   const texts = theManifestStages(repository, the_manifest, stages)
