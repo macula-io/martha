@@ -332,6 +332,27 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: ["a_user/a_user.ts:3: 'the-repo' (a path segment) restates a_repo/a_repo.ts THE_REPO"],
   },
   {
+    what: 'a value a template with a substitution holds in its own text, judged piece by piece (martha#437)',
+    base: TOOL, head: { 'a_user/a_user.ts': 'call(`${settingsDir}/the-tool`)\n' },
+    prints: ["a_user/a_user.ts:1: 'the-tool' (a path segment) restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'a value the run time builds inside a template, never judged: a substitution in the piece, and one joined to it (martha#437)',
+    base: TOOL, head: { 'a_user/a_user.ts': 'call(`${settingsDir}/the-${flavour}`)\ncall(`${settingsDir}the-tool`)\n' }, prints: [],
+  },
+  {
+    what: 'a GitHub API route whose owner has no hyphen, an address whatever stands before it (martha#437, Jupiter on PR 469)',
+    base: TOOL, head: { 'a_user/a_user.ts': "call('repos/rgfaber/the-tool/actions/runs')\n" }, prints: [],
+  },
+  {
+    what: 'a GitHub API route with a leading slash, an address (martha#437, Jupiter on PR 469)',
+    base: TOOL, head: { 'a_user/a_user.ts': "call('/repos/macula-io/the-tool/issues')\n" }, prints: [],
+  },
+  {
+    what: 'a GitHub API route whose owner a substitution builds, an address (martha#437, Jupiter on PR 469)',
+    base: TOOL, head: { 'a_user/a_user.ts': 'call(`repos/${owner}/the-tool/issues`)\n' }, prints: [],
+  },
+  {
     what: 'a marker imported under a second name',
     base: {},
     head: { 'a_tool/tools.ts': "import type { DefinesItsValues as D } from './marker.ts'\nexport const TOOLS = Object.freeze({ Edit: 'file_path' }) satisfies D\n" },
@@ -341,10 +362,7 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
 
 /** git with an identity and no signing, which a throwaway repository has no config for. */
 const gitIn = (root: string, ...args: readonly string[]): string =>
-  execFileSync('git', ['-C', root, ...marthasOwnGitArgs(['-c', 'user.name=planted', '-c', 'user.email=planted@example.invalid', '-c', 'commit.gpgsign=false', ...args])], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim()
+  execFileSync('git', ['-C', root, ...marthasOwnGitArgs(['-c', 'user.name=planted', '-c', 'user.email=planted@example.invalid', '-c', 'commit.gpgsign=false', ...args])], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 
 /** One commit holding what `files` writes over the tree (an empty text deletes), and its sha. */
 function commitOn(root: string, files: Files): string {
