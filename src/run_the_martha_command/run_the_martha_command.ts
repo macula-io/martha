@@ -20,8 +20,6 @@ import { readFile } from 'node:fs/promises'
 import { constants } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
-import { createInterface } from 'node:readline/promises'
-import { isatty } from 'node:tty'
 
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
@@ -31,7 +29,7 @@ import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } f
 import { declareCrew, OWNER_BELL } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { appendStateLine, crewRowsDirectory, crewStateDirectory, crewSubdirectory, openState, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -46,7 +44,7 @@ import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_laun
 import { drawTheCrewStrip, holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { showingSafely } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
-import { bellsOf, THE_BELLS_PLACE, theBellsTheOwnerKeeps, theFlipNamed } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
+import { bellsOf, theBellsTheOwnerKeeps, theFlipNamed } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
@@ -353,16 +351,7 @@ async function bells(io: CommandIo, places: Places, asked: Asked): Promise<numbe
   if (typeof crew === 'string') return refused(io, crew)
   const flip = theFlipNamed(asked.member, asked.args[0])
   if (asked.member !== undefined && flip === undefined) return refused(io, USAGE)
-  const place = crewSubdirectory(places.state.state_root, places.root, THE_BELLS_PLACE)
-  if ('refusal' in place) return refused(io, place.refusal)
-  const kept = theBellsTheOwnerKeeps({
-    members: crew.settings.members.map((one) => one.name),
-    declared: crew.settings.house_rules[OWNER_BELL],
-    place: { directory: place.path, lines: { append: appendStateLine, read: readStateFile } },
-    owner: crew.settings.owner,
-    onATerminal: io.terminal.is_terminal,
-    ...(flip === undefined ? {} : { flip }),
-  })
+  const kept = theBellsTheOwnerKeeps({ members: crew.settings.members.map((one) => one.name), declared: crew.settings.house_rules[OWNER_BELL], place: crew.launcher.bells!, owner: crew.settings.owner, onATerminal: io.terminal.is_terminal, ...(flip === undefined ? {} : { flip }) })
   if (!kept.shown) return refused(io, kept.refusal)
   kept.lines.forEach((line) => io.out(line))
   return EXIT_DONE
@@ -557,28 +546,4 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   crew: (io, places) => crew(io, places),
   [STOP]: (io, places, asked) => stop(io, places, asked.member),
   [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),
-}
-
-/** The owner's terminal on this process's standard input; questions are asked on stderr. */
-export const terminalOfThisProcess: OwnersTerminal = {
-  is_terminal: isatty(0),
-  ask: async (question) => {
-    const asking = createInterface({ input: process.stdin, output: process.stderr })
-    try {
-      return await asking.question(question)
-    } finally {
-      asking.close()
-    }
-  },
-}
-
-/** This process's own io: its working directory, environment, terminal and standard streams. */
-export const ioOfThisProcess: CommandIo = {
-  cwd: process.cwd(),
-  env: process.env,
-  stdio: 'inherit',
-  terminal: terminalOfThisProcess,
-  out: (line) => void process.stdout.write(`${line}\n`),
-  outBytes: (bytes) => void process.stdout.write(bytes),
-  err: (line) => void process.stderr.write(`${line}\n`),
 }

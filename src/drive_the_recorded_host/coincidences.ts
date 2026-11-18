@@ -39,10 +39,13 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: CONFIG, file: 'drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: CONFIG, file: 'drive_the_recorded_host/own_writes_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: CONFIG, file: 'drive_the_recorded_host/run_nothing_a_checkout_planted.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  // The same git subcommand, in the muted bell's throwaway repository (martha#371).
+  { value: CONFIG, file: 'drive_the_recorded_host/a_muted_bell_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: STATE_ROOT_NAME, file: 'drive_the_recorded_host/drive_the_recorded_host.ts', reason: THE_REPOSITORYS_OWN_NAME },
   // Bounds the recorded-host cases put on their own waits, and ages they make up for a journal entry (martha#441):
   // each is the same figure as a duration the tree names, and none of them is that duration.
   { value: LONGEST_MESSAGE, file: 'drive_the_recorded_host/a_permission_prompt_on_the_recorded_host.node-test.ts', reason: A_CASES_OWN_BOUND_ON_A_RUN },
+  { value: LONGEST_MESSAGE, file: 'drive_the_recorded_host/a_muted_bell_on_the_recorded_host.node-test.ts', reason: A_CASES_OWN_BOUND_ON_A_RUN },
   { value: LONGEST_MESSAGE, file: 'drive_the_recorded_host/a_switch_does_not_move_the_owners_default.node-test.ts', reason: A_CASES_OWN_BOUND_ON_A_RUN },
   { value: LONGEST_MESSAGE, file: 'drive_the_recorded_host/a_switch_on_the_recorded_host.node-test.ts', reason: A_CASES_OWN_BOUND_ON_A_RUN },
   { value: LONGEST_MESSAGE, file: 'drive_the_recorded_host/a_silent_host_fails_by_name.node-test.ts', reason: AN_AGE_THE_CASE_MAKES_UP },

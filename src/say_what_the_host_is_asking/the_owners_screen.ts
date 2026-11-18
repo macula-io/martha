@@ -10,7 +10,7 @@
 // core, and the launcher keeps the two things that touch the machine.
 
 import { theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { theBellsFor, type TheBellsSwitch } from '../ring_the_owner/ring_the_owner.ts'
+import { NO_BELLS, theBellsFor, theBellsTheOwnerDeclared, type TheBellsSwitch } from '../ring_the_owner/ring_the_owner.ts'
 import { takeAnOwnerDialog, type OwnerDialogEvent } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { NOTHING_IS_ASKED, theAsksAfter, type WhatTheHostIsAsking, type WhatTheHostSaid } from './say_what_the_host_is_asking.ts'
 
@@ -39,6 +39,41 @@ export interface TheScreenKeeper {
   held(): WhatTheHostIsAsking
   /** One thing the host said, applied: the row written, and the bell rung on the change it made. */
   heard(session_id: string, said: WhatTheHostSaid, at: number): void
+}
+
+/**
+ * The screen a launch keeps of its own, as the launch reads its own declaration: the member whose row it moves, the
+ * store that row is kept in, the switch the crew's declaration sets for every bell, and the owner's mute of this
+ * member's, asked of it every time a bell is about to be rung (martha#371). Where the bytes go is handed in with the
+ * rest, so this slice still holds no terminal of its own.
+ */
+export interface TheScreenOfALaunch {
+  readonly member: string
+  readonly beats: DashboardStore
+  /** Whether the declaration rings this member's bells at all; absent rings none, as every switch is off unasked. */
+  readonly declared_bells: boolean | undefined
+  /** Whether the owner has muted this member's bells, asked every time a bell is about to be rung (martha#371). */
+  readonly muted: () => boolean
+  /** Whether the launcher has the owner's terminal at all. */
+  readonly on_the_owners_terminal: boolean
+  /** Writes the bell's bytes where the owner is looking. */
+  write(bytes: string): void
+}
+
+/**
+ * The owner's screen for a launch, built from the launch's own facts: the declaration's switch over the owner's own mute
+ * of one member, which is the whole of what silences a bell (martha#371). A member started without the owner's terminal
+ * is still given its screen; it rings nothing, which ../ring_the_owner's own switch decides.
+ */
+export function theOwnersScreenOfALaunch(seen: TheScreenOfALaunch): TheScreenKeeper {
+  return theOwnersScreen({
+    beats: seen.beats,
+    member: seen.member,
+    bells: seen.declared_bells === undefined ? NO_BELLS : theBellsTheOwnerDeclared(seen.declared_bells),
+    muted: seen.muted,
+    onTheOwnersTerminal: seen.on_the_owners_terminal,
+    write: seen.write,
+  })
 }
 
 /**
