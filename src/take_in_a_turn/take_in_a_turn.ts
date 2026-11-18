@@ -159,6 +159,7 @@ export function takeInTurn(session: HostSession, arrival: Arrival, binder: Binde
 /** The registry rows that are not a turn source the host reports. */
 export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   'A8', // a handover is inherited through the record, not taken in (rule 4)
+  'A23', // the telling about the run before is handed in that same resume prompt, not taken in as a turn (martha#693)
   'A9', // a forged envelope is not something a host reports
   'A12', // a compaction summary is inherited through the record, not taken in
   'A19', // the crew text the launcher hands at a session's start is the owner's approved bytes, not a sender's words (martha#306)

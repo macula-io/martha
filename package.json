@@ -100,6 +100,7 @@
       "src/tell_the_member_a_line",
       "src/read_what_claude_code_says_of_an_agent",
       "src/read_what_claude_code_records_of_its_tools",
+      "src/a_launch_end_on_this_machine",
       "src/watch_the_crew_tools_a_launch_served"
     ],
     "decisionFiles": [
@@ -120,11 +121,11 @@
       "src/declare_a_solo_crew": 68,
       "src/drive_the_recorded_host": 557,
       "src/empty_directory_of_a_launch": 24,
-      "src/end_a_launch": 171,
+      "src/end_a_launch": 152,
       "src/end_a_launch_when_its_run_ends": 218,
       "src/give_a_member_its_own_config": 34,
       "src/find_a_homes_state_root": 10,
-      "src/guard_the_git_a_member_runs": 430,
+      "src/guard_the_git_a_member_runs": 411,
       "src/find_what_a_later_git_run_reads": 494,
       "src/hear_the_hosts_dialogs": 40,
       "src/install_the_mesh_server_for_claude_code": 133,
@@ -135,7 +136,7 @@
       "src/keep_the_crews_files_as_directories": 155,
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
-      "src/launch_a_claude_code_member": 556,
+      "src/launch_a_claude_code_member": 550,
       "src/launch_a_goose_member": 257,
       "src/linux_process_identity": 309,
       "src/list_stop_and_restart_the_crew": 99,
@@ -143,7 +144,7 @@
       "src/owners_settings_directory": 173,
       "src/place_the_hosts_settings": 127,
       "src/read_a_kernel_and_a_home": 133,
-      "src/refuse_a_git_call_in_a_members_shell": 30,
+      "src/refuse_a_git_call_in_a_members_shell": 25,
       "src/refuse_a_member_writing_owner_memory": 588,
       "src/refuse_settings_that_turn_hooks_off": 203,
       "src/row_streams_directory": 164,
@@ -155,8 +156,10 @@
       "src/start_the_member_on_its_host": 208,
       "src/start_the_member_on_the_owners_terminal": 86,
       "src/sweep_leftover_launch_directories": 153,
-      "src/ask_git_what_a_member_is_about_to_change": 85,
-      "src/tell_the_member_a_line": 42
+      "src/ask_git_what_a_member_is_about_to_change": 78,
+      "src/tell_the_member_a_line": 42,
+      "src/a_launch_end_on_this_machine": 119,
+      "src/watch_the_crew_tools_a_launch_served": 94
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",

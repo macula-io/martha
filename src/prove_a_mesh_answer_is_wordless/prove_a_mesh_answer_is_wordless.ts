@@ -112,6 +112,20 @@ export interface WhatTheLaunchSupplies {
   readonly input: Readonly<Record<string, unknown>>
 }
 
+/**
+ * What a launch supplied a mesh answer, read from the environments its approved config names (martha#251), or nothing at
+ * all: exactly one server environment, or a reading against a guess — and a guess is worse than the taint it would lift.
+ */
+export function whatTheLaunchSupplied(
+  environments: readonly Readonly<Record<string, string>>[],
+  the: { readonly node_id: string; readonly home: string; readonly host_version?: string },
+): { readonly wordless_answers: Omit<WhatTheLaunchSupplies, 'input'> } | Record<string, never> {
+  const env = environments.length === 1 ? environments[0] : undefined
+  if (env === undefined) return {}
+  const supplied = { node_id: the.node_id, env, home: env['HOME'] ?? the.home }
+  return { wordless_answers: the.host_version === undefined ? supplied : { ...supplied, host_version: the.host_version } }
+}
+
 /** An answer that reads nothing: the leaves it carried, for the journal and for a reviewer. */
 export interface NothingTaken {
   readonly reads_nothing: true

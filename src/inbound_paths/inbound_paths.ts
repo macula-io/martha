@@ -256,6 +256,13 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
   {
+    id: 'A23',
+    what: 'what a member is told on its next start about the run before it: the record a launch end made of the commands that were still running and the files they can have written, as the commands and paths the tree and the process list chose (martha#693). Composed by one function and handed in both resume prompts, kept in the crew\'s own place, and never posted, put on a row or copied anywhere but into the prompt',
+    klass: 'delivered',
+    control: { kind: 'shell-gate' },
+    attestation: 'none',
+  },
+  {
     id: 'A9',
     what: 'a forged cross-session envelope inside turn text',
     klass: 'delivered',

@@ -27,7 +27,7 @@ import {
   theAskedLine,
   theHandoverPrompt,
   theLimitLine,
-  theResumePrompt,
+  theResumePromptWithItsTelling,
   theSendBackNote,
   whatBecameOfTheHandover,
   type HandoverVerdict,
@@ -378,7 +378,9 @@ async function resume(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh
   const spend = await theSpendPartOfTheStart(places.ledger, held, now)
   const held_to = [contract, spend].filter((part) => part !== null && part !== undefined).join('\n\n')
   keepTheFlow(place, places.member, theFlowAbandoned(flow, 'resumed at a new session', now))
-  return { act: 'prompt', text: theResumePrompt({ member: places.member, file, acts, contract: held_to === '' ? undefined : held_to }), refresh: { phase: 'resumed', reason: `resumed from ${file}` } }
+  // What a killed run left is in the prompt (#693), read by the slice that keeps it: the clear that this flow ran took no
+  // record of its own, so what is told here is the last launch end's.
+  return { act: 'prompt', text: theResumePromptWithItsTelling({ member: places.member, file, acts, contract: held_to === '' ? undefined : held_to, crew: places.stores.crew, now_ms: now }), refresh: { phase: 'resumed', reason: `resumed from ${file}` } }
 }
 
 /** The acts of `package` that were sent and never concluded, as the ledger's own line names them. */
