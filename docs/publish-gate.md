@@ -207,8 +207,9 @@ control. `src/refuse_launch_of_unapproved_config/` is five rules:
    never above it. Nothing above the top is read: it is not the checkout author's,
    the launch never carries it, and a planned launch loads none of it. The stop
    directory the launcher names (the owner's home) bounds the walk when the start
-   is in no checkout, or in one whose top is the stop or above it, and nothing at
-   or above the stop is ever read.
+   is in no checkout, or in one whose top is the stop or above it, and the stop
+   is read only when the host starts in it. A start the stop is no ancestor of, in no checkout, is
+   read up to the root; it can only be refused.
 4. **What the gate cannot pin down is refused**: a symlink, even an approved one;
    a path that is not a plain file or directory; config in a directory that is
    no git checkout, or in one whose top is the stop directory or above it (a

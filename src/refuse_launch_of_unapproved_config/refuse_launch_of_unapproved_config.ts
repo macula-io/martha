@@ -389,7 +389,7 @@ export const admitsLaunch: LaunchGate = (request) => decideLaunch(request).allow
 export interface LaunchPlace {
   readonly host: string
   readonly launch_dir: string
-  /** Not read, nor anything above it: the owner's home. The whole bound when the start is in no checkout the gate reads (martha#766). */
+  /** Read only when the host starts in it: the owner's home. The whole bound when the start is in no checkout the gate reads (martha#766). */
   readonly stop_dir: string
   /**
    * The tree the owner approved, whose attributes the checkout is read under (martha#167). Omitted, the checkout's
