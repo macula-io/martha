@@ -77,15 +77,30 @@ export type TreeRead =
  * tree is used, which is what an approval is read against while there is no approval yet.
  */
 export function readCheckoutTree(dir: string, stop_dir: string, host: LaunchHost, attribute_tree?: string): TreeRead {
-  const found = checkoutOnDisk(dir, host)
+  const found = checkoutTheGateReads(dir, stop_dir, host)
   if (found === undefined) return { kind: 'none' }
-  if (holds(realOrResolved(host, found.top), realOrResolved(host, stop_dir))) return { kind: 'none' }
   const format = objectFormatOf(found.git_dir, host)
   if (format === undefined) {
     return { kind: 'refused', refusal: `The checkout at ${found.top} does not say which object format it holds, so the files a member would run cannot be judged (martha#167); approve the checkout again.` }
   }
-  const read = judgeTheCheckout({ top: realOrResolved(host, found.top), git_dir: found.git_dir, attribute_tree: attribute_tree ?? null }, format, host)
+  const read = judgeTheCheckout({ top: found.top, git_dir: found.git_dir, attribute_tree: attribute_tree ?? null }, format, host)
   return read.kind === 'refused' ? { kind: 'refused', refusal: read.refusal, ...(read.the_approved_tree === true ? { the_approved_tree: true as const } : {}) } : { kind: 'tree', tree: read.tree, changes: read.changes }
+}
+
+/**
+ * The checkout holding `dir` that the gate reads, or `undefined`: the nearest `.git` on disk
+ * (`checkoutOnDisk`), unless its top is `stop_dir` or a directory above it, where nothing pins
+ * what the checkout runs and hashing it would stage a whole home into the object store. Both the
+ * top and the stop are resolved through links, so a caller may pass either resolved or not.
+ *
+ * One answer, two readers (martha#766): the tree read and the config walk both bound themselves
+ * here, so the files an approval names and the tree it binds cannot come from different checkouts.
+ */
+export function checkoutTheGateReads(dir: string, stop_dir: string, host: LaunchHost): { readonly top: string; readonly git_dir: string } | undefined {
+  const found = checkoutOnDisk(dir, host)
+  if (found === undefined) return undefined
+  const top = realOrResolved(host, found.top)
+  return holds(top, realOrResolved(host, stop_dir)) ? undefined : { top, git_dir: found.git_dir }
 }
 
 /**
