@@ -272,8 +272,8 @@ export function stoppingHostOn(places: { readonly launcher: MemberPlaces; readon
  * call the `git` on a member's PATH is handed judged, and every ref a transaction deletes read for whose branch it is.
  * No layout declared, nothing is judged, and the crew's tools are handed no guard at all.
  */
-function theGitGuardPlaceOf(settings: CrewSettings, member: string): TheGitGuardPlaces {
-  return theGitGuardPlacesOf(theWorkspaceTheCrewDeclared(settings), member, thisMachine) ?? {}
+function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: CrewStore): TheGitGuardPlaces {
+  return theGitGuardPlacesOf(theWorkspaceTheCrewDeclared(settings), member, thisMachine, leftovers) ?? {}
 }
 
 /** The place a member's restart tool asks through; none when the crew's directory is not this user's own. */
@@ -291,6 +291,15 @@ async function finishAnySwitchBeforeTheHostStarts(request: MemberStartRequest, c
   for (const told of await finishTheOwnersDefaultAtLaunch({ member: request.member, host: { stores: { crew: crewStores.crew } }, owners, beats: dashboardRowsIn(request.places.dashboard), stillThere: fs.existsSync })) request.tellOwner(told)
 }
 
+/**
+ * One raising for this launch, and one channel carrier: the carrier counts a handed message taken in when the mod
+ * reports the member's next main turn started (martha#253).
+ */
+const theTurnsOf = (request: MemberStartRequest) => ({
+  turns: turnsRaised(),
+  channel: { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } },
+})
+
 /** Starts the named member of the crew declared at `root`, on the config its owner approved. */
 export async function startMember(request: MemberStartRequest): Promise<MemberStarted> {
   const ready = await readyToStart(request)
@@ -305,10 +314,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
   const { snapshot_root, ...places } = request.places
   const crewStores = theCrewsStores(request.state, request.root)
   await finishAnySwitchBeforeTheHostStarts(request, crewStores)
-  // One raising for this launch, and one channel carrier: the carrier counts a handed message taken in when the mod
-  // reports the member's next main turn started (martha#253).
-  const turns = turnsRaised()
-  const channel = { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(request.places.rows) } }
+  const { turns, channel } = theTurnsOf(request)
   const started = await launchClaudeCodeMember({
     member_name: request.member,
     node_id: ready.node_id,
@@ -317,6 +323,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     crew_settings: ready.settings,
     owner_bell: ready.settings.house_rules[OWNER_BELL],
     places,
+    leftovers: { crew: crewStores.crew, workspace: theWorkspaceTheCrewDeclared(ready.settings) },
     command: request.command,
     args: [...(ready.model === null ? [] : ['--model', ready.model]), ...request.args, ...(request.initial_prompt === undefined ? [] : [request.initial_prompt])],
     inherited: request.inherited,
@@ -325,7 +332,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     ...(request.hear_relay_place === undefined ? {} : { hearRelayPlace: request.hear_relay_place }),
     turns,
     crew_tools: (sessions, member) =>
-      crewToolsOver({ ...theGitGuardPlaceOf(ready.settings, request.member),
+      crewToolsOver({ ...theGitGuardPlaceOf(ready.settings, request.member, crewStores.crew),
         member: request.member,
         ledger: channel,
         beats: dashboardRowsIn(request.places.dashboard),

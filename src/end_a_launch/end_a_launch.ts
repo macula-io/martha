@@ -14,6 +14,7 @@
 
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { type ChildProcess, spawn } from 'node:child_process'
+import { readFileSync, statSync } from 'node:fs'
 import process from 'node:process'
 
 import { type LaunchRecorded, recordMemberLaunch, recordMemberStopped } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
@@ -21,7 +22,13 @@ import { killGroup, refusedIfTheRunIsGone } from '../end_a_launch_when_its_run_e
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { thePathWithTheGuardFirst } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
-import { linuxProcessIdentities } from '../linux_process_identity/process_identity_from_proc.ts'
+import { bootTimeMsUnder, PROC_ROOT, linuxProcessIdentities, processesInGroupUnder, startedAtMs } from '../linux_process_identity/process_identity_from_proc.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
+import {
+  keepWhatTheEndLeft,
+  ticksPerSecondOnTheMachine,
+  type TheMachineAtAnEnd,
+} from '../tell_a_member_what_its_relaunch_killed/the_end_on_this_machine.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { CLAUDE_SERVERS, launchEnvironment } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { isOnTheOwnersTerminal, startForegroundJob, type ForegroundJob } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
@@ -261,6 +268,10 @@ export function whenTheMemberStops(
     child.once('exit', (exit_code, signal) => {
       void (async () => {
         const stopped_because = ended()
+        // What the run left is read and kept BEFORE the group is killed (#693): a killed process has nothing left to
+        // read, and the host's background children are still alive when its own exit fires. The reading is synchronous
+        // for the same reason.
+        keepWhatTheRunLeft(launch, pid)
         killGroup(pid)
         recordMemberStopped(launchRecords, launch.member_name)
         await removeWhatTheLaunchMade(made)
@@ -269,4 +280,62 @@ export function whenTheMemberStops(
       })()
     })
   })
+}
+
+/**
+ * The record of what this launch left in the member's trees, kept in the crew's own place (#693); nothing when the
+ * launch was given no crew to keep it in. It never throws: an end that could not read or keep the record still ends the
+ * launch, and a record already kept then stands for the refusals.
+ */
+function keepWhatTheRunLeft(launch: ClaudeCodeMemberLaunch, group: number): void {
+  const leftovers = launch.leftovers
+  if (leftovers === undefined) return
+  keepWhatTheEndLeft({
+    member: launch.member_name,
+    at_ms: Date.now(),
+    group,
+    crew: leftovers.crew,
+    workspace: leftovers.workspace,
+    checkout: launch.place.launch_dir,
+    mesh_servers: launch.places.mesh_servers,
+    machine: theMachineAtAnEnd(launch),
+  })
+}
+
+/**
+ * This machine, as an end reads it (#693): the group the kernel holds now, each process's own words, and when in the
+ * boot a start happened, asked once here so the reading is one pass and the slice decides from what it is given.
+ */
+function theMachineAtAnEnd(launch: ClaudeCodeMemberLaunch): TheMachineAtAnEnd {
+  const boot_ms = bootTimeMsUnder(PROC_ROOT)
+  const ticks = ticksPerSecondOnTheMachine({ processes: thisMachine.processes }, launch.place.launch_dir)
+  return {
+    processes: thisMachine.processes,
+    files: thisMachine.stores.files,
+    modifiedAt: theWriteTime,
+    wordsOf: theWordsAt,
+    commandsIn: theGroupUnder,
+    theStartMs: (start_ticks) => (boot_ms === null || ticks === null ? null : startedAtMs(start_ticks, boot_ms, ticks)),
+  }
+}
+
+/** The words a process on this machine was started with, from the kernel's own cmdline; none when it holds none. */
+function theWordsAt(pid: number): readonly string[] {
+  try {
+    return readFileSync(`${PROC_ROOT}/${String(pid)}/cmdline`, 'utf8').split('\u0000').filter((word) => word !== '')
+  } catch {
+    return []
+  }
+}
+
+/** The commands a member's process group holds on this machine, as the kernel names them. Read before the kill. */
+const theGroupUnder: TheMachineAtAnEnd['commandsIn'] = (group) => processesInGroupUnder(PROC_ROOT, group)
+
+/** When a path was last written, as this machine's own stat says, or null when it will not say. */
+function theWriteTime(path: string): number | null {
+  try {
+    return statSync(path).mtimeMs
+  } catch {
+    return null
+  }
 }

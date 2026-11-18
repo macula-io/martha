@@ -16,7 +16,7 @@
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
-import type { HostContract } from '../host_contract/host_contract.ts'
+import type { CrewStore, HostContract } from '../host_contract/host_contract.ts'
 import { askGitWhatAMemberIsAboutToChange } from '../ask_git_what_a_member_is_about_to_change/ask_git_what_a_member_is_about_to_change.ts'
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import { readTheGitCallsInAShellLine } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
@@ -29,6 +29,8 @@ export interface AToolCallToGuard {
   /** The name the host gives the tool it is reporting, and the arguments the member's model was given for it. */
   readonly tool: string
   readonly input: Readonly<Record<string, unknown>>
+  /** The crew's own store, where what the member's last launch left is kept: a commit carrying it is refused (#693). */
+  readonly leftovers?: CrewStore
 }
 
 /**
@@ -59,5 +61,11 @@ export async function refuseAGitCallInAMembersShell(call: AToolCallToGuard): Pro
   if (line === undefined) return undefined
   const calls = readTheGitCallsInAShellLine(line)
   if (calls.length === 0) return undefined
-  return askGitWhatAMemberIsAboutToChange({ host: call.host, calls, workspace: call.workspace, member: call.member })
+  return askGitWhatAMemberIsAboutToChange({
+    host: call.host,
+    calls,
+    workspace: call.workspace,
+    member: call.member,
+    ...(call.leftovers === undefined ? {} : { leftovers: call.leftovers }),
+  })
 }

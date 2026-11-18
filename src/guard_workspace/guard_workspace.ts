@@ -146,6 +146,13 @@ const isAnotherMembers = (branch: string, workspace: TheWorkspace, member: strin
   return owner !== null && !sameMemberName(owner, member)
 }
 
+/**
+ * Whether a branch is `member`'s own: a branch of this crew, owned by `member`. The trees a launch end reads for what a
+ * killed run left are the worktrees this branch is on (#693), by this one rule rather than a second copy of it.
+ */
+export const isTheMembersBranch = (branch: string, workspace: TheWorkspace, member: string): boolean =>
+  isAMembersBranch(branch, workspace.members) && !isAnotherMembers(branch, workspace, member)
+
 /** The refusal a call of another member's branch is, named for the branch: what the caller is told, or undefined. */
 const refusalOfAnothersBranch = (branch: string, workspace: TheWorkspace, member: string): string | undefined =>
   isAnotherMembers(branch, workspace, member)

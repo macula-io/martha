@@ -26,10 +26,12 @@
 // directory the call runs in or the worktree it names. A call with no directory it can name is asked nowhere, and its
 // rules that need a fact do not fire.
 
-import type { HostContract } from '../host_contract/host_contract.ts'
+import type { CrewStore, HostContract } from '../host_contract/host_contract.ts'
 import { refuseACallInTheWorkspace, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { theLeftoverRecordOf } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
+import { theRefusalOfTheCommit } from '../tell_a_member_what_its_relaunch_killed/the_commit_that_carries_what_a_killed_run_left.ts'
 import { realpathSync } from 'node:fs'
 import { isAbsolute, join, sep } from 'node:path'
 
@@ -39,6 +41,11 @@ export interface AQuestionAboutACall {
   readonly calls: readonly AGitCall[]
   readonly workspace: TheWorkspace
   readonly member: string
+  /**
+   * The crew's own store, where the record of what the member's last launch left is kept (martha#693). A commit among
+   * the calls is judged on it; absent, no commit is judged, as for a crew that keeps no record.
+   */
+  readonly leftovers?: CrewStore
 }
 
 /** The porcelain line git prints for a worktree its record names but whose directory no longer stands. */
@@ -142,6 +149,23 @@ async function theFactsOf(host: AQuestionAboutACall['host'], clone: string | nul
   return { branches, defaultBranch, worktrees }
 }
 
+/** The command a call stages and ships what the index holds: the one a killed run's leftovers would go out in. */
+const COMMIT = 'commit'
+
+/**
+ * What a commit among the calls would ship that a killed run left, or undefined when none would (martha#693): the
+ * member's kept record judged against the bytes the index holds for the paths the commit would carry.
+ */
+async function theLeftoversRefusal(request: AQuestionAboutACall, calls: readonly AGitCall[]): Promise<string | undefined> {
+  const crew = request.leftovers
+  const commit = calls.find((call) => call.command === COMMIT)
+  if (crew === undefined || commit === undefined) return undefined
+  const kept = theLeftoverRecordOf(crew, request.member)
+  // A record nobody can read is said and judged nothing on (rule 3), and a place that cannot be asked is not a refusal.
+  if (kept === undefined || 'refusal' in kept || 'unreadable' in kept) return undefined
+  return theRefusalOfTheCommit({ processes: request.host.processes, directory: commit.directory, record: kept.record })
+}
+
 /** The refusal a call meets, asking git what it needs to know: undefined when the layout holds, or cannot be looked at. */
 export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutACall): Promise<string | undefined> {
   const { host, member } = request
@@ -156,5 +180,5 @@ export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutAC
   const clone = calls.map((call) => theCloneOf(call.directory, workspace.clones)).find((found) => found !== null) ?? null
   const where = calls.map(theWorktreeListedAt).find((found) => found !== null) ?? clone
   const guarded: AGuardedCall = { calls, workspace, member, facts: await theFactsOf(host, clone, where) }
-  return refuseACallInTheWorkspace(guarded)
+  return refuseACallInTheWorkspace(guarded) ?? (await theLeftoversRefusal(request, calls))
 }

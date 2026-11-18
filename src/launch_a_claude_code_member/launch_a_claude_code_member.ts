@@ -118,6 +118,8 @@ import {
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import type { CrewStore } from '../host_contract/host_contract.ts'
+import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
@@ -264,6 +266,15 @@ export interface ClaudeCodeMemberLaunch {
    * launch gives none.
    */
   readonly hearRelayPlace?: (place: MemberRelayPlace) => void
+  /**
+   * The crew's own store and the layout it declared, so this launch's end keeps what a killed command left in the
+   * member's trees (#693): the record the member's next start is told from, and the two refusals judge. A launch given
+   * none keeps no record, and the refusals judge nothing (a test's launch, and a crew that declared no layout).
+   */
+  readonly leftovers?: {
+    readonly crew: CrewStore
+    readonly workspace: TheWorkspace | undefined
+  }
 }
 
 /** How a member's process ended. */
