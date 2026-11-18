@@ -36,6 +36,7 @@ import {
   exceptionsNotHeld,
   lineOfAFinding,
   lineOfAMarkerNotHeld,
+  lineOfAnExceptionNotHeld,
   type MarkerNotHeld,
 } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { coreSources } from '../../prove_the_core/core_sources.ts'
@@ -74,7 +75,7 @@ function runSelfTest(): number {
 
 function reportStale(stale: readonly DeclaredCoincidence[]): number {
   for (const entry of stale) {
-    console.error(`${NAME}: ${entry.declared_in}:${entry.line}: '${entry.value}' in ${entry.file} is declared a coincidence but matches nothing there, or carries no reason, or repeats another entry. Drop it, or say why it stays.`)
+    console.error(`${NAME}: ${entry.declared_in}:${entry.line}: ${lineOfAnExceptionNotHeld(entry)} Drop it, or say why it stays.`)
   }
   return 2
 }

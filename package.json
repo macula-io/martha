@@ -150,8 +150,8 @@
       "src/run_the_martha_command": 454,
       "src/run_the_nodes_own_npm_alone": 165,
       "src/serve_the_relay_to_a_launch": 235,
-      "src/start_a_member": 168,
-      "src/start_the_member_on_its_host": 189,
+      "src/start_a_member": 167,
+      "src/start_the_member_on_its_host": 208,
       "src/start_the_member_on_the_owners_terminal": 86,
       "src/sweep_leftover_launch_directories": 153,
       "src/ask_git_what_a_member_is_about_to_change": 85,
@@ -166,6 +166,7 @@
     },
     "sliceCap": 600,
     "sliceCeilings": {
+      "src/check_no_literal_restates_a_value": 631,
       "src/land_passed_work_as_one_batch": 614
     },
     "packageImports": {

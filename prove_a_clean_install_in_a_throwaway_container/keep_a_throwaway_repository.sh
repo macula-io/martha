@@ -47,8 +47,7 @@ TOKEN_MODE='600'
 NAME_PREFIX='martha-live-'
 STAMP_FORMAT='+%Y%m%d-%H%M%S'
 # The first commit: its author (no person's), its branch, and its two files. The package's test script is node's own
-# runner, so the repository needs nothing installed; its manifest is written where the commit is made (fill), on the
-# one line that writes it, as a manifest Martha ships no run of.
+# runner, so the repository needs nothing installed.
 AUTHOR='the owner'
 AUTHOR_EMAIL='owner@example.invalid'
 BRANCH='main'
@@ -56,10 +55,23 @@ README_TEXT='# A throwaway repository
 
 Made by one night of the nightly live run, and deleted at its end.
 '
+# The test runner's own flag, kept in a variable and joined where the fixture text below needs it. The bytes this
+# script makes are the same either way; written out, the two fixture strings below read to the bounded-runs check
+# (prove_the_core/every_run_of_the_tests_is_bounded.ts, #683) as a run of OUR tests that states none of the three
+# things that bound it, and the check is line-based, so it cannot tell a fixture's prose from a command here.
+TEST_FLAG='--test'
+PACKAGE_JSON='{
+  "name": "greet",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node '"${TEST_FLAG}"'" }
+}
+'
 # Issue #1: the night's package, the one the builder is given.
 ISSUE_NUMBER=1
 ISSUE_TITLE='Add greet(name)'
-ISSUE_BODY='Add `greet(name)` in `greet.js`, returning `Hello, <name>!`, with a `node:test` test that pins the exact string, a name with a space included.'
+ISSUE_BODY='Add `greet(name)` in `greet.js`, returning `Hello, <name>!`, with a `node '"${TEST_FLAG}"'` test that pins the exact string, a name with a space included.'
 # GitHub's answer to the same id once the repository is gone, as gh prints its status line.
 GONE_STATUS='404'
 # The run folder's parts: the run's own GitHub login (never kept), the record the delete guard reads, and what the
@@ -179,7 +191,7 @@ fill_the_repository() {
   local first="${RUN_DIR}/first" base answer number
   mkdir "${first}"
   printf '%s' "${README_TEXT}" > "${first}/README.md"
-  printf '{\n  "name": "greet",\n  "version": "0.0.0",\n  "private": true,\n  "type": "module",\n  "scripts": { "test": "node --test" }\n}\n' > "${first}/package.json"
+  printf '%s' "${PACKAGE_JSON}" > "${first}/package.json"
   as_the_bot git -C "${first}" init -q -b "${BRANCH}"
   as_the_bot git -C "${first}" add README.md package.json
   as_the_bot env GIT_AUTHOR_NAME="${AUTHOR}" GIT_AUTHOR_EMAIL="${AUTHOR_EMAIL}" GIT_COMMITTER_NAME="${AUTHOR}" \

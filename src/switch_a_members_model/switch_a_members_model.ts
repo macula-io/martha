@@ -18,7 +18,7 @@
 
 import { join } from 'node:path'
 
-import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import { holdsReviews, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import type { TheOwnersModelRecord } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 
@@ -160,6 +160,12 @@ export function homeModelOf(settings: CrewSettings, member: string): string {
  * for such a member could never be undone and the session would stay on the other model for every package after it.
  */
 export function theSwitchACallAsks(args: ASwitchAsked, settings: CrewSettings, member: string): ADeclaredSwitch | string {
+  const who = settings.members.find((one) => one.name === member)
+  // A reviewer member's own session is the review (martha#541 package 6b): a switch would move it off the crew's
+  // reviewer model, which is the one thing the session is held to, so no switch is made for it.
+  if (who !== undefined && settings.house_rules.review_model !== null && holdsReviews(settings, who)) {
+    return `${member} holds reviews (role ${who.role}), and this crew holds reviews to ${settings.house_rules.review_model}: a switch would move the review off it, so no switch was made.`
+  }
   if (homeModelOf(settings, member) === '') {
     return `${member} declares no model of its own in this crew, so a switch could never be undone: declare ${member}'s model in the declaration first, and no switch was made.`
   }

@@ -383,7 +383,10 @@ test('two switches in two processes are one at a time: the second waits, and the
   // being each other's, which is what a switch across two crews would really look like.
   const first = aProcessToSwitch(shared, { tag: 'a', own_model: OWN_MODEL, review_model: THE_REVIEWER_MODEL, member: 'builder', config_dir, settings_file, lock_root, waits_for_go: true })
   await waitForAFile(join(shared, 'a', 'saved-a'), 'the first switch never saved its model')
-  const second = aProcessToSwitch(shared, { tag: 'b', own_model: THE_REVIEWER_MODEL, review_model: OWN_MODEL, member: 'reviewer', config_dir, settings_file, lock_root, waits_for_go: false })
+  // Both processes switch a builder: a solo crew's reviewer holds reviews since martha#541 package 6b, and a reviewer
+  // member on a model other than the crew's reviewer model is refused a switch, which would make this test about that
+  // rule and not about the lock.
+  const second = aProcessToSwitch(shared, { tag: 'b', own_model: THE_REVIEWER_MODEL, review_model: OWN_MODEL, member: 'builder', config_dir, settings_file, lock_root, waits_for_go: false })
   // The second switch's order must not come back while the first holds the lock: that is the whole of R2.
   await new Promise((resolved) => setTimeout(resolved, 400))
   assert.equal(there(join(shared, 'b', 'ordered-b')), false, 'the second switch took its order while the first still held the owner\'s settings file, so nothing kept them apart')
