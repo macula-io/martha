@@ -592,6 +592,10 @@ export const ROOM_SLICES_WHICH_LOAD: readonly string[] = [
  */
 export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[] = [
   {
+    name: 'check_the_workspace_layout',
+    why: 'the entry npm run check:workspace-layout and the CI job run, over the scan check_the_workspace_matches_its_layout holds; a host adapter may import no program, so the launch runs that slice and never this entry',
+  },
+  {
     name: 'probe_launch_hosts',
     why: 'a script run by hand, npm run probe:launch, to probe a host; the command never loads it',
   },

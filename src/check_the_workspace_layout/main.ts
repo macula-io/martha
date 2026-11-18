@@ -20,7 +20,8 @@ import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew } from '../declare_crew/declare_crew.ts'
 import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { theDriftInTheWorkspace } from './check_the_workspace_matches_its_layout.ts'
+import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 
 const NAME = 'check_the_workspace_matches_its_layout'
 
@@ -53,9 +54,10 @@ async function theGate(root: string): Promise<number> {
   return reportFindings(lines)
 }
 
-/** The git a planted workspace is built with, its own identity so nothing of the runner's is read. */
+/** The git a planted workspace is built with, its own identity so nothing of the runner's is read, and Martha's own
+ * settings on every call, as every place in this tree that starts git carries them (martha#192). */
 const gitIn = (cwd: string, ...args: readonly string[]): string =>
-  execFileSync('git', ['-c', 'user.name=the self-test', '-c', 'user.email=selftest@example.invalid', ...args], { cwd, encoding: 'utf8' }).trim()
+  execFileSync('git', marthasOwnGitArgs(['-c', 'user.name=the self-test', '-c', 'user.email=selftest@example.invalid', ...args]), { cwd, encoding: 'utf8' }).trim()
 
 /** A bare origin with one commit on `main`, a clone of it under `<root>/clones/acme/widget`, and the worktree place
  * beside them: the shape a crew's places hold, planted from nothing so the self-test reads plantings of its own. */
@@ -67,7 +69,7 @@ function plantAWorkspace(root: string): { readonly workspace: { clones: string; 
   mkdirSync(join(clones, 'acme'), { recursive: true })
   mkdirSync(worktrees)
   mkdirSync(seed)
-  execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch=main', origin])
+  execFileSync('git', marthasOwnGitArgs(['init', '--quiet', '--bare', '--initial-branch=main', origin]))
   gitIn(seed, 'init', '--quiet', '--initial-branch=main')
   writeFileSync(join(seed, 'README.md'), '# widget\n')
   gitIn(seed, 'add', '-A')

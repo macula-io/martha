@@ -282,8 +282,14 @@ const theScanLine = (lines: readonly string[]): string | null => {
 /** What the row says when the scan could not be made: the launch goes on, and the owner is told what was not looked at. */
 const THE_SCAN_FAILED = 'the workspace could not be scanned: run npm run check:workspace-layout by hand'
 
-/** The scan a launch runs: the slice, over this machine's tree and git, with the places the crew declared. */
-const theScanOf = (workspace: TheWorkspace): Promise<readonly string[]> =>
+/** A scan of the workspace a launch was given: the drift lines it found, or a rejection the launch reports and goes on
+ * past (martha#562 package 2). Testable through the folder below, which takes one in place of the scan it runs. */
+export type TheScanOfTheWorkspace = (workspace: TheWorkspace) => Promise<readonly string[]>
+
+/** The scan a launch runs: the slice, over this machine's tree and git, with the places the crew declared. It is a slice
+ * and not the program `npm run check:workspace-layout` runs (../check_the_workspace_layout), which an adapter may not
+ * import: the launch reports what the same scan finds, it does not run that program. */
+const theScanOf: TheScanOfTheWorkspace = (workspace: TheWorkspace) =>
   theDriftInTheWorkspace({ files: thisMachine.stores.files, processes: thisMachine.processes, workspace })
 
 /** Nothing to fold: a crew that declared no layout, or a launch given none. */
@@ -299,7 +305,7 @@ export function aFolderOfTheScan(
   workspace: TheWorkspace | undefined,
   member: string,
   beats: DashboardStore,
-  scan: (workspace: TheWorkspace) => Promise<readonly string[]> = theScanOf,
+  scan: TheScanOfTheWorkspace = theScanOf,
 ): () => void {
   if (workspace === undefined) return NOTHING_TO_FOLD
   let line: string | null = null

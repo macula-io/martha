@@ -14,8 +14,9 @@
 // It runs where the guard cannot see — after a member's shell, at a launch, or by hand — and it asks git only, with
 // Martha's own settings (../run_marthas_own_git). A place the crew did not declare is not checked, and a git that cannot
 // answer a question leaves that question unasked rather than inventing an answer. Two things run it: `npm run
-// check:workspace-layout` (main.ts, and the job CI gives it) and a launch, which folds what it finds into the member's
-// row (../guard_the_git_a_member_runs/the_guard_of_a_launch's aFolderOfTheScan).
+// check:workspace-layout`, whose entry is ../check_the_workspace_layout/main.ts (a program of its own, since it is a
+// program the launch cannot import), and a launch, which folds what it finds into the member's row
+// (../guard_the_git_a_member_runs/the_guard_of_a_launch's aFolderOfTheScan).
 //
 // The walk names what it cannot look at instead of dying on it: a child of the clones place that is no directory is a
 // line, and one the tree will not read is a line too. A walk that took every child for an organisation — as this one did

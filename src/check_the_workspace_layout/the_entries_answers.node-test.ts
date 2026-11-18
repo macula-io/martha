@@ -14,7 +14,7 @@ import { test, type TestContext } from 'node:test'
 import { soloDeclaration } from '../declare_crew/declare_crew.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
-const ENTRY = join(dirname(import.meta.dirname), 'check_the_workspace_matches_its_layout', 'main.ts')
+const ENTRY = join(import.meta.dirname, 'main.ts')
 const NAME = 'check_the_workspace_matches_its_layout'
 
 /** A workspace a crew declared: `<root>/clones/acme/widget`, `<root>/worktrees`, and the declaration that names both. */
@@ -126,5 +126,5 @@ test('a declaration that cannot be read answers 2, and says it could not be made
 
 test('the script the job runs names this entry, so a script pointed elsewhere fails here and not only in CI', () => {
   const manifest = JSON.parse(readFileSync(join(dirname(import.meta.dirname), '..', 'package.json'), 'utf8')) as { scripts: Record<string, string> }
-  assert.match(manifest.scripts['check:workspace-layout'] ?? '', /src\/check_the_workspace_matches_its_layout\/main\.ts$/)
+  assert.match(manifest.scripts['check:workspace-layout'] ?? '', /src\/check_the_workspace_layout\/main\.ts$/)
 })
