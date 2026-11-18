@@ -1,7 +1,7 @@
 {
   "name": "martha",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "A crew of coding agents. Core first; hosts are thin adapters.",
   "engines": {
@@ -29,6 +29,7 @@
     "record:claude-code-host": "node src/record_claude_code_host/record_claude_code_host.ts",
     "record:goose-engine": "node src/record_the_goose_engine/record_the_goose_engine.ts",
     "stand-in:openai-model": "node src/stand_in_for_an_openai_model/main.ts",
+    "stand-in:acp-agent": "node src/stand_in_for_an_acp_agent/main.ts",
     "lint": "eslint . --max-warnings=0",
     "redo:generated": "node src/redo_the_generated_files_of_a_merge/main.ts",
     "record:ring-results": "node src/record_ring_results/record_ring_results.ts",
@@ -79,6 +80,7 @@
       "src/keep_the_relays_journal",
       "src/keep_what_the_owner_signed",
       "src/launch_a_claude_code_member",
+      "src/launch_a_goose_member",
       "src/list_stop_and_restart_the_crew",
       "src/load_the_hosts_markdown",
       "src/place_the_hosts_settings",
@@ -131,6 +133,7 @@
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
       "src/launch_a_claude_code_member": 490,
+      "src/launch_a_goose_member": 257,
       "src/linux_process_identity": 309,
       "src/list_stop_and_restart_the_crew": 99,
       "src/load_the_hosts_markdown": 337,
