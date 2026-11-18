@@ -65,6 +65,9 @@ NIGHT_TOKEN_DROP="${CONTAINER_HOME}/.night-token"
 # session runs after its command ends, so its last screen stays readable.
 NIGHT_TMUX_SOCKET='night'
 NIGHT_PANE_HOLD='exec sleep infinity'
+# Where each member's session keeps every byte it draws (tmux pipe-pane), and the gate its member waits on until that
+# keeping has begun. Made after the clean start has been judged, so it is not a stranger to it.
+NIGHT_SCREENS="${CONTAINER_HOME}/.night-screens"
 # The container's own process list after the stop: pid, state, command line. Only the container's idle process (its
 # pid 1) and this listing itself may be there; any other process, a member's or a host's it started, is left over. A
 # zombie (state Z) has ended and holds nothing open: the idle process does not reap, so it is not counted.
@@ -235,44 +238,71 @@ night_clean_start_step() {
 # One tmux command in the container, on the night's own server.
 night_tmux() { on_the_host podman exec "${CONTAINER}" tmux -L "${NIGHT_TMUX_SOCKET}" "$@"; }
 
-# What the member named `name`'s session shows now, all of it.
+# What the member named `name`'s session shows now: only what is on its pane. A host that draws full-screen replaces
+# what was there before it, so a line printed before the host started is gone from here (#639 night 1). Used only to
+# say what the member was showing when a step fails.
 night_screen() { night_tmux capture-pane -p -J -S - -t "$1" 2> /dev/null || true; }
 
-# Whether the session of `name` shows `pattern` within `seconds`.
-night_screen_shows() {
-  local waited=0
-  while [ "${waited}" -lt "$3" ]; do
-    if night_screen "$1" | grep -qE -- "$2"; then return 0; fi
+# Every byte the session of `name` drew since it started, as tmux's pipe-pane kept it in the container.
+night_kept() { on_the_host podman exec "${CONTAINER}" cat "${NIGHT_SCREENS}/$1.log" 2> /dev/null || true; }
+
+# Drawn text matched plain: terminal sequences, control characters and every whitespace removed, so a line the host
+# drew in pieces, moved the cursor through, or wrapped still reads as its words.
+night_plain() {
+  LC_ALL=C sed -E $'s/\x1b\\[[0-9;?<>=!]*[ -/]*[@-~]//g; s/\x1b\\][^\x07\x1b]*(\x07|\x1b\\\\)//g; s/\x1b.//g' | LC_ALL=C tr -d '[:space:][:cntrl:]'
+}
+
+# Whether the session of `name` drew `pattern` (an extended pattern, matched against the plain bytes it drew since it
+# started, with the pattern's own whitespace removed) within `seconds`; read at least once, so 0 asks once.
+night_drew() {
+  local waited=0 plain_pattern
+  plain_pattern="$(printf '%s' "$2" | tr -d '[:space:]')"
+  while :; do
+    if night_kept "$1" | night_plain | grep -qE -- "${plain_pattern}"; then return 0; fi
+    if [ "${waited}" -ge "$3" ]; then return 1; fi
     sleep 1
     waited=$((waited + 1))
   done
-  return 1
 }
 
-# The script a member's session runs: its own command in the clone, then the run's line saying it ended, then held.
+# The script a member's session runs: it waits until the run keeps its bytes, then its own command in the clone, then
+# the run's line saying it ended, then held. Without the wait, what the member prints first could go before the run
+# starts keeping it.
 night_member_script() {
-  printf 'export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; cd %s; martha start %s; echo %s %s "$?"; %s' \
-    "${CONTAINER_HOME}" "${NIGHT_CLONE}" "$(remote_word "$1")" "$(remote_word "$1")" "$(remote_word "${ENDED_WORDS}")" "${NIGHT_PANE_HOLD}"
+  printf 'while [ ! -e %s ]; do sleep 0.1; done; export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; cd %s; martha start %s; echo %s %s "$?"; %s' \
+    "$(night_gate "$1")" "${CONTAINER_HOME}" "${NIGHT_CLONE}" "$(remote_word "$1")" "$(remote_word "$1")" "$(remote_word "${ENDED_WORDS}")" "${NIGHT_PANE_HOLD}"
+}
+
+# The file whose presence lets the session of `name` start its member.
+night_gate() { printf '%s/%s.go' "${NIGHT_SCREENS}" "$1"; }
+
+# The session of `name` started, held at its gate; its bytes kept from then on; then its gate opened.
+night_start_session() {
+  local name="$1"
+  on_the_host podman exec "${CONTAINER}" mkdir -p "${NIGHT_SCREENS}" > /dev/null 2>&1 \
+    && night_tmux new-session -d -s "${name}" -x "${TERMINAL_COLUMNS}" -y "${TERMINAL_ROWS}" "$(night_member_script "${name}")" > /dev/null 2>&1 \
+    && night_tmux pipe-pane -o -t "${name}" "cat >> ${NIGHT_SCREENS}/${name}.log" > /dev/null 2>&1 \
+    && on_the_host podman exec "${CONTAINER}" touch "$(night_gate "${name}")" > /dev/null 2>&1
 }
 
 # The restart step: each member started again by its own command, in the clone, in a tmux session of its own name, in
-# the release's order; its first-run folder question answered; and each earlier one still up once a later one starts.
+# the release's order, every byte it draws kept; its first-run folder question answered; and each earlier one still up
+# once a later one starts.
 night_restart_step() {
   local name earlier
   for name in "${MEMBERS[@]}"; do
-    night_tmux new-session -d -s "${name}" -x "${TERMINAL_COLUMNS}" -y "${TERMINAL_ROWS}" "$(night_member_script "${name}")" > /dev/null 2>&1 \
-      || { failed 'night restart' "tmux would not start ${name}'s session"; return 1; }
-    if ! night_screen_shows "${name}" "${name} ${STARTED_WORDS}" "${STARTED_WINDOW_S}"; then
+    night_start_session "${name}" || { failed 'night restart' "tmux would not start ${name}'s session and keep what it draws"; return 1; }
+    if ! night_drew "${name}" "${name} ${STARTED_WORDS}" "${STARTED_WINDOW_S}"; then
       failed 'night restart' "${name} never said '${name} ${STARTED_WORDS}' in the clone: $(night_screen "${name}" | tail -c 300 | tr '\n' ' ')"
       return 1
     fi
-    if night_screen_shows "${name}" "${TRUST_WORDS}" "${TURN_WINDOW_S}"; then
+    if night_drew "${name}" "${TRUST_WORDS}" "${TURN_WINDOW_S}"; then
       night_tmux send-keys -t "${name}" Down > /dev/null 2>&1 && sleep "${KEY_PAUSE_S}" && night_tmux send-keys -t "${name}" Enter > /dev/null 2>&1 \
         || { failed 'night restart' "${name}'s folder question could not be answered"; return 1; }
     fi
     for earlier in "${MEMBERS[@]}"; do
       if [ "${earlier}" = "${name}" ]; then break; fi
-      if night_screen "${earlier}" | grep -qF -- "${earlier} ${ENDED_WORDS}"; then
+      if night_drew "${earlier}" "${earlier} ${ENDED_WORDS}" 0; then
         failed 'night restart' "${earlier} ended in the clone while ${name} started"
         return 1
       fi
@@ -426,15 +456,43 @@ case "${words}" in
     find "${standin}/home" -xdev | sed "s#^${standin}/home#${home}#"
     ;;
   *'tmux -L night new-session'*)
+    # The session's command waits on its gate, as the run's does: the stand-in member starts only once the gate the
+    # command names is there. Then it draws as the host does: its started line, and then a full-screen draw (the
+    # alternate screen) that leaves that line off the pane, where the folder question's words are placed by moving the
+    # cursor rather than by spaces.
     name=''
-    while [ $# -gt 0 ]; do if [ "$1" = -s ]; then name="$2"; fi; shift; done
+    while [ $# -gt 0 ]; do if [ "$1" = -s ]; then name="$2"; fi; command="$1"; shift; done
+    gate="$(printf '%s' "${command}" | sed -n 's/^while \[ ! -e \([^ ]*\) \].*/\1/p' | in_home)"
     mkfifo "${standin}/tmux.${name}.keys"
     sleep 600 > "${standin}/tmux.${name}.keys" &
     printf '%s\n' "$!" >> "${standin}/night.pids"
-    "${here}/member" "martha start ${name}" < "${standin}/tmux.${name}.keys" > "${standin}/tmux.${name}.screen" 2>&1 &
+    : > "${standin}/tmux.${name}.screen"
+    (
+      if [ -n "${gate}" ]; then until [ -e "${gate}" ]; do sleep 0.1; done; fi
+      "${here}/member" "martha start ${name}" < "${standin}/tmux.${name}.keys" 2>&1 \
+        | sed -u -e "s/\(${started} [0-9]*\)/\1"$'\033[?1049h\033[2J'"/" -e "/Quick safety check/s/ /"$'\033[1C'"/g"
+    ) >> "${standin}/tmux.${name}.screen" &
     printf '%s\n' "$!" >> "${standin}/night.pids"
     ;;
-  *'tmux -L night capture-pane'*) tr -d '\r' < "${standin}/tmux.${@: -1}.screen" ;;
+  *'tmux -L night pipe-pane'*)
+    # Kept from now on, as tmux keeps it: what the pane drew before the pipe began is not in it.
+    name=''
+    while [ $# -gt 0 ]; do if [ "$1" = -t ]; then name="$2"; fi; command="$1"; shift; done
+    kept="$(printf '%s' "${command#cat >> }" | in_home)"
+    tail -c 0 -F "${standin}/tmux.${name}.screen" >> "${kept}" 2> /dev/null &
+    printf '%s\n' "$!" >> "${standin}/night.pids"
+    ;;
+  *'tmux -L night capture-pane'*)
+    # Only what is on the pane: what the full-screen draw left there, never what it replaced.
+    drawn="$(tr -d '\r' < "${standin}/tmux.${@: -1}.screen")"
+    printf '%s\n' "${drawn##*$'\033[?1049h'}"
+    ;;
+  *'.night-screens'*)
+    # The run's own execs on the folder that keeps the sessions' bytes: made, a gate touched, a kept file read.
+    mapped=()
+    for word in "$@"; do mapped+=("$(printf '%s' "${word}" | in_home)"); done
+    "${mapped[@]}"
+    ;;
   *'tmux -L night send-keys'*)
     name=''
     keys=()
