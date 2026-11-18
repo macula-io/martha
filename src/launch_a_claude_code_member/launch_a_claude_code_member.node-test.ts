@@ -39,6 +39,7 @@ import { STATE_HOME_VARIABLE } from '../refuse_launch_of_unapproved_config/the_c
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
+import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { POLL_MS, until } from '../drive_the_recorded_host/wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -4541,4 +4542,57 @@ test('the crew tools a launch hands over read the sessions map its relay keeps, 
   assert.equal('refused' in answered ? answered.refused : '', '', 'the launch knows the session that started in it')
   assert.equal(stamped.length, 1, 'the handover was stamped')
   assert.equal(stamped[0]?.predecessor_id, SESSION, 'the stamp names the session the handover came from')
+})
+
+/** The member's row, once it says something, read within `ms`: a tick's work is not the launch's own answer, so the
+ * test waits for the line rather than for the launch. */
+async function theRowSayingWithin(dashboard: string, member: string, ms: number): Promise<string> {
+  const began = Date.now()
+  for (;;) {
+    const needs = dashboardRowsIn(dashboard).read(member)?.needs ?? ''
+    if (needs !== '' || Date.now() - began > ms) return needs
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+}
+
+test('a workspace this launch was given is scanned once it is up, and its drift reaches the row (martha#562 package 2)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+  const member = 'Mercury'
+  dashboardRowsIn(place.dashboard).change(member, () => ({ ...theRowWithNothingSaid(), member, session: 'a-session', at: 1 }))
+  // A clones place holding one plain file: the walk names it rather than dying on it, which is the whole drift this
+  // launch has to report, and it needs no git to be planted.
+  const clones = join(place.state_root, 'the-clones-place')
+  const worktrees = join(place.state_root, 'the-worktrees-place')
+  mkdirSync(clones, { recursive: true })
+  mkdirSync(worktrees, { recursive: true })
+  writeFileSync(join(clones, 'a-note.md'), 'someone left this here\n')
+  const launch = {
+    ...memberLaunch(place, fake.command, place.approved, lines),
+    hook_settings_check_ms: 20,
+    leftovers: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')), workspace: { clones, worktrees, members: [member] } },
+  }
+
+  const started = await aMemberStartedIn(t, place, launch)
+
+  assert.equal(started.started, true)
+  assert.equal(
+    await theRowSayingWithin(place.dashboard, member, 5_000),
+    `the workspace drifts from its layout: ${join(clones, 'a-note.md')} is not a directory: the crew's clones are laid out <clones>/<org>/<repo>, and every place between them is one.`,
+  )
+})
+
+test('a launch given no workspace leaves no scan line, and the row keeps whatever it said (martha#562 package 2)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+  const member = 'Mercury'
+  dashboardRowsIn(place.dashboard).change(member, () => ({ ...theRowWithNothingSaid(), member, session: 'a-session', at: 1 }))
+
+  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command, place.approved, lines), hook_settings_check_ms: 20 })
+
+  assert.equal(started.started, true)
+  await new Promise((resolve) => setTimeout(resolve, 120))
+  assert.equal(dashboardRowsIn(place.dashboard).read(member)?.needs, '', 'a launch with no layout wrote a line anyway')
 })
