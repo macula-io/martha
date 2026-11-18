@@ -109,7 +109,6 @@ import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execu
 import {
   CLAUDE_SERVERS,
   CLAUDE_SETTINGS,
-  launchEnvironment,
   prepareLaunch,
   startedWithOf,
   type PreparedLaunch,
@@ -158,7 +157,8 @@ import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_left
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
-import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { theEnvironmentAMemberIsGiven } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -329,7 +329,7 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
   const owners = userSettingsPath(launch.inherited)
   if ('refusal' in owners) return owners.refusal
   const memberConfig = membersConfigFolderOf(prepared)
-  const env = { ...launchEnvironment(launch.inherited, prepared.switches, CLAUDE_CODE), ...theMembersConfigEnvironment(memberConfig) }
+  const env = theEnvironmentAMemberIsGiven({ inherited: launch.inherited, switches: prepared.switches, crew: { state_root: launch.places.state_root, rows: launch.places.rows }, member_config: memberConfig, host: CLAUDE_CODE })
   // The key answered yes is the one the member is handed, read from the environment it starts with.
   const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir, env[API_KEY_VARIABLE])
   if (!made.made) return made.refusal
