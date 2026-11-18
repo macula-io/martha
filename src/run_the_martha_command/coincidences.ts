@@ -6,6 +6,8 @@ import { THE_TAG_OF_NOTHING_TO_APPROVE } from '../approve_a_checkouts_config/coi
 import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_checkout/coincidences.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { EMPTY_DIRECTORY_NAME } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { THE_ACT_THE_OWNER_TYPES } from '../launch_a_goose_member/coincidences.ts'
+import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../launch_a_goose_member/launch_a_goose_member.ts'
 import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
@@ -27,4 +29,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_WHOLE_CREW, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: THE_STRIPS_VERB },
   // A test's bound on `martha crew`'s first frame (martha#572): how long a node start and one look may take.
   { value: LONGEST_MESSAGE, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: 'how long the test waits for martha crew to draw its first frame; the longest crew message is a length, not a time' },
+  // The act the owner types, spelled like the Goose engine's mode that asks its client (martha#541).
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'run_the_martha_command/run_the_martha_command.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
 ]
