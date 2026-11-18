@@ -2,6 +2,6 @@
 // The martha command (martha#98). Everything it does is in src/run_the_martha_command, on this process's own io.
 import process from 'node:process'
 import { runMarthaCommand } from '../src/run_the_martha_command/run_the_martha_command.ts'
-import { ioOfThisProcess } from '../src/the_io_of_this_process/the_io_of_this_process.ts'
+import { ioOfThisProcess } from '../src/show_the_owners_text_safely/show_the_owners_text_safely.ts'
 
 process.exitCode = await runMarthaCommand(process.argv.slice(2), ioOfThisProcess)
