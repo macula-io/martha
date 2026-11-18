@@ -1,0 +1,9 @@
+{
+  "name": "try-a-single-executable",
+  "private": true,
+  "type": "module",
+  "description": "The one tool the single-executable trial of martha#547 needs: postject, which Node 24 names for writing a SEA blob into a copy of node.",
+  "devDependencies": {
+    "postject": "1.0.0-alpha.6"
+  }
+}

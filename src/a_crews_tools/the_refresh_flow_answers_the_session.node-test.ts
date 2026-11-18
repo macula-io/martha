@@ -32,6 +32,12 @@ import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
 const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 
+/**
+ * The machine root the cases below hand in for a crew whose declaration names none (martha#314). It stands in for the
+ * machine's own, so the case reads the same wherever the suite runs, and it is never a path this machine keeps.
+ */
+const SCRATCH = '/var/scratch'
+
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-refresh-tool-'))
 after(() => removeTheTree(homeOfAll))
 
@@ -61,6 +67,8 @@ interface ACrewOptions {
   readonly refresh_between_tasks?: boolean
   /** Whether the crew has a member whose role is `supervisor`: the one a flow's own lines go to. */
   readonly supervisor?: boolean
+  /** The machine roots a launch hands in for a crew whose declaration names none (martha#314). */
+  readonly volatile_roots?: readonly string[]
 }
 
 /** One crew the test made: its member's tools, where its own store is, and the session that member's launcher holds. */
@@ -109,6 +117,7 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
     stores: { crew: keepTheCrewsFilesAsDirectories(crew) },
     stamps: handoverStampsIn(crew),
     sessions: { of: (id) => held.get(id) },
+    ...(options.volatile_roots === undefined ? {} : { volatile_roots: options.volatile_roots }),
   })
   /** The act of the next question, one turn later than the last write: a beat the row store takes as the newest. */
   const answerWith = async (session: string, percent: number, answer: string, at_start: boolean): Promise<string> => {
@@ -173,6 +182,21 @@ test('#255: a handover that carries no text is refused rather than written, so n
   const { tools } = await aCrewOfTools('builder')
   const answered = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: '   ' }, 'a-session')
   assert.ok('refused' in answered, 'an empty handover was accepted')
+})
+
+test('#314: a handover citing a path a reboot deletes is written and stamped as it always was, and its writer is told so', async () => {
+  const { tools } = await aCrewOfTools('builder', { volatile_roots: [SCRATCH] })
+  const answered = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: `open items: the verdict is ${SCRATCH}/v.md` }, 'a-session')
+
+  assert.ok('answer' in answered, `the handover citing a volatile path was not answered: ${JSON.stringify(answered)}`)
+  assert.ok(answered.answer.startsWith(THE_HANDOVER_WRITTEN), `the word a written handover answers with came off: ${answered.answer}`)
+  assert.match(answered.answer, new RegExp(`${SCRATCH}/v\\.md does not survive a reboot`), `the writer was not told the path goes: ${answered.answer}`)
+})
+
+test('#314: a handover citing no path a reboot deletes answers the one word, as it did before', async () => {
+  const { tools } = await aCrewOfTools('builder', { volatile_roots: [SCRATCH] })
+  const answered = await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'first rules\nwhat runs' }, 'a-session')
+  assert.deepEqual(answered, { answer: THE_HANDOVER_WRITTEN }, `a plain handover carried something more: ${JSON.stringify(answered)}`)
 })
 
 test('#255: a session past the limit is answered with the handover prompt, and its row says where it began', async () => {
