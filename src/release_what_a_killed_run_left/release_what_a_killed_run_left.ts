@@ -18,7 +18,7 @@ export const RELEASE_THE_FILES_TOOL = {
   name: THE_RELEASE_ACT,
   description:
     'Say that paths a killed run left in your trees are your own edits, after looking at them. A released path is not ' +
-    'refused at the next commit or hand-off, and the telling leaves it out. Name each path as the telling named it.',
+    'refused at the next commit, and the telling leaves it out. Name each path as the telling named it.',
   inputSchema: {
     type: 'object',
     properties: {
