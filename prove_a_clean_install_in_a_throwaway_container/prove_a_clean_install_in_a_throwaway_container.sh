@@ -457,7 +457,7 @@ dry_harness_modules() {
 # them by npm and never run, then the harness, which places the layer over the installed release with the installer's
 # own steps. Every line it says goes into the log, and its last is kept as the run's result line.
 dry_step() {
-  local said status=0 modules=() line
+  local said errors errors_file status=0 modules=() line
   mapfile -t modules < <(dry_harness_modules)
   if ! printf '%s\n' "${modules[@]}" | grep -qxF -- "${DRY_HARNESS}/${DRY_ENTRY}"; then
     failed dry "this checkout holds no ${DRY_HARNESS}/${DRY_ENTRY} to run"
@@ -469,11 +469,22 @@ dry_step() {
     || { failed dry "the layer did not reach the container: $(one_line "${said}")"; return 1; }
   said="$(in_the_container "npm install --prefix ${DRY_PUBLISHED} --ignore-scripts --no-audit --no-fund ${INSTALLER_NAME}@${INSTALLER_VERSION} && ln -s ${DRY_PUBLISHED}/node_modules/${INSTALLER_NAME} ${DRY_ROOT}/installer" 2>&1)" \
     || { failed dry "the published installer was not put beside the harness: $(one_line "${said}")"; return 1; }
-  said="$(in_the_container "node ${DRY_ROOT}/${DRY_HARNESS}/${DRY_ENTRY} ${DRY_LAYER} ${RELEASE_VERSION} ${DRY_SHA}" 2>&1)" || status=$?
+  # The harness's standard output and its errors are kept apart: they reach this run on two pipes through podman and
+  # ssh, so their order is not kept, and a warning node or the installer's code writes on stderr must never become the
+  # run's result line. The result line is the harness's own last line on standard output; its errors go into the log,
+  # and they are the words of a refusal.
+  errors_file="$(mktemp)"
+  said="$(in_the_container "node ${DRY_ROOT}/${DRY_HARNESS}/${DRY_ENTRY} ${DRY_LAYER} ${RELEASE_VERSION} ${DRY_SHA}" 2> "${errors_file}")" \
+    || status=$?
+  errors="$(cat "${errors_file}")"
+  rm -f "${errors_file}"
   if [ "${status}" -ne 0 ]; then
-    failed dry "main's layer was not placed, the harness ended ${status}: $(one_line "${said}")"
+    failed dry "main's layer was not placed, the harness ended ${status}: $(one_line "${errors}${errors:+ }${said}")"
     return 1
   fi
+  while IFS= read -r line; do
+    if [ -n "${line}" ]; then log "${line}"; fi
+  done <<< "${errors}"
   while IFS= read -r line; do
     if [ -n "${line}" ]; then log "${line}"; DRY_RESULT="${line}"; fi
   done <<< "${said}"
@@ -1114,12 +1125,17 @@ case "${1:-}" in
     . "$(dirname "$0")/member.facts"
     # The dry run's four calls: what reaches the container on its standard input is kept in the case's folder, the
     # harness's modules as the names the archive holds and the layer byte for byte; the published installer goes in
-    # unanswered; and the harness answers the case's dry.words with its dry.status.
+    # unanswered; and the harness answers the case's dry.words on standard output, then its dry.errors (when the case
+    # has them) on stderr, with its dry.status.
     case "$*" in
       *"tar -xf - -C ${dry}"*) tar -tf - > "${standin}/dry.modules"; exit 0 ;;
       *"cat > ${dry}/"*) cat > "${standin}/dry.layer"; exit 0 ;;
       *"npm install --prefix ${dry}/"*) exit 0 ;;
-      *"node ${dry}/"*) cat "${standin}/dry.words"; exit "$(cat "${standin}/dry.status")" ;;
+      *"node ${dry}/"*)
+        cat "${standin}/dry.words"
+        if [ -f "${standin}/dry.errors" ]; then cat "${standin}/dry.errors" >&2; fi
+        exit "$(cat "${standin}/dry.status")"
+        ;;
     esac
     case "$*" in *"${record}"*) exec cat "${standin}/release.record" ;; esac
     case "$*" in *"${crew}"*) exec cat "${standin}/release.crew" ;; esac
@@ -1729,9 +1745,12 @@ self_test() {
   printf '%s\n' "${release_version}" > "${standin}/version.words"
   dry_result="dry: the stand-in harness's own last line, for ${dry_sha}"
   printf 'dry: a line the stand-in harness says first\n%s\n' "${dry_result}" > "${standin}/dry.words"
+  # A warning on stderr after the result line, as node or the installer's code may write one: never the result line.
+  printf '(node:1) Warning: a line the stand-in writes on stderr, after its result\n' > "${standin}/dry.errors"
   printf '0\n' > "${standin}/dry.status"
   expect_status "${DRY_PASSED}" "${standin}" 'a-host' --dry-layer "${dry_layer}" "${dry_sha}" || case_failed=1
   [ "$(tail -1 "${standin}/out")" = "${dry_result}" ] || { echo "the self-test: a dry pass did not end on the harness's own result line" >&2; case_failed=1; }
+  grep -qF -- '(node:1) Warning: a line the stand-in writes on stderr' "${standin}/out" || { echo "the self-test: the harness's stderr did not reach the log" >&2; case_failed=1; }
   if grep -qF -- "${ALL_PROVEN_WORDS}" "${standin}/out"; then echo "the self-test: a dry pass said the release's words" >&2; case_failed=1; fi
   for name in "${SELF_TEST_MEMBERS[@]}"; do
     asked_for "^ok member ${name}: " "${standin}/out" || { echo "the self-test: a dry pass did not prove ${name}" >&2; case_failed=1; }
@@ -1757,7 +1776,9 @@ self_test() {
   standin="${root}/dry-refused"
   a_case "${standin}"
   printf '%s\n' "${release_version}" > "${standin}/version.words"
-  printf 'dry: not placed: the stand-in harness refuses this layer\n' > "${standin}/dry.words"
+  # The harness says a refusal on stderr (main.mjs: console.error), and those are the words the run fails in.
+  : > "${standin}/dry.words"
+  printf 'dry: not placed: the stand-in harness refuses this layer\n' > "${standin}/dry.errors"
   printf '1\n' > "${standin}/dry.status"
   expect_status 1 "${standin}" 'a-host' --dry-layer "${dry_layer}" "${dry_sha}" || case_failed=1
   asked_for "^FAIL dry: main's layer was not placed, the harness ended 1: dry: not placed: the stand-in harness refuses this layer\$" "${standin}/out" \
