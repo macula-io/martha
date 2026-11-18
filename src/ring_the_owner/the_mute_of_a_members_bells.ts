@@ -7,10 +7,11 @@
 // the bell and the notification.
 //
 // WHO FLIPS IT. Only the owner, at a terminal, with `martha bells <member> muted|heard`. There is no crew tool for it
-// and no act in `who_may_act`, for the reason ../release_a_held_member settled for the gate: a member's model can call
-// a tool, and the one thing the bell warns the owner about must not be able to silence its own warning. The residual is
-// that slice's too, said rather than hidden: a terminal is the same OS user's, so a second member that already has one
-// can type this as well (A13).
+// and no act in the declaration's table, for the reason ../release_a_held_member settled for the gate: a member's model
+// can call a tool, and the one thing the bell warns the owner about must not be able to silence its own warning. The
+// residual is that slice's too, said plainly (martha#619): a member runs as the owner's own OS user, and the refusal of
+// this act from inside a member is a speed bump, not a wall. A member that sets out to could still silence its bell, by
+// a terminal of its own outside its process tree or by appending to this file with its shell.
 //
 // WHERE IT IS KEPT. `<crew>/the-bells/the_bells_of_a_member.jsonl`, one line per flip, through the crew's own `lines`
 // seam (../audit_the_gate_for_a_member's StateLines), so no slice reaches a path on this machine itself. It is history,
