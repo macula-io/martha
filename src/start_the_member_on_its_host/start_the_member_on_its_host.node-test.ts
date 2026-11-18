@@ -184,8 +184,8 @@ test('#541 6b r=3: a reviewer member on the engine is refused to start by name, 
   )
 })
 
-/** The crew's layout places, as a declaration names them: no other constant in the tree carries these words. */
-const LAID_OUT = { clones: '/laid/out/clones', worktrees: '/laid/out/worktrees' }
+/** The crew's layout places, as a declaration names them: no constant in the tree carries these path segments. */
+const LAID_OUT = { clones: '/laid/out/first-places', worktrees: '/laid/out/second-places' }
 
 /** A declaration carrying only what a launch's leftovers read: the layout switch, its places, and the members. */
 const layoutDeclared = (on: boolean): CrewSettings =>
