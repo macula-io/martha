@@ -18,8 +18,13 @@
 // no joiner: one package whose name is two names joined would ask the question those two packages ask, and the landing's
 // ledger rows would name packages that did not land. Both are refused before the yes is looked for (theLandingNamesOneThingEach).
 //
-// Not closed here (martha#608): a settle records the ids the settling member says the owner ticked. The launcher sees
-// that a menu closed, not what was ticked, so an owner's yes in the queue is that member's word about the owner's menu.
+// What a queue's yes stands on is the host's own answer to the menu, not a member's account of it (martha#608): a settle
+// is refused unless a menu closed in the session after the batch was taken and its answer was kept, and every id it names
+// is one the owner picked, as that answer reports the picks. That closes the settle tool, not a write that goes around it
+// (T5 in martha#605): members run as the owner's own OS user, so a process of theirs can still append to the queue's
+// stream itself. martha#619 keeps a member's file tools out of the state root, and that is not a process of its own. Only
+// an OS wall would stop it, and the owner closed that road (martha#258): it is a speed bump that makes a faked yes awkward
+// and visible, not a boundary (docs/agent-control-loop.md).
 
 import { APPROVE_LANDING, OWNER, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
