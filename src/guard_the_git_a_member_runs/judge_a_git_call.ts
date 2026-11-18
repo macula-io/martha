@@ -25,18 +25,17 @@ import { request } from 'node:http'
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
 
+import { RELAY_ORIGIN, RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import {
   GIT_CALL_PATH,
   gitCallBody,
   heardGitVerdict,
   REF_TRANSACTION_PATH,
   refTransactionBody,
-  RELAY_ORIGIN,
-  RELAY_SOCKET_VARIABLE,
   THE_GUARDS_DEADLINE_MS,
   type ARefUpdate,
   type HeardGitVerdict,
-} from '../claude_code_relay/hooks/relay_protocol.ts'
+} from './guard_protocol.ts'
 
 /** The status a refusal exits with, which no git command returns for itself: the crew-code shape (martha#562). */
 export const REFUSED_STATUS = 3

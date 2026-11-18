@@ -1715,10 +1715,11 @@ test('a member\'s git meets the workspace guard: its folder is first on PATH, an
   const first = (spawned['PATH'] ?? '').split(':')[0] ?? ''
   assert.match(first, /\/git-guard$/, `the guard is not first on the member's PATH: ${spawned['PATH'] ?? ''}`)
   assert.ok(existsSync(join(first, 'git')), 'the folder first on the PATH holds no git to run')
-  // Seam (c)'s hook is the one the launch keeps enabled, and the folder git looks in is the guard's own.
+  // Seam (c)'s hook is the one file in the folder git looks in, which is the guard's own; every event stays off, so a
+  // hook a checkout names in its own config runs none (martha#562 r=1, martha#24).
   const settings = spawned[GIT_SETTINGS_VARIABLE] ?? ''
   assert.ok(settings.includes(`'core.hooksPath'='${join(first, THE_HOOKS_DIRECTORY_NAME)}'`), settings)
-  assert.ok(!settings.includes('hook.reference-transaction.enabled'), 'the launch switched off the hook seam (c) runs')
+  assert.ok(settings.includes(`'hook.reference-transaction.enabled'='false'`), `the launch left the event open to a checkout's own hook: ${settings}`)
 
   started.stop('the test is over')
   await started.stopped

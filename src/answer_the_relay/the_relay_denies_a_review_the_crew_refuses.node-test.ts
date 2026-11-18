@@ -28,7 +28,8 @@ import { WHO_DECIDES_REACH, MESH_TOOLS_THAT_WIDEN_REACH } from '../refuse_wideni
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
-import { memberRelay, THE_GUARD_ASK_UNREADABLE, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
+import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_relay.ts'
+import { THE_GUARD_ASK_UNREADABLE } from '../guard_the_git_a_member_runs/judge_a_guards_question.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 

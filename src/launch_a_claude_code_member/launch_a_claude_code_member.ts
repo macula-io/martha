@@ -154,13 +154,14 @@ import {
 import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directory.ts'
 import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
+import { keptBeatingWhileItRuns } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { relayJournalKeptIn } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
-import { foldTheMisses, NOTHING_FOLDED_YET, putTheGuardIn, theRealGitOnThisMachine, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
+import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
@@ -439,24 +440,9 @@ function launchDirectories(
   }
   // The guard's shim goes first on the member's PATH and its hook is where git looks for one (../guard_the_git_a_member_runs),
   // so it is placed here, inside the directory the launch takes away whole.
-  const realGit = theRealGitOnThisMachine(launch.inherited)
-  const guard = realGit === undefined ? { refusal: `The member is not started: its git guard found no git on ${launch.inherited['PATH'] ?? 'a PATH it was given'}.` } : putTheGuardIn(relayDirectory.directory, process.execPath, realGit)
-  if ('refusal' in guard) {
-    relayDirectory.remove()
-    ready.removeSnapshot()
-    return guard.refusal
-  }
+  const guard = theGuardOfTheLaunch(relayDirectory.directory, process.execPath, launch.inherited)
+  if ('refusal' in guard) { relayDirectory.remove(); ready.removeSnapshot(); return guard.refusal }
   return { relayDirectory, emptyDirectory, pluginDir: copy.plugin_dir, guard }
-}
-
-/**
- * The relay server, with the member's row kept fresh and the owner's list swept while it runs (martha#316), both left
- * alone once its launcher closes it.
- */
-function beatingWhileItRuns(crew: CrewTools | undefined, server: RelayServer): RelayServer {
-  if (crew === undefined) return server
-  const stops = [crew.startBeating(), crew.startSweeping()]
-  return { close: async () => { for (const stop of stops) stop(); await server.close() } }
 }
 
 /**
@@ -571,18 +557,15 @@ async function servedRelay(
   const answering = memberRelay(place, sessions)
   // Any report of a session's start, taken or refused, shows the host runs the relay (the backstop, #104).
   const relay: MemberRelay = {
+    ...answering,
     answer: (event, body) => {
       if (event === 'session_started') sessionReported()
       return answering.answer(event, body)
     },
-    run: (body) => answering.run(body),
-    answerTool: (body) => answering.answerTool(body),
-    judgeAGitCall: (body) => answering.judgeAGitCall(body),
-    judgeARefTransaction: (body) => answering.judgeARefTransaction(body),
   }
 
   try {
-    return beatingWhileItRuns(place.crew, await serveTheRelay(relay, socket_path))
+    return keptBeatingWhileItRuns(place.crew, await serveTheRelay(relay, socket_path))
   } catch (error) {
     return `${NOT_STARTED}: its relay socket could not be served (${(error as NodeJS.ErrnoException).code ?? String(error)}).`
   }
@@ -703,12 +686,7 @@ async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeli
 
   const { launchRecords, recorded } = started
   const offLauncherEnd = cleanUpIfTheLauncherEnds(pid, made)
-  // The one tick also folds the misses the member's git guard left (martha#562, seam b): folding is this launcher's own
-  // write, so the row keeps its one writer, and a miss written a moment before the tick still reaches it.
-  let folded = NOTHING_FOLDED_YET
-  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop, () => {
-    folded = foldTheMisses({ misses: made.guard.misses, folded }, { beats: dashboardRowsIn(launch.places.dashboard), member: launch.member_name, at: Date.now() })
-  })
+  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop, aFolderOfTheMisses(made.guard.misses, launch.member_name, dashboardRowsIn(launch.places.dashboard)))
   const ended = (): string | null => (backstop.disarm(), unwatch(), itsRunWent.forgetTheRun(), stoppedBecause)
   const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd, ended)
   backstop.arm()

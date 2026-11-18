@@ -33,7 +33,7 @@ import { dirname } from 'node:path'
 import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
-import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
+import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { handoverStampsIn, keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { readingOnly, type CrewStore, type DocumentStore, type HandoverStampStore, type Refused, type RowStore } from '../host_contract/host_contract.ts'
 import { LIFECYCLE_PLACE, watchForAStop, type StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
@@ -87,8 +87,8 @@ import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a
 import { unpassedOwnerArgument } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { theApprovalInUse, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { refuseAGitCallInAMembersShell, theWorkspaceTheCrewDeclared } from '../refuse_a_git_call_in_a_members_shell/refuse_a_git_call_in_a_members_shell.ts'
-import { refuseAGitCallFromThePath, refuseTheRefUpdates } from '../ask_git_what_a_member_is_about_to_change/ask_git_what_a_member_is_about_to_change.ts'
+import { theWorkspaceTheCrewDeclared } from '../refuse_a_git_call_in_a_members_shell/refuse_a_git_call_in_a_members_shell.ts'
+import { theGitGuardPlacesOf, type TheGitGuardPlaces } from '../guard_the_git_a_member_runs/the_git_guard_places_of_a_crew.ts'
 
 /** Why start starts nothing: its input is no terminal, as a member's shell tool's never is. */
 export const NOT_A_TERMINAL =
@@ -272,18 +272,8 @@ export function stoppingHostOn(places: { readonly launcher: MemberPlaces; readon
  * call the `git` on a member's PATH is handed judged, and every ref a transaction deletes read for whose branch it is.
  * No layout declared, nothing is judged, and the crew's tools are handed no guard at all.
  */
-function theGitGuardPlaceOf(
-  settings: CrewSettings,
-  member: string,
-): Pick<CrewToolPlaces, 'refusesTheGitCall' | 'refusesTheGitOnThePath' | 'refusesTheRefUpdate'> {
-  const workspace = theWorkspaceTheCrewDeclared(settings)
-  if (workspace === undefined) return {}
-  const at = { host: thisMachine, workspace, member }
-  return {
-    refusesTheGitCall: (call) => refuseAGitCallInAMembersShell({ ...at, ...call }),
-    refusesTheGitOnThePath: (call) => refuseAGitCallFromThePath({ ...at, ...call }),
-    refusesTheRefUpdate: (updates) => refuseTheRefUpdates(updates, workspace, member),
-  }
+function theGitGuardPlaceOf(settings: CrewSettings, member: string): TheGitGuardPlaces {
+  return theGitGuardPlacesOf(theWorkspaceTheCrewDeclared(settings), member, thisMachine) ?? {}
 }
 
 /** The place a member's restart tool asks through; none when the crew's directory is not this user's own. */

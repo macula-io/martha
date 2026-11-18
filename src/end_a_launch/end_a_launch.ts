@@ -128,13 +128,10 @@ export function whatTheHostStartsWith(
   launch: ClaudeCodeMemberLaunch,
   made: Pick<LaunchMade, 'prepared' | 'hostEnv' | 'relayDirectory' | 'emptyDirectory' | 'settingsArgs' | 'pluginDir' | 'guard'>,
 ): Starting {
-  const env = {
-    ...launchEnvironment(made.hostEnv, switchesThatRunNothingFromACheckout(made.hostEnv, made.emptyDirectory, made.guard.hooks), CLAUDE_CODE),
-    [RELAY_SOCKET_VARIABLE]: made.relayDirectory.socket_path,
-  }
+  const env = launchEnvironment(made.hostEnv, switchesThatRunNothingFromACheckout(made.hostEnv, made.emptyDirectory, made.guard.hooks), CLAUDE_CODE)
   return {
     args: [...launch.args, ...made.prepared.switches.args, ...made.settingsArgs, '--plugin-dir', made.pluginDir],
-    env: thePathWithTheGuardFirst(env, made.guard.directory),
+    env: thePathWithTheGuardFirst({ ...env, [RELAY_SOCKET_VARIABLE]: made.relayDirectory.socket_path }, made.guard.directory),
   }
 }
 

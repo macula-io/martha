@@ -781,7 +781,11 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'guard_workspace, read_the_git_calls_in_a_shell_line', names: ['guard_workspace', 'read_the_git_calls_in_a_shell_line', 'ask_git_what_a_member_is_about_to_change', 'check_the_workspace_matches_its_layout', 'refuse_a_git_call_in_a_members_shell', 'guard_the_git_a_member_runs'], type: '[the workspace guard]', code: true,
-      desc: ['What the workspace\'s layout refuses of', 'a git call: read_the_git_calls_in_a_', 'shell_line reads each call and the', 'directory it runs in, ask_git_what_a_', 'member_is_about_to_change asks git what', 'a call is about to move, and guard_', 'workspace refuses a call that leaves a', 'clone\'s branch or touches another', 'member\'s worktree or branch; check_the_', 'workspace_matches_its_layout names the', 'drift in a workspace, and refuse_a_git_', 'call_in_a_members_shell and guard_the_', 'git_a_member_runs are the three seams:', 'the shell line a tool call carries, the', 'git first on the member\'s PATH, and the', 'clone\'s ref transaction, each read and', 'judged before it runs. A crew that', 'declared no layout is judged by none', 'of it (martha#562)'] },
+      desc: ['What the workspace\'s layout refuses of', 'a git call: read_the_git_calls_in_a_', 'shell_line reads each call and the', 'directory it runs in, ask_git_what_a_', 'member_is_about_to_change asks git what', 'a call is about to move, and guard_', 'workspace refuses a call that leaves a', 'clone\'s branch or touches another', 'member\'s worktree or branch; check_the_', 'workspace_matches_its_layout names the', 'drift in a workspace, and refuse_a_git_', 'call_in_a_members_shell and guard_the_', 'git_a_member_runs are the seams that ask', 'it: the shell line a tool call carries,', 'the git first on the member\'s PATH, and', 'the clone\'s ref transaction, each read', 'and judged before it runs. A crew that', 'declared no layout is judged by none', 'of it (martha#562)'] },
+  ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'read_the_body_a_request_carries', names: ['read_the_body_a_request_carries'], type: '[a request to the launcher]', code: true,
+      desc: ['The body a request to the', 'launcher\'s socket carries: read', 'whole, up to the largest the', 'launcher reads, as JSON, and no', 'body at all when it is larger', 'or not JSON. Every endpoint of', 'the socket reads one this way', '(martha#41)'] },
   ],
 ]
 

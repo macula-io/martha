@@ -36,7 +36,7 @@
 // after 1a move, and they ask the entry for the same state they used to hold.
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { answerToolCall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
+import { answerToolCall, whatTheCrewRefusesOfACall, type ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { answersOver, type TheAnswersOfOneLaunch, type ThePlacesAHostReportsOver } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 import { noteTheCallCounted, theSpendACrewHolds } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, THE_REFRESH_THE_MOD_RUNS, startSession, type SessionStart } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
@@ -78,7 +78,7 @@ import { rememberOwnWriteOfCall } from '../launch_a_claude_code_member/remember_
 import type { JournalAnswer, RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { isAbsolute } from 'node:path'
+import { theGitCallJudged, theRefTransactionJudged, type AGuardsAnswer } from '../guard_the_git_a_member_runs/judge_a_guards_question.ts'
 
 /** What the launcher sends back, or that it is stopping the member and sends nothing. */
 export type RelayReply =
@@ -106,16 +106,6 @@ export interface MemberRelay {
    */
   judgeARefTransaction(body: unknown): Promise<AGuardsAnswer>
 }
-
-/**
- * What a guard's question is answered with: the verdict, which is exactly `{"allow":1}` or `{"deny":"<why>"}`, or why
- * this launcher cannot read the question. The second is not a refusal — the shim fails open on it and writes the miss
- * down — so it is answered with a status the shim reads as no answer at all, never as a yes.
- */
-export type AGuardsAnswer = { readonly verdict: Verdict } | { readonly refused: string }
-
-/** Why a guard's question is one this launcher does not answer: the body is not the shape the shim posts. */
-export const THE_GUARD_ASK_UNREADABLE = 'the launcher could not read the call it was asked about'
 
 export interface MemberRelayPlace {
   readonly records: SessionRecords
@@ -313,8 +303,8 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     },
     run: async (body) => (place.signed_runs === undefined ? { refused: NO_SIGNED_RUNS } : place.signed_runs.run(body)),
     answerTool: async (body) => answerAToolAndHearItsTurn(state, body, inOrder),
-    judgeAGitCall: async (body) => theGitCallJudged(place, body),
-    judgeARefTransaction: async (body) => theRefTransactionJudged(place, body),
+    judgeAGitCall: async (body) => theGitCallJudged(place.crew, body),
+    judgeARefTransaction: async (body) => theRefTransactionJudged(place.crew, body),
   }
 
   /** One event, answered; never throws, so the journal's answer line is written whatever the event did. */
@@ -641,66 +631,6 @@ async function toolCalled(state: RelayState, body: Body): Promise<RelayReply> {
 }
 
 /**
- * What the crew refuses of this call after the gate has allowed it, or undefined when it refuses nothing.
- *
- * The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role may
- * not make is refused after the gate has allowed it, and never in place of the gate's own answer. The workspace guard's
- * first seam is asked in the same place (martha#562), over the shell line the call carries, and a held end of the turn
- * (martha#311 ruling D) is asked last of all, so it only turns a yes into a no.
- */
-async function whatTheCrewRefuses(
-  place: MemberRelayPlace,
-  session: HostSession,
-  call: { readonly tool: string; readonly input: Body },
-): Promise<string | undefined> {
-  return (await place.crew?.refusesTheSubagent({ tool: call.tool, input: call.input }))
-    ?? (await place.crew?.refusesTheGitIn({ tool: call.tool, input: call.input }))
-    ?? place.crew?.ends.deniesACall(session.id)
-}
-
-/**
- * The `git` on a member's PATH asking about a call it is about to run (martha#562, seam b): the crew's verdict, or
- * why this launcher cannot read the question. A place that hands no guard of this seam refuses nothing.
- */
-async function theGitCallJudged(place: MemberRelayPlace, body: unknown): Promise<AGuardsAnswer> {
-  const call = aCallTheShimAskedAbout(body)
-  if (call === undefined) return { refused: THE_GUARD_ASK_UNREADABLE }
-  const refused = await place.crew?.refusesTheGitOnThePath?.(call)
-  return refused === undefined ? { verdict: ALLOW } : { verdict: { deny: refused } }
-}
-
-/** The clone's reference-transaction hook asking about the refs a transaction would update (martha#562, seam c). */
-function theRefTransactionJudged(place: MemberRelayPlace, body: unknown): AGuardsAnswer {
-  const updates = theRefsATransactionAskedAbout(body)
-  if (updates === undefined) return { refused: THE_GUARD_ASK_UNREADABLE }
-  const refused = place.crew?.refusesTheRefUpdate?.(updates)
-  return refused === undefined ? { verdict: ALLOW } : { verdict: { deny: refused } }
-}
-
-/** The git call a shim asked about (martha#562, seam b): an absolute directory and git's own words, or undefined. */
-function aCallTheShimAskedAbout(body: unknown): { readonly directory: string; readonly args: readonly string[] } | undefined {
-  if (!isBody(body)) return undefined
-  const { cwd, args } = body
-  if (typeof cwd !== 'string' || !isAbsolute(cwd)) return undefined
-  if (!Array.isArray(args) || args.some((word: unknown) => typeof word !== 'string')) return undefined
-  return { directory: cwd, args: args as readonly string[] }
-}
-
-/** The refs a transaction asked about (martha#562, seam c): one ref and whether it is a delete, each, or undefined. */
-function theRefsATransactionAskedAbout(body: unknown): readonly { readonly ref: string; readonly deletes: boolean }[] | undefined {
-  if (!isBody(body) || !Array.isArray(body['updates'])) return undefined
-  const updates = body['updates'].flatMap((update: unknown) => anUpdateAskedAbout(update) ?? [])
-  return updates.length === body['updates'].length ? updates : undefined
-}
-
-/** One ref a transaction asked about, or undefined when it is not the shape the hook posts. */
-function anUpdateAskedAbout(update: unknown): { readonly ref: string; readonly deletes: boolean } | undefined {
-  if (!isBody(update)) return undefined
-  const { ref, deletes } = update
-  return isText(ref) && typeof deletes === 'boolean' ? { ref, deletes } : undefined
-}
-
-/**
  * What the owner keeps from this call before the gate is asked (martha#122, #136): their own settings file, which no call
  * of a member's may name, and their memory, which no call may write. Undefined when the call may touch neither.
  */
@@ -734,7 +664,7 @@ async function theDenialOfACall(
     spend: await theSpendACrewHolds(place.crew, session.id),
   })?.deny
   if (verdict !== undefined) return verdict
-  return whatTheCrewRefuses(place, session, call)
+  return whatTheCrewRefusesOfACall(place.crew, call, session.id)
 }
 
 /**

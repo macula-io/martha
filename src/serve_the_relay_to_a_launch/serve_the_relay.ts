@@ -11,14 +11,11 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 
-import { RELAY_PATHS, GIT_CALL_PATH, REF_TRANSACTION_PATH, RUN_PATH, TOOL_ANSWER_PATH, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
-import type { AGuardsAnswer, MemberRelay } from '../answer_the_relay/answer_the_relay.ts'
-
-/**
- * The largest body the launcher reads. A tool call carries its input whole (a
- * file the model writes, among others); past this the call is refused.
- */
-export const LARGEST_RELAY_BODY = 32 * 1024 * 1024
+import { RELAY_PATHS, RUN_PATH, TOOL_ANSWER_PATH, type RelayEvent } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { GIT_CALL_PATH, REF_TRANSACTION_PATH } from '../guard_the_git_a_member_runs/guard_protocol.ts'
+import { theAnswerAGuardHears } from '../guard_the_git_a_member_runs/judge_a_guards_question.ts'
+import { theBodyOf } from '../read_the_body_a_request_carries/read_the_body_a_request_carries.ts'
+import type { MemberRelay } from '../answer_the_relay/answer_the_relay.ts'
 
 const EVENT_OF_PATH: ReadonlyMap<string, RelayEvent> = new Map(
   (Object.entries(RELAY_PATHS) as [RelayEvent, string][]).map(([event, path]) => [path, event]),
@@ -58,11 +55,27 @@ function reply(response: ServerResponse, status: number, body: unknown): void {
 }
 
 async function answerOne(relay: MemberRelay, request: IncomingMessage, response: ServerResponse): Promise<void> {
-  if (request.method === 'POST' && request.url === RUN_PATH) return runOne(relay, request, response)
-  if (request.method === 'POST' && request.url === TOOL_ANSWER_PATH) return answerAToolOne(relay, request, response)
-  if (request.method === 'POST' && request.url === GIT_CALL_PATH) return judgeOne(request, response, (body) => relay.judgeAGitCall(body))
-  if (request.method === 'POST' && request.url === REF_TRANSACTION_PATH) return judgeOne(request, response, (body) => relay.judgeARefTransaction(body))
+  if (request.method !== 'POST') return answerAnEvent(relay, request, response)
+  if (request.url === RUN_PATH) return answeredWithItsBody(request, response, async (body) => ({ status: 200, body: await relay.run(body) }))
+  if (request.url === TOOL_ANSWER_PATH) return answeredWithItsBody(request, response, async (body) => ({ status: 200, body: await relay.answerTool(body) }))
+  if (request.url === GIT_CALL_PATH) return answeredWithItsBody(request, response, async (body) => theAnswerAGuardHears(await relay.judgeAGitCall(body)))
+  if (request.url === REF_TRANSACTION_PATH) return answeredWithItsBody(request, response, async (body) => theAnswerAGuardHears(await relay.judgeARefTransaction(body)))
   return answerAnEvent(relay, request, response)
+}
+
+/**
+ * The answer a request gets once its body is read as JSON: the one refusal every endpoint shares, and the status and
+ * body the endpoint decides (a guard's question is a 400 when the launcher cannot read it, martha#562).
+ */
+async function answeredWithItsBody(
+  request: IncomingMessage,
+  response: ServerResponse,
+  answering: (body: unknown) => Promise<{ readonly status: number; readonly body: unknown }>,
+): Promise<void> {
+  const body = await theBodyOf(request)
+  if (body === undefined) return reply(response, 400, { refused: 'the body is not JSON the launcher reads' })
+  const said = await answering(body)
+  reply(response, said.status, said.body)
 }
 
 /** A hook event's request: the launcher's answer, or a refusal. */
@@ -70,7 +83,7 @@ async function answerAnEvent(relay: MemberRelay, request: IncomingMessage, respo
   const event = EVENT_OF_PATH.get(request.url ?? '')
   if (request.method !== 'POST' || event === undefined) return reply(response, 404, { refused: 'no such event' })
 
-  const body = await bodyOf(request)
+  const body = await theBodyOf(request)
   if (body === undefined) return reply(response, 400, { refused: 'the body is not JSON the launcher reads' })
 
   const answer = await relay.answer(event, body)
@@ -78,47 +91,3 @@ async function answerAnEvent(relay: MemberRelay, request: IncomingMessage, respo
   if (answer.answered) reply(response, 200, answer.body)
 }
 
-/** The crew's mod asking for a core tool's answer (martha#254), or a refusal when the body is not JSON. */
-async function answerAToolOne(relay: MemberRelay, request: IncomingMessage, response: ServerResponse): Promise<void> {
-  const body = await bodyOf(request)
-  if (body === undefined) return reply(response, 400, { refused: 'the body is not JSON the launcher reads' })
-  reply(response, 200, await relay.answerTool(body))
-}
-
-/** `martha run`'s request: the run's answer, or a refusal when the body is not JSON. */
-async function runOne(relay: MemberRelay, request: IncomingMessage, response: ServerResponse): Promise<void> {
-  const body = await bodyOf(request)
-  if (body === undefined) return reply(response, 400, { refused: 'the body is not JSON the launcher reads' })
-  reply(response, 200, await relay.run(body))
-}
-
-/**
- * A guard's question (martha#562, seams b and c): its verdict, or a status the shim reads as no answer at all. A
- * question this launcher cannot read is a 400, which the shim fails open on and writes down as a miss; it is never
- * answered with a yes the launcher did not reach.
- */
-async function judgeOne(
-  request: IncomingMessage,
-  response: ServerResponse,
-  judging: (body: unknown) => Promise<AGuardsAnswer>,
-): Promise<void> {
-  const body = await bodyOf(request)
-  if (body === undefined) return reply(response, 400, { refused: 'the body is not JSON the launcher reads' })
-  const answered = await judging(body)
-  return 'refused' in answered ? reply(response, 400, answered) : reply(response, 200, answered.verdict)
-}
-
-async function bodyOf(request: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = []
-  let size = 0
-  for await (const chunk of request as AsyncIterable<Buffer>) {
-    size += chunk.length
-    if (size > LARGEST_RELAY_BODY) return undefined
-    chunks.push(chunk)
-  }
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
-  } catch {
-    return undefined
-  }
-}

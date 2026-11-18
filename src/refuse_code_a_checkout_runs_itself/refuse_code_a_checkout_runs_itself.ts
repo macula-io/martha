@@ -98,26 +98,29 @@ export const DIRENV_CONFIG_VARIABLE = 'DIRENV_CONFIG'
 
 /**
  * The hooks a launch runs of its own, in a folder it made and holds nothing else in (martha#562, seam c): git is
- * pointed at this folder, so a checkout's own hooks run none, and the events named here stay enabled for these alone —
- * every other event is switched off as it was. Absent, git is pointed at the empty directory and every event is off.
+ * pointed at this folder instead of the empty one, so the one file the launch put there runs for a member's every git,
+ * and a hook of the checkout's does not.
  *
- * The folder is the launch's own, closed to every write, and this setting is command scope, above every config file: a
- * checkout's own `core.hooksPath` is below it and cannot win, and the hook left enabled is the one file the launch put
- * there. The other events stay off here, which is also what keeps a hook named in config from running.
+ * Every event stays switched off, and that is what keeps a hook named in config from running: `hook.<event>.enabled`
+ * governs the hooks a config names — at every scope, this one included — and not the files in the folder
+ * `core.hooksPath` names. Measured on git 2.56.1, a checkout's `hook.<name>.event=reference-transaction` runs seven
+ * times for one add and commit with the event left on, and none with it off, while the launch's own hook in its folder
+ * runs either way. So the event is not left on for the launch's hook (martha#562 r=1): the folder is enough, and
+ * nothing a checkout writes can be in it.
+ *
+ * The folder is closed to every write, and this setting is command scope, above every config file: a checkout's own
+ * `core.hooksPath` is below it and cannot win.
  */
 export interface TheHooksALaunchRuns {
   readonly directory: string
-  /** The events the folder holds a hook for, as githooks(5) names them. */
-  readonly events: readonly string[]
 }
 
 /** The git settings that run no hook of a checkout's, given the directory hooks are looked for in and the launch's own. */
 export function gitSettingsThatRunNoHook(empty_directory: string, theLaunchesHooks?: TheHooksALaunchRuns): readonly (readonly [string, string])[] {
-  const kept = new Set(theLaunchesHooks?.events ?? [])
   return [
     ['core.hooksPath', theLaunchesHooks?.directory ?? empty_directory],
     ['core.fsmonitor', 'false'],
-    ...GIT_HOOK_EVENTS.filter((event) => !kept.has(event)).map((event) => [`hook.${event}.enabled`, 'false'] as const),
+    ...GIT_HOOK_EVENTS.map((event) => [`hook.${event}.enabled`, 'false'] as const),
   ]
 }
 

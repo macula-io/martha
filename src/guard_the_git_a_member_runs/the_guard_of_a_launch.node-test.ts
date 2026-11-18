@@ -8,12 +8,13 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { createServer, type Server } from 'node:http'
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { GIT_CALL_PATH, RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { GIT_CALL_PATH } from './guard_protocol.ts'
+import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_directory.ts'
@@ -28,6 +29,7 @@ import {
   theMissesLine,
   thePathWithTheGuardFirst,
   THE_GUARD_DIRECTORY_MODE,
+  THE_HOOKS_DIRECTORY_NAME,
   THE_SHIM_MODE,
   THE_SHIM_NAME,
   type TheGitGuard,
@@ -276,13 +278,18 @@ test('the guard git is pointed at is the only hook folder, and its shim and fold
 
   assert.equal(statSync(placed.guard.directory).mode & 0o777, THE_GUARD_DIRECTORY_MODE)
   assert.equal(statSync(join(placed.guard.directory, THE_SHIM_NAME)).mode & 0o777, THE_SHIM_MODE)
-  assert.deepEqual(placed.guard.hooks.events, ['reference-transaction'])
+  // The folder git is pointed at holds the launch's one hook and nothing else, which is what makes every event staying
+  // off safe: no file a checkout wrote can be in it (martha#562 r=1, martha#24).
+  assert.equal(placed.guard.hooks.directory, join(placed.guard.directory, THE_HOOKS_DIRECTORY_NAME))
+  assert.deepEqual(readdirSync(placed.guard.hooks.directory), ['reference-transaction'])
 })
 
 /** A clone with a branch of another member's, and the launch's hooks pointed at the guard's. */
 interface ACloneUnderTheGuard {
   readonly clone: string
   readonly env: Record<string, string>
+  /** The file the hook this checkout names in its own config would touch, if git ever ran it. */
+  readonly aHookTheCheckoutNames: string
 }
 
 const gitIn = (cwd: string, ...args: readonly string[]): string => execFileSync('/usr/bin/git', [...args], { cwd, encoding: 'utf8' }).trim()
@@ -295,10 +302,18 @@ function aCloneUnderTheGuard(directory: string, socket: string): ACloneUnderTheG
   gitIn(directory, 'init', '--quiet', '--initial-branch=main', clone)
   gitIn(clone, '-c', 'user.name=Ann', '-c', 'user.email=ann@example.invalid', 'commit', '--quiet', '--allow-empty', '-m', 'the first commit')
   gitIn(clone, 'branch', 'uranus/9')
+  // A hook the checkout names in its own `.git/config`, which `core.hooksPath` does not govern (martha#24): the launch's
+  // switches must run none of it, while the launch's own hook in its own folder still runs (martha#562 r=1).
+  const touched = join(directory, 'the-checkouts-own-hook-ran')
+  const named = join(directory, 'a-hook-the-checkout-names')
+  writeFileSync(named, `#!/bin/sh\ntouch ${touched}\n`)
+  chmodSync(named, 0o755)
+  gitIn(clone, 'config', 'hook.a-checkout-named.event', 'reference-transaction')
+  gitIn(clone, 'config', 'hook.a-checkout-named.command', named)
   const empty = join(directory, 'an-empty-place')
   mkdirSync(empty)
   const switches = switchesThatRunNothingFromACheckout({}, empty, placed.guard.hooks)
-  return { clone, env: { ...placed.env, ...switches.env } as Record<string, string> }
+  return { clone, env: { ...placed.env, ...switches.env } as Record<string, string>, aHookTheCheckoutNames: touched }
 }
 
 test("a delete that reaches the transaction through git's absolute path is refused", async (t) => {
@@ -328,4 +343,20 @@ test("a delete of the member's own branch reaches git's transaction and is let t
 
   assert.equal(ran.status, 0, `the member's own delete did not run: ${ran.stderr}`)
   assert.equal(gitIn(under.clone, 'branch', '--list', 'hygiea/562'), '', 'the branch the member may delete is still there')
+})
+
+test("a checkout's own config-named hook runs none for the event the launch keeps, and the launch's own does (martha#562 r=1)", async (t) => {
+  const directory = aDirectory(t, 'martha-562-hook-c-')
+  mkdirSync(join(directory, 'launch'), { recursive: true })
+  const launcher = await aLauncherIn(join(directory, 'launch'), { status: 200, body: JSON.stringify({ deny: "uranus/9 is another member's branch" }) })
+  t.after(() => launcher.close())
+  const under = aCloneUnderTheGuard(directory, launcher.socket)
+
+  const ran = await theRunOf('/usr/bin/git', ['branch', '-D', 'uranus/9'], { cwd: under.clone, env: under.env })
+
+  // The launch's own hook ran — it asked the launcher, and the refusal stopped the delete — and the hook the checkout
+  // names in its own config ran none, because the event it names is one of the events the launch switches off.
+  assert.notEqual(ran.status, 0, `the delete was not stopped: ${ran.stderr}`)
+  assert.deepEqual(launcher.asked.map((question) => question.body), [{ updates: [{ ref: 'refs/heads/uranus/9', deletes: true }] }])
+  assert.equal(existsSync(under.aHookTheCheckoutNames), false, "the hook the checkout names in its own config ran under the launch's switches")
 })
