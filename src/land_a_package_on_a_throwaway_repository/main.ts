@@ -18,7 +18,7 @@
 import { readFileSync } from 'node:fs'
 
 import { whatTheStartWouldLoad, type TheStart } from './a_clean_start.ts'
-import { whyNotDelete, type WhatTheRunMade } from './the_delete_guard.ts'
+import { whatTheRunMadeIn, whyNotDelete } from './the_delete_guard.ts'
 import { redactTheToken, THE_TOKEN_REACHED_THE_RECORD } from './the_kept_record.ts'
 import { theTokensExpiry } from './the_tokens_expiry.ts'
 import { whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
@@ -59,7 +59,8 @@ const reach = (argument: string, input: string): Said => {
 }
 
 const deleteGuard = (argument: string, input: string): Said => {
-  const made = readJson(readFileSync(argument, 'utf8')) as WhatTheRunMade
+  const made = whatTheRunMadeIn(readJson(readFileSync(argument, 'utf8')))
+  if (typeof made === 'string') return couldNotLook(made)
   const why = whyNotDelete(made, readJson(input))
   return why === undefined ? { code: 0, out: made.full_name } : refuses(why)
 }

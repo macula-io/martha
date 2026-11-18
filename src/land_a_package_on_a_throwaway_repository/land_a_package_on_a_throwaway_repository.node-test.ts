@@ -9,9 +9,9 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { whatTheStartWouldLoad, INSTRUCTION_FILES, LOADED_FOLDERS, type TheStart } from './a_clean_start.ts'
-import { whyNotDelete, type WhatTheRunMade } from './the_delete_guard.ts'
+import { whatTheRunMadeIn, whyNotDelete, type WhatTheRunMade } from './the_delete_guard.ts'
 import { runTheGuard } from './main.ts'
-import { redactTheToken, REDACTED, THE_TOKEN_REACHED_THE_RECORD } from './the_kept_record.ts'
+import { flattened, redactTheToken, REDACTED, THE_TOKEN_REACHED_THE_RECORD, WITHHELD } from './the_kept_record.ts'
 import { NEAR_DAYS, NO_EXPIRY_NOTE, theTokensExpiry } from './the_tokens_expiry.ts'
 import { A_USER_ACCOUNT, whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -91,6 +91,73 @@ test('a token of another shape is still caught by its exact value', () => {
 test('a record with no token stays as it was, and an empty token is refused', () => {
   assert.deepEqual(redactTheToken('nothing secret here', TOKEN), { text: 'nothing secret here', reached: false })
   assert.throws(() => redactTheToken('anything', ' '), /the token to look for is empty/)
+})
+
+// --- r=1 item 1: the run's record is read before a delete is judged ------------------------------------------------
+
+test("a record that names no repository is could-not-look (2), never a delete: the review's own case", (t) => {
+  const made = join(aFolder(t), 'made.json')
+  writeFileSync(made, JSON.stringify({ stamp: 's1', run_started_at: '2026-01-01T00:00:00Z' }))
+  const said = runTheGuard(['delete', made], JSON.stringify({ name: 'night-s1', created_at: '2026-02-01T00:00:00Z' }))
+  assert.equal(said.code, 2)
+  assert.equal(said.out, undefined)
+})
+
+test('each field of the record, missing or not what it must be, is named and stops the delete', (t) => {
+  const made = join(aFolder(t), 'made.json')
+  const bad: ReadonlyArray<readonly [keyof WhatTheRunMade, unknown]> = [
+    ['id', undefined], ['id', 0], ['id', '9001'],
+    ['owner_id', undefined], ['owner_id', -1],
+    ['stamp', undefined], ['stamp', ' '],
+    ['run_started_at', undefined], ['run_started_at', 'yesterday'],
+    ['full_name', undefined], ['full_name', ''],
+  ]
+  for (const [field, value] of bad) {
+    const record = { ...MADE, [field]: value }
+    assert.equal(whatTheRunMadeIn(record), `the run's record has no readable ${field}`, `${field} = ${JSON.stringify(value)}`)
+    writeFileSync(made, JSON.stringify(record))
+    assert.equal(runTheGuard(['delete', made], JSON.stringify(answerFor())).code, 2, `${field} = ${JSON.stringify(value)}`)
+  }
+  assert.deepEqual(whatTheRunMadeIn(MADE), MADE)
+  assert.equal(whatTheRunMadeIn([MADE]), 'the run\'s record is not an object')
+})
+
+// --- r=1 item 2: a token a screen wrapped ---------------------------------------------------------------------------
+
+/** Whether a whole token can be joined back out of a kept text, across its breaks and sequences. */
+const holdsAWholeToken = (kept: string): boolean => flattened(kept).includes(TOKEN) || /github_pat_/.test(flattened(kept))
+
+test('a token wrapped inside its prefix reaches the record, and no whole token can be joined out of what is kept', () => {
+  const kept = redactTheToken(`$ gh auth token\r\n${TOKEN.slice(0, 5)}\r\n${TOKEN.slice(5)}\r\n$ `, TOKEN)
+  assert.equal(kept.reached, true)
+  assert.equal(kept.text, WITHHELD)
+  assert.equal(holdsAWholeToken(kept.text), false)
+})
+
+test('a token wrapped after its prefix, by a cursor move, reaches the record and leaves no tail behind', () => {
+  const screen = `x ${TOKEN.slice(0, 16)}\u001b[2;1H${TOKEN.slice(16)} y`
+  const kept = redactTheToken(screen, TOKEN)
+  assert.equal(kept.reached, true)
+  assert.equal(kept.text.includes(TOKEN.slice(16)), false)
+  assert.equal(holdsAWholeToken(kept.text), false)
+})
+
+test('a token split by a title sequence or a bare carriage return is caught the same way', () => {
+  for (const cut of ['\u001b]0;title\u0007', '\r']) {
+    const kept = redactTheToken(`${TOKEN.slice(0, 20)}${cut}${TOKEN.slice(20)}`, TOKEN)
+    assert.deepEqual(kept, { text: WITHHELD, reached: true }, JSON.stringify(cut))
+  }
+})
+
+test('a fine-grained token the run was not given, wrapped after its prefix, is withheld too, leaving no tail', () => {
+  const other = 'github_pat_22BBBBBBB0AnotherStandInToken_abc'
+  const kept = redactTheToken(`x ${other.slice(0, 16)}\r\n${other.slice(16)} y`, TOKEN)
+  assert.deepEqual(kept, { text: WITHHELD, reached: true })
+})
+
+test('a screen with no token, wrapped or not, is kept as it was', () => {
+  const screen = 'line one\r\n\u001b[1mbold\u001b[0m line two'
+  assert.deepEqual(redactTheToken(screen, TOKEN), { text: screen, reached: false })
 })
 
 // --- R1: the reach of the run's calls -------------------------------------------------------------------------------

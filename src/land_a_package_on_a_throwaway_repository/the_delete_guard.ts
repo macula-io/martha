@@ -24,6 +24,30 @@ type Field = Readonly<Record<string, unknown>>
 
 const isObject = (value: unknown): value is Field => typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const aPositiveInteger = (value: unknown): boolean => typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+const aWord = (value: unknown): boolean => typeof value === 'string' && value.trim() !== ''
+const aTime = (value: unknown): boolean => typeof value === 'string' && !Number.isNaN(Date.parse(value))
+
+/** What each field of the run's record must be, by its name. */
+const RECORD_FIELDS: ReadonlyArray<readonly [keyof WhatTheRunMade, (value: unknown) => boolean]> = [
+  ['id', aPositiveInteger],
+  ['owner_id', aPositiveInteger],
+  ['stamp', aWord],
+  ['run_started_at', aTime],
+  ['full_name', aWord],
+]
+
+/**
+ * The run's record, read: what it made, or why it cannot be read, naming the first field that is missing or not what
+ * it must be. A field the record leaves out would otherwise compare equal to the same field missing from GitHub's
+ * answer, and a delete would hold on two records that name no repository at all (martha#639, r=1 item 1).
+ */
+export function whatTheRunMadeIn(record: unknown): WhatTheRunMade | string {
+  if (!isObject(record)) return 'the run\'s record is not an object'
+  const bad = RECORD_FIELDS.find(([field, holds]) => !holds(record[field]))
+  return bad === undefined ? (record as unknown as WhatTheRunMade) : `the run's record has no readable ${bad[0]}`
+}
+
 /** The owner's numeric id in GitHub's answer for a repository, or undefined when the answer holds none. */
 const ownerIdOf = (answer: Field): unknown => (isObject(answer['owner']) ? answer['owner']['id'] : undefined)
 
