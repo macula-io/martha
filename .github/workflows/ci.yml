@@ -361,12 +361,14 @@ jobs:
   # Two modules that load each other (martha#525). In an ES module cycle one module can read another's export before it
   # has been set, so the value is `undefined` where it is used, and nothing reports the cycle: what CI shows instead is a
   # scatter of failing tests in modules the change never touched. The check follows every value import between the
-  # core's sources and names the whole loop, file by file; `import type` closes none, because a type is erased.
+  # repository's own sources — every code tree, and the files directly in the root (martha#748) — and names the whole
+  # loop, file by file; `import type` closes none, because a type is erased.
   #
-  # The planted pair is read back from the check's own verdict, and exit 1 (refused) is required, not any non-zero:
-  # exit 2 is "could not look", which must never read as a bite either.
+  # Two pairs are planted, one under `src/` and one under `installer/`, and each printed loop is read back from the
+  # check's own verdict: a check that had narrowed back to `src/` would pass a job that planted only the first. Exit 1
+  # (refused) is required, not any non-zero: exit 2 is "could not look", which must never read as a bite either.
   cycles:
-    name: no import cycle in the core
+    name: no import cycle
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -379,9 +381,11 @@ jobs:
       - name: the check bites
         run: |
           planted="${{ runner.temp }}/cycles-self-test"
-          mkdir -p "$planted/src/one" "$planted/src/two"
+          mkdir -p "$planted/src/one" "$planted/src/two" "$planted/installer"
           printf "import { b } from '../two/b.ts'\nexport const a = b\n" > "$planted/src/one/a.ts"
           printf "import { a } from '../one/a.ts'\nexport const b = a\n" > "$planted/src/two/b.ts"
+          printf "import { two } from './two.ts'\nexport const one = two\n" > "$planted/installer/one.ts"
+          printf "import { one } from './one.ts'\nexport const two = one\n" > "$planted/installer/two.ts"
           status=0
           npm run --silent check:no-import-cycle -- --root "$planted" > "$planted/verdict.txt" 2>&1 || status=$?
           if [ "$status" -ne 1 ]; then
@@ -389,6 +393,7 @@ jobs:
             exit 1
           fi
           grep -q "src/one/a.ts -> src/two/b.ts -> src/one/a.ts" "$planted/verdict.txt"
+          grep -q "installer/one.ts -> installer/two.ts -> installer/one.ts" "$planted/verdict.txt"
 
   # The relay loads in the recorded host (martha#104). The host reads a hooks module before it runs it and refuses it
   # whole for a rule it holds; a refused relay runs no gate, and the relay's unit tests drive a stand-in engine that
