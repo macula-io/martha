@@ -146,13 +146,13 @@ function theCommandOnThePath(command: string, inherited: Readonly<Record<string,
   for (const directory of (inherited['PATH'] ?? '').split(delimiter)) {
     if (directory === '') continue
     const candidate = join(directory, command)
-    if (isAFileAnyoneCanRun(candidate)) return candidate
+    if (isAFileThisUserCanRun(candidate)) return candidate
   }
   return undefined
 }
 
 /** Whether a path is a file this user may execute. Not a boundary: it turns a missing install into a refusal by name. */
-function isAFileAnyoneCanRun(candidate: string): boolean {
+function isAFileThisUserCanRun(candidate: string): boolean {
   try {
     if (!statSync(candidate).isFile()) return false
     accessSync(candidate, fsConstants.X_OK)
