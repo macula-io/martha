@@ -54,6 +54,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'end_a_launch_when_its_run_ends',
     'give_a_member_its_own_config',
     'find_a_homes_state_root',
+    'guard_the_git_a_member_runs',
     'find_what_a_later_git_run_reads',
     'hear_the_hosts_dialogs',
     'install_the_mesh_server_for_claude_code',
