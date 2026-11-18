@@ -112,6 +112,7 @@ function aCrewNamingItsReviewerModel(): CrewTools {
     theReviewModel: async () => THE_REVIEWER_MODEL,
     noteTheCallsAnswer: () => undefined,
     refusesTheSubagent: async () => undefined,
+    refusesTheGitIn: async () => undefined,
   }
 }
 

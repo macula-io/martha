@@ -40,6 +40,7 @@ import {
 } from './declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
+import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 
 // A made-up project root: this repository is public, so no real path appears here.
 const root = '/martha-project'
@@ -87,12 +88,15 @@ const team = {
  * The models this test's host runs (martha#315): what a declaration's `review_model` is read against. The fixture
  * names its own three, so a refusal below is about the declaration and never about a model list typed here.
  */
-const HOST_MODELS = ['model-a', 'model-b', 'model-r']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['model-a', 'model-b', 'model-r'] }
 
 const declare = (declaration: unknown) => {
   const { store, documentsRead } = storeOf({ [declaration_path]: JSON.stringify(declaration) })
   return { settings: declareCrew(store, root, HOST_MODELS), documentsRead }
 }
+
+/** A host that takes any model name its provider serves, as Goose does (martha#541, package 6). */
+const OPEN_HOST: ModelVocabulary = { kind: OPEN_VOCABULARY, names: [] }
 
 const refusedWith = async (declaration: unknown, field: string | null) => {
   const { settings } = declare(declaration)
@@ -570,4 +574,12 @@ test('#611 r=2: the line names no origin URL, so a token in its userinfo is neve
   assert.equal(proved.layout, null, 'an origin naming no repository proves no layout')
   assert.equal(proved.said, `No workspace layout: the origin of ${A_CHECKOUT} names no repository as org/name. ${LAYOUT_TO_ADD}`)
   assert.ok(!proved.said.includes('ghs_plantedtoken'), `the token in the origin reached the line init prints: ${proved.said}`)
+})
+
+test('a host that takes any model name reads any review model, and one that names its models refuses the rest', async () => {
+  const declaration = { ...team, house_rules: { ...team.house_rules, review_model: 'model-the-host-cannot-spell' } }
+  const { store } = storeOf({ [declaration_path]: JSON.stringify(declaration) })
+  const settings = await declareCrew(store, root, OPEN_HOST)
+  assert.equal(settings.house_rules.review_model, declaration.house_rules.review_model)
+  await refusedWith(declaration, 'house_rules.review_model')
 })

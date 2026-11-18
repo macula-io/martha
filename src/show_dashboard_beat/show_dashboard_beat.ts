@@ -333,3 +333,21 @@ const isWaits = (value: unknown): boolean =>
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const isText = (value: unknown): value is string => typeof value === 'string'
 const isPosition = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0
+
+/** Something a launcher stops: the relay it serves, or that server wrapped in the crew's own work. */
+export interface TheCloseable {
+  close(): Promise<void>
+}
+
+/**
+ * `server`, with the crew's beat and the owner's list swept while it runs (martha#316), both left alone once it closes.
+ * A crew that declared nothing has nothing to beat or sweep, and is handed the server unchanged.
+ */
+export function keptBeatingWhileItRuns(
+  crew: { startBeating(): () => void; startSweeping(): () => void } | undefined,
+  server: TheCloseable,
+): TheCloseable {
+  if (crew === undefined) return server
+  const stops = [crew.startBeating(), crew.startSweeping()]
+  return { close: async () => { for (const stop of stops) stop(); await server.close() } }
+}

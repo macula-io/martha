@@ -50,6 +50,7 @@ import {
   type Due,
   type RefreshTrigger,
 } from './refresh_a_member.ts'
+import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import {
   CARRY_THE_END,
   concludeTheEnd,
@@ -153,7 +154,7 @@ export interface TheRefreshPlaces {
   readonly root: string
   readonly documents: DocumentStore
   /** The models the host runs (martha#315), which the declaration is read back against. */
-  readonly models: readonly string[]
+  readonly models: ModelVocabulary
   readonly ledger: LedgerHost
   /** The share this member's session began at, by session id: the reference every threshold is measured from. */
   readonly began_at: Map<string, number>

@@ -12,6 +12,8 @@
 
 import { dirname, join } from 'node:path'
 
+import { CLOSED_VOCABULARY, OPEN_VOCABULARY, vocabularyOf, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+
 /** One platform extension the engine declares, by the key its config switches it with (martha#541 trial, finding 4). */
 export interface PlatformExtension {
   /** The key in the config root's `extensions` mapping: not always the extension's display name. */
@@ -44,6 +46,8 @@ export interface EngineFacts {
   readonly permission_options: readonly string[]
   /** The OpenAI provider: its name, the settings it reads, and the path it posts to under a host. */
   readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string }
+  /** The model names the delegate tool takes: closed when its schema lists them, open when it takes any text (#541 package 6). */
+  readonly subagent_models: ModelVocabulary
 }
 
 /** Reads one checkout of the engine: a file's text, or undefined when there is none; a directory's entries, or []. */
@@ -64,6 +68,7 @@ export const ENGINE_PLACES = {
   platform_extensions: 'crates/goose/src/agents/platform_extensions/mod.rs',
   acp_server: 'crates/goose/src/acp/server.rs',
   openai_provider: 'crates/goose-providers/src/openai.rs',
+  delegate_tool: 'crates/goose/src/agents/platform_extensions/summon.rs',
 } as const
 
 /** The crate root the platform extension map's `crate::` paths start from. */
@@ -81,6 +86,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'platform extensions', read: (source) => ({ platform_extensions: platformExtensionsIn(source) }) },
   { part: 'permission options', read: (source) => ({ permission_options: permissionOptionsIn(source) }) },
   { part: 'openai provider', read: (source) => ({ openai_provider: openaiProviderIn(source) }) },
+  { part: 'subagent models', read: (source) => ({ subagent_models: subagentModelsIn(source) }) },
 ]
 
 /** A file the part needs, or a throw that names it. */
@@ -198,6 +204,20 @@ function openaiProviderIn(source: EngineSource): EngineFacts['openai_provider'] 
     settings,
     default_base_path: captured(text, /pub const OPEN_AI_DEFAULT_BASE_PATH: &str = "([^"]+)"/, 'the default base path', path),
   }
+}
+
+/**
+ * The models a delegate may name, read from the `model` property of the delegate tool's schema: an `enum` there is a
+ * closed list and any other string is open. A property in neither shape is unreadable, never taken as open.
+ */
+function subagentModelsIn(source: EngineSource): ModelVocabulary {
+  const path = ENGINE_PLACES.delegate_tool
+  const tool = captured(fileOf(source, path), /fn create_delegate_tool\(&self\) -> Tool \{([\s\S]*?)Tool::new\(/, 'the delegate tool', path)
+  const model = captured(tool, /"model":\s*\{([^}]*)\}/, "the delegate tool's model", path)
+  const listed = /"enum":\s*\[([^\]]*)\]/.exec(model)?.[1]
+  if (listed !== undefined) return vocabularyOf(CLOSED_VOCABULARY, [...listed.matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? ''))
+  if (/"type":\s*"string"/.test(model)) return vocabularyOf(OPEN_VOCABULARY, [])
+  throw new Error(`${path} gives the delegate tool's model neither a list nor a string`)
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */

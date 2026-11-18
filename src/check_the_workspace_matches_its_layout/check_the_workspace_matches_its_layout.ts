@@ -21,6 +21,7 @@
 
 import type { FileTree, Processes } from '../host_contract/host_contract.ts'
 import type { AListedWorktree, TheWorkspace } from '../guard_workspace/guard_workspace.ts'
+import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { join, sep } from 'node:path'
 
@@ -178,11 +179,19 @@ function driftOfAWorktrees(clone: ACloneInspected, place: string): readonly stri
     .filter((line): line is string => line !== undefined)
 }
 
-/** The lines a repository cloned more than once is, one clone named with the others it doubles. */
+/**
+ * The lines a repository cloned more than once is, one clone named with the others it doubles. The clones are grouped by
+ * the origin git gives, so the grouping is exact; what is printed is the repository's `org/name`, never that URL
+ * (martha#670): it can carry a token in its userinfo, and these lines are read by the owner.
+ */
 function driftOfADoubleClone(clones: readonly ACloneInspected[]): readonly string[] {
   const byOrigin = new Map<string, string[]>()
   for (const clone of clones) if (clone.origin !== null) byOrigin.set(clone.origin, [...(byOrigin.get(clone.origin) ?? []), clone.path])
-  return [...byOrigin.entries()].flatMap(([origin, paths]) => (paths.length < 2 ? [] : [`${origin} is cloned ${String(paths.length)} times (${paths.join(', ')}): one clone per repository.`]))
+  return [...byOrigin.entries()].flatMap(([origin, paths]) => {
+    if (paths.length < 2) return []
+    const named = repoOfTheOrigin(origin) ?? `the origin of ${paths[0] ?? ''}`
+    return [`${named} is cloned ${String(paths.length)} times (${paths.join(', ')}): one clone per repository.`]
+  })
 }
 
 /** Every line the workspace drifts by, in the order a reader fixes them: the clones, then their worktrees, then doubles. */

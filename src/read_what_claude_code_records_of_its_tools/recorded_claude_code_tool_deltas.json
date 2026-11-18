@@ -1,0 +1,165 @@
+{
+  "_why": "Two transcript lines the pinned Claude Code host wrote into one crew member's session on this project's crew host, 2026-11-18, on 2.1.327 (martha#658): the delta that added the crew mod's 27 tools at the session's start, and the one that withdrew them 2 h 10 min later while the session worked on. The plugin API offers no call that withdraws a tool, so a withdrawal cannot be provoked on the recorded host; these were taken from a real loss. Kept as written, except: every name list is cut to the crew mod's own tools (the host listed 170 tools in the add), and each of those 27 names is replaced by the placeholder `mcp__a_mod__tool_01` \u2026 `mcp__a_mod__tool_27`, in the order the add listed them and the same in both lines (the real names are another tool's, which this repository does not carry), `surfacedDefinitions` is emptied (it carried other servers' tool descriptions), and only `type`, `timestamp` and `version` are kept of the line around the attachment (the rest names the session and its folder).",
+  "host_version": "2.1.327",
+  "records": [
+    {
+      "type": "attachment",
+      "timestamp": "2026-11-18T05:14:40.582Z",
+      "version": "2.1.327",
+      "attachment": {
+        "type": "deferred_tools_delta",
+        "addedNames": [
+          "mcp__a_mod__tool_01",
+          "mcp__a_mod__tool_02",
+          "mcp__a_mod__tool_03",
+          "mcp__a_mod__tool_04",
+          "mcp__a_mod__tool_05",
+          "mcp__a_mod__tool_06",
+          "mcp__a_mod__tool_07",
+          "mcp__a_mod__tool_08",
+          "mcp__a_mod__tool_09",
+          "mcp__a_mod__tool_10",
+          "mcp__a_mod__tool_11",
+          "mcp__a_mod__tool_12",
+          "mcp__a_mod__tool_13",
+          "mcp__a_mod__tool_14",
+          "mcp__a_mod__tool_15",
+          "mcp__a_mod__tool_16",
+          "mcp__a_mod__tool_17",
+          "mcp__a_mod__tool_18",
+          "mcp__a_mod__tool_19",
+          "mcp__a_mod__tool_20",
+          "mcp__a_mod__tool_21",
+          "mcp__a_mod__tool_22",
+          "mcp__a_mod__tool_23",
+          "mcp__a_mod__tool_24",
+          "mcp__a_mod__tool_25",
+          "mcp__a_mod__tool_26",
+          "mcp__a_mod__tool_27"
+        ],
+        "addedLines": [
+          "mcp__a_mod__tool_01",
+          "mcp__a_mod__tool_02",
+          "mcp__a_mod__tool_03",
+          "mcp__a_mod__tool_04",
+          "mcp__a_mod__tool_05",
+          "mcp__a_mod__tool_06",
+          "mcp__a_mod__tool_07",
+          "mcp__a_mod__tool_08",
+          "mcp__a_mod__tool_09",
+          "mcp__a_mod__tool_10",
+          "mcp__a_mod__tool_11",
+          "mcp__a_mod__tool_12",
+          "mcp__a_mod__tool_13",
+          "mcp__a_mod__tool_14",
+          "mcp__a_mod__tool_15",
+          "mcp__a_mod__tool_16",
+          "mcp__a_mod__tool_17",
+          "mcp__a_mod__tool_18",
+          "mcp__a_mod__tool_19",
+          "mcp__a_mod__tool_20",
+          "mcp__a_mod__tool_21",
+          "mcp__a_mod__tool_22",
+          "mcp__a_mod__tool_23",
+          "mcp__a_mod__tool_24",
+          "mcp__a_mod__tool_25",
+          "mcp__a_mod__tool_26",
+          "mcp__a_mod__tool_27"
+        ],
+        "removedNames": [],
+        "wireHiddenNames": [],
+        "readdedNames": [],
+        "pendingMcpServers": [],
+        "failedMcpServers": [],
+        "surfacedNames": [],
+        "surfacedDefinitions": []
+      }
+    },
+    {
+      "type": "attachment",
+      "timestamp": "2026-11-18T07:24:42.940Z",
+      "version": "2.1.327",
+      "attachment": {
+        "type": "deferred_tools_delta",
+        "addedNames": [],
+        "addedLines": [],
+        "removedNames": [
+          "mcp__a_mod__tool_01",
+          "mcp__a_mod__tool_02",
+          "mcp__a_mod__tool_03",
+          "mcp__a_mod__tool_04",
+          "mcp__a_mod__tool_05",
+          "mcp__a_mod__tool_06",
+          "mcp__a_mod__tool_07",
+          "mcp__a_mod__tool_08",
+          "mcp__a_mod__tool_09",
+          "mcp__a_mod__tool_10",
+          "mcp__a_mod__tool_11",
+          "mcp__a_mod__tool_12",
+          "mcp__a_mod__tool_13",
+          "mcp__a_mod__tool_14",
+          "mcp__a_mod__tool_15",
+          "mcp__a_mod__tool_16",
+          "mcp__a_mod__tool_17",
+          "mcp__a_mod__tool_18",
+          "mcp__a_mod__tool_19",
+          "mcp__a_mod__tool_20",
+          "mcp__a_mod__tool_21",
+          "mcp__a_mod__tool_22",
+          "mcp__a_mod__tool_23",
+          "mcp__a_mod__tool_24",
+          "mcp__a_mod__tool_25",
+          "mcp__a_mod__tool_26",
+          "mcp__a_mod__tool_27"
+        ],
+        "causeNeutral": true,
+        "wireHiddenNames": [],
+        "readdedNames": [],
+        "pendingMcpServers": [],
+        "failedMcpServers": [],
+        "retractedTools": [
+          {
+            "name": "mcp__a_mod__tool_01",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__a_mod__tool_04",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__a_mod__tool_05",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__a_mod__tool_08",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__a_mod__tool_14",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__a_mod__tool_16",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__a_mod__tool_17",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__a_mod__tool_20",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__a_mod__tool_24",
+            "cause": "not_configured"
+          },
+          {
+            "name": "mcp__a_mod__tool_25",
+            "cause": "not_configured"
+          }
+        ]
+      }
+    }
+  ]
+}

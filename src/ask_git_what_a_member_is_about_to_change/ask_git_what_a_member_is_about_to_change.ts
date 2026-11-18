@@ -7,17 +7,19 @@
 // The workspace guard (../guard_workspace) decides from a call's own words and a few facts only git can say: the
 // branches a clone has, which is what tells `checkout main` from `checkout src/app.ts`, and the worktrees a removal or
 // a prune would meet, with the branch each of them is on. This slice asks for them, runs the guard, and hands back the
-// refusal. All three seams of the guard end here — the relay's tool_called, the `git` shim on the member's PATH, and
+// refusal. All three seams of the guard end here — the relay's tool_called, the `git` first on the member's PATH, and
 // the clone's own ref-transaction hook — so the facts are asked one way and the answers are the same three answers.
-// None of the three is wired yet: package 2 lands them, and nothing calls this slice until it does.
+// The first asks about a shell line (seam a, ../refuse_a_git_call_in_a_members_shell); the other two ask from the
+// launch's own guard (../guard_the_git_a_member_runs), and seam (c) needs no fact git alone can say.
 //
 // Every run carries Martha's own settings (../run_marthas_own_git) and reads only: `for-each-ref` lists branches,
 // `symbolic-ref` names the branch a clone starts on, `worktree list` lists worktrees. Nothing here writes, fetches or
 // prunes.
 //
 // It fails open, as the shim does. A git that cannot be run, or a line this slice cannot read, leaves the fact empty,
-// and the rule that needed it does not fire: a member's shell must not be refused because Martha could not look. Each
-// miss is visible twice — the shim writes its timeout to the member's row, and the scan
+// and the rule that needed it does not fire: a member's shell must not be refused because Martha could not look. A miss
+// the shim itself met is visible twice — the shim appends a line to the launch's misses file and the launcher folds it
+// into the member's row (../guard_the_git_a_member_runs), and the scan
 // (../check_the_workspace_matches_its_layout) reports what got through.
 //
 // Where it asks is the call's own business: the clone the call lands in for the branches, and for the worktrees the
