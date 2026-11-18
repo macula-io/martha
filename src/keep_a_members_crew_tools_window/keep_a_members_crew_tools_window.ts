@@ -146,7 +146,14 @@ export function theOwedLineOf(window: ACrewToolsWindow): string {
 
 // --- the window's file ---------------------------------------------------------------------------------------------
 
-const theWindowFile = (member: string): string => `${member}.json`
+/** What ends a window's file name: the member's name comes before it. */
+const WINDOW_FILE_SUFFIX = '.json'
+
+const theWindowFile = (member: string): string => `${member}${WINDOW_FILE_SUFFIX}`
+
+/** The member a file in the place is the window of, or undefined for a name no window is kept under. */
+export const theMemberOfTheFile = (name: string): string | undefined =>
+  name.endsWith(WINDOW_FILE_SUFFIX) && name.length > WINDOW_FILE_SUFFIX.length ? name.slice(0, -WINDOW_FILE_SUFFIX.length) : undefined
 
 const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 const CAUSES: readonly ServedToolsCause[] = ['left_the_configuration', 'other']
