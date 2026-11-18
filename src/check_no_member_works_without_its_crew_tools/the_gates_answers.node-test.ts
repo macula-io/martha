@@ -24,6 +24,7 @@ import {
   type ACrewToolsWindow,
 } from '../keep_a_members_crew_tools_window/keep_a_members_crew_tools_window.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 
 const GATE = join(import.meta.dirname, 'main.ts')
 const NAME = 'check_no_member_works_without_its_crew_tools'
@@ -165,6 +166,24 @@ for (const [stopped, lockedOf] of [
       } finally {
         chmodSync(locked, 0o700)
       }
+    } finally {
+      run.remove()
+    }
+  })
+}
+
+// A `--state-root` with no directory after it must not fall back to the home state root: the gate would then pass over
+// the owner's own state, a root nobody asked it to read. The home state root is pointed at a scratch one that holds an
+// open window, so a fallback that read it would exit 1, and one over an empty root would exit 0: only 2 is the fix.
+for (const words of [['--state-root'], ['--state-root', ''], ['--state-root', '--anything']]) {
+  test(`${words.map((word) => JSON.stringify(word)).join(' ')} is a check that could not be made, never a reading of the home state root (martha#658)`, () => {
+    const run = scratch()
+    try {
+      const xdg = join(run.checkout, 'xdg')
+      aLostMembersWindow(theWindowsPlace(stateRootOf(run.checkout, xdg), run.checkout))
+      const gate = spawnSync(process.execPath, [GATE, ...words], { encoding: 'utf8', env: { ...process.env, XDG_STATE_HOME: xdg } })
+      assert.equal(gate.status, 2, gate.stderr)
+      assert.match(gate.stderr, new RegExp(`^${NAME}: could not be made: --state-root was given no directory`))
     } finally {
       run.remove()
     }

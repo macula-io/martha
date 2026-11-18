@@ -99,10 +99,17 @@ function theGate(state_root: string): number {
   return open.length + unread.length === 0 ? 0 : 1
 }
 
-/** The value of `name` in the arguments, or undefined when it was not given. */
-const option = (name: string): string | undefined => {
+/**
+ * The value of `name` in the arguments, or undefined when it was not given. A flag given with no value, or with another
+ * flag where its value goes, answers null: reading the home state root in its place would pass over a root nobody asked for.
+ */
+const option = (name: string): string | null | undefined => {
   const at = process.argv.indexOf(name)
-  return at === -1 ? undefined : process.argv[at + 1]
+  if (at === -1) return undefined
+  const value = process.argv[at + 1]
+  return value === undefined || value === '' || value.startsWith('-') ? null : value
 }
 
-process.exitCode = theGate(option('--state-root') ?? stateRootOf(homedir(), process.env['XDG_STATE_HOME']))
+const asked = option('--state-root')
+if (asked === null) console.error(`${NAME}: could not be made: --state-root was given no directory`)
+process.exitCode = asked === null ? 2 : theGate(asked ?? stateRootOf(homedir(), process.env['XDG_STATE_HOME']))
