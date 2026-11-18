@@ -48,6 +48,14 @@
 //     `settings.json`; `${dir}settings.json` and `${dir}/settings.${flavour}`
 //     name nothing. A dynamic `import()`'s specifier and a tag's template are
 //     left out, as a module's path is;
+//   - a word a template's text holds quoted, judged as its own value: a shell
+//     `case` pattern, an argument, a JSON or SQL fragment written inside the text
+//     a function builds names the constant as the bare word beside it would
+//     (martha#776). `case "$1" in 'prepared') exec …` names `prepared`, and a
+//     word that is a path is judged by its segments too. A quoted run holding a
+//     substitution is the run time's rather than the tree's, so it is never
+//     judged (martha#437's rule for a piece), and neither is a run holding a
+//     space, which is prose between two apostrophes rather than one quoted word;
 //   - a *definition* whose value equals an exported constant of ANOTHER module,
 //     exported or not: three private `const X = 'node_modules'` beside
 //     `DEPENDENCIES` are three restatements, and `const T = 'Bash'` is the same
@@ -551,11 +559,71 @@ export const textOfATemplate = (node: ts.TemplateExpression): string =>
 /** The distinct segments of a path literal that name a value on their own: never the literal itself, and never one a substitution stands in (martha#437). */
 export const piecesOfALiteral = (literal: string): string[] => pathSegmentsOf(literal).filter((piece) => !piece.includes(SUBSTITUTION_MARK))
 
+/** What separates the words of a quoted run: a space, so a run holding one is prose between two quotes, not a word (martha#776). */
+const A_SPACE = /\s/
+
+/** A character of a word, which an apostrophe inside one stands between: `tool's` (martha#776). */
+const A_WORD_CHARACTER = /\w/
+
+/** Whether the mark at `at` is an apostrophe inside a word, `tool's`, rather than a quote around one (martha#776). */
+const anApostropheInAWord = (text: string, at: number): boolean => A_WORD_CHARACTER.test(text[at - 1] ?? '') && A_WORD_CHARACTER.test(text[at + 1] ?? '')
+
+/** Whether the mark at `at` is a quote placed around a word, never an apostrophe prose stands between (martha#776). */
+const isTheQuoteAroundAWord = (text: string, at: number): boolean => (text[at] === "'" || text[at] === '"') && !(text[at] === "'" && anApostropheInAWord(text, at))
+
+/** Where the quote at `at` closes: the next mark of its kind that is no apostrophe inside a word, or -1 when none does. */
+const whereTheQuoteCloses = (text: string, at: number): number => {
+  for (let closes = at + 1; closes < text.length; closes += 1) {
+    if (text[closes] === text[at] && !(text[at] === "'" && anApostropheInAWord(text, closes))) return closes
+  }
+  return -1
+}
+
+/** Whether a run two quotes hold is one quoted word: long enough to be a value, no substitution mark, and no space (martha#776). */
+const isOneQuotedWord = (word: string): boolean => word.length >= SHORTEST_VALUE && !word.includes(SUBSTITUTION_MARK) && !A_SPACE.test(word)
+
+/**
+ * The distinct words a template's text holds quoted, each long enough to be a value: the words a shell, JSON or SQL
+ * fragment spells between quotes (martha#776). A run holding a substitution mark is the run time's rather than the
+ * tree's, so it is no word here (martha#437's rule for a piece), a run holding a space is prose between two quotes, and
+ * an apostrophe inside a word is no quote at all, so prose before a quoted word cannot swallow it.
+ */
+export const quotedWordsIn = (text: string): string[] => {
+  const words: string[] = []
+  let at = 0
+  while (at < text.length) {
+    const closes = isTheQuoteAroundAWord(text, at) ? whereTheQuoteCloses(text, at) : -1
+    if (closes === -1) {
+      at += 1
+      continue
+    }
+    const word = text.slice(at + 1, closes)
+    if (isOneQuotedWord(word)) words.push(word)
+    at = closes + 1
+  }
+  return [...new Set(words)]
+}
+
 /** A value written as one segment of a path literal: a use of it, as the bare value would be (martha#437). */
 const findingsForTheSegments = (path: string, line: number, segments: readonly string[], files: ReadonlySet<string>, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] =>
   segments
     .filter((segment) => !files.has(segment))
     .flatMap((segment) => findingsForAUse(path, line, segment, declared, definitions).map((finding) => ({ ...finding, segment: true })))
+
+/**
+ * A value a template's text holds as one quoted word: a use of it, judged as the bare word would be, and by its path
+ * segments when the word is a path rather than an address (martha#776).
+ */
+const findingsForAQuotedWord = (path: string, line: number, word: string, files: ReadonlySet<string>, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] => {
+  const whole = findingsForAUse(path, line, word, declared, definitions)
+  return files.has(word) || holdsAnAddress(word) ? whole : [...whole, ...findingsForTheSegments(path, line, pathSegmentsOf(word), files, declared, definitions)]
+}
+
+/** What a template's text holds: each piece a path separator splits out, and each word it quotes (martha#437, martha#776). */
+const findingsForTheTemplatesText = (path: string, line: number, text: string, files: ReadonlySet<string>, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] => [
+  ...findingsForTheSegments(path, line, piecesOfALiteral(text), files, declared, definitions),
+  ...quotedWordsIn(text).flatMap((word) => findingsForAQuotedWord(path, line, word, files, declared, definitions)),
+]
 
 /** The literals of a source that can carry a value: not a module's path, not a property's name, not a type (rule 1 of part b). */
 const literalsThatCarryAValue = (file: ts.SourceFile): ts.Node[] =>
@@ -565,7 +633,7 @@ const literalsThatCarryAValue = (file: ts.SourceFile): ts.Node[] =>
 function findingsAt(node: ts.Node, line: number, path: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[], everyDefinition: readonly Definition[], definitionAt: ReadonlyMap<ts.Node, Definition>, files: ReadonlySet<string>): Finding[] {
   if (ts.isTemplateExpression(node)) {
     const text = textOfATemplate(node)
-    return holdsAnAddress(text) ? [] : findingsForTheSegments(path, line, piecesOfALiteral(text), files, declared, definitions)
+    return holdsAnAddress(text) ? [] : findingsForTheTemplatesText(path, line, text, files, declared, definitions)
   }
   const literal = valueOfALiteral(node as ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral)
   if (!isANumber(literal) && literal.length < SHORTEST_VALUE) return []
@@ -573,7 +641,9 @@ function findingsAt(node: ts.Node, line: number, path: string, declared: readonl
   const whole = definition === undefined
     ? findingsForAUse(path, line, literal, declared, definitions)
     : findingsForADefinition(definition, line, declared, definitions, everyDefinition)
-  return files.has(literal) || holdsAnAddress(literal) ? whole : [...whole, ...findingsForTheSegments(path, line, pathSegmentsOf(literal), files, declared, definitions)]
+  const quoted = ts.isNoSubstitutionTemplateLiteral(node) ? quotedWordsIn(literal).flatMap((word) => findingsForAQuotedWord(path, line, word, files, declared, definitions)) : []
+  const asALiteral = files.has(literal) || holdsAnAddress(literal) ? whole : [...whole, ...findingsForTheSegments(path, line, pathSegmentsOf(literal), files, declared, definitions)]
+  return [...asALiteral, ...quoted]
 }
 
 /**
