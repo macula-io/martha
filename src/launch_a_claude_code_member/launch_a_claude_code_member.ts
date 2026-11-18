@@ -149,7 +149,7 @@ import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_termina
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theRowWithTheLine, theRowWithoutTheLineItWrote } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
-import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheBellsPlace, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
+import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
@@ -189,7 +189,7 @@ export interface LauncherPlaces {
    * that cannot be read, this launch reads no mute and rings as the declaration leaves it: a mute the owner typed is not
    * honoured, which is the loud direction.
    */
-  readonly bells?: TheBellsPlace
+  readonly bells?: string
 }
 
 export interface ClaudeCodeMemberLaunch {
@@ -466,7 +466,7 @@ function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising
  */
 function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen' | 'telling'> {
   const journal = relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID())
-  const mute = (): TheMute => (launch.places.bells === undefined ? NOTHING_IS_MUTED : theMuteOf(launch.places.bells, launch.member_name))
+  const mute = (): TheMute => (launch.places.bells === undefined ? NOTHING_IS_MUTED : theMuteOf({ directory: launch.places.bells, lines: { append: appendStateLine, read: readStateFile } }, launch.member_name))
   if (mute().muted) launch.tellOwner(theMutedStartLine(launch.member_name))
   return {
     journal,

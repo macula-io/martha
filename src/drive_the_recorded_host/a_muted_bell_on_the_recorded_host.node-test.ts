@@ -125,7 +125,7 @@ const ANSWER_AFTER_MS = 1_200
  * One run of the real command on a terminal, with the recorded host and the stand-in model offering the shell call: the
  * host draws its prompt, the owner answers it, and the run ends. Resolves with everything the terminal was shown.
  */
-async function aRun(project: Project, t: TestContext): Promise<string> {
+async function aRun(project: Project): Promise<string> {
   const ran = await driveTheRecordedHost({
     claude: recordedHost(),
     ...project,
@@ -154,20 +154,19 @@ async function aRun(project: Project, t: TestContext): Promise<string> {
     },
   })
   const shown = `${ran.shown}`
-  t.diagnostic(plainTextOf(shown).slice(-2000))
   return shown
 }
 
 test('the owner\'s mute silences a launched member\'s bell, and the same member unmuted rings', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t)
   // Unmuted, the same launch the muting is compared with: the bell's own title bytes are handed to the terminal.
-  const unmuted = await aRun(project, t)
+  const unmuted = await aRun(project)
   assert.ok(unmuted.includes(THE_BELLS_TITLE_BYTES), 'the launch of a member whose bells ring was handed no bell')
   assert.ok(!plainTextOf(unmuted).includes(theMutedStartLine(MEMBER)), 'a member with no mute was told its bell is muted')
   // The owner mutes this member's bell at their own terminal, and the next launch honours it.
   const muted = marthaOnATerminal({ claude: recordedHost(), ...project }, ['bells', MEMBER, BELLS_MUTED])
   assert.equal(muted.exit_code, 0, plainTextOf(muted.shown))
-  const silenced = await aRun(project, t)
+  const silenced = await aRun(project)
   assert.ok(plainTextOf(silenced).includes(theMutedStartLine(MEMBER)), `a muted member was not told so at its start: ${plainTextOf(silenced).slice(-1500)}`)
   assert.ok(!silenced.includes(THE_BELLS_TITLE_BYTES), 'a muted member\'s bell rang anyway')
 })

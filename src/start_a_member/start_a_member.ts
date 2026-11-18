@@ -47,7 +47,6 @@ import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_it
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import {
-  appendStateLine,
   CREW_ROW_PLACE,
   crewRowsDirectory,
   crewStateDirectory,
@@ -55,7 +54,6 @@ import {
   nodeIdsFor,
   PERMISSION_BITS,
   readApprovals,
-  readStateFile,
   stateSubdirectory,
   STATE_DIRECTORY_MODE,
   ownWritesKeptForLaunch,
@@ -104,8 +102,7 @@ const STATE_PLACES = [THE_PLACES_A_STATE_ROOT_KEEPS.records_place, 'snapshots', 
 function closedRelayRoot(relay_root: string): string | undefined {
   if (fs.lstatSync(relay_root, { throwIfNoEntry: false }) === undefined) fs.mkdirSync(relay_root, { recursive: true, mode: STATE_DIRECTORY_MODE })
   const found = fs.lstatSync(relay_root)
-  const closed = found.isDirectory() && found.uid === process.getuid?.() && (found.mode & PERMISSION_BITS) === STATE_DIRECTORY_MODE
-  return closed ? undefined : `${NOT_STARTED}: ${relay_root} is not a directory of this user's that only this user may enter.`
+  return found.isDirectory() && found.uid === process.getuid?.() && (found.mode & PERMISSION_BITS) === STATE_DIRECTORY_MODE ? undefined : `${NOT_STARTED}: ${relay_root} is not a directory of this user's that only this user may enter.`
 }
 
 /** The launcher's places in Martha's state, and the relay root for its sockets; or why one cannot be used. */
@@ -120,7 +117,7 @@ export function launcherPlacesOf(state: MarthaState, relay_root: string, root: s
   const [dashboard, gate_audit, bells, launch_records, snapshot_root, mesh_servers, relay_journal] = made.map((place) => ('path' in place ? place.path : ''))
   const unsafe = closedRelayRoot(relay_root)
   if (unsafe !== undefined) return { refusal: unsafe }
-  return { rows: rows.path, dashboard: dashboard!, gate_audit: gate_audit!, bells: { directory: bells!, lines: { append: appendStateLine, read: readStateFile } }, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
+  return { rows: rows.path, dashboard: dashboard!, gate_audit: gate_audit!, bells: bells!, launch_records: launch_records!, snapshot_root: snapshot_root!, mesh_servers: mesh_servers!, relay_journal: relay_journal!, relay_root }
 }
 
 export interface MemberStartRequest {

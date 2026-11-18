@@ -351,14 +351,14 @@ async function bells(io: CommandIo, places: Places, asked: Asked): Promise<numbe
   if (typeof crew === 'string') return refused(io, crew)
   const flip = theFlipNamed(asked.member, asked.args[0])
   if (asked.member !== undefined && flip === undefined) return refused(io, USAGE)
-  const kept = theBellsTheOwnerKeeps({ members: crew.settings.members.map((one) => one.name), declared: crew.settings.house_rules[OWNER_BELL], place: crew.launcher.bells!, owner: crew.settings.owner, onATerminal: io.terminal.is_terminal, ...(flip === undefined ? {} : { flip }) })
+  const kept = theBellsTheOwnerKeeps({ members: crew.settings.members.map((one) => one.name), declared: crew.settings.house_rules[OWNER_BELL], place: { directory: crew.launcher.bells!, lines: { append: appendStateLine, read: readStateFile } }, owner: crew.settings.owner, onATerminal: io.terminal.is_terminal, ...(flip === undefined ? {} : { flip }) })
   if (!kept.shown) return refused(io, kept.refusal)
   kept.lines.forEach((line) => io.out(line))
   return EXIT_DONE
 }
 
 /**
- * `gate [--member <name>]` (martha#321): what the gate does to each declared member, or one member's lines.
+ * `martha gate [--member <name>]` (martha#321): what the gate does to each declared member, or one member's lines.
  * The reading is ../say_what_the_gate_does's; this only hands it the crew's own place and prints what it answers.
  */
 async function theGate(io: CommandIo, places: Places, member: string | undefined): Promise<number> {
