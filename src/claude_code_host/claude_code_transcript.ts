@@ -41,8 +41,12 @@ export interface AHeldTranscript {
   skipping: boolean
 }
 
-/** The folder under the host config folder that holds every project's session transcripts. */
-export const PROJECTS_FOLDER = 'projects'
+/**
+ * The folder under the host config folder that holds every project's session transcripts: the same folder
+ * ../refuse_a_member_writing_owner_memory denies a member's writes in. Not exported: the tree's tests spell the host's
+ * layout out as they build it.
+ */
+const PROJECTS_FOLDER = 'projects'
 
 /** The longest line kept whole; a longer one is skipped, never buffered (martha#658's size bound). */
 export const LONGEST_TRANSCRIPT_LINE = 1024 * 1024

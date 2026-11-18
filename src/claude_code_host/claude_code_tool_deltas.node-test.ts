@@ -18,7 +18,7 @@ import {
   TOOL_DELTA_FIELDS,
   TOOL_DELTA_TYPE,
 } from './claude_code_tool_deltas.ts'
-import { LONGEST_TRANSCRIPT_LINE, letTheTranscriptGo, openTheTranscript, PROJECTS_FOLDER, readTheNewLines, type AHeldTranscript } from './claude_code_transcript.ts'
+import { LONGEST_TRANSCRIPT_LINE, letTheTranscriptGo, openTheTranscript, readTheNewLines, type AHeldTranscript } from './claude_code_transcript.ts'
 
 function theTwoRecorded(): readonly [RecordedToolDeltaLine, RecordedToolDeltaLine] {
   const [added, withdrawn] = RECORDED_TOOL_DELTAS.records
@@ -107,8 +107,8 @@ test('a line of another attachment type is not a tool delta', () => {
 function aLaunch(t: { after(fn: () => void): void }) {
   const root = mkdtempSync(join(tmpdir(), 'martha-658-transcript-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
-  const config_dir = join(root, 'config')
-  const folder = join(config_dir, PROJECTS_FOLDER, '-work-project')
+  const config_dir = join(root, 'launch-config')
+  const folder = join(config_dir, 'projects', '-work-project')
   mkdirSync(folder, { recursive: true })
   const session_id = '0a1b2c3d-0000-4000-8000-000000000001'
   const transcript_path = join(folder, `${session_id}.jsonl`)
@@ -160,7 +160,7 @@ test('a path outside the launch config projects folder, or naming another sessio
   const elsewhere = join(root, `${where.session_id}.jsonl`)
   writeFileSync(elsewhere, '')
   assert.match(String((openTheTranscript({ ...where, transcript_path: elsewhere }) as { refused: string }).refused), /^transcript path refused: it is not one folder below/)
-  const deeper = join(where.config_dir, PROJECTS_FOLDER, 'a', 'b', `${where.session_id}.jsonl`)
+  const deeper = join(where.config_dir, 'projects', 'a', 'b', `${where.session_id}.jsonl`)
   mkdirSync(dirname(deeper), { recursive: true })
   writeFileSync(deeper, '')
   assert.match(String((openTheTranscript({ ...where, transcript_path: deeper }) as { refused: string }).refused), /it is not one folder below/)
