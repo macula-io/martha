@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, declareCrew, type Act } from '../declare_crew/declare_crew.ts'
+import { ACTS, APPROVE_LANDING, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OFFER_OWNER_ASKS, RESTART_MEMBER, declareCrew, type Act } from '../declare_crew/declare_crew.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -115,7 +115,7 @@ function theToolsOf(member: string): CrewTools {
   })
 }
 
-/** One handler that reads a grant, the act it reads, and the crew tool call that reaches it. */
+/** One handler that reads a grant (its slice and file), the act it reads, and the crew tool call that reaches it. */
 interface ARow {
   readonly act: Act
   readonly handler: string
@@ -133,21 +133,21 @@ const RANGE = { path: root, base: BASE, tip: TIP, packages: [PACKAGE] }
  * acts on another (park, wake, restart) acts on ANOTHER, so no row is refused for acting on itself.
  */
 const ROWS: readonly ARow[] = [
-  { act: 'assign_work', handler: 'the_verify_range_tool', tool: VERIFY_RANGE_TOOL.name, args: RANGE },
-  { act: 'assign_work', handler: 'unheld_work_tool', tool: UNHELD_WORK_TOOL.name, args: {} },
-  { act: 'assign_work', handler: 'the_todo_tools', tool: OWNER_TODO_ADD_TOOL.name, args: { text: 'say yes to the landing' } },
-  { act: 'assign_work', handler: 'the_todo_tools', tool: OWNER_TODO_DONE_TOOL.name, args: { id: 'an-act' } },
-  { act: 'assign_work', handler: 'the_contract_tools', tool: KEEP_THE_CONTRACT_TOOL.name, args: { package: PACKAGE } },
-  { act: 'assign_work', handler: 'the_standing_tools', tool: STANDING_ADD_TOOL.name, args: { package: PACKAGE, text: 'watch it' } },
-  { act: 'assign_work', handler: 'the_standing_tools', tool: STANDING_CLOSE_TOOL.name, args: { package: PACKAGE } },
-  { act: 'assign_work', handler: 'nudge_the_supervisor', tool: LOG_A_MILESTONE_TOOL.name, args: { package: PACKAGE, event: 'resume', note: 'go on' } },
-  { act: 'assign_work', handler: 'who_is_free_tool', tool: WHO_IS_FREE_TOOL.name, args: {} },
-  { act: 'approve_landing', handler: 'the_owners_yes_to_a_landing', tool: FAST_FORWARD_TOOL.name, args: RANGE },
-  { act: 'resume_parked_work', handler: 'park_and_wake_a_member', tool: PARK_A_MEMBER_TOOL.name, args: { member: ANOTHER, reason: 'waiting' } },
-  { act: 'resume_parked_work', handler: 'park_and_wake_a_member', tool: WAKE_A_MEMBER_TOOL.name, args: { member: ANOTHER, reason: 'back' } },
-  { act: 'offer_owner_asks', handler: 'queue_the_owners_asks', tool: TAKE_ASKS_TOOL.name, args: {} },
-  { act: 'offer_owner_asks', handler: 'queue_the_owners_asks', tool: SETTLE_ASKS_TOOL.name, args: {} },
-  { act: 'restart_member', handler: 'restart_a_member', tool: RESTART_A_MEMBER_TOOL.name, args: { member: ANOTHER, reason: 'stalled' } },
+  { act: 'assign_work', handler: 'check_a_range_before_the_owner_says_yes/the_verify_range_tool', tool: VERIFY_RANGE_TOOL.name, args: RANGE },
+  { act: 'assign_work', handler: 'find_the_unheld_work/unheld_work_tool', tool: UNHELD_WORK_TOOL.name, args: {} },
+  { act: 'assign_work', handler: 'keep_the_owners_todo_list/the_todo_tools', tool: OWNER_TODO_ADD_TOOL.name, args: { text: 'say yes to the landing' } },
+  { act: 'assign_work', handler: 'keep_the_owners_todo_list/the_todo_tools', tool: OWNER_TODO_DONE_TOOL.name, args: { id: 'an-act' } },
+  { act: 'assign_work', handler: 'keep_the_package_contract/the_contract_tools', tool: KEEP_THE_CONTRACT_TOOL.name, args: { package: PACKAGE } },
+  { act: 'assign_work', handler: 'keep_the_supervisors_standing_items/the_standing_tools', tool: STANDING_ADD_TOOL.name, args: { package: PACKAGE, text: 'watch it' } },
+  { act: 'assign_work', handler: 'keep_the_supervisors_standing_items/the_standing_tools', tool: STANDING_CLOSE_TOOL.name, args: { package: PACKAGE } },
+  { act: 'assign_work', handler: 'nudge_the_supervisor/nudge_the_supervisor', tool: LOG_A_MILESTONE_TOOL.name, args: { package: PACKAGE, event: 'resume', note: 'go on' } },
+  { act: 'assign_work', handler: 'see_who_is_free/who_is_free_tool', tool: WHO_IS_FREE_TOOL.name, args: {} },
+  { act: APPROVE_LANDING, handler: 'land_passed_work_as_one_batch/the_owners_yes_to_a_landing', tool: FAST_FORWARD_TOOL.name, args: RANGE },
+  { act: 'resume_parked_work', handler: 'park_and_wake_a_member/park_and_wake_a_member', tool: PARK_A_MEMBER_TOOL.name, args: { member: ANOTHER, reason: 'waiting' } },
+  { act: 'resume_parked_work', handler: 'park_and_wake_a_member/park_and_wake_a_member', tool: WAKE_A_MEMBER_TOOL.name, args: { member: ANOTHER, reason: 'back' } },
+  { act: OFFER_OWNER_ASKS, handler: 'queue_the_owners_asks/queue_the_owners_asks', tool: TAKE_ASKS_TOOL.name, args: {} },
+  { act: OFFER_OWNER_ASKS, handler: 'queue_the_owners_asks/queue_the_owners_asks', tool: SETTLE_ASKS_TOOL.name, args: {} },
+  { act: RESTART_MEMBER, handler: 'stop_and_restart_a_member/restart_a_member', tool: RESTART_A_MEMBER_TOOL.name, args: { member: ANOTHER, reason: 'stalled' } },
 ]
 
 /** What a tool says that is a refusal for the grant: every handler's refusal opens with the caller's name and "may not". */
@@ -182,22 +182,22 @@ const EVERY_CREW_TOOL: Readonly<Record<string, ALedgerLine>> = {
   [READ_THE_RECEIPTS_TOOL.name]: { ungated: 'reads what became of messages the caller sent' },
   [PARK_A_MEMBER_TOOL.name]: { asks: ['resume_parked_work'] },
   [WAKE_A_MEMBER_TOOL.name]: { asks: ['resume_parked_work'] },
-  [RESTART_A_MEMBER_TOOL.name]: { asks: ['restart_member'] },
+  [RESTART_A_MEMBER_TOOL.name]: { asks: [RESTART_MEMBER] },
   [SWITCH_YOUR_MODEL_TOOL.name]: { ungated: "switches the caller's own model, among those the declaration names" },
   [RETURN_TO_YOUR_OWN_MODEL_TOOL.name]: { ungated: 'returns the caller to its own declared model' },
   [WRITE_MY_HANDOVER_SCHEMA.name]: { ungated: "writes the caller's own handover" },
   [REFRESH_THIS_SESSION]: { ungated: "refreshes the caller's own session" },
   [VERIFY_RANGE_TOOL.name]: { asks: ['assign_work'] },
   [LAND_BATCH_TOOL.name]: { ungated: 'pushes an integration branch, never a default branch; moving the default branch is the fast-forward, which asks approve_landing' },
-  [FAST_FORWARD_TOOL.name]: { asks: ['approve_landing'] },
+  [FAST_FORWARD_TOOL.name]: { asks: [APPROVE_LANDING] },
   [WORKTREE_OPEN_TOOL.name]: { ungated: "opens a worktree under the declaration's worktree place, for the caller's own work" },
   [WORKTREE_FINISH_TOOL.name]: { ungated: "removes a worktree on a branch Martha's own naming made; a convenience, not a guard (martha#256)" },
   [OWNER_TODO_ADD_TOOL.name]: { asks: ['assign_work'] },
   [OWNER_TODO_DONE_TOOL.name]: { asks: ['assign_work'] },
   [QUEUE_ASK_TOOL.name]: { ungated: 'queues a question for the owner; taking and settling asks are gated' },
   [LIST_ASKS_TOOL.name]: { ungated: "reads the owner's waiting asks" },
-  [TAKE_ASKS_TOOL.name]: { asks: ['offer_owner_asks'] },
-  [SETTLE_ASKS_TOOL.name]: { asks: ['offer_owner_asks'] },
+  [TAKE_ASKS_TOOL.name]: { asks: [OFFER_OWNER_ASKS] },
+  [SETTLE_ASKS_TOOL.name]: { asks: [OFFER_OWNER_ASKS] },
   [STANDING_ADD_TOOL.name]: { asks: ['assign_work'] },
   [STANDING_CLOSE_TOOL.name]: { asks: ['assign_work'] },
   [STANDING_TOOL.name]: { ungated: 'reads the standing items' },
