@@ -60,8 +60,11 @@ export const HTTP_STATUS = {
   last_server_error: 599,
 } as const
 
-/** A status a host is telling us to come back for, rather than a missing link. */
-const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([HTTP_STATUS.request_timeout, HTTP_STATUS.too_many_requests])
+/**
+ * A status a host is telling us to come back for, rather than a missing link. A 429 is not here: it is retried as a
+ * refusal (REFUSING_STATUSES below), the one set that decides it.
+ */
+const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([HTTP_STATUS.request_timeout])
 
 /** A status by which a site refuses the checker rather than says the page is gone (martha#714). */
 const REFUSING_STATUSES: ReadonlySet<number> = new Set([HTTP_STATUS.forbidden, HTTP_STATUS.too_many_requests])
