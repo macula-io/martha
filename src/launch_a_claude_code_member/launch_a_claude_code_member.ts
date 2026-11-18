@@ -118,8 +118,8 @@ import {
   type PreparedLaunch,
   type SnapshotPlace,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import type { CrewTools, WatchedCrewTools } from '../a_crews_tools/a_crews_tools.ts'
-import type { TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
+import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_served/watch_the_crew_tools_a_launch_served.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
@@ -215,7 +215,7 @@ export interface LauncherPlaces {
  * How a launch builds its crew's tools: over its sessions, its member's own config folder and the crew tools it watches
  * (martha#658). The tools it returns hold that watch (martha#710), so a builder that leaves it out cannot compile.
  */
-export type CrewToolsOfALaunch = (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch }) => WatchedCrewTools
+export type CrewToolsOfALaunch = (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch }) => HoldingTheWatch<CrewTools>
 
 export interface ClaudeCodeMemberLaunch {
   readonly member_name: string

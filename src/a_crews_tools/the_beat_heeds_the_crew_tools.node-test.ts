@@ -80,7 +80,7 @@ async function untilTheLookSettles(places: ReturnType<typeof aWatchedMember>['pl
 }
 
 test('crew tools built over places that hold a watch hold that same watch, as a launch\'s builder must return them (martha#710)', (t) => {
-  // Typed by the overload as WatchedCrewTools: places with a watch are answered by the first overload, which a builder
+  // Typed by the overload as HoldingTheWatch<CrewTools>: places with a watch are answered by the first overload, which a builder
   // that left the watch out could not return. At run time the field is the watch the places carried, not another.
   const member = aWatchedMember(t)
   assert.equal(member.tools.served_tools, member.places.served_tools, 'the tools carry a watch other than the one their places held')
