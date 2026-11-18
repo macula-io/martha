@@ -252,6 +252,34 @@ export const SOURCE_GATES = {
 
 export type KnownSourceGate = keyof typeof SOURCE_GATES
 
+/** One checkout file a source gate is asked about: the name the engine's source spells, and whether the launcher records it. */
+export interface SourceProbe {
+  readonly records: boolean
+  readonly what: string
+  readonly file: string
+}
+
+/**
+ * The questions every source gate is asked (martha#541): each name the launcher records is answered as recorded, so a
+ * gate that records nothing is caught, and a file the engine attaches no text from is answered as not recorded, so a
+ * gate that records every file is caught. The names are the table the launcher reads, never restated here.
+ */
+export const SOURCE_PROBES: readonly SourceProbe[] = [
+  ...RECORDED_TEXT_FILES.map((file) => ({ records: true, what: `${file}, which the engine loads`, file })),
+  { records: false, what: 'a file the engine attaches no text from', file: 'README.md' },
+]
+
+/** Why a row naming a source gate is a gap: it is not delivered text, the gate nobody built, or one that answers a question wrong. */
+export function sourceRowGap(path: InboundPath, name: string, source_gates: Readonly<Record<string, SourceGate>>): string | undefined {
+  if (path.klass !== 'delivered') return 'names a recorded source on a path that puts no text into a turn'
+  const gate = source_gates[name]
+  if (gate === undefined) return `names a source gate nobody has built: ${name}`
+  const failed = SOURCE_PROBES.find((probe) => gate(probe.file) !== probe.records)
+  if (failed === undefined) return undefined
+  return failed.records ? `the gate ${name} records no ${failed.what}` : `the gate ${name} records ${failed.what}`
+}
+
+
 /**
  * What one of the engine's launched rows leaves open (martha#541): the launch gate is the one C1 and C2 stand on — Martha
  * decides on a checkout whose files the owner approved by content and by this checkout's tree, with the engine's own
