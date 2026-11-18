@@ -148,8 +148,8 @@ import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directo
 import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theRowWithTheLine, theRowWithoutTheLineItWrote } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { theOwnersScreen } from '../say_what_the_host_is_asking/the_owners_screen.ts'
-import { NO_BELLS, theBellsTheOwnerDeclared } from '../ring_the_owner/ring_the_owner.ts'
+import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
+import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
@@ -183,6 +183,13 @@ export interface LauncherPlaces {
    * place. Absent, an audited member's call is refused: the audit never runs without a place to write its evidence.
    */
   readonly gate_audit?: string
+  /**
+   * The crew's own place where the owner's mutes of a member's bells are kept (martha#371), made with the crew's place:
+   * the launcher asks it every time a bell is about to ring, and `martha bells` keeps a flip in it. Absent, or a file
+   * that cannot be read, this launch reads no mute and rings as the declaration leaves it: a mute the owner typed is not
+   * honoured, which is the loud direction.
+   */
+  readonly bells?: string
 }
 
 export interface ClaudeCodeMemberLaunch {
@@ -198,9 +205,9 @@ export interface ClaudeCodeMemberLaunch {
    */
   readonly crew_settings?: CrewSettings
   /**
-   * Whether this member's bells ring when its host asks the owner something (`house_rules.owner_bell`, less the owner's
-   * own mute of this member, martha#313), read once by `martha start`. Absent means none ring, as every switch in the
-   * declaration is off unasked.
+   * Whether this member's bells ring when its host asks the owner something (`house_rules.owner_bell`, read once by
+   * `martha start`), with the owner's own mute of this member read on top of it every time a bell is about to ring
+   * (martha#313, martha#371). Absent means none ring, as every switch in the declaration is off unasked.
    */
   readonly owner_bell?: boolean
   readonly places: LauncherPlaces
@@ -452,19 +459,19 @@ function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising
  * The two places this launch keeps of its own: its relay's journal, one file named by the approval it runs on (a launch
  * started on no approval names itself, martha#240), and the owner's screen (martha#313) — the member's own row, moved
  * by what the host asks, and the bell that change is worth, rung on the terminal this launcher was started on.
+ *
+ * The owner's own mute of this member's bells (martha#371) is read here, once for the line the owner is told, and then
+ * asked again every time the screen is about to ring: a mute typed at the owner's terminal reaches a member that is
+ * running, so a member is never restarted to silence a bell.
  */
 function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch): Pick<MemberRelayPlace, 'journal' | 'screen' | 'telling'> {
   const journal = relayJournalKeptIn(launch.places.relay_journal, launch.place.since_approval?.launch_id ?? randomUUID())
+  const mute = (): TheMute => (launch.places.bells === undefined ? NOTHING_IS_MUTED : theMuteOf({ directory: launch.places.bells, lines: { append: appendStateLine, read: readStateFile } }, launch.member_name))
+  if (mute().muted) launch.tellOwner(theMutedStartLine(launch.member_name))
   return {
     journal,
     telling: theMembersTelling({ member: launch.member_name, dashboard: launch.places.dashboard, rows: launch.places.rows, journal }),
-    screen: theOwnersScreen({
-      beats: dashboardRowsIn(launch.places.dashboard),
-      member: launch.member_name,
-      bells: launch.owner_bell === undefined ? NO_BELLS : theBellsTheOwnerDeclared(launch.owner_bell),
-      onTheOwnersTerminal: isOnTheOwnersTerminal(launch.stdio),
-      write: (bytes) => void process.stdout.write(bytes),
-    }),
+    screen: theOwnersScreenOfALaunch({ member: launch.member_name, beats: dashboardRowsIn(launch.places.dashboard), declared_bells: launch.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(launch.stdio), write: (bytes) => void process.stdout.write(bytes) }),
   }
 }
 
