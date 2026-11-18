@@ -13,8 +13,13 @@
 //
 // It runs where the guard cannot see — after a member's shell, at a launch, or by hand — and it asks git only, with
 // Martha's own settings (../run_marthas_own_git). A place the crew did not declare is not checked, and a git that cannot
-// answer a question leaves that question unasked rather than inventing an answer. Nothing runs it yet: package 2 wires
-// it to the launch and to the crew's hygiene command, and until then it is called by a test and by nothing else.
+// answer a question leaves that question unasked rather than inventing an answer. Two things run it: `npm run
+// check:workspace-layout` (main.ts, and the job CI gives it) and a launch, which folds what it finds into the member's
+// row (../guard_the_git_a_member_runs/the_guard_of_a_launch's aFolderOfTheScan).
+//
+// The walk names what it cannot look at instead of dying on it: a child of the clones place that is no directory is a
+// line, and one the tree will not read is a line too. A walk that took every child for an organisation — as this one did
+// until martha#562 package 2 wired it — died with ENOTDIR on the first file anyone left beside the organisations.
 //
 // What it cannot see: a worktree made outside the crew's places, once its clone no longer records it; and a repository
 // cloned twice under two organisations the crew did not put in one place.
@@ -36,7 +41,7 @@ import { join, sep } from 'node:path'
  * same question there.
  */
 export interface AnInspectionOfTheWorkspace {
-  readonly files: Pick<FileTree, 'childrenOf' | 'realPathOf'>
+  readonly files: Pick<FileTree, 'childrenOf' | 'realPathOf' | 'kindOf'>
   readonly processes: Pick<Processes, 'run'>
   readonly workspace: TheWorkspace
 }
@@ -116,23 +121,78 @@ async function theWorktreesOf(processes: AnInspectionOfTheWorkspace['processes']
   })
 }
 
-/** Every clone the crew's clone place holds, as `worktree_open` lays them out: `<clones>/<org>/<repo>`, two words deep. */
-function theClonesIn(places: AnInspectionOfTheWorkspace): readonly string[] {
+/** The names a place holds and the lines for what it holds that is no directory: what the walk could not look at is
+ * named, never skipped silently, and never thrown over (martha#562 r4). */
+interface TheDirectoriesUnder {
+  readonly directories: readonly string[]
+  readonly lines: readonly string[]
+}
+
+/** The line a path is when the walk can tell it is no directory, or cannot tell at all. */
+const notADirectory = (path: string): string =>
+  `${path} is not a directory: the crew's clones are laid out <clones>/<org>/<repo>, and every place between them is one.`
+
+/** The line a path is when the tree would not say what stands there: reported, so a place the crew cannot read is drift
+ * the owner sees rather than a check that dies. */
+const unreadablePath = (path: string, why: string): string => `${path} could not be read (${why}), so what the crew put there is not known.`
+
+/** What stands at a path once the links in front of it are followed, or the error the tree answered with. `kindOf` does not
+ * follow a link, so a symlinked org or clone is resolved first and then read: a link in front of a place is both how a
+ * machine spells a place and how a crew moves one, and neither is drift (martha#79). */
+function whatStandsAt(files: AnInspectionOfTheWorkspace['files'], path: string): 'directory' | 'other' | string {
+  try {
+    return files.kindOf(files.realPathOf(path) ?? path).kind === 'directory' ? 'directory' : 'other'
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
+/** The children of a place that are directories, and one line for each child that is not one or could not be read. */
+function theDirectoriesUnder(files: AnInspectionOfTheWorkspace['files'], path: string): TheDirectoriesUnder {
+  const directories: string[] = []
+  const lines: string[] = []
+  let children: readonly string[]
+  try {
+    children = files.childrenOf(path)
+  } catch (error) {
+    return { directories: [], lines: [unreadablePath(path, error instanceof Error ? error.message : String(error))] }
+  }
+  for (const name of children) {
+    const child = join(path, name)
+    const what = whatStandsAt(files, child)
+    if (what === 'directory') directories.push(child)
+    else lines.push(what === 'other' ? notADirectory(child) : unreadablePath(child, what))
+  }
+  return { directories, lines }
+}
+
+/** Every clone the crew's clone place holds, as `worktree_open` lays them out: `<clones>/<org>/<repo>`, two words deep,
+ * and the lines for anything in the way that is no directory of either level. */
+function theClonesIn(places: AnInspectionOfTheWorkspace): { readonly clones: readonly string[]; readonly lines: readonly string[] } {
   const clones = places.workspace.clones
-  if (clones === null) return []
-  return places.files.childrenOf(clones).flatMap((org) => places.files.childrenOf(join(clones, org)).map((repo) => join(clones, org, repo)))
+  if (clones === null) return { clones: [], lines: [] }
+  const orgs = theDirectoriesUnder(places.files, clones)
+  const under = orgs.directories.map((org) => theDirectoriesUnder(places.files, org))
+  return {
+    clones: under.flatMap((found) => found.directories),
+    lines: [...orgs.lines, ...under.flatMap((found) => found.lines)],
+  }
 }
 
 /** What git says of one clone: its branch, the branch it starts on, its work, where it came from, every worktree it records. */
 async function inspected(places: AnInspectionOfTheWorkspace, clone: string): Promise<ACloneInspected> {
-  const { processes } = places
+  const { processes, files } = places
+  const itself = files.realPathOf(clone) ?? clone
+  const worktrees = await theWorktreesOf(processes, clone)
   return {
     path: clone,
     branch: await theAnswerOf(processes, clone, THE_BRANCH),
     start: await theStartOf(processes, clone),
     dirty: (await saidByGit(processes, clone, THE_DIRTY_WORK)).some((line) => line !== ''),
     origin: await theAnswerOf(processes, clone, THE_ORIGIN),
-    worktrees: await theWorktreesOf(processes, clone),
+    // git names a clone's own directory as it resolved it, so a clone reached through a link is compared as its own
+    // path resolves too, or the clone's own entry would be read as a worktree outside the crew's place (martha#79).
+    worktrees: worktrees.filter((worktree) => (files.realPathOf(worktree.path) ?? worktree.path) !== itself),
   }
 }
 
@@ -204,10 +264,10 @@ export async function theDriftInTheWorkspace(places: AnInspectionOfTheWorkspace)
     worktrees: thePathItself(places.files, places.workspace.worktrees),
   }
   const resolved: AnInspectionOfTheWorkspace = { ...places, workspace }
-  const named = theClonesIn(resolved)
-  const clones = await Promise.all(named.map((clone) => inspected(resolved, clone)))
+  const found = theClonesIn(resolved)
+  const clones = await Promise.all(found.clones.map((clone) => inspected(resolved, clone)))
   const place = workspace.worktrees
   const own = clones.flatMap(driftOfAClone)
   const worktrees = place === null ? [] : clones.flatMap((clone) => driftOfAWorktrees(clone, place))
-  return [...own, ...worktrees, ...driftOfADoubleClone(clones)]
+  return [...found.lines, ...own, ...worktrees, ...driftOfADoubleClone(clones)]
 }
