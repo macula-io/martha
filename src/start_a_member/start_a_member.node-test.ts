@@ -599,6 +599,50 @@ test('a declaration naming a reviewer model this host runs starts the member, an
   )
 })
 
+/**
+ * A reviewer member through the start itself (martha#541 package 6b, r=3 amendment C): the crew's reviewer rule is
+ * asked by `martha start`, not only by the slice that composes it, and the owner's own arguments reach that rule. The
+ * reviewer as init writes it declares no model, so a crew that holds reviews to one cannot start it; declared on the
+ * reviewer model it starts; and the owner's own model switch on it is refused before the host runs, whatever it names.
+ */
+/** Why a start refused, or '' for one that started. */
+const refusalOf = (started: MemberStarted): string => (started.started ? '' : started.refusal)
+
+/** That a refusal is a start's own and names every word given, each as it was given. */
+const refusedNaming = (refusal: string, words: readonly string[]): void => {
+  assert.ok(refusal.startsWith(NOT_STARTED), refusal)
+  for (const word of words) assert.ok(refusal.includes(word), `the refusal does not name ${word}: ${refusal}`)
+}
+
+test('#541 6b: martha start holds a reviewer member to the reviewer model, and the owner\'s model switch never reaches its host (mutants: the rule not asked at the start; the owner\'s arguments not handed to it)', async (t) => {
+  const [review_model = '', another_model = ''] = CLAUDE_CODE_MODELS.names
+  assert.notEqual(review_model, another_model, 'the recorded host names fewer than two models, so this test could tell no two apart')
+  const reviewer = SOLO_MEMBERS[1].name
+  const reviewerOn = async (model: string | null, args: readonly string[]) => {
+    const place = placeFor(t, {})
+    await declared(place)
+    const declaration = soloDeclaration('Ada Owner')
+    const members = declaration.members.map((member) => (member.name === reviewer ? { ...member, model } : member))
+    writeFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), `${JSON.stringify({ ...declaration, members, house_rules: { [REVIEW_MODEL]: review_model } }, null, 2)}\n`)
+    const fake = fakeClaude(place)
+    const started = await startedOn(place, { ...requestFor(place, fake.command, reviewer, []), args: [...args] })
+    return { started, ran: () => existsSync(fake.ran) }
+  }
+
+  const asInitWritesIt = await reviewerOn(null, [])
+  assert.equal(asInitWritesIt.started.started, false, 'a reviewer member declaring no model was started under a crew that holds reviews to one')
+  refusedNaming(refusalOf(asInitWritesIt.started), [reviewer, review_model])
+  assert.equal(asInitWritesIt.ran(), false, 'the host ran for a reviewer member the rule refused')
+
+  const withTheOwnersSwitch = await reviewerOn(review_model, [THE_MODELS_SWITCH, another_model])
+  assert.equal(withTheOwnersSwitch.started.started, false, `a reviewer member was started with the owner's own ${THE_MODELS_SWITCH}`)
+  refusedNaming(refusalOf(withTheOwnersSwitch.started), [reviewer, another_model])
+  assert.equal(withTheOwnersSwitch.ran(), false, `the host ran with the owner's ${THE_MODELS_SWITCH} on a reviewer member`)
+
+  const onItsModel = await reviewerOn(review_model, [])
+  assert.ok(onItsModel.started.started, refusalOf(onItsModel.started))
+})
+
 test("a run reading a member's rows derives the same place the launcher writes them to (martha#254, r=1 O2)", () => {
   const state_home = mkdtempSync(join(tmpdir(), 'martha-254-derive-'))
   const checkout = join(state_home, 'checkout')
