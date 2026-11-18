@@ -633,13 +633,18 @@ export function thePicksIn(input: unknown, answer: unknown): readonly APostedOpt
   if (new Set(questions.map((one) => one.question)).size !== questions.length) return undefined
   const picked: APostedOption[] = []
   for (const one of questions) {
-    const said = answers[one.question]
-    if (typeof said !== 'string') return undefined
-    const matching = everyOrderingOf(one.options).filter((ordering) => ordering.map((option) => option.label).join(PICK_JOINER) === said)
-    if (matching.length > 1) return undefined
-    picked.push(...(matching[0] ?? []))
+    const of_one = thePicksOfOne(one, answers[one.question])
+    if (of_one === undefined) return undefined
+    picked.push(...of_one)
   }
   return picked
+}
+
+/** One question's picks: the one ordering of its options its answer joins to, none for the owner's words, undefined when unreadable. */
+function thePicksOfOne(question: APostedQuestion, said: unknown): readonly APostedOption[] | undefined {
+  if (typeof said !== 'string') return undefined
+  const matching = everyOrderingOf(question.options).filter((ordering) => ordering.map((option) => option.label).join(PICK_JOINER) === said)
+  return matching.length > 1 ? undefined : (matching[0] ?? [])
 }
 
 /** One posted question: its text and its options, as the member posted them. */
