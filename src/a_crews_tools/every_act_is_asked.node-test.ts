@@ -20,6 +20,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { ACTS, APPROVE_LANDING, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OFFER_OWNER_ASKS, RESTART_MEMBER, declareCrew, type Act } from '../declare_crew/declare_crew.ts'
+import { NO_MODEL_NAMED } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -109,7 +110,7 @@ const lifecycle: StoppingHost = {
  */
 async function theToolsOf(member: string, act: Act): Promise<CrewTools> {
   const documents = documentsFor(act)
-  const settings = await declareCrew(documents, root, [])
+  const settings = await declareCrew(documents, root, NO_MODEL_NAMED)
   return crewToolsOver({
     member,
     ledger: { clock: { now: () => 1_000 }, stores: { rows } },
