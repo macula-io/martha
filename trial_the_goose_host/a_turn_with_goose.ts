@@ -22,10 +22,23 @@ export function promptOver(acp: GooseOverAcp, sessionId: string, text: string, t
   }))
 }
 
+/**
+ * The cap ran out before Goose answered (martha#612): its own kind of error, so a line that got no answer in time is
+ * told apart from every other error by what it is, never by matching its words.
+ */
+export class NoAnswerInTime extends Error {
+  readonly ms: number
+  constructor(ms: number) {
+    super(`no answer within ${ms} ms`)
+    this.name = 'NoAnswerInTime'
+    this.ms = ms
+  }
+}
+
 /** A promise that fails rather than waits forever: a launch is capped, never left hanging. */
 export function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((settle, fail) => {
-    const timer = setTimeout(() => fail(new Error(`no answer within ${ms} ms`)), ms)
+    const timer = setTimeout(() => fail(new NoAnswerInTime(ms)), ms)
     work.then(
       (value) => { clearTimeout(timer); settle(value) },
       (error: Error) => { clearTimeout(timer); fail(error) },
