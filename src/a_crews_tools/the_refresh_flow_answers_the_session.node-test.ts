@@ -27,9 +27,10 @@ import { HANDOVERS_PLACE, THE_HANDOVER_WRITTEN, THE_REFRESH_DECLINED, WRITE_MY_H
 import { keepThePackageContract } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import { HANDOVER_LIMIT_PERCENT, REFRESH_MARGIN_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { crewToolsOver, CREW_TOOL_NAMES, REFRESH_THIS_SESSION, type CrewTools } from './a_crews_tools.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
-const HOST_MODELS = ['opus', 'fable']
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 
 /**
  * The machine root the cases below hand in for a crew whose declaration names none (martha#314). It stands in for the

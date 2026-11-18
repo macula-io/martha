@@ -99,7 +99,7 @@
       "src/answer_the_relay": 462,
       "src/approve_a_checkouts_config": 69,
       "src/ask_the_host_what_it_loads": 292,
-      "src/claude_code_host": 483,
+      "src/claude_code_host": 480,
       "src/read_what_claude_code_says_of_an_agent": 117,
       "src/claude_code_relay": 717,
       "src/cut_the_rules_from_the_host_binary": 395,

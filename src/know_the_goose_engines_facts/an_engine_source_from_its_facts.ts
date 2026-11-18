@@ -9,6 +9,7 @@
 
 import { dirname, join } from 'node:path'
 
+import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { ENGINE_PLACES, GOOSE_CRATE, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
@@ -36,6 +37,24 @@ function platformExtensionMap(extensions: readonly PlatformExtension[]): Readonl
   return Object.assign({ [ENGINE_PLACES.platform_extensions]: map }, ...keyed.map(({ files }) => files)) as Record<string, string>
 }
 
+/** `models` turned to the other kind, closed when it is open and open when it is closed: the drift a test plants. */
+export function theOtherKindOf(models: ModelVocabulary): ModelVocabulary {
+  return models.kind === OPEN_VOCABULARY
+    ? { kind: CLOSED_VOCABULARY, names: ['a-listed-model', 'another-listed-model'] }
+    : { kind: OPEN_VOCABULARY, names: [] }
+}
+
+/** The delegate tool's schema as the engine writes it, its `model` a list when the vocabulary is closed. */
+function delegateTool(models: EngineFacts['subagent_models']): string {
+  const listed = models.kind === CLOSED_VOCABULARY ? `,\n                    "enum": [${models.names.map((name) => JSON.stringify(name)).join(', ')}]` : ''
+  return [
+    '    fn create_delegate_tool(&self) -> Tool {\n        let schema = serde_json::json!({\n            "type": "object",\n            "properties": {\n',
+    '                "provider": {\n                    "type": "string",\n                    "description": "Override LLM provider."\n                },\n',
+    `                "model": {\n                    "type": "string",\n                    "description": "Override model."${listed}\n                },\n`,
+    '            }\n        });\n\n        Tool::new(\n            "delegate",\n',
+  ].join('')
+}
+
 /** Every file of a tree that says `facts`, by its path in the checkout. */
 export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, string>> {
   const modes = facts.mode.values.map((mode) => `    #[strum(message = "a mode")]\n    ${pascalCase(mode)},\n`).join('')
@@ -51,6 +70,7 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.mode_when_unset]: `impl Config {\n    pub(crate) fn resolve_goose_mode(&self) -> Result<GooseMode, ConfigError> {\n        match self.get_param_strict("${facts.mode.setting}") {\n            Ok(mode) => Ok(mode),\n            Err(ConfigError::NotFound(_)) => Ok(GooseMode::${pascalCase(facts.mode.when_unset)}),\n            Err(error) => Err(error),\n        }\n    }\n}\n`,
     ...platformExtensionMap(facts.platform_extensions),
     [ENGINE_PLACES.acp_server]: `        let options = vec![\n${options}        ];\n`,
+    [ENGINE_PLACES.delegate_tool]: delegateTool(facts.subagent_models),
     [ENGINE_PLACES.openai_provider]: `pub const OPEN_AI_PROVIDER_NAME: &str = "${facts.openai_provider.name}";\npub const OPEN_AI_DEFAULT_BASE_PATH: &str = "${facts.openai_provider.default_base_path}";\n            vec![\n${settings}            ],\n`,
   }
 }
