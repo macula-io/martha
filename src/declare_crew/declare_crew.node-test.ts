@@ -598,16 +598,27 @@ test('#541 6b: a crew that names no reviewer model reads on a host this release 
   assert.deepEqual(settings.members.map((member) => theHostOfMember(settings, member)), [CLAUDE_CODE, THE_ENGINES_HOST])
 })
 
-test('#541 6b: declareCrew is the one-host wrapper, and refuses a two-host crew by the host it records no models for', async () => {
+test('#541 6b: declareCrew is the one-host wrapper, and a one-host crew reads through it as through declareCrewOnHosts', async () => {
   const viaWrapper = await declare(team).settings
   const viaHosts = await declareOnHosts(team, new Map([[CLAUDE_CODE, HOST_MODELS]]))
   assert.deepEqual(viaWrapper.house_rules, viaHosts.house_rules)
   assert.deepEqual(viaWrapper.members, viaHosts.members)
   assert.deepEqual(viaWrapper.mode.may, viaHosts.mode.may)
-  await assert.rejects(declare(acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST })).settings, (error: unknown) => {
-    assert.ok(error instanceof DeclarationRefused)
+})
+
+test('#541 6b r=2: declareCrew keeps its reading, so a two-host crew its callers read is held to the one vocabulary they hand it (mutant: the one-host map put back)', async () => {
+  // Every caller but `martha start` reads the crew with declareCrew: `martha approve`, the launcher, the crew tools, the
+  // refresh flow, the crew text and init. A two-host crew (package 5) that names a review_model the vocabulary they hand
+  // over spells must read for all of them, as it did before 6b; holding each member's own host is declareCrewOnHosts'.
+  const twoHosts = acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST })
+  const settings = await declare(twoHosts).settings
+  assert.equal(settings.house_rules.review_model, 'model-r')
+  assert.deepEqual(settings.members.map((member) => theHostOfMember(settings, member)), [CLAUDE_CODE, THE_ENGINES_HOST])
+  // A name that vocabulary cannot spell is refused as it always was, naming what the host runs.
+  await assert.rejects(declare({ ...twoHosts, house_rules: { ...twoHosts.house_rules, [REVIEW_MODEL]: 'engine-model' } }).settings, (error: unknown) => {
+    assert.ok(error instanceof DeclarationRefused, `expected a DeclarationRefused, got ${String(error)}`)
     assert.equal(error.field, 'house_rules.review_model')
-    assert.ok(error.message.includes(THE_ENGINES_HOST), error.message)
+    assert.ok(error.message.includes(`it runs ${HOST_MODELS.names.join(', ')}`), error.message)
     return true
   })
 })

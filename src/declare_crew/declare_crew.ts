@@ -434,11 +434,12 @@ const isText = (value: unknown): value is string => typeof value === 'string' &&
  * its models, a `review_model` must be one of them, because a crew that named one Martha cannot spell would hold every
  * review to a model nothing ever matches; when the host takes any name its provider serves, any name is read.
  *
- * This is the one-host case of ../declareCrewOnHosts: a crew whose members all run on the host this release starts a
- * member on. A crew whose members name two hosts is read with `declareCrewOnHosts`, which has a vocabulary for each.
+ * This reading is unchanged by martha#541 package 6b, so no caller of it changes: `review_model` is held to `models`
+ * alone, whatever host a member names. A caller that knows each host's vocabulary reads the crew with
+ * `declareCrewOnHosts`, which holds the model to every member's own host.
  */
 export async function declareCrew(documents: DocumentStore, root: string, models: ModelVocabulary): Promise<CrewSettings> {
-  return declareCrewOnHosts(documents, root, new Map([[THE_HOST_A_MEMBER_RAN_ON, models]]))
+  return readTheCrew(documents, root, { every_host: models })
 }
 
 /**
@@ -453,12 +454,22 @@ export type TheVocabulariesOfHost = ReadonlyMap<string, ModelVocabulary>
  * members run on different hosts is held to what each member's own host runs, not to one host's list.
  */
 export async function declareCrewOnHosts(documents: DocumentStore, root: string, vocabularies: TheVocabulariesOfHost): Promise<CrewSettings> {
+  return readTheCrew(documents, root, { by_host: vocabularies })
+}
+
+/**
+ * What the reviewer model is read against: one vocabulary for the whole crew, as `declareCrew` has always read it, or one
+ * per host, as `declareCrewOnHosts` reads it (martha#541 package 6b).
+ */
+type TheModelsTheRuleReads = { readonly every_host: ModelVocabulary } | { readonly by_host: TheVocabulariesOfHost }
+
+async function readTheCrew(documents: DocumentStore, root: string, models: TheModelsTheRuleReads): Promise<CrewSettings> {
   const crew = join(root, DECLARATION_DIRECTORY)
   const declaration = join(crew, DECLARATION_FILE)
   if (!isAbsolute(root)) throw new DeclarationRefused(declaration, null, 'is not under an absolute project root')
   const text = await readDeclaration(documents, declaration, join(root, CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE))
   const parsed = parseDeclaration(declaration, text)
-  return deepFreeze(settingsOf(new Refuse(declaration), parsed, { root, crew, declaration }, vocabularies))
+  return deepFreeze(settingsOf(new Refuse(declaration), parsed, { root, crew, declaration }, models))
 }
 
 /**
@@ -508,7 +519,7 @@ class Refuse {
   }
 }
 
-function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conventions'>, vocabularies: TheVocabulariesOfHost): CrewSettings {
+function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conventions'>, models: TheModelsTheRuleReads): CrewSettings {
   if (!isObject(value)) return refuse.at(null, 'is not a JSON object')
   refuse.unknownKeys(value, TOP_LEVEL_KEYS, '')
   if (value['version'] !== DECLARATION_VERSION) refuse.at('version', `is not ${DECLARATION_VERSION}`)
@@ -522,7 +533,7 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     host,
     members,
     mode,
-    house_rules: houseRulesOf(refuse, value['house_rules'], vocabularies, { members, mode, crew_host: host }),
+    house_rules: houseRulesOf(refuse, value['house_rules'], models, { members, mode, crew_host: host }),
     gate: gateOf(refuse, value['house_rules'], members),
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
@@ -722,12 +733,12 @@ function gateOf(refuse: Refuse, value: unknown, members: readonly Member[]): Gat
   return read
 }
 
-function houseRulesOf(refuse: Refuse, value: unknown, vocabularies: TheVocabulariesOfHost, crew: TheCrewRead): HouseRules {
+function houseRulesOf(refuse: Refuse, value: unknown, models: TheModelsTheRuleReads, crew: TheCrewRead): HouseRules {
   if (value === undefined) return houseRulesFrom({})
   if (!isObject(value)) return refuse.at('house_rules', `is not ${shapeOf(HOUSE_RULE_KEYS)}`)
   refuse.unknownKeys(value, HOUSE_RULE_KEYS, 'house_rules.')
   refuseSwitches(refuse, value)
-  refuseTheReviewModel(refuse, value[REVIEW_MODEL], vocabularies, crew)
+  refuseTheReviewModel(refuse, value[REVIEW_MODEL], models, crew)
   refusePlaces(refuse, value)
   refuseMinutes(refuse, value)
   return houseRulesFrom(value)
@@ -755,10 +766,12 @@ interface TheCrewRead {
  * one of the crew's hosts can never spell would refuse every review spawned there forever. A host this release records
  * no vocabulary for is refused by name too, never read as runnable.
  */
-function refuseTheReviewModel(refuse: Refuse, model: unknown, vocabularies: TheVocabulariesOfHost, crew: TheCrewRead): void {
+function refuseTheReviewModel(refuse: Refuse, model: unknown, models: TheModelsTheRuleReads, crew: TheCrewRead): void {
   if (model === undefined) return
   if (!isText(model)) return refuse.at(`house_rules.${REVIEW_MODEL}`, 'is not a model name')
   const name = model.trim()
+  if ('every_host' in models) return refuseOnTheOneHost(refuse, name, models.every_host)
+  const vocabularies = models.by_host
   const held = new Set<string>()
   for (const member of crew.members) {
     const host = theHostOfResolved(member, crew.crew_host)
@@ -774,6 +787,16 @@ function refuseTheReviewModel(refuse: Refuse, model: unknown, vocabularies: TheV
     const runs = vocabulary.names.length === 0 ? 'none Martha can name' : vocabulary.names.join(', ')
     refuse.at(where, `is not a model ${host} runs (it runs ${runs}), so a review could never be held to it`)
   }
+}
+
+/**
+ * The reviewer model read against the one vocabulary `declareCrew` is handed (martha#315), exactly as before martha#541
+ * package 6b: a name that host cannot spell is refused, where the owner sees which model it does run.
+ */
+function refuseOnTheOneHost(refuse: Refuse, name: string, models: ModelVocabulary): void {
+  if (hostRuns(models, name)) return
+  const runs = models.names.length === 0 ? 'none Martha can name' : models.names.join(', ')
+  refuse.at(`house_rules.${REVIEW_MODEL}`, `is not a model this host runs (it runs ${runs}), so a review could never be held to it`)
 }
 
 /**
