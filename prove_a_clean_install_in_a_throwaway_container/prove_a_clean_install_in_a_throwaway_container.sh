@@ -933,12 +933,12 @@ finish() {
     log failed
     exit 1
   fi
-  log "${ALL_PROVEN_WORDS}: ${MEMBERS[*]}"
   if a_night && [ -z "${NIGHT_READY}" ]; then
     failed run 'the night did not get ready'
     log failed
     exit 1
   fi
+  log "${ALL_PROVEN_WORDS}: ${MEMBERS[*]}"
   exit 0
 }
 

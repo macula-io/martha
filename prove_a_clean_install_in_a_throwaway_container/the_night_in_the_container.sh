@@ -364,7 +364,7 @@ CURL
   cat > "${dir}/martha" << 'MARTHA'
 #!/usr/bin/env bash
 # martha init, as far as the night's clone can tell: the crew declared in the folder it runs in.
-if [ "${1:-}" = init ]; then mkdir -p .martha && printf '{}\n' > .martha/crew.json; fi
+if [ "${1:-}" = init ]; then : > the-stand-in-init-ran; fi
 MARTHA
   cat > "${dir}/night-podman" << 'NIGHTPODMAN'
 #!/usr/bin/env bash
