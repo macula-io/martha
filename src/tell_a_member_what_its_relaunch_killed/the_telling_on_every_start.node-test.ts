@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { MINUTE_MS, WORKTREES } from '../declare_crew/declare_crew.ts'
+import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import type { CrewPlace, CrewStore } from '../host_contract/host_contract.ts'
 import { theResumePrompt as theHandoverPrompt } from '../write_my_handover/write_my_handover.ts'
 import { theResumePrompt as theWakePrompt } from '../wake_a_member/wake_a_member.ts'
@@ -16,7 +17,7 @@ import { theKeptText, type WhatAKilledRunLeft } from './tell_a_member_what_its_r
 
 /** A crew's place in memory: one name, and what was kept under it, so a test reads what the slice wrote. */
 const aPlace = (holding: Map<string, string> = new Map<string, string>()): CrewPlace => ({
-  path: `/a/crew/${LEFTOVER_RECORDS_PLACE}`,
+  path: `/a/${THE_WHOLE_CREW}/${LEFTOVER_RECORDS_PLACE}`,
   keep: (name, text) => {
     holding.set(name, text)
     return undefined
@@ -109,7 +110,7 @@ test('a place that will not answer says why too, never "nothing was left"', () =
 
 test('a record the store refuses to keep says why, so the caller is not told it was kept', () => {
   const refusing: CrewStore = {
-    place: () => ({ path: '/a/crew', keep: () => ({ refusal: 'the disk is full' }), read: () => undefined, names: () => [] }),
+    place: () => ({ path: `/a/${THE_WHOLE_CREW}`, keep: () => ({ refusal: 'the disk is full' }), read: () => undefined, names: () => [] }),
   }
   assert.equal(keepTheLeftoverRecordOf(refusing, aRecord()), 'the disk is full')
 })
@@ -149,7 +150,7 @@ test('a released leftover is not told as holding the run\'s bytes, though the ki
 test('a worktree found gone is carried into the telling on the start', () => {
   const { crew } = aCrew()
   keepTheLeftoverRecordOf(crew, aRecord())
-  const told = theTellingOnTheNextStart({ crew, member: 'a_member', now_ms: 2, gone: ['/work/worktrees/gone'] })
+  const told = theTellingOnTheNextStart({ crew, member: 'a_member', now_ms: 2, gone: [`/work/${WORKTREES}/gone`] })
   assert.ok(told.telling !== undefined)
   assert.match(told.telling, /gone/)
 })
