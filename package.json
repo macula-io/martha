@@ -54,7 +54,6 @@
       "src/read_one_file_held_by_its_descriptor"
     ],
     "hostAdapters": [
-      "src/start_the_member_on_its_host",
       "src/answer_the_relay",
       "src/approve_a_checkouts_config",
       "src/ask_git_what_a_member_is_about_to_change",
@@ -92,6 +91,7 @@
       "src/run_the_nodes_own_npm_alone",
       "src/serve_the_relay_to_a_launch",
       "src/start_a_member",
+      "src/start_the_member_on_its_host",
       "src/start_the_member_on_the_owners_terminal",
       "src/sweep_leftover_launch_directories",
       "src/tell_the_member_a_line",
