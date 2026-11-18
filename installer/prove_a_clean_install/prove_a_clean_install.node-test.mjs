@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 
 import { removeEvenReadOnly } from '../serve_a_release_locally/serve_a_release_locally.mjs'
 import { TOP } from '../unpack_the_release_layer/unpack_the_release_layer.mjs'
-import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX, startOnATerminal, killEvenIfGone, killEveryMember, MEMBER_WAIT_MS, NOTHING_MATCHED, POLL_MS, RUNNABLE, quoted } from './prove_a_clean_install.mjs'
+import { proveACleanInstall, startedLineSource, HELD, heldAt, HOLD_VARIABLE, WORK_PREFIX, startOnATerminal, killEvenIfGone, killEveryMember, stopMember, theProcessesOnThisMachine, MEMBER_WAIT_MS, NOTHING_MATCHED, POLL_MS, RUNNABLE, quoted } from './prove_a_clean_install.mjs'
 
 const SCRIPT = fileURLToPath(new URL('./prove_a_clean_install.mjs', import.meta.url))
 // The solo crew as the committed tree declares it; computed, so the installer's typecheck does not follow it into src.
@@ -29,6 +29,9 @@ const { RELAY_FILES, RELAY_COPY_NAME } = /** @type {{ RELAY_FILES: readonly stri
 const COMMAND_TIMEOUT_MS = 50_000
 // The mode a planted defect gives the release: writable by its owner, which a placed release never is.
 const WRITABLE = 0o755
+// This machine's processes, the same reader a run uses: the tear-down signals on a start time, never on a pid alone
+// (martha#628).
+const PROCESSES = await theProcessesOnThisMachine()
 
 /**
  * Runs the script as a command, bounded by COMMAND_TIMEOUT_MS.
@@ -58,6 +61,48 @@ const alive = (pid) => {
     return false
   }
 }
+
+/**
+ * A process's state, from /proc: `T` is stopped, which a signal of ours would have made it, so a case that must not
+ * signal a pid asserts the state and not only that the process is alive (martha#628).
+ * @param {number} pid
+ */
+const stateOf = (pid) => {
+  const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+  return stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/)[0]
+}
+
+/**
+ * The state of a process that may already be gone: a killed process is `Z` until it is reaped, and an orphan is reaped
+ * as soon as the kernel hands it on, so "gone" is a state of its own here (martha#628).
+ * @param {number} pid
+ */
+const stateOrGone = (pid) => {
+  try {
+    return stateOf(pid)
+  } catch {
+    return 'gone'
+  }
+}
+
+/**
+ * A member as a run makes one, with its wrapper's start time held as the run holds it: what a test plants beyond that
+ * is said in `overrides` (martha#628).
+ * @param {string} name
+ * @param {import('node:child_process').ChildProcess} child
+ * @param {Record<string, unknown>} [overrides]
+ */
+const aMember = (name, child, overrides = {}) => /** @type {any} */ ({
+  name,
+  child,
+  pid: 0,
+  said: '',
+  ended: '',
+  exited: Promise.resolve(''),
+  identity: null,
+  childIdentity: PROCESSES.identityOf(Number(child.pid)),
+  ...overrides
+})
 
 /**
  * The session a pid runs in, read from /proc: a run under `script` leads a session of its own, and an orphan keeps its
@@ -469,7 +514,7 @@ test('a start in flight is killed with everything under it, so nothing it began 
     'wait',
     ''
   ].join('\n'), { mode: RUNNABLE })
-  const member = { name: 'in flight', child: startOnATerminal(quoted(writer), { cwd: tree, env: process.env }), pid: 0, said: '', ended: '', exited: Promise.resolve('') }
+  const member = aMember('in flight', startOnATerminal(quoted(writer), { cwd: tree, env: process.env }))
   /** @type {number} */
   let writerPid = 0
   t.after(() => {
@@ -481,7 +526,7 @@ test('a start in flight is killed with everything under it, so nothing it began 
   writerPid = Number(readFileSync(pidFile, 'utf8').trim())
   assert.ok(writerPid > 0, 'the start said the pid of what it began')
   assert.equal(alive(writerPid), true, 'what the start began is alive before the tear-down')
-  killEvenIfGone(member)
+  killEvenIfGone(member, PROCESSES)
   const ended = Date.now() + MEMBER_WAIT_MS
   while (alive(writerPid) && Date.now() < ended) await delay(POLL_MS)
   assert.equal(alive(writerPid), false, 'nothing the start began is alive after the tear-down')
@@ -505,7 +550,7 @@ test('a run that forks while it is walked is frozen, so nothing of it outlives t
     'wait',
     ''
   ].join('\n'), { mode: RUNNABLE })
-  const member = { name: 'forking', child: startOnATerminal(quoted(forker), { cwd: tree, env: process.env }), pid: 0, said: '', ended: '', exited: Promise.resolve('') }
+  const member = aMember('forking', startOnATerminal(quoted(forker), { cwd: tree, env: process.env }))
   /** @type {number} */
   let session = 0
   t.after(() => {
@@ -527,7 +572,7 @@ test('a run that forks while it is walked is frozen, so nothing of it outlives t
     walked = inSession(session)
   }
   assert.ok(walked.length > 1, `the run forked children before the tear-down: ${walked.length} in session ${session}`)
-  assert.deepEqual(killEvenIfGone(member), [], 'the walk asked every process it froze for its children')
+  assert.deepEqual(killEvenIfGone(member, PROCESSES), [], 'the walk asked every process it froze for its children')
   const ended = Date.now() + MEMBER_WAIT_MS
   let left = inSession(session)
   while (left.length > 0 && Date.now() < ended) {
@@ -561,9 +606,9 @@ test('a walk that could not be made fails the tear-down by name, and only status
     // the one case that must not refuse anything.
     const child = spawn('sleep', ['300'], { stdio: 'ignore' })
     t.after(() => { try { process.kill(Number(child.pid), 'SIGKILL') } catch { /* already gone */ } })
-    const member = { name: what, child, pid: 0, said: '', ended: '', exited: Promise.resolve('') }
+    const member = aMember(what, child)
     process.env.PATH = onlyPath
-    const refusals = killEvenIfGone(member)
+    const refusals = killEvenIfGone(member, PROCESSES)
     process.env.PATH = path
     const ended = Date.now() + MEMBER_WAIT_MS
     while (alive(Number(child.pid)) && Date.now() < ended) await delay(POLL_MS)
@@ -586,11 +631,11 @@ test('a walk the tear-down could not make is one of its refusals (martha#590 r=2
   const child = spawn('sleep', ['300'], { stdio: 'ignore' })
   t.after(() => { try { process.kill(Number(child.pid), 'SIGKILL') } catch { /* already gone */ } })
   // A member the tear-down kills, whose own promise then says it ended: the only refusal left is the walk's.
-  const member = { name: 'walked', child, pid: 0, said: '', ended: '', exited: Promise.resolve('ended') }
+  const member = aMember('walked', child, { exited: Promise.resolve('ended') })
   const path = process.env.PATH
   t.after(() => { process.env.PATH = path })
   process.env.PATH = nowhere
-  const refusals = await killEveryMember([member], {})
+  const refusals = await killEveryMember([member], {}, PROCESSES)
   process.env.PATH = path
   assert.equal(refusals.length, 1, `one refusal, the walk's, held by the tear-down: ${JSON.stringify(refusals)}`)
   assert.match(refusals[0] ?? '', /the children of pid \d+ could not be read: /, 'and it names the walk that failed')
@@ -679,15 +724,98 @@ test('the walk freezes each process before it reads its children, and the record
   const { stub, record } = aPgrepThatRecordsTheState(tree)
   const path = process.env.PATH
   t.after(() => { process.env.PATH = path })
-  const member = { name: 'walked', child: wrapper, pid: 0, said: '', ended: '', exited: Promise.resolve('') }
+  const member = aMember('walked', wrapper)
   process.env.PATH = [stub, path].join(delimiter)
-  const refusals = killEvenIfGone(member)
+  const refusals = killEvenIfGone(member, PROCESSES)
   process.env.PATH = path
   assert.deepEqual(refusals, [], 'the walk asked every process it froze for its children')
   const recorded = readFileSync(record, 'utf8').trim().split('\n').filter((line) => line !== '').map((line) => line.split(' '))
   const asked = recorded.map(([pid]) => Number(pid))
   assert.deepEqual(asked.sort((one, other) => one - other), [...pids].sort((one, other) => one - other), `the walk asked about every process in the tree: ${JSON.stringify(recorded)}`)
   assert.deepEqual(recorded.filter(([, state]) => state !== 'T'), [], `every process was stopped before its children were read: ${JSON.stringify(recorded)}`)
+})
+
+/**
+ * The same reader a run uses, except for one pid, whose start time is another live process's from the `after`-th read
+ * on: the kernel handing that pid to another process between two of our reads (martha#628).
+ * @param {number} about
+ * @param {number} after
+ * @param {string | null} then
+ */
+const aReaderThatChangesItsMind = (about, after, then) => /** @type {any} */ ({
+  identityOf: (() => {
+    let read = 0
+    return (/** @type {number} */ pid) => {
+      if (pid !== about) return PROCESSES.identityOf(pid)
+      read += 1
+      return read > after ? then : PROCESSES.identityOf(pid)
+    }
+  })(),
+  signalGroup: PROCESSES.signalGroup
+})
+
+// martha#628: the tear-down signals the process it recorded, never the number. A pid the kernel has handed to another
+// process answers kill() exactly as the one we started does, so what a signal is sent on is the start time held when
+// the pid was named. The record here is this test's own start time, which is what a run holds after the wrapper it
+// named has ended and its number has gone round again: nothing under that number is walked, because nothing under it
+// is the run's.
+test('a wrapper whose pid is no longer the process it was named as has nothing under it walked (martha#628)', async (t) => {
+  const { wrapper, pids } = await aTreeTwoDeep(t)
+  const [child, grandchild] = [pids[1], pids[2]]
+  if (child === undefined || grandchild === undefined) assert.fail('the tree came to a child and a grandchild')
+  const member = aMember('reused', wrapper, { childIdentity: PROCESSES.identityOf(process.pid) })
+  assert.deepEqual(killEvenIfGone(member, PROCESSES), [], 'a pid that is not ours is a process already gone: nothing is refused')
+  assert.equal(stateOf(child), 'S', 'the child of a pid that is not ours is not even stopped')
+  assert.equal(alive(grandchild), true, 'and nothing under it is killed')
+})
+
+// martha#628: the walk holds each child's start time the moment `pgrep` names it, and the kill reads it again. A pid
+// the kernel hands on between those two reads is another process's, and is left alone: the freeze was ours, the kill
+// would not be.
+test('a pid that changed hands between the freeze and the kill is not killed (martha#628)', async (t) => {
+  const { wrapper, pids } = await aTreeTwoDeep(t)
+  const grandchild = pids[2]
+  if (grandchild === undefined) assert.fail('the tree came to a grandchild')
+  // Read once when `pgrep` names it and once at the stop; the kill reads a third time, and by then it is another
+  // live process's number: this test's own start time stands in for the one the kernel hands on.
+  const member = aMember('changed', wrapper)
+  killEvenIfGone(member, aReaderThatChangesItsMind(grandchild, 2, PROCESSES.identityOf(process.pid)))
+  assert.equal(stateOrGone(grandchild), 'T', `the pid that changed hands was frozen and then left alone, not killed: ${stateOrGone(grandchild)}`)
+})
+
+// martha#628: a group is signalled only while its leader is still the process the run recorded. A pid handed on can
+// lead a group of its own, and `kill(-pid)` would take every process in it.
+test('a process group whose leader is no longer the process the run recorded is not signalled (martha#628)', (t) => {
+  const wrapper = spawn('sleep', ['300'], { stdio: 'ignore' })
+  const leader = spawn('sleep', ['300'], { stdio: 'ignore', detached: true })
+  t.after(() => {
+    for (const pid of [Number(wrapper.pid), Number(leader.pid)]) { try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ } }
+  })
+  const member = aMember('grouped', wrapper, { pid: Number(leader.pid), identity: PROCESSES.identityOf(process.pid) })
+  killEvenIfGone(member, PROCESSES)
+  assert.equal(alive(Number(leader.pid)), true, 'the group the member was named with killed nothing: its leader is another process now')
+})
+
+// martha#628: `kill(0, …)` reaches this run's own process group, and `kill(-0, …)` is the same call. A member whose
+// start never named a pid is refused by name instead of being signalled with the number it does not have.
+test('a stop is refused by name for a member that was never named with a pid (martha#628)', async (t) => {
+  const child = spawn('sleep', ['300'], { stdio: 'ignore' })
+  t.after(() => { try { process.kill(Number(child.pid), 'SIGKILL') } catch { /* already gone */ } })
+  await assert.rejects(stopMember(aMember('unnamed', child), {}, PROCESSES), /unnamed was never named with a pid \(0\)/)
+  assert.equal(alive(Number(child.pid)), true, 'and nothing was signalled: a signal to pid 0 would reach this run itself')
+})
+
+// martha#628: the two numbers a stop signals are a pid and the start time held for it; a stop whose recorded leader is
+// gone, and whose number belongs to someone else now, is refused by name rather than sent.
+test('a stop is refused by name for a member whose pid is no longer the process recorded (martha#628)', async (t) => {
+  const wrapper = spawn('sleep', ['300'], { stdio: 'ignore' })
+  const leader = spawn('sleep', ['300'], { stdio: 'ignore', detached: true })
+  t.after(() => {
+    for (const pid of [Number(wrapper.pid), Number(leader.pid)]) { try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ } }
+  })
+  const member = aMember('moved', wrapper, { pid: Number(leader.pid), identity: PROCESSES.identityOf(process.pid) })
+  await assert.rejects(stopMember(member, {}, PROCESSES), /moved, pid \d+, is no longer the process this run recorded/)
+  assert.equal(alive(Number(leader.pid)), true, 'no signal reached the group whose leader is another process now')
 })
 
 // martha#189 r=2: the hold's own promise. The interrupt tests above only show that a run which logs the held line is
