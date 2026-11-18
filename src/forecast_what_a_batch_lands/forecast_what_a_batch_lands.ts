@@ -146,7 +146,8 @@ async function classify(host: LandingHost, path: string, clashed: string, stages
 /**
  * The chain grown by a pull request that lands: a commit no ref names, over the merged tree. When the redo would redo
  * something, the chain takes the earlier side of each redone path (`-X ours`), which is what the next merge is classified
- * against: a picture is redrawn whatever it holds, and package.json outside its ceilings is the same on both sides.
+ * against: package.json is the same on both sides outside its ceilings, so the earlier side stands until the redo sums
+ * the raises. Nothing else is redone — since martha#627 a C4 picture is drawn at release, and a clash in one is by hand.
  */
 async function theChainGrown(host: LandingHost, path: string, chain: TheChain, one: LandedWork, merged: AMergeInMemory, redone: readonly string[]): Promise<Step<{ readonly forecast: AForecast; readonly chain: TheChain }>> {
   const settled = redone.length === 0 ? { ok: merged } : await mergedInMemory(host, path, chain.tip, one.head, ['-X', 'ours'])

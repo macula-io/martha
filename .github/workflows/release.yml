@@ -126,6 +126,12 @@ jobs:
           out="$(docker buildx imagetools inspect "$IMAGE:$VERSION" 2>&1)" || status=$?
           if [ "$status" -eq 0 ]; then echo "::error::$IMAGE:$VERSION is already published"; exit 1; fi
           if [ "$out" != "ERROR: $IMAGE:$VERSION: not found" ]; then echo "::error::could not tell whether $IMAGE:$VERSION is published: $out"; exit 1; fi
+      # The C4 pictures are drawn at release, and the version bump is the one pull request
+      # allowed to carry one (martha#627). A tagged tree whose picture is not what the
+      # generator draws was cut without that check, and is refused here, by name, before
+      # anything is packed or pushed.
+      - name: Every picture the release archives is what the generator draws
+        run: node src/check_the_pictures_change_with_the_version/main.ts --tree --repository .
       - name: Pack the tree
         run: pack_a_release/pack_a_release.sh "${{ steps.names.outputs.version }}" "$RELEASE_CTX"
       - name: Build and push one image manifest, one layer FROM scratch
