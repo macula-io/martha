@@ -25,6 +25,9 @@ import process from 'node:process'
 // as prove_the_order_of_the_dialogs.mjs does (martha#474).
 import { HOSTS } from '../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
+// The host draws its screen a word at a time, moving the cursor where the spaces would be, so every screen this probe
+// matches is read plainly: the one reader both probes use (#693).
+import { AT_ITS_PROMPT, says } from '../prove_the_core/a_screen_drawn_in_pieces.ts'
 
 /** The host, at the version the adapter was recorded from: the same variable the recorded-host tests read. */
 const HOST = process.env.MARTHA_RECORDED_HOST
@@ -35,8 +38,13 @@ const STAND_IN_KEY = `sk-ant-api03-${'0'.repeat(80)}`
 const PID_FILE = 'background.pid'
 /** How long the background command would outlive any clear: far longer than this probe takes. */
 const BACKGROUND_SECONDS = '600'
-/** The command the member is made to start: it writes its own pid, then outlives the probe on purpose. */
-const BACKGROUND_COMMAND = `(echo $$ > ${PID_FILE}; exec sleep ${BACKGROUND_SECONDS}) & echo started`
+/**
+ * The command the member is made to start: it writes its own pid and becomes the long sleep, so the pid it writes is
+ * the pid that runs. Nothing here forks into the background: the tool is already asked for a background task (turnOf),
+ * and `$$` inside a subshell names the shell that forked it, so a `( ... ) &` here would write a shell that exits by
+ * itself and leave the probe watching the wrong process.
+ */
+const BACKGROUND_COMMAND = `echo $$ > ${PID_FILE}; exec sleep ${BACKGROUND_SECONDS}`
 
 /** The home the host finds a first run already done in, and the checkout it runs in. */
 function setUp(out) {
@@ -98,11 +106,30 @@ async function standInModel(command) {
   return server
 }
 
-/** Whether `held` becomes true within `ms`, asked again every fifth of a second. */
-const settles = async (held, ms) => {
+/** Whether `held` becomes true within `ms`, asked again every fifth of a second. */const settles = async (held, ms) => {
   const until = Date.now() + ms
   while (Date.now() < until) {
     if (held()) return true
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  return false
+}
+
+/**
+ * Whether the host has stopped drawing for `quietMs`: a host with a turn running keeps redrawing its spinner, and a
+ * host at its prompt draws nothing. This is how the probe knows a turn has ended, because the only words this host
+ * prints about a turn are gone from the screen by the time it ends, and a prompt mixed into a running turn is dropped.
+ */
+const quietFor = async (lengthOf, quietMs, ms) => {
+  let seen = lengthOf()
+  let since = Date.now()
+  const until = Date.now() + ms
+  while (Date.now() < until) {
+    if (lengthOf() !== seen) {
+      seen = lengthOf()
+      since = Date.now()
+    }
+    if (Date.now() - since >= quietMs) return true
     await new Promise((resolve) => setTimeout(resolve, 200))
   }
   return false
@@ -118,6 +145,9 @@ const alive = (pid) => {
   }
 }
 
+/** Whether the host's own process is still there. */
+const theHostIsAlive = (child) => child.pid !== undefined && alive(child.pid)
+
 /** The pid the background command wrote, once it has written it. */
 const theBackgroundPid = (out) => {
   const file = join(out, 'checkout', PID_FILE)
@@ -126,9 +156,71 @@ const theBackgroundPid = (out) => {
   return Number.isInteger(pid) && pid > 0 ? pid : undefined
 }
 
+/** How long the host must have drawn nothing for the probe to take it as back at its prompt. */
+const QUIET_MS = 1500
+/** How long the probe waits for the host to go quiet at all before typing at it anyway. */
+const IDLE_WAIT_MS = 30000
+/** How long the clear is given to finish: it is the host's own local command and calls no model. */
+const CLEAR_SETTLES_MS = 5000
+/** How long each screen this probe types at is given: the bypass warning, the banner, then the command's own pid. */
+const WARNING_WAIT_MS = 20000
+const WELCOME_WAIT_MS = 60000
+const STARTED_WAIT_MS = 60000
+
+/** Every screen this probe needs and may never see, each said by name so a run that cannot happen says so. */
+const NEVER_DRAWN = Object.freeze({
+  warning: `the bypass warning was never drawn: no screen said "Enter to confirm" within ${WARNING_WAIT_MS / 1000}s`,
+  prompt: `the host never reached its prompt: no screen said "${AT_ITS_PROMPT}" after the warning was accepted`,
+  started: `the background command never wrote ${PID_FILE}: nothing was running for the clear to end`,
+})
+
+/** The screen this run needed and never saw, or undefined when it saw all three. */
+const theScreenItLacked = (warned, welcomed, started) => {
+  if (!warned) return NEVER_DRAWN.warning
+  if (!welcomed) return NEVER_DRAWN.prompt
+  if (!started) return NEVER_DRAWN.started
+  return undefined
+}
+
+/**
+ * The bypass warning, drawn once before the first turn: its first choice is "No, exit", so the probe moves the
+ * selection down to the one that accepts and confirms it. Whether it was drawn at all.
+ */
+const acceptTheWarning = async (child, screen) => {
+  const warned = await settles(() => says(screen(), 'Enter to confirm'), WARNING_WAIT_MS)
+  if (!warned) return false
+  await new Promise((resolve) => setTimeout(resolve, 800))
+  child.stdin.write('\u001b[B')
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  child.stdin.write('\r')
+  return true
+}
+
+/** The host at its prompt, asked for the one turn that starts the background command. Whether it got there. */
+const startTheTurn = async (child, screen) => {
+  const welcomed = await settles(() => says(screen(), AT_ITS_PROMPT), WELCOME_WAIT_MS)
+  if (!welcomed) return false
+  await new Promise((resolve) => setTimeout(resolve, 2000))
+  child.stdin.write('run the probe command\r')
+  return true
+}
+
+/**
+ * The host's own clear, typed at a prompt and never into a turn -- this host keeps drawing while a turn runs and draws
+ * nothing once it is back at its prompt, so the probe waits for it to go quiet -- and whether the command is still there
+ * afterwards. Nothing this host draws says "cleared": the clear redraws the prompt and no banner, and the banner is
+ * drawn once at the start (2.1.327, measured), so the clear is given a fixed time and the kernel is asked, which is the
+ * only party that answers this probe's question.
+ */
+const clearAtThePrompt = async (child, screen, pid) => {
+  await quietFor(() => screen().length, QUIET_MS, IDLE_WAIT_MS)
+  child.stdin.write('/clear\r')
+  await new Promise((resolve) => setTimeout(resolve, CLEAR_SETTLES_MS))
+  return pid !== undefined && alive(pid)
+}
+
 /** The host, driven: one turn that starts a background command, then the host's own clear. */
 async function driveTheHost(out, places, base_url) {
-  const command = BACKGROUND_COMMAND
   const child = spawn('script', ['-qefc', `'${join(places.home, 'bin', 'claude')}' --dangerously-skip-permissions`, '/dev/null'], {
     cwd: places.checkout,
     env: {
@@ -146,44 +238,27 @@ async function driveTheHost(out, places, base_url) {
   child.stderr.on('data', (chunk) => (drawn += chunk.toString('utf8')))
   const marks = []
   const mark = (what) => marks.push({ what, at: Date.now() })
-  // The bypass warning is drawn once, before the first turn: its first choice is "No, exit", so the probe moves the
-  // selection down to the one that accepts and confirms it.
-  const warned = await settles(() => screen().includes('Enter to confirm'), 20000)
-  if (warned) {
-    await new Promise((resolve) => setTimeout(resolve, 800))
-    child.stdin.write('\u001b[B')
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    child.stdin.write('\r')
-    mark('accepted-the-warning')
-  }
-  await settles(() => screen().includes('for shortcuts'), 60000)
-  await new Promise((resolve) => setTimeout(resolve, 2000))
-  child.stdin.write('run the probe command\r')
-  const started = await settles(() => theBackgroundPid(out) !== undefined, 60000)
+  // Each step needs the one before it: without the warning accepted the host sits at the dialog, and every later key
+  // would land in it, so a run that cannot get past the first screen stops there and says which screen it lacked.
+  const warned = await acceptTheWarning(child, screen)
+  mark(warned ? 'accepted-the-warning' : 'the-bypass-warning-never-drawn')
+  const welcomed = warned && (await startTheTurn(child, screen))
+  if (warned && !welcomed) mark('the-prompt-banner-never-drawn')
+  const started = welcomed && (await settles(() => theBackgroundPid(out) !== undefined, STARTED_WAIT_MS))
   mark(started ? 'background-started' : 'background-never-started')
   const pid = theBackgroundPid(out)
-  const hostAliveBefore = child.pid !== undefined && alive(child.pid)
-  const drawnBefore = drawn.length
+  const hostAliveBefore = theHostIsAlive(child)
+  let stillThere
   if (started) {
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    stillThere = await clearAtThePrompt(child, screen, pid)
+    mark('cleared')
   }
-  child.stdin.write('/clear\r')
-  // The clear is the host's own command: it is done when the screen has drawn itself again past what it held, and the
-  // welcome line is back. A Return that lands too early is dropped, as the dialog probe found, so it is sent twice.
-  const cleared = await settles(() => drawn.slice(drawnBefore).includes('for shortcuts') || drawn.length > drawnBefore + 2000, 20000)
-  if (!cleared) {
-    child.stdin.write('/clear\r')
-    await settles(() => drawn.slice(drawnBefore).includes('for shortcuts') || drawn.length > drawnBefore + 2000, 20000)
-  }
-  mark('cleared')
-  await new Promise((resolve) => setTimeout(resolve, 3000))
-  const stillThere = pid === undefined ? false : alive(pid)
-  const hostAliveAfter = child.pid !== undefined && alive(child.pid)
+  const hostAliveAfter = theHostIsAlive(child)
   child.stdin.write('/exit\r')
   await new Promise((resolve) => setTimeout(resolve, 2000))
   child.kill('SIGKILL')
   writeFileSync(join(out, 'screen.log'), drawn)
-  return { command, pid, stillThere, hostAliveBefore, hostAliveAfter, marks }
+  return { command: BACKGROUND_COMMAND, pid, stillThere, hostAliveBefore, hostAliveAfter, marks, missing: theScreenItLacked(warned, welcomed, started) }
 }
 
 const main = async () => {
@@ -205,10 +280,16 @@ const main = async () => {
     host_process_alive_before_clear: drove.hostAliveBefore,
     host_process_alive_after_clear: drove.hostAliveAfter,
     marks: drove.marks,
+    ...(drove.missing === undefined ? {} : { could_not_run: drove.missing }),
   }
   writeFileSync(join(OUT, 'probe.json'), `${JSON.stringify(said, null, 2)}\n`)
   process.stdout.write(`${JSON.stringify(said, null, 2)}\n`)
-  if (drove.pid === undefined) return 2
+  // A run that never reached the clear says which screen it lacked, never that the command was gone: the two are
+  // different answers, and only one of them is the probe's.
+  if (drove.missing !== undefined) {
+    process.stderr.write(`the probe could not run: ${drove.missing}\n`)
+    return 2
+  }
   return drove.stillThere ? 0 : 1
 }
 
