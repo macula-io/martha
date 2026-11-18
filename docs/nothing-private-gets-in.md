@@ -71,8 +71,27 @@ Out of reach of this check, and said here so nobody assumes otherwise:
   families of the lab's machines do, and the list is itself private, so CI reads
   it from the `MARTHA_LAB_HOSTS` repository secret (a JSON array). A pull request
   from a fork gets no secrets: there the check runs every other class and says
-  which one it skipped. Anywhere else, a missing list stops the check rather than
-  passing it.
+  which one it skipped.
+- **A member's machine holds the families as keyed digests** (martha#731). The
+  owner runs `npm run keep:lab-families` once, at a terminal. It writes a random
+  key and one HMAC-SHA256 digest per family to
+  `$XDG_CONFIG_HOME/martha/lab_families.json` (else `~/.config/martha/`), mode
+  0600, and never the plain list. Without `MARTHA_LAB_HOSTS`, both checks read
+  that file and find a lab machine name by the same rule CI holds to, so a range
+  passes or fails before it is pushed. Said plainly, it is a speed bump:
+  - The key sits beside the digests, and a family is a short word, so whoever
+    reads the file and tries words gets the families back.
+  - The check itself is the oracle: a member can run it over `<word>07` lines and
+    see which ones it withholds.
+  - What the file stops is carrying the families by accident: its bytes spell no
+    name, so an environment dump, a log or a quoted file shows only hex.
+  - A Goose member's launch hands it a fresh home and nothing inherited, so its
+    check finds no file. That is on purpose: a copy of the key in every launch
+    home would multiply it. CI judges the families for it.
+  - A family added to the secret without keeping the file again passes a member's
+    check, and CI refuses the range: CI stays the backstop.
+- **Neither the secret nor the file:** every other class still runs and prints
+  its hits, and the check exits 2. It never passes because it could not look.
 - **A public digest passes only where it is written as one.** A sha256 digest
   of a public file has the shape of a node id or a key, so a bare 64-hex string
   is refused whatever it is. A digest passes when the text around it says it is
@@ -174,6 +193,9 @@ Keep the reasoning, drop the link.
 ```sh
 # The tree as it is, every class except the lab's families:
 MARTHA_LAB_HOSTS='[]' npm run check:private
+
+# On a member's machine, after the owner has run npm run keep:lab-families:
+npm run check:private -- --range <base>..<head>
 
 # What CI runs on a pull request: the tree, then every commit in the range.
 MARTHA_LAB_HOSTS='["<family>"]' GITHUB_TOKEN=... npm run check:private -- --range <base>..<head>
