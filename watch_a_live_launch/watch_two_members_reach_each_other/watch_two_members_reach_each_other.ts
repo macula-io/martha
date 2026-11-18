@@ -9,7 +9,7 @@
 //
 // The launch is the real one: `martha init`, `martha approve` and `martha start`, twice, on one checkout where both
 // members share one crew's streams. Only the models are stand-ins
-// (../src/drive_the_recorded_host/drive_the_recorded_host.ts): the reviewer's first turn calls the host's own agent
+// (../../src/drive_the_recorded_host/drive_the_recorded_host.ts): the reviewer's first turn calls the host's own agent
 // tool, and the stand-in answers that agent's request while the member's turn is still open.
 //
 // The order is what this observes: the builder says its hand-off while the reviewer is inside its subagent, so a member
@@ -19,24 +19,24 @@
 // request was answered. What passes is that the reviewer took it in once, after its own turn, and that the verdict came
 // back the same way.
 //
-//   ./watch_a_live_launch/watch_two_members_reach_each_other.sh
+//   ./watch_a_live_launch/watch_two_members_reach_each_other/watch_two_members_reach_each_other.sh
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 
-import { SOLO_MEMBERS } from '../src/declare_crew/declare_crew.ts'
-import { FRAME_OPENING, framed } from '../src/hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
-import type { ModelRequest, ModelScript, ScriptedTurn } from '../src/drive_the_recorded_host/drive_the_recorded_host.ts'
-import { crewRowsDirectoryOf, driveTheRecordedHost, plainTextOf } from '../src/drive_the_recorded_host/drive_the_recorded_host.ts'
-import { stateHomeUnder } from '../src/find_a_homes_state_root/find_a_homes_state_root.ts'
-import { HOST_SILENCE_MS } from '../src/drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'
-import { addressedTo, readTheChannel, tookInRowsOf, type ChannelHost, type PlacedMessage } from '../src/keep_the_crew_channel/crew_channel.ts'
-import { CREW_LINES, VALUE_SHAPES } from '../src/read_a_crew_line/crew_lines.ts'
-import { readACrewLine } from '../src/read_a_crew_line/read_a_crew_line.ts'
-import { rowStreamsDirectory } from '../src/row_streams_directory/row_streams_directory.ts'
-import { SAY_TO_THE_CREW } from '../src/send_a_crew_message/send_a_crew_message.ts'
-import { READ_THE_RECEIPTS } from '../src/show_what_a_message_became/show_what_a_message_became.ts'
+import { SOLO_MEMBERS } from '../../src/declare_crew/declare_crew.ts'
+import { FRAME_OPENING, framed } from '../../src/hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import type { ModelRequest, ModelScript, ScriptedTurn } from '../../src/drive_the_recorded_host/drive_the_recorded_host.ts'
+import { crewRowsDirectoryOf, driveTheRecordedHost, plainTextOf } from '../../src/drive_the_recorded_host/drive_the_recorded_host.ts'
+import { stateHomeUnder } from '../../src/find_a_homes_state_root/find_a_homes_state_root.ts'
+import { HOST_SILENCE_MS } from '../../src/drive_the_recorded_host/wait_while_the_host_keeps_showing.ts'
+import { addressedTo, readTheChannel, tookInRowsOf, type ChannelHost, type PlacedMessage } from '../../src/keep_the_crew_channel/crew_channel.ts'
+import { CREW_LINES, VALUE_SHAPES } from '../../src/read_a_crew_line/crew_lines.ts'
+import { readACrewLine } from '../../src/read_a_crew_line/read_a_crew_line.ts'
+import { rowStreamsDirectory } from '../../src/row_streams_directory/row_streams_directory.ts'
+import { SAY_TO_THE_CREW } from '../../src/send_a_crew_message/send_a_crew_message.ts'
+import { READ_THE_RECEIPTS } from '../../src/show_what_a_message_became/show_what_a_message_became.ts'
 import {
   aCallAndItsResult,
   aCheckoutToWatch,
@@ -52,13 +52,13 @@ import {
   toolCallsIn,
   type MemberRan,
   type WatchedPlace,
-} from './a_launch_to_watch.ts'
+} from '../a_launch_to_watch.ts'
 
 /** The words the reviewer's agent tool is called with: the whole of the transcript its subagent's request carries. */
 const SUBAGENTS_PROMPT = 'Look one thing up for me, and say nothing else.'
 
 /** The name the host gives the crew mod's tools, from the mod's own plugin manifest: `mcp__<name>__<tool>`. */
-const THE_MODS_NAME = (JSON.parse(readFileSync(join(import.meta.dirname, '..', 'src', 'claude_code_relay', '.claude-plugin', 'plugin.json'), 'utf8')) as { name: string }).name
+const THE_MODS_NAME = (JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'src', 'claude_code_relay', '.claude-plugin', 'plugin.json'), 'utf8')) as { name: string }).name
 
 /** The call the host makes of one of the crew's tools. */
 const called = (tool: string): string => `mcp__${THE_MODS_NAME}__${tool}`
@@ -86,7 +86,7 @@ const BUILDERS_REQUESTS = 10
 const A_RANGE = `${'a'.repeat(40)}..${'b'.repeat(40)}`
 
 /**
- * One line of the crew's protocol, rendered from the shape its reader accepts (../src/read_a_crew_line), and put back
+ * One line of the crew's protocol, rendered from the shape its reader accepts (../../src/read_a_crew_line), and put back
  * through that reader before it is used: a line the crew refuses would reach the member as an error and the
  * observation would observe nothing (a first run's VERDICT carried no PASS).
  */
