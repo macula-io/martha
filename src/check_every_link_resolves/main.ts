@@ -5,11 +5,13 @@
 // (3) and MARTHA_LINK_WAIT_MS (5000: the wait before the second scan, doubled
 // before each scan after it).
 //
-// Exit 0 every link resolves, 1 a link is broken or a slow host never answered
-// (one line each, file:line:column url | status), 2 the check could not be made.
+// Exit 0 every link resolves, or the only ones left are links a site refused the
+// checker for (403/429, each reported as a warning line, martha#714); 1 a link
+// is broken or a slow host never answered (one line each, file:line:column url |
+// status), 2 the check could not be made.
 // It never passes because it could not look.
 
-import { checkEveryLinkResolves, type Verdict } from './check_every_link_resolves.ts'
+import { checkEveryLinkResolves, type Failure, type Verdict } from './check_every_link_resolves.ts'
 import { runLychee, type Checker } from './run_lychee.ts'
 
 const DEFAULT_INPUTS = ['**/*.md']
@@ -33,9 +35,25 @@ const checkerFrom = (inputs: readonly string[]): Checker => ({
 const waitsFor = (scans: number, baseMs: number): number[] =>
   Array.from({ length: scans }, (_step, index) => baseMs * 2 ** index)
 
+/** Where a link sits and what was said of it: file:line:column url | status. */
+const placeOf = (failure: Failure): string => `${failure.file}:${failure.line}:${failure.column} ${failure.url} | ${failure.status}`
+
+/** Each refused link as a warning, so a PR shows it without going red (martha#714). */
+const reportRefused = (refused: readonly Failure[]): void => {
+  for (const failure of refused) {
+    console.error(`::warning file=${failure.file},line=${failure.line},col=${failure.column}::${placeOf(failure)} (the site refused the checker; not counted as broken)`)
+  }
+}
+
 const announce = (verdict: Verdict): number => {
+  if (verdict.verdict !== 'unknown') reportRefused(verdict.refused)
   if (verdict.verdict === 'resolved') {
-    console.log(`check_every_link_resolves: every link resolves (${verdict.scans} scan(s))`)
+    const scans = `(${verdict.scans} scan(s))`
+    const said =
+      verdict.refused.length === 0
+        ? `every link resolves ${scans}`
+        : `no link is broken ${scans}; ${verdict.refused.length} link(s) a site refused the checker for are reported above and not counted`
+    console.log(`check_every_link_resolves: ${said}`)
     return 0
   }
   if (verdict.verdict === 'unknown') {
@@ -43,7 +61,7 @@ const announce = (verdict: Verdict): number => {
     return 2
   }
   for (const failure of verdict.failures) {
-    console.error(`${failure.file}:${failure.line}:${failure.column} ${failure.url} | ${failure.status}`)
+    console.error(placeOf(failure))
   }
   console.error(`check_every_link_resolves: ${verdict.failures.length} link(s) unresolved after ${verdict.scans} scan(s)`)
   return 1
