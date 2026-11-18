@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -37,7 +38,7 @@ function crewHanded(t: TestContext, guard: TheGuardsPlaces): CrewTools {
   })
 }
 
-const A_SHELL_CALL = { tool: 'Bash', input: { command: 'git push origin --delete uranus/9' } }
+const A_SHELL_CALL = { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'git push origin --delete uranus/9' } }
 const A_SHIM_CALL = { directory: '/work/clone', args: ['push', 'origin', '--delete', 'uranus/9'] }
 const A_REF_UPDATE = [{ ref: 'refs/heads/uranus/9', deletes: true }]
 
