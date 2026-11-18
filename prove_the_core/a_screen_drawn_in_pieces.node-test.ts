@@ -47,3 +47,12 @@ test('the sequences this host draws with <, >, = or : are taken out of the real 
     assert.ok(!drawnPlainly.includes(payload), `the ${payload} sequence's own bytes were left on the screen as words`)
   }
 })
+
+// The same fixture holds a cursor save, a cursor restore and a charset selection between words, and one left in splits a
+// phrase exactly as a stray `>` did, so the class is closed and not only the three sequences above.
+test('a save, a restore, a charset selection and a control nobody sees are taken out too', () => {
+  assert.equal(plain('\u001b7two\u001b8'), 'two')
+  assert.equal(plain('\u001b(Btwo'), 'two')
+  assert.equal(plain('t\u000fwo'), 'two')
+  assert.ok(says('Enter\u001b7 to\u001b8 confirm', 'Enter to confirm'))
+})
