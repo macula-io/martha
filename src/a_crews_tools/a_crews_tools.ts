@@ -89,6 +89,7 @@ import {
   rowAfterASwitch,
   theRowWithNothingSaid,
   type AUnitOnARow,
+  type CrewToolsOnARow,
   type DashboardRow,
   type DashboardStore,
   type TheOwnersDefaultTold,
@@ -393,13 +394,16 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
       return handle(args)
     },
     startBeating(): () => void {
+      // What the last look at the crew tools found (martha#658). The next beat writes it: a write of its own would carry
+      // the same moment as the beat it followed, and the newest beat wins, so it would be dropped.
+      let tools: CrewToolsOnARow | undefined
       const timer = setInterval(() => {
         try {
-          // A heartbeat says nothing of its own: it is the row as this session last left it, at this moment's beat.
-          writeRow(held, state, (row) => row)
-          // The crew tools (martha#658) are looked at once the beat has landed, so a look that fails leaves the beat as it was.
+          // A heartbeat says nothing of its own but the crew tools: it is the row as this session last left it.
+          writeRow(held, state, (row) => (tools === undefined ? row : { ...row, served_tools: tools }))
+          // The look starts once the beat has landed, so a look that fails leaves the beat as it was.
           const heeded = held.served_tools === undefined ? undefined : heedTheCrewTools(held, state.session)
-          void heeded?.then((tools) => tools === undefined || writeRow(held, state, (row) => ({ ...row, served_tools: tools }))).catch(() => undefined)
+          void heeded?.then((found) => void (tools = found ?? tools), () => undefined)
         } catch {
           // A beat the disk would not take is the next beat's business: the row it could not write stays readable.
         }

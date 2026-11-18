@@ -165,3 +165,36 @@ test("the served names are the ones the relay's mod answers: its plugin's name, 
   for (const name of names) assert.ok(answered.has(name), `${name} is a tool the mod answers`)
   assert.equal(served.watch.factOf(SESSION).state, 'unknown')
 })
+
+test('the session a refresh started from is the one the crew answered as the session started, and no other', async (t) => {
+  const { config_dir, transcript } = aConfig(t)
+  const asked: string[] = []
+  const watched = watchTheCrewToolsOf({
+    config_dir,
+    uid: process.getuid?.() ?? -1,
+    served: SERVED,
+    askThePredecessor: async (session_id) => (asked.push(session_id), 'the-session-it-refreshed-from'),
+  })
+  watched.journalOver(aJournal()).received('session_started', { session_id: SESSION, source: 'startup', transcript_path: transcript })
+  await new Promise((settled) => setImmediate(settled))
+  assert.deepEqual(asked, [SESSION], 'the crew is asked once, for the session that started')
+  assert.equal(watched.watch.predecessorOf(SESSION), 'the-session-it-refreshed-from')
+  assert.equal(watched.watch.predecessorOf('a-session-it-never-heard'), null)
+})
+
+test('a body the watch cannot read is still handed to the launch journal, whose answer comes back unchanged', (t) => {
+  const { config_dir } = aConfig(t)
+  const watched = aWatch(config_dir)
+  const inner = aJournal()
+  const answer = { answered: () => undefined }
+  const journal = watched.journalOver({ ...inner, received: (event, body) => (inner.received(event, body), answer) })
+  const unreadable = Object.defineProperty({}, 'session_id', {
+    enumerable: true,
+    get: () => {
+      throw new Error('a body that throws when it is read')
+    },
+  })
+  assert.equal(journal.received('prompt_submitted', unreadable), answer)
+  assert.deepEqual(inner.received_events, ['prompt_submitted'])
+  assert.deepEqual(watched.watch.takeTheCalls(), [], 'nothing is counted from a body it could not read')
+})
