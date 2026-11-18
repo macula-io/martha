@@ -14,9 +14,11 @@ import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { NoAnswerInTime, withinTheCap } from './a_turn_with_goose.ts'
+import { THE_KILL_WAIT_MS, THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS, whenTheLaunchStarted } from './drive_the_trial.ts'
 import { RecordingProxy } from './record_what_goose_sends.ts'
 import {
-  THE_LAUNCH_BOUND_KEY, THE_MARGIN_OVER_A_ROUND_TRIP, TheModelPace, theCapFor, theLaunchesBoundMs, whyTheBoundCannotFit,
+  THE_LAUNCH_BOUND_KEY, THE_MARGIN_OVER_A_ROUND_TRIP, TheBoundCannotFitTheLaunch, TheModelPace, theCapFor, theLaunchesBoundMs,
+  whyTheBoundCannotFit,
 } from './the_cap_a_line_gets.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
@@ -134,5 +136,48 @@ test('a bad launch bound is refused by name rather than becoming a bound of zero
   assert.equal(theLaunchesBoundMs(forkWith('7')), 7 * 60_000, 'a positive number of minutes is the bound')
   assert.throws(() => theLaunchesBoundMs(forkWith('')), /says nothing of TRIAL_MINUTES_PER_LAUNCH|not a positive number/)
   assert.throws(() => theLaunchesBoundMs(forkWith('x')), /not a positive number of minutes/)
+  for (const zero of ['0', '0.0']) {
+    assert.throws(() => theLaunchesBoundMs(forkWith(zero)), /not a positive number of minutes/, `${zero} minutes is no bound (PR 733 A3)`)
+  }
   assert.throws(() => theLaunchesBoundMs(aFreshDirectory()), /the launch's bound is defined there and nowhere else/)
+})
+
+/** A model's answer, and what is left of the launch, both short enough for a unit case to wait out. */
+const A_SLOW_ANSWER_MS = 200
+const LITTLE_LEFT_MS = 100
+const THE_TURN_ENDS_AFTER_MS = 50
+const THE_ANSWER_LANDS_AFTER_MS = 10
+
+test('a model slower than what is left is never refused at its answer: a turn that ends inside what is left is its own (PR 733 A1)', async () => {
+  const pace = new TheModelPace()
+  const cap = theCapFor(pace, () => LITTLE_LEFT_MS)
+  const turnEnds = new Promise<string>((settle) => setTimeout(() => settle('the turn ended'), THE_TURN_ENDS_AFTER_MS))
+  const turn = withinTheCap(turnEnds, cap)
+  setTimeout(() => pace.noteAnAnswer(A_SLOW_ANSWER_MS), THE_ANSWER_LANDS_AFTER_MS)
+  assert.equal(await turn, 'the turn ended', 'the slow answer left the turn the time the launch still had')
+})
+
+test('a turn the launch end cuts is a NoAnswerInTime that names the arithmetic, so it reads not-observed (PR 733 A1)', async () => {
+  const pace = new TheModelPace()
+  const turn = withinTheCap(neverSettles(), theCapFor(pace, () => LITTLE_LEFT_MS))
+  setTimeout(() => pace.noteAnAnswer(A_SLOW_ANSWER_MS), THE_ANSWER_LANDS_AFTER_MS)
+  await assert.rejects(turn, (error: unknown) => {
+    assert.ok(error instanceof NoAnswerInTime, String(error))
+    assert.equal(error.ms, LITTLE_LEFT_MS)
+    const wanted = theIdleBound(A_SLOW_ANSWER_MS)
+    assert.equal(error.message, `no answer within ${LITTLE_LEFT_MS} ms, the launch's end: a ${A_SLOW_ANSWER_MS} ms round-trip plus its ${wanted - A_SLOW_ANSWER_MS} ms margin is ${wanted} ms, beyond the ${LITTLE_LEFT_MS} ms left of the launch`)
+    return true
+  })
+})
+
+test('only a turn that starts with nothing left of the launch is refused outright (PR 733 A1)', async () => {
+  await assert.rejects(withinTheCap(neverSettles(), theCapFor(new TheModelPace(), () => 0)), TheBoundCannotFitTheLaunch)
+})
+
+test('a launch is counted from its node process start, as the runner counts it, and its end has room past the kill (PR 733 A2)', () => {
+  assert.equal(whenTheLaunchStarted(0), Math.floor(performance.timeOrigin), 'the first line of a process: from the process start')
+  const before = Date.now()
+  const later = whenTheLaunchStarted(1)
+  assert.ok(later >= before && later <= Date.now(), 'a later line of the same process: from its own start')
+  assert.ok(THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS > THE_KILL_WAIT_MS, 'the room covers what follows the kill, not the kill alone')
 })

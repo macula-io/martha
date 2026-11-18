@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { THE_LAUNCH_BOUND_KEY } from './the_cap_a_line_gets.ts'
+import { THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS } from './drive_the_trial.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const theDriverRun = promisify(execFile)
@@ -37,12 +38,14 @@ function aFreshDirectory(): string {
 }
 
 /**
- * The engine, as far as the driver can tell: the handshake, and one prompt answered after asking the model.
+ * The engine, as far as the driver can tell: the handshake, and one prompt answered after asking the model, or,
+ * going quiet after its chat, never answered at all. Which one is written into the script: a launch hands the engine
+ * none of the test's environment.
  *
  * Its shebang names the node that runs these tests, not `/usr/bin/env node`: a launch gets a PATH of the system's
  * own, and on a runner node lives outside it, so an engine found through PATH is one the launch cannot start.
  */
-const A_STAND_IN_ENGINE = `#!${process.execPath}
+const aStandInEngine = (goesQuietAfterItsChat: boolean): string => `#!${process.execPath}
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -72,11 +75,13 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     .then(() => post('/api/show', { model: 'a-model' }))
     .then(() => post('/v1/chat/completions', { model: 'a-model', messages: [] }))
     .then(() => {
+      if (${String(goesQuietAfterItsChat)}) return
       send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'a-stand-in-session', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'the stand-in engine answered' } } } })
       result(message.id, { stopReason: 'end_turn' })
     })
 })
 `
+const A_STAND_IN_ENGINE = aStandInEngine(false)
 
 /** An engine that starts and then says nothing at all: the launch never shakes hands (PR 733 R2). */
 const AN_ENGINE_THAT_NEVER_ANSWERS = `#!${process.execPath}
@@ -143,6 +148,23 @@ function aForkSaying(minutes: string): string {
   return fork
 }
 
+const MS_IN_A_MINUTE = 60_000
+
+/** A launch's bound, in the minutes pins.env gives, that leaves `leftMs` once the room its own end needs is taken. */
+const aLaunchLeaving = (leftMs: number): string => String((THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS + leftMs) / MS_IN_A_MINUTE)
+
+/**
+ * A model too slow for what is left of its launch, whose answer still lands inside it (PR 733 A1): its chat takes
+ * SLOW_CHAT_MS, so its idle bound is half again that, and the launch leaves SLOW_LAUNCH_LEFT_MS at its start. When
+ * the answer lands, what is left is that less the chat and node's own start, well under the idle bound and well
+ * above nothing, on a fast machine or a slow one.
+ */
+const SLOW_CHAT_MS = 8_000
+const SLOW_LAUNCH_LEFT_MS = 15_000
+
+/** What a launch leaves the handshake of an engine that never answers. */
+const HANDSHAKE_LEFT_MS = 5_000
+
 /** Runs the driver for one line, and hands back what the launch left behind. */
 async function theDriverFor(
   line: number, minutes: string, modelUrl: string, engineSource = A_STAND_IN_ENGINE,
@@ -190,22 +212,38 @@ test('the driver carries a line to its own verdict under the bound its model set
 
 test('the driver writes a fail by name when the engine never shakes hands, rather than leaving no result (martha#732)', async () => {
   // A launch of a little over the room its own end needs: what is left for the handshake is that much and no more.
-  const { evidence } = await theDriverFor(1, '0.4', 'http://127.0.0.1:9', AN_ENGINE_THAT_NEVER_ANSWERS)
+  const { evidence } = await theDriverFor(1, aLaunchLeaving(HANDSHAKE_LEFT_MS), 'http://127.0.0.1:9', AN_ENGINE_THAT_NEVER_ANSWERS)
   const result = JSON.parse(readFileSync(join(evidence, 'line-1', 'result.json'), 'utf8')) as { verdict: string; say: string }
   assert.equal(result.verdict, 'fail', 'a launch that never shook hands is a fail that is never launched again')
   assert.match(result.say, /the engine answered no handshake within the \d+ ms left of the launch/,
     'the refusal says what was left, not only that nothing came')
 })
 
-test('the driver refuses, by name and with the arithmetic, a line whose model paced too slowly for what is left (martha#732)', async () => {
-  const model = await aStandInModel(3_000)
+test('a model too slow for what is left of the launch is not refused: its turn ends inside it and the line reaches its own verdict (PR 733 A1)', async () => {
+  const model = await aStandInModel(SLOW_CHAT_MS)
   try {
-    const { evidence } = await theDriverFor(1, '0.45', model.url)
+    const { evidence } = await theDriverFor(1, aLaunchLeaving(SLOW_LAUNCH_LEFT_MS), model.url)
+    const result = JSON.parse(readFileSync(join(evidence, 'line-1', 'result.json'), 'utf8')) as {
+      verdict: string; say: string; cap: { roundTripMs: number }
+    }
+    assert.doesNotMatch(result.say, /cannot give this turn the bound|no answer within/, `the turn was not cut: ${result.say}`)
+    assert.notEqual(result.verdict, 'not-observed', 'the line reached a verdict of its own')
+    assert.ok(result.cap.roundTripMs >= SLOW_CHAT_MS, `the slow chat answer was measured: ${JSON.stringify(result.cap)}`)
+  } finally {
+    await model.stop()
+  }
+})
+
+test('a turn the launch\'s end cuts reads not-observed, with the arithmetic, so it is launched again (PR 733 A1)', async () => {
+  const model = await aStandInModel(SLOW_CHAT_MS)
+  try {
+    const { evidence } = await theDriverFor(1, aLaunchLeaving(SLOW_LAUNCH_LEFT_MS), model.url, aStandInEngine(true))
     const result = JSON.parse(readFileSync(join(evidence, 'line-1', 'result.json'), 'utf8')) as { verdict: string; say: string }
-    assert.equal(result.verdict, 'fail', 'a bound that cannot fit is a fail that is never launched again')
-    assert.match(result.say, /the launch cannot give this turn the bound its model asks for/)
-    assert.match(result.say, /(a \d+ ms round-trip plus its \d+ ms margin is \d+ ms, beyond the \d+ ms left of the launch|the launch has -?\d+ ms left, less than the room its own end needs)/,
-      'the refusal carries the arithmetic, not only the word no')
+    // The observation is the not-observed one, which is what the fork launches again. The verdict may still be a
+    // fail for the trace's own reasons (the node running the stand-in engine may live under this machine's home),
+    // which is not what this case observes; the say begins with the observation either way.
+    assert.match(result.say, /^the line observed nothing: no answer within \d+ ms, the launch's end: a \d+ ms round-trip plus its \d+ ms margin is \d+ ms, beyond the \d+ ms left of the launch/,
+      'the cut carries the arithmetic, not only the word no')
   } finally {
     await model.stop()
   }

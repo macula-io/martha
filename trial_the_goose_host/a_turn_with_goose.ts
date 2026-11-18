@@ -33,9 +33,12 @@ export function promptOver(acp: GooseOverAcp, sessionId: string, text: string, c
 }
 
 /**
- * A turn's bound, renewed every time an answer lands (martha#732): the cap is the model's own pace times the
- * requests the line's turn makes, so a turn that keeps working is never cut for being long, and a turn that
- * stalls is cut at the pace the model itself set. Without a cap the turn waits for the launch's own bound.
+ * A turn's bound, renewed every time an answer lands (martha#732): the model's own slowest chat answer plus its
+ * margin, or what is left of the launch when that is less. A turn that keeps working is never cut for being long,
+ * and a turn that stalls is cut at the pace the model itself set. A turn is never refused while the launch has time
+ * left (PR 733 A1): a model slower than what is left still gets all of it, and a turn the launch's end cuts says
+ * so with the arithmetic and reads as not-observed, so it is launched again. Only a turn that starts with nothing
+ * left is refused outright. Without a cap the turn waits for the launch's own bound.
  */
 export function withinTheCap<T>(work: Promise<T>, cap: TheCapALineGets | undefined): Promise<T> {
   if (cap === undefined) return work
@@ -45,13 +48,14 @@ export function withinTheCap<T>(work: Promise<T>, cap: TheCapALineGets | undefin
       if (timer !== undefined) clearTimeout(timer)
       const made = cap.made()
       const why = whyTheBoundCannotFit(made)
-      if (why !== undefined) {
-        // Refused by name rather than run to be reaped by the runner, which would leave no result at all (R2, R4).
-        fail(new TheBoundCannotFitTheLaunch(why))
+      if (made.remainingMs <= 0) {
+        // Nothing is left to wait in: refused by name rather than run to be reaped by the runner, which would
+        // leave no result at all (R2, R4).
+        fail(new TheBoundCannotFitTheLaunch(why ?? `the launch has ${String(made.remainingMs)} ms left`))
         return
       }
       if (!Number.isFinite(made.ms)) return
-      timer = setTimeout(() => fail(new NoAnswerInTime(made.ms)), made.ms)
+      timer = setTimeout(() => fail(new NoAnswerInTime(made.ms, why)), made.ms)
     }
     const stopListening = cap.pace.onEachAnswer(arm)
     const clear = (): void => {
@@ -72,8 +76,9 @@ export function withinTheCap<T>(work: Promise<T>, cap: TheCapALineGets | undefin
  */
 export class NoAnswerInTime extends Error {
   readonly ms: number
-  constructor(ms: number) {
-    super(`no answer within ${ms} ms`)
+  /** `why` says the launch's end set the bound, below the model's own pace, with the arithmetic (PR 733 A1). */
+  constructor(ms: number, why?: string) {
+    super(why === undefined ? `no answer within ${ms} ms` : `no answer within ${ms} ms, the launch's end: ${why}`)
     this.name = 'NoAnswerInTime'
     this.ms = ms
   }

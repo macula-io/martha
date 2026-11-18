@@ -108,8 +108,9 @@ export function whyTheBoundCannotFit(made: TheCapMadeOf): string | undefined {
 }
 
 /**
- * The model has paced itself too slowly for what is left of the launch: a turn under it would only be reaped by
- * the runner, writing no result at all, so it is refused by name instead (PR 733 R2, R4).
+ * A turn that starts with nothing left of the launch: it would only be reaped by the runner, writing no result at
+ * all, so it is refused by name instead (PR 733 R2, R4). A model slower than what is left is not refused: its turn
+ * gets all that is left, and a cut there is a NoAnswerInTime that names the launch's end (PR 733 A1).
  */
 export class TheBoundCannotFitTheLaunch extends Error {
   constructor(why: string) {
@@ -133,6 +134,7 @@ export function theLaunchesBoundMs(gooseSource: string): number {
   }
   const found = new RegExp(`^${THE_LAUNCH_BOUND_KEY}=(.+)$`, 'm').exec(pins)?.[1]?.trim()
   if (found === undefined) throw new Error(`${path} says nothing of ${THE_LAUNCH_BOUND_KEY}`)
-  if (!MINUTES.test(found)) throw new Error(`${path} gives ${THE_LAUNCH_BOUND_KEY} as '${found}', not a positive number of minutes`)
+  // The digits alone let 0 through, a bound that would blame the engine's handshake for the pins file (PR 733 A3).
+  if (!MINUTES.test(found) || Number(found) <= 0) throw new Error(`${path} gives ${THE_LAUNCH_BOUND_KEY} as '${found}', not a positive number of minutes`)
   return Number(found) * MS_IN_A_MINUTE
 }

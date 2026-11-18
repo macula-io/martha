@@ -36,13 +36,29 @@ import {
 export const THE_KILL_WAIT_MS = 20_000
 
 /**
- * The room a turn leaves for the end of its launch (PR 733 R2): the group is killed and waited for, the proxy is
- * stopped, the engine's logs are copied and the line's result is written. The kill's wait is the only term that
- * is measured anywhere (THE_KILL_WAIT_MS); the rest are copies of files already on disk. A turn bounded by the
- * whole launch would only ever fire after the runner's own `timeout` had killed node, which writes no result at
- * all.
+ * What the end of a launch does after the kill's wait: stop the proxy, read the trace, copy the engine's logs and
+ * write the line's result. Nothing times these; this is an allowance, chosen as half the kill's wait, not a
+ * measurement (PR 733 A2).
  */
-export const THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS = THE_KILL_WAIT_MS
+export const THE_ALLOWANCE_FOR_WHAT_FOLLOWS_THE_KILL_MS = THE_KILL_WAIT_MS / 2
+
+/**
+ * The room a turn leaves for the end of its launch (PR 733 R2, A2): the kill's wait, at its longest, and the
+ * allowance for what follows it. It must cover the whole end: the runner's `timeout` sends TERM at the launch's
+ * bound, and `keepTheEndsOnSignal` keeps the engine's logs and then lets that TERM end node, so an end still
+ * running then writes no result at all. A turn bounded by the whole launch would only ever fire after that.
+ */
+export const THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS = THE_KILL_WAIT_MS + THE_ALLOWANCE_FOR_WHAT_FOLLOWS_THE_KILL_MS
+
+/**
+ * When a launch started, counted as the runner's `timeout` counts it (PR 733 A2). The runner starts one node
+ * process per line, so the first line's launch started with the process itself, before node had loaded the
+ * driver, and not when the line got round to starting. A later line in the same process is covered by no
+ * `timeout` of the runner's, so its launch starts when it does.
+ */
+export function whenTheLaunchStarted(lineInTheProcess: number): number {
+  return lineInTheProcess === 0 ? Math.floor(performance.timeOrigin) : Date.now()
+}
 
 interface Options {
   readonly goose: string
@@ -160,7 +176,7 @@ async function handOver(acp: GooseOverAcp, place: Place, remaining: () => number
   }
 }
 
-async function startARun(line: number, options: Options): Promise<Running> {
+async function startARun(line: number, options: Options, launchedAt: number): Promise<Running> {
   const place = aPlaceFor(line, options.evidence, options.launch)
   if (line === 1) plant(place.ownerHome, HOME_MARKERS)
   if (line === 2) plant(place.checkout, CHECKOUT_MARKERS)
@@ -169,7 +185,6 @@ async function startARun(line: number, options: Options): Promise<Running> {
   // The model's pace is measured from the proxy's chat answers, into the launch's own evidence, and becomes the
   // bound the line's turns are under: an idle bound, inside what is left of the launch (martha#732).
   const pace = new TheModelPace()
-  const launchedAt = Date.now()
   const theLaunchesBound = theLaunchesBoundMs(options.gooseSource)
   const remaining = (): number => theLaunchesBound - (Date.now() - launchedAt) - THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS
   const cap = theCapFor(pace, remaining)
@@ -331,12 +346,12 @@ export function theObservationOfALineThatThrew(error: unknown): Observation {
   return { verdict: 'fail', say: `the line could not be run: ${error instanceof Error ? error.message : String(error)}`, evidence: {} }
 }
 
-async function runLine(line: number, options: Options): Promise<void> {
+async function runLine(line: number, options: Options, launchedAt: number): Promise<void> {
   const evidenceForLine = join(options.evidence, `line-${line}`)
   mkdirSync(evidenceForLine, { recursive: true })
   let running: Running
   try {
-    running = await startARun(line, options)
+    running = await startARun(line, options, launchedAt)
   } catch (error) {
     // A launch that never got as far as its line still leaves a verdict behind (PR 733 R2): a launch with no
     // result reads as a failure the fork never relaunches, and a kind of failure nobody can read.
@@ -355,8 +370,8 @@ async function runLine(line: number, options: Options): Promise<void> {
 }
 
 /**
- * What the line's bound was made of, as its result records it (martha#732): the model's own slowest answer this
- * launch measured, the requests its turn makes, and the bound those made against the launch's own. Recorded
+ * What the line's bound was made of, as its result records it (martha#732): the model's own slowest chat answer
+ * this launch measured, the margin over it, what was left of the launch, and the bound those made. Recorded
  * whether or not it fitted, since a line cut at the cap is told apart from one the model never answered by it.
  */
 function theCapTheLineHad(running: Running): TheCapMadeOf & { readonly whyNot: string | undefined } {
@@ -368,7 +383,7 @@ async function main(): Promise<void> {
   const options = optionsFrom(process.argv.slice(2))
   process.on('SIGTERM', keepTheEndsOnSignal)
   mkdirSync(options.evidence, { recursive: true })
-  for (const line of options.lines) await runLine(line, options)
+  for (const [inTheProcess, line] of options.lines.entries()) await runLine(line, options, whenTheLaunchStarted(inTheProcess))
 }
 
 if (import.meta.main) await main()
