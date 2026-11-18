@@ -1,5 +1,6 @@
 // The nightly live run's guards for its throwaway repository, as the run's bash calls them (martha#639):
 //
+//   node src/land_a_package_on_a_throwaway_repository/main.ts expiry <now, ISO 8601>  < the expiry header's value, empty when GitHub sent none
 //   node src/land_a_package_on_a_throwaway_repository/main.ts who <owner id>         < GET /user's answer
 //   node src/land_a_package_on_a_throwaway_repository/main.ts reach <owner id>       < every page of GET /user/repos, as one JSON list
 //   node src/land_a_package_on_a_throwaway_repository/main.ts delete <made.json>      < GET /repositories/<id>'s answer
@@ -7,7 +8,8 @@
 //   node src/land_a_package_on_a_throwaway_repository/main.ts redact <token file>     < a text bound for the kept record
 //
 // Exit 0 the guard holds, 1 it refuses, naming why on standard error, 2 it could not look. `redact` writes the text,
-// redacted, to standard output either way, and exits 1 when a token had reached it. The token is never an argument:
+// redacted, to standard output either way, and exits 1 when a token had reached it. `expiry` exits 0 with a note on
+// standard output for a token with no expiry, a warning when it is near its expiry, and 1 when it has expired. The token is never an argument:
 // `redact` reads it from the 0600 file the run keeps it in, so no process list or shell history shows it.
 //
 // Nothing here calls GitHub or the container. The run makes those calls and hands the answers in, so each guard is the
@@ -18,6 +20,7 @@ import { readFileSync } from 'node:fs'
 import { whatTheStartWouldLoad, type TheStart } from './a_clean_start.ts'
 import { whyNotDelete, type WhatTheRunMade } from './the_delete_guard.ts'
 import { redactTheToken, THE_TOKEN_REACHED_THE_RECORD } from './the_kept_record.ts'
+import { theTokensExpiry } from './the_tokens_expiry.ts'
 import { whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 
 const NAME = 'land_a_package_on_a_throwaway_repository'
@@ -72,7 +75,16 @@ const redact = (argument: string, input: string): Said => {
   return kept.reached ? { code: 1, err: THE_TOKEN_REACHED_THE_RECORD, out: kept.text } : { code: 0, out: kept.text }
 }
 
-const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact }
+const expiry = (argument: string, input: string): Said => {
+  const now = new Date(argument)
+  if (Number.isNaN(now.getTime())) return couldNotLook(`'${argument}' is not a time`)
+  const said = theTokensExpiry(input, now)
+  if (said.refuses) return refuses(said.why ?? 'the token cannot be used')
+  if (said.warning !== undefined) return { code: 0, out: `warning: ${said.warning}\n` }
+  return said.note === undefined ? holds : { code: 0, out: `note: ${said.note}\n` }
+}
+
+const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact }
 
 /** What the guard named by `args` says of `input`. Anything it cannot read is exit 2, never a pass. */
 export function runTheGuard(args: readonly string[], input: string): Said {

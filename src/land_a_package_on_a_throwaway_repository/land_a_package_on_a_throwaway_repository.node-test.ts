@@ -12,6 +12,7 @@ import { whatTheStartWouldLoad, INSTRUCTION_FILES, LOADED_FOLDERS, type TheStart
 import { whyNotDelete, type WhatTheRunMade } from './the_delete_guard.ts'
 import { runTheGuard } from './main.ts'
 import { redactTheToken, REDACTED, THE_TOKEN_REACHED_THE_RECORD } from './the_kept_record.ts'
+import { NEAR_DAYS, NO_EXPIRY_NOTE, theTokensExpiry } from './the_tokens_expiry.ts'
 import { A_USER_ACCOUNT, whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -123,6 +124,37 @@ test("calls that answer as the owner's own login fail by name, as do an organisa
   assert.match(whyTheCallsAreNotTheBots({ message: 'Bad credentials' }, 4242) ?? '', /was not read$/)
   assert.equal(runTheGuard(['who', '4242'], JSON.stringify({ login: 'the-owner', id: 1, type: A_USER_ACCOUNT })).code, 1)
   assert.equal(runTheGuard(['who', 'the-bot'], '{}').code, 2)
+})
+
+// --- the token's expiry, read each night ----------------------------------------------------------------------------
+
+const NOW = new Date('2026-11-18T03:00:00Z')
+
+test('a token a month from its expiry holds with nothing to say', () => {
+  assert.deepEqual(theTokensExpiry('2026-12-18 03:00:00 UTC', NOW), { refuses: false })
+})
+
+test("a token with no expiry is the owner's choice: a note, not a warning, and the night goes on", () => {
+  const said = theTokensExpiry('', NOW)
+  assert.equal(said.refuses, false)
+  assert.equal(said.warning, undefined)
+  assert.match(said.note ?? '', /^the token has no expiry \(owner's choice, 2026-11-18\)$/)
+})
+
+test('a token within the near days is warned about, one just outside them is not', () => {
+  const near = new Date(NOW.getTime() + (NEAR_DAYS - 1) * 86_400_000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC')
+  const far = new Date(NOW.getTime() + (NEAR_DAYS + 1) * 86_400_000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC')
+  assert.match(theTokensExpiry(near, NOW).warning ?? '', /^the token expires in \d+ day\(s\)/)
+  assert.deepEqual(theTokensExpiry(far, NOW), { refuses: false })
+})
+
+test('an expired token, or an expiry that cannot be read, refuses the night', () => {
+  assert.match(theTokensExpiry('2026-11-18 02:59:59 UTC', NOW).why ?? '', /^the token expired at/)
+  assert.match(theTokensExpiry('next tuesday', NOW).why ?? '', /could not be read$/)
+  assert.equal(runTheGuard(['expiry', NOW.toISOString()], '2026-11-18 02:59:59 UTC').code, 1)
+  assert.deepEqual(runTheGuard(['expiry', NOW.toISOString()], '').code, 0)
+  assert.equal(runTheGuard(['expiry', NOW.toISOString()], '').out, `note: ${NO_EXPIRY_NOTE}\n`)
+  assert.equal(runTheGuard(['expiry', 'not a time'], '').code, 2)
 })
 
 // --- R3: a clean start ----------------------------------------------------------------------------------------------
