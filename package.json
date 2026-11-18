@@ -12,7 +12,6 @@
     "typecheck": "tsc --noEmit",
     "check:private": "node src/check_nothing_private_gets_in/main.ts",
     "check:posted-text": "node src/check_posted_text_carries_nothing_private/main.ts",
-    "keep:lab-families": "node src/keep_the_lab_families/main.ts",
     "check:links": "node src/check_every_link_resolves/main.ts",
     "check:logos": "node src/check_the_logos_are_valid_svg/main.ts",
     "check:marthas-names": "node src/check_marthas_names_are_its_own/main.ts",
