@@ -40,7 +40,8 @@ interface Options {
   readonly ollama: string
 }
 
-interface Running {
+/** One line's launch while it runs: what conduct drives. */
+export interface Running {
   readonly line: number
   readonly options: Options
   readonly place: Place
@@ -141,13 +142,22 @@ function trialOf(running: Running): Trial {
   }
 }
 
-async function conduct(running: Running): Promise<Observation> {
+/**
+ * What one launched line observed, and never a throw (martha#612): the line's own verdict, or what it threw recorded by
+ * theObservationOfALineThatThrew, so a turn that got no answer in time is `not-observed` here, below every caller. The
+ * lines are this trial's own unless a test gives its own.
+ */
+export async function conduct(running: Running, lines: Readonly<Record<number, Line>> = LINES): Promise<Observation> {
+  return conductTheLine(running, lines).catch(theObservationOfALineThatThrew)
+}
+
+async function conductTheLine(running: Running, lines: Readonly<Record<number, Line>>): Promise<Observation> {
   if (running.line === 7) {
     running.acp.answers.next = 'allow_once'
     await promptOver(running.acp, running.sessionId, 'Use the shell tool to run: echo the launch has work to end')
     return { verdict: 'not-observed', say: 'the launch is running; what line 7 observes is the kill', evidence: { asked: running.acp.answers.asked.length } }
   }
-  const line = LINES[running.line]
+  const line = lines[running.line]
   if (line === undefined) throw new Error(`the trial has no line ${running.line}`)
   return line(trialOf(running))
 }
@@ -208,7 +218,7 @@ export function theObservationOfALineThatThrew(error: unknown): Observation {
 
 async function runLine(line: number, options: Options): Promise<void> {
   const running = await startARun(line, options)
-  const observation = await conduct(running).catch(theObservationOfALineThatThrew)
+  const observation = await conduct(running)
   const { trace, groupLeft } = await endARun(running)
   const result = { line, ...verdictOf(line, running.currentMode, observation, trace, groupLeft), trace, groupLeft }
   const evidenceForLine = join(options.evidence, `line-${line}`)

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { NoAnswerInTime, withTimeout } from './a_turn_with_goose.ts'
-import { theObservationOfALineThatThrew } from './drive_the_trial.ts'
+import { conduct, theObservationOfALineThatThrew, type Running } from './drive_the_trial.ts'
 import { lineFour, type Trial } from './the_nine_lines.ts'
 import type { GooseOverAcp } from './speak_acp_to_goose.ts'
 
@@ -48,4 +48,19 @@ test('#612: a turn that spoke of a subagent and made no tool call stays a fail, 
   const observed = await lineFour({ acp, sessionId: 'a-session' } as unknown as Trial)
   assert.equal(observed.verdict, 'fail')
   assert.equal(observed.say, 'the session spoke of a subagent and no tool call reached the client')
+})
+
+/** A launched line as conduct reads it, with no engine behind it: the line the test's own table answers. */
+const aRunningLine = (line: number): Running => ({ line, acp: {}, options: { model: 'a-model', gooseSource: 'a-source' } }) as unknown as Running
+
+test('#612: conduct, which every launched line goes through, records a line that got no answer in time as not-observed and any other throw as fail (mutant: the old catch-all back in the wiring)', async () => {
+  const noAnswer = await conduct(aRunningLine(4), { 4: async () => { throw new NoAnswerInTime(A_SHORT_CAP_MS) } })
+  assert.equal(noAnswer.verdict, 'not-observed', noAnswer.say)
+  const broken = await conduct(aRunningLine(4), { 4: async () => { throw new Error('the engine closed its pipe') } })
+  assert.equal(broken.verdict, 'fail', broken.say)
+  // A verdict the line reached without throwing is the line's own, passed through as it is.
+  const own = { verdict: 'fail' as const, say: 'a wrong answer', evidence: { the: 'line' } }
+  assert.deepEqual(await conduct(aRunningLine(4), { 4: async () => own }), own)
+  // A line the trial does not have is an error of its own, and a fail.
+  assert.equal((await conduct(aRunningLine(5), {})).verdict, 'fail')
 })
