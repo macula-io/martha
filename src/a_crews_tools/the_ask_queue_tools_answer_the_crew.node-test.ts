@@ -30,6 +30,7 @@ import {
   REVIEW_MINUTES,
   STALLED_MINUTES,
   STRICT_GATE,
+  THE_HOST_A_MEMBER_RAN_ON,
   WORKTREES,
   type CrewSettings,
 } from '../declare_crew/declare_crew.ts'
@@ -178,9 +179,10 @@ const THE_TWO_COPIES: Readonly<Record<string, string>> = {
 const theSettingsWith = (clones: string | null): CrewSettings => ({
   paths: { root, crew: join(root, DECLARATION_DIRECTORY), declaration: join(root, DECLARATION_DIRECTORY, DECLARATION_FILE), conventions: null },
   owner: 'Ann',
+  host: THE_HOST_A_MEMBER_RAN_ON,
   members: [
-    { name: LEAD, role: SUPERVISOR, model: null },
-    { name: BUILDER, role: 'builder', model: null },
+    { name: LEAD, role: SUPERVISOR, model: null, host: null },
+    { name: BUILDER, role: 'builder', model: null, host: null },
   ],
   mode: {
     name: 'team',

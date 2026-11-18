@@ -17,7 +17,7 @@ import {
   type Place,
   type Probe,
 } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
-import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
 const [OPENCODE_CONFIG, , OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
@@ -63,7 +63,7 @@ const ONLY_REPORT = 'true'
 /** Claude Code as the leader of its own process group, whose id the hooks read as MEMBER_GROUP. */
 const claudeInItsOwnGroup = (...extra: readonly string[]): Command => (switches) => ({
   command: 'setsid',
-  args: ['sh', '-c', 'export MEMBER_GROUP=$$; exec "$0" "$@"', 'claude', ...extra, ...switches.args],
+  args: ['sh', '-c', 'export MEMBER_GROUP=$$; exec "$0" "$@"', CLAUDE, ...extra, ...switches.args],
 })
 /** A prompt that makes one tool call before the reply. */
 const ONE_CALL_PROMPT = 'Run the shell command `true` with the Bash tool, then reply with the single word ok.'

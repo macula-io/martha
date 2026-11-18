@@ -13,6 +13,7 @@ import { delimiter, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { driveTheRecordedHost, environmentOf, RECORDED_HOST_VARIABLE, theRecordedHostAt } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
+import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 /** The stand-in's address for a run that never reaches it: nothing listens there, and nothing here connects. */
@@ -46,12 +47,12 @@ test('a host path that names no file is refused by name, and no link is made for
     () => environmentOf({ claude: missing, home }, AN_ADDRESS_NOTHING_ANSWERS, join(home, 'runtime')),
     { message: refusal(missing) },
   )
-  assert.equal(lstatSync(join(home, 'bin', 'claude'), { throwIfNoEntry: false }), undefined, 'a refused run leaves no link behind, not even a dangling one')
+  assert.equal(lstatSync(join(home, 'bin', CLAUDE), { throwIfNoEntry: false }), undefined, 'a refused run leaves no link behind, not even a dangling one')
 })
 
 test('a host path that names something this user cannot run is refused the same way', (t) => {
   const home = aHome(t)
-  const notExecutable = join(home, 'claude')
+  const notExecutable = join(home, CLAUDE)
   writeFileSync(notExecutable, '#!/bin/sh\nexit 0\n')
   chmodSync(notExecutable, 0o644)
   const aDirectory = join(home, 'a-directory')
@@ -74,7 +75,7 @@ test('a host path given relative names the file it leads to, and the link to it 
 
     const environment = environmentOf({ claude: 'the-recorded-host', home }, AN_ADDRESS_NOTHING_ANSWERS, join(home, 'runtime'))
     const [first] = environment.PATH.split(delimiter)
-    assert.equal(realpathSync(join(first ?? '', 'claude')), realpathSync(host))
+    assert.equal(realpathSync(join(first ?? '', CLAUDE)), realpathSync(host))
   } finally {
     process.chdir(from)
   }
@@ -88,7 +89,7 @@ test('the PATH a run is given finds claude at the link, first, so no later claud
 
   const [first] = environment.PATH.split(delimiter)
   assert.equal(first, join(home, 'bin'))
-  assert.equal(realpathSync(join(first ?? '', 'claude')), realpathSync(host))
+  assert.equal(realpathSync(join(first ?? '', CLAUDE)), realpathSync(host))
 })
 
 test('a run whose host names no file refuses before it makes anything', async (t) => {

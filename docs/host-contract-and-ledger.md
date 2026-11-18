@@ -42,6 +42,7 @@ in, so that one entry answers every host
 | `AStartingSession` | the session, the outcome its host's own table gives the start event (`SessionStartOutcome`: `fresh`, `same_id` or `inherits`; none for an event the table does not declare, which has lost its record), and the predecessor the host names | `TheAnswerToAStart`: refused and why, or taken with what the session is handed as it starts |
 | `ArrivingTurn` | a turn's text, and its `Arrival` | `TheAnswerToATurn`: kept, or refused and why; a refused turn is never raised |
 | `AReviewTheHostSawFail` | the session, the turn's text, and the origin kind the engine stamped on it | nothing: a review the host reports failed is named on the owner's row and to the member, only for a session the entry holds |
+| `ACalledTool` | the session, the tool by the name the host called it, its input, the host's id for the call when it gives one, and the agent that made the call when an agent of the session made it | `TheAnswerToACall`: allowed, or denied and why; only the adapter writes its host's own yes |
 
 The entry never reads a host's own table. The adapter turns the host's event
 into its outcome and its prompt origin into an `Arrival`, and it hands the

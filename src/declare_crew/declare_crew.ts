@@ -28,11 +28,38 @@ import { memberNameKey } from './member_names.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { GATE_AUDITS, GATE_ENFORCES, gateSettingOf, type GateSetting } from '../read_the_gate_mode/read_the_gate_mode.ts'
 
 /** Where a crew's declaration lives, relative to the project root (martha#468: the folder is Martha's own). */
 export const DECLARATION_DIRECTORY = '.martha'
 export const DECLARATION_FILE = 'martha.json'
+
+/**
+ * The key a crew's host is declared under, at the top level and on a member (martha#541, package 5): one file says
+ * which host runs each member, so `martha start` and `martha wake` start it there and never on another host.
+ */
+export const HOST = 'host'
+
+/**
+ * The host every release before this one started a member on (martha#541): what a declaration that names no host at
+ * all reads as, under this reader's upgrade rule, so a crew an earlier release's init wrote still starts.
+ */
+export const THE_HOST_A_MEMBER_RAN_ON = CLAUDE_CODE
+
+/**
+ * The host Martha's engine is, as the engine's own recording names it (martha#547): one definition, read from the
+ * recording rather than typed, so the name the declaration accepts and the name a launch starts cannot drift.
+ */
+export const THE_ENGINES_HOST: string = RECORDED_GOOSE_ENGINE.engine_name
+
+/**
+ * The hosts a declaration may name (martha#541, package 5): the hosts Martha knows. A name outside this list is refused
+ * by field, naming these; a host in it that this release has no launcher for is refused at the start, by name, and is
+ * never started on another host.
+ */
+export const HOSTS_IT_KNOWS: readonly string[] = [THE_HOST_A_MEMBER_RAN_ON, THE_ENGINES_HOST]
 
 /**
  * The declaration crew-code reads, which an older checkout of Martha's may still hold in place of Martha's own
@@ -242,10 +269,11 @@ export const SOLO_MEMBERS = [
  * writer emits and what this slice accepts cannot drift; `martha init` writes it (../declare_a_solo_crew), and the
  * two places of a layout are written together or not at all, as a layout naming one without the other is refused here.
  */
-export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = null) {
+export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = null, host: string = THE_HOST_A_MEMBER_RAN_ON) {
   return {
     version: DECLARATION_VERSION,
     owner,
+    host,
     members: SOLO_MEMBERS,
     mode: {
       name: SOLO_MODE,
@@ -276,6 +304,8 @@ export interface Member {
   readonly name: string
   readonly role: string
   readonly model: string | null
+  /** The host this member is started on, when the declaration names one for it; null when the crew's own applies. */
+  readonly host: string | null
 }
 
 export interface Mode {
@@ -302,6 +332,12 @@ export interface CrewPaths {
 export interface CrewSettings {
   readonly paths: CrewPaths
   readonly owner: string
+  /**
+   * The host the crew starts a member on when the member names none (martha#541): the declaration's crew-level `host`,
+   * or THE_HOST_A_MEMBER_RAN_ON when the declaration names none at all, so a file an earlier release wrote still
+   * declares and still starts the host it always started.
+   */
+  readonly host: string
   readonly members: readonly Member[]
   readonly mode: Mode
   readonly house_rules: HouseRules
@@ -345,9 +381,9 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
-const OPTIONAL_MEMBER_KEYS = ['model'] as const
+const OPTIONAL_MEMBER_KEYS = ['model', HOST] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
 const MODE_KEYS = ['name', 'roles', 'may'] as const
 
@@ -445,6 +481,7 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
   return {
     paths: { ...paths, conventions: conventionsOf(refuse, value['conventions'], paths.crew) },
     owner: value['owner'].trim(),
+    host: crewHostOf(refuse, value[HOST]),
     members,
     mode,
     house_rules: houseRulesOf(refuse, value['house_rules'], models),
@@ -578,11 +615,36 @@ function membersOf(refuse: Refuse, value: unknown, roles: readonly string[]): Me
 function memberOf(refuse: Refuse, member: unknown, at: string, roles: readonly string[], seen: Set<string>): Member {
   if (!isObject(member)) return refuse.at(at, `is not ${shapeOf(REQUIRED_MEMBER_KEYS, OPTIONAL_MEMBER_KEYS)}`)
   refuse.unknownKeys(member, MEMBER_KEYS, `${at}.`)
-  const { role, model } = member
+  const { role, model, host } = member
   const name = memberNameOf(refuse, member.name, at, seen)
   if (typeof role !== 'string' || !roles.includes(role)) refuse.at(`${at}.role`, `is not a role of this mode (${roles.join(', ')})`)
   if (model !== undefined && model !== null && !isText(model)) refuse.at(`${at}.model`, 'is not a model name, or null for the host\'s own')
-  return { name, role, model: model ?? null }
+  return { name, role, model: model ?? null, host: host === undefined ? null : hostNamed(refuse, host, `${at}.${HOST}`) }
+}
+
+/**
+ * The crew's host (martha#541): the one a member that names none is started on. A declaration that names no host at
+ * all reads as THE_HOST_A_MEMBER_RAN_ON, the host every release before this one started, under the reader's upgrade
+ * rule; a name Martha does not know is refused by its field, never read as another host.
+ */
+function crewHostOf(refuse: Refuse, value: unknown): string {
+  return value === undefined ? THE_HOST_A_MEMBER_RAN_ON : hostNamed(refuse, value, HOST)
+}
+
+/** A host name the declaration writes, refused by its field when it is not one Martha knows. */
+function hostNamed(refuse: Refuse, value: unknown, at: string): string {
+  if (typeof value !== 'string' || !HOSTS_IT_KNOWS.includes(value)) {
+    refuse.at(at, `is not a host Martha knows (they are ${HOSTS_IT_KNOWS.join(', ')})`)
+  }
+  return value
+}
+
+/**
+ * The host a member is started on (martha#541): the member's own, else the crew's, else the host every release before
+ * this one started. The one reading, so a start and a wake cannot resolve it differently.
+ */
+export function theHostOfMember(settings: CrewSettings, member: Member): string {
+  return member.host ?? settings.host
 }
 
 function memberNameOf(refuse: Refuse, name: unknown, at: string, seen: Set<string>): string {

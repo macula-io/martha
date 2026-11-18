@@ -15,8 +15,7 @@
 // It declares the crew's workspace layout too, when the checkout can prove one (martha#611): a member's
 // `worktree_open` refuses a crew that names no layout (../open_and_finish_a_worktree), so a declaration with none
 // would leave the owner editing `house_rules` by hand before the crew can do anything with a worktree. What a
-// checkout proves is the core's answer (../declare_crew, workspaceLayoutOf); this slice reads git where git has to
-// be read and composes the two.
+// checkout proves is the core's answer (../declare_crew, workspaceLayoutOf); this slice reads git where it is read.
 
 import fs from 'node:fs'
 import { join } from 'node:path'
@@ -46,6 +45,11 @@ export interface SoloCrewRequest {
   readonly documents: DocumentStore
   /** The models the host runs (martha#315), as its adapter records them: what the declaration is read back against. */
   readonly models: ModelVocabulary
+  /**
+   * The host this install starts a member on (martha#541, #547): the crew-level `host` init writes. The Claude Code
+   * plugin's init names Claude Code; the standalone install's names the engine, from its own recording.
+   */
+  readonly host: string
 }
 
 export type SoloCrewDeclared =
@@ -83,11 +87,10 @@ export async function declareSoloCrew(request: SoloCrewRequest): Promise<SoloCre
   const owner = request.owner?.trim() ?? ''
   if (owner === '') return { declared: false, refusal: NO_OWNER }
   const workspace = workspaceLayoutOf(fs.realpathSync(request.root), repoOfTheCheckout(request.origin), request.origin)
-  const directory = join(request.root, DECLARATION_DIRECTORY)
-  const declaration = join(directory, DECLARATION_FILE)
+  const directory = join(request.root, DECLARATION_DIRECTORY), declaration = join(directory, DECLARATION_FILE)
   const unmade = declarationDirectory(directory)
   if (unmade !== undefined) return { declared: false, refusal: unmade }
-  const unwritten = writeOnce(declaration, `${JSON.stringify(soloDeclaration(owner, workspace.layout), null, 2)}\n`)
+  const unwritten = writeOnce(declaration, `${JSON.stringify(soloDeclaration(owner, workspace.layout, request.host), null, 2)}\n`)
   if (unwritten !== undefined) return { declared: false, refusal: unwritten }
 
   let settings: CrewSettings

@@ -151,4 +151,8 @@ HOME="$TRIAL/owner-home" node trial_the_goose_host/drive_the_trial.ts \
 
 `--line` takes `1`..`9` or a list (`--line 3,5`) or `all`; `--launch` moves the launch places
 (default `/var/tmp/martha-goose-trial`); `--ollama` names the model endpoint. Each line writes
-`<evidence>/line-N/result.json` and `<evidence>/line-N/trace.log`.
+`<evidence>/line-N/result.json`, `<evidence>/line-N/trace.log`, `<evidence>/line-N/acp.jsonl` (every
+message across the pipe with the engine, timestamped and by direction, appended as it crosses) and
+`<evidence>/line-N/engine-logs/` (the launch's own `goose-root/state/logs`, copied in before the launch
+ends). A line whose verdict is `not-observed` fails by name if no exchange was kept beside it
+(`./the_evidence_says_why.ts`, martha#694).

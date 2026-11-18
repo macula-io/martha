@@ -16,7 +16,7 @@
 // home, and the owner's own PATH finds a shell under the home before the system's.
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
@@ -24,7 +24,8 @@ import { HOME_MARKERS, CHECKOUT_MARKERS, aPlaceFor, plant, writeTheConfig, type 
 import { NoAnswerInTime, promptOver, withTimeout } from './a_turn_with_goose.ts'
 import { findingsIn, pathsIn, type TraceFindings } from './read_the_trace.ts'
 import { RecordingProxy } from './record_what_goose_sends.ts'
-import { GooseOverAcp } from './speak_acp_to_goose.ts'
+import { GooseOverAcp, type Exchange } from './speak_acp_to_goose.ts'
+import { THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_says_why.ts'
 import {
   lineEight, lineFive, lineFour, lineNine, lineOne, lineSix, lineThree, lineTwo, sevenAfterTheKill,
   type Line, type Observation, type Trial,
@@ -124,8 +125,18 @@ async function startARun(line: number, options: Options): Promise<Running> {
   const evidenceForLine = join(options.evidence, `line-${line}`)
   mkdirSync(evidenceForLine, { recursive: true })
   const tracePath = join(evidenceForLine, 'trace.log')
+  // The exchange is kept as it crosses, one line per message, in the launch's own evidence directory
+  // (martha#694). Written empty first: a launch killed before its first message still leaves the file the
+  // verdict is checked against, rather than a directory that looks as if nothing was asked for.
+  const transcriptPath = join(evidenceForLine, THE_TRANSCRIPT)
+  writeFileSync(transcriptPath, '')
+  const keep = (exchange: Exchange): void => {
+    appendFileSync(transcriptPath, `${JSON.stringify(exchange)}\n`)
+  }
+  // Recorded before the engine starts, so a launch killed during the handshake still has its logs kept.
+  theLaunchInHand = { root: place.root, into: evidenceForLine }
   const child = startGoose(place, options, line, tracePath)
-  const acp = new GooseOverAcp(child)
+  const acp = new GooseOverAcp(child, keep)
   const { sessionId, currentMode } = await shakeHands(acp, place)
   return { line, options, place, proxy, acp, child, tracePath, sessionId, currentMode }
 }
@@ -183,10 +194,45 @@ function readTrace(place: Place, goose: string, tracePath: string): TraceFinding
   return findingsIn(pathsIn(readFileSync(tracePath, 'utf8')), place.ownerHome, userInfo().homedir, allowed)
 }
 
-async function endARun(running: Running): Promise<{ trace: TraceFindings; groupLeft: string[] }> {
+/**
+ * The engine's own request logs, copied into the launch's evidence (martha#694).
+ *
+ * The engine writes them under its path root as it runs, and they are the other half of the exchange: the
+ * transcript says what Martha and the engine told each other, these say what the engine asked the model.
+ * Copied after the group is dead (so nothing is mid-write) and, on a launch killed at its bound, from the
+ * SIGTERM handler below. Returns how many files were kept, which the result records; a launch that wrote none
+ * keeps none, which is itself worth knowing.
+ */
+export function keepTheEngineLogs(root: string, into: string): number {
+  const from = join(root, 'state', 'logs')
+  if (!existsSync(from)) return 0
+  const to = join(into, THE_ENGINE_LOGS)
+  cpSync(from, to, { recursive: true, force: true })
+  // The engine keeps its tracing log a folder down (logs/cli/<date>/), beside the request logs: count files, not entries.
+  return readdirSync(to, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).length
+}
+
+/** Where the launch in hand keeps its evidence, and the root its engine writes its own logs under. */
+let theLaunchInHand: { readonly root: string; readonly into: string } | undefined
+
+/**
+ * The one case the copy has to happen outside the run's own code: the runner's ten-minute `timeout` sends
+ * SIGTERM while a line is still running — during the handshake as readily as during a turn — and the engine's
+ * logs have to be kept before the process dies. The signal is raised again with the handler gone, so the
+ * launch still ends the way it did before: killed, with the status the runner prints.
+ */
+function keepTheEndsOnSignal(): void {
+  if (theLaunchInHand !== undefined) keepTheEngineLogs(theLaunchInHand.root, theLaunchInHand.into)
+  process.removeListener('SIGTERM', keepTheEndsOnSignal)
+  process.kill(process.pid, 'SIGTERM')
+}
+
+async function endARun(running: Running): Promise<{ trace: TraceFindings; groupLeft: string[]; engineLogs: number }> {
   const groupLeft = await killTheGroup(running.child)
   await running.proxy.stop()
-  return { trace: readTrace(running.place, running.options.goose, running.tracePath), groupLeft }
+  const engineLogs = keepTheEngineLogs(running.place.root, join(running.options.evidence, `line-${running.line}`))
+  theLaunchInHand = undefined
+  return { trace: readTrace(running.place, running.options.goose, running.tracePath), groupLeft, engineLogs }
 }
 
 /** The verdict a line ends with: the mode it reported, what it saw, and what the trace found. */
@@ -217,11 +263,12 @@ export function theObservationOfALineThatThrew(error: unknown): Observation {
 }
 
 async function runLine(line: number, options: Options): Promise<void> {
+  const evidenceForLine = join(options.evidence, `line-${line}`)
   const running = await startARun(line, options)
   const observation = await conduct(running)
-  const { trace, groupLeft } = await endARun(running)
-  const result = { line, ...verdictOf(line, running.currentMode, observation, trace, groupLeft), trace, groupLeft }
-  const evidenceForLine = join(options.evidence, `line-${line}`)
+  const { trace, groupLeft, engineLogs } = await endARun(running)
+  const verdict = theVerdictKeptWithItsExchange(line, verdictOf(line, running.currentMode, observation, trace, groupLeft), evidenceForLine)
+  const result = { line, ...verdict, trace, groupLeft, engineLogs }
   mkdirSync(evidenceForLine, { recursive: true })
   writeFileSync(join(evidenceForLine, 'result.json'), JSON.stringify(result, null, 2))
   console.log(`line ${line}: ${result.verdict} — ${result.say}`)
@@ -229,6 +276,7 @@ async function runLine(line: number, options: Options): Promise<void> {
 
 async function main(): Promise<void> {
   const options = optionsFrom(process.argv.slice(2))
+  process.on('SIGTERM', keepTheEndsOnSignal)
   mkdirSync(options.evidence, { recursive: true })
   for (const line of options.lines) await runLine(line, options)
 }

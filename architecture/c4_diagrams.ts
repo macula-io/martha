@@ -10,8 +10,10 @@
 //
 // The diagrams draw the code that is in src/, not the design that is still to come:
 // every slice named in the Component diagram is a directory in src/, and a box drawn
-// for something not built says so. When a box changes, change it here, redraw, and
-// keep architecture/README.md's tables in step.
+// for something not built says so. A box changes here with the package that changes it,
+// and architecture/README.md's tables change beside it. The SVG in assets/ does not: it
+// is DRAWN_AT_RELEASE (../src/check_the_pictures_change_with_the_version), so it catches
+// up with this file's drawing once, in the version-bump change that rule names.
 //
 // Colours are literal values in plain classes with a prefers-color-scheme dark
 // block, never CSS custom properties, which some renderers draw black.
@@ -642,12 +644,16 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a script run by hand, npm run record:goose-engine, when the Goose engine moves to a new version (martha#541); the daily engine drift job runs its --check, and no member ever loads it',
   },
   {
-    name: 'know_the_goose_engines_facts',
-    why: "the Goose engine's facts as recorded from its source, and the reader that takes them (martha#541); only the recorder and the model stand-in load it until the Goose adapter is built",
-  },
-  {
     name: 'stand_in_for_an_openai_model',
     why: 'a model behind an OpenAI-compatible URL, answered from a script, for runs of the Goose engine with no model (martha#541); tests and npm run stand-in:openai-model load it, and no member ever does',
+  },
+  {
+    name: 'launch_a_goose_member',
+    why: "one Goose member's launch: its own root and home, the config root it writes, the engine in a process group of its own, and the permission store checked empty when the launch ends (martha#541 packages 7-8); nothing loads it until the one start call picks a member's host, and its tests do today",
+  },
+  {
+    name: 'stand_in_for_an_acp_agent',
+    why: 'an ACP agent on stdio answered from a script, offering the recorded Goose engine\'s permission answers, for the tests of speak_acp_to_an_agent (martha#541); tests and npm run stand-in:acp-agent load it, and no member ever does',
   },
   {
     name: 'check_no_member_outlives_its_run',
@@ -722,14 +728,14 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
     { col: 0, kind: 'b-sys', name: 'run_the_martha_command', names: ['run_the_martha_command', 'list_stop_and_restart_the_crew', 'release_a_held_member', 'show_the_owners_text_safely', 'find_a_member_a_run_left_behind', 'refuse_an_owner_act_from_inside_a_member', 'record_where_an_owners_act_was_typed', 'keep_where_owners_acts_were_typed'], type: '[the acts]', code: true,
       desc: ['init, approve, start <member>, run <shape>,', 'pin-key, keep-shapes, release <member>,', 'gate, --version: the words checked first,', 'a refusal on stderr with the command that', 'fixes it, 0 / 1 / 2. release_a_held_member', 'is the owner\'s release of a held member,', 'and list_stop_and_restart_the_crew is', 'martha ls, stop and restart\'s wiring here;', 'show_the_owners_text_safely writes every', 'terminal control out before the owner', 'reads it, and find_a_member_a_run_left_', 'behind names a member a run started and', 'left running, by its name and the time', 'it started; owner acts (#619):', 'refuse_an_owner_act_from_inside_a_', 'member, record_where_an_owners_act_', 'was_typed, keep_where_owners_acts_', 'were_typed'] },
-    { col: 1, kind: 'b-cmp', name: 'declare_a_solo_crew, declare_crew', names: ['declare_a_solo_crew', 'declare_crew'], type: '[the declaration]', code: true,
-      desc: ['Reads .martha/martha.json once into typed', 'settings; writes it only when none exists.', 'The mode\'s table says who may assign,', 'approve, resume, take asks and restart'] },
+    { col: 1, kind: 'b-cmp', name: 'declare_a_solo_crew, declare_crew', names: ['declare_a_solo_crew', 'declare_crew', 'know_the_goose_engines_facts'], type: '[the declaration]', code: true,
+      desc: ['Reads .martha/martha.json once into typed', 'settings; writes it only when none exists.', 'The mode\'s table says who may assign,', 'approve, resume, take asks and restart.', 'A member\'s host names a host Martha knows:', 'the engine\'s name is its own recording\'s,', 'engine_name, which know_the_goose_', 'engines_facts holds (martha#541)'] },
     { col: 2, kind: 'b-cmp', name: 'approve_a_checkouts_config', names: ['approve_a_checkouts_config'], type: '[the owner\'s yes]', code: true,
       desc: ['Names every file that starts code and', 'the checkout\'s tree, asks on the owner\'s', 'own terminal, and keeps the fingerprint', 'it was given in approvals.jsonl'] },
   ],
   [
-    { col: 0, kind: 'b-cmp', name: 'start_a_member', names: ['start_a_member', 'pass_only_switches_that_load_no_config'], type: '[one member]', code: true,
-      desc: ['Refuses no terminal, a name the crew lacks', 'and a stale approval; -- words pass only', 'pass_only_switches_that_load_no_config', 'allows, then names the approval it starts', 'on and holds the terminal'] },
+    { col: 0, kind: 'b-cmp', name: 'start_a_member', names: ['start_a_member', 'pass_only_switches_that_load_no_config', 'start_the_member_on_its_host'], type: '[one member]', code: true,
+      desc: ['Refuses no terminal, a name the crew lacks', 'and a stale approval; -- words pass only', 'pass_only_switches_that_load_no_config', 'allows, then names the approval it starts', 'on and holds the terminal.', 'start_the_member_on_its_host is the table', 'a start picks its host\'s launcher from,', 'refusing a host this release cannot start'] },
     { col: 1, kind: 'b-cmp', name: 'launch_a_claude_code_member', names: ['launch_a_claude_code_member', 'run_an_owner_signed_command', 'raise_a_turn_to_the_member', 'hand_a_crew_message_to_its_member', 'answer_the_relay', 'ask_the_host_what_it_loads', 'end_a_launch', 'keep_the_relays_journal', 'place_the_hosts_settings', 'serve_the_relay_to_a_launch', 'start_the_member_on_the_owners_terminal', 'sweep_leftover_launch_directories', 'end_a_launch_when_its_run_ends', 'give_a_member_its_own_config', 'watch_the_crew_tools_a_launch_served'], type: '[the launcher]', code: true,
       desc: ['The launch itself: Martha\'s places, the', 'approved snapshot and the launch record', 'written before the host starts.', 'place_the_hosts_settings settles what the', 'host reads, ask_the_host_what_it_loads', 'proves it loads the relay copy, and', 'serve_the_relay_to_a_launch makes the', 'socket and the copy; answer_the_relay', 'answers the relay\'s events on it,', 'keep_the_relays_journal keeps what the', 'launch did, and end_a_launch starts the', 'host in its own process group and cleans', 'up when it ends. start_the_member_on_', 'the_owners_terminal gives it the owner\'s', 'terminal, sweep_leftover_launch_', 'directories takes a dead launch\'s', 'directories away; raise_a_turn_to_the_', 'member raises each kept turn to its', 'listeners, hand_a_crew_message_to_its_', 'member hands one message at a time and', 'counts it taken in, and run_an_owner_', 'signed_command runs a shape the owner', 'signed on a verified copy, in a sandbox;', 'end_a_launch_when_its_run_ends gives', 'the launch its run\'s lifeline, so a run', 'that ends takes its member with it;', 'give_a_member_its_own_config makes the', 'member a config folder of its own, so', 'the owner\'s own hooks never load in it;', 'watch_the_crew_tools_a_launch_served', 'reads which crew tools each session', 'still holds, through the journal the', 'launch keeps (martha#658)'] },
     { col: 2, kind: 'b-cmp', name: 'refuse_launch_of_unapproved_config', names: ['refuse_launch_of_unapproved_config', 'judge_a_checkouts_tree', 'refuse_code_a_checkout_runs_itself', 'remember_a_members_own_writes', 'run_marthas_own_git', 'empty_directory_of_a_launch', 'know_claude_codes_own_facts'], type: '[the launch gate]', code: true,
@@ -790,6 +796,8 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
     { col: 0, kind: 'b-cmp', name: 'guard_workspace, read_the_git_calls_in_a_shell_line', names: ['guard_workspace', 'read_the_git_calls_in_a_shell_line', 'ask_git_what_a_member_is_about_to_change', 'check_the_workspace_matches_its_layout', 'refuse_a_git_call_in_a_members_shell', 'guard_the_git_a_member_runs'], type: '[the workspace guard]', code: true,
       desc: ['What the workspace\'s layout refuses of', 'a git call: read_the_git_calls_in_a_', 'shell_line reads each call and the', 'directory it runs in, ask_git_what_a_', 'member_is_about_to_change asks git what', 'a call is about to move, and guard_', 'workspace refuses a call that leaves a', 'clone\'s branch or touches another', 'member\'s worktree or branch; check_the_', 'workspace_matches_its_layout names the', 'drift in a workspace, and refuse_a_git_', 'call_in_a_members_shell and guard_the_', 'git_a_member_runs are the seams that ask', 'it: the shell line a tool call carries,', 'the git first on the member\'s PATH, and', 'the clone\'s ref transaction, each read', 'and judged before it runs. A crew that', 'declared no layout is judged by none', 'of it (martha#562)'] },
+    { col: 1, kind: 'b-cmp', name: 'speak_acp_to_an_agent', names: ['speak_acp_to_an_agent'], type: '[an ACP agent, as its client]', code: true,
+      desc: ['Martha as the client of an engine it', 'drives over ACP on stdio (martha#541):', 'sessions, prompts, each tool call\'s', 'updates and the turn\'s end; a call is', 'answered allow_once or reject_once', 'from the gate\'s decision, else', 'cancelled. Not yet wired to a launch'] },
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'read_the_body_a_request_carries', names: ['read_the_body_a_request_carries'], type: '[a request to the launcher]', code: true,
