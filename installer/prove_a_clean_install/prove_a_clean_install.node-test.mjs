@@ -6,7 +6,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, delimiter, dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
@@ -596,6 +596,99 @@ test('a walk the tear-down could not make is one of its refusals (martha#590 r=2
   assert.match(refusals[0] ?? '', /the children of pid \d+ could not be read: /, 'and it names the walk that failed')
 })
 
+/**
+ * The pids `pgrep` names as children of `pid`, asked the way the walk asks it. An answer other than "some" or "none"
+ * fails the test instead of reading as no children, which would pass a check by never making it.
+ * @param {number} pid
+ * @returns {number[]}
+ */
+const childrenOfPid = (pid) => {
+  const ran = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' })
+  assert.ok(ran.status === 0 || ran.status === NOTHING_MATCHED, `pgrep -P ${pid} answered ${String(ran.status)}`)
+  return ran.status === 0 ? ran.stdout.trim().split('\n').filter((line) => line !== '').map(Number) : []
+}
+
+/**
+ * A wrapper with a child and a grandchild, each a real process, so a walk has two levels it must stop before reading
+ * them (martha#590 r=3). Both shells wait beside the process they began: a shell left with one command could be
+ * replaced by it, and the level would be gone.
+ * @param {import('node:test').TestContext} t
+ */
+const aTreeTwoDeep = async (t) => {
+  const inner = `${quoted('sh')} -c ${quoted(`${quoted('sleep')} 300 & wait`)}`
+  const wrapper = spawn('sh', ['-c', `${inner} & wait`], { stdio: 'ignore' })
+  const wrapperPid = Number(wrapper.pid)
+  /** @type {number[]} */
+  let pids = [wrapperPid]
+  t.after(() => {
+    // Whatever the assertions said, the tree goes, so a failing case leaves nothing running for the next one.
+    for (const pid of pids) { try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ } }
+  })
+  const began = Date.now() + MEMBER_WAIT_MS
+  while (Date.now() < began) {
+    const children = childrenOfPid(wrapperPid)
+    const [onlyChild] = children
+    const grandchildren = onlyChild === undefined ? [] : childrenOfPid(onlyChild)
+    if (children.length === 1 && onlyChild !== undefined && grandchildren.length === 1) {
+      pids = [wrapperPid, onlyChild, ...grandchildren]
+      return { wrapper, pids }
+    }
+    await delay(POLL_MS)
+  }
+  assert.fail(`the tree never came to a wrapper, a child and a grandchild under pid ${wrapperPid}`)
+}
+
+/**
+ * A `pgrep` first on PATH that writes down the state `/proc/<pid>/stat` holds for the pid it is asked about, then asks
+ * the real `pgrep` the same question. What the walk stopped before reading is then on a record: a process frozen
+ * before its children are read is `T`, and one whose children were read first is still running (martha#590 r=3).
+ * @param {string} tree
+ * @returns {{ stub: string, record: string }}
+ */
+const aPgrepThatRecordsTheState = (tree) => {
+  const stub = join(tree, 'a-pgrep-that-records')
+  mkdirSync(stub)
+  const record = join(tree, 'the-states-the-walk-saw')
+  // Written empty first: a walk that never asked leaves an empty record to read, not a missing file to guess at.
+  writeFileSync(record, '')
+  const real = spawnSync('sh', ['-c', 'command -v pgrep'], { encoding: 'utf8' }).stdout.trim()
+  assert.notEqual(real, '', 'the real pgrep is on PATH, to pass the question on to')
+  writeFileSync(join(stub, 'pgrep'), `#!/bin/sh
+pid=''
+previous=''
+for word in "$@"; do
+  if [ "$previous" = '-P' ]; then pid="$word"; fi
+  previous="$word"
+done
+if [ -n "$pid" ] && [ -r "/proc/$pid/stat" ]; then
+  state="$(sed -e 's/^.*) //' -e 's/ .*$//' "/proc/$pid/stat")"
+  printf '%s %s\\n' "$pid" "$state" >> ${quoted(record)}
+fi
+exec ${quoted(real)} "$@"
+`, { mode: RUNNABLE })
+  return { stub, record }
+}
+
+// martha#590 r=3: the order the freeze-then-read rule rests on is pinned on a record, not on a race. The forking case
+// above can tell freeze-then-read from read-then-freeze only by a fork landing inside one `pgrep` spawn, so a mutant
+// that reads a process's children before stopping it survived most runs. The stub here writes the state /proc holds
+// for every pid the walk asks about: freeze-then-read leaves every one `T`, and reading first leaves it `S`.
+test('the walk freezes each process before it reads its children, and the record of the states says so (martha#590 r=3)', async (t) => {
+  const tree = scratch(t)
+  const { wrapper, pids } = await aTreeTwoDeep(t)
+  const { stub, record } = aPgrepThatRecordsTheState(tree)
+  const path = process.env.PATH
+  t.after(() => { process.env.PATH = path })
+  const member = { name: 'walked', child: wrapper, pid: 0, said: '', ended: '', exited: Promise.resolve('') }
+  process.env.PATH = [stub, path].join(delimiter)
+  const refusals = killEvenIfGone(member)
+  process.env.PATH = path
+  assert.deepEqual(refusals, [], 'the walk asked every process it froze for its children')
+  const recorded = readFileSync(record, 'utf8').trim().split('\n').filter((line) => line !== '').map((line) => line.split(' '))
+  const asked = recorded.map(([pid]) => Number(pid))
+  assert.deepEqual(asked.sort((one, other) => one - other), [...pids].sort((one, other) => one - other), `the walk asked about every process in the tree: ${JSON.stringify(recorded)}`)
+  assert.deepEqual(recorded.filter(([, state]) => state !== 'T'), [], `every process was stopped before its children were read: ${JSON.stringify(recorded)}`)
+})
 
 // martha#189 r=2: the hold's own promise. The interrupt tests above only show that a run which logs the held line is
 // interrupted and fails; a hold that logged and returned at once would leave them green, because the signal still ends
