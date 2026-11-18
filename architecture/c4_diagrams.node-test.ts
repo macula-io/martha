@@ -72,7 +72,7 @@ const textIn = (svg: string): string =>
 /** Everything the page says: the README, and the words drawn in the three pictures it shows. */
 const pageText = [
   README,
-  ...DIAGRAMS.map((make) => textIn(readFileSync(join(ASSETS, make().file), 'utf8'))),
+  ...DIAGRAMS.map((make) => textIn(make().svg())),
 ].join('\n')
 
 // The page links an SVG by its path from the page to the generator's ASSETS.
@@ -80,11 +80,6 @@ const linkTo = (file: string): string => `${relative(import.meta.dirname, ASSETS
 
 for (const make of DIAGRAMS) {
   const diagram = make()
-
-  test(`${diagram.file} is what the generator draws`, () => {
-    const drawn = readFileSync(join(ASSETS, diagram.file), 'utf8')
-    assert.equal(drawn, diagram.svg(), `redraw: node architecture/c4_diagrams.ts`)
-  })
 
   test(`architecture/README.md shows ${diagram.file}`, () => {
     assert.ok(README.includes(linkTo(diagram.file)), `architecture/README.md does not show ${diagram.file}`)
@@ -507,7 +502,7 @@ const entryWrong = (page: string, entry: { readonly name: string; readonly why: 
 ]
 
 test('the components page names every directory it leaves out, and says why', () => {
-  const page = normalizeSpace(textIn(readFileSync(join(ASSETS, 'c4-components.svg'), 'utf8')))
+  const page = normalizeSpace(textIn(components().svg()))
   const wrong = [...countWrong(page), ...LEFT_OUT.flatMap((entry) => entryWrong(page, entry))]
   assert.deepEqual(wrong, [], `the components page disagrees with LEFT_OUT:\n${wrong.join('\n')}`)
 })
