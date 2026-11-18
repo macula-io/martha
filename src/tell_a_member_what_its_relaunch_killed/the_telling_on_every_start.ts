@@ -11,6 +11,7 @@ import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 
 import {
   KEPT_IN_A_RECORD,
+  releaseKeyOf,
   theKeptText,
   theRecordIn,
   theTellingOf,
@@ -56,11 +57,12 @@ export const theLeftoverRecordOf = (crew: CrewStore, member: string): AKeptRecor
 /** The file a member's releases are kept under: beside its record, in the same place, one file per member. */
 export const theReleaseFileNameOf = (member: string): string => `${member}-released.json`
 
-/** One release as the place keeps it: the path, and the extra value a caller put with it, if any. */
+/** One release as the place keeps it: the path, the bytes it answered, and the worktree the caller put with it, if any. */
 const aReleased = (value: unknown): value is IReleasedPath => {
   if (typeof value !== 'object' || value === null) return false
   const one = value as IReleasedPath
-  return typeof one.path === 'string' && one.path !== '' && (one.worktree === undefined || typeof one.worktree === 'string')
+  return typeof one.path === 'string' && one.path !== '' && typeof one.digest === 'string' && one.digest !== '' &&
+    (one.worktree === undefined || typeof one.worktree === 'string')
 }
 
 /** What a release file holds, read back: the entries it parses, and nothing at all from one nobody can read (rule 3). */
@@ -85,13 +87,12 @@ export const theReleasedPathsOf = (crew: CrewStore, member: string): readonly IR
   return kept === undefined || 'refusal' in kept ? [] : theReleasesIn(kept.text)
 }
 
-/** Why the release could not be kept, or nothing when it was: each path once, the newest release of it last. */
+/** Why the release could not be kept, or nothing when it was: each file-and-digest once, the newest release of it last. */
 export const keepTheReleaseOf = (crew: CrewStore, member: string, released: readonly IReleasedPath[]): string | undefined => {
   const place = crew.place(LEFTOVER_RECORDS_PLACE)
   if ('refusal' in place) return place.refusal
-  const key = (one: IReleasedPath): string => `${one.worktree ?? ''}\u0000${one.path}`
-  const byKey = new Map(theReleasedPathsOf(crew, member).map((one) => [key(one), one]))
-  for (const one of released) byKey.set(key(one), one)
+  const byKey = new Map(theReleasedPathsOf(crew, member).map((one) => [releaseKeyOf(one), one]))
+  for (const one of released) byKey.set(releaseKeyOf(one), one)
   const kept = [...byKey.values()].slice(-KEPT_IN_A_RECORD)
   const refused = place.keep(theReleaseFileNameOf(member), JSON.stringify(kept))
   return refused === undefined ? undefined : refused.refusal

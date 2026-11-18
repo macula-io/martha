@@ -162,12 +162,30 @@ test('a killed file the member did not touch is still refused after an end that 
 test('the release act lets a carried-over leftover through, and the next commit is not refused', () => {
   const afterTheKill = theRecordAfter(anEnd())
   const afterTheStart = theRecordAfter({ ...anEnd({ running: [], mtimes: [] }), replaced: afterTheKill })
-  const released = [{ path: A_FILE.path }]
+  const released = [{ path: A_FILE.path, digest: A_FILE.digest }]
   assert.equal(theRefusalOfACommit(afterTheStart, [{ path: A_FILE.path, digest: A_FILE.digest }], released), undefined)
   // The released path was the only one there was: the telling has nothing left to say, so it is no paragraph at all —
   // never one that still claims the path holds what the run was writing.
   const told = theTellingOf(afterTheStart, released) ?? ''
   assert.doesNotMatch(told, /still hold what it was writing/)
+})
+
+test('#693 r=3 R5: a release answers the bytes it was taken for, and a later run\'s mutant at the same path is refused', () => {
+  const first = theRecordAfter(anEnd())
+  const released = first.leftovers.map((one) => ({ path: one.path, digest: one.digest }))
+  // The bytes the member looked at and answered are committed unrefused.
+  assert.equal(theRefusalOfACommit(first, [{ path: A_FILE.path, digest: A_FILE.digest }], released), undefined)
+  // A second killed run leaves its own mutant at the same path: the release answers none of those bytes.
+  const secondRuns = { ...A_FILE, digest: 'the second run\'s bytes' }
+  const second = theRecordAfter({
+    ...anEnd({ dirty: [secondRuns], mtimes: [anMtime(secondRuns, STARTED_AT)] }),
+    released,
+    replaced: first,
+  })
+  assert.deepEqual(second.leftovers.map((one) => one.digest), [secondRuns.digest])
+  assert.ok(theRefusalOfACommit(second, [{ path: A_FILE.path, digest: secondRuns.digest }], released) !== undefined)
+  // The telling names the bytes that stand now, though the member released the path's older ones.
+  assert.match(theTellingOf(second, released) ?? '', /still hold what it was writing/)
 })
 
 test('a leftover whose bytes changed is not carried over, and is committed', () => {

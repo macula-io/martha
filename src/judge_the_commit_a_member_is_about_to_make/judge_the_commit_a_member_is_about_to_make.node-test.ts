@@ -16,7 +16,7 @@ import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_gi
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theLeftoversRefusal, theRefusalOfTheCommit } from './judge_the_commit_a_member_is_about_to_make.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { keepTheLeftoverRecordOf, theReleasedPathsOf, theTellingOnTheNextStart } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
+import { keepTheLeftoverRecordOf, theLeftoverRecordOf, theReleasedPathsOf, theTellingOnTheNextStart } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import { releaseTheFilesAKilledRunLeft } from '../release_what_a_killed_run_left/release_what_a_killed_run_left.ts'
 import { THE_RELEASE_ACT, theDigestOf, type WhatAKilledRunLeft } from '../tell_a_member_what_its_relaunch_killed/tell_a_member_what_its_relaunch_killed.ts'
 
@@ -97,7 +97,9 @@ test('#693: the member\'s own bytes, staged over the mutant, are the ones commit
 test('#693: a path the member released is not refused, and a deletion in the index has nothing to digest', async (t) => {
   const checkout = aRepoWithAMutant(t)
   git(checkout, ['add', '-A'])
-  assert.equal(await theRefusalOfTheCommit({ processes, directory: checkout, record: theRecordOf(), released: [{ path: A_FILE }] }), undefined)
+  const record = theRecordOf()
+  const released = record.leftovers.map((one) => ({ path: one.path, digest: one.digest }))
+  assert.equal(await theRefusalOfTheCommit({ processes, directory: checkout, record, released }), undefined)
   git(checkout, ['rm', '-q', '--cached', A_FILE])
   assert.equal(await theRefusalOfTheCommit({ processes, directory: checkout, record: theRecordOf() }), undefined)
 })
@@ -171,6 +173,15 @@ test('#693 r=2: a release of a path no record holds is refused, and the path is 
   const told = releaseTheFilesAKilledRunLeft({ crew, member: THE_MEMBER, paths: ['src/not_ours.ts'] })
   assert.ok('refused' in told, JSON.stringify(told))
   assert.deepEqual(theReleasedPathsOf(crew, THE_MEMBER), [])
+})
+
+test('#693 r=3 R5: the act keeps the digest of the bytes it released, not only the path', (t) => {
+  const crew = aCrewHoldingTheRecord(t)
+  const kept = theLeftoverRecordOf(crew, THE_MEMBER)
+  assert.ok(kept !== undefined && !('refusal' in kept) && !('unreadable' in kept), 'the record the act reads is kept')
+  releaseTheFilesAKilledRunLeft({ crew, member: THE_MEMBER, paths: [A_FILE] })
+  const standing = kept.record.leftovers.filter((one) => one.path === A_FILE).map((one) => one.digest)
+  assert.deepEqual(theReleasedPathsOf(crew, THE_MEMBER).map((one) => one.digest), standing)
 })
 
 test('#693 r=2: the telling leaves a released path out, and still names the ones that stand', async (t) => {

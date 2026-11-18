@@ -140,7 +140,7 @@ test('a released leftover is not told as holding the run\'s bytes, though the ki
     crew,
     member: 'a_member',
     now_ms: 2,
-    released: [{ path: 'src/a_slice/a_file.ts' }],
+    released: [{ path: 'src/a_slice/a_file.ts', digest: 'a7f3' }],
   })
   assert.ok(told.telling !== undefined)
   assert.doesNotMatch(told.telling, /still hold what it was writing/)

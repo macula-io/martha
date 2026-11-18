@@ -68,6 +68,12 @@ export interface ILeftover extends IDirtyFile {
 export interface IReleasedPath {
   readonly path: string
   readonly worktree?: string
+  /**
+   * The digest of the bytes the member looked at and said are its own (martha#693 r=3 R5): a release answers those
+   * bytes at that path, and never a later write of the path, so a second killed run's different mutant at a released
+   * path is still refused.
+   */
+  readonly digest: string
 }
 
 /** When a file was last written, as the end read it from the tree: what rule 1 judges against a command's start. */
@@ -127,6 +133,14 @@ export const THE_RELEASE_ACT = 'release_the_files_a_killed_run_left'
 const keyOf = (one: { readonly path: string; readonly worktree?: string }): string =>
   `${one.worktree ?? ''}\u0000${one.path}`
 
+/**
+ * The key a release is matched by: the file it answers, and the digest of the bytes it answered (r=3 R5). Matching a
+ * release by its path alone would let a second killed run's different mutant at that path go through. One spelling,
+ * so the store that keeps a release and the judgement that reads it cannot disagree about what a release answers.
+ */
+export const releaseKeyOf = (one: { readonly path: string; readonly worktree?: string; readonly digest: string }): string =>
+  `${keyOf(one)}\u0000${one.digest}`
+
 const nameOf = (one: { readonly path: string; readonly worktree?: string }): string =>
   one.worktree === undefined ? one.path : `${one.worktree}: ${one.path}`
 
@@ -141,13 +155,16 @@ export const theDirtyOf = (record: WhatAKilledRunLeft): readonly IDirtyFile[] =>
   })
 }
 
-/** `all` without the paths a member released. */
-const theReleasedOut = <One extends { readonly path: string; readonly worktree?: string }>(
+/**
+ * `all` without the files a member released, matched by worktree, path and digest (martha#693 r=3 R5): a release
+ * answers the bytes it was taken for, and bytes written at that path since are judged afresh.
+ */
+const theReleasedOut = <One extends { readonly path: string; readonly worktree?: string; readonly digest: string }>(
   all: readonly One[],
   released: readonly IReleasedPath[] = [],
 ): readonly One[] => {
-  const letGo = new Set(released.map(keyOf))
-  return all.filter((one) => !letGo.has(keyOf(one)))
+  const letGo = new Set(released.map(releaseKeyOf))
+  return all.filter((one) => !letGo.has(releaseKeyOf(one)))
 }
 
 /** The leftovers that still stand, once the paths a member released are out of them (rule 2). */
@@ -269,9 +286,10 @@ const theRunningSaid = (record: WhatAKilledRunLeft): readonly string[] => {
 const theFilesSaid = (record: WhatAKilledRunLeft, released: readonly IReleasedPath[]): readonly string[] => {
   const leftovers = theStandingLeftoversOf(record, released)
   const standingKeys = new Set(leftovers.map(keyOf))
-  // A released path is the member's own answer: it is left out of both sentences, never moved back into the wider one.
-  const letGo = new Set(released.map(keyOf))
-  const dirty = theDirtyOf(record).filter((one) => !standingKeys.has(keyOf(one)) && !letGo.has(keyOf(one)))
+  // A released file is the member's own answer: the bytes it released are left out of both sentences, never moved back
+  // into the wider one — and bytes written at that path since are told, because they are not what the member answered.
+  const letGo = new Set(released.map(releaseKeyOf))
+  const dirty = theDirtyOf(record).filter((one) => !standingKeys.has(keyOf(one)) && !letGo.has(releaseKeyOf(one)))
   const leftSaid =
     leftovers.length === 0
       ? []
