@@ -10,7 +10,8 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative } from 'node:path'
+import { delimiter, dirname, join, relative } from 'node:path'
+import process from 'node:process'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
@@ -64,10 +65,15 @@ function aChange (dir, path) {
   return git(dir, 'rev-parse', 'HEAD')
 }
 
-/** The script, run from `dir`'s copy, packing `sha` to a layer under `root`. @param {string} root @param {string} dir @param {string} sha */
-function pack (root, dir, sha) {
+/**
+ * The script, run from `dir`'s copy, packing `sha` to a layer under `root`. With `pathFirst`, that folder comes first
+ * on the script's PATH.
+ * @param {string} root @param {string} dir @param {string} sha @param {string} [pathFirst]
+ */
+function pack (root, dir, sha, pathFirst) {
   const out = join(root, 'layer.tar.gz')
-  const run = spawnSync('bash', [join(dir, relative(REPO, SCRIPT)), sha, out], { encoding: 'utf8' })
+  const env = pathFirst === undefined ? process.env : { ...process.env, PATH: `${pathFirst}${delimiter}${process.env.PATH}` }
+  const run = spawnSync('bash', [join(dir, relative(REPO, SCRIPT)), sha, out], { encoding: 'utf8', env })
   return { status: run.status, said: `${run.stdout}${run.stderr}`, packed: existsSync(out) }
 }
 
@@ -87,6 +93,21 @@ test('main whose installer/ is its tag\'s passes the check and goes on to the re
   assert.doesNotMatch(said, new RegExp(NOT_PACKABLE))
   assert.match(said, /^dry: the installer's own dependencies could not be installed$/m)
   assert.equal(status, COULD_NOT_RUN_EXIT, said)
+})
+
+test('a comparison git cannot make, after the tag was found, exits as could-not-run in the packer\'s words', (t) => {
+  const { root, dir } = aRepository(t, { tagged: true })
+  const sha = aChange(dir, join('installer', 'a_module.mjs'))
+  // A git that refuses only `diff`, first on the script's PATH: every other git call is the real one.
+  const shim = join(root, 'shim')
+  mkdirSync(shim)
+  const realGit = spawnSync('bash', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim()
+  writeFileSync(join(shim, 'git'), `#!/bin/bash\nfor a in "$@"; do [ "$a" = diff ] && { echo 'the shim refuses diff' >&2; exit 128; }; done\nexec ${realGit} "$@"\n`, { mode: 0o755 })
+  const { status, said, packed } = pack(root, dir, sha, shim)
+  assert.match(said, new RegExp(`^dry: git could not compare installer/ at ${sha} with ${installerRef(NAMES.installerVersion)}$`, 'm'))
+  assert.doesNotMatch(said, new RegExp(NOT_PACKABLE))
+  assert.equal(status, COULD_NOT_RUN_EXIT, said)
+  assert.equal(packed, false)
 })
 
 test('a tree with no tag for its installer version is left to the pin, never called not packable', (t) => {

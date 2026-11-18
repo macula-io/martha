@@ -43,7 +43,8 @@ INSTALLER_TAG="$(node --input-type=module -e 'const { installerRef } = await imp
   "${TREE}/installer/keep_the_names_in_one_place/names.mjs" "${INSTALLER_VERSION}")" \
   || { echo "dry: the tree at ${SHA} could not name its installer tag" >&2; exit 2; }
 if git -C "${TREE}" rev-parse --verify --quiet "${INSTALLER_TAG}^{commit}" > /dev/null; then
-  DRIFT="$(git -C "${TREE}" diff --name-only "${INSTALLER_TAG}" HEAD -- installer)"
+  DRIFT="$(git -C "${TREE}" diff --name-only "${INSTALLER_TAG}" HEAD -- installer)" \
+    || { echo "dry: git could not compare installer/ at ${SHA} with ${INSTALLER_TAG}" >&2; exit 2; }
   if [[ -n "${DRIFT}" ]]; then
     echo "dry: not packable: installer ahead of its tag: installer/ at ${SHA} is not what ${INSTALLER_TAG} published ($(wc -l <<< "${DRIFT}") file(s)); nothing was packed" >&2
     exit 3
