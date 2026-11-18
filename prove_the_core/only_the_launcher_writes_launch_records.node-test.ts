@@ -36,7 +36,6 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'keep_the_crews_files_as_directories',
     'empty_directory_of_a_launch',
     'linux_process_identity',
-    'owners_settings_directory',
     'row_streams_directory',
   ])
   assert.deepEqual(declaredHostGlue(repository, 'hostAdapters'), [

@@ -3,7 +3,7 @@
 // The things Martha's run time asks of the Node under it (martha#547, package S3), each checked on the Node that runs
 // this file, through Martha's own code where Martha has it:
 //   - file sync: a file written whole through a temporary name, fsynced and renamed into place
-//     (writeTheOwnersSettingsBack, as every crew file is kept);
+//     (keepTheCrewsFilesAsDirectories, as every crew file is kept);
 //   - child process groups: a detached child leads a group of its own, and killing the group ends what it started
 //     (how a launch and the relay probe are ended);
 //   - Unix sockets: an HTTP request answered over a socket at a path no longer than Martha allows (the relay);
@@ -22,7 +22,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
-import { writeTheOwnersSettingsBack } from '../src/owners_settings_directory/owners_settings_directory.ts'
+import { keepTheCrewsFilesAsDirectories } from '../src/keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { npmBesideNode } from '../src/run_the_nodes_own_npm_alone/run_the_nodes_own_npm_alone.ts'
 import { longestSocketPath } from '../src/serve_the_relay_to_a_launch/relay_directory.ts'
 
@@ -31,11 +31,12 @@ type Check = (dir: string) => Promise<string | undefined>
 const GROUP_GONE_WITHIN_MS = 10_000
 
 async function fileSync(dir: string): Promise<string | undefined> {
-  const file = join(dir, 'kept.json')
-  const bytes = Buffer.from('{"kept":1}\n')
-  const refused = writeTheOwnersSettingsBack(file, bytes, 0o600)
+  const place = keepTheCrewsFilesAsDirectories(dir).place('kept')
+  if ('refusal' in place) return place.refusal
+  const text = '{"kept":1}\n'
+  const refused = place.keep('kept.json', text)
   if (refused !== undefined) return refused.refusal
-  return readFileSync(file).equals(bytes) ? undefined : 'the file read back is not the bytes written'
+  return readFileSync(join(place.path, 'kept.json'), 'utf8') === text ? undefined : 'the file read back is not the bytes written'
 }
 
 /** Whether any process is left in the group `group`. */

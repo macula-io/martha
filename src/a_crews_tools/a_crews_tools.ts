@@ -18,7 +18,7 @@ import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { theLineToHandAtStart, type TheStartLine } from '../hand_a_member_its_crew_text/the_start_line.ts'
-import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores, ToolNames } from '../host_contract/host_contract.ts'
+import type { DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores, ToolNames } from '../host_contract/host_contract.ts'
 import { VERIFY_RANGE_TOOL, verifyTheRangeOver } from '../check_a_range_before_the_owner_says_yes/the_verify_range_tool.ts'
 import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { THE_CHANNEL_READ_ASK, theChannelReadAsk } from '../keep_the_crew_channel/the_channel_read.ts'
@@ -36,8 +36,6 @@ import { finishAWorktree, openAWorktree, type WorktreeAnswer, type WorktreesRequ
 import { WORKTREE_FINISH_TOOL, WORKTREE_OPEN_TOOL, theWorktreeToolOver } from '../open_and_finish_a_worktree/the_worktree_tools.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL, theParkToolOver, type AParkAsked } from '../park_and_wake_a_member/the_park_tools.ts'
-import type { AGuardedSwitch, OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
-import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack, type AnOrderAsked } from '../put_the_owners_model_back/the_guarded_switch.ts'
 import { menusTheLauncherKeeps, type TheOwnersMenus } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import {
   LIST_ASKS_TOOL,
@@ -60,6 +58,7 @@ import {
 } from '../refuse_calls_outside_the_package_contract/the_acts_of_a_call.ts'
 import type { TheContractHanded } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 import {
+  CARRY_A_MODEL,
   THE_REFRESH_ASK,
   aSwitchMayFollow,
   askAMemberToRefresh,
@@ -67,6 +66,7 @@ import {
   theQuestionIn,
   theRefreshAct,
   type TheAct,
+  type TheOrder,
   type TheRefreshPlaces,
   type TheSessionsQuestion,
 } from '../refresh_a_member/the_refresh_flow.ts'
@@ -86,17 +86,16 @@ import {
   BEAT_INTERVAL_MS,
   SPEND_FIELD,
   beatAfter,
-  rowAfterASwitch,
   theRowWithNothingSaid,
   type AUnitOnARow,
   type DashboardRow,
   type DashboardStore,
-  type TheOwnersDefaultTold,
 } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { READ_THE_RECEIPTS_TOOL, theReceiptsOver } from '../show_what_a_message_became/the_receipts_tool.ts'
 import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
+import { modelPlace, theModelOf, theSwitchDirected } from '../switch_a_members_model/switch_a_members_model.ts'
 import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
@@ -186,12 +185,6 @@ export interface CrewToolPlaces {
    * which model runs it, as the adapter records it. A place given none holds no review to the crew's reviewer model.
    */
   readonly spawn?: ASpawnedAgent
-  /**
-   * The owner's own settings file, and where the one lock that guards it lives (martha#359): the file the host's model
-   * command saves the switched model into as the owner's default. A launch given none refuses a switch by name, because
-   * a switch that cannot be put back would leave the owner's every new session on the member's model.
-   */
-  readonly owners_settings?: OwnersDefaultPlace | Refused
   /**
    * What hands this member the crew's messages it has not taken in (martha#253). The mod asks for one each time it
    * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
@@ -329,19 +322,6 @@ interface SessionState {
   row_model: string
   /** The share each session began at, by session id (martha#255): every refresh threshold is measured from it. */
   readonly began_at: Map<string, number>
-  /**
-   * The owner's settings one switch has guarded and not yet put back (martha#359): the lock it holds, the record to
-   * keep, and the file's bytes as they were. It is taken when the order goes out and released when the host reports, so
-   * a second switch waits for it rather than building its record on the first one's half-finished work.
-   */
-  guarded: AGuardedSwitch | null
-  /**
-   * What the owner's file needs of the owner, for the turn's one row write (martha#359): a reason and the line the row
-   * said before it, so a switch that was not put back is said once, in the row the turn already writes, and a finished
-   * one takes its own line away. It is folded into that write rather than written beside it: a beat taken at the same
-   * clock value as the row already there is dropped whole.
-   */
-  owner_needs: TheOwnersDefaultTold | null
   /** The one hold on the end of a running turn this launch keeps (martha#311). */
   readonly ends: TheEndsHold
 }
@@ -369,8 +349,6 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools {
     row_model: held.launched_on ?? '',
     began_at: held.began_at ?? new Map<string, number>(),
     ends: holdingTheEnds(),
-    guarded: null,
-    owner_needs: null,
   }
   const handlers = handlersOver(held, state)
   // One budget over this launch's places (martha#513, slice 3): it reads a package's spend once per session and keeps
@@ -462,7 +440,7 @@ async function answerAnAskOfTheMods(
   const channel = await answerAChannelAsk(places.carrier, name, args)
   if (channel !== undefined) return channel
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
-  if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
+  if (name === THE_MODEL_REPORT_ASK) return theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
   return undefined
 }
@@ -502,17 +480,13 @@ async function theSessionsAct(
 ): Promise<CoreToolAnswer> {
   const question = theQuestionIn(args, from)
   if (typeof question === 'string') return { refused: question }
-  // A switch whose report never came (martha#359): the mod reports the host's command before it asks this question
-  // again, so a guard still open here is one no session is coming back for. It is closed without waiting — the host's
-  // save may still land, and the record it leaves is what the next launch finishes.
-  await closeTheGuardNoOneReported(anOrderOver(places, state))
   const act = await theRefreshAct(refreshPlacesOf(places, state), question)
   const ordered = theOrderOf(act)
-  const switching = aSwitchMayFollow(ordered, question) ? await theModelOrder(anOrderOver(places, state)) : null
+  const switching = aSwitchMayFollow(ordered, question) ? theModelOrder(triggerPlaceOf(places)) : null
   // What the package has spent, through the one budget this launch keeps: a session's first question is where that
   // read happens, so the row costs nothing a call would not have cost anyway (martha#513, slice 3).
   const spend = theSpendOnARow(await budget.theSpendInForce(from))
-  writeRow(places, state, (row) => theRowAfterTheTurn(state, row, question, act, spend))
+  writeRow(places, state, (row) => theRowAfterTheTurn(row, question, act, spend))
   return { answer: JSON.stringify(switching ?? ordered) }
 }
 
@@ -521,7 +495,6 @@ async function theSessionsAct(
  * doing, because the row store keeps the newest beat and two writes in the same millisecond would lose the second.
  */
 function theRowAfterTheTurn(
-  state: SessionState,
   row: DashboardRow,
   question: TheSessionsQuestion,
   act: TheAct,
@@ -529,16 +502,7 @@ function theRowAfterTheTurn(
 ): DashboardRow {
   const host = { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd }
   const refresh = act.refresh === undefined ? {} : { refresh: act.refresh }
-  return { ...row, ...refresh, needs: theNeedsAfter(state, row), session: question.session_id, host, [SPEND_FIELD]: spend }
-}
-
-/** The row's `needs` after this turn (martha#359): what the owner's file said, or its own line taken away again. */
-function theNeedsAfter(state: SessionState, row: DashboardRow): string {
-  const told = state.owner_needs
-  if (told === null) return row.needs
-  state.owner_needs = null
-  if (told.why !== '') return told.why
-  return told.before.includes(row.needs) ? '' : row.needs
+  return { ...row, ...refresh, session: question.session_id, host, [SPEND_FIELD]: spend }
 }
 
 /**
@@ -583,10 +547,6 @@ function beatsOf(store: DashboardStore, settings: CrewSettings): Readonly<Record
 /** Where a model switch is recorded, for the return a park, a report or the return tool makes of it (martha#315). */
 const triggerPlaceOf = (places: CrewToolPlaces): TheTriggerPlace => ({ stores: places.stores, member: places.member, ledger: places.ledger })
 
-/** What an order is decided over: where the switch is recorded, the owner's settings file, and this session's guard. */
-const anOrderOver = (places: CrewToolPlaces, state: SessionState): AnOrderAsked => ({ ...triggerPlaceOf(places), owners: places.owners_settings, session: state })
-
-/** What the owner's list is handed: the streams, this member, the declaration's table, and the checkout its checks run in. */
 const theOwnersListAsked = (places: CrewToolPlaces, settings: CrewSettings) => ({
   ledger: places.ledger,
   member: places.member,
@@ -858,21 +818,37 @@ function writeRow(places: CrewToolPlaces, state: SessionState, change: (row: Das
 }
 
 /**
+ * The order that makes a recorded switch real, or null when there is nothing to direct (martha#315): one exact shape,
+ * `{carry: 'model', model}`, which the mod answers with the host's own model command once the turn has ended. The
+ * record is marked directed before the order goes back, so the same switch is not handed over twice.
+ *
+ * Nothing about the owner's own default is guarded here (martha#632): since martha#602 a member's host runs on a config
+ * folder of its own, so its model command saves into that folder and never into the owner's settings.
+ *
+ * Every model in a record is one the declaration names, because a switch is refused for a member that declares none
+ * (r=2), so there is no model here that cannot be spelled as the host's command argument.
+ */
+function theModelOrder(place: TheTriggerPlace): TheOrder | null {
+  const models = modelPlace(place)
+  if ('refusal' in models) return null
+  const current = theModelOf(models, place.member)
+  if (current.kind === 'unreadable') return null
+  const marker = current.kind === 'switched' ? current.marker : current.last_marker
+  if (marker === null || marker.directed) return null
+  const model = marker.switched ? marker.model : marker.home
+  return 'refusal' in theSwitchDirected(place, place.member, marker) ? null : { carry: CARRY_A_MODEL, model }
+}
+
+/**
  * What the mod says once the host's model command resolved (martha#315): the model this session runs on, written into
  * the row. It is the only writer of a switched model, so the row never says a switch the host has not made.
- *
- * It is also where the owner's default is put back (martha#359): the host's save is waited for in the file, never
- * assumed from this answer, and the record a crash would need is kept before the restore. What was not put back is said
- * in the row's `needs` and in this answer, which is all the member is told — the mod carries this answer no further.
  */
-async function theModelReported(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+function theModelReported(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): CoreToolAnswer {
   const model = textOf(args['model'])
   if (model === '') return { refused: 'a session reporting its model names it, and this one named none' }
-  const putBack = await theOwnersDefaultPutBack(anOrderOver(places, state))
   state.row_model = model
-  writeRow(places, state, (row) => rowAfterASwitch(row, putBack))
-  const noted = `Noted: this row says ${model}.`
-  return { answer: putBack.why === '' ? noted : `${noted} ${putBack.why}` }
+  writeRow(places, state, (row) => row)
+  return { answer: `Noted: this row says ${model}.` }
 }
 
 /** The places the refresh flow decides over: the crew's own store, the row, the stamps, and where this session began. */

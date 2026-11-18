@@ -2,7 +2,6 @@
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
-import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
 import { LONGEST_MESSAGE } from '../send_a_crew_message/send_a_crew_message.ts'
@@ -12,8 +11,6 @@ export const COINCIDENCES: readonly Exception[] = [
   // (martha#343). Both spell the word the crew's park place is named with, and neither is that place.
   { value: PARKED_PLACE, file: 'a_crews_tools/the_park_tool_keeps_the_marker.node-test.ts', reason: 'the state a park marker reads back as, and the argument the one tool used to take; the crew\'s park place is named the same word and is not this' },
   { value: CARRY_A_MODEL, file: 'a_crews_tools/the_model_tools_answer_the_crew.node-test.ts', reason: 'the arguments the switch tool takes, as its own schema declares them' },
-  // A test's bound on another process's step, and a figure its own clock makes (martha#441): each is the same number as
-  // a value the tree defines and neither is that value.
-  { value: HOST_ANSWER_TIMEOUT_MS, file: 'a_crews_tools/a_switch_leaves_the_owners_default_alone.node-test.ts', reason: 'how long a step of another process may take before a test calls it stuck; the tree\'s half minute is a launch\'s wait for a host answer, which this test does not drive' },
+  // A figure a test's own clock makes (martha#441): the same number as a value the tree defines, and not that value.
   { value: LONGEST_MESSAGE, file: 'a_crews_tools/the_who_is_free_tool_answers_the_supervisor.node-test.ts', reason: 'the elapsed time a report is given, as two beats of the test\'s own clock make it; the tree\'s twenty thousand is the longest text one message may carry' },
 ]

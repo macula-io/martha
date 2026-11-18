@@ -113,6 +113,9 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: [`a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL ${GONE}`],
   },
   {
+    what: 'a constant the change removes, its value still held by another exported constant, which is no copy of it', base: { ...TOOL, 'b_keep/b_keep.ts': "export const KEPT = 'the-tool'\n" }, head: { 'a_tool/a_tool.ts': '' }, prints: [],
+  },
+  {
     what: 'a file the change moves, its constant removed, with a copy left',
     base: { 'a_tool/a_tool.ts': `${FILLER}export const TOOL = 'the-old-value'\n`, 'a_user/a_user.ts': "call('the-old-value')\n" },
     head: { 'a_tool/a_tool.ts': '', 'b_tool/b_tool.ts': FILLER },
