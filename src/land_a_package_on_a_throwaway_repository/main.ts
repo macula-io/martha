@@ -7,6 +7,11 @@
 //   node src/land_a_package_on_a_throwaway_repository/main.ts clean-start <start.json> < every path under the home, one per line
 //   node src/land_a_package_on_a_throwaway_repository/main.ts redact <token file>     < a transcript bound for the kept record
 //   node src/land_a_package_on_a_throwaway_repository/main.ts screen <placed|not-placed> < a member's screen bound for the kept record
+//   node src/land_a_package_on_a_throwaway_repository/main.ts claims <night.json>     < nothing (the night file names both transcripts)
+//
+// `claims` reads the night's package, range, builder and reviewer, and the two members' transcript paths, from the
+// night file (package, range, builder, reviewer, builder_transcript, reviewer_transcript), and exits 1 naming the first
+// of section 6's four crew rows the transcripts do not show.
 //
 // Exit 0 the guard holds, 1 it refuses, naming why on standard error, 2 it could not look. `redact` writes the text,
 // redacted, to standard output either way, and exits 1 when a token had reached it. `expiry` exits 0 with a note on
@@ -21,6 +26,7 @@ import { readFileSync } from 'node:fs'
 import { whatTheStartWouldLoad, type TheStart } from './a_clean_start.ts'
 import { whatTheRunMadeIn, whyNotDelete } from './the_delete_guard.ts'
 import { keepAScreen, redactTheToken, THE_TOKEN_REACHED_THE_RECORD, TOKEN_NOT_PLACED, TOKEN_PLACED } from './the_kept_record.ts'
+import { whichCrewClaimFails, type TheNight } from './the_nights_claims.ts'
 import { theTokensExpiry } from './the_tokens_expiry.ts'
 import { whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 
@@ -92,7 +98,22 @@ const screen = (argument: string, input: string): Said => {
   return { code: 0, out: keepAScreen(input, argument === TOKEN_PLACED).text }
 }
 
-const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact, screen }
+/** The fields a night file must carry, each a non-empty string. */
+const NIGHT_FIELDS = ['package', 'range', 'builder', 'reviewer', 'builder_transcript', 'reviewer_transcript'] as const
+
+/** Section 6's four crew rows, read from the two transcripts the night file names. Nothing on standard input is read. */
+const claims = (argument: string): Said => {
+  const night = readJson(readFileSync(argument, 'utf8'))
+  if (typeof night !== 'object' || night === null) return couldNotLook(`${argument} is not a night's JSON object`)
+  const field = (name: (typeof NIGHT_FIELDS)[number]): unknown => (night as Record<string, unknown>)[name]
+  const missing = NIGHT_FIELDS.filter((name) => typeof field(name) !== 'string' || field(name) === '')
+  if (missing.length > 0) return couldNotLook(`${argument} names no ${missing.join(', ')}`)
+  const said = (name: (typeof NIGHT_FIELDS)[number]): string => field(name) as string
+  const theNight: TheNight = { package: said('package'), range: said('range'), builder: said('builder'), reviewer: said('reviewer') }
+  return verdictOf(whichCrewClaimFails(theNight, readFileSync(said('builder_transcript'), 'utf8'), readFileSync(said('reviewer_transcript'), 'utf8')))
+}
+
+const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact, screen, claims }
 
 /** What the guard named by `args` says of `input`. Anything it cannot read is exit 2, never a pass. */
 export function runTheGuard(args: readonly string[], input: string): Said {

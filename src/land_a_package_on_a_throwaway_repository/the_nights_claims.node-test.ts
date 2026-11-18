@@ -3,9 +3,14 @@
 // expected lines are written out here, never built with the function under test.
 
 import assert from 'node:assert/strict'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { framed } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { runTheGuard } from './main.ts'
 import { HANDOFF_ARRIVED, HANDOFF_SAID, theMembersRecords, theNightsLine, VERDICT_ARRIVED, VERDICT_SAID, whichCrewClaimFails, type TheNight } from './the_nights_claims.ts'
 
 const BASE = 'a'.repeat(40)
@@ -135,4 +140,44 @@ test('a verdict that never reached the builder fails the fourth row', () => {
 
 test('a transcript line that is not JSON is never read as a transcript holding nothing', () => {
   assert.throws(() => theMembersRecords(`${aCall(T1, HANDOFF)}\n{not json\n`), /line 2 of the transcript is not JSON/)
+})
+
+// --- the claims verb: the run's bash hands it a night file naming both transcripts ----------------------------------
+
+/** A night file in a folder of its own, removed after the test, naming the two transcripts written beside it. */
+const aNightFile = (t: { after: (fn: () => void) => void }, builder: string, reviewer: string, change: Record<string, unknown> = {}): string => {
+  const folder = mkdtempSync(join(tmpdir(), 'martha-639-claims-'))
+  t.after(() => removeTheTree(folder))
+  writeFileSync(join(folder, 'builder.jsonl'), builder)
+  writeFileSync(join(folder, 'reviewer.jsonl'), reviewer)
+  const night = { ...NIGHT, builder_transcript: join(folder, 'builder.jsonl'), reviewer_transcript: join(folder, 'reviewer.jsonl'), ...change }
+  writeFileSync(join(folder, 'night.json'), JSON.stringify(night))
+  return join(folder, 'night.json')
+}
+
+test('the claims verb holds (0) when both transcripts show the four rows', (t) => {
+  assert.deepEqual(runTheGuard(['claims', aNightFile(t, GOOD_BUILDER, GOOD_REVIEWER)], ''), { code: 0 })
+})
+
+test('the claims verb refuses (1) naming the first row that fails: a FAIL is not the night\'s verdict', (t) => {
+  const failed = builderOf(aTurn(T2, `[crew #1] ada: ${HANDOFF}`), aCall(T3, VERDICT.replace(' PASS ', ' FAIL ')))
+  const said = runTheGuard(['claims', aNightFile(t, GOOD_BUILDER, failed)], '')
+  assert.equal(said.code, 1)
+  assert.match(said.err ?? '', new RegExp(`^${VERDICT_SAID}: `))
+})
+
+test("the claims verb reads the members from the night file: builder and reviewer swapped fail the handoff's arrival", (t) => {
+  const said = runTheGuard(['claims', aNightFile(t, GOOD_BUILDER, GOOD_REVIEWER, { builder: NIGHT.reviewer, reviewer: NIGHT.builder })], '')
+  assert.equal(said.code, 1)
+  assert.match(said.err ?? '', new RegExp(`^${HANDOFF_ARRIVED}: no turn from bo in ada's transcript`))
+})
+
+test('a night file missing a field, a transcript that is not there, or one that is not JSON is could-not-look (2), never a pass', (t) => {
+  for (const name of ['package', 'range', 'builder', 'reviewer', 'builder_transcript', 'reviewer_transcript']) {
+    const said = runTheGuard(['claims', aNightFile(t, GOOD_BUILDER, GOOD_REVIEWER, { [name]: '' })], '')
+    assert.equal(said.code, 2, name)
+    assert.match(said.err ?? '', new RegExp(`names no ${name}`), name)
+  }
+  assert.equal(runTheGuard(['claims', aNightFile(t, GOOD_BUILDER, GOOD_REVIEWER, { reviewer_transcript: '/nonexistent/martha-639' })], '').code, 2)
+  assert.equal(runTheGuard(['claims', aNightFile(t, `${GOOD_BUILDER}{not json\n`, GOOD_REVIEWER)], '').code, 2)
 })
