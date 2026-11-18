@@ -222,12 +222,26 @@ function constantValueIn(text: string, name: string, path: string): string {
   return value
 }
 
+/** The platform extension that served skills before the engine's own setting did (martha#614). */
+export const SKILLS_EXTENSION = 'skills'
+
 /**
  * The config root's line switching skills off the model, for an engine that declares the switch and
  * leaves skills on when it is unset; an engine with no such setting is left to the extensions mapping,
- * and one whose unset value already keeps skills away needs no line at all.
+ * and one whose unset value already keeps skills away needs no line at all. An engine with neither the
+ * setting nor the extension offers the model every skill with nothing to switch off: that is refused by
+ * name, never launched in silence (upstream removed the extension, and a sync without the port is that).
  */
 export function skillsSwitchedOffIn(source: string): string[] {
   const skills = skillsSwitchIn(source)
-  return skills === undefined || !skills.whenUnset ? [] : [`${skills.setting}: false`]
+  if (skills === undefined) {
+    if (!platformExtensionKeysIn(source).includes(SKILLS_EXTENSION)) {
+      throw new Error(
+        `the engine declares no skills switch in ${SKILLS_SWITCH_SOURCE} and no ${SKILLS_EXTENSION} extension: ` +
+          'its model would be offered every skill with nothing to switch off',
+      )
+    }
+    return []
+  }
+  return skills.whenUnset ? [`${skills.setting}: false`] : []
 }

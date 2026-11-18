@@ -88,8 +88,33 @@ function anEngineWithASkillsSwitch(setting: string, whenUnset: boolean): string 
   })
 }
 
+/** The extensions map of an engine from before the switch: Developer, and Skills as an extension of its own. */
+const THE_EXTENSIONS_MAP_WITH_SKILLS = THE_EXTENSIONS_MAP.replace(
+  '    map\n',
+  [
+    '    map.insert(',
+    '        crate::skills::EXTENSION_NAME,',
+    '        PlatformExtensionDef {',
+    '            default_enabled: true,',
+    '            hidden: false,',
+    '        },',
+    '    );',
+    '    map',
+    '',
+  ].join('\n'),
+)
+
 /** The engine before the switch existed: no such setting, and skills switched off as an extension. */
 function anEngineWithNoSkillsSwitch(): string {
+  return anEngineSource({
+    [PLACES.extensions]: THE_EXTENSIONS_MAP_WITH_SKILLS,
+    [PLACES.developer]: DEVELOPER,
+    'crates/goose/src/skills/client.rs': 'pub static EXTENSION_NAME: &str = "skills";\n',
+  })
+}
+
+/** An engine after upstream dropped the extension but without the port: neither a setting nor an extension. */
+function anEngineWithNeither(): string {
   return anEngineSource({
     [PLACES.extensions]: THE_EXTENSIONS_MAP,
     [PLACES.developer]: DEVELOPER,
@@ -126,6 +151,12 @@ test("an engine with no skills setting gets no line: the extensions mapping is t
   const { text } = theConfigA(engine)
   assert.doesNotMatch(text, /SKILLS/, 'no skills line is invented for an engine that has none')
   assert.match(text, /^  developer:$/m, 'and the engine still gets its extension switches')
+  assert.match(text, /^  skills:\n    enabled: false$/m, 'skills switched off as that engine spells it')
+})
+
+test('an engine with neither the skills setting nor the skills extension is refused by name (martha#614)', () => {
+  const engine = anEngineWithNeither()
+  assert.throws(() => theConfigA(engine), /declares no skills switch .* and no skills extension: its model would be offered every skill/)
 })
 
 test('a setting named by a constant the engine never defines is said out loud, not skipped (martha#614)', () => {
