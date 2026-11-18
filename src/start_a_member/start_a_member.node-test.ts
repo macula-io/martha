@@ -276,6 +276,8 @@ const BEATS_A_ROW_WAITS = 4
 test('#710: martha start builds crew tools that hold the window of the tools its host served, so the beat writes them on the row (mutants: the served window dropped where the launch builds its crew tools; the watch lost before the beat)', async (t) => {
   // Through the start itself, as an owner runs it: the host table, the Claude Code entry and the crew tools it builds,
   // with the crew's own store. A test that built its own tools would stay green while the launch dropped the watch.
+  // The builder also takes this machine's processes; the test calls no crew tool that acts, so none of them is touched,
+  // and it must stay that way (martha#710).
   const place = placeFor(t, {})
   await declared(place)
   const fake = fakeClaude(place)
@@ -291,7 +293,7 @@ test('#710: martha start builds crew tools that hold the window of the tools its
   await until(`${member}'s row to carry ${CREW_TOOLS_FIELD}`, () => rows.read(member)?.[CREW_TOOLS_FIELD] !== undefined, t, undefined, () =>
     Date.now() - since < BEATS_A_ROW_WAITS * BEAT_INTERVAL_MS
       ? undefined
-      : `the crew tools a Claude Code launch builds carry no served window: ${member}'s beat wrote no ${CREW_TOOLS_FIELD} in ${BEATS_A_ROW_WAITS} beats (martha#710)`)
+      : `the crew tools a Claude Code launch builds carry no served window, or its look failed: ${member}'s beat wrote no ${CREW_TOOLS_FIELD} in ${BEATS_A_ROW_WAITS} beats (martha#710)`)
 })
 
 test('#541: a member the declaration names the engine for is refused by name, and no other host is started (mutant: the table keyed by the crew\'s host)', async (t) => {
