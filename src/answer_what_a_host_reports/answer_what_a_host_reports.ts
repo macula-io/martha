@@ -8,20 +8,33 @@
 // tree as it was when the owner approved the launch (what a read is exempt against, martha#127).
 //
 // What it answers (1b) is the delivery family, in the contract's words: a session's start (`AStartingSession`), a turn
-// (`ArrivingTurn`), and a review the host saw fail (`AReviewTheHostSawFail`). A tool call and a tool result are added
-// by the pull requests that move them (2, 3). Until then the handlers still in the adapter ask this file for the
-// state, and for a refreshed session's take-in; each of those members goes when its last caller moves.
+// (`ArrivingTurn`), and a review the host saw fail (`AReviewTheHostSawFail`). And (2) a called tool (`ACalledTool`),
+// allowed or denied before it runs. A tool result is added by the pull request that moves it (3). Until then the
+// handlers still in the adapter ask this file for the state, and for a refreshed session's take-in; each of those
+// members goes when its last caller moves.
 //
 // It names no host: the types it takes are the slices' and the contract's own, and a host's facts arrive already
 // translated by the adapter (packages 2-4's design, comment 6941097792): a start as the outcome its host's table gives
 // it, a turn with the arrival the host's origins give it, and the envelope a host writes for a failed agent as a value
 // the launcher hands in.
 
-import type { CrewTools, TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
-import type { ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
+import { theContractACrewHolds, type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
+import { answerToolCall, whatTheCrewRefusesOfACall, type ApprovedLaunch, type ToolCall } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { startSessionAs } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
-import type { AReviewTheHostSawFail, ArrivingTurn, AStartingSession, TheAnswerToAStart, TheAnswerToATurn, TurnSource } from '../host_contract/host_contract.ts'
+import { agentsToHold, runOf, type AgentRun, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
+import { noteTheCallCounted, theSpendACrewHolds } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
+import type {
+  ACalledTool,
+  AReviewTheHostSawFail,
+  ArrivingTurn,
+  AStartingSession,
+  TheAnswerToACall,
+  TheAnswerToAStart,
+  TheAnswerToATurn,
+  ToolNames,
+  TurnSource,
+} from '../host_contract/host_contract.ts'
 import type { LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import {
   nameTheFailedReviewIn,
@@ -29,6 +42,8 @@ import {
   type TheReviewSpawns,
   type WhereTheFailedReviewIsTold,
 } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
+import type { GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
+import type { Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { approvedStartTreeOf } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { type HostSession, rememberSession, takeInTurn } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -64,7 +79,41 @@ export interface ThePlacesAHostReportsOver {
   readonly failed_review_report?: TheReportTheHostWrites | undefined
   /** Where a line about a failed review goes (martha#390): the owner's row and the member. Absent, nothing is told. */
   readonly told?: WhereTheFailedReviewIsTold | undefined
+  /**
+   * The agents the host started under this launch's sessions (martha#170). One table, made once by the launcher: a
+   * called tool writes it here, and the adapter's agent start, stop and result read it until they move (PR 3).
+   */
+  readonly agents: TheRunTable
+  /** Who may send executable text, as the launch's policy says. */
+  readonly policy: Policy
+  /** How the host names a called tool: its `host.tools`. */
+  readonly names: ToolNames
+  /** What the gate does to this member (martha#321); absent means enforced. */
+  readonly gate?: GateMode | undefined
+  /**
+   * Where an audited member's would-be refusals are kept (martha#321); absent, an audited member's call is refused. Typed
+   * by the gate's own call, so the entry carries the place without naming the audit, which only its five places may.
+   */
+  readonly audit?: ToolCall['audit']
+  /**
+   * The member's signed runs (martha#129); a member without them runs no shape. Only the half the entry calls is named
+   * here: the signed runs are host glue, which no slice imports, and the adapter hands its own table in.
+   */
+  readonly signed_runs?: { callAllowed(tool: string, input: Readonly<Record<string, unknown>>): void } | undefined
+  /**
+   * Why a call's input writes the owner's settings files (martha#122), or undefined: the adapter's own decision, closed
+   * over the files its host reads, the launch's directory and the owner's home. Asked first of all.
+   */
+  refusesAWriteToTheOwnersSettings(input: Readonly<Record<string, unknown>>): string | undefined
+  /**
+   * Why a call writes where the owner's sessions load memory from (martha#136), or undefined: the adapter's own
+   * decision, closed over its host's places and the machine. Asked second.
+   */
+  refusesAWriteToTheOwnersMemory(tool: string, input: Readonly<Record<string, unknown>>): string | undefined
 }
+
+/** The table of one launch's agents, made once by the launcher: the entry's call writes it, the adapter's agent handlers read it. */
+export const agentRunsKept = (): TheRunTable => new Map<string, AgentRun>()
 
 /**
  * One launch's answers, as the adapter reaches them while its handlers have not all moved: the record, the sessions,
@@ -107,6 +156,12 @@ export interface TheAnswersOfOneLaunch {
    * not be kept. The mod's tool call still asks it here until it moves (martha#541, PR 3).
    */
   takeInARefreshedSession(session_id: string): Promise<string | undefined>
+  /**
+   * A called tool, before it runs: allowed, or denied and why. Each refusal is asked in its order (the owner's settings,
+   * their memory, the gate, the crew's reviewer-model rule, a held end), and an allowed call is counted against the
+   * package's spend before it is allowed (martha#513).
+   */
+  aToolCalled(call: ACalledTool): Promise<TheAnswerToACall>
 }
 
 /** The answers one launch gives, over the sessions it has taken a start of. */
@@ -156,7 +211,7 @@ export function answersOver(
     }
   }
 
-  const held: TheSessionsHeld = { places, sessions, broken, keep }
+  const held: TheSessionsHeld = { places, sessions, broken, keep, vouchFor }
 
   return {
     records: places.records,
@@ -175,6 +230,7 @@ export function answersOver(
     aTurnArrived: async (session_id, turn) => aTurnArrivedIn(held, session_id, turn),
     aReviewTheHostSawFail: async (report) => aReviewTheHostSawFailIn(held, report),
     takeInARefreshedSession: async (session_id) => takeInARefreshedSessionIn(held, session_id),
+    aToolCalled: async (call) => aToolCalledIn(held, call),
   }
 }
 
@@ -184,6 +240,7 @@ interface TheSessionsHeld {
   readonly sessions: Map<string, HostSession>
   readonly broken: ReadonlyMap<string, string>
   keep(session: HostSession): Promise<string | undefined>
+  vouchFor(session: HostSession): Promise<HostSession | string>
 }
 
 /** The session a clear was told in, when this id is the one the crew is waiting for: the crew's own answer, or none. */
@@ -255,6 +312,74 @@ async function aReviewTheHostSawFailIn({ places, sessions }: TheSessionsHeld, re
   const review_model = await crew.theReviewModel()
   if (review_model === null) return
   await nameTheFailedReviewIn(places.reviews, report.text, { origin_kind: report.origin_kind, review_model, report: failed_review_report }, told)
+}
+
+/**
+ * A called tool, decided before it runs (martha#541, PR 2): the session named and vouched for, the agent's call noted on
+ * its run, then every refusal in its order. An allowed call is counted against the package's spend before it runs
+ * (martha#513, slice 3), so a call whose row cannot be kept does not run and a member cannot spend where nothing counts
+ * it. Only then is it noted as a signed run, a review it lets through remembered, and its turn's end told it is in
+ * flight.
+ */
+async function aToolCalledIn(held: TheSessionsHeld, call: ACalledTool): Promise<TheAnswerToACall> {
+  const { places } = held
+  const named = sessionNamed(call.session_id, held.sessions, held.broken)
+  if (typeof named === 'string') return { denied: named }
+  const session = await held.vouchFor(named)
+  if (typeof session === 'string') return { denied: session }
+  noteTheAgentsCall(places.agents, session, call)
+  const denial = await theDenialOfACall(places, session, call)
+  if (denial !== undefined) return { denied: denial }
+  const uncounted = await noteTheCallCounted(places.crew, session.id, places.names.ownNameOf(call.tool))
+  if (uncounted !== undefined) return { denied: uncounted }
+  places.signed_runs?.callAllowed(call.tool, call.input)
+  await noteTheReviewThisLaunchLetThrough(places, call)
+  places.crew?.ends.aCallAllowed(session.id, call.call_id ?? '')
+  return { allowed: 1 }
+}
+
+/** A call an agent made, noted on its run as one of the calls "every call it made" counts; the member's own note nothing. */
+function noteTheAgentsCall(agents: TheRunTable, session: HostSession, call: ACalledTool): void {
+  if (call.agent_id === undefined) return
+  const run = runOf(agents, session.id, call.agent_id)
+  if (call.call_id !== undefined) run.calls_seen.add(call.call_id)
+}
+
+/** Why this call is refused before it runs, or undefined: the owner's settings, their memory, the gate, then what the crew refuses beside it (the reviewer-model rule, the workspace guard's first seam, a held end). */
+async function theDenialOfACall(places: ThePlacesAHostReportsOver, session: HostSession, call: ACalledTool): Promise<string | undefined> {
+  const settings = places.refusesAWriteToTheOwnersSettings(call.input)
+  if (settings !== undefined) return settings
+  const memory = places.refusesAWriteToTheOwnersMemory(call.tool, call.input)
+  if (memory !== undefined) return memory
+  const verdict = answerToolCall({
+    tool: call.tool,
+    session,
+    policy: places.policy,
+    input: call.input,
+    launch: places.launch,
+    names: places.names,
+    host: places.machine,
+    agents_running: agentsToHold(places.agents, session.id, call.agent_id),
+    ...(places.gate === undefined ? {} : { gate: places.gate }),
+    audit: places.audit,
+    contract: await theContractACrewHolds(places.crew, { tool: call.tool, input: call.input }, places.names),
+    spend: await theSpendACrewHolds(places.crew, session.id),
+  })?.deny
+  if (verdict !== undefined) return verdict
+  return whatTheCrewRefusesOfACall(places.crew, call, session.id)
+}
+
+/**
+ * Keeps a call this launch allowed when it is one of the crew's reviews on its reviewer model (martha#390), so a failure
+ * the host reports later can be read as that review's and no other's. An allowed review is also the member taking up
+ * again whichever review stopped before it: the line that one left in the row leaves it here (martha#390 r=1).
+ */
+async function noteTheReviewThisLaunchLetThrough(places: ThePlacesAHostReportsOver, call: ACalledTool): Promise<void> {
+  if (places.crew === undefined || call.call_id === undefined) return
+  const review_model = await places.crew.theReviewModelOfTheCall({ tool: call.tool, input: call.input })
+  if (review_model === null) return
+  places.reviews.remember(call.call_id, review_model)
+  places.told?.takeTheLineBack()
 }
 
 /**

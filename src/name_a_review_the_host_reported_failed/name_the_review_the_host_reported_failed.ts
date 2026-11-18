@@ -151,6 +151,11 @@ export interface WhereTheFailedReviewIsTold {
    * review's call is handed over so that writing it down can name it (martha#430).
    */
   readonly theMember: (line: string, call: string) => Promise<void>
+  /**
+   * The line this launcher put in the row leaves it again (martha#390 r=1): an allowed review is the member taking up
+   * the one that stopped before it. Only this launcher's own line goes.
+   */
+  readonly takeTheLineBack: () => void
 }
 
 /**
