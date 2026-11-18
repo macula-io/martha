@@ -16,7 +16,9 @@ import {
   DECLARATION_DIRECTORY,
   DECLARATION_FILE,
   DECLARATION_VERSION,
+  HOLD_REVIEWS,
   HOST,
+  REVIEW_MODEL,
   SOLO_MODE,
   THE_ENGINES_HOST,
   THE_HOST_A_MEMBER_RAN_ON,
@@ -31,6 +33,7 @@ import {
   THE_LAUNCHERS_OF_HOST,
   noLauncherFor,
   theStartOfAHost,
+  theStartOfAMember,
   type AHostsLauncher,
   type AStartOnItsHost,
   type TheLaunchersOfHost,
@@ -125,4 +128,34 @@ test('the command a start runs is the host\'s own fact, found on the path and ha
 
 test('the engine has no launcher in this release, so a declaration may name it and a start of it is refused by name (martha#541)', () => {
   assert.equal(Object.hasOwn(THE_LAUNCHERS_OF_HOST, THE_ENGINES_HOST), false)
+})
+
+/** A one-host crew whose reviewer holds reviews, and whose reviewer runs on `reviewer_model` (martha#541 package 6b). */
+const aCrewWhoseReviewerRuns = (reviewer_model: string) =>
+  JSON.stringify({
+    version: DECLARATION_VERSION,
+    owner: 'Ann',
+    host: THE_HOST_A_MEMBER_RAN_ON,
+    members: [
+      { name: 'Builder', role: 'builder' },
+      { name: 'Reviewer', role: 'reviewer', model: reviewer_model },
+    ],
+    mode: { name: SOLO_MODE, roles: ['builder', 'reviewer'], may: { [HOLD_REVIEWS]: ['reviewer'] } },
+    house_rules: { [REVIEW_MODEL]: 'fable' },
+  })
+
+test('#541 6b: a start asks the crew\'s reviewer rule over the host it found (mutant: the reviewer rule not asked at a start)', async (t) => {
+  // The path holds a runnable file named for the host's own command, so the start reaches the rule after the lookup.
+  const path = aPathHolding(t, CLAUDE)
+  const offItsModel = await settingsOf(aCrewWhoseReviewerRuns('opus'))
+  const [builder, reviewer] = offItsModel.members
+  const refused = theStartOfAMember(CLAUDE_CODE, { PATH: path }, reviewer!, offItsModel)
+  assert.match(String(refused), /Reviewer holds reviews .* holds reviews to fable; its model is opus\./, 'a reviewer member off the crew\'s reviewer model was allowed to start')
+  assert.ok(typeof theStartOfAMember(CLAUDE_CODE, { PATH: path }, builder!, offItsModel) !== 'string', 'a member that holds no reviews was refused a start')
+
+  const onItsModel = await settingsOf(aCrewWhoseReviewerRuns('fable'))
+  const itsReviewer = onItsModel.members[1]!
+  const started = theStartOfAMember(CLAUDE_CODE, { PATH: path }, itsReviewer, onItsModel)
+  assert.ok(typeof started !== 'string', `a reviewer member on the crew's reviewer model was refused a start: ${started}`)
+  assert.equal(started.command, join(path, CLAUDE), 'the start did not run the command it found on the path')
 })
