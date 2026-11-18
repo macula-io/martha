@@ -20,6 +20,7 @@
     "check:restated-values": "node src/check_no_literal_restates_a_value/main.ts",
     "check:recorded-host-runs": "node src/check_every_recorded_host_test_is_run/main.ts",
     "check:no-member-outlives-its-run": "node src/check_no_member_outlives_its_run/main.ts",
+    "check:no-launcher-outlives-its-run": "node prove_the_core/no_launcher_outlives_its_run.ts",
     "check:no-import-cycle": "node src/check_no_import_cycle/main.ts",
     "probe:launch": "node src/probe_launch_hosts/probe_hosts.ts",
     "record:mesh-tools": "node src/record_mesh_server_tools/record_mesh_server_tools.ts",

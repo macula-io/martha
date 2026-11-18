@@ -52,15 +52,15 @@ const STOOD_IN = 'the sigstore bundle check is stood in, a local release is sign
 // The signals that interrupt a run; it then tears down before it ends.
 const INTERRUPTS = /** @type {const} */ (['SIGINT', 'SIGTERM'])
 // How long a member has to come up, and then to end once it is stopped.
-const MEMBER_WAIT_MS = 30_000
+export const MEMBER_WAIT_MS = 30_000
 // How often a wait for a member looks again.
-const POLL_MS = 50
+export const POLL_MS = 50
 // How long the stand-in host stays up unless it is stopped: far longer than any run. The stand-in never reports its
 // session's start, so on a terminal the launcher's backstop would stop it after TRUST_ANSWER_DEADLINE_MS (ten minutes,
 // host_runs_the_relay.ts); a run stops every member long before, so the backstop never fires here and is no part of it.
 const HOST_HOLDS_SECONDS = 600
 // The stand-in host's mode: its owner may run it.
-const RUNNABLE = 0o700
+export const RUNNABLE = 0o700
 // The fresh checkout's committer, whom `martha init` declares the solo crew for.
 const OWNER = 'clean install'
 // util-linux script, giving a command a terminal of its own and ending with its status.
@@ -298,7 +298,7 @@ async function startTheCrew ({ run, work, box, places, installed, plant, running
 }
 
 /** @param {string} word */
-const quoted = (word) => `'${word.replaceAll("'", `'\\''`)}'`
+export const quoted = (word) => `'${word.replaceAll("'", `'\\''`)}'`
 
 /**
  * A stand-in `claude`: the installed tree's answers to the launcher, then it notes its arguments by its pid and
@@ -341,6 +341,16 @@ const ownersEnvironment = (box, hostDir, relayRoot) => ({
 })
 
 /**
+ * A command started on a terminal of its own, as the owner starts a member: `script` makes the terminal, and the words
+ * are the shell's.
+ * @param {string} words the command, quoted for the shell
+ * @param {{ cwd: string, env: NodeJS.ProcessEnv }} options
+ */
+export function startOnATerminal (words, options) {
+  return spawn('script', [...ON_A_TERMINAL, words, '/dev/null'], { ...options, stdio: 'pipe' })
+}
+
+/**
  * The installed command as the owner runs it in `project`: plainly, or on a terminal of its own.
  * @param {{ martha: string, project: string, env: NodeJS.ProcessEnv }} at
  */
@@ -350,7 +360,7 @@ function theOwner ({ martha, project, env }) {
   return {
     run: (/** @type {string[]} */ ...args) => spawnSync(process.execPath, [martha, ...args], { ...options, encoding: 'utf8', input: '', timeout: MEMBER_WAIT_MS }),
     onATerminal: (/** @type {string[]} */ ...args) => spawnSync('script', [...ON_A_TERMINAL, words(args), '/dev/null'], { ...options, encoding: 'utf8', input: '', timeout: MEMBER_WAIT_MS }),
-    startOnATerminal: (/** @type {string[]} */ ...args) => spawn('script', [...ON_A_TERMINAL, words(args), '/dev/null'], { ...options, stdio: 'pipe' })
+    startOnATerminal: (/** @type {string[]} */ ...args) => startOnATerminal(words(args), options)
   }
 }
 
@@ -545,30 +555,111 @@ async function tearDown (log, { work, registry, relayRoot, members }, plant) {
 }
 
 /**
- * Every member still running is killed with its process group, and its `martha start` with it.
+ * Every member still running is killed with its process group, and its `martha start` with it. What a kill could not do
+ * is a refusal, so the tear-down fails by name instead of reporting a run it never reached as ended (martha#590 r=2).
+ * Exported for the case that drives that refusal through the list the tear-down fails on, not the walk alone.
  * @param {Member[]} members
  * @param {Plant} plant
  * @returns {Promise<string[]>} which did not end, if any
  */
-async function killEveryMember (members, plant) {
+export async function killEveryMember (members, plant) {
   const refusals = []
   for (const member of members) {
     member.child.stdin?.end()
-    if (!member.ended) killEvenIfGone(member)
+    if (!member.ended) refusals.push(...killEvenIfGone(member))
     if (!member.ended && !await endOf(member)) refusals.push(`martha start for ${member.name} did not end`)
     if (member.pid && !await endsInTime(member.pid, plant)) refusals.push(`${member.name}, pid ${member.pid}, is still alive after ${MEMBER_WAIT_MS} ms`)
   }
   return refusals
 }
 
-/** @param {Member} member */
-function killEvenIfGone (member) {
+/**
+ * `pgrep`'s exit status when it matched no process at all (martha#590 r=2). Every other status, and a `pgrep` that
+ * could not be run, is a walk that did not happen, never an answer of "no children".
+ */
+export const NOTHING_MATCHED = 1
+
+/**
+ * The child pids `pgrep` names for `pid`, or a refusal when the question could not be asked: a status of 2 or 3 (a
+ * usage or a system error) and a `pgrep` that is not there each read as "no children" if they are not told apart from
+ * `NOTHING_MATCHED`, and a tear-down would then report a run it never reached as ended (martha#590 r=2).
+ * @param {number} pid
+ * @param {string[]} refusals
+ * @returns {number[]}
+ */
+function childrenOf (pid, refusals) {
+  const ran = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' })
+  if (ran.error) {
+    refusals.push(`the children of pid ${pid} could not be read: ${reason(ran.error)}`)
+    return []
+  }
+  if (ran.status === NOTHING_MATCHED) return []
+  if (ran.status !== 0) {
+    refusals.push(`the children of pid ${pid} could not be read: pgrep ended with status ${String(ran.status)}`)
+    return []
+  }
+  return ran.stdout.trim().split('\n').filter((child) => child !== '').map(Number)
+}
+
+/**
+ * Every process under `pid`, deepest last, each one frozen before its own children are read (martha#590 r=1): a
+ * stopped process cannot fork, so the children read after the `SIGSTOP` are the last it will ever have, and a kill of
+ * everything collected cannot be outrun by a process that forks while the tree is walked. A start's wrapper is
+ * `script`, which runs the run in a session of its own: the run is not in the wrapper's process group, so it is found
+ * by walking down from the wrapper.
+ *
+ * A process that is already gone is skipped, and nothing under it can be walked, because it is no longer anyone's
+ * child. A process that could not be frozen or read is a refusal, never a silent stop: the tear-down fails by name on
+ * it rather than reporting a run as ended that it never reached.
+ * @param {number | undefined} pid
+ * @returns {{ frozen: number[], refusals: string[] }}
+ */
+function frozenUnder (pid) {
+  /** @type {number[]} */
+  const frozen = []
+  /** @type {string[]} */
+  const refusals = []
+  /** @param {number} at */
+  const walk = (at) => {
+    try {
+      process.kill(at, 'SIGSTOP')
+    } catch (error) {
+      // ESRCH: it ended before it could be frozen, and it is no longer anyone's child to walk. Anything else is a
+      // process still in the tree that the tear-down could not stop.
+      if (/** @type {{ code?: unknown }} */ (error)?.code !== 'ESRCH') refusals.push(`pid ${at} could not be frozen: ${reason(error)}`)
+      return
+    }
+    frozen.push(at)
+    for (const child of childrenOf(at, refusals)) walk(child)
+  }
+  if (pid) walk(pid)
+  return { frozen, refusals }
+}
+
+/**
+ * The tear-down's kill of a member that may never have been named: the wrapper, everything the wrapper started, and
+ * the member's own process group where one was named. Every process under the wrapper is frozen before any of them is
+ * killed, so a run that forks while it is walked cannot put a child out of reach: a run killed only with its wrapper
+ * goes on writing where it was, which is a relay root made again after the tear-down removed it (martha#590).
+ * @param {Member} member
+ * @returns {string[]} what could not be done, if anything: the tear-down fails on it by name
+ */
+export function killEvenIfGone (member) {
+  const { frozen, refusals } = frozenUnder(member.child.pid)
+  for (const pid of frozen) {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // That process is already gone.
+    }
+  }
   try {
     if (member.pid) process.kill(-member.pid, 'SIGKILL')
   } catch {
     // Its group is already gone.
   }
   member.child.kill('SIGKILL')
+  return refusals
 }
 
 /**

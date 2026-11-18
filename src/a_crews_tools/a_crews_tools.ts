@@ -99,6 +99,7 @@ import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
+import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
 
@@ -207,6 +208,12 @@ export interface CrewToolPlaces {
   readonly menus?: TheOwnersMenus
   /** The share each session began at, by session id: kept here, so every threshold is measured from where it started. */
   readonly began_at?: Map<string, number>
+  /**
+   * The roots a reboot deletes on this machine (martha#314), for a crew whose declaration names none: derived by the
+   * adapter that launches, from the OS, and handed in here rather than written into a slice. A place given none holds
+   * no machine root, so the note then names only what the declaration names.
+   */
+  readonly volatile_roots?: readonly string[]
 }
 
 /** The tools a crew's member can call. */
@@ -695,7 +702,8 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [RESTART_A_MEMBER_TOOL.name]: declaring(places, async (declared, args) => theRestartAsked(places, declared.settings, args)),
     [SWITCH_YOUR_MODEL_TOOL.name]: declaring(places, async (declared, args) => switchTheModelOver({ ...triggerPlaceOf(places), settings: declared.settings }, args)),
     [RETURN_TO_YOUR_OWN_MODEL_TOOL.name]: async (args) => returnToYourOwnModelOver(triggerPlaceOf(places), args),
-    [WRITE_MY_HANDOVER_SCHEMA.name]: async (args) => theHandoverToolOver(theHandoverAsked(places, state), args),
+    [WRITE_MY_HANDOVER_SCHEMA.name]: async (args) =>
+      theHandoverToolOver(theHandoverAsked(places, state, theRootsInForce(places.settings?.volatile_paths ?? [], places.volatile_roots ?? [])), args),
     [REFRESH_THIS_SESSION]: async (args) => theRefreshAskedOf(places, args),
     [VERIFY_RANGE_TOOL.name]: (args) => actingOn(theRangeACallNames(args), (on, asked) => verifyTheRangeOver(actingHost(on), asked)),
     [LAND_BATCH_TOOL.name]: (args) =>
@@ -749,6 +757,7 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   held: state.held === null ? places.beats.read(places.member) : state.held,
   to: args['to'],
   text: args['text'],
+  volatile_roots: theRootsInForce(settings.volatile_paths, places.volatile_roots ?? []),
 })
 
 /** What the receipts are read over: the channel's ledger, the member that sent, and the crew it sent to. */
@@ -766,14 +775,15 @@ async function theRestartAsked(places: CrewToolPlaces, settings: CrewSettings, a
   return theRestartToolOver({ lifecycle: places.lifecycle, settings, member: places.member, reason, onto, fresh: args['fresh'] === true })
 }
 
-/** What a handover is written over: the crew's store, its stamps, and the session this call came from. */
-const theHandoverAsked = (places: CrewToolPlaces, state: SessionState) => ({
+/** What a handover is written over: the crew's store, its stamps, the session this call came from, and the roots a reboot deletes. */
+const theHandoverAsked = (places: CrewToolPlaces, state: SessionState, volatileRoots: readonly string[]) => ({
   host: places,
   stamps: places.stamps,
   sessions: places.sessions,
   session: state.session,
   member: places.member,
   now: () => places.ledger.clock.now(),
+  volatile_roots: volatileRoots,
 })
 
 /** `refresh_this_session`: a member asked to refresh is told its handover is expected, or why no refresh is asked for. */
