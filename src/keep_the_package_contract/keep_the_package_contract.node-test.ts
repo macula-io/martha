@@ -277,9 +277,10 @@ test('a yes about another package marks nothing, whether it says "unbounded" or 
 
 // --- the contract a session is handed --------------------------------------------
 
-test('a package with no contract says so, and names the tool that records one', () => {
+test('a package with no contract says none of its work runs, and names the tool that records one (martha#597)', () => {
   const said = theContractPart(PACKAGE, undefined)
   assert.match(said, /has no package contract recorded/)
+  assert.match(said, /none of its work runs/)
   assert.match(said, new RegExp(KEEP_THE_PACKAGE_CONTRACT))
 })
 
