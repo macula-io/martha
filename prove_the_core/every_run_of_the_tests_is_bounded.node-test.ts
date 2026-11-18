@@ -195,6 +195,9 @@ const RUNS: ReadonlyArray<{ readonly name: string; readonly script: string; read
   { name: 'a function written `function f { … }` forwards too', script: "function f { ssh -n h \"$@\"; }\nf 'node --test x'", line: 2 },
   { name: 'RUN+=(…) appends to what RUN holds', script: 'RUN=(node)\nRUN+=(--test x)\n"${RUN[@]}"', line: 2, text: 'RUN+=(--test x)' },
   { name: 'a substitution in an array element runs', script: 'RUN=($(node --test x))', line: 1, text: 'node --test x' },
+  { name: '<(…) runs: a process substitution the command reads', script: 'diff <(node --test x) /dev/null', line: 1, text: 'node --test x' },
+  { name: '>(…) runs: a process substitution the command writes to', script: 'echo y > >(node --test x)', line: 1, text: 'node --test x' },
+  { name: 'done < <(…): a process substitution a redirection reads', script: 'while read -r l; do echo "$l"; done < <(node --test x)', line: 1, text: 'node --test x' },
 ]
 
 for (const { name, script, line, text } of RUNS) {
@@ -227,6 +230,7 @@ const DATA: ReadonlyArray<{ readonly name: string; readonly script: string }> = 
   { name: "a function's body ends at its closing brace", script: "f() { echo; }\nssh -n h \"$1\"\nf 'node --test x'" },
   { name: 'a shell given a script file reads no script on its input', script: "printf '%s\\n' 'node --test x' | bash ./a.sh" },
   { name: 'a comment is prose', script: '# node --test x is what a run looks like' },
+  { name: "'<(…)' inside single quotes is text", script: "echo '<(node --test x)'" },
 ]
 
 for (const { name, script } of DATA) {

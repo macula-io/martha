@@ -7,8 +7,8 @@
 // or a substitution kept as it was written, so the rule can still see a `$RUN` or a `$(…)` for what it is.
 //
 // It reads: '…', "…" (with its escapes and the $(…), `…` and ${…} it still opens), $'…', a backslash, a
-// backslash-newline, a comment, $(…), $((…)), ${…}, `…`, an array assignment, here-documents (<<, <<-, quoted or bare)
-// and here-strings (<<<). A part that never closes is thrown as AnUnclosedPart, named by the line it opened on, so
+// backslash-newline, a comment, $(…), $((…)), ${…}, `…`, a process substitution <(…) or >(…), an array assignment,
+// here-documents (<<, <<-, quoted or bare) and here-strings (<<<). A part that never closes is thrown as AnUnclosedPart, named by the line it opened on, so
 // the check fails closed: a script this cannot follow never passes.
 
 /** One word of a command, as the shell hands it to the program. */
@@ -21,7 +21,7 @@ export interface AWord {
   readonly quoted: boolean
   /** The name, when the word is exactly one parameter expansion: `$NAME`, `${NAME}`, `"${NAME[@]}"`. */
   readonly whole: string | undefined
-  /** What each of its `$(…)` and `` `…` `` runs. */
+  /** What each of its `$(…)`, `` `…` ``, `<(…)` and `>(…)` runs. */
   readonly inner: readonly (readonly AToken[])[]
   /** The elements, when the word is an array assignment `NAME=(…)`. */
   readonly array: readonly AWord[] | undefined
@@ -94,6 +94,9 @@ const A_NAME_SO_FAR = /^[A-Za-z_]\w*\+?$/
 /** The start of an array assignment: `NAME=(` or `NAME+=(`. */
 const AN_ARRAY_OPENS = /^[A-Za-z_]\w*\+?=$/
 
+/** A process substitution opening, `<(` or `>(`: bash runs what it holds, as it runs a `$(…)`. */
+const A_PROCESS_SUBSTITUTION = /^[<>]\(/
+
 const newState = (src: string, line: number): State => ({ src, at: 0, line, pending: [] })
 
 /** Moves `n` characters on, counting the lines it passes. */
@@ -124,14 +127,14 @@ function skipAComment(s: State): void {
 /** A script's tokens, read to its end. */
 export function tokensOf(text: string, line: number): AToken[] {
   const s = newState(text, line)
-  const tokens = lexTokens(s, undefined)
+  const tokens = lexTokens(s, undefined, '')
   const left = s.pending[0]
   if (left !== undefined) throw new AnUnclosedPart(left.line, `a here-document to ${left.delimiter}`)
   return tokens
 }
 
-/** Tokens up to the end of the text, or, inside a `$(` opened on line `opened`, up to its own `)`. */
-function lexTokens(s: State, opened: number | undefined): AToken[] {
+/** Tokens up to the end of the text, or, inside `what` opened on line `opened`, up to its own `)`. */
+function lexTokens(s: State, opened: number | undefined, what: string): AToken[] {
   const tokens: AToken[] = []
   let depth = 0
   while (skipToAToken(s)) {
@@ -142,7 +145,7 @@ function lexTokens(s: State, opened: number | undefined): AToken[] {
     tokens.push(token)
     if (op === '\n') readTheBodies(s)
   }
-  if (opened !== undefined) throw new AnUnclosedPart(opened, 'a $(…)')
+  if (opened !== undefined) throw new AnUnclosedPart(opened, what)
   return tokens
 }
 
@@ -152,6 +155,7 @@ const BRACKETS: Readonly<Record<string, number>> = { '(': 1, ')': -1 }
 function aToken(s: State): AToken {
   const fd = /^\d+(?=[<>])/.exec(s.src.slice(s.at, s.at + 12))
   if (fd !== null) advance(s, fd[0].length)
+  if (A_PROCESS_SUBSTITUTION.test(ahead(s, 2))) return { kind: 'word', word: aProcessSubstitution(s) }
   const op = OPERATORS.find((one) => s.src.startsWith(one, s.at))
   if (op === undefined) return { kind: 'word', word: readWord(s) }
   const line = s.line
@@ -185,6 +189,16 @@ function readABody(s: State, p: Pending): void {
     lines.push(text)
   }
   p.into.body = { text: lines.join('\n'), line: first }
+}
+
+/** `<(…)` or `>(…)`, one word: bash runs what it holds and hands the command a path to its output or input. */
+function aProcessSubstitution(s: State): AWord {
+  const start = s.at
+  const opened = s.line
+  const what = `a ${ahead(s, 2)}…)`
+  advance(s, 2)
+  const inner = [lexTokens(s, opened, what)]
+  return { text: s.src.slice(start, s.at), line: opened, quoted: false, whole: undefined, inner, array: undefined, assigns: undefined }
 }
 
 function readWord(s: State): AWord {
@@ -321,7 +335,7 @@ function readSubstitution(s: State, w: Building): void {
   const start = s.at
   const opened = s.line
   advance(s, 2)
-  w.inner.push(lexTokens(s, opened))
+  w.inner.push(lexTokens(s, opened, 'a $(…)'))
   w.text += s.src.slice(start, s.at)
 }
 
