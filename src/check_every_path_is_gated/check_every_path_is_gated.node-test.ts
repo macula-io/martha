@@ -91,6 +91,15 @@ test('a planted path with no control makes the check fail, and it names that pat
   )
 })
 
+test('two rows sharing an id make the check fail, and it names both rows (martha#758)', () => {
+  const shipped = INBOUND_PATHS.find((path) => path.id === 'A1')
+  assert.ok(shipped, 'the register ships a row A1 to plant a twin of')
+  // The twin copies A1's control, so the only gap it can make is the shared id.
+  const twin: InboundPath = { ...shipped, what: 'a planted twin of A1' }
+  const gaps = coverageOf([...INBOUND_PATHS, twin], gateRefuses)
+  assert.deepEqual(gaps, [{ path: 'A1', why: `the id is held by 2 rows: ${shipped.what}; a planted twin of A1` }])
+})
+
 test('a planted path whose control was left out altogether makes the check fail', () => {
   const planted = {
     id: 'B99',

@@ -159,10 +159,27 @@ export function gapsInGateCoverage(
 ): readonly Gap[] {
   const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates, ask: ask_gates, command: command_gates, source: source_gates }
 
-  return paths.flatMap((path) => {
-    const why = gapOfRow(path, gateRefuses, gates, config_stand_in)
-    return why === undefined ? [] : [{ path: path.id, why }]
-  })
+  // Both halves are kept: the rows two packages gave one id (martha#758) and every row's own gap. A resolution
+  // that keeps only the second makes the shared-id check silent while it still type-checks.
+  return [
+    ...gapsOfSharedIds(paths),
+    ...paths.flatMap((path) => {
+      const why = gapOfRow(path, gateRefuses, gates, config_stand_in)
+      return why === undefined ? [] : [{ path: path.id, why }]
+    }),
+  ]
+}
+
+/**
+ * One gap per id that more than one row holds, naming every such row's `what` in register order (martha#758).
+ * Packages add rows in parallel and each picks the next number by hand, so two can pick the same one.
+ */
+function gapsOfSharedIds(paths: readonly InboundPath[]): readonly Gap[] {
+  const rows_by_id = new Map<string, string[]>()
+  for (const path of paths) rows_by_id.set(path.id, [...(rows_by_id.get(path.id) ?? []), path.what])
+  return [...rows_by_id]
+    .filter(([, whats]) => whats.length > 1)
+    .map(([id, whats]) => ({ path: id, why: `the id is held by ${String(whats.length)} rows: ${whats.join('; ')}` }))
 }
 
 /** Every gate a row may name, by kind. */
