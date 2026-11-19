@@ -146,7 +146,7 @@
       "src/launch_a_goose_member": 249,
       "src/linux_process_identity": 332,
       "src/list_stop_and_restart_the_crew": 103,
-      "src/load_the_hosts_markdown": 427,
+      "src/load_the_hosts_markdown": 426,
       "src/owners_settings_directory": 173,
       "src/place_the_hosts_settings": 127,
       "src/read_a_kernel_and_a_home": 133,
@@ -169,6 +169,8 @@
       "src/a_launch_end_on_this_machine": 124
     },
     "programParts": {
+      "src/compare_two_host_recordings": "src/record_claude_code_host",
+      "src/follow_what_host_code_calls": "src/record_claude_code_host",
       "src/declare_a_launch_probe": "src/probe_launch_hosts",
       "src/probe_a_checkouts_own_config": "src/probe_launch_hosts",
       "src/probe_the_hosts_auto_memory": "src/probe_launch_hosts",
@@ -182,7 +184,7 @@
       "src/declare_crew": 619
     },
     "packageImports": {
-      "typescript": "prove_the_core",
+      "typescript": ["prove_the_core", "src/compare_two_host_recordings", "src/follow_what_host_code_calls", "src/record_claude_code_host"],
       "eslint": "prove_the_core",
       "saxes": "src"
     },
