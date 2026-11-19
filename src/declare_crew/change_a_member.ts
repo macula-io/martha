@@ -151,24 +151,31 @@ function addSwitches(words: readonly string[]): { model: string | null; host: st
   return { model: given[MODEL_SWITCH] ?? null, host: given[HOST_SWITCH] ?? null }
 }
 
+/** The one word after the member, read as a value or the default it names; undefined when there is not exactly one. */
+const theOneValue = (rest: readonly string[], default_word: string): string | null | undefined => (rest.length === 1 ? valueOrDefault(rest[0], default_word) : undefined)
+
+/** Each verb's reading of the words after the member's name: the change, or undefined when they are no way it is used. */
+const THE_VERBS_WORDS: Readonly<Record<string, (member: string, rest: readonly string[]) => CrewChange | undefined>> = {
+  [ADD]: (member, [role, ...switches]) => {
+    const given = aValue(role) ? addSwitches(switches) : undefined
+    return given === undefined ? undefined : { kind: ADD, member, role: role!, ...given }
+  },
+  [REMOVE]: (member, rest) => (rest.length === 0 ? { kind: REMOVE, member } : undefined),
+  [SET_MODEL]: (member, rest) => {
+    const model = theOneValue(rest, HOST_DEFAULT)
+    return model === undefined ? undefined : { kind: SET_MODEL, member, model }
+  },
+  [SET_HOST]: (member, rest) => {
+    const host = theOneValue(rest, CREW_DEFAULT)
+    return host === undefined ? undefined : { kind: SET_HOST, member, host }
+  },
+}
+
 /** The change the words after `martha crew` ask for, or undefined when they are no way a verb is used. */
 export function theCrewChangeAsked(words: readonly string[]): CrewChange | undefined {
   const [verb, member, ...rest] = words
-  if (!aValue(member)) return undefined
-  if (verb === REMOVE) return rest.length === 0 ? { kind: REMOVE, member } : undefined
-  if (verb === ADD) {
-    const [role, ...switches] = rest
-    const given = aValue(role) ? addSwitches(switches) : undefined
-    return given === undefined ? undefined : { kind: ADD, member, role: role!, ...given }
-  }
-  if (rest.length !== 1) return undefined
-  if (verb === SET_MODEL) {
-    const model = valueOrDefault(rest[0], HOST_DEFAULT)
-    return model === undefined ? undefined : { kind: SET_MODEL, member, model }
-  }
-  if (verb !== SET_HOST) return undefined
-  const host = valueOrDefault(rest[0], CREW_DEFAULT)
-  return host === undefined ? undefined : { kind: SET_HOST, member, host }
+  const read = verb !== undefined && Object.hasOwn(THE_VERBS_WORDS, verb) ? THE_VERBS_WORDS[verb] : undefined
+  return read !== undefined && aValue(member) ? read(member, rest) : undefined
 }
 
 /** What the changed member is now, in one line. */

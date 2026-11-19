@@ -311,12 +311,8 @@ async function crew(io: CommandIo, places: Places): Promise<number> {
  * while it is not running, as `martha stop` reads it, and an added member gets its node id as `martha init` makes one.
  */
 async function changeTheCrew(io: CommandIo, places: Places, change: CrewChange): Promise<number> {
-  if (change.kind === REMOVE) {
-    const crew = await crewsPlacesOf(io, places)
-    if (typeof crew === 'string') return refused(io, crew)
-    const declared = crew.settings.members.find((member) => sameMemberName(member.name, change.member))
-    if (declared !== undefined && isRunning(crew, declared.name)) return refused(io, `${declared.name} is running, so it stays on the crew. Stop it first: martha ${STOP} ${declared.name}`)
-  }
+  const running = change.kind === REMOVE ? await whyItStays(io, places, change.member) : undefined
+  if (running !== undefined) return refused(io, running)
   const outcome = await aChangedDeclaration(documents, places.root, THE_VOCABULARIES_OF_HOST, change)
   if ('refusal' in outcome) return refused(io, outcome.refusal)
   const unwritten = writeAChangedDeclaration(places.root, outcome)
@@ -324,6 +320,14 @@ async function changeTheCrew(io: CommandIo, places: Places, change: CrewChange):
   const ids = change.kind === ADD ? nodeIdsFor(places.state, [change.member]) : undefined
   theChangeTold(change, outcome, THE_VOCABULARIES_OF_HOST).forEach(tellOwnerOn(io))
   return ids !== undefined && 'refusal' in ids ? refused(io, ids.refusal) : EXIT_DONE
+}
+
+/** Why `member` stays on the crew: it is running, as `martha stop` reads it, or the crew cannot be read; or undefined. */
+async function whyItStays(io: CommandIo, places: Places, member: string): Promise<string | undefined> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return crew
+  const declared = crew.settings.members.find((one) => sameMemberName(one.name, member))
+  return declared !== undefined && isRunning(crew, declared.name) ? `${declared.name} is running, so it stays on the crew. Stop it first: martha ${STOP} ${declared.name}` : undefined
 }
 
 /** `martha stop [<member>]` (martha#312): one member, or every running one; each outcome told to the owner. */
