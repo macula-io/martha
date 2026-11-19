@@ -133,7 +133,7 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
 const LAB_HOST = '<lab host>'
 
 // Any text this check prints, with each lab hostname in it replaced, in any case: a
-// hit's location, a repository name, an error a lookup or git threw.
+// hit's location, an error a lookup or git threw.
 export const withoutLabNames = (text: string) => text.replace(new RegExp(PUBLIC_TEXT_PATTERNS.lab_fqdn, anyCase), LAB_HOST)
 
 // A value one class refuses in a line, as the scan found it. It is never printed: a hit
