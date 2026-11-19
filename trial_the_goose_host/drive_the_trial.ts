@@ -26,7 +26,7 @@ import { findingsIn, pathsIn, type TraceFindings } from './read_the_trace.ts'
 import { RecordingProxy } from './record_what_goose_sends.ts'
 import { GooseOverAcp, type Exchange } from './speak_acp_to_goose.ts'
 import { TheModelPace, theCapFor, theLaunchesBoundMs, whyTheBoundCannotFit, type TheCapALineGets, type TheCapMadeOf } from './the_cap_a_line_gets.ts'
-import { THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_says_why.ts'
+import { refusalsIn, THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_says_why.ts'
 import {
   lineEight, lineFive, lineFour, lineNine, lineOne, lineSix, lineThree, lineTwo, sevenAfterTheKill,
   type Line, type Observation, type Trial,
@@ -393,11 +393,36 @@ function theCapTheLineHad(running: Running): TheCapMadeOf & { readonly whyNot: s
   return { ...made, whyNot: whyTheBoundCannotFit(made) }
 }
 
+/**
+ * The whole evidence directory judged by the rule the run kept line by line (martha#694): every not-observed line that
+ * cannot say why is printed by name, and the run's exit is 1 when there is one. The same rule `--check-evidence`
+ * applies to a directory already on disk, so a finished run and a reviewer reach the same verdict.
+ */
+function judgeTheWholeRun(evidence: string): number {
+  const refusals = refusalsIn(evidence)
+  for (const refusal of refusals) console.error(`drive_the_trial: ${refusal}`)
+  return refusals.length === 0 ? 0 : 1
+}
+
+/** The value given after `name` in `argv`, or undefined when it is not given. */
+function optionOf(argv: readonly string[], name: string): string | undefined {
+  const found = argv.indexOf(name)
+  return found === -1 ? undefined : argv[found + 1]
+}
+
 async function main(): Promise<void> {
+  const checkEvidence = optionOf(process.argv.slice(2), '--check-evidence')
+  if (checkEvidence !== undefined) {
+    process.exitCode = judgeTheWholeRun(checkEvidence)
+    return
+  }
   const options = optionsFrom(process.argv.slice(2))
   process.on('SIGTERM', keepTheEndsOnSignal)
   mkdirSync(options.evidence, { recursive: true })
   for (const [inTheProcess, line] of options.lines.entries()) await runLine(line, options, whenTheLaunchStarted(inTheProcess))
+  // The run is over, so the directory can be judged whole: a verdict that ended not-observed with nothing kept
+  // beside it is a line that cannot say why it observed nothing, and the run says so rather than exiting green.
+  process.exitCode = judgeTheWholeRun(options.evidence)
 }
 
 if (import.meta.main) await main()

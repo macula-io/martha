@@ -6,6 +6,7 @@
 // handing the next reader a verdict that says nothing.
 
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -150,4 +151,54 @@ test('the engine request logs are copied beside the transcript, and a launch tha
   const quiet = join(place, 'goose-root-quiet')
   mkdirSync(quiet, { recursive: true })
   assert.equal(keepTheEngineLogs(quiet, into), 0, 'a launch that asked the model nothing keeps nothing')
+})
+
+/** The two entries the rule is reached through, run as a run runs them. */
+const THE_CHECK = join(import.meta.dirname, 'check_the_trial_evidence.ts')
+const THE_DRIVER = join(import.meta.dirname, 'drive_the_trial.ts')
+
+test('the check, through its own entry, refuses a not-observed line with no transcript by name (martha#694)', () => {
+  const evidence = anEvidenceDirectory()
+  aVerdict(join(evidence, 'line-4'), NOT_OBSERVED)
+
+  const ran = spawnSync(process.execPath, [THE_CHECK, '--dir', evidence], { encoding: 'utf8' })
+
+  assert.equal(ran.status, 1, 'a directory that cannot say why it observed nothing is a red check')
+  assert.match(ran.stderr, /line 4: not-observed, and no ACP transcript was kept, so the run cannot say why \(line-4\)/)
+})
+
+test('the check passes a not-observed line that kept its transcript, and says what it judged (martha#694)', () => {
+  const evidence = anEvidenceDirectory()
+  const line = join(evidence, 'line-4')
+  aVerdict(line, NOT_OBSERVED)
+  anExchange(line)
+
+  const ran = spawnSync(process.execPath, [THE_CHECK, '--dir', evidence], { encoding: 'utf8' })
+
+  assert.equal(ran.status, 0, ran.stderr)
+  assert.match(ran.stdout, /holds no line that ended not-observed without its transcript/)
+})
+
+test('a directory that is not there is a check that could not be made, never a pass (martha#694)', () => {
+  const ran = spawnSync(process.execPath, [THE_CHECK, '--dir', join(anEvidenceDirectory(), 'no-such-line')], { encoding: 'utf8' })
+
+  assert.equal(ran.status, 2)
+  assert.match(ran.stderr, /the check could not be made/)
+})
+
+test('the check plants the line with no transcript and its twin, and requires both answers (martha#694)', () => {
+  const ran = spawnSync(process.execPath, [THE_CHECK, '--self-test'], { encoding: 'utf8' })
+
+  assert.equal(ran.status, 0, ran.stderr)
+  assert.match(ran.stdout, /a line with no transcript is refused by name, and one with it passes/)
+})
+
+test('the driver judges a whole evidence directory on its own, so a reviewer needs no launch (martha#694)', () => {
+  const evidence = anEvidenceDirectory()
+  aVerdict(join(evidence, 'line-4'), NOT_OBSERVED)
+
+  const ran = spawnSync(process.execPath, [THE_DRIVER, '--check-evidence', evidence], { encoding: 'utf8' })
+
+  assert.equal(ran.status, 1)
+  assert.match(ran.stderr, /line 4: not-observed, and no ACP transcript was kept/)
 })
