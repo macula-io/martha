@@ -11,7 +11,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { connect, createServer } from 'node:net'
-import { tmpdir } from 'node:os'
+import { constants, tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { after, test, type TestContext } from 'node:test'
@@ -2729,6 +2729,13 @@ function launcherProcess(
   return script
 }
 
+// How a launcher ended by each signal goes. SIGQUIT ends it with an exit status of 128 plus its number, the status a
+// shell reports for a death by that signal, rather than by the signal itself: SIGQUIT dumps core, and a core, or the
+// journal record a piped core handler writes even with cores off, keeps the launcher's memory and its whole environment
+// on disk (martha#845). The 128 is the shell's convention, written here as the test's own fact.
+const howTheLauncherEnds = (signal: NodeJS.Signals): { code: number | null; signal: NodeJS.Signals | null } =>
+  signal === 'SIGQUIT' ? { code: 128 + constants.signals.SIGQUIT, signal: null } : { code: null, signal }
+
 // Every signal a launcher can be ended by without its own say, including the two a terminal's hangup and its quit key
 // send (martha#472): a launcher signalled directly cleans up exactly like one spoken to by martha stop.
 for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
@@ -2736,7 +2743,9 @@ for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
     const place = placeFor(t)
     const fake = fakeClaude(place)
     const launcher = spawn(process.execPath, [launcherProcess(place, fake.command)], { stdio: ['ignore', 'pipe', 'inherit'] })
-    const ended = new Promise<NodeJS.Signals | null>((resolve) => launcher.once('exit', (_code, by) => resolve(by)))
+    const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+      launcher.once('exit', (code, by) => resolve({ code, signal: by })),
+    )
     // Before any assertion: a test that fails must not leave the member running.
     t.after(async () => {
       if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
@@ -2758,7 +2767,7 @@ for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
     )
 
     launcher.kill(signal)
-    assert.equal(await ended, signal, 'the signal still ends the launcher')
+    assert.deepEqual(await ended, howTheLauncherEnds(signal), 'the signal still ends the launcher, SIGQUIT with its status and no core')
     await until('the member\'s group to be killed', () => !isAlive(child), t)
     assert.deepEqual(readdirSync(place.relay_root), [])
     assert.deepEqual(readdirSync(place.snapshot_root), [])
