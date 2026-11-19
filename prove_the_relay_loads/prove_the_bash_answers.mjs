@@ -6,6 +6,9 @@
 // Every release re-took it by hand; this takes it the way prove_the_order_of_the_dialogs.mjs measures the order: the
 // host the caller installed, an isolated home, a stand-in model on a local port, no login and no secret.
 //
+// The answer is read as the recording's own `_why` defines it: what `next(e)` resolved to with the host's message count
+// (`ref`) left out — the same rule, through the same function, as the gate that reads this recording (martha#129).
+//
 // A reviewer's design note, kept here because it is what the mode split is for (martha#812 r=2): exit 0 must mean every
 // case was taken, so the live mode's fail-closed promise is pinned by CI with a stand-in host that never answers, and
 // the comparison itself is the program `--compare` runs. No host and no npm are needed for either.
@@ -24,6 +27,7 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
+import { withoutRef } from '../src/keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
 import { HOSTS } from '../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { DIALOG_WAIT_MS, WELCOME_WAIT_MS } from './the_wait_a_probe_gives_a_screen.mjs'
 
@@ -254,7 +258,11 @@ async function takeTheCase({ claude, out, at, one }) {
   model.close()
   if (!existsSync(places.logfile)) return { why: whyNoAnswer(run) }
   try {
-    return { taken: JSON.parse(readFileSync(places.logfile, 'utf8')) }
+    const written = JSON.parse(readFileSync(places.logfile, 'utf8'))
+    // The answer as the recording's own `_why` defines it: what `next(e)` resolved to with `ref` left out. That is the
+    // host's count of the messages it produced for the call — a number, 1 in every run made this way, carrying no text
+    // the model reads — and the gate that reads the recording leaves it out with this same function (martha#129).
+    return { taken: { ...written, answer: withoutRef(written.answer) } }
   } catch {
     return { why: 'the plugin wrote no answer the check could read' }
   }
