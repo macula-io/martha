@@ -52,7 +52,7 @@ test('a callee bound by a const arrow is recorded with its body: a changed body 
   assert.deepEqual(differing(host('a+1'), host('a+2')), [FIELD])
 })
 
-test('two functions that call each other are each recorded once, and the chase ends (martha#811 r=1; mutant: a reached entry recorded again)', { timeout: 10_000 }, () => {
+test('two functions that call each other are each recorded once, and the chase ends (martha#811 r=1; mutant: a reached entry recorded again)', () => {
   const host = `function X(n){return n?Y(n-1):0}function Y(n){return n?X(n-1):1}${THE_TEXT}`
   const callees = calleesIn(host)
   assert.deepEqual(callees.functions.map(({ calls }) => calls), [{ Y: 1 }, { X: 0 }])
