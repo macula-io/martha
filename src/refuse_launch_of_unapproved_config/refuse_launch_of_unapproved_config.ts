@@ -452,13 +452,8 @@ export function theFilesOf(host: Host): readonly string[] {
 export function decideLaunch({ host, entries, tree, approved_fingerprints, refusal }: LaunchRequest): LaunchDecision {
   if (!theGateCanCheck(host)) return { allow: false, refusal: theUnknownHost(host) }
 
-  const unpinned = entries.find((entry) => entry.kind === 'symlink' || entry.kind === 'unreadable')
-  if (unpinned !== undefined) {
-    return {
-      allow: false,
-      refusal: `${REFUSED}: ${unpinned.path} is ${unpinned.kind === 'symlink' ? 'a symlink' : 'unreadable'}, so its content cannot be approved. Replace it with a plain file or a plain directory.`,
-    }
-  }
+  const unapprovable = whatNoApprovalCovers(host, entries)
+  if (unapprovable !== undefined) return { allow: false, refusal: `${REFUSED}: ${unapprovable}` }
 
   const unread = theFilesOf(host).find(
     (name) => !entries.some((entry) => entry.path === name || name.startsWith(`${entry.path}/`)),
@@ -466,9 +461,6 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints, refus
   if (unread !== undefined) {
     return { allow: false, refusal: `${REFUSED}: ${unread} was not read, so the config cannot be checked.` }
   }
-
-  const reserved = aSkillWithAReservedName(entries.map((entry) => entry.path), theRowOfHost(host).carried_folders)
-  if (reserved !== undefined) return { allow: false, refusal: `${REFUSED}: ${reserved}` }
 
   // No config needs no approval (rule 5), and a checkout it does not ask about cannot refuse it: nothing approved is
   // at risk there. Every other launch must have read the tree it would run.
@@ -492,6 +484,18 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints, refus
     allow: false,
     refusal: `${REFUSED}: the checkout holds config that starts code by itself (${present.join(', ')}), and the owner has not approved this config with this checkout's files (fingerprint ${fingerprint}). Run martha approve, read what it shows, and answer yes.`,
   }
+}
+
+/**
+ * Why no approval can cover these entries, or undefined: a link or an unreadable path, whose content cannot be pinned
+ * (rule 4), or a carried skill named like a folder the host or Martha's scan reads as its own (martha#747).
+ */
+function whatNoApprovalCovers(host: Host, entries: readonly ConfigEntry[]): string | undefined {
+  const unpinned = entries.find((entry) => entry.kind === 'symlink' || entry.kind === 'unreadable')
+  if (unpinned !== undefined) {
+    return `${unpinned.path} is ${unpinned.kind === 'symlink' ? 'a symlink' : 'unreadable'}, so its content cannot be approved. Replace it with a plain file or a plain directory.`
+  }
+  return aSkillWithAReservedName(entries.map((entry) => entry.path), theRowOfHost(host).carried_folders)
 }
 
 /** What a member started on an approval checks its own writes against (./pass_a_members_own_writes.ts, martha#132). */
@@ -767,23 +771,36 @@ interface CopyPlace {
  * hashed, and they are never reported to the owner as "not loaded".
  */
 function carryApproved(entries: readonly ConfigEntry[], place: CopyPlace, carrying: Carrying): string | undefined {
-  const { launch, start, snapshot, machine, crewText } = place
+  const { start, snapshot, machine } = place
   for (const entry of entries) {
-    if (entry.kind === 'absent' || aFolderCarriedWhole(entry, launch.carried_folders)) continue
-    const switchesFor = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
-    const noSwitch = crewText.has(entry.path) || isBelowACarriedFolder(entry.path, launch.carried_folders)
-    if (entry.kind !== 'file' || (switchesFor === undefined && !noSwitch)) {
+    const carrier = carrierOf(entry, place)
+    if (carrier === 'passed over') continue
+    if (carrier === 'left behind') {
       noteNotCarried(carrying.not_carried, entry.path)
       continue
     }
 
     const content = machine.stores.files.bytesOf(join(start, entry.path))
-    if (createHash('sha256').update(content).digest('hex') !== entry.sha256) return entry.path
+    if (entry.kind !== 'file' || createHash('sha256').update(content).digest('hex') !== entry.sha256) return entry.path
     const copied = snapshot.write(entry.path, content)
-    if (switchesFor !== undefined) carrying.carried.push(switchesFor(copied))
+    if (carrier.switchesFor !== undefined) carrying.carried.push(carrier.switchesFor(copied))
     carrying.carried_files[entry.path] = content
   }
   return undefined
+}
+
+/**
+ * How one entry is carried: passed over (absent, or a carried folder's own directory), left behind and told to the
+ * owner, or copied, with the switch that passes it when it has one. A file is copied when a switch passes it, or when
+ * it is a crew text or under a carried folder, which carry no switch of their own.
+ */
+function carrierOf(entry: ConfigEntry, place: CopyPlace): 'passed over' | 'left behind' | { readonly switchesFor: ((path: string) => HostSwitches) | undefined } {
+  const { launch, crewText } = place
+  if (entry.kind === 'absent' || aFolderCarriedWhole(entry, launch.carried_folders)) return 'passed over'
+  const switchesFor = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
+  const noSwitch = crewText.has(entry.path) || isBelowACarriedFolder(entry.path, launch.carried_folders)
+  if (entry.kind !== 'file' || (switchesFor === undefined && !noSwitch)) return 'left behind'
+  return { switchesFor }
 }
 
 /**

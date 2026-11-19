@@ -90,23 +90,34 @@ export function theSkillsLoaderIn(text: string): TheSkillsLoader {
  * config folder would not load, the checkout's own folder would, or bare mode reads a variable the launch does not
  * drop. The recorder runs it on what it cuts, and the recording runs it on what is committed.
  */
-export function theSkillsLoaderHolds({ skills_loader, bare_mode_test, host_skill_catalog }: TheSkillsLoader): void {
+export function theSkillsLoaderHolds(recorded: TheSkillsLoader): void {
+  const { skills_loader, host_skill_catalog } = recorded
+  theProjectGuardHolds(skills_loader, theUserReadHolds(recorded))
+  if (!skills_loader.includes(`${nameOf(host_skill_catalog)}()`)) throw new Error('The skills loader does not call the recorded host skill catalog reader (martha#747).')
+  hostSkillCatalogVariableOf(host_skill_catalog)
+}
+
+/** Refuses a loader whose user-scope read is gone or comes before its bare-mode return; answers where its bare branch starts. */
+function theUserReadHolds({ skills_loader, bare_mode_test }: TheSkillsLoader): number {
   const userRead = USER_READ.exec(skills_loader)
   if (userRead === null) throw new Error('The skills loader does not read the config folder\'s skills under userSettings, so the skills a launch copies there would not load (martha#747).')
-  const guard = PROJECT_GUARD.exec(skills_loader)?.[1]
-  if (guard === undefined) throw new Error('The skills loader binds no projectSettings guard, so whether it reads the checkout\'s own skills cannot be told (martha#747).')
   const bare = BARE_MODE_TEST.exec(bare_mode_test)
   if (bare === null) throw new Error('The recorded bare-mode test is not one this reads, so the variable a launch drops cannot be told (martha#747).')
   const branch = skills_loader.indexOf(`if(${bare[1] ?? ''}())return(`)
   if (branch < 0 || branch > userRead.index) throw new Error('The skills loader does not return on the bare-mode test before its user-scope read (martha#747).')
+  return branch
+}
+
+/** Refuses a loader that reads project skills, after its bare branch, anywhere but under its projectSettings guard. */
+function theProjectGuardHolds(skills_loader: string, branch: number): void {
+  const guard = PROJECT_GUARD.exec(skills_loader)?.[1]
+  if (guard === undefined) throw new Error('The skills loader binds no projectSettings guard, so whether it reads the checkout\'s own skills cannot be told (martha#747).')
   const afterBranch = skills_loader.indexOf(';let ', branch)
   const guarded = skills_loader.split(`${guard}?Promise.all(`).length - 1
   const reads = skills_loader.slice(afterBranch).split(PROJECT_READ).length - 1
   if (guarded < 2 || reads !== guarded) {
     throw new Error(`The skills loader reads project skills ${String(reads)} time(s) outside bare mode, ${String(guarded)} of them under its projectSettings guard, so the checkout's own skills could load (martha#747).`)
   }
-  if (!skills_loader.includes(`${nameOf(host_skill_catalog)}()`)) throw new Error('The skills loader does not call the recorded host skill catalog reader (martha#747).')
-  hostSkillCatalogVariableOf(host_skill_catalog)
 }
 
 /** The variable bare mode is read from, as the recorded test reads it. */
