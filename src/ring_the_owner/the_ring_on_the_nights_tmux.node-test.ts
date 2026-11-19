@@ -18,6 +18,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
+import { EDIT_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { notificationIdOf, NOTIFICATION_ESCAPE } from './ring_the_owner.ts'
 
@@ -63,7 +64,7 @@ function thePane(place: string, what: 'ring' | 'clipboard', after: string): stri
   // A launcher's own decision: the bells for a row going into "needs you", wrapped or not as isInsideTmux reads this pane.
   const rings = `const r = await import(${JSON.stringify(ring)}); const b = await import(${JSON.stringify(beat)}); const d = await import(${JSON.stringify(dialog)});
 const row = { ...b.theRowWithNothingSaid(), member: ${JSON.stringify(MEMBER)}, session: 's', at: 1 };
-const asking = d.takeAnOwnerDialog(row, { change: 'opened', at: 2, raised: { kind: 'permission', agent: '', tool: 'Edit', input: { file_path: 'a' } } });
+const asking = d.takeAnOwnerDialog(row, { change: 'opened', at: 2, raised: { kind: 'permission', agent: '', tool: ${JSON.stringify(EDIT_TOOL)}, input: { file_path: 'a' } } });
 process.stdout.write(r.theBellsFor(row, asking, { bell: false, notify: true }, true, false, r.isInsideTmux(process.env)));`
   const send = what === 'ring' ? `node --no-warnings --input-type=module -e '${rings.replaceAll("'", `'\\''`)}'` : `printf '\\033]52;c;bWFydGhh\\007'`
   return `while [ ! -e ${place}/go ]; do sleep 0.05; done; ${send}; printf '\\n%s\\n' '${after}'; exec cat > ${place}/keys`

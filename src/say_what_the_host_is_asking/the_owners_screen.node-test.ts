@@ -15,7 +15,7 @@ import { after, test } from 'node:test'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { notificationIdOf, theBellsFor, theCloseOf, THE_BELL } from '../ring_the_owner/ring_the_owner.ts'
+import { notificationIdOf, theBellsFor, theCloseOf, THE_BELL, TMUX_PASSTHROUGH_OPENING } from '../ring_the_owner/ring_the_owner.ts'
 import { IDLE, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { MENU_TOOL } from './say_what_the_host_is_asking.ts'
@@ -225,7 +225,7 @@ test('a launch whose terminal is a tmux pane sends its notification through tmux
     screen.heard('a-session', { said: 'permission', call: A_PERMISSION }, 20)
     return wrote
   }
-  const passthrough = '\x1bPtmux;'
+  const passthrough = TMUX_PASSTHROUGH_OPENING
 
   const inside = rung(true)
   assert.equal(inside.length, 1, 'one write, on the change into needs you')
