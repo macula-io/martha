@@ -51,7 +51,7 @@ export interface AGitignorePattern {
 
 /** What one line of a `.gitignore` is: nothing, a pattern, a line the engine drops, or a line this port refuses. */
 export type AParsedGitignoreLine =
-  | { readonly kind: 'nothing' }
+  | { readonly kind: 'nothing-taken' }
   | { readonly kind: 'pattern'; readonly pattern: AGitignorePattern }
   | { readonly kind: 'dropped'; readonly why: string }
   | { readonly kind: 'refused'; readonly refusal: string }
@@ -71,7 +71,7 @@ const RUST_WHITESPACE = new Set([0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20, 0x85, 0xa0,
 const REGEX_META_CHARACTERS = new Set(['\\', '.', '+', '*', '?', '(', ')', '|', '[', ']', '{', '}', '^', '$', '#', '&', '-', '~'])
 
 /** Nothing a `.gitignore` line says that the engine's matcher takes. */
-const NOTHING: AParsedGitignoreLine = { kind: 'nothing' }
+const NOTHING: AParsedGitignoreLine = { kind: 'nothing-taken' }
 
 /** A pattern the port cannot compile: it becomes a refusal, never a silent skip. */
 class AGlobThatCannotBeCompiled extends Error {}

@@ -17,7 +17,7 @@ import { aGitignoreLine, type AGitignorePattern } from './a_gitignore_pattern.ts
 import { anythingIsAt, bytesOrNone, isAFile, type TheFiles } from './the_files_a_hint_is_read_through.ts'
 
 /** The name the engine reads a directory's ignore lines from (`build_gitignore`'s `.join(".gitignore")`). */
-export const GITIGNORE_FILE = '.gitignore'
+const GITIGNORE_FILE = '.gitignore'
 
 /** A newline and a carriage return, as the engine's line reader splits and trims them. */
 const A_NEWLINE = 0x0a
