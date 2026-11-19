@@ -5,8 +5,8 @@
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
-/** Why `'.claude'` is written by literal in the shape a recorded host's sign-in rule takes (martha#776). */
-const THE_RECORDINGS_OWN_WORD = 'the folder the recorded host names in its own sign-in rule, kept as the host spelled it; a change to the tree\'s folder must not rewrite the bytes the recording holds'
+/** Why `'.claude'` is written by literal in the fixture this slice writes in the shape of the host's sign-in rule (martha#776). */
+const THE_RECORDINGS_OWN_WORD = 'the folder as the host\'s own sign-in rule spells it, in a fixture written in that rule\'s shape; the cut reads only the variable, and the fixture keeps the host\'s spelling rather than the tree\'s constant'
 
 export const COINCIDENCES: readonly Exception[] = [
   { value: CLAUDE_FOLDER, file: 'cut_the_rules_from_the_host_binary/the_sign_in_store.node-test.ts', reason: THE_RECORDINGS_OWN_WORD },
