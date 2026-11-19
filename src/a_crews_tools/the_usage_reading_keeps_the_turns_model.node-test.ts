@@ -165,3 +165,34 @@ test('#860 R4: a refusal on the turn the flow writes its own phase is said besid
   assert.match(said?.reason ?? '', /.; what the session spent was not kept: Martha keeps no crew files there/, 'the refusal was not said beside the flow\'s own reason')
   rmSync(usage_place, { force: true })
 })
+
+/** The refresh phase the member's row says, or null when it says none. */
+const theRowPhaseOf = (crew: ACrew): { readonly phase: string; readonly reason: string } | null => crew.beats.read(MEMBER)?.refresh ?? null
+
+/** The crew's usage place made a file, so the store refuses it; undone by the function returned. */
+function theUsagePlaceRefused(crew: ACrew): () => void {
+  const usage_place = join(crew.home, THE_CREW_FILES, USAGE_PLACE)
+  removeTheTree(usage_place)
+  writeFileSync(usage_place, 'not a place\n')
+  return () => rmSync(usage_place, { force: true })
+}
+
+test('#860 R4: a refusal while the flow waits on the phase it wrote earlier is said beside it, once, and taken off leaving the flow\'s own words (mutants: the left phase replaced, the left phase wiped, said twice)', async () => {
+  const crew = await aCrewOfTools()
+  await aTurnEnds(crew, '', 0)
+  const asked = askAMemberToRefresh({ stores: { crew: keepTheCrewsFilesAsDirectories(join(crew.home, THE_CREW_FILES)) } }, MEMBER, 'the owner asked for it', STARTED_AT)
+  assert.equal(asked, undefined, 'the test could not ask for a refresh')
+  await aTurnEnds(crew, 't-1', 0.25)
+  const flows = theRowPhaseOf(crew) ?? assert.fail('the flow wrote no phase of its own to wait on')
+  assert.notEqual(flows.phase, SPEND_NOT_KEPT, 'the flow wrote no phase of its own to wait on')
+  const answerAgain = theUsagePlaceRefused(crew)
+  await aTurnEnds(crew, 't-2', 0.375)
+  await aTurnEnds(crew, 't-3', 0.5)
+  const said = theRowPhaseOf(crew) ?? assert.fail('the row says no phase')
+  assert.equal(said.phase, flows.phase, 'the refusal replaced the phase the flow is waiting on')
+  assert.equal(said.reason.split('what the session spent was not kept').length, 2, `the refusal was not said exactly once beside the flow's reason: ${said.reason}`)
+  assert.ok(said.reason.startsWith(`${flows.reason}; what the session spent was not kept: Martha keeps no crew files there`), said.reason)
+  answerAgain()
+  await aTurnEnds(crew, 't-4', 0.625)
+  assert.deepEqual(theRowPhaseOf(crew), flows, 'once a reading was kept, the row does not say the flow\'s own phase as the flow wrote it')
+})

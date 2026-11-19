@@ -200,15 +200,35 @@ interface ARowPhase {
   readonly reason: string
 }
 
+/** How the row says a reading was not kept, after the flow's own reason when it has one. */
+const NOT_KEPT_SAYS = 'what the session spent was not kept: '
+const AFTER_THE_FLOWS_REASON = '; '
+
+/** A row phase with what it said of a reading not kept taken off: the flow's own reason, as the flow wrote it. */
+const withoutWhatWasNotKept = (phase: ARowPhase): ARowPhase => ({ ...phase, reason: phase.reason.split(`${AFTER_THE_FLOWS_REASON}${NOT_KEPT_SAYS}`)[0] ?? phase.reason })
+
+/** `phase` saying the reading was not kept: beside the flow's own reason, said once however often it was refused. */
+const sayingWhatWasNotKept = (phase: ARowPhase, why: string): ARowPhase => ({ ...phase, reason: `${withoutWhatWasNotKept(phase).reason}${AFTER_THE_FLOWS_REASON}${why}` })
+
 /**
- * The flow's act, with a reading the store refused said on the row: beside the flow's own phase, never in its place, and
- * taken off at the next turn's end that keeps a reading, never by a beat that kept nothing. Only the row phase changes:
- * the order the mod is sent stays the flow's alone, so a refused reading never holds the flow up.
+ * The flow's act, with a reading the store refused said on the row: beside the flow's own phase, never in its place,
+ * whether the flow writes that phase on this turn or left it on the row from an earlier one; and taken off at the next
+ * turn's end that keeps a reading, never by a beat that kept nothing, leaving the flow's own phase as it wrote it. Only
+ * the row phase changes: the order the mod is sent stays the flow's alone, so a refused reading never holds the flow up.
  */
 export function withWhatWasNotKept<A extends { readonly refresh?: ARowPhase | null }>(act: A, unkept: string | undefined, said: ARowPhase | null | undefined, turn_running: boolean): A {
-  if (unkept !== undefined) {
-    const why = `what the session spent was not kept: ${unkept}`
-    return { ...act, refresh: act.refresh === undefined || act.refresh === null ? { phase: SPEND_NOT_KEPT, reason: why } : { ...act.refresh, reason: `${act.refresh.reason}; ${why}` } }
-  }
-  return act.refresh === undefined && !turn_running && said?.phase === SPEND_NOT_KEPT ? { ...act, refresh: null } : act
+  if (unkept !== undefined) return { ...act, refresh: theRefusalSaid(act.refresh === undefined ? said : act.refresh, `${NOT_KEPT_SAYS}${unkept}`) }
+  if (act.refresh !== undefined || turn_running || said === undefined || said === null) return act
+  return theRefusalTakenOff(act, said)
+}
+
+/** The row phase saying `why`: beside the flow's phase when there is one, on its own when the row holds none of the flow's. */
+const theRefusalSaid = (flows: ARowPhase | null | undefined, why: string): ARowPhase =>
+  flows === undefined || flows === null || flows.phase === SPEND_NOT_KEPT ? { phase: SPEND_NOT_KEPT, reason: why } : sayingWhatWasNotKept(flows, why)
+
+/** The act once a reading was kept: a bare refusal cleared, the flow's phase given back its own words, else untouched. */
+function theRefusalTakenOff<A extends { readonly refresh?: ARowPhase | null }>(act: A, said: ARowPhase): A {
+  if (said.phase === SPEND_NOT_KEPT) return { ...act, refresh: null }
+  const left = withoutWhatWasNotKept(said)
+  return left.reason === said.reason ? act : { ...act, refresh: left }
 }
