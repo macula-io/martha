@@ -55,8 +55,18 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { checkoutTheGateReads, readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import {
+  CLAUDE_AUTO_UPDATER_OFF,
+  CLAUDE_CODE,
+  CLAUDE_FOLDER,
+  CLAUDE_SKILLS,
+  CLAUDE_SKILLS_ELSEWHERE,
+  MCP_CONFIG_SWITCH,
+  MEMORY_FOLDER_OVERRIDE,
+  REMOTE_MEMORY_ROOT,
+} from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { aSkillWithAReservedName, isBelowACarriedFolder } from './carry_the_approved_skills.ts'
 
 
 export type { LaunchHost }
@@ -88,8 +98,9 @@ export function launchEnvironment(
 }
 
 /**
- * The files each host reads from a project directory to start something by itself. Each is one the host was seen to
- * start something from (issue #16), never a guess. The table is keyed by the name a declaration writes, which is a
+ * The files and folders each host reads from a project directory, either to start something by itself (issue #16), or,
+ * for Claude Code's skills folder, to hand the model as instructions (martha#747), which Martha carries into the
+ * member's own config folder. Each is one the host was seen to read, never a guess. The table is keyed by the name a declaration writes, which is a
  * string the recording holds, so it is a string-keyed table with a guard at each read rather than a union the compiler
  * checks (martha#541's ruling on G1); this slice's own test holds the two tables to the same hosts.
  */
@@ -98,6 +109,9 @@ export const CLAUDE_CODE_FILES = [
   `${CLAUDE_FOLDER}/settings.json`,
   // The last one Claude Code writes itself: a member's own permission answers.
   `${CLAUDE_FOLDER}/settings.local.json`,
+  // Last, so a reader that takes the rows by position reads the same names (martha#747): the skills the host would
+  // read with project settings on, which a launch carries into the member's own config folder instead.
+  CLAUDE_SKILLS,
 ] as const
 
 /** OpenCode's: the last one holds a checkout's plugins and their installed packages. */
@@ -237,6 +251,12 @@ export interface HostLaunch {
    * names its reason in NO_AUTO_UPDATER instead, and the same test holds both halves.
    */
   readonly env_last: Readonly<Record<string, string>>
+  /**
+   * The listed folders whose files are carried with no switch of their own, into a place the launcher writes
+   * (martha#747): their bytes are the approved ones, they are never reported as not loaded, and a skill in them may not
+   * take a name the host keeps for itself.
+   */
+  readonly carried_folders: readonly string[]
 }
 
 const NO_ENV: Readonly<Record<string, string>> = {}
@@ -319,7 +339,7 @@ export const NO_AUTO_UPDATER: Readonly<Record<string, string>> = {
 export const CLAUDE_PROJECT_CONFIG_OFF: HostSwitches = {
   args: ['--setting-sources', 'user', '--strict-mcp-config'],
   env: CLAUDE_MEMORY_OFF,
-  env_dropped: [...CLAUDE_COMMAND_ELSEWHERE, ...CLAUDE_MEMORY_ELSEWHERE],
+  env_dropped: [...CLAUDE_COMMAND_ELSEWHERE, ...CLAUDE_MEMORY_ELSEWHERE, ...CLAUDE_SKILLS_ELSEWHERE],
 }
 
 export const HOSTS: Readonly<Record<string, HostLaunch>> = {
@@ -330,6 +350,7 @@ export const HOSTS: Readonly<Record<string, HostLaunch>> = {
       [CLAUDE_SETTINGS]: claudeSettingsSwitches,
     },
     env_last: CLAUDE_AUTO_UPDATER_OFF,
+    carried_folders: [CLAUDE_SKILLS],
   },
   opencode: {
     // The background service ignores a client's environment, so the host runs
@@ -344,6 +365,7 @@ export const HOSTS: Readonly<Record<string, HostLaunch>> = {
       [OPENCODE_CONFIG_WITH_COMMENTS]: (path) => ({ args: NO_ARGS, env: { OPENCODE_CONFIG: path }, env_dropped: NOTHING_DROPPED }),
     },
     env_last: OPENCODE_AUTO_UPDATER_OFF,
+    carried_folders: [],
   },
   [RECORDED_GOOSE_ENGINE.engine_name]: {
     // The engine reaches its own folders through the one variable the recording names, and everything else through the
@@ -359,6 +381,7 @@ export const HOSTS: Readonly<Record<string, HostLaunch>> = {
     },
     carried: {},
     env_last: NO_ENV,
+    carried_folders: [],
   },
 }
 
@@ -500,13 +523,8 @@ export function theFilesOf(host: Host): readonly string[] {
 export function decideLaunch({ host, entries, tree, approved_fingerprints, refusal }: LaunchRequest): LaunchDecision {
   if (!theGateCanCheck(host)) return { allow: false, refusal: theUnknownHost(host) }
 
-  const unpinned = entries.find((entry) => entry.kind === 'symlink' || entry.kind === 'unreadable')
-  if (unpinned !== undefined) {
-    return {
-      allow: false,
-      refusal: `${REFUSED}: ${unpinned.path} is ${unpinned.kind === 'symlink' ? 'a symlink' : 'unreadable'}, so its content cannot be approved. Replace it with a plain file or a plain directory.`,
-    }
-  }
+  const unapprovable = whatNoApprovalCovers(host, entries)
+  if (unapprovable !== undefined) return { allow: false, refusal: `${REFUSED}: ${unapprovable}` }
 
   const unread = theFilesOf(host).find(
     (name) => !entries.some((entry) => entry.path === name || name.startsWith(`${entry.path}/`)),
@@ -537,6 +555,18 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints, refus
     allow: false,
     refusal: `${REFUSED}: the checkout holds config that starts code by itself (${present.join(', ')}), and the owner has not approved this config with this checkout's files (fingerprint ${fingerprint}). Run martha approve, read what it shows, and answer yes.`,
   }
+}
+
+/**
+ * Why no approval can cover these entries, or undefined: a link or an unreadable path, whose content cannot be pinned
+ * (rule 4), or a carried skill named like a folder the host or Martha's scan reads as its own (martha#747).
+ */
+function whatNoApprovalCovers(host: Host, entries: readonly ConfigEntry[]): string | undefined {
+  const unpinned = entries.find((entry) => entry.kind === 'symlink' || entry.kind === 'unreadable')
+  if (unpinned !== undefined) {
+    return `${unpinned.path} is ${unpinned.kind === 'symlink' ? 'a symlink' : 'unreadable'}, so its content cannot be approved. Replace it with a plain file or a plain directory.`
+  }
+  return aSkillWithAReservedName(entries.map((entry) => entry.path), theRowOfHost(host).carried_folders)
 }
 
 /** What a member started on an approval checks its own writes against (./pass_a_members_own_writes.ts, martha#132). */
@@ -814,23 +844,45 @@ interface CopyPlace {
  * hashed, and they are never reported to the owner as "not loaded".
  */
 function carryApproved(entries: readonly ConfigEntry[], place: CopyPlace, carrying: Carrying): string | undefined {
-  const { launch, start, snapshot, machine, crewText } = place
+  const { start, snapshot, machine } = place
   for (const entry of entries) {
-    if (entry.kind === 'absent') continue
-    const switchesFor = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
-    const ownText = crewText.has(entry.path)
-    if (entry.kind !== 'file' || (switchesFor === undefined && !ownText)) {
+    const carrier = carrierOf(entry, place)
+    if (carrier === 'passed over') continue
+    if (carrier === 'left behind') {
       noteNotCarried(carrying.not_carried, entry.path)
       continue
     }
 
     const content = machine.stores.files.bytesOf(join(start, entry.path))
-    if (createHash('sha256').update(content).digest('hex') !== entry.sha256) return entry.path
+    if (entry.kind !== 'file' || createHash('sha256').update(content).digest('hex') !== entry.sha256) return entry.path
     const copied = snapshot.write(entry.path, content)
-    if (switchesFor !== undefined) carrying.carried.push(switchesFor(copied))
+    if (carrier.switchesFor !== undefined) carrying.carried.push(carrier.switchesFor(copied))
     carrying.carried_files[entry.path] = content
   }
   return undefined
+}
+
+/**
+ * How one entry is carried: passed over (absent, or a carried folder's own directory), left behind and told to the
+ * owner, or copied, with the switch that passes it when it has one. A file is copied when a switch passes it, or when
+ * it is a crew text or under a carried folder, which carry no switch of their own.
+ */
+function carrierOf(entry: ConfigEntry, place: CopyPlace): 'passed over' | 'left behind' | { readonly switchesFor: ((path: string) => HostSwitches) | undefined } {
+  const { launch, crewText } = place
+  if (entry.kind === 'absent' || aFolderCarriedWhole(entry, launch.carried_folders)) return 'passed over'
+  const switchesFor = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
+  const noSwitch = crewText.has(entry.path) || isBelowACarriedFolder(entry.path, launch.carried_folders)
+  if (entry.kind !== 'file' || (switchesFor === undefined && !noSwitch)) return 'left behind'
+  return { switchesFor }
+}
+
+/**
+ * Whether `entry` is a carried folder itself, or a directory inside one, whose files are carried one by one: it is not
+ * left behind. Installed packages inside one are, like anywhere else, never walked, so they are left behind.
+ */
+function aFolderCarriedWhole(entry: ConfigEntry, folders: readonly string[]): boolean {
+  if (entry.kind !== 'directory' || entry.path.split('/').at(-1) === DEPENDENCIES) return false
+  return folders.includes(entry.path) || isBelowACarriedFolder(entry.path, folders)
 }
 
 /** Note a path left behind, unless a directory above it is already noted. */

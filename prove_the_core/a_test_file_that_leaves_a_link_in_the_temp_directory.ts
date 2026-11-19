@@ -1,6 +1,6 @@
-// A test file the run guard must fail, and one that passes on its own: it leaves a symlink named by its own pid in the
-// temp directory, the shape every_test_file_cleans_up.ts holds test files to (martha-472-link-<pid>). Run only by
-// every_test_run_ends.node-test.ts, which removes what it leaves.
+// A test file the run guard must fail: it leaves a symlink named by its own pid in the temp directory it was given, the
+// shape that made part 1 of martha#724 (martha-472-link-<pid>). Run only by every_test_run_ends.node-test.ts: the guard
+// names it and fails it, and the leftover goes with the file's own directory, which the run's roots take with them.
 
 import { symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'

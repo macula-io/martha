@@ -5,12 +5,14 @@ import { dirname, join } from 'node:path'
 
 import { CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { memoryDenyRules, ownerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { claude, HEADLESS_CLAUDE, ownerSettingsPath, PROMPT, type OwnerMarkdownFile, type Place, type Probe } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
+import { claude, HEADLESS_CLAUDE, ownerSettingsPath, PROMPT, put, type OwnerMarkdownFile, type Place, type Probe } from '../declare_a_launch_probe/declare_a_launch_probe.ts'
 import { deniedWriteIn } from './the_write_the_host_was_refused.ts'
 import { skillsListedIn } from './the_skills_the_host_listed.ts'
 import { SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { readFileSync } from 'node:fs'
 
 // --- the trash, and the skills the host syncs from the owner's account (martha#243) ---
 //
@@ -109,6 +111,47 @@ export const SYNCED_PROBES: readonly Probe[] = [
     gate_names: (place: Place) => syncedPathsOf(place, HOOKED_SYNCED),
   },
 ]
+
+// --- the approved checkout's skills, with project settings still off (martha#747, T1-live) ---
+//
+// The checkout holds a skill and the owner approves it; the planned launch carries it, and the row copies the carried
+// bytes into the config folder the host is started on, as the launcher does into a member's own. The host must list
+// it, and its debug log must name that folder's skills as its user scope. The control is the same start on the same
+// folder with no copies in it: the host lists no such skill, so the copy is what loads it and the checkout's own
+// folder, which project settings off keeps unread, is not.
+
+const APPROVED_SKILL = 'approved-skill-probe'
+const DEBUG_LOG = 'host-debug.log'
+
+/** What the host's debug log says its user-scope skills folder is, compared with the config folder the run named. */
+const userScopeIsTheConfigFolders = (place: Place): boolean => {
+  try {
+    return readFileSync(join(place.scratch, DEBUG_LOG), 'utf8').includes(`user=${join(dirname(ownerSettingsPath(place)), SKILLS_KIND)}`)
+  } catch {
+    return false
+  }
+}
+
+/** One row of the pair: the approved checkout's skill, carried into the config folder or not. */
+const approvedSkillRow = (carried: boolean): Probe => ({
+  what: carried
+    ? "Claude Code as martha start starts it: the approved checkout's skill, copied into the member's config folder, is listed with project settings off (martha#747)"
+    : "Claude Code as martha start starts it, the control: the same approved checkout with no copy in the config folder lists no such skill, so its own .claude/skills is not read (martha#747)",
+  host: CLAUDE_CODE,
+  command: (switches, place) => ({
+    command: CLAUDE,
+    args: ['-p', THE_MODELS_SWITCH, 'haiku', '--output-format', 'stream-json', '--verbose', '--debug-file', join(place.scratch, DEBUG_LOG), PROMPT, ...switches.args],
+  }),
+  approved: (place) => put(place.checkout, `${CLAUDE_SKILLS}/${APPROVED_SKILL}/SKILL.md`, `---\nname: ${APPROVED_SKILL}\ndescription: a probe skill\n---\n${PROMPT}\n`),
+  planted: () => {},
+  planned: true,
+  owner_settings: () => JSON.stringify({}),
+  ...(carried ? { carries_skills: true as const } : {}),
+  from_output: (place: Place, printed: string) => ({ SKILL_LISTED: skillsListedIn(printed).includes(APPROVED_SKILL), USER_SCOPE_IS_THE_CONFIG_FOLDERS: userScopeIsTheConfigFolders(place) }),
+  expected: { SKILL_LISTED: carried, USER_SCOPE_IS_THE_CONFIG_FOLDERS: true },
+})
+
+export const APPROVED_SKILLS_PROBES: readonly Probe[] = [approvedSkillRow(true), approvedSkillRow(false)]
 
 // --- the folders the host loads the owner's own text from (martha#154) -------
 //

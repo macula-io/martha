@@ -14,7 +14,7 @@ import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
-import { test, type TestContext } from 'node:test'
+import { after, test, type TestContext } from 'node:test'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { RELAY_COPY_NAME, removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
@@ -85,6 +85,8 @@ import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_c
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
+import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE, SKILLS_KIND } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // --- the run this file is (martha#559) --------------------------------------------
 
@@ -104,6 +106,10 @@ process.once('exit', () => {
   RUN_THIS_FILE_IS.close()
   removeTheTree(dirname(THE_RUNS_END))
 })
+
+// And taken down when the file's tests are done, which is before the guard judges what this file left (martha#724): a
+// directory it makes is this file's to remove, whether the run ends by force-exit or another way.
+after(() => removeTheTree(dirname(THE_RUNS_END)))
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -4600,4 +4606,52 @@ test('a launch given no workspace leaves no scan line, and the row keeps whateve
   assert.equal(started.started, true)
   await new Promise((resolve) => setTimeout(resolve, 120))
   assert.equal(dashboardRowsIn(place.dashboard).read(member)?.needs, '', 'a launch with no layout wrote a line anyway')
+})
+
+// --- the approved checkout's skills, with project settings still off (martha#747) ---------------------------------
+// The skill texts below are the tests' own bytes, never a constant under test: a launch that carried nothing, or
+// carried them anywhere else, cannot match them.
+
+const A_SKILL = '---\nname: x\ndescription: a skill the owner approved for this test\n---\nDo the thing the test asks.\n'
+const A_SKILLS_REFERENCE = 'a file the skill points at, its bytes the test\'s own\n'
+
+test("T1: a launch on an approved checkout writes its skills into the member's own config folder, byte-equal, with project settings still off (martha#747)", async (t) => {
+  const place = placeFor(t, SERVERS, { [`${CLAUDE_SKILLS}/x/SKILL.md`]: A_SKILL, [`${CLAUDE_SKILLS}/x/ref.md`]: A_SKILLS_REFERENCE })
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved))
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write what it was started with', () => existsSync(fake.argsFile) && existsSync(fake.envFile), t)
+  const own = membersOwnConfig(place)
+  assert.equal(readFileSync(join(own, SKILLS_KIND, 'x', 'SKILL.md'), 'utf8'), A_SKILL)
+  assert.equal(readFileSync(join(own, SKILLS_KIND, 'x', 'ref.md'), 'utf8'), A_SKILLS_REFERENCE)
+  assert.equal(lstatSync(join(own, SKILLS_KIND, 'x', 'SKILL.md')).mode & 0o777, 0o600, 'a copied skill is the launcher\'s alone')
+  assert.equal(lstatSync(join(own, SKILLS_KIND, 'x', 'SKILL.md')).isFile(), true, 'a copied skill is a file, never a link')
+  const args = readFileSync(fake.argsFile, 'utf8').split('\n')
+  const at = args.indexOf('--setting-sources')
+  assert.ok(at >= 0 && args[at + 1] === 'user', `the host still starts with project settings off: ${args.join(' ')}`)
+  started.stop('the test is over')
+  await started.stopped
+})
+
+test("T4: an approved skill whose frontmatter declares hooks is refused at launch, naming the copied file (martha#747, martha#146)", async (t) => {
+  const withHooks = '---\nname: x\ndescription: a skill\nhooks:\n  PreToolUse: []\n---\nbody\n'
+  const place = placeFor(t, SERVERS, { [`${CLAUDE_SKILLS}/x/SKILL.md`]: withHooks })
+  const fake = fakeClaude(place)
+  const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved), fake.ranFile)
+  assert.ok(refusal.includes(join(SKILLS_KIND, 'x', 'SKILL.md')) && refusal.includes('the key hooks'), refusal)
+})
+
+test('T7, T9a: an inherited host skill catalog and an inherited bare mode never reach the member (martha#747)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const launch = memberLaunch(place, fake.command, place.approved)
+  const inherited = { ...launch.inherited, [CLAUDE_CODE_BARE_MODE_VARIABLE]: 'an-inherited-bare-mode', [CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE]: join(place.home, 'a-mount') }
+  const started = await aMemberStartedIn(t, place, { ...launch, inherited })
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write what it was started with', () => existsSync(fake.envFile), t)
+  const env = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
+  assert.equal(Object.hasOwn(env, CLAUDE_CODE_BARE_MODE_VARIABLE), false, 'bare mode is dropped')
+  assert.equal(Object.hasOwn(env, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE), false, 'the host skill catalog is dropped')
+  started.stop('the test is over')
+  await started.stopped
 })

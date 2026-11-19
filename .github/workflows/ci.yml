@@ -493,6 +493,10 @@ jobs:
           node-version: '24'
       - run: npm ci
       - run: prove_the_recorded_host_is_current/prove_the_drift_check_bites.sh
+      # The Bash answers harness can fail too (martha#812): the comparison names every difference, and the live mode
+      # takes no case from a host that never answers. No host and no npm: the comparison is driven with recordings the
+      # tests write, and the live mode with a stand-in `claude`, which is only a path to the harness.
+      - run: prove_the_relay_loads/prove_the_bash_answers_bites.sh
 
   # The engine drift check can fail (macula-io/martha#541, package 10): the recorder's --check passes on a tree that
   # says what the recording says and fails, naming the fact, on one that does not, with no engine checkout. Then it
