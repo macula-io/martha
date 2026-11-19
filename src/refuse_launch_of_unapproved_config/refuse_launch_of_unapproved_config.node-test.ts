@@ -29,6 +29,7 @@ import {
   snapshotApproved,
   startedWithOf,
   startedWithTheSwitches,
+  theRecordOfTheTextAStartLoads,
   theRowOfHost,
   type Host,
 } from './refuse_launch_of_unapproved_config.ts'
@@ -326,6 +327,28 @@ test('a checkout outside the stop directory altogether still has its tree read',
   const elsewhere = mkdtempSync(join(tmpdir(), 'martha-elsewhere-'))
   t.after(() => removeTheTree(elsewhere))
   assert.equal(treeAt(place.checkout, elsewhere), git(place.checkout, 'rev-parse', 'HEAD^{tree}'))
+})
+
+test("the record of the engine's hint text refuses when a directory on the way cannot be read (martha#541)", (t) => {
+  const place = scratch(t)
+  // A machine whose file store cannot read one directory it is asked about, as an unreadable parent answers an lstat.
+  const aMachineThatCannotReadADirectory = {
+    ...thisMachine,
+    stores: {
+      ...thisMachine.stores,
+      files: {
+        ...thisMachine.stores.files,
+        kindOf: (at: string) => {
+          // The words a file store's own lstat fails with, kept as node spells them, so the refusal is judged on them.
+          if (at.endsWith(join(sep, '.git'))) throw Object.assign(new Error(`EACCES: permission denied, lstat '${at}'`), { code: 'EACCES' })
+          return thisMachine.stores.files.kindOf(at)
+        },
+      },
+    },
+  }
+  const recorded = theRecordOfTheTextAStartLoads({ host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: place.checkout, stop_dir: place.home }, aMachineThatCannotReadADirectory)
+  if (!('refusal' in recorded)) assert.fail('a directory that could not be read was recorded as though it had been')
+  assert.match(recorded.refusal, /could not be read \(EACCES:/)
 })
 
 // --- where it looks -------------------------------------------------------------

@@ -11,7 +11,7 @@ import { LONGEST_MESSAGE } from '../send_a_crew_message/send_a_crew_message.ts'
 import { THE_SAVE_WAIT_MS } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { THE_ACT_THE_OWNER_TYPES } from '../launch_a_goose_member/coincidences.ts'
-import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../launch_a_goose_member/launch_a_goose_member.ts'
+import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { TRUST_ANSWER_DEADLINE_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 
 /**
