@@ -13,9 +13,19 @@
 // token, so that whole value is withheld rather than kept in part; a line that does not parse whole is withheld whole
 // too, since nothing of it can be vouched for.
 //
-// The bounds are the product's own: one file past TRANSCRIPTS_FILE_BYTES_KEPT, and the files of one launch past
-// TRANSCRIPTS_LAUNCH_BYTES_KEPT, are replaced by a line saying so. A truncated JSONL presented as a transcript is
-// never what a reader should get.
+// A token can stand in a record's own KEY as well as in a value, and a key is as readable as a value is, so keys are
+// redacted too (martha#646 r=3 R7). A line nothing was redacted in is kept exactly as the host wrote it: writing it out
+// again would change the numbers past 2^53 and the spacing the host chose, and a reader would be reading the host's
+// transcript no longer (martha#646 r=3 R8). Only a line a redaction applied to is written out again.
+//
+// The bounds are the product's own, and they are counted on the bytes actually KEPT: one file past
+// TRANSCRIPTS_FILE_BYTES_KEPT and the files of one launch past TRANSCRIPTS_LAUNCH_BYTES_KEPT are replaced by a line
+// saying so. On what was read, the bound would not be a bound: redaction can make a file longer than it was, and a run
+// of lines that do not parse is kept as one line naming how many rather than one withheld line each, so a small file of
+// them would otherwise be kept tens of times its own size — enough for a joined string to throw and take the launch's
+// every transcript with it (martha#646 r=3 R6). A truncated JSONL presented as a transcript is never what a reader
+// should get, and one file that cannot be kept is kept as its own line saying so, never at the launch's other files'
+// expense.
 
 import { join } from 'node:path'
 
@@ -52,6 +62,14 @@ export const WITHHELD = '[withheld: a token was in this text across a line break
 
 /** What stands for a line of a transcript that does not parse whole: nothing of it can be vouched for. */
 export const WITHHELD_LINE = "[withheld: this line is not the host's own record, so none of it is kept]"
+
+/**
+ * What stands for a run of `count` such lines, kept as one line: a file of lines that do not parse would otherwise grow
+ * the kept text by a whole withheld line each, which is far more than the file itself was (martha#646 r=3 R6). One line
+ * is spelled as it always was, so a transcript with one bad line reads as it did.
+ */
+export const theWithheldLines = (count: number): string =>
+  count === 1 ? WITHHELD_LINE : `[withheld: ${String(count)} lines of this transcript are not the host's own records, so none of them is kept]`
 
 /** What stands for a transcript that could not be read: nothing of it is kept, and it is not silently an empty file. */
 export const COULD_NOT_READ = '[not kept: this transcript could not be read]'
@@ -169,74 +187,160 @@ function redactEveryStringInAList(list: readonly unknown[], theLaunchKey: string
   return { value, found }
 }
 
-/** Each value of `record` redacted, its own keys as they were, and whether any held a token. */
+/**
+ * Each value of `record` redacted, its own keys redacted too, and whether any of them held a token. A key is a string
+ * a reader of the transcript can read, so a token the member put in one is a token kept in the clear (martha#646 r=3
+ * R7). Two keys that redact alike become one, the later value standing: a value is lost, never the token.
+ */
 function redactEveryStringInARecord(record: Readonly<Record<string, unknown>>, theLaunchKey: string): ARedactedValue {
   let found = false
   const value = Object.fromEntries(
     Object.entries(record).map(([key, one]) => {
+      const theKey = redactTheTokens(key, theLaunchKey)
       const redacted = redactEveryStringIn(one, theLaunchKey)
-      found = found || redacted.found
-      return [key, redacted.value]
+      found = found || theKey.found || redacted.found
+      return [theKey.text, redacted.value]
     }),
   )
   return { value, found }
 }
 
+/** One line of a transcript as it is kept, and whether it was withheld whole, so it joins a run of the same. */
+interface AKeptLine {
+  readonly text: string
+  readonly withheld: boolean
+}
+
 /**
- * One line of a transcript, kept: parsed as the host wrote it, every string in it redacted, and the record written out
- * whole again; or, for a line that does not parse, the line that says nothing of it was kept.
+ * One line of a transcript, kept: parsed as the host wrote it, every string in it — and every key — redacted, and the
+ * record written out whole again only when a redaction applied to it; a line nothing was redacted in is kept exactly as
+ * the host wrote it, since writing it out again would change the numbers and the spacing the host wrote (martha#646 r=3
+ * R8). A line that does not parse is withheld whole.
+ *
+ * A line the host wrote is one JSON object or array, so a line that begins with neither is not one of its records and is
+ * withheld without being parsed: parsing every line of a file of junk means throwing on every one, which cost the exit
+ * handler twenty seconds for a file the bound should turn into one line (martha#646 r=3 R6). Such a line is withheld,
+ * never kept, so nothing of it can reach a reader.
  */
-function redactOneLine(line: string, theLaunchKey: string, found: { any: boolean }): string {
-  if (line === '') return line
+function redactOneLine(line: string, theLaunchKey: string, found: { any: boolean }): AKeptLine {
+  if (line === '') return { text: line, withheld: false }
+  const begins = line.trimStart().charAt(0)
+  if (begins !== '{' && begins !== '[') return { text: WITHHELD_LINE, withheld: true }
   let record: unknown
   try {
     record = JSON.parse(line)
   } catch {
-    return WITHHELD_LINE
+    return { text: WITHHELD_LINE, withheld: true }
   }
   const redacted = redactEveryStringIn(record, theLaunchKey)
-  found.any = found.any || redacted.found
-  return JSON.stringify(redacted.value)
+  if (!redacted.found) return { text: line, withheld: false }
+  found.any = true
+  return { text: JSON.stringify(redacted.value), withheld: false }
+}
+
+/** What a transcript kept within a cap came to: the host's own lines, whether a token was kept out of any, and its size. */
+export interface ATranscriptWithinItsBound {
+  readonly text: string
+  readonly found: boolean
+  /** The kept bytes counted when the walk stopped, when they would pass the cap; the caller keeps a note in its place. */
+  readonly over: number | null
 }
 
 /**
- * `text` as the host wrote it, kept: one JSON record a line, every string of it redacted on its decoded value, each
- * record written out whole again, and a line that does not parse whole withheld whole. Lines end where they ended, so a
- * kept transcript ends with the newline its own did.
+ * `text` as the host wrote it, kept within `cap` bytes: one line a line, a line no redaction applied to kept byte for
+ * byte, every other written out again, a line that does not parse withheld whole, and a run of those kept as one line
+ * naming how many. The walk stops as soon as the kept text would pass `cap`, so a file the bound leaves no room for
+ * costs its own size and not a string grown past what the engine can hold (martha#646 r=3 R6): a transcript past a
+ * bound is kept as its note, never in part. `over` is the size counted by then, the crossing line's own included.
  */
-export function redactTheTranscript(text: string, theLaunchKey: string): { readonly text: string; readonly found: boolean } {
+export function redactTheTranscriptWithin(text: string, theLaunchKey: string, cap: number): ATranscriptWithinItsBound {
   const found = { any: false }
-  const lines = text.split('\n').map((line) => redactOneLine(line, theLaunchKey, found))
-  return { text: lines.join('\n'), found: found.any }
+  const lines: string[] = []
+  let bytes = 0
+  let over: number | null = null
+  let withheld = 0
+  /** `line` kept after the ones already kept, counting the newline before it, or the walk stopped when it does not fit. */
+  const keep = (line: string): boolean => {
+    const add = Buffer.byteLength(line) + (lines.length === 0 ? 0 : 1)
+    bytes += add
+    if (bytes > cap) {
+      over = bytes
+      return false
+    }
+    lines.push(line)
+    return true
+  }
+  /** The run of withheld lines so far kept as the one line it is, before a line that is kept in full. */
+  const theRunKept = (): boolean => {
+    if (withheld === 0) return true
+    const one = theWithheldLines(withheld)
+    withheld = 0
+    return keep(one)
+  }
+  for (const line of text.split('\n')) {
+    const kept = redactOneLine(line, theLaunchKey, found)
+    if (kept.withheld) {
+      withheld += 1
+      continue
+    }
+    if (!theRunKept() || !keep(kept.text)) break
+  }
+  if (over === null) theRunKept()
+  return { text: over === null ? lines.join('\n') : '', found: found.any, over }
+}
+
+/**
+ * What one transcript is kept as, given the room left of the launch's bound: its redacted text when both bounds have
+ * room for it, and otherwise the note naming the bound it passed. A redaction that throws is this file's note and no
+ * other file's business, since one transcript never costs a launch the rest.
+ */
+function theKeptTextOf(transcript: AConfigFile, theLaunchKey: string, room: number): { readonly text: string; readonly found: boolean } {
+  try {
+    const redacted = redactTheTranscriptWithin(transcript.text ?? '', theLaunchKey, Math.min(TRANSCRIPTS_FILE_BYTES_KEPT, room))
+    if (redacted.over === null) return { text: redacted.text, found: redacted.found }
+    const of: TheBound = room <= TRANSCRIPTS_FILE_BYTES_KEPT ? 'launch' : 'file'
+    return { text: tooLargeToKeep(redacted.over, of === 'file' ? TRANSCRIPTS_FILE_BYTES_KEPT : TRANSCRIPTS_LAUNCH_BYTES_KEPT, of), found: false }
+  } catch {
+    return { text: COULD_NOT_READ, found: false }
+  }
 }
 
 /**
  * What of the member's config folder is kept: the host's transcripts, redacted, inside the two bounds, with a file the
  * bounds leave no room for replaced by the line that says so. Read in path order, so the same folder always keeps the
- * same files. The launch's own bound is counted on the bytes actually kept, not on what `stat` said a file was.
+ * same files.
+ *
+ * Both bounds are counted on the bytes actually KEPT, never on what `stat` said a file was: redaction can grow a file
+ * (a withheld value is longer than the value it replaces), so the per-file bound is the kept text's own size and the
+ * launch's room is what is left of its bound (martha#646 r=3 R6). A note is kept bytes too and is counted. Nothing here
+ * can leave a file's entry out: a file whose kept text passes either bound, or whose redaction throws, is kept as its
+ * own line saying so, so one file never costs the launch its others.
  */
 export function chooseTheTranscripts(holds: WhatTheConfigFolderHolds): TheTranscriptsToKeep {
   const kept: AKeptTranscript[] = []
   const marked: string[] = []
   let theLaunchesBytes = 0
+  const noteKept = (path: string, text: string): void => {
+    kept.push({ path, text })
+    theLaunchesBytes += Buffer.byteLength(text)
+  }
   const transcripts = holds.files.filter((one) => isTheHostsTranscript(one.path)).sort((one, other) => one.path.localeCompare(other.path))
   for (const transcript of transcripts) {
     if (transcript.unread === 'file' || transcript.bytes > TRANSCRIPTS_FILE_BYTES_KEPT) {
-      kept.push({ path: transcript.path, text: tooLargeToKeep(transcript.bytes, TRANSCRIPTS_FILE_BYTES_KEPT, 'file') })
+      noteKept(transcript.path, tooLargeToKeep(transcript.bytes, TRANSCRIPTS_FILE_BYTES_KEPT, 'file'))
       continue
     }
-    if (transcript.unread === 'launch' || theLaunchesBytes + transcript.bytes > TRANSCRIPTS_LAUNCH_BYTES_KEPT) {
-      kept.push({ path: transcript.path, text: tooLargeToKeep(transcript.bytes, TRANSCRIPTS_LAUNCH_BYTES_KEPT, 'launch') })
+    if (transcript.unread === 'launch') {
+      noteKept(transcript.path, tooLargeToKeep(transcript.bytes, TRANSCRIPTS_LAUNCH_BYTES_KEPT, 'launch'))
       continue
     }
     if (transcript.unread === 'could-not-read') {
-      kept.push({ path: transcript.path, text: COULD_NOT_READ })
+      noteKept(transcript.path, COULD_NOT_READ)
       continue
     }
-    const redacted = redactTheTranscript(transcript.text ?? '', holds.theLaunchKey)
-    theLaunchesBytes += Buffer.byteLength(redacted.text)
-    kept.push({ path: transcript.path, text: redacted.text })
-    if (redacted.found) marked.push(transcript.path)
+    const keptText = theKeptTextOf(transcript, holds.theLaunchKey, TRANSCRIPTS_LAUNCH_BYTES_KEPT - theLaunchesBytes)
+    noteKept(transcript.path, keptText.text)
+    if (keptText.found) marked.push(transcript.path)
   }
   return { kept, marked }
 }
