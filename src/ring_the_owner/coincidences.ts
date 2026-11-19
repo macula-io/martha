@@ -1,7 +1,7 @@
 // The coincidences of ring_the_owner: words its own files spell like a constant held elsewhere, each with its reason
 // (martha#289). Read by the restated-values check as a syntax tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { HOST_TERMINAL } from '../drive_the_recorded_host/drive_the_recorded_host.ts'
 import { TMUX_PASSTHROUGH_OPENING } from './ring_the_owner.ts'
 

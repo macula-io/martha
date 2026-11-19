@@ -88,14 +88,18 @@ function aNightServer(t: TestContext, place: string, pane: string): string[] {
   return tmux
 }
 
-/** Whether `pid` is still a process. */
+/**
+ * Whether `pid` is still a running process. A zombie is not: in a container whose first process reaps nothing, a stopped
+ * server stays a zombie, which signal 0 still reaches.
+ */
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0)
-    return true
   } catch {
     return false
   }
+  const stat = existsSync(`/proc/${String(pid)}/stat`) ? readFileSync(`/proc/${String(pid)}/stat`, 'utf8') : ''
+  return stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) !== 'Z'
 }
 
 /** A client attached with `attach`, recorded by `script` into `record`; its keyboard is its standard input. */

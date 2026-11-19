@@ -18,6 +18,11 @@ TOOL="${CONTAINER_TOOL:-docker}"
 
 # shellcheck source=prove_a_clean_install_in_a_throwaway_container/prove_a_clean_install_in_a_throwaway_container.sh
 . "${HERE}/prove_a_clean_install_in_a_throwaway_container.sh"
+# The bounds every run of the tests carries (RUN_TIMEOUT_MS, FORCE_EXIT_FLAG, GUARD_FLAG), read from the repository's
+# top, where the guard's path holds, and never restated here.
+cd "${REPO}"
+# shellcheck source=prove_the_relay_loads/the_runs_bounds.sh
+. "${REPO}/prove_the_relay_loads/the_runs_bounds.sh"
 
 said() { printf 'the_ring_on_the_nights_pinned_tmux: %s\n' "$1" >&2; }
 
@@ -43,7 +48,7 @@ summary="${debs}/summary"
 status=0
 "${TOOL}" run --rm -e MARTHA_TESTS_TMUX_REQUIRED=1 -e "MARTHA_TESTS_TMUX_VERSION=${version}" \
   -v "${REPO}:/repo" -v "${debs}:/debs:ro" -w /repo "${image}" \
-  bash -c "dpkg -i /debs/*.deb > /dev/null && npm ci --ignore-scripts --silent && node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts --test-reporter=spec ${CASES}" \
+  bash -c "dpkg -i /debs/*.deb > /dev/null && npm ci --ignore-scripts --silent && node --test --test-timeout=${RUN_TIMEOUT_MS} ${FORCE_EXIT_FLAG} ${GUARD_FLAG} --test-reporter=spec ${CASES}" \
   > "${summary}" 2>&1 || status=$?
 cat "${summary}"
 [ "${status}" -eq 0 ] || { said "the cases exited ${status} on tmux ${version} in ${image}"; exit 1; }
