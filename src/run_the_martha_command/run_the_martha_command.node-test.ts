@@ -675,7 +675,9 @@ const FIRST_FRAME_MS = 20_000
 test('#572: martha crew takes no argument', (t) => {
   const place = placeFor(t)
   assert.equal(marthaWith(place, runtimeOf(place), 'crew', 'Terra').status, EXIT_USAGE)
-  assert.ok(USAGE.includes('| martha crew |'), USAGE)
+  // No argument but one of the verbs martha#307 added: the strip is still `martha crew` alone, and the bracket holds the
+  // verbs, each optional.
+  assert.ok(USAGE.includes('| martha crew [add <member> <role>'), USAGE)
 })
 
 test('#572: martha crew clears the terminal and draws the header and every declared member, in the declaration order', async (t) => {
