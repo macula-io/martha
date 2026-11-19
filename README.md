@@ -93,17 +93,20 @@ through it.
 ## Install
 
 Martha runs on Node, from the version its `engines` field sets, and starts one
-coding tool, whose version the Claude Code adapter records. These two commands,
-run from a Martha checkout, print both:
+coding tool, whose version the Claude Code adapter records. Its second host, the
+engine built on Goose, is recorded the same way, at the commit its recorder read.
+These three commands, run from a Martha checkout, print all of them:
 
 ```sh
 node -p "require('./package.json').engines.node"
 node -p "require('./src/claude_code_host/recorded_claude_code_host.json').host_version"
+node -p "require('./src/know_the_goose_engines_facts/recorded_goose_engine.json').engine_version"
 ```
 
 Those files are where the versions are set: upgrade Node to the one the first
 names, and sign in to the coding tool the second names (`claude --version` is
-what you have).
+what you have). The third is the engine's pin, read from the engine's own source
+and re-taken only by its recorder, so no version is written on this page.
 
 Install one of two ways: from the signed package, when you want to run Martha,
 or from a checkout, when you are working on Martha itself.

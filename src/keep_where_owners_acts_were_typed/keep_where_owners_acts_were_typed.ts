@@ -11,6 +11,7 @@ import process from 'node:process'
 
 import { APPROVALS_FILE, appendStateLine, crewSubdirectory, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { COMMAND_SHAPES_FILE, OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
+import { THE_OWNERS_ANSWERS_FILE } from '../serve_the_owners_answers/the_owners_answer_route.ts'
 import { THE_BELLS_FILE, THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { PROC_ROOT, whereItIsTypedUnder } from '../linux_process_identity/process_identity_from_proc.ts'
 import {
@@ -43,6 +44,7 @@ export function theRecordFilesOf(place: TheOwnersActsPlace): Readonly<Record<str
     approve: join(place.state.directory, APPROVALS_FILE),
     'pin-key': join(place.state.directory, OWNER_KEYS_FILE),
     'keep-shapes': join(place.state.directory, COMMAND_SHAPES_FILE),
+    answer: join(place.state.directory, THE_OWNERS_ANSWERS_FILE),
     ...('path' in bells ? { bells: join(bells.path, THE_BELLS_FILE) } : {}),
   }
 }

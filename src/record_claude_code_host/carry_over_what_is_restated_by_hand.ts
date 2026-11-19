@@ -14,6 +14,8 @@
 import type { MemoryOff, RecordedHost } from '../claude_code_host/recorded_claude_code_host.ts'
 import type { GuardCalls } from './what_the_hosts_guards_call.ts'
 
+/** The file that holds the recording: written by the recorder, printed by the README's Install block (martha#541 package 11). */
+export const RECORDING_OF_THE_HOST = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
 /** The recording's own note on where it comes from. */
 export const NOTE = '_why'
 /** How the host keeps memory off, restated by hand for a version (martha#136). */
