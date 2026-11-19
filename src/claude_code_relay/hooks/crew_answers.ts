@@ -61,6 +61,8 @@ export async function switchTheModelOnTheHost(host: TheModelSwitchHost, model: s
 
 /** What the pane draws, as the launcher answers it (martha#254): its header, one line per member, and how it opens. */
 export interface ThePaneShown {
+  /** The goal line above the header (martha#309), or null for an answer from a launcher that draws none. */
+  readonly goal: string | null
   readonly header: string
   readonly lines: readonly string[]
   readonly open_at_start: boolean
@@ -113,7 +115,8 @@ export function paneIn(said: string): ThePaneShown | null {
     const parsed = JSON.parse(said) as Partial<ThePaneShown>
     if (typeof parsed.header !== 'string' || !Array.isArray(parsed.lines)) return null
     const { header, lines, rows, redraw_ms } = parsed
-    return { header, lines, open_at_start: parsed.open_at_start === true, rows: rows ?? PANE_CHROME_ROWS, redraw_ms: redraw_ms ?? null }
+    const goal = typeof parsed.goal === 'string' && parsed.goal !== '' ? parsed.goal : null
+    return { goal, header, lines, open_at_start: parsed.open_at_start === true, rows: rows ?? PANE_CHROME_ROWS, redraw_ms: redraw_ms ?? null }
   } catch {
     return null
   }

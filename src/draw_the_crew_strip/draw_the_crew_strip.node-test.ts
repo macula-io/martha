@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { NO_MEMBER_HAS_REPORTED, READER_BEAT_MS, seeTheCrew, thePaneHeader, thePaneLine } from '../see_the_crew/see_the_crew.ts'
+import { NO_MEMBER_HAS_REPORTED, READER_BEAT_MS, seeTheCrew, thePaneGoal, thePaneHeader, thePaneLine } from '../see_the_crew/see_the_crew.ts'
 import { OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theTabTitle } from '../title_a_members_tab/title_a_members_tab.ts'
 import { drawOnce, drawTheStrip, NOTHING_DRAWN, theStripFrame, type TheStripsSeam } from './draw_the_crew_strip.ts'
@@ -45,20 +45,26 @@ function seamOver(beats: Readonly<Record<string, DashboardRow>>, now: () => numb
 
 test('T1: the strip draws exactly the reader\'s header, then one line per member in the declaration\'s order', () => {
   const seen = seeTheCrew(CREW, { Uranus: beat('Uranus', NOW - 1_000, { state: 'waiting', waits: { on: 'ci', for: 'a run', since: NOW - 1_000 } }) }, NOW)
-  assert.deepEqual(theStripFrame(seen), [thePaneHeader(seen.counts), thePaneLine(seen.rows[0]!), thePaneLine(seen.rows[1]!)])
-  assert.equal(theStripFrame(seen)[2], 'Uranus: waiting · Draw the strip 2/5 · macula-io/martha#572 · waits on ci for a run')
+  assert.deepEqual(theStripFrame(seen), [thePaneGoal(seen.goal), thePaneHeader(seen.counts), thePaneLine(seen.rows[0]!), thePaneLine(seen.rows[1]!)])
+  assert.equal(theStripFrame(seen)[3], 'Uranus: waiting · Draw the strip 2/5 · macula-io/martha#572 · waits on ci for a run')
 })
 
 test('T1: a crew with no member draws the header and the reader\'s own words for it', () => {
   const seen = seeTheCrew({ members: [] }, {}, NOW)
-  assert.deepEqual(theStripFrame(seen), [thePaneHeader(seen.counts), NO_MEMBER_HAS_REPORTED])
+  assert.deepEqual(theStripFrame(seen), [thePaneGoal(null), thePaneHeader(seen.counts), NO_MEMBER_HAS_REPORTED])
+})
+
+test('a declared goal is the strip\'s first line, above the header (martha#309)', () => {
+  const withGoal = seeTheCrew({ members: [{ name: 'Vesta' }], goal: { says: 'Ship the dashboard', packages: [] } }, {}, NOW)
+  assert.equal(theStripFrame(withGoal)[0], 'Goal: Ship the dashboard')
+  assert.equal(theStripFrame(withGoal)[1], thePaneHeader(withGoal.counts), 'the header still follows the goal')
 })
 
 test('T2: what the reader answers is what the strip and the title show, even against the beat under it', () => {
   const seen = seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - 1_000) }, NOW)
   assert.equal(seen.rows[0]!.state, 'working', 'the beat under the answer says working')
   const answered = { ...seen, rows: [{ ...seen.rows[0]!, state: OFFLINE }, seen.rows[1]!] }
-  assert.equal(theStripFrame(answered)[1], 'Vesta: offline · Draw the strip 2/5 · macula-io/martha#572')
+  assert.equal(theStripFrame(answered)[2], 'Vesta: offline · Draw the strip 2/5 · macula-io/martha#572')
   assert.equal(theTabTitle(answered.rows[0]!), 'Vesta · offline · 2/5 · Draw the strip')
 })
 
@@ -76,7 +82,7 @@ test('T4: a member whose launcher stopped beating past OFFLINE_AFTER_MS reads of
 
   assert.deepEqual(titles, ['Vesta · working · 2/5 · Draw the strip', 'Vesta · offline · 2/5 · Draw the strip'], 'one title per change, none per redraw')
   assert.equal(frames.length, 2, 'a frame is drawn when it changes, and only then')
-  assert.equal(frames[1]![1], 'Vesta: offline · Draw the strip 2/5 · macula-io/martha#572')
+  assert.equal(frames[1]![2], 'Vesta: offline · Draw the strip 2/5 · macula-io/martha#572')
 })
 
 test('the strip with no title setter titles nothing, and still draws', () => {

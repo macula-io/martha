@@ -698,7 +698,7 @@ test('#572: martha crew clears the terminal and draws the header and every decla
     const giveUp = setTimeout(() => resolve(false), FIRST_FRAME_MS)
     strip.stdout.on('data', (chunk: Buffer) => {
       out += chunk.toString('utf8')
-      if (out.split('\n').length > names.length + 1) {
+      if (out.split('\n').length > names.length + 2) {
         clearTimeout(giveUp)
         resolve(true)
       }
@@ -713,7 +713,10 @@ test('#572: martha crew clears the terminal and draws the header and every decla
   await ended
   assert.ok(drawn, `martha crew drew no whole frame: out ${JSON.stringify(out)} err ${JSON.stringify(err)}`)
   assert.ok(out.startsWith(CLEAR_THE_TERMINAL), `the frame does not open by clearing the terminal: ${JSON.stringify(out)}`)
-  const [header, ...lines] = out.slice(CLEAR_THE_TERMINAL.length).trimEnd().split('\n')
+  // One line above the header since martha#309: the declaration `martha init` wrote names no goal, so the line says so
+  // rather than drawing an empty one.
+  const [goal, header, ...lines] = out.slice(CLEAR_THE_TERMINAL.length).trimEnd().split('\n')
+  assert.match(goal!, /^No crew goal declared: /, out)
   assert.equal(header, `0/${names.length} online · 0 waiting · 0 need you`)
   assert.deepEqual(lines, names.map((name) => `${name}: idle ·  0/1`), out)
 })

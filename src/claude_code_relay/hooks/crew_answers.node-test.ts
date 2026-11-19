@@ -141,3 +141,9 @@ test('#311: an end that names no turn is not an order the mod carries out (mutan
   assert.equal(orderIn(JSON.stringify({ carry: CARRY_THE_END })), null, 'an end with no turn was read as an order')
   assert.equal(orderIn(JSON.stringify({ carry: CARRY_THE_END, turn_id: '' })), null, 'an end with an empty turn was read as an order')
 })
+
+test('the pane answer carries the goal line above the header, and a launcher that draws none reads as none (martha#309)', () => {
+  const withGoal = JSON.stringify(thePaneAnsweredBy(seeTheCrew({ members: [], goal: { says: 'Ship slice one', packages: [] } }, {}, 1_000), false, 1_000))
+  assert.equal(paneIn(withGoal)?.goal, 'Goal: Ship slice one', 'the goal line is read from the launcher\'s answer')
+  assert.equal(paneIn(JSON.stringify({ header: '0/0 online', lines: [] }))?.goal, null, 'an answer that carries no goal line is drawn with none')
+})

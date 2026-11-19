@@ -10,16 +10,17 @@
 // strip calls it only when the title changed.
 
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import type { CrewGoal } from '../declare_crew/declare_crew.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy, type CrewCounts, type CrewRow, type TheDeclaredCrew } from '../see_the_crew/see_the_crew.ts'
 import { theTitleToSet } from '../title_a_members_tab/title_a_members_tab.ts'
 
 /** The strip opens by itself wherever it is launched; the pane's own open-at-start switch is not the strip's to read. */
 const THE_STRIP_IS_OPEN = true
 
-/** The frame the strip draws for the reader's answer: the pane's header, then one line per member. */
-export function theStripFrame(seen: { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts }): readonly string[] {
+/** The frame the strip draws for the reader's answer: the pane's goal and header, then one line per member. */
+export function theStripFrame(seen: { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts; readonly goal?: CrewGoal | null }): readonly string[] {
   const pane = thePaneAnsweredBy(seen, THE_STRIP_IS_OPEN, READER_BEAT_MS)
-  return [pane.header, ...pane.lines]
+  return [pane.goal, pane.header, ...pane.lines]
 }
 
 /** What the strip is drawn over: the crew, its rows as the launchers beat them, a clock, and where it draws. */

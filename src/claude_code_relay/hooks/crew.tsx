@@ -13,7 +13,7 @@ import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, PANE, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
-import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
+import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown, type ThePaneShown } from './crew_answers.ts'
 
 /** Why a tool call has no answer: Martha did not launch this session (it was started by hand), or the launcher could not be heard. */
 const NOT_OURS = 'Martha did not launch this session, so it answers no tool here'
@@ -339,6 +339,15 @@ const answerWaitForCi = ($: CrewEngine, e: Record<string, unknown>): Promise<unk
 const answerReleaseTheFiles = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'release_the_files_a_killed_run_left')
 
 /**
+ * The goal line the pane draws above its header (martha#309), when the launcher's answer carries one: a launcher that
+ * draws none, or an answer this copy cannot read, draws no goal line at all.
+ */
+function theGoalLine(the_views: TheViews, shown: ThePaneShown | null): unknown {
+  const { Text } = the_views
+  return shown === null || shown.goal === null ? null : <Text>{shown.goal}</Text>
+}
+
+/**
  * The pane as the host draws it: the crew's rows, then the owner's list (martha#316). When the read failed it says it
  * could not read the crew, and why: drawing `0/0 online` and "no one has reported" over a broken answer tells the owner
  * a lie about a working crew (martha#254 part 2 r=2 R2).
@@ -355,6 +364,7 @@ async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
   const list = shown === null ? undefined : await theOwnersList($)
   return (
     <Box flexDirection="column">
+      {theGoalLine(views, shown)}
       <Box flexDirection="row" justifyContent="space-between">
         <Text bold>{shown === null ? 'Could not read the crew' : shown.header}</Text>
         <Button key="close" label="close" hotkey="x" role="dismiss" onPress={() => void shutThePane($)} />
