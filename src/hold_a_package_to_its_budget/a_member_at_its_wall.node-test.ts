@@ -103,6 +103,7 @@ function aCrewWithABudget(ledger: LedgerHost): CrewTools {
     startBeating: () => () => {},
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    noteTheStart: () => undefined,
     ends: holdingTheEnds(),
     thePredecessorOf: async () => null,
     theSpendInForce: (session_id) => budget.theSpendInForce(session_id),

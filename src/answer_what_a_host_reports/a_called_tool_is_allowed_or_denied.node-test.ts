@@ -63,6 +63,7 @@ function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
     },
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    noteTheStart: () => undefined,
     ends: {
       ...ends,
       deniesACall: (session) => ends.deniesACall(session),
