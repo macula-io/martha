@@ -94,7 +94,7 @@ function aPlantedRepository(where: string): void {
   writeFileSync(
     join(where, 'package.json'),
     JSON.stringify(
-      { name: 'a-planted-run', private: true, type: 'module', scripts: { test: "node --test 'suite/*.node-test.mjs'", 'test:file': "node --test 'suite/*.node-test.mjs'" } },
+      { name: 'a-planted-run', private: true, type: 'module', scripts: { test: "node --test 'suite/*.node-test.mjs'", 'test:file': 'node --test' } },
       null,
       2,
     ),
@@ -106,6 +106,10 @@ function aPlantedRepository(where: string): void {
   }
   mkdirSync(join(where, 'suite'), { recursive: true })
   writeFileSync(join(where, 'suite', 'the_planted_suite.node-test.mjs'), THE_PLANTED_SUITE)
+  // A file the whole-suite glob does not pick: only the one-file script can reach it, so a run that names it and still
+  // passes the glob has run the wrong script.
+  mkdirSync(join(where, 'elsewhere'), { recursive: true })
+  writeFileSync(join(where, 'elsewhere', 'a_file_only_the_one_file_script_reaches.node-test.mjs'), THE_PLANTED_SUITE)
 }
 
 /** The record root as the planted run sees it: the one name the record module holds, never a second copy of it. */
@@ -221,6 +225,16 @@ test('#802: the record is there before the suite runs its first file, and names 
   assert.equal(seen.cwd, plant.where, `${NAME}: the suite ran in ${seen.cwd}, not the checkout`)
   assert.equal(record.worktree, plant.where, `${NAME}: the record names ${record.worktree}, not the checkout the run was started in`)
   assert.equal(theRecordIn(plant, record.token), undefined, `${NAME}: a run that ended left its record behind`)
+})
+
+test('#802: with files named, the run goes through the one-file script, in the record\'s group', async (t) => {
+  const plant = aPlant(t, 'one-file')
+  const ran = await aNodeRun(plant, THE_RUNNER, ['elsewhere/a_file_only_the_one_file_script_reaches.node-test.mjs'])
+  assert.equal(ran.status, 0, `${NAME}: the planted one-file run failed:\n${ran.output}`)
+  const seen = theSeen(plant)
+  assert.ok(seen !== undefined, `${NAME}: the file only the one-file script reaches never ran, so the run did not go through it`)
+  assert.notEqual(seen.record, null, `${NAME}: the one-file run wrote no record before its file`)
+  assert.equal(seen.pgrp, (seen.record as TheRecordOfATestRun).pid, `${NAME}: the one-file run is not in the group its record names`)
 })
 
 test('#802: SIGTERM to the wrapper ends the suite and removes the record', async (t) => {

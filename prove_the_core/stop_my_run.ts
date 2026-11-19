@@ -181,7 +181,7 @@ function theRecordsHere(worktree: string, options: TheOptions): readonly TheReco
   if (mine.length === 0) {
     return { state: 'refused', said: `no test run of yours is recorded in ${worktree}; a run started with npm run test:mine is` }
   }
-  return { state: 'refused', said: `${mine.length} runs are recorded in ${worktree}: ${mine.map((one) => one.token).join(', ')}; name one with --token, or --all-mine` }
+  return { state: 'refused', said: `${mine.length} runs are recorded in ${worktree}: ${[...mine.map((one) => one.token)].sort().join(', ')}; name one with --token, or --all-mine` }
 }
 
 /** The records stopped from the handle: the chosen runs, or the refusal that chose none. */

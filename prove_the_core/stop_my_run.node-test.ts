@@ -14,7 +14,7 @@
 
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -222,7 +222,7 @@ test('#802: with no token, one run is stopped and two are named rather than gues
   const second = aPlantedRecord(t, other.pid, where, linuxProcessIdentities.identityOf(other.pid) ?? '')
   const two = await theStopper([], where)
   assert.equal(two.status, 2, `${NAME}: two recorded runs were stopped without being named:\n${two.output}`)
-  assert.match(two.output, new RegExp(`2 runs are recorded in .*: ${first.token}, ${second.token}; name one with --token, or --all-mine`), `${NAME}: the two runs were not both named:\n${two.output}`)
+  assert.match(two.output, new RegExp(`2 runs are recorded in .*: ${[first.token, second.token].sort().join(', ')}; name one with --token, or --all-mine`), `${NAME}: the two runs were not both named:\n${two.output}`)
   assert.equal(isRunning(one.pid) && isRunning(other.pid), true, `${NAME}: a run was stopped that the command only had to name`)
 })
 
@@ -264,6 +264,19 @@ test('#802: the walk never signals the group this command itself runs in', async
   assert.equal(stopped.status, 2, `${NAME}: the walk answered as stopped for the group it runs in:\n${stopped.output}`)
   assert.match(stopped.output, new RegExp(`no process of the suite is running under ${where}`), `${NAME}: the refusal did not say what it found:\n${stopped.output}`)
   assert.equal(isRunning(plant.pid), true, `${NAME}: the walk signalled its own group, which would have ended the shell that called it`)
+})
+
+test('#802: the walk reads the kernel it is given, not this machine\'s (--proc)', async (t) => {
+  const where = realpathSync(aScratch(t, 'planted-kernel-checkout'))
+  const kernel = aScratch(t, 'planted-kernel')
+  const group = 4242
+  mkdirSync(join(kernel, String(group)))
+  writeFileSync(join(kernel, String(group), 'stat'), `${group} (node) S 1 ${group} ${group} 0 -1 0 0 0`)
+  writeFileSync(join(kernel, String(group), 'cmdline'), 'node\u0000--test\u0000src/**/*.node-test.ts\u0000')
+  symlinkSync(where, join(kernel, String(group), 'cwd'))
+  const stopped = await theStopper(['--by-cwd', where, '--proc', kernel], where)
+  assert.equal(stopped.status, 2, `${NAME}: the planted kernel tree was not read:\n${stopped.output}`)
+  assert.match(stopped.output, new RegExp(`the group of process ${group} is gone`), `${NAME}: the walk did not find the suite the planted tree holds:\n${stopped.output}`)
 })
 
 test('#802: a group that does not hear SIGTERM is reported still there, and its record kept', async (t) => {
