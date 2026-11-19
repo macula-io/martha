@@ -2,13 +2,13 @@
 // package 9a). Each case serves a real Unix socket in a directory of its own and removes that directory when it ends.
 
 import assert from 'node:assert/strict'
-import { chmodSync, lstatSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { chmodSync, lstatSync, readFileSync, writeFileSync } from 'node:fs'
 import process from 'node:process'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { newShortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { EXIT_DONE, EXIT_REFUSED } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import type { AnAnswerHeard, AnOpenAsk, TheOwnersAsks, WhatAnAnswerDid } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
 import { AN_ANSWER_NEEDS_A_TERMINAL, answerAct, answerOf, NOTHING_WAITS, type TheAnswersIo } from './martha_answer.ts'
@@ -40,9 +40,12 @@ function someAsks(open: readonly AnOpenAsk[], did: WhatAnAnswerDid = { did: 'ans
   return { heard, decide: () => () => 'reject', open: () => open, answer: (one) => (heard.push(one), did), kept: [], notes: [] }
 }
 
-/** A directory of the case's own, 0700, removed when `run` ends. */
+/**
+ * A directory of the case's own, 0700, removed when `run` ends. It is made where a socket address has room
+ * whatever TMPDIR is: CI runs the suite under a long one on purpose, and `listen` refuses a path past it (martha#79).
+ */
 async function inAPlace(run: (place: string) => Promise<void>): Promise<void> {
-  const place = mkdtempSync(join(tmpdir(), 'martha-9a-'))
+  const place = newShortRelayRoot()
   try {
     await run(place)
   } finally {
