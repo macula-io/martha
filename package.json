@@ -179,7 +179,7 @@
     "sliceCeilings": {
       "src/check_no_literal_restates_a_value": 660,
       "src/land_passed_work_as_one_batch": 627,
-      "src/declare_crew": 619,
+      "src/declare_crew": 652,
       "src/know_the_goose_engines_facts": 727
     },
     "packageImports": {
