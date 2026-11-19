@@ -33,7 +33,7 @@ const runTheCases = (script, only = []) =>
 test('every case holds on the owner\'s follow script', () => {
   const run = runTheCases(SCRIPT)
   assert.equal(run.status, 0, `${run.stdout}${run.stderr}`)
-  assert.match(run.stdout, /^cases: 11 of 11 held$/m)
+  assert.match(run.stdout, /^cases: 12 of 12 held$/m)
 })
 
 /**
@@ -53,6 +53,7 @@ const MUTANTS = [
   },
   { name: 'a control character is not refused', line: "echo 'it holds a control character'", to: '', killedBy: 'a_control_character_is_refused' },
   { name: 'what runs on the host is not held to one quoted word', line: "echo 'what it runs on the host is not one quoted word'", to: '', killedBy: 'more_than_one_word_is_refused' },
+  { name: 'what the host runs is not held to quoted words', line: "echo 'what the host runs is not only quoted words'", to: '', killedBy: 'a_host_command_after_the_exec_is_refused' },
   { name: 'what runs on the host is not held to podman exec -it', line: "echo 'it does not run podman exec -it on the host'", to: '', killedBy: 'not_a_podman_exec_is_refused' },
   {
     name: 'the host is taken from the command, not from run.txt',

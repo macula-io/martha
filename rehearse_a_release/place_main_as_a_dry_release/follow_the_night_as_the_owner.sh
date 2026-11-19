@@ -36,6 +36,10 @@ PROMPT='Press Enter to run it here: '
 ENDED='--- the night ended'
 # What every owner command runs on the host, before it is quoted as one word: a terminal in the night's container.
 REMOTE_LEAD="'podman' 'exec' '-it' '"
+# A quote inside a quoted word, as the proof writes it: close the quote, an escaped quote, open it again.
+QUOTE_IN_A_WORD="'\\''"
+# What the host's shell may be given: words each quoted that way, one space apart, and nothing else.
+HOST_WORDS=$'^\'([^\']|\'\\\\\'\')*\'( \'([^\']|\'\\\\\'\')*\')*$'
 # How many lines the proof prints under an owner command, at most, before the step that ends it.
 STEPS_SHOWN=6
 
@@ -58,19 +62,22 @@ the_night_ended() {
   exit 0
 }
 from_run_txt() { sed -n "s/^$1=//p" "${RUN_TXT}" 2> /dev/null | head -1; }
-# The command as the proof quotes a word for the host's shell: in single quotes, each quote inside as '\''.
-quoted_as_one_word_lead() { printf "'%s" "${1//\'/\'\\\'\'}"; }
 
 # A command is the proof's only when it has no control character and is exactly ssh -t, the host run.txt names, and
-# one word quoted as the proof quotes it that starts a podman exec -it.
+# one word quoted as the proof quotes it. That word, unquoted once, is what the host's shell runs: it must be nothing
+# but words each quoted the same way, one space apart, as the proof's remote_words makes them, and they must start
+# podman exec -it. So no ; or other shell text can follow the exec on the host (Mercurius, #639 PR 821 r=1).
 the_proofs_shape() {
-  local line="$1" lead rest
+  local line="$1" lead rest inner
   [[ "${line}" != *[[:cntrl:]]* ]] || { echo 'it holds a control character'; return 1; }
   lead="ssh -t '${HOST}' "
   [[ "${line}" == "${lead}"* ]] || { echo "it does not start ssh -t '${HOST}'"; return 1; }
   rest="${line#"${lead}"}"
   [[ "${rest}" =~ ^\'([^\']|\'\\\'\')*\'$ ]] || { echo 'what it runs on the host is not one quoted word'; return 1; }
-  [[ "${rest}" == "$(quoted_as_one_word_lead "${REMOTE_LEAD}")"* ]] || { echo 'it does not run podman exec -it on the host'; return 1; }
+  inner="${rest:1:${#rest}-2}"
+  inner="${inner//"${QUOTE_IN_A_WORD}"/\'}"
+  [[ "${inner}" =~ ${HOST_WORDS} ]] || { echo 'what the host runs is not only quoted words'; return 1; }
+  [[ "${inner}" == "${REMOTE_LEAD}"* ]] || { echo 'it does not run podman exec -it on the host'; return 1; }
 }
 
 echo "waiting for the night's owner commands (Ctrl-C stops following; the run itself goes on)"

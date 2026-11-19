@@ -103,21 +103,31 @@ if wanted a_members_line_is_never_offered; then
   verdict a_members_line_is_never_offered "$(held never_offered)" "a line from proof.log, a member's text, was offered as the owner's command"
 fi
 if wanted a_control_character_is_refused; then
-  # A carriage return inside the quoted word: printed, it would hide what comes before it from the owner.
-  night a_control_character_is_refused 0 "$(shaped "${A_HOST}" "$(one_word true)"$'\r'"$(one_word hidden)")"
+  # A carriage return inside one of the host's quoted words, so every other check passes: printed, it would hide
+  # what comes before it from the owner.
+  night a_control_character_is_refused 0 "$(shaped "${A_HOST}" "$(one_word "true"$'\r'"hidden")")"
   { sleep 2; printf '\n'; } | in_a_terminal
   verdict a_control_character_is_refused "$(held never_offered)" "a command with a control character in it was offered"
 fi
 if wanted more_than_one_word_is_refused; then
-  # The proof's shape, and then a second word for the owner's own shell.
-  night more_than_one_word_is_refused 0 "${THE_COMMAND}; true"
+  # The host's words without the outer quoting: once unquoted they are the proof's own, but the owner's shell reads
+  # the words' insides bare, so the ; in 'true; true' runs a second command on the owner's machine.
+  night more_than_one_word_is_refused 0 "ssh -t $(one_word "${A_HOST}") '$(one_word podman) $(one_word exec) $(one_word -it) $(one_word a-container) $(one_word 'true; true')'"
   { sleep 2; printf '\n'; } | in_a_terminal
   verdict more_than_one_word_is_refused "$(held never_offered)" "a command running more than the proof's one word was offered"
 fi
 if wanted not_a_podman_exec_is_refused; then
-  night not_a_podman_exec_is_refused 0 "ssh -t $(one_word "${A_HOST}") $(one_word true)"
+  # Quoted words, as the proof quotes them, that run something other than podman exec -it.
+  night not_a_podman_exec_is_refused 0 "ssh -t $(one_word "${A_HOST}") $(one_word "$(one_word sh) $(one_word -c) $(one_word true)")"
   { sleep 2; printf '\n'; } | in_a_terminal
   verdict not_a_podman_exec_is_refused "$(held never_offered)" "a command that is not a podman exec on the host was offered"
+fi
+if wanted a_host_command_after_the_exec_is_refused; then
+  # One quoted word that starts the proof's podman exec -it, and then shell text the host's shell would run outside the
+  # container: ...'c1'; touch HOST_RAN; 'x' (Mercurius, #639 PR 821 r=1).
+  night a_host_command_after_the_exec_is_refused 0 "ssh -t $(one_word "${A_HOST}") $(one_word "$(one_word podman) $(one_word exec) $(one_word -it) $(one_word a-container); touch HOST_RAN; $(one_word x)")"
+  { sleep 2; printf '\n'; } | in_a_terminal
+  verdict a_host_command_after_the_exec_is_refused "$(held never_offered)" "a command running shell text on the host after the podman exec was offered"
 fi
 if wanted another_host_is_refused; then
   night another_host_is_refused 0 "$(shaped another-host "$(one_word true)")"
