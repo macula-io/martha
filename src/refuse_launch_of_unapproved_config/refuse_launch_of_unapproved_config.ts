@@ -24,10 +24,12 @@
 //      Claude Code's own approval is a list of server names, which is why it
 //      cannot be this control.
 //
-//   3. THE DIRECTORIES ABOVE COUNT. A config above the checkout is fingerprinted
-//      with it, up to (not including) the directory the launcher names as the
-//      stop, the owner's home. This is for a host started by hand, which walks up
-//      (OpenCode with no stop at all); a planned launch reads none of them.
+//   3. THE CHECKOUT IS THE BOUND. A config inside the checkout is fingerprinted
+//      with it, from the directory the host starts in up to the checkout's top, and
+//      never above it. Nothing above the top is read: it is not the checkout
+//      author's, the launch never carries it, and a planned launch loads none of it
+//      (martha#766). The stop bounds the walk when the start is in no checkout, or
+//      in one whose top is the stop or above it.
 //
 //   4. WHAT THE GATE CANNOT PIN DOWN IS REFUSED: a symlink, even an approved one;
 //      a path that is not a plain file or directory; config in a directory that
@@ -50,10 +52,11 @@
 import { createHash } from 'node:crypto'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 
-import { readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
+import { checkoutTheGateReads, readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 
 
 export type { LaunchHost }
@@ -81,22 +84,73 @@ export function launchEnvironment(
   const kept = Object.entries(inherited).filter(
     (entry): entry is [string, string] => entry[1] !== undefined && !switches.env_dropped.includes(entry[0]),
   )
-  return { ...Object.fromEntries(kept), ...switches.env, ...HOSTS[host].env_last }
+  return { ...Object.fromEntries(kept), ...switches.env, ...theRowOfHost(host).env_last }
 }
 
 /**
- * The files and directories each host reads from a project directory to start
- * something by itself. Each is one the host was seen to start something from
- * (issue #16), never a guess.
+ * The files each host reads from a project directory to start something by itself. Each is one the host was seen to
+ * start something from (issue #16), never a guess. The table is keyed by the name a declaration writes, which is a
+ * string the recording holds, so it is a string-keyed table with a guard at each read rather than a union the compiler
+ * checks (martha#541's ruling on G1); this slice's own test holds the two tables to the same hosts.
  */
-export const LAUNCH_FILES_OF_HOST = {
+export const CLAUDE_CODE_FILES = [
+  '.mcp.json',
+  `${CLAUDE_FOLDER}/settings.json`,
   // The last one Claude Code writes itself: a member's own permission answers.
-  [CLAUDE_CODE]: ['.mcp.json', `${CLAUDE_FOLDER}/settings.json`, `${CLAUDE_FOLDER}/settings.local.json`],
-  // The last one holds a checkout's plugins and their installed packages.
-  opencode: ['opencode.json', 'opencode.jsonc', '.opencode'],
+  `${CLAUDE_FOLDER}/settings.local.json`,
+] as const
+
+/** OpenCode's: the last one holds a checkout's plugins and their installed packages. */
+export const OPENCODE_FILES = ['opencode.json', 'opencode.jsonc', '.opencode'] as const
+
+/**
+ * Where the engine keeps its own settings, under the home a launch gives it (`../launch_a_goose_member`), named for the
+ * test that pins the families against the design as the design spells them: the trial
+ * planted a file in every place the engine reads a home, and both of these under `.config` were found by it
+ * (../../trial_the_goose_host/a_launch_the_trial_writes.ts).
+ */
+export const ENGINE_FOLDER = '.config/goose'
+
+/**
+ * The engine's own hints file (martha#541): its source names it (`GOOSE_HINTS_FILENAME`, crates/goose/src/hints/load_hints.rs)
+ * and reads it from the directory the engine starts in, so it is text a checkout puts into every prompt. It starts no
+ * code, so this gate does not list it and never refuses a checkout for holding one; a row that says what such text does
+ * is the send path's (martha#541 packages 7-8 part C, C3's wiring), not this gate's.
+ */
+export const ENGINE_HINTS_FILE = '.goosehints'
+
+/**
+ * The engine's own files, in the families the design lists them by (martha#541, B1.3): the folders it reads skills,
+ * agents, recipes, checks and plugins from in the checkout it starts in, its settings under the home of its own, and the
+ * review file it reads. Both a checkout's and a launch's root move these, so `.claude`'s skills and agents are listed
+ * beside `.goose`'s: the engine reads all three names (the trial above planted one marker in each, on the checkout and on
+ * the home). A family is one inbound row of its own (C3 to C9), and each row names its family through this table rather
+ * than typing the files again.
+ */
+export const ENGINE_FAMILIES = {
+  plugins: ['.agents/plugins'],
+  settings: [`${ENGINE_FOLDER}/settings.json`, `${ENGINE_FOLDER}/settings.local.json`],
+  skills: ['.agents/skills', '.goose/skills', `${CLAUDE_FOLDER}/skills`],
+  agents: ['.agents/agents', `${CLAUDE_FOLDER}/agents`, '.goose/agents'],
+  recipes: ['.goose/recipes', '.agents/recipes'],
+  checks: ['.agents/checks'],
+  review: ['.agents/REVIEW.md'],
 } as const
 
-export type Host = keyof typeof LAUNCH_FILES_OF_HOST
+/**
+ * Every file the engine starts something from, family by family. `ENGINE_HINTS_FILE` and `AGENTS.md` are not here: they
+ * start nothing but a prompt, so no gate stands in front of them, and their rows belong to the launch's wiring (C3).
+ */
+export const ENGINE_FILES: readonly string[] = Object.values(ENGINE_FAMILIES).flat()
+
+export const LAUNCH_FILES_OF_HOST: Readonly<Record<string, readonly string[]>> = {
+  [CLAUDE_CODE]: CLAUDE_CODE_FILES,
+  opencode: OPENCODE_FILES,
+  // The name the recording holds, so the gate and the engine's own facts can never spell it differently.
+  [RECORDED_GOOSE_ENGINE.engine_name]: ENGINE_FILES,
+}
+
+export type Host = string
 
 /** What Martha knows about starting one host on approved config. */
 export interface HostLaunch {
@@ -109,7 +163,8 @@ export interface HostLaunch {
    * (martha#460). It holds the host's own auto-updater switch: a launch hands the host a home of its own, where the
    * owner's answer to updating is not read, and an update the host then runs installs over the owner's own copy.
    * It is spread rather than written into each builder, so a launch path added later carries it or fails the test
-   * that names it (every_launch_switches_the_hosts_auto_updater_off.node-test.ts).
+   * that names it (every_launch_switches_the_hosts_auto_updater_off.node-test.ts). A host with nothing to switch off
+   * names its reason in NO_AUTO_UPDATER instead, and the same test holds both halves.
    */
   readonly env_last: Readonly<Record<string, string>>
 }
@@ -164,20 +219,42 @@ export const CLAUDE_MEMORY_ELSEWHERE = [
   REMOTE_MEMORY_ROOT,
 ] as const
 
-export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST[CLAUDE_CODE]
-const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS] = LAUNCH_FILES_OF_HOST.opencode
+export const [CLAUDE_SERVERS, CLAUDE_SETTINGS] = CLAUDE_CODE_FILES
+const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS] = OPENCODE_FILES
 
 /** The switches that hand Claude Code a settings file: the carried copy, or the one a launch writes (martha#136). */
 export const claudeSettingsSwitches = (path: string): HostSwitches => ({ args: ['--settings', path], env: NO_ENV, env_dropped: NOTHING_DROPPED })
 
-export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
+/**
+ * Why a host's row needs no auto-updater switch in its `env_last`, in words the owner could check (martha#541's ruling on
+ * the engine): a host is either switched or has a reason here, never both and never neither, and
+ * every_launch_switches_the_hosts_auto_updater_off.node-test.ts holds both halves.
+ *
+ * The engine's reason: what the pinned engine runs on its own is read from its source at the recorded commit, not
+ * guessed. It has no update at startup, so a launch of it holds no install over the owner's copy; the two updatings it
+ * has are a command the member's model would have to ask for, which reaches the gate as a tool call like any other, and
+ * a plugin's, which needs an installed plugin and a launch root holds none.
+ */
+export const NO_AUTO_UPDATER: Readonly<Record<string, string>> = {
+  [RECORDED_GOOSE_ENGINE.engine_name]:
+    `The pinned engine (${RECORDED_GOOSE_ENGINE.engine_commit}) runs no update of its own at startup: the only updating it has is an explicit command (crates/goose-cli/src/cli.rs:1053-1061), which a member's model would have to ask for and the gate sees as a tool call, and one a plugin runs (crates/goose/src/plugins/mod.rs:190-236), which needs an installed plugin and a launch root holds none.`,
+}
+
+/**
+ * The switches that keep Claude Code from reading the checkout's own config: `--strict-mcp-config`, so only the servers
+ * passed by `--mcp-config` start, and the memory switches below. It is a name of its own because a reader that must
+ * compare with it and never copy it refers to it (../claude_code_host, martha#135), and a change to it is then a change
+ * to what a read is exempt on.
+ */
+export const CLAUDE_PROJECT_CONFIG_OFF: HostSwitches = {
+  args: ['--setting-sources', 'user', '--strict-mcp-config'],
+  env: CLAUDE_MEMORY_OFF,
+  env_dropped: [...CLAUDE_COMMAND_ELSEWHERE, ...CLAUDE_MEMORY_ELSEWHERE],
+}
+
+export const HOSTS: Readonly<Record<string, HostLaunch>> = {
   [CLAUDE_CODE]: {
-    // --strict-mcp-config: only the servers passed by --mcp-config start.
-    project_config_off: {
-      args: ['--setting-sources', 'user', '--strict-mcp-config'],
-      env: CLAUDE_MEMORY_OFF,
-      env_dropped: [...CLAUDE_COMMAND_ELSEWHERE, ...CLAUDE_MEMORY_ELSEWHERE],
-    },
+    project_config_off: CLAUDE_PROJECT_CONFIG_OFF,
     carried: {
       [CLAUDE_SERVERS]: (path) => ({ args: [MCP_CONFIG_SWITCH, path], env: NO_ENV, env_dropped: NOTHING_DROPPED }),
       [CLAUDE_SETTINGS]: claudeSettingsSwitches,
@@ -197,6 +274,21 @@ export const HOSTS: Readonly<Record<Host, HostLaunch>> = {
       [OPENCODE_CONFIG_WITH_COMMENTS]: (path) => ({ args: NO_ARGS, env: { OPENCODE_CONFIG: path }, env_dropped: NOTHING_DROPPED }),
     },
     env_last: OPENCODE_AUTO_UPDATER_OFF,
+  },
+  [RECORDED_GOOSE_ENGINE.engine_name]: {
+    // The engine reaches its own folders through the one variable the recording names, and everything else through the
+    // home it is given, so both are kept out of everything it inherits: a launch makes both for itself and names them
+    // (../launch_a_goose_member's theEnvironmentOfALaunch), so a value inherited from the owner's shell could only
+    // move the engine onto a root or a home no owner approved. Nothing is carried: the launcher writes the config root
+    // its engine reads, so the checkout's own copies are never the ones it loads, and each family is approved and
+    // refused by content like any other host's (martha#541, packages 7-8 part C).
+    project_config_off: {
+      args: NO_ARGS,
+      env: NO_ENV,
+      env_dropped: [RECORDED_GOOSE_ENGINE.path_root_variable, 'HOME'],
+    },
+    carried: {},
+    env_last: NO_ENV,
   },
 }
 
@@ -302,11 +394,41 @@ export function fingerprintOf({ entries, tree }: LaunchState): string {
 
 const REFUSED = 'This coding tool is not started here'
 
+/**
+ * The launch row of `host`, or the failure that is Martha's own: the tables are keyed by the name a declaration writes,
+ * which is a string, so a reader that names a host it means gets the row here or a refusal naming it — never a value
+ * that might be missing, read on as an empty one (martha#541's ruling on G1). `decideLaunch` refuses a host with no row
+ * before anything starts, so a launch that reaches this with none is a code path that skipped the gate.
+ */
+export function theRowOfHost(host: Host): HostLaunch {
+  const launch = HOSTS[host]
+  if (launch === undefined) throw new Error(`${REFUSED}: ${host} has no launch row, so nothing says how to start it`)
+  return launch
+}
+
+/**
+ * Whether this release knows both halves of a host: the files it starts something from, and how to start it without the
+ * checkout's own config. A host with either half missing is refused by name (rule 4).
+ */
+const theGateCanCheck = (host: Host): boolean => LAUNCH_FILES_OF_HOST[host] !== undefined && Object.hasOwn(HOSTS, host)
+
+/** The refusal a host this release knows nothing of is shown, naming the host as the declaration wrote it. */
+const theUnknownHost = (host: Host): string =>
+  `${REFUSED}: Martha does not know which files ${host} starts things from, so it cannot check them.`
+
+/**
+ * The files `host` starts something from. After `theGateCanCheck` this is one of the hosts this release lists, so a
+ * reader that has not checked is refused by name here rather than reading an unlisted host as a checkout with no config.
+ */
+export function theFilesOf(host: Host): readonly string[] {
+  const names = LAUNCH_FILES_OF_HOST[host]
+  if (names === undefined) throw new Error(`${REFUSED}: ${host} is no host this release lists files for`)
+  return names
+}
+
 /** Whether this host may start here, and if not, the refusal to show the owner. */
 export function decideLaunch({ host, entries, tree, approved_fingerprints, refusal }: LaunchRequest): LaunchDecision {
-  if (!Object.hasOwn(HOSTS, host)) {
-    return { allow: false, refusal: `${REFUSED}: Martha does not know which files ${host} starts things from, so it cannot check them.` }
-  }
+  if (!theGateCanCheck(host)) return { allow: false, refusal: theUnknownHost(host) }
 
   const unpinned = entries.find((entry) => entry.kind === 'symlink' || entry.kind === 'unreadable')
   if (unpinned !== undefined) {
@@ -316,8 +438,7 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints, refus
     }
   }
 
-  const names: readonly string[] = LAUNCH_FILES_OF_HOST[host as Host]
-  const unread = names.find(
+  const unread = theFilesOf(host).find(
     (name) => !entries.some((entry) => entry.path === name || name.startsWith(`${entry.path}/`)),
   )
   if (unread !== undefined) {
@@ -387,7 +508,7 @@ export const admitsLaunch: LaunchGate = (request) => decideLaunch(request).allow
 export interface LaunchPlace {
   readonly host: string
   readonly launch_dir: string
-  /** Not read, nor anything above it: the owner's home. */
+  /** Read only when the host starts in it: the owner's home. The whole bound when the start is in no checkout the gate reads (martha#766). */
   readonly stop_dir: string
   /**
    * The tree the owner approved, whose attributes the checkout is read under (martha#167). Omitted, the checkout's
@@ -405,16 +526,23 @@ export interface LaunchPlace {
 
 /**
  * Every file the host would read to start something, from the directory it
- * starts in and each directory above it, up to but not including `stop_dir`.
- * Both are resolved through symlinks first. A start outside `stop_dir` is read
- * all the way up to the filesystem root. A host with no entry reads nothing.
+ * starts in and each directory above it: up to the checkout's top when the start
+ * is in a checkout whose top is not the stop or above it, and otherwise up to but
+ * not including `stop_dir`, or as far as the filesystem root when the stop is no
+ * ancestor of the start. Both the start and the stop are resolved through symlinks
+ * first. A host with no entry reads nothing.
+ *
+ * The top is the bound because the checkout's own config is the only config its
+ * author ships, and the launch carries none above it (martha#766).
  */
 export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, machine: LaunchHost): readonly ConfigEntry[] {
-  if (!Object.hasOwn(HOSTS, host)) return []
-  const names: readonly string[] = LAUNCH_FILES_OF_HOST[host as Host]
+  const names = LAUNCH_FILES_OF_HOST[host]
+  if (names === undefined) return []
 
   const start = realOrResolved(machine, launch_dir)
-  const found = directoriesUpFrom(start, realOrResolved(machine, stop_dir)).flatMap((dir) =>
+  const stop = realOrResolved(machine, stop_dir)
+  const top = checkoutTheGateReads(start, stop, machine)?.top
+  const found = directoriesUpFrom(start, stop, top).flatMap((dir) =>
     names.flatMap((name) => entriesAt(machine, start, dir, name)),
   )
   // Two listed names share a parent (.claude/…): a parent that is not a
@@ -554,7 +682,7 @@ export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machi
   const decision = decideLaunch({ host: place.host, ...state, approved_fingerprints: place.approved_fingerprints })
   if (!decision.allow) return decision
 
-  const launch = HOSTS[place.host as Host]
+  const launch = theRowOfHost(place.host)
   const start = realOrResolved(machine, place.launch_dir)
   const snapshot = machine.stores.scratch.make(place.snapshot_root, 'launch-')
   const snapshot_dir = snapshot.path
@@ -648,12 +776,19 @@ function envOf(carried: readonly HostSwitches[]): Record<string, string> | strin
   return env
 }
 
-/** The start, then each directory above it, stopping below `stop` or at the root. */
-function directoriesUpFrom(start: string, stop: string): readonly string[] {
+/**
+ * The start, then each directory above it, ending at whichever comes first: the
+ * directory before `stop`, or `top` itself once it has been pushed. `top` is the
+ * checkout's top when the gate reads that checkout (martha#766). Without one the
+ * walk is the stop's alone, and it runs to the root when the stop is no ancestor
+ * of the start.
+ */
+function directoriesUpFrom(start: string, stop: string, top: string | undefined): readonly string[] {
   const dirs: string[] = [start]
-  if (start === stop) return dirs
+  if (start === stop || start === top) return dirs
   for (let dir = dirname(start); dir !== stop && dir !== dirs[dirs.length - 1]; dir = dirname(dir)) {
     dirs.push(dir)
+    if (dir === top) break
   }
   return dirs
 }
