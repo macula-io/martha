@@ -95,8 +95,10 @@ IMAGE_PINS=(
 # Node image is pinned. Nothing of it outlives the container.
 CONTAINER_USER='node'
 CONTAINER_HOME='/tmp/martha-home'
-# What keeps the container up while the steps are run in it, and what every one of its names starts with.
-CONTAINER_IDLES='sleep 3600'
+# What keeps the container up while the steps are run in it, and what every one of its names starts with. A night
+# keeps it up for longer: its own windows on top (container_idles, the_night_in_the_container.sh).
+CONTAINER_IDLE_S=3600
+CONTAINER_IDLES="sleep ${CONTAINER_IDLE_S}"
 CONTAINER_PREFIX='martha-clean-install'
 # The container's own record of what is mounted into it, of its network, and of its environment; the length of the
 # first being what a run requires to be 0, the second never the host's own network, and the third the image's own
@@ -344,7 +346,7 @@ container_step() {
   local status=0
   CONTAINER="${CONTAINER_PREFIX}-$$-${RANDOM}"
   CREATE_WAS_IN_FLIGHT=1
-  on_the_host podman create --name "${CONTAINER}" --user "${CONTAINER_USER}" "${IMAGE}" ${CONTAINER_IDLES} > /dev/null \
+  on_the_host podman create --name "${CONTAINER}" --user "${CONTAINER_USER}" "${IMAGE}" $(container_idles) > /dev/null \
     || status=$?
   if [ "${status}" -ne 0 ]; then
     # Only a status podman itself returned -- 1 to 127, its own exit -- says the create is over and made nothing. 255 is
@@ -1000,13 +1002,18 @@ run_the_steps() {
   sign_in_step || return 1
   if [ -n "${SIGN_IN_MISSED}" ]; then return 0; fi
   members_step || return 1
-  if a_night; then night_steps || return 1; fi
+  if a_night; then
+    night_steps || return 1
+    night_landing_steps || return 1
+  fi
 }
 
 # Whatever happened: the container goes first, then the run says how it ended, and exits with that.
 finish() {
   local status=$?
   trap - EXIT INT TERM
+  # A night's record is kept while its members still run: a launch's transcripts go with it.
+  if [ -n "${CONTAINER}" ] && ! night_keep_and_claim; then status=1; fi
   close_every_terminal
   if [ -n "${CONTAINER}" ]; then
     if ! tear_down_step; then status=1; fi
@@ -1043,6 +1050,11 @@ finish() {
   fi
   if a_night && [ -z "${NIGHT_READY}" ]; then
     failed run 'the night did not get ready'
+    log failed
+    exit 1
+  fi
+  if a_night && [ -z "${NIGHT_CLAIMED}" ]; then
+    failed run 'the night'"'"'s claims were not proven'
     log failed
     exit 1
   fi
@@ -1460,7 +1472,7 @@ the_owners_steps_printed() {
     '  ssh -t '*) : ;;
     *) echo "the self-test: the owner's command is not on its own line under step 1: ${line}" >&2; return 1 ;;
   esac
-  for expected in '  2. type yes to approve' '  3. sign in' '  4. answer the folder question yes'; do
+  for expected in '  2. approve the checkout: type yes where martha approve asks, nothing where it asks nothing' '  3. sign in' '  4. answer the folder question yes'; do
     at=$((at + 1))
     line="$(sed -n "$((at + 2))p" "${out}")"
     if [ "${line}" != "${expected}" ]; then
@@ -1616,6 +1628,7 @@ self_test() {
   # The member half's windows, short enough for a self-test: the stand-ins answer at once.
   export MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S=2 MARTHA_CLEAN_INSTALL_MEMBER_WINDOW_S=2 MARTHA_CLEAN_INSTALL_TURN_WINDOW_S=2
   export MARTHA_CLEAN_INSTALL_STARTED_WINDOW_S=3 MARTHA_CLEAN_INSTALL_POLL_S=1 MARTHA_CLEAN_INSTALL_KEY_PAUSE_S=0.2
+  export MARTHA_CLEAN_INSTALL_NIGHT_WORK_WINDOW_S=3 MARTHA_CLEAN_INSTALL_NIGHT_YES_WINDOW_S=3 MARTHA_CLEAN_INSTALL_NIGHT_ROWS_POLL_S=1
   mkdir -p "${STAND_INS}"
   write_stand_ins "${STAND_INS}"
   local root="${SELF_TEST_ROOT}"

@@ -18,6 +18,11 @@
 // `landing` reads the same four night fields, the builder's transcript and the crew's rows folder (builder_transcript,
 // rows_folder), and exits 1 naming the first of section 6's landing rows (5 to 7) they do not show.
 //
+//   node src/land_a_package_on_a_throwaway_repository/main.ts asked <rows folder>       < nothing
+//
+// `asked` exits 0 once the crew in that rows folder has queued an ask of the owner, and 1 while it has queued none: the
+// night waits on it before it prints the owner's second command.
+//
 // Exit 0 the guard holds, 1 it refuses, naming why on standard error, 2 it could not look. `redact` writes the text,
 // redacted, to standard output either way, and exits 1 when a token had reached it. `expiry` exits 0 with a note on
 // standard output for a token with no expiry, a warning when it is near its expiry, and 1 when it has expired. The token is never an argument:
@@ -146,14 +151,28 @@ export async function landing(argument: string): Promise<Said> {
 }
 
 const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact, screen, claims }
-/** The one guard that reads a store, and so answers later. */
+/** The guards that read a store, and so answer later. */
 const LANDING = 'landing'
+const ASKED = 'asked'
+
+/** Whether the crew whose rows folder is `folder` has queued any ask of the owner. Nothing on standard input is read. */
+export async function asked(folder: string): Promise<Said> {
+  try {
+    const asks = await rowStreamsDirectory(folder).read(OWNER_ASKS_STREAM)
+    return asks.length > 0 ? holds : refuses(`the crew in ${folder} has queued no ask of the owner`)
+  } catch (error) {
+    return couldNotLook(error instanceof Error ? error.message : String(error))
+  }
+}
+
+/** The guards that read a store, by name. */
+const STORE_GUARDS: Readonly<Record<string, (argument: string) => Promise<Said>>> = { [LANDING]: landing, [ASKED]: asked }
 
 /** What the guard named by `args` says of `input`. Anything it cannot read is exit 2, never a pass. */
 export function runTheGuard(args: readonly string[], input: string): Said {
   const [name, argument] = args
   const guard = name === undefined ? undefined : GUARDS[name]
-  if (guard === undefined || argument === undefined || args.length !== 2) return couldNotLook(`usage: main.ts <${[...Object.keys(GUARDS), LANDING].join('|')}> <argument>`)
+  if (guard === undefined || argument === undefined || args.length !== 2) return couldNotLook(`usage: main.ts <${[...Object.keys(GUARDS), ...Object.keys(STORE_GUARDS)].join('|')}> <argument>`)
   try {
     return guard(argument, input)
   } catch (error) {
@@ -163,7 +182,8 @@ export function runTheGuard(args: readonly string[], input: string): Said {
 
 if (import.meta.main) {
   const args = process.argv.slice(2)
-  const said = args[0] === LANDING && args.length === 2 && args[1] !== undefined ? await landing(args[1]) : runTheGuard(args, readFileSync(0, 'utf8'))
+  const store = args[0] === undefined ? undefined : STORE_GUARDS[args[0]]
+  const said = store !== undefined && args.length === 2 && args[1] !== undefined ? await store(args[1]) : runTheGuard(args, readFileSync(0, 'utf8'))
   if (said.out !== undefined) process.stdout.write(said.out)
   if (said.err !== undefined) process.stderr.write(`${NAME}: ${said.err}\n`)
   process.exitCode = said.code
