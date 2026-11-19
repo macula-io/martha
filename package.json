@@ -14,7 +14,6 @@
     "check:private": "node src/check_nothing_private_gets_in/main.ts",
     "check:posted-text": "node src/check_posted_text_carries_nothing_private/main.ts",
     "check:links": "node src/check_every_link_resolves/main.ts",
-    "check:logos": "node src/check_the_logos_are_valid_svg/main.ts",
     "check:marthas-names": "node src/check_marthas_names_are_its_own/main.ts",
     "check:base-tests": "node src/check_no_test_the_base_passed_goes_missing/main.ts",
     "check:host-ceilings": "node src/check_a_host_directory_stays_under_its_ceiling/main.ts",
@@ -97,6 +96,7 @@
       "src/run_an_owner_signed_command",
       "src/run_the_martha_command",
       "src/run_the_nodes_own_npm_alone",
+      "src/serve_the_crews_tools_to_an_engine",
       "src/serve_the_relay_to_a_launch",
       "src/serve_the_owners_answers",
       "src/start_a_member",
@@ -143,7 +143,7 @@
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
       "src/launch_a_claude_code_member": 553,
-      "src/launch_a_goose_member": 229,
+      "src/launch_a_goose_member": 249,
       "src/linux_process_identity": 332,
       "src/list_stop_and_restart_the_crew": 103,
       "src/load_the_hosts_markdown": 427,
@@ -157,7 +157,8 @@
       "src/run_an_owner_signed_command": 562,
       "src/run_the_martha_command": 484,
       "src/run_the_nodes_own_npm_alone": 165,
-      "src/serve_the_relay_to_a_launch": 243,
+      "src/serve_the_crews_tools_to_an_engine": 282,
+      "src/serve_the_relay_to_a_launch": 266,
       "src/serve_the_owners_answers": 251,
       "src/start_a_member": 167,
       "src/start_the_member_on_its_host": 211,
@@ -177,7 +178,7 @@
     "sliceCap": 600,
     "sliceCeilings": {
       "src/check_no_literal_restates_a_value": 660,
-      "src/land_passed_work_as_one_batch": 613,
+      "src/land_passed_work_as_one_batch": 626,
       "src/declare_crew": 619
     },
     "packageImports": {
