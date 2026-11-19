@@ -58,9 +58,10 @@ test('a recording without a version or a hash is refused', () => {
   assert.deepEqual(theNodeRuntime(JSON.stringify({ version, archives: { ...archives, [PLATFORMS[1]]: { sha256: 'f00' } } })), { refusal: `the recording holds no sha256 for ${PLATFORMS[1]}` })
 })
 
-test('only the four platforms are made', () => {
+test('only the Linux platforms are made', () => {
   for (const platform of PLATFORMS) assert.equal(platformOf(...(platform.split('-') as [string, string])), platform)
   assert.deepEqual(platformOf('win32', 'x64'), { refusal: 'a standalone Martha is not made for win32-x64' })
+  assert.deepEqual(platformOf('darwin', 'arm64'), { refusal: 'a standalone Martha is not made for darwin-arm64' })
 })
 
 test("the names are the installer's and the version is the root package's", () => {
