@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { THE_EXTENSION_A_MEMBER_KEEPS } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import type { DeveloperTool, EngineFacts } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -32,7 +33,7 @@ const aTool = (name: string, argument: string, [read_only, destructive, open_wor
 })
 
 /** Seven tools, one of each kind and three with none (each reaching past the machine), none named as the engine names its own. */
-const SPELLED: Pick<EngineFacts, 'developer_tools' | 'shell_tool' | 'path_resolution'> = {
+const SPELLED: Pick<EngineFacts, 'developer_tools' | 'shell_tool' | 'path_resolution' | 'tool_naming'> = {
   developer_tools: [
     aTool('put', 'target', [false, true, false]),
     aTool('change', 'file', [false, true, false]),
@@ -44,7 +45,14 @@ const SPELLED: Pick<EngineFacts, 'developer_tools' | 'shell_tool' | 'path_resolu
   ],
   shell_tool: 'run',
   path_resolution: { absolute: 'as_given', bases: ['working_dir', 'current_dir', '.'], trims: false, expands_home: false },
+  tool_naming: { meta_path: [], separator: '::', split_at: 'first' },
 }
+
+/** A spelled tool by the name a call carries: the Developer extension's, then this test's own separator. */
+const called = (own: string): string => `${THE_EXTENSION_A_MEMBER_KEEPS}::${own}`
+
+/** A recorded tool by the name a call carries, spelled from the recording's separator, never by the code under test. */
+const recorded = (own: string): string => `${THE_EXTENSION_A_MEMBER_KEEPS}${RECORDED_GOOSE_ENGINE.tool_naming.separator}${own}`
 
 /** A folder for one test, removed after it, as the file system spells it. */
 function aFolder(t: TestContext): string {
@@ -61,31 +69,31 @@ const fileToolsOf = (facts: Parameters<typeof theEnginesFileTools>[0]) => {
 
 test('each tool is placed by its hints: the shell tool a command, a destructive one that stays on the machine one file, a read-only one every file below, any other none (#541 package A, design G1; mutants: each kind branch, open world not read)', () => {
   assert.deepEqual(theEnginesToolResultRows(SPELLED), {
-    put: { reads: 'a_file', source: 'checkout_file', field: 'target' },
-    change: { reads: 'a_file', source: 'checkout_file', field: 'file' },
-    run: { reads: 'a_command', source: 'checkout_run', field: 'line' },
-    list: { reads: 'a_search', source: 'checkout_file', field: 'dir' },
+    [called('put')]: { reads: 'a_file', source: 'checkout_file', field: 'target' },
+    [called('change')]: { reads: 'a_file', source: 'checkout_file', field: 'file' },
+    [called('run')]: { reads: 'a_command', source: 'checkout_run', field: 'line' },
+    [called('list')]: { reads: 'a_search', source: 'checkout_file', field: 'dir' },
   })
 })
 
-test('on the recording, the rows are the design table: write and edit one file, tree every file below, shell a command, read_image none (#541 package A, design G1)', () => {
+test('on the recording, the rows are the design table, keyed by the name a call carries: write and edit one file, tree every file below, shell a command, read_image none (#541 package A, design G1)', () => {
   assert.deepEqual(theEnginesToolResultRows(RECORDED_GOOSE_ENGINE), {
-    write: { reads: 'a_file', source: 'checkout_file', field: 'path' },
-    edit: { reads: 'a_file', source: 'checkout_file', field: 'path' },
-    shell: { reads: 'a_command', source: 'checkout_run', field: 'command' },
-    tree: { reads: 'a_search', source: 'checkout_file', field: 'path' },
+    [recorded('write')]: { reads: 'a_file', source: 'checkout_file', field: 'path' },
+    [recorded('edit')]: { reads: 'a_file', source: 'checkout_file', field: 'path' },
+    [recorded('shell')]: { reads: 'a_command', source: 'checkout_run', field: 'command' },
+    [recorded('tree')]: { reads: 'a_search', source: 'checkout_file', field: 'path' },
   })
 })
 
 test("the engine's file tools: the one-file tools write, each its own write on its argument; every file and search tool's argument names a file; no whole-file tool (#541 package A, design G1; mutants: search arguments dropped, shell taken as a writer)", () => {
   const tools = fileToolsOf(SPELLED)
-  assert.deepEqual(tools.writing_tools, ['put', 'change'])
+  assert.deepEqual(tools.writing_tools, [called('put'), called('change')])
   assert.deepEqual(tools.file_arguments, ['target', 'file', 'dir'])
-  assert.deepEqual(tools.own_writes, { put: 'target', change: 'file' })
+  assert.deepEqual(tools.own_writes, { [called('put')]: 'target', [called('change')]: 'file' })
   assert.equal(tools.whole_file, undefined)
-  const recorded = fileToolsOf(RECORDED_GOOSE_ENGINE)
-  assert.deepEqual(recorded.writing_tools, ['write', 'edit'])
-  assert.deepEqual(recorded.file_arguments, ['path'])
+  const fromTheRecording = fileToolsOf(RECORDED_GOOSE_ENGINE)
+  assert.deepEqual(fromTheRecording.writing_tools, [recorded('write'), recorded('edit')])
+  assert.deepEqual(fromTheRecording.file_arguments, ['path'])
 })
 
 test('a recording whose resolution trims, reads ~, or takes another base first builds no file tools (#541 package A, design G1; mutants: each condition dropped)', () => {

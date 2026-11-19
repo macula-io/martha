@@ -25,6 +25,7 @@
 
 import { dirname, isAbsolute, join, sep } from 'node:path'
 
+import { THE_EXTENSION_A_MEMBER_KEEPS } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import type { HostFileTools } from '../host_contract/host_contract.ts'
 import type { EngineFacts, DeveloperTool } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import type { DeniedPlace } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
@@ -34,7 +35,15 @@ import { realPathOf } from '../refuse_settings_that_turn_hooks_off/settings_that
 import type { ToolResultReading, ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 /** The facts these values are read from. */
-export type TheFactsTheDecisionsRead = Pick<EngineFacts, 'developer_tools' | 'shell_tool' | 'path_resolution' | 'engine_folders' | 'engine_name'>
+export type TheFactsTheDecisionsRead = Pick<EngineFacts, 'developer_tools' | 'shell_tool' | 'path_resolution' | 'engine_folders' | 'engine_name' | 'tool_naming'>
+
+/**
+ * A Developer tool by the name a call carries: the extension a member keeps, the engine's separator, the tool's own
+ * name. The entry is handed that name (read from the call's update, ../speak_acp_to_an_agent), so the rows and the file
+ * tools are keyed by it, and a tool of the same own name in another extension (the crew's server) is never taken for
+ * the Developer's.
+ */
+export const theCalledNameOf = (facts: Pick<EngineFacts, 'tool_naming'>, own: string): string => `${THE_EXTENSION_A_MEMBER_KEEPS}${facts.tool_naming.separator}${own}`
 
 /** How the engine's results are placed, by the kind its hints give a tool. */
 type AToolsKind = 'a_command' | 'a_file' | 'a_search'
@@ -55,13 +64,13 @@ const ROW_OF: Readonly<Record<AToolsKind, (field: string) => ToolResultReading>>
   a_search: (field) => ({ reads: 'a_search', source: 'checkout_file', field }),
 }
 
-/** Where each of the engine's tools' results came from, by the tool's own name; a tool with no kind has no row. */
-export function theEnginesToolResultRows(facts: Pick<EngineFacts, 'developer_tools' | 'shell_tool'>): ToolResultRows {
+/** Where each of the engine's tools' results came from, by the name a call carries; a tool with no kind has no row. */
+export function theEnginesToolResultRows(facts: Pick<EngineFacts, 'developer_tools' | 'shell_tool' | 'tool_naming'>): ToolResultRows {
   return Object.freeze(
     Object.fromEntries(
       facts.developer_tools.flatMap((tool) => {
         const kind = theKindOfATool(tool, facts.shell_tool)
-        return kind === undefined ? [] : [[tool.name, ROW_OF[kind](tool.argument)] as const]
+        return kind === undefined ? [] : [[theCalledNameOf(facts, tool.name), ROW_OF[kind](tool.argument)] as const]
       }),
     ),
   )
@@ -77,7 +86,7 @@ const THE_SESSIONS_FOLDER = 'working_dir'
  * The engine's file tools as the host decisions take them. The writing tools are the tools of kind `a_file`, each the
  * member's own write on its argument; the arguments a call names a file in are those of every file and search tool.
  */
-export function theEnginesFileTools(facts: Pick<EngineFacts, 'developer_tools' | 'shell_tool' | 'path_resolution'>): TheEnginesFileTools {
+export function theEnginesFileTools(facts: Pick<EngineFacts, 'developer_tools' | 'shell_tool' | 'path_resolution' | 'tool_naming'>): TheEnginesFileTools {
   const resolution = facts.path_resolution
   if (resolution.trims || resolution.expands_home || resolution.bases[0] !== THE_SESSIONS_FOLDER) {
     return { refusal: `the recorded engine resolves a path in a way this launch does not resolve it (${JSON.stringify(resolution)}): its file tools are not built, so no call is judged against the wrong file` }
@@ -87,9 +96,9 @@ export function theEnginesFileTools(facts: Pick<EngineFacts, 'developer_tools' |
   const naming = kinds.filter(({ kind }) => kind === 'a_file' || kind === 'a_search').map(({ tool }) => tool.argument)
   return {
     tools: Object.freeze({
-      writing_tools: Object.freeze(writing.map((tool) => tool.name)),
+      writing_tools: Object.freeze(writing.map((tool) => theCalledNameOf(facts, tool.name))),
       file_arguments: Object.freeze([...new Set(naming)]),
-      own_writes: Object.freeze(Object.fromEntries(writing.map((tool) => [tool.name, tool.argument]))),
+      own_writes: Object.freeze(Object.fromEntries(writing.map((tool) => [theCalledNameOf(facts, tool.name), tool.argument]))),
       whole_file: undefined,
       resolve: asTheEngineResolves,
     }),
