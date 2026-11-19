@@ -50,13 +50,27 @@ const OWNER_TURN = 'Do the first task.'
 const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: [CLAUDE_CODE_SHELL_TOOL] } })
 const GIT_NAME = 'martha-test'
 const GIT_EMAIL = 'martha-test@example.invalid'
+/** The file that defines the time limit every recorded-host run carries (--test-timeout), and the line that says it. */
+const THE_RUNS_BOUNDS = join(import.meta.dirname, '..', '..', 'prove_the_relay_loads', 'the_runs_bounds.sh')
+const THE_RUNS_TIMEOUT_LINE = /^RUN_TIMEOUT_MS=(\d+)$/m
+/**
+ * The time limit node gives this file's one case, read from its one definition and never typed again here. A run
+ * that outlasts it is cancelled with node's own words, before any of this file's can say why (martha#891 r=1 R1).
+ */
+const theRunsTimeoutMs = (): number => {
+  const said = THE_RUNS_TIMEOUT_LINE.exec(readFileSync(THE_RUNS_BOUNDS, 'utf8'))?.[1]
+  if (said === undefined) throw new Error(`${THE_RUNS_BOUNDS} defines no RUN_TIMEOUT_MS, so this file cannot keep its waits inside it`)
+  return Number(said)
+}
 /**
  * How long the long tool waits at most for the end to be ordered (martha#891). It no longer sleeps a fixed time the
  * runner's speed could outlast — run 44598893743's second beat came after a fixed 150 s had already run out — but
  * until the run has seen the end ordered, so on any runner the end is ordered while the tool still runs. This bound
- * only ends a run whose end never came, and that run then fails by name as one that cannot judge the order.
+ * only ends a run whose end never came, and that run then fails by name as one that cannot judge the order. So it
+ * sits two minutes inside the run's time limit: the silence below takes one of them, and the run's start the other,
+ * so the case's own words come before node cancels it.
  */
-const THE_LONG_TOOLS_BOUND_MS = 420_000
+const THE_LONG_TOOLS_BOUND_MS = theRunsTimeoutMs() - 2 * MINUTE_MS
 /** How often the run looks for the ordered end, and the tool for the run's word that it came. */
 const A_LOOK_MS = 250
 /**
