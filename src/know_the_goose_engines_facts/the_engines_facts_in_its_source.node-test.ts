@@ -366,6 +366,13 @@ const ROOTS_PLANTED_UNLISTED = [
     fn: SKILL_ROOT_READERS.skill_folders,
   },
   {
+    what: 'a second list of folders from the working directory inside the same if let (Mercurius on PR 882 r=2: only the exactly-once count refuses it)',
+    place: ENGINE_PLACES.skill_folders,
+    at: '    }\n    dirs.extend(plugin_dirs',
+    planted: '        for path in [wd.join(".cursor").join("skills")] {\n            dirs.push(SkillDirectory { path });\n        }\n',
+    fn: SKILL_ROOT_READERS.skill_folders,
+  },
+  {
     what: 'a plugin folder the discovery reads from the root beside the project one',
     place: ENGINE_PLACES.plugin_discovery,
     at: '        found.extend(list_dir_children(&project_plugins_dir)',
