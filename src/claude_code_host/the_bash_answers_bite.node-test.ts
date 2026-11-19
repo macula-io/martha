@@ -7,11 +7,12 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_BASH_RESULTS, type RecordedBashCase } from './claude_code_bash_results.ts'
 
@@ -34,7 +35,7 @@ const theRecordedAnswer = A_RECORDED_CASE.answer as { readonly result: Readonly<
 /** A recording file of the shape the committed one has, written where the test may read it. */
 function aRecording(t: TestContext, cases: readonly RecordedBashCase[]): string {
   const dir = mkdtempSync(join(tmpdir(), 'bash-answers-bite-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const path = join(dir, 'a-recording.json')
   writeFileSync(path, `${JSON.stringify({ host_version: RECORDED_BASH_RESULTS.host_version, mark: RECORDED_BASH_RESULTS.mark, cases })}\n`)
   return path
@@ -49,7 +50,7 @@ function theRun(args: readonly string[], env: Record<string, string> = {}): { re
 /** A `claude` that is only a path: a shell script that does what the script says and never loads a plugin. */
 function aStandInHost(t: TestContext, script: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'bash-answers-stand-in-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const path = join(dir, CLAUDE)
   writeFileSync(path, `#!/bin/sh\n${script}\n`)
   chmodSync(path, 0o755)
@@ -108,7 +109,7 @@ test('a recording with no cases could not be compared, whatever the taken file h
 
 test('the live mode against a host that exits without answering takes no case and says which', (t) => {
   const out = mkdtempSync(join(tmpdir(), 'bash-answers-live-'))
-  t.after(() => rmSync(out, { recursive: true, force: true }))
+  t.after(() => removeTheTree(out))
   const standIn = aStandInHost(t, 'exit 0')
   const run = theRun([out], { MARTHA_RECORDED_HOST: standIn })
   assert.equal(run.status, 2, `a host that answered nothing was counted: ${run.stdout}`)
@@ -119,7 +120,7 @@ test('the live mode against a host that exits without answering takes no case an
 
 test('the live mode takes the same road when the host says a word and fails', (t) => {
   const out = mkdtempSync(join(tmpdir(), 'bash-answers-live-'))
-  t.after(() => rmSync(out, { recursive: true, force: true }))
+  t.after(() => removeTheTree(out))
   const standIn = aStandInHost(t, 'echo "a word from the host"\nexit 1')
   const run = theRun([out], { MARTHA_RECORDED_HOST: standIn })
   assert.equal(run.status, 2, 'a host that answered nothing was counted')
@@ -129,7 +130,7 @@ test('the live mode takes the same road when the host says a word and fails', (t
 
 test('an out-dir inside the checkout is refused before anything is made, and the tree stays clean', (t) => {
   const inside = join(THE_CHECKOUT, 'an-out-dir-a-run-must-refuse')
-  t.after(() => rmSync(inside, { recursive: true, force: true }))
+  t.after(() => removeTheTree(inside))
   assert.equal(existsSync(inside), false, 'the path this case plants existed before the run')
   const standIn = aStandInHost(t, 'exit 0')
   const run = theRun([inside], { MARTHA_RECORDED_HOST: standIn })
