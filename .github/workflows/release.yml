@@ -60,7 +60,6 @@ jobs:
   private:
     runs-on: ubuntu-latest
     env:
-      MARTHA_LAB_HOSTS: ${{ secrets.MARTHA_LAB_HOSTS }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,6 +80,12 @@ jobs:
       image: ${{ steps.names.outputs.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # No dry run's commit is in this tag (martha#695, T1a). The dry packer makes one commit in a clone of its own,
+      # restoring installer/ from its tag, and marks it with DRY_RESTORE_SUBJECT; a release must never carry it. The
+      # step deepens the tag's history back to the release tag before it -- this checkout is shallow -- and refuses a
+      # range that holds one, before anything is packed or pushed.
+      - name: No dry run's commit is in this tag's history
+        run: ./pack_a_release/refuse_a_dry_restore_tag.sh "${GITHUB_REF_NAME}"
       # The runner context is not allowed in a job-level env, so the build context is named here, once, for the
       # steps after it.
       - name: The build context

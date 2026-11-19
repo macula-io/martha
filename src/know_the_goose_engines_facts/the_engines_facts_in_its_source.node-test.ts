@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -87,4 +87,59 @@ test("a delegate tool's model that is neither a list nor a string is unreadable,
   assert.notEqual(typed, tool, 'the built delegate tool has no string model to retype')
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.delegate_tool]: typed }))
   assert.deepEqual(unreadable.map(({ part }) => part), [ENGINE_PARTS.find(({ read }) => 'subagent_models' in read(anEngineSourceSaying(files)))?.part])
+})
+
+// The files the engine reads into every prompt (martha#785): their names, the setting that replaces them, and the list it
+// loads when the setting is unset, all read from the engine's own source, so a launch that records them never types one.
+
+/** The part that reads the hint files, by the field it gives. */
+const THE_HINT_FILES_PART = (): string | undefined =>
+  ENGINE_PARTS.find(({ read }) => {
+    try {
+      return 'hint_files' in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS)))
+    } catch {
+      return false
+    }
+  })?.part
+
+test("a hints file the engine renames is read as renamed, and the list it loads follows the new name (martha#785)", () => {
+  const recorded = RECORDED_FACTS.hint_files
+  const renamed = `${recorded.goose_hints}-renamed`
+  const hint_files = { ...recorded, goose_hints: renamed, when_unset: recorded.when_unset.map((name) => (name === recorded.goose_hints ? renamed : name)) }
+  const { facts } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, hint_files })))
+  assert.equal(facts.hint_files?.goose_hints, renamed, "the engine's hints file name was not read from its source")
+  assert.deepEqual(facts.hint_files?.when_unset, hint_files.when_unset, 'the list the engine loads did not follow the renamed file')
+})
+
+test('the list the engine loads when the setting is unset is read from it, not assumed to be both names (martha#785)', () => {
+  const recorded = RECORDED_FACTS.hint_files
+  const hint_files = { ...recorded, when_unset: [recorded.agents_md] }
+  const { facts } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, hint_files })))
+  assert.deepEqual(facts.hint_files?.when_unset, [recorded.agents_md])
+})
+
+test('the setting that replaces the hint files is read from the engine (martha#785)', () => {
+  const recorded = RECORDED_FACTS.hint_files
+  const hint_files = { ...recorded, setting: `${recorded.setting}_MOVED` }
+  const { facts } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, hint_files })))
+  assert.equal(facts.hint_files?.setting, hint_files.setting)
+})
+
+test('a hint file the list names by a constant the file never declares is unreadable, never a shorter list (martha#785)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.hint_files] ?? ''
+  const constant = HINT_FILE_CONSTANTS.agents_md
+  assert.ok(text.includes(`${constant}.to_string()`), 'the built tree does not list the instruction file by its constant')
+  const planted = text.replace(`${constant}.to_string()`, `${constant}_UNDECLARED.to_string()`)
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.hint_files]: planted }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [THE_HINT_FILES_PART()])
+})
+
+test('a hint file the list names in a shape the reader does not know is unreadable, never a list without it (martha#785)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.hint_files] ?? ''
+  const constant = HINT_FILE_CONSTANTS.agents_md
+  const planted = text.replace(`${constant}.to_string()`, `${constant}.to_string(),\n                String::from("NOTES.md")`)
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.hint_files]: planted }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [THE_HINT_FILES_PART()])
 })

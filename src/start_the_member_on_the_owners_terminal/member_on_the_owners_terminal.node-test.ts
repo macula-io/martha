@@ -15,7 +15,7 @@
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
@@ -38,7 +38,7 @@ test('a member that exits at once is still its pid\'s process when the launcher 
   const member = markThenExit(t)
   let identity: string | null | undefined
   let ranFirst: boolean | undefined
-  const job = onTheTerminal.startForegroundJob(member.command, member.args, { cwd: tmpdir(), env: ENV }, (pid) => {
+  const job = onTheTerminal.startForegroundJob(member.command, member.args, { cwd: dirname(member.mark), env: ENV }, (pid) => {
     identity = linuxProcessIdentities.identityOf(pid)
     ranFirst = existsSync(member.mark)
     return { admitted: true }
@@ -58,7 +58,7 @@ test('a member that exits at once is still its pid\'s process when the launcher 
 test('a member the launcher does not admit never runs, and the shell ends saying so (#94)', async (t) => {
   const member = markThenExit(t)
   let asked = 0
-  const job = onTheTerminal.startForegroundJob(member.command, member.args, { cwd: tmpdir(), env: ENV }, () => {
+  const job = onTheTerminal.startForegroundJob(member.command, member.args, { cwd: dirname(member.mark), env: ENV }, () => {
     asked += 1
     return { admitted: false }
   })
@@ -73,7 +73,7 @@ test('a member the launcher does not admit never runs, and the shell ends saying
 
 test('a launcher that throws while the member is held does not admit it (#94)', async (t) => {
   const member = markThenExit(t)
-  const job = onTheTerminal.startForegroundJob(member.command, member.args, { cwd: tmpdir(), env: ENV }, () => {
+  const job = onTheTerminal.startForegroundJob(member.command, member.args, { cwd: dirname(member.mark), env: ENV }, () => {
     throw new Error('the record could not be written')
   })
   const shellEnded = new Promise<number | null>((resolve) => job.shell.once('exit', (code) => resolve(code)))

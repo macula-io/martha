@@ -18,24 +18,24 @@ reader where to look. A lab host name is a map of the network.
 | A private issue or PR link | `synthetic-owner/private-repo#123`, `https://github.com/synthetic-owner/private-repo/issues/123` | a comment or doc moved as written |
 | A shorthand link to another repository | `synthetic-repo#123` | the same; the owner is implied, so nothing outside the author's head says whether it is public |
 | A private remote or repository name | `git@github.com:synthetic-owner/private-repo.git`, a constant holding `synthetic-owner/private-repo` | a fallback, a default, an install script |
-| An internal host name | a `*.lab` name, a lab machine named by its family and number | a log line, a comment, a test fixture |
+| An internal host name | a `*.lab` name | a log line, a comment, a test fixture |
 | A home directory, a private address, a private email, a real node id or key | a path under a real user's home, RFC 1918 addresses, a 64-hex id | the same classes the crew's note check and release scan already refuse |
-| A fact recorded from another checkout | a private remote, a lab machine name, a path under a home, held by the engine's own source | recorded rather than typed: `npm run record:goose-engine` reads an engine checkout and writes its facts to [`src/know_the_goose_engines_facts/recorded_goose_engine.json`](../src/know_the_goose_engines_facts/recorded_goose_engine.json), so a value can arrive from a tree this repository does not review |
+| A fact recorded from another checkout | a private remote, a `*.lab` name, a path under a home, held by the engine's own source | recorded rather than typed: `npm run record:goose-engine` reads an engine checkout and writes its facts to [`src/know_the_goose_engines_facts/recorded_goose_engine.json`](../src/know_the_goose_engines_facts/recorded_goose_engine.json), so a value can arrive from a tree this repository does not review |
 
 Each of those can enter through four paths:
 
 1. **The tree at the head of a pull request** — a file as it will be merged,
-   and its path: a file named after a machine publishes the name with no text
+   and its path: a file named after a host publishes the name with no text
    at all. Every tracked path, and every path a commit adds, is read as a line.
 2. **A commit inside the pull request** that a later commit removes. GitHub keeps
    every pushed commit of a pull request reachable, so a leak that the final tree
    no longer shows is still public. The check reads every commit's added lines.
 3. **A commit message.** It is published with the commit. The check reads it.
-4. **The check's own output.** A CI log of a public repository is public. The lab's
-   machine families are therefore never printed: a hit names the file, the line
-   and the class, and withholds the value. Nothing else printed carries one
-   either: a lab name in a path, a repository name or a shorthand is replaced
-   by `<lab host>`.
+4. **The check's own output.** A CI log of a public repository is public. A lab
+   hostname is therefore never printed: a hit names the file, the line and the
+   class, and withholds the value. Nothing else printed carries one either: a
+   lab hostname in a path, a repository name or a shorthand is replaced by
+   `<lab host>`.
 
 Out of reach of this check, and said here so nobody assumes otherwise:
 
@@ -66,32 +66,10 @@ Out of reach of this check, and said here so nobody assumes otherwise:
 - **A shorthand reference to another repository is refused** (`synthetic-repo#123`).
   Only this repository's own `martha#n` passes. Write `owner/repo#n` so the
   check, and a reader, can tell what it points at.
-- **Lab machine families are a secret, not a file.** The generic classes (every
-  `*.lab` name, every home directory, every RFC 1918 address) need no list. The
-  families of the lab's machines do, and the list is itself private, so CI reads
-  it from the `MARTHA_LAB_HOSTS` repository secret (a JSON array). A pull request
-  from a fork gets no secrets: there the check runs every other class and says
-  which one it skipped.
-- **A member's machine holds the families as keyed digests** (martha#731). The
-  owner runs `npm run keep:lab-families` once, at a terminal. It writes a random
-  key and one HMAC-SHA256 digest per family to
-  `$XDG_CONFIG_HOME/martha/lab_families.json` (else `~/.config/martha/`), mode
-  0600, and never the plain list. Without `MARTHA_LAB_HOSTS`, both checks read
-  that file and find a lab machine name by the same rule CI holds to, so a range
-  passes or fails before it is pushed. Said plainly, it is a speed bump:
-  - The key sits beside the digests, and a family is a short word, so whoever
-    reads the file and tries words gets the families back.
-  - The check itself is the oracle: a member can run it over `<word>07` lines and
-    see which ones it withholds.
-  - What the file stops is carrying the families by accident: its bytes spell no
-    name, so an environment dump, a log or a quoted file shows only hex.
-  - A Goose member's launch hands it a fresh home and nothing inherited, so its
-    check finds no file. That is on purpose: a copy of the key in every launch
-    home would multiply it. CI judges the families for it.
-  - A family added to the secret without keeping the file again passes a member's
-    check, and CI refuses the range: CI stays the backstop.
-- **Neither the secret nor the file:** every other class still runs and prints
-  its hits, and the check exits 2. It never passes because it could not look.
+- **Lab machine names are not a class** (martha#773). The owner decided on
+  2026-11-18 that the lab's machine names may be public: the machines sit
+  behind a NAT. The check needs no list and no secret, so a member's machine
+  runs every class CI runs, before a push. A `*.lab` hostname is still refused.
 - **A public digest passes only where it is written as one.** A sha256 digest
   of a public file has the shape of a node id or a key, so a bare 64-hex string
   is refused whatever it is. A digest passes when the text around it says it is
@@ -169,8 +147,7 @@ them is refused. There is no exemption for a document, a fenced block or a table
 an evidence citation and a code sample are the same bytes, and both instances
 leaked inside inline code.
 
-A run that could not look — a surface refused, a page unreadable, the families
-missing — exits 2. It never passes because it could not look.
+A run that could not look — a surface refused, a page unreadable — exits 2. It never passes because it could not look.
 
 ## The rewrite rule for moved code
 
@@ -191,14 +168,12 @@ Keep the reasoning, drop the link.
 ## Running it
 
 ```sh
-# The tree as it is, every class except the lab's families:
-MARTHA_LAB_HOSTS='[]' npm run check:private
+# The tree as it is:
+npm run check:private
 
-# On a member's machine, after the owner has run npm run keep:lab-families:
-npm run check:private -- --range <base>..<head>
-
-# What CI runs on a pull request: the tree, then every commit in the range.
-MARTHA_LAB_HOSTS='["<family>"]' GITHUB_TOKEN=... npm run check:private -- --range <base>..<head>
+# What CI runs on a pull request, and a member runs before a push: the tree,
+# then every commit in the range.
+GITHUB_TOKEN=... npm run check:private -- --range <base>..<head>
 ```
 
 Exit 0 is clean, 1 lists one hit per line as `where: what`, and 2 means the check
@@ -207,12 +182,12 @@ could not be made.
 The text posted on GitHub, read whole, and one draft before it is posted:
 
 ```sh
-# Every surface of this repository's posted text (read-only token, families from
-# the secret; the run writes nothing):
-GITHUB_REPOSITORY=<owner>/<repo> GITHUB_TOKEN=... MARTHA_LAB_HOSTS='["<family>"]' npm run check:posted-text
+# Every surface of this repository's posted text (read-only token; the run
+# writes nothing):
+GITHUB_REPOSITORY=<owner>/<repo> GITHUB_TOKEN=... npm run check:posted-text
 
 # One draft, before it is posted:
-MARTHA_LAB_HOSTS='[]' npm run check:posted-text -- --text <file>
+npm run check:posted-text -- --text <file>
 ```
 
 Its `where` names the object a person acts on: `issue #170 comment 6765201999:12`,

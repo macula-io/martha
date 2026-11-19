@@ -29,16 +29,17 @@
 
 import { join } from 'node:path'
 
-import { ARGUMENT_GATES, ASK_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { ARGUMENT_GATES, ASK_GATES, COMMAND_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, SOURCE_GATES, sourceRowGap, type CommandGate, type Control, type InboundPath, type SourceGate } from '../inbound_paths/inbound_paths.ts'
 import { MAX_ASK, type AnAsk } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import type { Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { THE_MODELS_SWITCH, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { THE_COMMAND_STARTS } from '../speak_acp_to_an_agent/the_acp_client.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import {
+  CLAUDE_CODE_FILES,
   fingerprintOf,
-  LAUNCH_FILES_OF_HOST,
   type ConfigEntry,
   type Host,
   type LaunchGate,
@@ -152,16 +153,20 @@ export function gapsInGateCoverage(
   path_gates: Readonly<Record<string, PathGate>> = {},
   config_stand_in?: (probe: ConfigPathProbe) => PathProbe,
   ask_gates: Readonly<Record<string, AskGate>> = ASK_GATES,
+  command_gates: Readonly<Record<string, CommandGate>> = COMMAND_GATES,
+  source_gates: Readonly<Record<string, SourceGate>> = SOURCE_GATES,
 ): readonly Gap[] {
-  const gaps: Gap[] = [...gapsOfSharedIds(paths)]
-  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates, ask: ask_gates }
+  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates, ask: ask_gates, command: command_gates, source: source_gates }
 
-  for (const path of paths) {
-    const why = gapOfRow(path, gateRefuses, gates, config_stand_in)
-    if (why !== undefined) gaps.push({ path: path.id, why })
-  }
-
-  return gaps
+  // Both halves are kept: the rows two packages gave one id (martha#758) and every row's own gap. A resolution
+  // that keeps only the second makes the shared-id check silent while it still type-checks.
+  return [
+    ...gapsOfSharedIds(paths),
+    ...paths.flatMap((path) => {
+      const why = gapOfRow(path, gateRefuses, gates, config_stand_in)
+      return why === undefined ? [] : [{ path: path.id, why }]
+    }),
+  ]
 }
 
 /**
@@ -183,6 +188,8 @@ interface Gates {
   readonly argument: Readonly<Record<string, ArgumentGate>>
   readonly path: Readonly<Record<string, PathGate>>
   readonly ask: Readonly<Record<string, AskGate>>
+  readonly command: Readonly<Record<string, CommandGate>>
+  readonly source: Readonly<Record<string, SourceGate>>
 }
 
 /**
@@ -207,9 +214,8 @@ function gapOfAClaimedControl(
   gates: Gates,
   standIn?: (probe: ConfigPathProbe) => PathProbe,
 ): string | undefined {
-  if (path.klass === 'launched' && control.kind !== 'launch-gate') {
-    return `is code the host starts by itself, and ${control.kind} does not stand in front of that`
-  }
+  const started_not_launched = codeTheHostStarts(path, control)
+  if (started_not_launched !== undefined) return started_not_launched
 
   if (control.kind === 'launch-gate') return launchedRowGap(path, control, gates.launch)
 
@@ -217,11 +223,25 @@ function gapOfAClaimedControl(
 
   if (control.kind === 'refused-before-launch') return argumentRowGap(path, control.gate, gates.argument)
 
+  if (control.kind === 'refused-as-a-command') return commandRowGap(path, control.gate, gates.command)
+
+  if (control.kind === 'recorded-source') return sourceRowGap(path, control.gate, gates.source)
+
   if (control.kind === 'ask-gate') return askRowGap(path, control.gate, gates.ask)
 
   if (control.kind === 'check_every_path_is_gated') return gatedPathRowGap(path, control, gateRefuses, gates, standIn)
 
   return claimedControlGap(path, control, gateRefuses, gates.delivery)
+}
+
+/**
+ * Why code the host starts by itself may carry no control but the launch gate: no tool is called and no model runs on
+ * such a path, so only a gate that stands before the host starts can cover it, and anything else is a claim of cover
+ * that cannot stand there (martha#541 added a text gate, which is a delivered path's control).
+ */
+function codeTheHostStarts(path: InboundPath, control: Control): string | undefined {
+  if (path.klass !== 'launched' || control.kind === 'launch-gate') return undefined
+  return `is code the host starts by itself, and ${control.kind} does not stand in front of that`
 }
 
 /** Why a row claiming an ask gate is a gap: the gate nobody built, one that answers a question wrong, or a row that is not delivered text. */
@@ -263,6 +283,38 @@ function argumentRowGap(path: InboundPath, name: string, argument_gates: Readonl
   const failed = ARGUMENT_PROBES.find((probe) => gate(probe.args) !== probe.passes)
   if (failed === undefined) return undefined
   return failed.passes ? `the gate ${name} refuses ${failed.what}` : `the gate ${name} passes ${failed.what}`
+}
+
+/** One turn a command gate is asked about: its text, and whether the gate must pass it to the model. */
+export interface CommandProbe {
+  readonly passes: boolean
+  readonly what: string
+  readonly text: string
+}
+
+/**
+ * The questions every command gate is asked (martha#541, shape 2): an ordinary turn is passed, so a gate that refuses
+ * every turn is caught; a turn starting a command is refused each way a turn can start one, blank space before it
+ * included; and a turn that only holds those characters later is passed, since the engine runs a command only when its
+ * first non-blank character is one.
+ */
+export const COMMAND_PROBES: readonly CommandProbe[] = [
+  { passes: true, what: 'an ordinary turn', text: 'please read the diff again' },
+  ...THE_COMMAND_STARTS.flatMap((start) => [
+    { passes: false, what: `a turn starting with ${start}`, text: `${start}a command the engine would run` },
+    { passes: false, what: `a turn starting with ${start} after blank space`, text: `   ${start}a command the engine would run` },
+  ]),
+  { passes: true, what: 'a turn that holds those characters later on', text: `hello ${THE_COMMAND_STARTS.join(' and ')}` },
+]
+
+/** Why a row naming a command gate is a gap: it is not delivered text, the gate nobody built, or one that answers a question wrong. */
+function commandRowGap(path: InboundPath, name: string, command_gates: Readonly<Record<string, CommandGate>>): string | undefined {
+  if (path.klass !== 'delivered') return 'names a command gate on a path that puts no text into a turn'
+  const gate = command_gates[name]
+  if (gate === undefined) return `names a command gate nobody has built: ${name}`
+  const failed = COMMAND_PROBES.find((probe) => gate(probe.text) !== probe.passes)
+  if (failed === undefined) return undefined
+  return failed.passes ? `the gate ${name} refuses ${failed.what}` : `the gate ${name} admits ${failed.what}`
 }
 
 export interface ArgumentProbe {
@@ -430,13 +482,13 @@ function claimedControlGap(
 // A host the launch probes use, its first listed file, and a second one: the
 // probes are built from the module's own lists, never a restated file name.
 const PROBE_HOST: Host = CLAUDE_CODE
-const [SERVERS, SETTINGS] = LAUNCH_FILES_OF_HOST[PROBE_HOST]
+const [SERVERS, SETTINGS] = CLAUDE_CODE_FILES
 
 const sha = (digit: string) => digit.repeat(64)
 
 /** Every listed file for the probe host, absent, with any present ones laid over. */
 function onDisk(present: readonly ConfigEntry[]): readonly ConfigEntry[] {
-  const absent: ConfigEntry[] = LAUNCH_FILES_OF_HOST[PROBE_HOST]
+  const absent: ConfigEntry[] = CLAUDE_CODE_FILES
     .filter((name) => !present.some((entry) => entry.path === name))
     .map((name) => ({ path: name, kind: 'absent' }))
   return [...absent, ...present]

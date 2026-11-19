@@ -20,8 +20,8 @@ import {
   type SessionRecordStore,
 } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
+  CLAUDE_CODE_FILES,
   fingerprintOf,
-  LAUNCH_FILES_OF_HOST,
   readLaunchState,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { answerToolCall, type ApprovedLaunch, type ToolCallAnswer } from './answer_a_tool_call.ts'
@@ -170,7 +170,7 @@ test('a tainted member cannot send: every tool that hands text to someone else i
 
 // --- the launch, checked again on every call ------------------------------------
 
-const [, CLAUDE_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
+const [, CLAUDE_SETTINGS] = CLAUDE_CODE_FILES
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync(

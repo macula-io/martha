@@ -9,15 +9,10 @@
 // resolver that asks whether that repository is public, so a private repository
 // is refused without this public tree having to name it.
 
-import { FAMILY, labNamesIn, type LabFamilyDigests } from './lab_family_digests.ts'
 import { digestStartsFinder } from './public_digest.ts'
 import { HEX_DIGIT, ID_HEX_DIGITS, PUBLIC_TEXT_PATTERNS } from './public_text.ts'
 
 export interface Rules {
-  // The families of the lab's machine names. Private: CI reads them from a secret.
-  readonly labHosts: readonly string[]
-  // The same families as keyed digests, on a member's machine (./lab_family_digests.ts).
-  readonly labDigests?: LabFamilyDigests
   // Email domains this repository may name.
   readonly publicEmails: readonly string[]
   // Exact identifiers that are shaped like an email address and are not one,
@@ -55,7 +50,6 @@ export type Resolve = (owner: string, repo: string) => Promise<Visibility>
 // The scan's own synthetic forms, one per class. Each is a whole-value match.
 export const SYNTHETIC = {
   lab_fqdn: String.raw`^[a-z0-9-]+-synthetic\.lab$`,
-  lab_machine: String.raw`^(%s)9[0-9]$`,
   home_dir: String.raw`^/(home|Users)/synthetic$`,
   private_address: String.raw`^192\.168\.255\.[0-9]{1,3}$`,
   email: String.raw`^[A-Za-z0-9._%+-]+@synthetic\.invalid$`,
@@ -78,20 +72,9 @@ interface Found {
 }
 const each = (pattern: string, text: string, flags = 'g'): Found[] =>
   [...text.matchAll(new RegExp(pattern, flags))].map((found) => ({ value: found[0], at: found.index }))
-// A host name has no case: the lab classes match it however it is written. The
-// patterns stay the shared definition's; the flag is this reader's.
+// A host name has no case: the lab hostname class matches it however it is
+// written. The pattern stays the shared definition's; the flag is this reader's.
 const anyCase = 'gi'
-// A lab machine name's value, accepted in its synthetic form: any family, then 9 and
-// a digit. The value is a family and two digits, so this holds the same for a
-// declared family and for one found by its digest.
-const SYNTHETIC_MACHINE = SYNTHETIC.lab_machine.replace('%s', FAMILY.source.slice(1, -1))
-// The lab's families, in plain or as digests: what names a lab machine.
-type LabNames = Pick<Rules, 'labHosts' | 'labDigests'>
-const families = (rules: Pick<Rules, 'labHosts'>) => {
-  const bad = rules.labHosts.find((family) => !FAMILY.test(family))
-  if (bad !== undefined) throw new Error('a lab host family is not a plain lowercase name')
-  return rules.labHosts.join('|')
-}
 
 // One class: its matches in a line, minus what the class accepts.
 interface TextClass {
@@ -105,7 +88,6 @@ interface TextClass {
 
 const textClasses = (rules: Rules): readonly TextClass[] => {
   const synthetic = (pattern: string, flags = '') => (value: string) => rules.allowSynthetic && new RegExp(pattern, flags).test(value)
-  const machine = rules.labHosts.length === 0 ? '' : families(rules)
   const digestStarts = digestStartsFinder(PUBLIC_TEXT_PATTERNS.hex_id)
   // The whole hex run an id sits in: what is refused, and what a form must hold.
   const hexRun = `${HEX_DIGIT}*${PUBLIC_TEXT_PATTERNS.hex_id}${HEX_DIGIT}*`
@@ -121,15 +103,6 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
       shows: false,
       matches: (text) => each(PUBLIC_TEXT_PATTERNS.lab_fqdn, text, anyCase),
       accepts: synthetic(SYNTHETIC.lab_fqdn, 'i'),
-    },
-    {
-      what: 'a lab machine name',
-      shows: false,
-      matches: (text) => [
-        ...(machine === '' ? [] : each(PUBLIC_TEXT_PATTERNS.lab_machine.replace('%s', machine), text, anyCase)),
-        ...(rules.labDigests === undefined ? [] : labNamesIn(text, rules.labDigests)),
-      ],
-      accepts: synthetic(SYNTHETIC_MACHINE, 'i'),
     },
     {
       what: 'a home directory',
@@ -164,34 +137,23 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
   ]
 }
 
-// The lab's host names, generic and declared, as one pattern.
-const labPatternOf = (rules: Pick<Rules, 'labHosts'>) =>
-  rules.labHosts.length === 0
-    ? PUBLIC_TEXT_PATTERNS.lab_fqdn
-    : `${PUBLIC_TEXT_PATTERNS.lab_fqdn}|${PUBLIC_TEXT_PATTERNS.lab_machine.replace('%s', families(rules))}`
-
 const LAB_HOST = '<lab host>'
 
-// Any text this check prints, with each lab name in it replaced, in any case: a
-// hit's location, a repository name, an error a lookup or git threw. The names the
-// digests find are replaced after the plain ones, from the end so each place holds.
-export const withoutLabNames = (text: string, labHosts: readonly string[], labDigests?: LabFamilyDigests) => {
-  const plain = text.replace(new RegExp(labPatternOf({ labHosts }), 'gi'), LAB_HOST)
-  if (labDigests === undefined) return plain
-  return labNamesIn(plain, labDigests).reverse().reduce((said, name) => `${said.slice(0, name.at)}${LAB_HOST}${said.slice(name.at + name.value.length)}`, plain)
-}
+// Any text this check prints, with each lab hostname in it replaced, in any case: a
+// hit's location, a repository name, an error a lookup or git threw.
+export const withoutLabNames = (text: string) => text.replace(new RegExp(PUBLIC_TEXT_PATTERNS.lab_fqdn, anyCase), LAB_HOST)
 
-// Whether a text names a lab host, by either rule.
-const namesALabHost = (text: string, rules: LabNames) =>
-  new RegExp(labPatternOf(rules), 'i').test(text) || (rules.labDigests !== undefined && labNamesIn(text, rules.labDigests).length > 0)
+// Whether a text names a lab hostname.
+const namesALabHost = (text: string) => new RegExp(PUBLIC_TEXT_PATTERNS.lab_fqdn, 'i').test(text)
 
-// Nothing printed names a lab host: not a class's value (an email at a lab host),
-// not a repository or shorthand name, not the path a hit is found at. A value of a
-// class is withheld whole; anything else has each lab name in it replaced.
-const printing = (rules: Rules) => {
-  const clean = (text: string) => withoutLabNames(text, rules.labHosts, rules.labDigests)
+// Nothing printed names a lab hostname: not a class's value (an email at a lab
+// host), not a repository or shorthand name, not the path a hit is found at. A
+// value of a class is withheld whole; anything else has each lab hostname in it
+// replaced.
+const printing = () => {
+  const clean = withoutLabNames
   const shown = (one: TextClass, value: string) =>
-    one.shows && !namesALabHost(value, rules) ? `${one.what} (${value})` : `${one.what} (value withheld)`
+    one.shows && !namesALabHost(value) ? `${one.what} (${value})` : `${one.what} (value withheld)`
   return { clean, shown }
 }
 type Printing = ReturnType<typeof printing>
@@ -266,24 +228,24 @@ const shorthandHitsOf = (line: Line, rules: Rules, print: Printing): Hit[] =>
 
 // A lookup that throws stops the check, and its message is printed: whatever it
 // says about the repository it was asked has its lab names replaced first.
-const resolvedOrCleanError = async (resolve: Resolve, reference: RepoReference, rules: Rules) => {
+const resolvedOrCleanError = async (resolve: Resolve, reference: RepoReference) => {
   try {
     return await resolve(reference.owner, reference.repo)
   } catch (error) {
-    throw new Error(withoutLabNames(error instanceof Error ? error.message : String(error), rules.labHosts, rules.labDigests))
+    throw new Error(withoutLabNames(error instanceof Error ? error.message : String(error)))
   }
 }
 
 // Every hit in the sources. Each distinct repository is resolved once.
 export const privateHitsIn = async (sources: readonly Source[], rules: Rules, resolve: Resolve): Promise<Hit[]> => {
   const classes = textClasses(rules)
-  const print = printing(rules)
+  const print = printing()
   const lines = sources.flatMap((source) => source.lines)
   const references = lines.flatMap((line) => repoReferencesIn(line, rules))
   const visibility = new Map<string, Visibility>()
   for (const reference of references) {
     const key = `${reference.owner}/${reference.repo}`.toLowerCase()
-    if (!visibility.has(key)) visibility.set(key, await resolvedOrCleanError(resolve, reference, rules))
+    if (!visibility.has(key)) visibility.set(key, await resolvedOrCleanError(resolve, reference))
   }
   const repoHits = references
     .filter((reference) => visibility.get(`${reference.owner}/${reference.repo}`.toLowerCase()) !== 'public')
@@ -295,41 +257,4 @@ export const privateHitsIn = async (sources: readonly Source[], rules: Rules, re
     ...lines.flatMap((line) => [...textHitsOf(line, classes, print), ...shorthandHitsOf(line, rules, print)]),
     ...repoHits,
   ]
-}
-
-// The lab's families: declared in plain by the environment (CI), else kept as
-// digests on this machine (a member's), else skipped on a fork's pull request,
-// which gets no secrets. With none of them the families are not checked: every
-// other rule still runs and prints, and the check never passes.
-export type Families =
-  | { readonly kind: 'declared'; readonly labHosts: readonly string[] }
-  | { readonly kind: 'kept'; readonly labDigests: LabFamilyDigests }
-  | { readonly kind: 'skipped'; readonly why: string }
-  | { readonly kind: 'unchecked'; readonly why: string }
-
-/** Why the check never passes without the families. */
-export const FAMILIES_UNCHECKED =
-  'the lab machine families could not be checked: MARTHA_LAB_HOSTS is not set, and this machine keeps no lab families file (npm run keep:lab-families)'
-
-// The secret parsed, or null. JSON.parse's own error quotes the text it could not
-// read, and this text is the secret: it must never reach the log.
-const parsedOrNull = (raw: string): unknown => {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
-}
-
-export const familiesFrom = (raw: string | undefined, forkPullRequest: boolean, kept: () => LabFamilyDigests | undefined): Families => {
-  if (raw === undefined || raw.trim() === '') {
-    const labDigests = kept()
-    if (labDigests !== undefined) return { kind: 'kept', labDigests }
-    if (forkPullRequest) return { kind: 'skipped', why: 'a pull request from a fork gets no secrets' }
-    return { kind: 'unchecked', why: FAMILIES_UNCHECKED }
-  }
-  const parsed = parsedOrNull(raw)
-  const valid = Array.isArray(parsed) && parsed.every((family) => typeof family === 'string' && FAMILY.test(family))
-  if (!valid) throw new Error('MARTHA_LAB_HOSTS must be a JSON array of plain lowercase names')
-  return { kind: 'declared', labHosts: parsed as string[] }
 }

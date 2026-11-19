@@ -28,6 +28,8 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
+import ts from 'typescript'
+
 import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { FORCE_EXIT_FLAG, GUARD_FLAG, TIMEOUT_FLAG, testRunFlagsOf, withoutTheTestContext } from './every_test_run_ends.ts'
 import { manifestOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
@@ -194,6 +196,10 @@ const THE_FILES_THE_RUN_READS = [
   'prove_the_core/a_test_run_ends/every_test_run_ends.ts',
   'prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts',
   'prove_the_core/a_test_run_ends/every_test_file_cleans_up.ts',
+  // The guard gives each file its own directories, and what it needs for that is the machine's own temporary directory
+  // and the removal that opens a read-only folder first (martha#724).
+  'src/host_contract/host_contract.ts',
+  'src/serve_the_relay_to_a_launch/relay_copy.ts',
 ] as const
 
 /**
@@ -330,4 +336,15 @@ test('#723: every refusal the single-file run can make is made, with its own wor
     assert.equal(ran.status, 2, `${NAME}: ${called} was not refused:\n${ran.output}`)
     assert.match(ran.output, one.says, `${NAME}: ${called} was refused, but not with its own words:\n${ran.output}`)
   }
+})
+
+test('#753: every module the single-file run copies imports only node\'s own modules and the files copied with it', () => {
+  // The copy has no node_modules: a module that imports a package fails there, as typescript once did here (martha#753).
+  const modules = THE_FILES_THE_RUN_READS.filter((file) => file.endsWith('.ts'))
+  const beyond = modules.flatMap((file) =>
+    ts.preProcessFile(readFileSync(join(repository, file), 'utf8'), true, true).importedFiles
+      .map((imported) => imported.fileName)
+      .filter((name) => !name.startsWith('node:') && !(THE_FILES_THE_RUN_READS as readonly string[]).includes(join(dirname(file), name)))
+      .map((name) => `${file} imports ${name}`))
+  assert.deepEqual(beyond, [], 'a module the single-file run copies imports what the copy does not hold')
 })

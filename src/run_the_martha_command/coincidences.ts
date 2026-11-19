@@ -7,7 +7,7 @@ import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_check
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { EMPTY_DIRECTORY_NAME } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { THE_ACT_THE_OWNER_TYPES } from '../launch_a_goose_member/coincidences.ts'
-import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../launch_a_goose_member/launch_a_goose_member.ts'
+import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'

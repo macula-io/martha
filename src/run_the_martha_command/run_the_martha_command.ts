@@ -54,6 +54,7 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { whyAnOwnersActIsRefusedInsideAMember, type AProcessAbove } from '../refuse_an_owner_act_from_inside_a_member/refuse_an_owner_act_from_inside_a_member.ts'
 import { ancestorsUnder, PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
+import { SYSTEM_TEMPORARY_DIRECTORY } from '../host_contract/host_contract.ts'
 import { launchRecordsUnder } from '../read_a_kernel_and_a_home/launch_records_under_a_state_root.ts'
 import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
@@ -142,10 +143,6 @@ async function approve(io: CommandIo, places: Places): Promise<number> {
   const outcome = await approveConfig({ ...places, terminal: io.terminal, documents, tellOwner, now: () => new Date() })
   if (outcome.kind === 'refused') return refused(io, outcome.refusal)
   io.out(outcome.kind === 'nothing' ? NOTHING_TO_APPROVE : `Approved: fingerprint ${outcome.fingerprint}.`)
-  for (const [what, act] of [['Your approvals, and where each was typed (martha#619):', 'approve'], ['Your pinned keys, and where each was typed:', 'pin-key']] as const) {
-    const lines = whatTheOwnerReadsOf(places, act, theFirstApprovalAt(places))
-    if (lines.length > 0) [what, ...lines].forEach((line) => io.out(line))
-  }
   return EXIT_DONE
 }
 
@@ -258,10 +255,12 @@ async function startingTheMember(
   })
 }
 
+/** The directory this user's launches keep their relay roots under: inside the runtime directory they were given when it is an absolute path, and under the system's own temporary directory when they were given none. */
+export const theCommandsRuntimeDirectory = (runtime: string | undefined): string => join(absolute(runtime) ?? SYSTEM_TEMPORARY_DIRECTORY, `martha-${process.getuid?.()}`)
+
 /** The launcher's places in Martha's state, with the relay sockets under this user's runtime directory. */
 function launcherOf(io: CommandIo, places: Places): ReturnType<typeof launcherPlacesOf> {
-  const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? '/tmp'
-  return launcherPlacesOf(places.state, join(runtime, `martha-${process.getuid?.()}`), places.root)
+  return launcherPlacesOf(places.state, theCommandsRuntimeDirectory(io.env['XDG_RUNTIME_DIR']), places.root)
 }
 
 /** What `martha ls` and `martha stop` read (martha#312); or why it cannot be read. */
@@ -544,7 +543,8 @@ function theFirstApprovalAt(places: Places): string | undefined {
 
 /**
  * An owner's act that writes a record, made, then its lines named in the log of where the owner's acts were typed
- * (martha#619): the record first, the entries after it, and only for an act that ended done.
+ * (martha#619): the record first, the entries after it, and only for an act that ended done. What the act shows the
+ * owner of that log is printed here, once the entry is kept, never inside the act (martha#765).
  */
 async function recordedWhereItWasTyped(io: CommandIo, places: Places, asked: Asked, act: (io: CommandIo, places: Places, asked: Asked) => Promise<number>): Promise<number> {
   const file = theRecordFilesOf(places)[asked.act]
@@ -555,6 +555,11 @@ async function recordedWhereItWasTyped(io: CommandIo, places: Places, asked: Ask
   if (done !== EXIT_DONE || file === undefined) return done
   const unkept = keepWhereItWasTyped(places, asked.act, before, at, seenFromThisProcess())
   if (unkept !== undefined) io.err(`The act is made, but where it was typed is not kept: ${unkept}`)
+  // Kept, so the listing can be read: an entry that could not be kept would show the owner's own act as forged.
+  else if (asked.act === 'approve') ([['Your approvals, and where each was typed (martha#619):', 'approve'], ['Your pinned keys, and where each was typed:', 'pin-key']] as const).forEach(([what, act]) => {
+    const lines = whatTheOwnerReadsOf(places, act, theFirstApprovalAt(places))
+    if (lines.length > 0) [what, ...lines].forEach((line) => io.out(line))
+  })
   return done
 }
 

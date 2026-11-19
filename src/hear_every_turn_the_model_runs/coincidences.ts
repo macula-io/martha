@@ -6,7 +6,7 @@ import { HOST_SILENCE_MS } from '../drive_the_recorded_host/wait_while_the_host_
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { THE_ACT_THE_OWNER_TYPES } from '../launch_a_goose_member/coincidences.ts'
-import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../launch_a_goose_member/launch_a_goose_member.ts'
+import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 
 /**
  * Why the shell tool's limit is not the run's silence budget (martha#441): the test asks the host for a call that may

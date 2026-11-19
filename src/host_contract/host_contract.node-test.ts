@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { ROW_STREAM_MOVED, readingOnly } from './host_contract.ts'
+import { ROW_STREAM_MOVED, SYSTEM_TEMPORARY_DIRECTORY, readingOnly } from './host_contract.ts'
 import { coreSources } from '../../prove_the_core/read_the_manifest_and_the_linter/core_sources.ts'
 import { SCANNED_EXTENSIONS, isScannedSource } from './core_source.ts'
 import { moduleReferencesOf } from '../../prove_the_core/read_a_source/parse_a_source.ts'
@@ -204,7 +204,7 @@ test('the files, scratch and runner a test gives are the ones the host uses (#26
   const outcome = { exit_code: 0, stdout: 'ran', stderr: '' }
   const { host } = hostForTests({
     files: { kindOf: () => ({ kind: 'absent' }), bytesOf: () => new Uint8Array(), childrenOf: () => ['a'], realPathOf: () => '/real' },
-    scratch: { make: (root, prefix) => ({ path: `${root ?? '/tmp'}/${prefix}1`, write: (name) => name, remove: () => undefined }) },
+    scratch: { make: (root, prefix) => ({ path: `${root ?? SYSTEM_TEMPORARY_DIRECTORY}/${prefix}1`, write: (name) => name, remove: () => undefined }) },
     runNow: () => outcome,
   })
   assert.deepEqual(host.stores.files.kindOf('/a-run-tree'), { kind: 'absent' })

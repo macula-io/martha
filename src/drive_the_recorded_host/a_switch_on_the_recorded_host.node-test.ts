@@ -11,12 +11,13 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { test, type TestContext } from 'node:test'
+import { after, test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
+import { removeWhatAppearedIn, A_CASES_HOME } from '../../prove_the_core/a_test_run_ends/every_test_file_cleans_up.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
@@ -38,6 +39,14 @@ const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: 
 const GIT_NAME = 'martha-test'
 const GIT_EMAIL = 'martha-test@example.invalid'
 
+/** What this file's temporary directory held before its first case ran: only what appears after is this file's. */
+const ALREADY_IN_THE_TEMP_DIRECTORY = new Set(readdirSync(tmpdir()))
+
+// The first case stops a run on purpose, and a run stopped that way can be cut off before its own end reaches the
+// directory it made. This file removes what appeared in its temporary directory, so it leaves nothing behind however far
+// a run got (martha#724); what was already there, and any other shape, is never touched.
+after(() => removeWhatAppearedIn(tmpdir(), ALREADY_IN_THE_TEMP_DIRECTORY))
+
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', `user.name=${GIT_NAME}`, '-c', `user.email=${GIT_EMAIL}`, '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim()
 }
@@ -53,7 +62,7 @@ interface Project {
  * that wants a reviewer model does.
  */
 function approvedProjectWithModels(t: TestContext): Project {
-  const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-model-host-')))
+  const home = realpathSync(mkdtempSync(join(tmpdir(), A_CASES_HOME)))
   t.after(() => removeTheTree(home))
   const checkout = join(home, 'project')
   for (const [path, text] of Object.entries({ 'README.md': 'a project\n', '.claude/settings.json': SETTINGS })) {

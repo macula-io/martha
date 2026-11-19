@@ -12,6 +12,7 @@ import { test, type TestContext } from 'node:test'
 import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import { manifestOf, PACKAGES, testCommandsOf } from '../read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { testRunFlagsOf } from '../a_test_run_ends/every_test_run_ends.ts'
+import { THE_WRAPPER } from '../a_test_run_keeps_one_temporary_root/keep_a_test_run_in_one_temporary_root.ts'
 import {
   environmentLeakReportOf,
   FAILING_TESTS_HEADING,
@@ -107,10 +108,17 @@ for (const folder of PACKAGES) {
   test(`npm test in ${folder} runs node --test through ${RUNNER}`, () => {
     const at = join(repository, folder)
     // The command that runs node --test is the script's last: the recorded-host runs may come before it (martha#383).
-    const [program, runner, ...rest] = testCommandsOf(manifestOf(at)).at(-1)?.words ?? []
-    assert.equal(program, 'node')
-    assert.equal(resolve(at, runner ?? ''), resolve(repository, RUNNER), `${folder}'s test script starts with ${runner}`)
-    assert.deepEqual(rest.slice(0, 2), ['node', '--test'])
+    // This repository's own last command runs the suite inside the run's one root (martha#724), so its program is the
+    // wrapper and the runner follows it; the installer's own runs the runner alone.
+    const words = testCommandsOf(manifestOf(at)).at(-1)?.words ?? []
+    assert.equal(words[0], 'node')
+    const wrapped = resolve(at, words[1] ?? '') === resolve(repository, THE_WRAPPER)
+    assert.equal(wrapped, folder === '.', `${folder}'s test script runs its suite ${wrapped ? 'inside' : 'outside'} a run's root`)
+    // The command itself: `node <runner> node --test …`, following the wrapper's own two words when it has one.
+    const inside = wrapped ? words.slice(2) : words
+    assert.equal(inside[0], 'node')
+    assert.equal(resolve(at, inside[1] ?? ''), resolve(repository, RUNNER), `${folder}'s test script starts with ${inside[1]}`)
+    assert.deepEqual(inside.slice(2, 4), ['node', '--test'])
   })
 }
 

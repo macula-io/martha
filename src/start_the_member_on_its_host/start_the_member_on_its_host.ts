@@ -16,8 +16,7 @@
 // already holding the member, so only a start picks a host.
 
 import { randomUUID } from 'node:crypto'
-import fs from 'node:fs'
-import { accessSync, constants as fsConstants, statSync } from 'node:fs'
+import fs, { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import process from 'node:process'
@@ -43,7 +42,7 @@ import { CLAUDE, CLAUDE_CODE, CLAUDE_INSTALL } from '../know_claude_codes_own_fa
 import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { aReviewerMembersModelRefusal, theOwnersModelSwitchRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
-import { launchClaudeCodeMember, type LauncherPlaces, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { launchClaudeCodeMember, type ClaudeCodeMemberLaunch, type LauncherPlaces, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { ownersSettingsIn } from '../owners_settings_directory/owners_settings_directory.ts'
@@ -264,13 +263,24 @@ function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: C
   return theGitGuardPlacesOf(theWorkspaceTheCrewDeclared(settings), member, thisMachine, leftovers) ?? {}
 }
 
-/** The Claude Code entry: today's launch, unchanged in behaviour, behind the table. */
-async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted> {
-  await finishAnySwitchBeforeTheHostStarts(start)
+/**
+ * What this launch hands its end: the crew's own store, and the workspace its declaration lays out (martha#693,
+ * martha#562). One place builds them, so a test can plant a declaration and read what a real start would hand on: the
+ * launch tests hand a workspace in themselves, and a start that handed none would leave every one of them green.
+ */
+export const leftoversOfALaunch = (settings: CrewSettings, crew: CrewStore) => ({ crew, workspace: theWorkspaceTheCrewDeclared(settings) })
+
+/**
+ * The request a Claude Code start hands its launcher (martha#784): one value, built here from the start and handed on
+ * whole, as `leftoversOfALaunch` builds one field of it. The launch tests build their own request and the start tests
+ * swap the whole host launcher, so nothing else reads what a real start hands on: without this, any field below could
+ * be replaced by a literal at the call site with every test green.
+ */
+export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeMemberLaunch {
   // One raising for this launch, and one channel carrier: the carrier counts a handed message taken in when the mod
   // reports the member's next main turn started (martha#253).
   const channel = start.channel
-  return launchClaudeCodeMember({
+  return {
     member_name: start.member,
     node_id: start.node_id,
     place: { host: CLAUDE_CODE, launch_dir: start.root, stop_dir: start.home, snapshot_root: start.snapshot_root, crew_text_files: crewTextFilesOf(start.settings), ...approvedPlace(start.member, start.approval, start.state) },
@@ -280,7 +290,7 @@ async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted>
     places: start.places,
     // The crew's own store and the layout it declared, so this launch's end keeps what a killed command left (#693):
     // the record the member's next start is told from, and the two refusals judge (a launch given none keeps nothing).
-    leftovers: { crew: start.crew_stores.crew, workspace: theWorkspaceTheCrewDeclared(start.settings) },
+    leftovers: leftoversOfALaunch(start.settings, start.crew_stores.crew),
     command: start.command,
     args: [...(start.model === null ? [] : [THE_MODELS_SWITCH, start.model]), ...start.args, ...(start.prompt === undefined ? [] : [start.prompt])],
     inherited: start.inherited,
@@ -326,5 +336,11 @@ async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted>
       () => signedShapeNames(start.state),
       CLAUDE_CODE_BASH_RESULT_SHAPES,
     ),
-  })
+  }
+}
+
+/** The Claude Code entry: today's launch, unchanged in behaviour, behind the table. */
+async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted> {
+  await finishAnySwitchBeforeTheHostStarts(start)
+  return launchClaudeCodeMember(theLaunchOfAClaudeCodeStart(start))
 }

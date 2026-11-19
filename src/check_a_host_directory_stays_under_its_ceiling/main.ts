@@ -30,6 +30,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
 import { manifestPathOf } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { refuseKeysDeclaredTwice } from '../../prove_the_core/read_the_manifest_and_the_linter/keys_declared_twice.ts'
 import { describe } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { describeASlice } from './the_core_slices_under_the_cap.ts'
 import { judgeTheTree, type Judged } from './judge_the_tree.ts'
@@ -61,7 +62,11 @@ const measure = (judged: Judged): number => {
  * it never raises a number nor invents one. */
 const record = (repository: string, judged: Judged): number => {
   const path = manifestPathOf(repository)
-  const hosts = withLoweredCeilings(readFileSync(path, 'utf8'), judged.code)
+  const text = readFileSync(path, 'utf8')
+  // Refused before anything is lowered (martha#753): with nothing to lower the writer is never reached, and a run that
+  // said "nothing was written" would pass a manifest that hides a declaration.
+  refuseKeysDeclaredTwice(text)
+  const hosts = withLoweredCeilings(text, judged.code)
   const slices = withLoweredSliceCeilings(hosts.text, judged.slices)
   const lowered = [...hosts.lowered, ...slices.lowered]
   const removed = slices.removed ?? []

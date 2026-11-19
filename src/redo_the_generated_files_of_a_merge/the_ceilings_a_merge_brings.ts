@@ -29,6 +29,7 @@
 import { basename } from 'node:path'
 
 import { manifestPathOf, type Manifest } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { aKeyDeclaredTwiceInWords, keysDeclaredTwice } from '../../prove_the_core/read_the_manifest_and_the_linter/keys_declared_twice.ts'
 import {
   ceilingsOf,
   CEILINGS_NAME,
@@ -79,6 +80,10 @@ function withTheSummedMapsEmptied(manifest: Manifest): string {
 
 /** The manifest a stage holds, or why the stage is not one this can read. */
 function aManifestIn(text: string, stage: string): Step<Manifest> {
+  // A stage that declares a key twice is refused before it is parsed (martha#753): the parse keeps the last
+  // declaration, and the merge would write the file with the other one gone.
+  const twice = keysDeclaredTwice(text)
+  if (twice.length > 0) return { refused: `${stage}: ${twice.map(aKeyDeclaredTwiceInWords).join('; ')}` }
   try {
     return { ok: JSON.parse(text) as Manifest }
   } catch {

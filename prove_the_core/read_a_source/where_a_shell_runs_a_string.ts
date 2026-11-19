@@ -9,7 +9,7 @@
 import type { ACommand, AWord } from '../read_a_shell_script/read_a_shell_script.ts'
 
 /** The shells, by the last part of the word that names them. */
-export const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash'])
+export const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'fish'])
 
 /** A shell's options that take the next word as their value; any other `--long` word takes none. */
 export const SHELL_VALUE_OPTIONS = new Set(['-o', '+o', '-O', '+O', '--rcfile', '--init-file'])
@@ -22,6 +22,32 @@ export const SSH_VALUE_LETTERS = 'BbcDEeFIiJLlmOoPpQRSWw'
 
 /** The programs that run the rest of their words as a command, each with its own options in front of it. */
 export const WRAPPERS = ['env', 'exec', 'command', 'nohup', 'timeout', 'sudo', 'xargs', 'podman exec', 'docker exec']
+
+/**
+ * The programs whose own option hands its value to a shell to run (martha#759), and the option that carries it: su runs
+ * its command string in the target user's shell, flock, script and npm run it through one of their own.
+ */
+export const RUNS_ITS_OPTIONS_STRING: Readonly<Record<string, { readonly short: string; readonly long: string }>> = {
+  su: { short: 'c', long: '--command' },
+  runuser: { short: 'c', long: '--command' },
+  flock: { short: 'c', long: '--command' },
+  script: { short: 'c', long: '--command' },
+  'npm exec': { short: 'c', long: '--call' },
+  'npm x': { short: 'c', long: '--call' },
+  npx: { short: 'c', long: '--call' },
+}
+
+/** The programs that join their own words and hand them to a shell, with the options that say to run them as a command line instead. */
+export const RUNS_ITS_WORDS_THROUGH_A_SHELL: Readonly<Record<string, readonly string[]>> = { watch: ['-x', '--exec'] }
+
+/**
+ * The programs that run their arguments as shell command lines, with the words that separate the template from the
+ * arguments: the words before the first separator are one string, and with no template each word after a separator is
+ * a command of its own. A separator of four or more colons names file names, which run nothing.
+ */
+export const RUNS_ITS_ARGUMENTS_AS_COMMANDS: Readonly<Record<string, readonly string[]>> = {
+  parallel: [':::', '::::', ':::+', '::::+'],
+}
 
 /** The words that run every word after them, joined, as a script. */
 export const RUNS_ITS_WORDS = new Set(['eval'])
@@ -58,9 +84,14 @@ export function theProgramsPlace(command: ACommand): number {
   return at === -1 || NO_PROGRAM_FOLLOWS.has(command.words[at]?.text ?? '') ? -1 : at
 }
 
+/** The name out of `names` that starts at `at` (`podman exec` is two words), or undefined when none does. */
+function aNameAt(names: readonly string[], words: readonly AWord[], at: number): string | undefined {
+  return names.find((one) => one.split(' ').every((part, k) => (k === 0 ? programOf(words[at]) : words[at + k]?.text) === part))
+}
+
 /** How many words the wrapper at `at` spans (`podman exec` is two), or 0 when none starts there. */
 export function aWrapperAt(words: readonly AWord[], at: number): number {
-  const wrapper = WRAPPERS.find((one) => one.split(' ').every((part, k) => (k === 0 ? programOf(words[at]) : words[at + k]?.text) === part))
+  const wrapper = aNameAt(WRAPPERS, words, at)
   return wrapper === undefined ? 0 : wrapper.split(' ').length
 }
 
@@ -143,6 +174,84 @@ function aSplitStringAt(words: readonly AWord[], at: number): AString | undefine
   return word.text === ENV_SPLIT_FLAG || word.text === ENV_SPLIT_LONG ? words[at + 1] : undefined
 }
 
+/** A flag cluster: `-c`, `-qc`, `-euc`. */
+const A_FLAG_CLUSTER = /^-[A-Za-z]+$/
+
+/** The program's own option words, from `from` up to the `--` that ends them. */
+function theOptionsOf(words: readonly AWord[], from: number): readonly AWord[] {
+  const end = words.findIndex((word, at) => at >= from && word.text === '--')
+  return end === -1 ? words.slice(from) : words.slice(from, end)
+}
+
+/** The string the option word at `at` carries, or nothing: attached to its flag, or the word after it. */
+function aValueTheOptionCarries(words: readonly AWord[], at: number, options: { readonly short: string; readonly long: string }): AString[] {
+  const word = words[at]
+  if (word === undefined) return []
+  const value = new RegExp(`^-[A-Za-z]*${options.short}(.+)$`).exec(word.text)?.[1] ?? new RegExp(`^${options.long}=(.+)$`).exec(word.text)?.[1]
+  if (value !== undefined) return [{ text: value, line: word.line }]
+  const apart = A_FLAG_CLUSTER.test(word.text) ? word.text.endsWith(options.short) : word.text === options.long
+  return apart ? words.slice(at + 1, at + 2) : []
+}
+
+/** The string of the option-string program at `at`: the value of the option that hands a shell one, when it carries one. */
+function anOptionString(words: readonly AWord[], at: number): AString[] {
+  const name = aNameAt(Object.keys(RUNS_ITS_OPTIONS_STRING), words, at)
+  const options = name === undefined ? undefined : RUNS_ITS_OPTIONS_STRING[name]
+  if (name === undefined || options === undefined) return []
+  const its = theOptionsOf(words, at + name.split(' ').length)
+  return its.flatMap((_, k) => aValueTheOptionCarries(its, k, options)).slice(0, 1)
+}
+
+/** The words a program joins and hands a shell, when none of its own options says to run them as a command line instead. */
+function aJoinedWordsString(words: readonly AWord[], at: number): AString[] {
+  const name = aNameAt(Object.keys(RUNS_ITS_WORDS_THROUGH_A_SHELL), words, at)
+  const runsThemAsALine = name === undefined ? undefined : RUNS_ITS_WORDS_THROUGH_A_SHELL[name]
+  if (name === undefined || runsThemAsALine === undefined) return []
+  const after = words.slice(at + name.split(' ').length)
+  if (after.some((word) => runsThemAsALine.includes(word.text))) return []
+  const first = after.findIndex((word) => !word.text.startsWith('-'))
+  return joined(first === -1 ? [] : after.slice(first))
+}
+
+/** Whether a separator names file names rather than commands: four or more colons. */
+const namesFiles = (separator: string): boolean => separator.replace(/[^:]/g, '').length >= 4
+
+/** The words before the first separator, past the program's own options, joined into one string. */
+function itsTemplate(after: readonly AWord[], separators: readonly string[]): AString[] {
+  const first = after.findIndex((word) => !word.text.startsWith('-'))
+  if (first === -1) return []
+  const end = after.findIndex((word) => separators.includes(word.text))
+  return joined(after.slice(first, end === -1 ? after.length : end))
+}
+
+/** Each word a separator marks as a command line of its own. */
+function itsSeparatedCommands(after: readonly AWord[], separators: readonly string[]): AString[] {
+  const commands: AString[] = []
+  let aCommandFollows = false
+  for (const word of after) {
+    if (separators.includes(word.text)) {
+      aCommandFollows = !namesFiles(word.text)
+      continue
+    }
+    if (aCommandFollows) commands.push({ text: word.text, line: word.line })
+  }
+  return commands
+}
+
+/** The strings of the arguments-as-commands program at `at`: its template, and each command a separator marks. */
+function theArgumentCommandStrings(words: readonly AWord[], at: number): AString[] {
+  const name = aNameAt(Object.keys(RUNS_ITS_ARGUMENTS_AS_COMMANDS), words, at)
+  const separators = name === undefined ? undefined : RUNS_ITS_ARGUMENTS_AS_COMMANDS[name]
+  if (name === undefined || separators === undefined) return []
+  const after = words.slice(at + name.split(' ').length)
+  return [...itsTemplate(after, separators), ...itsSeparatedCommands(after, separators)]
+}
+
+/** The strings the command's own programs hand a shell, anywhere in the command (martha#759). */
+function whatAProgramHandsAShell(words: readonly AWord[]): AString[] {
+  return words.flatMap((_, at) => [...anOptionString(words, at), ...aJoinedWordsString(words, at), ...theArgumentCommandStrings(words, at)])
+}
+
 /** Whether the command's program, or the program a wrapper in that place runs, is a shell reading its standard input. */
 export function readsAScriptOnItsInput(command: ACommand): boolean {
   const { words } = command
@@ -174,15 +283,38 @@ export function theStringsItRuns(command: ACommand, forwarders: ReadonlySet<stri
     ...theShellsCommandStrings(words),
     ...theRemoteCommands(words),
     ...whatEnvSplits(words),
+    ...whatAProgramHandsAShell(words),
     ...(herestring !== undefined && readsAScriptOnItsInput(command) ? [herestring] : []),
     ...whatAForwarderIsHanded(command, forwarders),
   ]
 }
 
-/** What each command of a script is fed by its pipeline: every quoted word before a shell that reads its input. */
+/**
+ * Whether a script on the command's standard input is read as one: the command itself, or a later command of its
+ * pipeline (martha#759's amendment B). `cat <<'EOF' | bash` is bash reading the body, though cat writes it.
+ */
+export function aShellReadsOnItsInput(commands: readonly ACommand[], command: ACommand): boolean {
+  return commands.some((one) => one.pipeline === command.pipeline && one.place >= command.place && readsAScriptOnItsInput(one))
+}
+
+/**
+ * Whether the command runs a command line it reads on its standard input: a shell, or the arguments-as-commands
+ * program with no template and no separator, whose input lines each become a command (martha#759).
+ */
+function readsACommandLineOnItsInput(command: ACommand): boolean {
+  if (readsAScriptOnItsInput(command)) return true
+  const program = theProgramsPlace(command)
+  const name = aNameAt(Object.keys(RUNS_ITS_ARGUMENTS_AS_COMMANDS), command.words, program)
+  const separators = name === undefined ? undefined : RUNS_ITS_ARGUMENTS_AS_COMMANDS[name]
+  if (name === undefined || separators === undefined) return false
+  const after = command.words.slice(program + name.split(' ').length)
+  return !after.some((word) => !word.text.startsWith('-') || separators.includes(word.text))
+}
+
+/** What each command of a script is fed by its pipeline: every quoted word before a program that runs its input. */
 export function whatThePipesFeed(commands: readonly ACommand[]): Map<ACommand, AString[]> {
   const fed = new Map<ACommand, AString[]>()
-  for (const reader of commands.filter((command) => command.place > 0 && readsAScriptOnItsInput(command))) {
+  for (const reader of commands.filter((command) => command.place > 0 && readsACommandLineOnItsInput(command))) {
     const before = commands.filter((command) => command.pipeline === reader.pipeline && command.place < reader.place)
     fed.set(reader, before.flatMap((command) => command.words.filter((word) => word.quoted)))
   }

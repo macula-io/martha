@@ -72,6 +72,21 @@ wait for it to stop (a server's `close` callback, a child's `exit`). A check
 (`prove_the_core/a_test_run_ends/every_test_run_ends.ts`) fails when the script loses any of
 the three.
 
+What a test leaves on disk fails the same way. Each file's process is handed a
+`TMPDIR` and an `XDG_RUNTIME_DIR` of its own, both empty when it starts, so any
+entry in either one is that file's to remove:
+
+```text
+src/x/x.node-test.ts left behind in the temp directory after its tests: martha-472-link-4242. Remove it in t.after.
+```
+
+A `tmpdir()` a test calls, or a sibling it starts calls, answers the file's own
+directory, and it goes with the file whether the file passed or failed. Those
+directories sit in two roots `npm test` makes for each stage and removes when the
+stage ends (`prove_the_core/a_test_run_keeps_one_temporary_root/keep_a_test_run_in_one_temporary_root.ts`), so an
+interrupted run leaves nothing in `/tmp` for the next one to guess at, and a
+scratch a test forgets is never another run's to delete.
+
 No test prints your environment. `npm test`, here and in `installer/`, runs
 node --test through `prove_the_core/no_test_reaches_a_secret/no_test_output_carries_the_environment.ts`,
 which plants a fresh secret-looking value in `MARTHA_PLANTED_SECRET` and fails

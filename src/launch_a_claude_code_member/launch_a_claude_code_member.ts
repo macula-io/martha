@@ -168,6 +168,9 @@ import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journa
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
+import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
+import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
 import { theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
@@ -608,24 +611,6 @@ function sessionStartDeadline(launch: ClaudeCodeMemberLaunch, hostEnv: Readonly<
 }
 
 /**
- * The backstop (#104): a host that runs the relay reports the session's start;
- * a member whose relay has not, the deadline's ms after it was armed, is stopped.
- */
-function relayBackstop(deadline: { readonly ms: number; readonly why: string }, stop: (why: string) => void): { reported(): void; arm(): void; disarm(): void } {
-  let reported = false
-  let unheard: NodeJS.Timeout | undefined
-  const disarm = (): void => clearTimeout(unheard)
-  return {
-    reported: () => ((reported = true), disarm()),
-    arm: () => {
-      if (reported) return
-      unheard = setTimeout(() => stop(deadline.why), deadline.ms)
-    },
-    disarm,
-  }
-}
-
-/**
  * Reads the settings files the host reads again every `ms`, apart from any
  * hook, and stops the member the first time one sets a switch (martha#122 r=2);
  * returns what ends the watch. `also` is work the same tick does, which is how a
@@ -651,6 +636,17 @@ function watchHookSettings(watch: HookSettingsWatch, ms: number, stop: (why: str
 export async function launchClaudeCodeMember(asking: ClaudeCodeMemberLaunch): Promise<MemberStarted> {
   const { launch, lifeline } = theLaunchItsRunAsks(asking, NOT_STARTED)
   return lifeline.kind === 'refused' ? { started: false, refusal: told(launch, lifeline.refusal) } : launching(launch, lifeline)
+}
+
+/**
+ * The tick the launcher keeps (martha#562 package 2): the misses a member's git guard left, and the scan of the workspace
+ * this launch was given, which starts here and is never awaited. It sits beside the launch rather than inside it so that
+ * what it decides — including a launch given no layout — costs the launch's own reading nothing.
+ */
+function aTickOfWorkFor(launch: ClaudeCodeMemberLaunch, misses: string): () => void {
+  const beats = dashboardRowsIn(launch.places.dashboard)
+  const scan: TheScanOfTheWorkspace = (workspace) => theDriftInTheWorkspace({ files: thisMachine.stores.files, processes: thisMachine.processes, workspace })
+  return aTickOfTheRowsWork(aFolderOfTheMisses(misses, launch.member_name, beats), aFolderOfTheScan(launch.leftovers?.workspace, launch.member_name, beats, scan))
 }
 
 /** The launch itself, on a run that has said whether it is still there. */
@@ -709,7 +705,9 @@ async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeli
 
   const { launchRecords, recorded } = started
   const offLauncherEnd = cleanUpIfTheLauncherEnds(pid, made)
-  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop, aFolderOfTheMisses(made.guard.misses, launch.member_name, dashboardRowsIn(launch.places.dashboard)))
+  // The row's one line is written here, and here only: the misses a guard left, and the scan of the workspace this
+  // launch was given, which starts now that its host is up and is never awaited (martha#562 package 2).
+  const unwatch = watchHookSettings(ready.hookSettings, launch.hook_settings_check_ms ?? HOOK_SETTINGS_CHECK_MS, stop, aTickOfWorkFor(launch, made.guard.misses))
   const ended = (): string | null => (backstop.disarm(), unwatch(), itsRunWent.forgetTheRun(), stoppedBecause)
   const stopped = whenTheMemberStops(started.child, pid, launch, launchRecords, made, offLauncherEnd, ended)
   backstop.arm()
