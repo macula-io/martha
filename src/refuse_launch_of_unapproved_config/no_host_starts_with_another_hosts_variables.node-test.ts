@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { HOSTS, launchEnvironment, type Host, type HostSwitches } from './refuse_launch_of_unapproved_config.ts'
+import { HOSTS, launchEnvironment, theRowOfHost, type Host, type HostSwitches } from './refuse_launch_of_unapproved_config.ts'
 
 /** A path for the carried-file switches to name; only the variable names they set are read. */
 const A_CARRIED_COPY = '/a-snapshot/a-carried-copy'
@@ -21,7 +21,7 @@ const namesOf = (switches: HostSwitches): string[] => [...Object.keys(switches.e
 
 /** Every variable name `host`'s row declares: its project-config switches, its carried files' switches, and its env_last. */
 function namesTheRowDeclares(host: Host): Set<string> {
-  const row = HOSTS[host]
+  const row = theRowOfHost(host)
   const carried = Object.values(row.carried).flatMap((carry) => namesOf(carry(A_CARRIED_COPY)))
   return new Set([...namesOf(row.project_config_off), ...carried, ...Object.keys(row.env_last)])
 }
@@ -30,7 +30,7 @@ test("no host's launch carries a variable only another host's row declares", () 
   assert.ok(EVERY_HOST.length > 1, 'there are at least two hosts, or this walk compares nothing')
   for (const host of EVERY_HOST) {
     const own = namesTheRowDeclares(host)
-    const started = Object.keys(launchEnvironment({}, HOSTS[host].project_config_off, host))
+    const started = Object.keys(launchEnvironment({}, theRowOfHost(host).project_config_off, host))
     for (const other of EVERY_HOST.filter((candidate) => candidate !== host)) {
       const theirs = [...namesTheRowDeclares(other)].filter((name) => !own.has(name))
       const leaked = started.filter((name) => theirs.includes(name))
