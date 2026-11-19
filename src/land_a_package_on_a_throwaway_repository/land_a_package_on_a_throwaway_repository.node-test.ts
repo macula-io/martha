@@ -69,7 +69,7 @@ test('an answer for another id, an empty stamp, and no answer at all are each re
 
 // --- R4: the kept record --------------------------------------------------------------------------------------------
 
-const TOKEN = 'github_pat_11AAAAAAA0ThisIsAStandInToken_xyz'
+const TOKEN = 'github_pat_synthetic11AAAAAAA0ThisIsAStandInToken_xyz'
 
 test("a member's transcript that printed the token keeps no token, and says one reached it", () => {
   const kept = redactTheToken(`$ gh auth token\n${TOKEN}\n$ echo again ${TOKEN}`, TOKEN)
@@ -84,7 +84,7 @@ test('a fine-grained token the run was not given is caught by its shape', () => 
 })
 
 test('a token of another shape is still caught by its exact value', () => {
-  const kept = redactTheToken('hosts: oauth_token: ghp_plainOldToken123', 'ghp_plainOldToken123')
+  const kept = redactTheToken('hosts: oauth_token: ghp_syntheticPlainOldToken123', 'ghp_syntheticPlainOldToken123')
   assert.deepEqual(kept, { text: `hosts: oauth_token: ${REDACTED}`, reached: true })
 })
 
@@ -150,7 +150,7 @@ test('a token split by a title sequence or a bare carriage return is caught the 
 })
 
 test('a fine-grained token the run was not given, wrapped after its prefix, is withheld too, leaving no tail', () => {
-  const other = 'github_pat_22BBBBBBB0AnotherStandInToken_abc'
+  const other = 'github_pat_synthetic22BBBBBBB0AnotherStandInToken_abc'
   const kept = redactTheToken(`x ${other.slice(0, 16)}\r\n${other.slice(16)} y`, TOKEN)
   assert.deepEqual(kept, { text: WITHHELD, reached: true })
 })

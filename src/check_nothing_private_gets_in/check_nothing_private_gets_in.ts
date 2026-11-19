@@ -10,7 +10,7 @@
 // is refused without this public tree having to name it.
 
 import { digestStartsFinder } from './public_digest.ts'
-import { HEX_DIGIT, ID_HEX_DIGITS, PUBLIC_TEXT_PATTERNS } from './public_text.ts'
+import { GITHUB_TOKEN_PREFIXES, HEX_DIGIT, ID_HEX_DIGITS, PUBLIC_TEXT_PATTERNS } from './public_text.ts'
 
 export interface Rules {
   // Email domains this repository may name.
@@ -55,6 +55,7 @@ export const SYNTHETIC = {
   email: String.raw`^[A-Za-z0-9._%+-]+@synthetic\.invalid$`,
   hex_id: `^(${HEX_DIGIT})\\1{${ID_HEX_DIGITS - 1}}$`,
   repo_owner: String.raw`^synthetic-[a-z0-9-]+$`,
+  github_token: `^(${GITHUB_TOKEN_PREFIXES.join('|')})synthetic[A-Za-z0-9_]*$`,
 }
 
 // Paths on github.com that are not an owner: a link there is not a repository.
@@ -126,6 +127,12 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
       // id is a node id or a key until shown otherwise.
       accepts: (value, at, text) =>
         synthetic(SYNTHETIC.hex_id)(value) || (oneId.test(value) && digestStarts(text).has(at)),
+    },
+    {
+      // A GitHub token in a post is a key to whatever it reaches, for as long as it lives (martha#904).
+      what: 'a GitHub token',
+      matches: (text) => each(PUBLIC_TEXT_PATTERNS.github_token, text),
+      accepts: synthetic(SYNTHETIC.github_token),
     },
   ]
 }
