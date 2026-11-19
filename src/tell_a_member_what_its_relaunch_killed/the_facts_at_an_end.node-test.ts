@@ -83,9 +83,9 @@ test('a differing path whose bytes cannot be read is left out of both lists', ()
   assert.deepEqual(record.leftovers, [])
 })
 
-test('two trees are told with their own names, and one tree needs none', () => {
+test('one tree is told by its own name too, and two trees keep their own (martha#719)', () => {
   const one = theRecordAtTheEnd(anEnd())
-  assert.equal(one.dirty[0]?.worktree, undefined)
+  assert.deepEqual(one.dirty.map((file) => file.worktree), [THE_TREE])
   const two = theRecordAtTheEnd(anEnd({ trees: [THE_TREE, OTHER_TREE] }))
   assert.deepEqual(two.dirty.map((file) => file.worktree), [THE_TREE, OTHER_TREE])
 })
