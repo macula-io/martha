@@ -1859,7 +1859,7 @@ self_test() {
     on_the_host() { local last; for last in "$@"; do :; done; sh -c "${last}"; }
     KEPT_TRANSCRIPTS="${kept_copy}" TRANSCRIPTS="${kept_nowhere}" LOG_FILE="${kept_log}" keep_what_the_member_did 0
   )
-  if ! grep -qF -- "${KEPT_COPY_WORDS}$(turn_line "${first}")" "${kept_log}"; then
+  if ! grep -qF -- "${KEPT_COPY_WORDS}{$(turn_line "${first}")}" "${kept_log}"; then
     echo 'the self-test: a failed step read no copy of an ended launch, so what its member did was said to be gone' >&2
     case_failed=1
   fi
