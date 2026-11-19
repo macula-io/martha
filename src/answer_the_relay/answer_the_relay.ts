@@ -350,7 +350,7 @@ export { NO_CREW_TOOLS } from '../answer_what_a_host_reports/answer_what_a_host_
 async function answerACoreTool(state: RelayState, body: unknown): Promise<Answered | Refused> {
   if (state.place.crew === undefined) return { refused: NO_CREW_TOOLS }
   const call = bodyOfAToolCall(body)
-  if (call === undefined) return { refused: 'the tool call is not one this launcher reads: it wants a session, a tool and its arguments' }
+  if (call === undefined) return { refused: A_CREW_CALL_UNREAD }
   return state.answers.aCrewToolAsked(call)
 }
 
@@ -364,6 +364,9 @@ async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrd
   if (start !== undefined) await inOrder(async () => state.everyTurn.recorded(start))
   return answer
 }
+
+/** Why a crew tool call is refused when its body is not a session, a tool and its arguments. */
+export const A_CREW_CALL_UNREAD = 'the tool call is not one this launcher reads: it wants a session, a tool and its arguments'
 
 /** A tool call's three fields, or undefined when the body is not one. */
 export function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>> } | undefined {

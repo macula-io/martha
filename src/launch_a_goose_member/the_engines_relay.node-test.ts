@@ -5,7 +5,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { ACrewToolAsked } from '../host_contract/host_contract.ts'
-import { AN_ENGINE_LAUNCH_ASKS_NO, AN_UNREAD_CREW_CALL, anEngineRelay } from './the_engines_relay.ts'
+import { A_CREW_CALL_UNREAD } from '../answer_the_relay/answer_the_relay.ts'
+import { AN_ENGINE_LAUNCH_ASKS_NO, anEngineRelay } from './the_engines_relay.ts'
 
 /** An entry whose order is held shut until the test opens it, and that records each crew call it answers. */
 function anEntryHeldShut() {
@@ -40,14 +41,14 @@ test("a crew tool call is answered by the entry, after the work its order alread
 test('a crew tool call the relay cannot read is refused by name, and the entry is not asked (#541 package A, design G1)', async () => {
   const entry = anEntryHeldShut()
   entry.open()
-  assert.deepEqual(await anEngineRelay(entry.answers as never).answerTool({ tool: 'no session' }), { refused: AN_UNREAD_CREW_CALL })
+  assert.deepEqual(await anEngineRelay(entry.answers as never).answerTool({ tool: 'no session' }), { refused: A_CREW_CALL_UNREAD })
   assert.deepEqual(entry.asked, [])
 })
 
 test("a hook's event, a signed run and both git questions are refused by name, never answered as allowed (#541 package A, design G1)", async () => {
   const entry = anEntryHeldShut()
   const relay = anEngineRelay(entry.answers as never)
-  assert.deepEqual(await relay.answer('tool_called', { session_id: 's', tool_name: 'Bash' }), { answered: true, body: { refused: AN_ENGINE_LAUNCH_ASKS_NO('hook') } })
+  assert.deepEqual(await relay.answer('tool_called', { session_id: 's' }), { answered: true, body: { refused: AN_ENGINE_LAUNCH_ASKS_NO('hook') } })
   assert.deepEqual(await relay.run({ name: 'x' }), { refused: AN_ENGINE_LAUNCH_ASKS_NO('signed run') })
   assert.deepEqual(await relay.judgeAGitCall({}), { refused: AN_ENGINE_LAUNCH_ASKS_NO('git shim') })
   assert.deepEqual(await relay.judgeARefTransaction({}), { refused: AN_ENGINE_LAUNCH_ASKS_NO('git hook') })

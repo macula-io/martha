@@ -5,15 +5,12 @@
 // An engine launch in package A puts no hook, no `martha run` and no git shim in front of its member, so nothing should
 // ask the relay's other questions. One that arrives anyway is refused by name, never answered as allowed.
 
-import { bodyOfAToolCall, type MemberRelay } from '../answer_the_relay/answer_the_relay.ts'
+import { A_CREW_CALL_UNREAD, bodyOfAToolCall, type MemberRelay } from '../answer_the_relay/answer_the_relay.ts'
 import type { TheAnswersOfOneLaunch } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 
 /** Why an engine launch refuses a relay question its member has nothing to ask with. */
 export const AN_ENGINE_LAUNCH_ASKS_NO = (what: string): string =>
   `an engine launch puts no ${what} in front of its member, so it answers no such question (#541 package A, design G1)`
-
-/** The crew tool body the relay cannot read, refused by name. */
-export const AN_UNREAD_CREW_CALL = 'the tool call is not one this launcher reads: it wants a session, a tool and its arguments'
 
 /** The relay of one engine launch, over its entry. */
 export function anEngineRelay(answers: Pick<TheAnswersOfOneLaunch, 'inOrder' | 'aCrewToolAsked'>): MemberRelay {
@@ -22,7 +19,7 @@ export function anEngineRelay(answers: Pick<TheAnswersOfOneLaunch, 'inOrder' | '
     run: async () => ({ refused: AN_ENGINE_LAUNCH_ASKS_NO('signed run') }),
     answerTool: async (body) => {
       const ask = bodyOfAToolCall(body)
-      if (ask === undefined) return { refused: AN_UNREAD_CREW_CALL }
+      if (ask === undefined) return { refused: A_CREW_CALL_UNREAD }
       return answers.inOrder(async () => answers.aCrewToolAsked(ask))
     },
     judgeAGitCall: async () => ({ refused: AN_ENGINE_LAUNCH_ASKS_NO('git shim') }),
