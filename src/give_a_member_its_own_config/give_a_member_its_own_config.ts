@@ -18,17 +18,23 @@
 //     the member's environment hands the host an API key, that key answered yes, so the host does not stop the
 //     member to ask whether to use it (decided 2026-11-18). These are first-run answers Martha gives for the owner.
 //
+// It also holds the skills of the approved checkout (martha#747), copied under skills/ from the bytes the launch gate
+// carried and hashed as approved: the host reads that folder as user-scope skills while project settings stay off, so
+// the checkout's own .claude/skills is never read. They are copies, never links (the host drops a second file of the
+// same identity, and a link would leave the live checkout's bytes in place), at file mode 0600 in 0700 folders: the
+// executable bit is not carried, because the approval hashes content, not mode.
+//
 // Sign-in is pointed at, never copied: the recorded host's sign-in store variable, set and empty, names the owner's own
 // default store (../cut_the_rules_from_the_host_binary/the_sign_in_store.ts). Both variables go on the member's
 // environment over anything inherited, so neither the owner's shell nor a settings file the gate passes points the
 // member back at the owner's folder.
 
 import { lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { API_KEY_ANSWERS_KEY, apiKeyAnsweredYes, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, TRUST_ACCEPTED_KEY } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
-import { CONFIG_DIR_VARIABLE, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { CONFIG_DIR_VARIABLE, SKILLS_KIND, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 
 /** The setting that keeps the owner's claude.ai connectors out of a session. */
@@ -39,7 +45,8 @@ export const MEMBER_CONFIG_FOLDER = 'the-members-own-config'
 
 /** Only the launcher's user reads or writes the folder and its files. */
 export const MEMBER_CONFIG_MODE = 0o700
-const FILE_MODE = 0o600
+/** The mode of every file the folder holds: only the launcher's user reads it. */
+export const FILE_MODE = 0o600
 
 /** The member's user settings: the owner's account connectors off, its skills not synced (martha#602). */
 export const MEMBERS_OWN_SETTINGS: Readonly<Record<string, boolean>> = { [CONNECTORS_OFF_SETTING]: true, [SYNC_OFF_SETTING]: false }
@@ -63,9 +70,14 @@ export function theMembersConfigEnvironment(folder: string): Readonly<Record<str
 
 /**
  * Makes the member's config folder at `folder` for a member of `checkout` whose environment hands the host
- * `apiKey`, or none; or why it could not be made.
+ * `apiKey`, or none, holding `skills`, keyed by their path below the skills folder; or why it could not be made.
  */
-export function makeTheMembersConfig(folder: string, checkout: string, apiKey: string | undefined): { readonly made: true } | { readonly made: false; readonly refusal: string } {
+export function makeTheMembersConfig(
+  folder: string,
+  checkout: string,
+  apiKey: string | undefined,
+  skills: Readonly<Record<string, Uint8Array>>,
+): { readonly made: true } | { readonly made: false; readonly refusal: string } {
   try {
     lstatSync(folder)
     return { made: false, refusal: `${folder} already exists, and a member's config folder is only ever made new` }
@@ -76,6 +88,11 @@ export function makeTheMembersConfig(folder: string, checkout: string, apiKey: s
     mkdirSync(folder, { mode: MEMBER_CONFIG_MODE })
     writeFileSync(join(folder, USER_SETTINGS_FILE), `${JSON.stringify(MEMBERS_OWN_SETTINGS)}\n`, { mode: FILE_MODE, flag: 'wx' })
     writeFileSync(join(folder, HOST_TRUST_RECORD_FILE), `${JSON.stringify(theMembersHostRecord(checkout, apiKey))}\n`, { mode: FILE_MODE, flag: 'wx' })
+    for (const [path, bytes] of Object.entries(skills)) {
+      const at = join(folder, SKILLS_KIND, path)
+      mkdirSync(dirname(at), { recursive: true, mode: MEMBER_CONFIG_MODE })
+      writeFileSync(at, bytes, { mode: FILE_MODE, flag: 'wx' })
+    }
     return { made: true }
   } catch (error) {
     return { made: false, refusal: `the member's config folder ${folder} could not be made: ${error instanceof Error ? error.message : String(error)}` }

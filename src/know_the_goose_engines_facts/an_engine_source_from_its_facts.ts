@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SKILLS_SWITCH_READERS, type ASkillsSwitch, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -87,6 +87,15 @@ function extensionConfig(stdio: EngineFacts['stdio_extension']): string {
   ].join('')
 }
 
+/** A skills switch as the engine writes it (martha#839): a constant naming the setting, and the function reading it. */
+function skillsSwitch(reader: string, switched: ASkillsSwitch): string {
+  const constant = `SETTING_READ_BY_${reader}`
+  return [
+    `pub const ${constant}: &str = "${switched.setting}";\n\n`,
+    `pub fn ${reader}(config: &Config) -> bool {\n    config\n        .get_param::<bool>(${constant})\n        .unwrap_or(${String(switched.when_unset)})\n}\n`,
+  ].join('')
+}
+
 /** Every file of a tree that says `facts`, by its path in the checkout. */
 export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, string>> {
   const modes = facts.mode.values.map((mode) => `    #[strum(message = "a mode")]\n    ${pascalCase(mode)},\n`).join('')
@@ -106,6 +115,8 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.hint_files]: hintFiles(facts.hint_files),
     [ENGINE_PLACES.stdio_extension]: extensionConfig(facts.stdio_extension),
     [ENGINE_PLACES.session_context]: `pub const SESSION_ID_HEADER: &str = "${facts.tool_call_session_key}";\n\npub const TOOL_CALL_REQUEST_ID_HEADER: &str = "another-key";\n`,
+    [ENGINE_PLACES.skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.skills_advertised, facts.skills_advertised),
+    [ENGINE_PLACES.builtin_skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.builtin_skills_advertised, facts.builtin_skills_advertised),
     [ENGINE_PLACES.openai_provider]: `pub const OPEN_AI_PROVIDER_NAME: &str = "${facts.openai_provider.name}";\npub const OPEN_AI_DEFAULT_BASE_PATH: &str = "${facts.openai_provider.default_base_path}";\n            vec![\n${settings}            ],\n`,
   }
 }

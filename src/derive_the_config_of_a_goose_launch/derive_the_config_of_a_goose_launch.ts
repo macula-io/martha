@@ -16,9 +16,15 @@
 // nothing asking. The test beside this file holds both to the recording, so a renamed extension key or a dropped
 // mode fails a test instead of writing a switch the engine ignores.
 //
+// The declaration itself is held to the recording in four refusals, before anything is written (martha#797): the
+// provider must be the one recorded, no setting may name the setting that replaces the engine's hint files, no
+// setting may carry the engine's own prefix, and every remaining setting must be one the provider's recording
+// names. A declaration is therefore never wider than the facts beside this file.
+//
 // It returns the text alone. Where the text is written, and under which root, is the launch's, so no path is named
 // here.
 
+import { ENGINE_PLACES } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import type { RecordedEngine } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 
 /** The one platform extension a member's model is offered: Developer, whose shell and file edits are gated. */
@@ -32,6 +38,12 @@ export const THE_MODE_THAT_ASKS_THE_CLIENT = 'approve'
  * recording, whatever the engine would do with a config that does not name it (martha#541, shape 2 and 3).
  */
 export const SLASH_COMMANDS_OFF = false
+
+/**
+ * What both skills switches are set to (martha#839): each setting offers skills when true and the engine reads an unset
+ * one as true, so a launch writes `false` for both and no skill reaches the model. Approved skills are #614's to turn on.
+ */
+export const SKILLS_OFF = false
 
 /** The config key the engine reads the provider from. */
 export const THE_PROVIDER_SETTING = 'GOOSE_PROVIDER'
@@ -85,6 +97,21 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
     aLine(`  ${extension.key}`, ''),
     aLine('    enabled', extension.key === THE_EXTENSION_A_MEMBER_KEEPS),
   ])
+  // The provider is judged first: a declaration is a provider and a model, and the recording holds the
+  // settings of one provider. A declaration naming another would launch a provider nothing recorded, with
+  // settings nothing checked, so the refusal is what holds the bound until a recording package adds one
+  // (martha#797, Neptunus's R1).
+  if (model.provider !== facts.openai_provider.name) {
+    throw new Error(`a launch names the provider ${JSON.stringify(model.provider)}, and only ${facts.openai_provider.name} is recorded: no other provider can be launched until a recording package adds it`)
+  }
+  // A setting that replaces the files the engine reads into every prompt is refused by the name the recording
+  // gives it (martha#797, #785). Its value is quoted as it is written and never parsed: the engine reads the
+  // value through `parse_env_value`, so only a value it can parse would load anything, and a refusal that said
+  // what the files "would be" would claim more than an unparsable value earns (Neptunus's R3).
+  const namesTheHintFiles = Object.entries(model.settings).find(([setting]) => setting === facts.hint_files.setting)
+  if (namesTheHintFiles !== undefined) {
+    throw new Error(`a provider setting ${facts.hint_files.setting} is written as ${JSON.stringify(namesTheHintFiles[1])}, and the engine would load the files it names in place of the ${facts.hint_files.when_unset.join(' and ')} a launch records`)
+  }
   // A provider's own settings are what the model declaration names for its endpoint. A setting under the
   // engine's own prefix is the engine's, read before the session's model: the subagent model and provider
   // live there, and either one set in this root moves a delegate's model without Martha naming it
@@ -95,6 +122,13 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
   if (borrowed !== undefined) {
     throw new Error(`a provider setting ${borrowed} carries the engine's own prefix ${enginePrefix}, and only the engine's settings the launcher derives are written to its config root`)
   }
+  // Every other setting must be one the provider's own recording names: an allow-list, because a deny-list is
+  // the settings someone has found so far and this root is otherwise open (martha#797). The comparison is
+  // exact: the engine reads a config-root key as it is spelled, so another case is another key it never reads.
+  const notRecorded = Object.keys(model.settings).find((setting) => !facts.openai_provider.settings.includes(setting))
+  if (notRecorded !== undefined) {
+    throw new Error(`a provider setting ${notRecorded} is none of the settings ${facts.openai_provider.name} reads, which ${ENGINE_PLACES.openai_provider} records: ${facts.openai_provider.settings.join(', ')}`)
+  }
   return [
     aLine(THE_PROVIDER_SETTING, model.provider),
     aLine(THE_MODEL_SETTING, model.model),
@@ -102,6 +136,8 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
     // Not the opposite of the engine's default: the setting turns slash commands ON, so off is `false`
     // whether the engine would have them on or off in a config that does not name it.
     aLine(facts.slash_commands.setting, SLASH_COMMANDS_OFF),
+    aLine(facts.skills_advertised.setting, SKILLS_OFF),
+    aLine(facts.builtin_skills_advertised.setting, SKILLS_OFF),
     ...Object.entries(model.settings).map(([setting, value]) => aLine(setting, value)),
     aLine(THE_EXTENSIONS_SETTING, ''),
     ...switches,
@@ -112,7 +148,12 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
   ].join('\n')
 }
 
-/** A key of the config, indentation included: a word, so no key can start a line of its own. */
+/**
+ * A key of the config, indentation included: a word, so no key can start a line of its own. It is a defence
+ * of the keys the launch writes itself, which are constants above: since #797 a model setting cannot reach
+ * this check, because every one of them is refused by name before it is written, and the check stays for what
+ * it still holds rather than being deleted with the case that used to exercise it.
+ */
 const A_WORD_OF_A_KEY = /^[A-Za-z0-9_-]+$/
 
 /** The prefix the engine's own settings carry, from the variable that moves its root: `GOOSE_` from `GOOSE_PATH_ROOT`. */

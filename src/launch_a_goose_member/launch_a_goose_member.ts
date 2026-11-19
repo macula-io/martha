@@ -47,11 +47,11 @@
 // (`theTextAStartLoads`), as ../inbound_paths' A25 and A26 say. The engine reads the same files again on every model
 // request, so the record is the start's reading of them, not the last word on what the engine attaches.
 //
-// Two gaps are named here rather than closed, and neither is silent:
-//   - Skills. On the pinned build `load_skill` is offered to every session and is not a platform
-//     extension, so no switch in this config root reaches it (trial line 9 failed on exactly this).
-//     Saturnus's port of the fork's skills switch (#614) closes it, and until it lands a session is
-//     offered one tool beyond the allow-list, which Martha still gates as a tool call like any other.
+// Skills are off: the config root writes both of the engine's skills switches off, read from the recording
+// (martha#839), so `load_skill` and the compiled-in skills are offered to no session. Turning approved skills
+// on is #614's (DECIDED 2026-11-18 "Approved skills on (Recommended)").
+//
+// One gap is named here rather than closed, and it is not silent:
 //   - The mode a session reports back. The launcher pins the mode that asks in the config root, but the
 //     engine also reports the mode a session actually runs in, over ACP, and there is no client here to
 //     ask it: a session that reports any other mode must be refused when the client that opens it (part
