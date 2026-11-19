@@ -22,8 +22,8 @@ import { AcpClient } from './the_acp_client.ts'
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
 const NAMING = RECORDED_GOOSE_ENGINE.tool_naming
 /** A server-prefixed name whose own part holds the separator too, so where the name is split shows. */
-const A_SERVERS_TOOL = { server: 'crew_tools', own: `hand${NAMING.separator}over` }
-const A_NAMED_CALL = { id: 'call-7', title: 'crew tools: hand  over', input: { to: 'the-reviewer' }, name: `${A_SERVERS_TOOL.server}${NAMING.separator}${A_SERVERS_TOOL.own}` }
+const A_SERVERS_TOOL = { server: 'a_tool_server', own: `hand${NAMING.separator}over` }
+const A_NAMED_CALL = { id: 'call-7', title: 'a tool server: hand  over', input: { to: 'the-reviewer' }, name: `${A_SERVERS_TOOL.server}${NAMING.separator}${A_SERVERS_TOOL.own}` }
 const A_DENIAL = 'the gate refuses this call'
 /** What the engine makes of a refusal, and of an allow, from the call's own update. */
 const REFUSED = { heard: REJECT_ONCE, runs: 0, saves: 0 }
