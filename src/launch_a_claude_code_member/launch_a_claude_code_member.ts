@@ -104,7 +104,7 @@ import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
-import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { sourcesALaunchHandsTheModel } from '../install_the_mesh_server_for_claude_code/what_a_launch_hands_the_model.ts'
 import { meshServerEnvironments } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { whatTheLaunchSupplied } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
@@ -168,7 +168,7 @@ import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journa
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { theCarriedSkills } from '../refuse_launch_of_unapproved_config/carry_the_approved_skills.ts'
+import { isBelowACarriedFolder } from '../refuse_launch_of_unapproved_config/carry_the_approved_skills.ts'
 import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
@@ -720,4 +720,16 @@ async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeli
   }
 
   return { started: true, pid, stopped, stop }
+}
+
+/**
+ * The carried skill files, keyed by their path below the skills folder: what the member's config folder writes under
+ * `skills/` (martha#747). The gate decided which are carried; this only names them as the folder takes them.
+ */
+export function theCarriedSkills(carried_files: Readonly<Record<string, Uint8Array>>): Readonly<Record<string, Uint8Array>> {
+  return Object.fromEntries(
+    Object.entries(carried_files)
+      .filter(([path]) => isBelowACarriedFolder(path, [CLAUDE_SKILLS]))
+      .map(([path, bytes]) => [path.slice(CLAUDE_SKILLS.length + 1), bytes]),
+  )
 }

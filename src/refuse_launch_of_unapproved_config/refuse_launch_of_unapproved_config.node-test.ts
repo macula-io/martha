@@ -42,7 +42,8 @@ import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { CLAUDE_SKILLS, theCarriedSkills } from './carry_the_approved_skills.ts'
+import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { theCarriedSkills } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // Every test reads real directories and real git checkouts through the real

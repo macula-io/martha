@@ -58,15 +58,15 @@ import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exac
 import {
   CLAUDE_AUTO_UPDATER_OFF,
   CLAUDE_CODE,
-  CLAUDE_CODE_BARE_MODE_VARIABLE,
-  CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE,
   CLAUDE_FOLDER,
+  CLAUDE_SKILLS,
+  CLAUDE_SKILLS_ELSEWHERE,
   MCP_CONFIG_SWITCH,
   MEMORY_FOLDER_OVERRIDE,
   REMOTE_MEMORY_ROOT,
 } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { aSkillWithAReservedName, CLAUDE_SKILLS, isBelowACarriedFolder } from './carry_the_approved_skills.ts'
+import { aSkillWithAReservedName, isBelowACarriedFolder } from './carry_the_approved_skills.ts'
 
 
 export type { LaunchHost }
@@ -274,13 +274,6 @@ const OPENCODE_CONFIG_ELSEWHERE = ['OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_D
  * lands on the owner's own copy as Claude Code's did (martha#460).
  */
 const OPENCODE_AUTO_UPDATER_OFF: Readonly<Record<string, string>> = { OPENCODE_DISABLE_AUTOUPDATE: '1' }
-
-/**
- * Each brings skills in that no approval read (martha#747): bare mode, in which the host loads none of the skills a
- * launch copies and reads added folders' skills unguarded, and the host skill catalog, a mount of skills named by an
- * inherited variable. Both are Claude Code facts the recorded host is checked against (martha#747).
- */
-const CLAUDE_SKILLS_ELSEWHERE = [CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE] as const
 
 /**
  * Claude Code 2.1 reads this from its own environment and starts every tool
