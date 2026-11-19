@@ -109,8 +109,10 @@ const theTreesAtTheEnd = (the: AnEnd): {
       unreadable ??= read.unreadable
       continue
     }
-    // One tree needs no tag; more than one does, so two trees holding one path cannot be confused.
-    const read_one = theDirtyOfATree({ tree, read, reads: the.tree_reads, ...(the.trees.length === 1 ? {} : { worktree: tree }) })
+    // Every tree is tagged with its own place, one tree as much as many (martha#719): a refusal reads a leftover at the
+    // tree the record names, and the member's one worktree is not the crew's checkout. Two trees holding one path are
+    // still told apart by it.
+    const read_one = theDirtyOfATree({ tree, read, reads: the.tree_reads, worktree: tree })
     dirty.push(...read_one.dirty)
     mtimes.push(...read_one.mtimes)
   }

@@ -8,16 +8,18 @@
 import type { CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import type { CrewStore, TheFilesAndProcesses } from '../host_contract/host_contract.ts'
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
+import { refuseAHandOffWithALeftover } from '../refuse_a_handoff_with_a_leftover/refuse_a_handoff_with_a_leftover.ts'
 import { refuseAGitCallInAMembersShell } from '../refuse_a_git_call_in_a_members_shell/refuse_a_git_call_in_a_members_shell.ts'
 import { refuseAGitCallFromThePath, refuseTheRefUpdates } from './a_call_the_guards_seams_ask_about.ts'
 
 /** The places the guard is asked through, each ending in ../ask_git_what_a_member_is_about_to_change. */
-export type TheGitGuardPlaces = Pick<CrewToolPlaces, 'refusesTheGitCall' | 'refusesTheGitOnThePath' | 'refusesTheRefUpdate'>
+export type TheGitGuardPlaces = Pick<CrewToolPlaces, 'refusesTheGitCall' | 'refusesTheGitOnThePath' | 'refusesTheRefUpdate' | 'refusesTheHandOff'>
 
 /**
- * The guard's three places for `member`, in `workspace`, on `host`: undefined when the crew declared no layout, which is
- * a crew whose git is guarded by nothing. `leftovers` is the crew's own store, where what the member's last launch left
- * is kept: a commit that would carry it is refused there (martha#693), and without it no commit is judged.
+ * The guard's four places for `member`, in `workspace`, on `host`: undefined when the crew declared no layout, which is
+ * a crew whose git is guarded by nothing and whose record holds no trees. `leftovers` is the crew's own store, where
+ * what the member's last launch left is kept: a commit that would carry it is refused there (martha#693), and a
+ * hand-off that would carry it is refused as it is sent (martha#719). Without it neither is judged.
  */
 export function theGitGuardPlacesOf(
   workspace: TheWorkspace | undefined,
@@ -31,5 +33,6 @@ export function theGitGuardPlacesOf(
     refusesTheGitCall: (call) => refuseAGitCallInAMembersShell({ ...at, ...call }),
     refusesTheGitOnThePath: (call) => refuseAGitCallFromThePath({ ...at, ...call }),
     refusesTheRefUpdate: (updates) => refuseTheRefUpdates(updates, workspace, member),
+    refusesTheHandOff: async (call) => refuseAHandOffWithALeftover({ ...at, ...call }),
   }
 }
