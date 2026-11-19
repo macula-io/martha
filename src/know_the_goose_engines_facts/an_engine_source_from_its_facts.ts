@@ -129,7 +129,7 @@ function pluginDiscovery(roots: CheckoutSkillRoots): string {
     `    found.sort_by(|left, right| left.root.cmp(&right.root));\n    found\n}\n\n`,
     `fn ${CHECKOUT_ROOT_CARRIERS.plugin_settings}(project_root: Option<&Path>) -> Vec<(SettingsScope, PluginSettings)> {\n    let mut paths: Vec<(SettingsScope, PathBuf)> = Vec::new();\n`,
     `    if let Some(path) = user_settings_path() {\n        paths.push((SettingsScope::User, path));\n    }\n`,
-    `    if let Some(root) = project_root {\n        paths.push((SettingsScope::Project, ${SKILL_ROOT_READERS.plugin_settings}(root, false)));\n        paths.push((SettingsScope::Local, ${SKILL_ROOT_READERS.plugin_settings}(root, true)));\n    }\n    paths\n}\n\n`,
+    `    if let Some(root) = project_root {\n        paths.push((SettingsScope::Project, ${SKILL_ROOT_READERS.plugin_settings}(root, false)));\n        paths.push((SettingsScope::Local, ${SKILL_ROOT_READERS.plugin_settings}(root, true)));\n    }\n\n    paths\n        .into_iter()\n        .filter_map(|(scope, path)| match read_settings(&path) {\n            Ok(Some(s)) => Some((scope, s)),\n            Ok(None) => None,\n            Err(e) => {\n                tracing::warn!(path = %path.display(), error = %e, \"Failed to read plugin settings\");\n                None\n            }\n        })\n        .collect()\n}\n\n`,
     `fn ${SKILL_ROOT_READERS.plugin_folder}(project_root: &Path) -> PathBuf {\n    ${joined('project_root', roots.plugin_folder)}\n}\n\n`,
     `fn ${SKILL_ROOT_READERS.plugin_settings}(project_root: &Path, local: bool) -> PathBuf {\n    let file = if local {\n        "${nameOf(local)}"\n    } else {\n        "${nameOf(shared)}"\n    };\n`,
     `    ${joined('project_root', folderOf(shared))}.join(file)\n}\n`,

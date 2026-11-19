@@ -546,9 +546,9 @@ function skillFoldersFromKnownBases(source: EngineSource): void {
   const body = squeezed(functionBody(text, fn, path))
   const workingDir = boundFrom(functionBody(text, fn, path), rootParameterOf(text, fn, path), fn, path)
   const list = captured(body, /letmut(\w+)=Vec::new\(\);/, `the folders ${fn} gathers`, path)
-  const plugins = captured(body, new RegExp(`let(\\w+)=${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}\\(`), `the plugin folders ${fn} takes`, path)
+  const plugins = captured(body, new RegExp(`let(\\w+)=${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}\\(${rootParameterOf(text, fn, path)},config\\);`), `the plugin folders ${fn} takes`, path)
   const home = captured(body, /let(\w+)=dirs::home_dir\(\);/, `the home ${fn} reads`, path)
-  const homes = [...body.matchAll(new RegExp(`ifletSome\\((\\w+)\\)=${home}\\.as_ref\\(\\)`, 'g'))].map((found) => found[1] ?? '')
+  const homes = [...body.matchAll(new RegExp(`ifletSome\\((\\w+)\\)=${home}\\.as_ref\\(\\)\\{`, 'g'))].map((found) => found[1] ?? '')
   const rooted = `(?:${[workingDir, ...homes].join('|')})${JOINS}`
   const pushed = `${list}\\.push\\(SkillDirectory\\{`
   const extended = `${list}\\.extend\\(${plugins}\\.(?:iter|into_iter)\\(\\)(?:\\.filter\\(\\|\\(_,\\w+\\)\\|\\*\\w+==PluginScope::\\w+\\))?\\.map\\(\\|\\(path,_\\)\\|SkillDirectory\\{`
@@ -580,6 +580,9 @@ function skillFoldersFromKnownBases(source: EngineSource): void {
  * - each such `<h>`: that binding, and each folder joined onto it in a list or a push;
  * - the plugin folders: their `let` and each recognised `extend`;
  * - `path`: each SkillDirectory's field, each `path: path…` value, each `for path in [` and each `|(path, _)|` closure.
+ * The plugin discovery counts its two plugin folders the same way, and the settings loader counts the user's file.
+ * Every shape a binding is read from is anchored on what closes it (a `{` or a `;`), so a chain after it, a `.map(…)`
+ * say, is no shape this reader knows (Neptunus on PR 893 r=3).
  *
  * The reader does not list the ways Rust can bind a name. A tuple, a match arm, a `ref`, a nested pattern or a slice
  * each write the name once more, so a binding of any shape is one use too many.
@@ -600,10 +603,13 @@ function pluginsFromKnownBases(source: EngineSource): void {
   const root = boundFrom(functionBody(text, fn, path), rootParameterOf(text, fn, path), fn, path)
   const project = captured(body, new RegExp(`let(\\w+)=${SKILL_ROOT_READERS.plugin_folder}\\(${root}\\);`), `the project plugin folder ${fn} reads`, path)
   const user = captured(body, /let(\w+)=plugin_install_dir\(\);/, `the user plugin folder ${fn} reads`, path)
-  const bases = `${project}|${user}`
-  const listed = `\\w+\\.extend\\(list_dir_children\\(&(?:${bases})\\)\\.into_iter\\(\\)\\.map\\(\\|\\((\\w+),(\\w+)\\)\\|DiscoveredPlugin\\{\\1,\\2,`
-  const grown = leftOver(body, [listed], '\\.(?:push|extend|append|chain)\\(|list_dir_children\\(|DiscoveredPlugin\\{')
+  const listedFrom = (bases: string): string => `\\w+\\.extend\\(list_dir_children\\(&(?:${bases})\\)\\.into_iter\\(\\)\\.map\\(\\|\\((\\w+),(\\w+)\\)\\|DiscoveredPlugin\\{\\1,\\2,`
+  const grown = leftOver(body, [listedFrom(`${project}|${user}`)], '\\.(?:push|extend|append|chain)\\(|list_dir_children\\(|DiscoveredPlugin\\{')
   if (grown !== undefined) throw unknownBase(path, fn, grown)
+  // A plugin folder bound again under the same name (Neptunus on PR 893 r=3, the closed rule): each stands in its `let`,
+  // each check that the two are not one folder, and each listing of its children, and nowhere else.
+  const compared = timesIn(body, `equivalent_paths\\(&${project},&${user}\\)`)
+  everyBaseUseKnown(functionBody(text, fn, path), new Map([project, user].map((base) => [base, 1 + compared + timesIn(body, listedFrom(base))])), path, fn)
 }
 
 /** Every settings file `load_all_settings` reads is the user's or one `project_settings_path` builds (martha#614 Done-when 6). */
@@ -611,12 +617,22 @@ function settingsFromKnownBases(source: EngineSource): void {
   const path = ENGINE_PLACES.plugin_discovery
   const fn = CHECKOUT_ROOT_CARRIERS.plugin_settings
   const text = fileOf(source, path)
-  const body = squeezed(functionBody(text, fn, path))
-  const root = boundFrom(functionBody(text, fn, path), rootParameterOf(text, fn, path), fn, path)
-  const user = /ifletSome\((\w+)\)=user_settings_path\(\)/.exec(body)?.[1]
+  const raw = functionBody(text, fn, path)
+  const body = squeezed(raw)
+  const root = boundFrom(raw, rootParameterOf(text, fn, path), fn, path)
+  const list = captured(body, /letmut(\w+):Vec<\(SettingsScope,PathBuf\)>=Vec::new\(\);/, `the settings files ${fn} gathers`, path)
+  const binding = (name: string): string => `ifletSome\\(${name}\\)=user_settings_path\\(\\)\\{`
+  const user = new RegExp(binding('(\\w+)')).exec(body)?.[1]
   const files = [...(user === undefined ? [] : [user]), `${SKILL_ROOT_READERS.plugin_settings}\\(${root},(?:true|false)\\)`].join('|')
-  const grown = leftOver(body, [`\\w+\\.push\\(\\(SettingsScope::\\w+,(?:${files})\\)\\);`], '\\.(?:push|extend|append|insert|chain)\\(')
+  const pushedOf = (file: string): string => `${list}\\.push\\(\\(SettingsScope::\\w+,(?:${file})\\)\\);`
+  const grown = leftOver(body, [pushedOf(files)], '\\.(?:push|extend|append|insert|chain)\\(')
   if (grown !== undefined) throw unknownBase(path, fn, grown)
+  if (user === undefined) return
+  // The user's file bound again under the same name (Neptunus on PR 893 r=3, S1 and S2): before the list is read back,
+  // the name stands in each `if let` that binds it and each push of it, and nowhere else. What reads the list back
+  // binds its own `path` in a closure, so it is not counted.
+  const gathered = captured(raw, new RegExp(`^([\\s\\S]*)\\n {4}${list}\\b`), `where ${fn} reads its list back`, path)
+  everyBaseUseKnown(gathered, new Map([[user, timesIn(body, binding(user)) + timesIn(body, pushedOf(user))]]), path, fn)
 }
 
 /** `project_plugin_dir` and `project_settings_path` are the root joined with strings and nothing else (martha#614 Done-when 6). */
