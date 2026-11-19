@@ -214,11 +214,12 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   ...DIALOG_PARTS,
   ...REPORT_PARTS,
   sign_in_store_variable: signInParts(RECORDED_HOST.sign_in_store_variable),
-  // The switch that keeps the host's updater off, cut from the host rather than restated (martha#637).
-  auto_updater_switch: switchModules(),
   // Last, so the import of what the managed-folder guard calls is in the loader's module, before the first module of
   // its own; the memory guard restated by hand sits in a module of its own among them (martha#438).
   guards: guardModules(GUARD),
+  // After the guards, for the reason above: this part opens a module of its own, so it must not sit between the loader's
+  // text and the import that names what its guard calls (martha#637).
+  auto_updater_switch: switchModules(),
 }
 
 /** A host text holding `parts`, written to a scratch file the test removes. */
@@ -521,9 +522,13 @@ test('a host whose memory guard, on check or hosted-mode variable is not the one
     assert.notEqual(planted, quoted, 'the planted text differs')
     const memory = MEMORY_TEXT.replace(quoted, planted)
     const plant = (guard: GuardCalls): GuardCalls => ({ ...guard, functions: guard.functions.map((entry) => (entry.function === quoted ? { ...entry, function: planted } : entry)) })
-    const run = check(hostHolding(t, { ...RECORDED_PARTS, guards: guardModules(plant(GUARD), plant(FILE_GUARD), memory) }), RECORDED_HOST.host_version)
+    // The on check is the auto-updater switch's check too (martha#637), recorded whole there: a host whose check changed
+    // says so in both places, or the stand-in describes two hosts, and the switch's own copy would keep the old text.
+    const switchText = switchModules().replace(quoted, planted)
+    const switchFields = switchText === switchModules() ? [] : ['auto_updater_switch']
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, guards: guardModules(plant(GUARD), plant(FILE_GUARD), memory), auto_updater_switch: switchText }), RECORDED_HOST.host_version)
     assert.equal(run.status, 1, quoted.slice(0, 40))
-    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: ${fields.join(', ')}\n`)
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: ${[...switchFields, ...fields].sort().join(', ')}\n`)
   }
 })
 

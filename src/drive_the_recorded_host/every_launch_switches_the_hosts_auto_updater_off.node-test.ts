@@ -9,11 +9,11 @@
 // sixteen such installs in half an hour, each one within a second of a launch.
 //
 // Each host's switch is its own row's `env_last` in HOSTS (martha#474), and these cases call the two builders a host can
-// be started with, so a launch path that stops carrying it fails by name here rather than on the owner's machine. Two
-// cases pin the switches to the spelling each host reads, since every other case reads them from the row and so would
-// agree with a misspelt one. Two more launches start a host themselves, outside those builders — the relay-loads check-bites leg and the
-// dialog-order probe — and they are read here for the same switch (martha#460 r=1). Nothing here starts a host: both
-// builders are pure, so this runs in every CI run.
+// be started with, so a launch path that stops carrying it fails by name here rather than on the owner's machine. One case
+// pins the switch to the spelling its host reads, and Claude Code's is the recording's pair, since every other case reads
+// the row and so would agree with a misspelt one (martha#637). Two more launches start a host themselves, outside those
+// builders — the relay-loads check-bites leg and the dialog-order probe — and they are read here for the same switch
+// (martha#460 r=1). Nothing here starts a host: both builders are pure, so this runs in every CI run.
 
 import assert from 'node:assert/strict'
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
@@ -31,6 +31,8 @@ import {
   type Host,
   type HostSwitches,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { autoUpdaterSwitchIn } from '../record_claude_code_host/the_auto_updater_switch.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 
@@ -122,12 +124,39 @@ test('the member and probe launches switch the host auto-updater off', () => {
 
 // The one place each switch is spelled as its host reads it (martha#474): every other case reads the row, so a
 // misspelt name or value there would pass all of them and bring back the install over the owner's own copy.
-test("Claude Code's auto-updater switch is spelled as Claude Code reads it", () => {
-  assert.deepEqual(theRowOfHost(CLAUDE_CODE).env_last, { DISABLE_AUTOUPDATER: '1' })
-})
-
 test("OpenCode's auto-updater switch is spelled as OpenCode reads it", () => {
   assert.deepEqual(theRowOfHost('opencode').env_last, { OPENCODE_DISABLE_AUTOUPDATE: '1' })
+})
+
+// Claude Code's switch is not spelled in this repository (martha#637): the row is exactly the pair the recording holds, so
+// a re-recording that renames the variable or gives it another value is what every launch below then sets, and a row that
+// restated a pair of its own would be one this case names.
+test("Claude Code's row carries exactly the auto-updater switch the recording holds", () => {
+  const recorded = RECORDED_HOST.auto_updater_switch
+  assert.deepEqual(theRowOfHost(CLAUDE_CODE).env_last, { [recorded.variable]: recorded.off_value })
+})
+
+/** The variable and the off value a stand-in host is given: this case's own words, not the recording's pair. */
+const A_STAND_INS_SWITCH = 'A_STAND_INS_UPDATER_SWITCH'
+const A_STAND_INS_OFF = 'stand-in-off'
+
+/**
+ * A host's own answer, not a constant in the recorder (martha#637): a stand-in host written in the host's shape, reading a
+ * variable and a value of this case's own, is cut to exactly that pair. A recorder that restated the recording's variable
+ * or off value instead of reading the host's code would return the recorded pair here, and this pair is not it.
+ */
+test("the pair a launch sets is the host's own code read, not a constant in the recorder", () => {
+  const host = [
+    `function aStandInsSwitch(){return aStandInsDecision(aStandInsCheck(process.env.${A_STAND_INS_SWITCH}))}`,
+    `function aStandInsDecision(aValue){return aValue?{type:"env",envVar:"${A_STAND_INS_SWITCH}"}:null}`,
+    `function aStandInsCheck(aValue){return aValue==="${A_STAND_INS_OFF}"}`,
+    `var aChildsEnvironment={${A_STAND_INS_SWITCH}:"${A_STAND_INS_OFF}"}`,
+  ].join(';')
+  const { auto_updater_switch: cut } = autoUpdaterSwitchIn(host)
+  assert.equal(cut.variable, A_STAND_INS_SWITCH)
+  assert.equal(cut.off_value, A_STAND_INS_OFF)
+  const recorded = RECORDED_HOST.auto_updater_switch
+  assert.notDeepEqual({ [cut.variable]: cut.off_value }, { [recorded.variable]: recorded.off_value }, 'the stand-in says its own pair; a case written with the recorded one would pass a recorder that restated it')
 })
 
 test('the recorded host run switches the host auto-updater off', (t) => {
