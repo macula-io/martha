@@ -574,8 +574,9 @@ function engineEndpointOf(refuse: Refuse, value: unknown): EngineEndpoint | null
   if (value === undefined) return null
   if (!isObject(value)) return refuse.at(ENGINE_ENDPOINT, `is not ${shapeOf(ENGINE_ENDPOINT_REQUIRED_KEYS, ENGINE_ENDPOINT_OPTIONAL_KEYS)}`)
   refuse.unknownKeys(value, [...ENGINE_ENDPOINT_REQUIRED_KEYS, ...ENGINE_ENDPOINT_OPTIONAL_KEYS], `${ENGINE_ENDPOINT}.`)
-  const host = value['host']
-  if (!isAnEndpointsHost(host)) return refuse.at(`${ENGINE_ENDPOINT}.host`, `is not a URL on ${ENDPOINT_SCHEMES.join(' or ')}`)
+  const checked = anEndpointsHost(value['host'])
+  if ('why' in checked) return refuse.at(`${ENGINE_ENDPOINT}.host`, checked.why)
+  const { host } = checked
   const base_path = value['base_path']
   if (!isAbsentOrText(base_path)) return refuse.at(`${ENGINE_ENDPOINT}.base_path`, 'is not a path')
   const key_from = value['key_from']
@@ -583,8 +584,22 @@ function engineEndpointOf(refuse: Refuse, value: unknown): EngineEndpoint | null
   return { host, base_path: base_path ?? null, key_from: key_from ?? null }
 }
 
-/** A host an endpoint may name: text that is a URL on one of the schemes it is reached over. */
-const isAnEndpointsHost = (value: unknown): value is string => isText(value) && ENDPOINT_SCHEMES.includes(aUrlsScheme(value))
+/**
+ * The parts of a URL a key can ride in, by the name the refusal gives each: a user name, a password, a query and a
+ * fragment. An endpoint's host carries none of them, so a key never reaches the declaration or the config the launch
+ * writes through the host (Q1, design r=2 R1). A key spelled into the URL's path cannot be told from a path, and is
+ * not caught here.
+ */
+const PARTS_A_KEY_RIDES_IN = { username: 'a user name', password: 'a password', search: 'a query', hash: 'a fragment' } as const
+
+/** The host an endpoint names, or why the value is not one: a URL on a scheme it is reached over, with no part a key rides in. */
+function anEndpointsHost(value: unknown): { readonly host: string } | { readonly why: string } {
+  const url = isText(value) ? aUrl(value) : undefined
+  if (!isText(value) || url === undefined || !ENDPOINT_SCHEMES.includes(url.protocol)) return { why: `is not a URL on ${ENDPOINT_SCHEMES.join(' or ')}` }
+  const carried = Object.entries(PARTS_A_KEY_RIDES_IN).filter(([part]) => url[part as keyof typeof PARTS_A_KEY_RIDES_IN] !== '')
+  if (carried.length === 0) return { host: value }
+  return { why: `carries ${carried.map(([, named]) => named).join(' and ')}, where a key can ride: the key itself never goes in the declaration` }
+}
 
 /** Nothing written, or text. */
 const isAbsentOrText = (value: unknown): value is string | undefined => value === undefined || isText(value)
@@ -592,12 +607,12 @@ const isAbsentOrText = (value: unknown): value is string | undefined => value ==
 /** Nothing written, or the name of an environment variable. */
 const isAbsentOrAVariablesName = (value: unknown): value is string | undefined => value === undefined || (typeof value === 'string' && AN_ENVIRONMENT_NAME.test(value))
 
-/** A URL's scheme, or nothing when the text is not a URL. */
-function aUrlsScheme(text: string): string {
+/** The text read as a URL, or undefined when it is not one. */
+function aUrl(text: string): URL | undefined {
   try {
-    return new URL(text).protocol
+    return new URL(text)
   } catch {
-    return ''
+    return undefined
   }
 }
 

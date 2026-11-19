@@ -734,6 +734,15 @@ test('#541 package A: an engine endpoint is a URL on http or https, a path, and 
   await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', key_from: 'sk-a key' } }, `${ENGINE_ENDPOINT}.key_from`)
   await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', key: 'sk-a-key' } }, `${ENGINE_ENDPOINT}.key`)
   await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', key_from: 'sk-a key' } }).settings, /the key itself never goes in the declaration/)
+  // A key carried in the host's URL, in each part it can ride in (Neptunus's F1 on PR 907; mutant: the parts check dropped).
+  for (const [host, part] of [
+    ['https://user:sk-a-key@a-host.test', /a user name and a password/],
+    ['https://a-host.test/?api_key=sk-a-key', /a query/],
+    ['https://a-host.test/#sk-a-key', /a fragment/],
+  ] as const) {
+    await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host } }, `${ENGINE_ENDPOINT}.host`)
+    await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host } }).settings, part, host)
+  }
 })
 
 /** A checkout of a made-up repository under a made-up home: this repository is public, so no real path appears here. */
