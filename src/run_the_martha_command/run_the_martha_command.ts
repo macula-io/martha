@@ -143,10 +143,6 @@ async function approve(io: CommandIo, places: Places): Promise<number> {
   const outcome = await approveConfig({ ...places, terminal: io.terminal, documents, tellOwner, now: () => new Date() })
   if (outcome.kind === 'refused') return refused(io, outcome.refusal)
   io.out(outcome.kind === 'nothing' ? NOTHING_TO_APPROVE : `Approved: fingerprint ${outcome.fingerprint}.`)
-  for (const [what, act] of [['Your approvals, and where each was typed (martha#619):', 'approve'], ['Your pinned keys, and where each was typed:', 'pin-key']] as const) {
-    const lines = whatTheOwnerReadsOf(places, act, theFirstApprovalAt(places))
-    if (lines.length > 0) [what, ...lines].forEach((line) => io.out(line))
-  }
   return EXIT_DONE
 }
 
@@ -547,7 +543,8 @@ function theFirstApprovalAt(places: Places): string | undefined {
 
 /**
  * An owner's act that writes a record, made, then its lines named in the log of where the owner's acts were typed
- * (martha#619): the record first, the entries after it, and only for an act that ended done.
+ * (martha#619): the record first, the entries after it, and only for an act that ended done. What the act shows the
+ * owner of that log is printed here, once the entry is kept, never inside the act (martha#765).
  */
 async function recordedWhereItWasTyped(io: CommandIo, places: Places, asked: Asked, act: (io: CommandIo, places: Places, asked: Asked) => Promise<number>): Promise<number> {
   const file = theRecordFilesOf(places)[asked.act]
@@ -558,6 +555,11 @@ async function recordedWhereItWasTyped(io: CommandIo, places: Places, asked: Ask
   if (done !== EXIT_DONE || file === undefined) return done
   const unkept = keepWhereItWasTyped(places, asked.act, before, at, seenFromThisProcess())
   if (unkept !== undefined) io.err(`The act is made, but where it was typed is not kept: ${unkept}`)
+  // Kept, so the listing can be read: an entry that could not be kept would show the owner's own act as forged.
+  else if (asked.act === 'approve') ([['Your approvals, and where each was typed (martha#619):', 'approve'], ['Your pinned keys, and where each was typed:', 'pin-key']] as const).forEach(([what, act]) => {
+    const lines = whatTheOwnerReadsOf(places, act, theFirstApprovalAt(places))
+    if (lines.length > 0) [what, ...lines].forEach((line) => io.out(line))
+  })
   return done
 }
 

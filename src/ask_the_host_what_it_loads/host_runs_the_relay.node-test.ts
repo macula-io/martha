@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { CLAUDE_SERVERS, HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_SERVERS, theRowOfHost } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import {
   firstValidatorError,
@@ -23,7 +23,7 @@ import {
 } from './host_runs_the_relay.ts'
 import { hostAnswers, LOADS_THE_RELAY, refusesTheRelay } from '../drive_the_recorded_host/host_stand_in.ts'
 import { RELAY_COPY_NAME, removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { CLAUDE, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE, CLAUDE_CODE, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 function placeFor(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-host-'))
@@ -179,9 +179,9 @@ test('an owner who passes the host its ignore-persisted-trust argument is read a
 // What the question is asked with (martha#154 r=2): the member's own settings, so the `env` block that moves the
 // config dir applies, and nothing that starts anything -- no server file, and every hook off.
 test('the session-init question is asked with no server file and with hooks off (#154 r=2)', () => {
-  const serversSwitch = HOSTS['claude-code'].carried[CLAUDE_SERVERS]
+  const serversSwitch = theRowOfHost(CLAUDE_CODE).carried[CLAUDE_SERVERS]
   assert.ok(serversSwitch !== undefined, 'the adapter names the switch that hands the host its server file')
-  const launchSwitches = [...HOSTS['claude-code'].project_config_off.args, ...serversSwitch(join(tmpdir(), 'servers.json')).args]
+  const launchSwitches = [...theRowOfHost(CLAUDE_CODE).project_config_off.args, ...serversSwitch(join(tmpdir(), 'servers.json')).args]
   assert.ok(launchSwitches.includes(MCP_CONFIG_SWITCH), 'the member itself is started with the servers file')
   const asked = initQuestionArgs(launchSwitches, '/tmp/hooks-off.json')
   assert.deepEqual(asked.filter((arg) => arg.startsWith(MCP_CONFIG_SWITCH)), [], 'no switch that names a server')
