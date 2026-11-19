@@ -77,7 +77,7 @@ function theTabOf(tabs: TheCrewsTabs, member: string): readonly string[] {
     `cd ${asLineRest(tabs.root)}`,
     `launch --hold --title ${asLaunchOption(member)} -- ${martha} ${THE_ACTS_A_TAB_RUNS.held} ${name}`,
     'focus',
-    `launch --location=hsplit --bias=${THE_STRIPS_FIRST_SHARE} --allow-remote-control --remote-control-password ${asLaunchOption('!')} --remote-control-password ${checker} -- ${martha} ${THE_ACTS_A_TAB_RUNS.strip} ${TAB_OF} ${name}`,
+    `launch --location=hsplit --bias=${THE_STRIPS_FIRST_SHARE} --allow-remote-control --remote-control-password ${checker} -- ${martha} ${THE_ACTS_A_TAB_RUNS.strip} ${TAB_OF} ${name}`,
   ]
 }
 
@@ -109,7 +109,7 @@ export function theCheckerSource(actions: readonly string[]): string {
     '    payload = pcmd.get("payload") or {}',
     '    if pcmd.get("cmd") not in THE_STRIPS_ACTIONS:',
     '        return False',
-    '    if payload.get("match") or payload.get("all") or payload.get("self") not in (None, True):',
+    '    if payload.get("all") or payload.get("self") not in (None, True):',
     '        return False',
     '    self_window = extra_data.get("self_window")',
     '    return bool(self_window is not None and self_window.allow_remote_control)',
