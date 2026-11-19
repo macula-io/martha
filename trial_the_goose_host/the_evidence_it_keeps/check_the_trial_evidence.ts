@@ -1,4 +1,4 @@
-// Run the check: node trial_the_goose_host/check_the_trial_evidence.ts [--dir <evidence>] [--self-test]
+// Run the check: node trial_the_goose_host/the_evidence_it_keeps/check_the_trial_evidence.ts [--dir <evidence>] [--self-test]
 //
 // A finished evidence directory, judged by the rule the driver keeps while a line runs (martha#694): a line that ended
 // not-observed and kept no ACP transcript beside it cannot say why it observed nothing, and this fails it by name.

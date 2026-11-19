@@ -16,9 +16,9 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { THE_LAUNCH_BOUND_KEY } from './the_cap_a_line_gets.ts'
+import { THE_LAUNCH_BOUND_KEY } from './the_cap_a_line_gets/the_cap_a_line_gets.ts'
 import { THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS } from './drive_the_trial.ts'
-import { THE_TRANSCRIPT } from './the_evidence_says_why.ts'
+import { THE_TRANSCRIPT } from './the_evidence_it_keeps/the_evidence_says_why.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const theDriverRun = promisify(execFile)

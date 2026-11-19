@@ -20,13 +20,13 @@ import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSyn
 import { userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
-import { HOME_MARKERS, CHECKOUT_MARKERS, aPlaceFor, plant, writeTheConfig, type Place } from './a_launch_the_trial_writes.ts'
-import { NoAnswerInTime, promptOver, setTheCapInHand, withTimeout } from './a_turn_with_goose.ts'
-import { findingsIn, pathsIn, type TraceFindings } from './read_the_trace.ts'
-import { RecordingProxy } from './record_what_goose_sends.ts'
-import { GooseOverAcp, type Exchange } from './speak_acp_to_goose.ts'
-import { TheModelPace, theCapFor, theLaunchesBoundMs, whyTheBoundCannotFit, type TheCapALineGets, type TheCapMadeOf } from './the_cap_a_line_gets.ts'
-import { refusalsIn, THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_says_why.ts'
+import { HOME_MARKERS, CHECKOUT_MARKERS, aPlaceFor, plant, writeTheConfig, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
+import { NoAnswerInTime, promptOver, setTheCapInHand, withTimeout } from './the_engine_over_acp/a_turn_with_goose.ts'
+import { findingsIn, pathsIn, type TraceFindings } from './the_evidence_it_keeps/read_the_trace.ts'
+import { RecordingProxy } from './the_engine_over_acp/record_what_goose_sends.ts'
+import { GooseOverAcp, type Exchange } from './the_engine_over_acp/speak_acp_to_goose.ts'
+import { TheModelPace, theCapFor, theLaunchesBoundMs, whyTheBoundCannotFit, type TheCapALineGets, type TheCapMadeOf } from './the_cap_a_line_gets/the_cap_a_line_gets.ts'
+import { refusalsIn, THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_it_keeps/the_evidence_says_why.ts'
 import {
   lineEight, lineFive, lineFour, lineNine, lineOne, lineSix, lineThree, lineTwo, sevenAfterTheKill,
   type Line, type Observation, type Trial,

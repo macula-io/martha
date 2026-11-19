@@ -12,12 +12,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   NOT_OBSERVED, THE_ENGINE_LOGS, THE_TRANSCRIPT, messagesIn, refusalsIn, theRefusalOf, theVerdictKeptWithItsExchange,
 } from './the_evidence_says_why.ts'
-import { keepTheEngineLogs } from './drive_the_trial.ts'
-import type { Observation } from './the_nine_lines.ts'
+import { keepTheEngineLogs } from '../drive_the_trial.ts'
+import type { Observation } from '../the_nine_lines.ts'
 
 const made: string[] = []
 
@@ -155,7 +155,7 @@ test('the engine request logs are copied beside the transcript, and a launch tha
 
 /** The two entries the rule is reached through, run as a run runs them. */
 const THE_CHECK = join(import.meta.dirname, 'check_the_trial_evidence.ts')
-const THE_DRIVER = join(import.meta.dirname, 'drive_the_trial.ts')
+const THE_DRIVER = join(import.meta.dirname, '..', 'drive_the_trial.ts')
 
 test('the check, through its own entry, refuses a not-observed line with no transcript by name (martha#694)', () => {
   const evidence = anEvidenceDirectory()
