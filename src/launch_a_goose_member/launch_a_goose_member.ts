@@ -40,6 +40,11 @@
 // `reject_always`, and a later call then skips the client, so a launch that ends with anything saved is a
 // launch Martha did not gate. A store in a shape this launcher does not know is not read as an empty one.
 //
+// The provider's secrets are written to the file the recording names beside the config file, 0600, never into the
+// config itself (#541 package A, design r=2 R1): the config switches the keyring off, so that file is where the engine
+// reads them. The read-back before the start holds both files to the bytes the launch wrote, and the secrets file to
+// mode 0600 and this user. A launch's end removes the root, and the file with it.
+//
 // The launch is decided through `prepareLaunch` (../refuse_launch_of_unapproved_config), the same call every
 // other host's launch goes through: a checkout holding any of the engine's own config files the owner has not
 // approved starts nothing, and the gate's snapshot is removed whenever the launch ends. The checkout's own hint
@@ -65,7 +70,7 @@ import { getuid } from 'node:process'
 
 import { killGroup } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import type { RecordedEngine } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { theConfigOfALaunch, theRootReadBack, type TheModelALaunchRuns } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
+import { theConfigOfALaunch, theRootReadBack, theSecretsOfALaunch, type TheModelALaunchRuns } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { prepareLaunch, theRecordOfTheTextAStartLoads, type ATextAStartLoads, type PreparedLaunch, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { realOrResolved } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -288,6 +293,11 @@ export function theConfigFileOf(root: string): string {
   return join(root, THE_CONFIG_FOLDER, THE_CONFIG_FILE)
 }
 
+/** The secrets file of the launch whose path root is `root`: beside its config file, by the name the recording gives it. */
+export function theSecretsFileOf(facts: RecordedEngine, root: string): string {
+  return join(root, THE_CONFIG_FOLDER, facts.secret_storage.file)
+}
+
 /** One launch's refusal, in the words every refusal of this launcher is given in. */
 const refused = (why: string): { readonly refusal: string } => ({ refusal: `The member is not started: ${why}` })
 
@@ -335,7 +345,7 @@ export interface AGooseLaunchAsked {
   readonly model: TheModelALaunchRuns
   /** The relay socket the crew's tool server posts to, and the token it carries: the launch's own, minted for it. */
   readonly tool_server: { readonly socket_path: string; readonly token: string }
-  /** A test's hand on the config root between its write and the engine's start; a real launch gives none. */
+  /** A test's hand on the config root (and the secrets file beside it) between their write and the engine's start; a real launch gives none. */
   readonly before_the_start?: (config_at: string) => void
 }
 
@@ -363,7 +373,7 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
   // The root read back just before the engine reads it (martha#541 C1, guard row 3): the servers it names are a fact of
   // this launch, and a root that names any server but the crew's, or is not the text this launch wrote, starts nothing.
   asked.before_the_start?.(config_at)
-  const readBack = theRootAsItWasWritten(asked.facts, config_at, made.config)
+  const readBack = theRootAsItWasWritten(asked.facts, config_at, made.config, { at: theSecretsFileOf(asked.facts, places.root), written: made.secrets })
   if ('refusal' in readBack) {
     for (const folder of [places.root, places.home]) removeTheTree(folder)
     removeTheTree(prepared.snapshot_dir)
@@ -388,13 +398,26 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
   return { places, config_at, text_a_start_loads, servers: readBack.servers, engine: started, end }
 }
 
-/** The config root as the engine is about to read it, judged by ../derive_the_config_of_a_goose_launch; or why it cannot be read. */
-function theRootAsItWasWritten(facts: RecordedEngine, config_at: string, written: string): { readonly servers: readonly string[] } | { readonly refusal: string } {
+/**
+ * The config root as the engine is about to read it, judged by ../derive_the_config_of_a_goose_launch, and the secrets
+ * file beside it: this user's, mode 0600 exactly, and the bytes the launch wrote; or why the engine is not started.
+ */
+function theRootAsItWasWritten(facts: RecordedEngine, config_at: string, written: string, secrets: { readonly at: string; readonly written: string }): { readonly servers: readonly string[] } | { readonly refusal: string } {
   try {
-    return theRootReadBack(facts, { at: config_at, text: readFileSync(config_at, 'utf8'), written }, THE_CREWS_TOOL_SERVER)
+    const root = theRootReadBack(facts, { at: config_at, text: readFileSync(config_at, 'utf8'), written }, THE_CREWS_TOOL_SERVER)
+    if ('refusal' in root) return root
+    const why = whyTheSecretsFileIsNotAsWritten(secrets)
+    return why === undefined ? root : { refusal: `the secrets file at ${secrets.at} ${why}, so the engine is not started on it.` }
   } catch (error) {
     return { refusal: `the config root at ${config_at} could not be read back before the start (${(error as NodeJS.ErrnoException).code ?? String(error)})` }
   }
+}
+
+/** Why the secrets file is not this user's own 0600 file holding the bytes the launch wrote, or nothing when it is. */
+function whyTheSecretsFileIsNotAsWritten(secrets: { readonly at: string; readonly written: string }): string | undefined {
+  const held = lstatSync(secrets.at)
+  if (!held.isFile() || held.uid !== (getuid?.() ?? -1) || (held.mode & PERMISSION_BITS) !== FILE_MODE) return 'is not a file only this user may read and write'
+  return readFileSync(secrets.at, 'utf8') === secrets.written ? undefined : 'is not the text this launch wrote'
 }
 
 /**
@@ -406,7 +429,7 @@ function theRootAsItWasWritten(facts: RecordedEngine, config_at: string, written
  * which promises that the engine was exec'd and not that it has run, so a record read after the start cannot be made to
  * differ on purpose. It matters little: the engine reads the same files again on every model request (A25 and A26).
  */
-function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly places: ThePlacesOfALaunch; readonly config_at: string; readonly config: string; readonly text_a_start_loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
+function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly places: ThePlacesOfALaunch; readonly config_at: string; readonly config: string; readonly secrets: string; readonly text_a_start_loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
   const leaveNothingBehind = (why: string, folders: readonly string[] = []): { readonly refusal: string } => {
     for (const folder of folders) removeTheTree(folder)
     removeTheTree(prepared.snapshot_dir)
@@ -424,9 +447,11 @@ function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLau
   const { places } = made
 
   let config: string
+  let secrets: string
   try {
     const entry = theToolServersEntry(asked.facts.stdio_extension, { ...asked.tool_server, checkout: places.checkout })
     config = theConfigOfALaunch(asked.facts, asked.model, { key: THE_CREWS_TOOL_SERVER, entry })
+    secrets = theSecretsOfALaunch(asked.facts, asked.model)
   } catch (error) {
     return leaveNothingBehind(error instanceof Error ? error.message : String(error), [places.root, places.home])
   }
@@ -434,10 +459,11 @@ function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLau
   try {
     mkdirSync(join(places.root, THE_CONFIG_FOLDER), { mode: A_LAUNCHS_FOLDERS_MODE })
     writeFileSync(config_at, config, { mode: FILE_MODE, flag: 'wx' })
+    writeFileSync(theSecretsFileOf(asked.facts, places.root), secrets, { mode: FILE_MODE, flag: 'wx' })
   } catch (error) {
     return leaveNothingBehind(`the config root could not be written at ${config_at} (${error instanceof Error ? error.message : String(error)})`, [places.root, places.home])
   }
-  return { places, config_at, config, text_a_start_loads: recorded.loads }
+  return { places, config_at, config, secrets, text_a_start_loads: recorded.loads }
 }
 
 /** Whether `at` is a real directory: a link is not one, and neither is a path that is not there. */

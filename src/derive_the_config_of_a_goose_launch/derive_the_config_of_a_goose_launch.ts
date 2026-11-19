@@ -21,6 +21,11 @@
 // setting may carry the engine's own prefix, and every remaining setting must be one the provider's recording
 // names. A declaration is therefore never wider than the facts beside this file.
 //
+// The provider's secrets never go into that root (#541 package A, design r=2 R1): the engine reads a secret from the
+// environment or its secret storage and never from config.yaml, so the root switches the system keyring off by the
+// recorded name and the secrets are written as a text of their own, which the launch puts in the file the recording
+// names beside the config file. A secret named among the settings is refused, never written where it is not read.
+//
 // It returns the text alone. Where the text is written, and under which root, is the launch's, so no path is named
 // here.
 
@@ -45,6 +50,9 @@ export const SLASH_COMMANDS_OFF = false
  */
 export const SKILLS_OFF = false
 
+/** What the keyring switch is set to: the engine reads a YAML true as off, so the secrets come from the file beside the config (#541 package A). */
+export const KEYRING_OFF = true
+
 /** The config key the engine reads the provider from. */
 export const THE_PROVIDER_SETTING = 'GOOSE_PROVIDER'
 
@@ -62,6 +70,8 @@ export interface TheModelALaunchRuns {
   readonly model: string
   /** The settings that provider needs to reach its endpoint, written into the config root, never inherited. */
   readonly settings: Readonly<Record<string, string>>
+  /** The settings the provider reads as secrets, by their recorded names: written to the secrets file alone, never the root (#541 package A). */
+  readonly secrets: Readonly<Record<string, string>>
 }
 
 /** One value of a tool server's entry as the config writes it: a word or a number on its line, a list as items, a mapping as keys. */
@@ -122,6 +132,12 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
   if (borrowed !== undefined) {
     throw new Error(`a provider setting ${borrowed} carries the engine's own prefix ${enginePrefix}, and only the engine's settings the launcher derives are written to its config root`)
   }
+  // A secret among the settings is refused by name (#541 package A, design r=2 R1): the engine never reads a secret from
+  // the config file, so it would be written where nothing reads it, and the provider would run with no key.
+  const aSecret = Object.keys(model.settings).find((setting) => facts.openai_provider.secrets.includes(setting))
+  if (aSecret !== undefined) {
+    throw new Error(`a provider setting ${aSecret} is one ${facts.openai_provider.name} reads as a secret, which goes to ${facts.secret_storage.file} and never into the config root`)
+  }
   // Every other setting must be one the provider's own recording names: an allow-list, because a deny-list is
   // the settings someone has found so far and this root is otherwise open (martha#797). The comparison is
   // exact: the engine reads a config-root key as it is spelled, so another case is another key it never reads.
@@ -138,6 +154,7 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
     aLine(facts.slash_commands.setting, SLASH_COMMANDS_OFF),
     aLine(facts.skills_advertised.setting, SKILLS_OFF),
     aLine(facts.builtin_skills_advertised.setting, SKILLS_OFF),
+    aLine(facts.secret_storage.keyring_switch, KEYRING_OFF),
     ...Object.entries(model.settings).map(([setting, value]) => aLine(setting, value)),
     aLine(THE_EXTENSIONS_SETTING, ''),
     ...switches,
@@ -146,6 +163,19 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
     ...server.entry.flatMap(([key, value]) => theEntrysLines(`    ${key}`, value)),
     '',
   ].join('\n')
+}
+
+/**
+ * The secrets file's text for one launch (#541 package A, design r=2 R1): each secret on a line of its own, under the
+ * name the provider reads it by, its value quoted as the config's are. A secret the provider does not read is refused
+ * by name: written under any other key it is a key nothing reads, and the provider runs without it.
+ */
+export function theSecretsOfALaunch(facts: RecordedEngine, model: TheModelALaunchRuns): string {
+  const unread = Object.keys(model.secrets).find((secret) => !facts.openai_provider.secrets.includes(secret))
+  if (unread !== undefined) {
+    throw new Error(`a secret ${unread} is none of the secrets ${facts.openai_provider.name} reads, which ${ENGINE_PLACES.openai_secrets} records: ${facts.openai_provider.secrets.join(', ')}`)
+  }
+  return [...Object.entries(model.secrets).map(([secret, value]) => aLine(secret, value)), ''].join('\n')
 }
 
 /**

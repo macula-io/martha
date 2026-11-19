@@ -35,6 +35,7 @@ import {
   launchTheGooseEngine,
   startTheEngine,
   theConfigFileOf,
+  theSecretsFileOf,
   theEnvironmentOfALaunch,
   thePermissionStoreIsStillEmpty,
   thePermissionStoreOf,
@@ -48,9 +49,16 @@ const THE_WAIT_A_TEST_GIVES_MS = 3_000
 
 /** A setting the provider's recording names: the only kind of setting a declaration may carry (martha#797). */
 function aRecordedSetting(): string {
-  const setting = FACTS.openai_provider.settings[0]
-  if (setting === undefined) throw new Error('the recording names no provider setting, so no declaration could carry one')
+  const setting = FACTS.openai_provider.settings.find((one) => !FACTS.openai_provider.secrets.includes(one))
+  if (setting === undefined) throw new Error('the recording names no provider setting that is not a secret, so no declaration could carry one')
   return setting
+}
+
+/** A secret the provider reads, by its recorded name (#541 package A). */
+function aRecordedSecret(): string {
+  const secret = FACTS.openai_provider.secrets[0]
+  if (secret === undefined) throw new Error('the recording names no secret the provider reads, so no launch could write one')
+  return secret
 }
 
 /**
@@ -58,7 +66,7 @@ function aRecordedSetting(): string {
  * own rather than names of the test's: since martha#797 a launch refuses a provider nothing recorded and a
  * setting no recording names, so a made-up one would refuse every launch this file builds.
  */
-const A_MODEL = { provider: FACTS.openai_provider.name, model: 'a-model-a-test-names', settings: { [aRecordedSetting()]: 'a-value-a-test-names' } }
+const A_MODEL = { provider: FACTS.openai_provider.name, model: 'a-model-a-test-names', settings: { [aRecordedSetting()]: 'a-value-a-test-names' }, secrets: { [aRecordedSecret()]: 'a-secret-a-test-names' } }
 
 /** A relay socket and a token a test names: the launch's own would be minted, and nothing here reads either. */
 const A_TOOL_SERVER = { socket_path: join(tmpdir(), 'a-relay-a-test-names.sock'), token: 'a-token-a-test-names' }
@@ -185,6 +193,7 @@ test('the config root holds no key but the ones the launcher derives: a subagent
     FACTS.slash_commands.setting,
     FACTS.skills_advertised.setting,
     FACTS.builtin_skills_advertised.setting,
+    FACTS.secret_storage.keyring_switch,
     ...Object.keys(A_MODEL.settings),
     THE_EXTENSIONS_SETTING,
   ]
@@ -548,4 +557,47 @@ test('a config root edited between its write and the start, its servers untouche
     return config.replace(THE_MODE_LINE, `${FACTS.mode.setting}: "${FACTS.mode.when_unset}"`)
   })
   assert.match(refusal, /is not the text this launch wrote/)
+})
+
+test('a launch writes the secrets to the recorded file beside its config, 0600, and none of them into the config (#541 package A; mutant: secrets.yaml written 0644)', async (t) => {
+  const { root, place } = anApprovedLaunch(t)
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
+  assert.ok('engine' in launch, `the launch was refused: ${'refusal' in launch ? launch.refusal : ''}`)
+  t.after(() => launch.engine.stop())
+  const at = theSecretsFileOf(FACTS, launch.places.root)
+  assert.equal(dirname(at), dirname(launch.config_at), 'the secrets file is not beside the config file')
+  assert.equal(statSync(at).mode & 0o777, 0o600, 'the secrets file may be read by someone other than this user')
+  const [[secret, value] = ['', '']] = Object.entries(A_MODEL.secrets)
+  assert.equal(readFileSync(at, 'utf8'), `${secret}: "${value}"\n`)
+  assert.ok(!readFileSync(launch.config_at, 'utf8').includes(value), 'the config holds the secret\'s value')
+  await launch.end()
+})
+
+/** A launch whose secrets file `change` alters between its write and the engine's start: refused, leaving nothing, starting nothing. */
+async function aLaunchOfAChangedSecretsFile(t: TestContext, change: (at: string) => void): Promise<string> {
+  const { root, place } = anApprovedLaunch(t)
+  const refused = await launchTheGooseEngine({
+    facts: FACTS,
+    binary: aStandInEngineIn(root),
+    launch_root: root,
+    place,
+    model: A_MODEL,
+    tool_server: A_TOOL_SERVER,
+    before_the_start: (config_at) => change(join(dirname(config_at), FACTS.secret_storage.file)),
+  })
+  if ('engine' in refused) t.after(() => refused.engine.stop())
+  assert.ok('refusal' in refused, 'a launch whose secrets file was changed before the start started the engine')
+  assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch left its root, and the secrets in it')
+  assert.equal(existsSync(join(root, 'the-cwd')), false, 'the stand-in engine ran')
+  return refused.refusal
+}
+
+test('a secrets file edited between its write and the start is refused as not the text the launch wrote (#541 package A; mutant: the secrets bytes check dropped)', async (t) => {
+  const refusal = await aLaunchOfAChangedSecretsFile(t, (at) => writeFileSync(at, `${readFileSync(at, 'utf8')}${aRecordedSecret()}: "another"\n`))
+  assert.match(refusal, /the secrets file at .* is not the text this launch wrote/)
+})
+
+test('a secrets file opened to others between its write and the start is refused, never started on (#541 package A; mutant: the secrets mode check dropped)', async (t) => {
+  const refusal = await aLaunchOfAChangedSecretsFile(t, (at) => chmodSync(at, 0o644))
+  assert.match(refusal, /the secrets file at .* is not a file only this user may read and write/)
 })
