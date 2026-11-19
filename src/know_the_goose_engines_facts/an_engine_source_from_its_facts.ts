@@ -109,7 +109,7 @@ function skillFolders(roots: CheckoutSkillRoots): string {
     `    dirs.extend(plugin_dirs.iter().filter(|(_, scope)| *scope == PluginScope::Project).map(|(path, _)| SkillDirectory { path: path.clone() }));\n`,
     `    let home = dirs::home_dir();\n    if let Some(h) = home.as_ref() {\n        dirs.push(SkillDirectory { path: ${joined('h', '.agents/skills')} });\n    }\n`,
     `    dirs.push(SkillDirectory { path: Paths::config_dir().join("skills") });\n`,
-    `    if let Some(h) = home.as_ref() {\n        for path in [${joined('h', '.claude/skills')}] {\n            dirs.push(SkillDirectory { path });\n        }\n    }\n    dirs\n}\n`,
+    `    if let Some(h) = home.as_ref() {\n        for path in [${joined('h', '.config/agents/skills')}] {\n            dirs.push(SkillDirectory { path });\n        }\n    }\n    dirs\n}\n`,
     `\npub fn ${WORKING_DIRECTORY_AS_THE_ROOT}(working_dir: Option<&Path>) -> Vec<SourceEntry> {\n    let fallback;\n    let wd = match working_dir {\n        Some(p) => Some(p),\n        None => {\n            fallback = std::env::current_dir().ok();\n            fallback.as_deref()\n        }\n    };\n    discover_skills(wd)\n}\n`,
   ].join('')
 }
