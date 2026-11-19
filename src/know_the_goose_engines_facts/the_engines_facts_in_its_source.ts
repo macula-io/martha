@@ -144,6 +144,7 @@ export const ENGINE_PLACES = {
   shell_tool: 'crates/goose/src/agents/platform_extensions/developer/mod.rs',
   skill_folders: 'crates/goose/src/skills/mod.rs',
   plugin_discovery: 'crates/goose/src/plugins/discovery.rs',
+  plugin_skill_dirs: 'crates/goose/src/plugins/mod.rs',
 } as const
 
 /** The function that decides each of a checkout's skill roots, in the file ENGINE_PLACES names for it (martha#614). */
@@ -151,6 +152,16 @@ export const SKILL_ROOT_READERS = {
   skill_folders: 'all_skill_dirs_with_config',
   plugin_folder: 'project_plugin_dir',
   plugin_settings: 'project_settings_path',
+} as const
+
+/**
+ * The functions a checkout's root is passed through on its way to the plugin skills (martha#614): the plugin skill
+ * folders in ENGINE_PLACES.plugin_skill_dirs, and the discovery and the settings loader in ENGINE_PLACES.plugin_discovery.
+ */
+export const CHECKOUT_ROOT_CARRIERS = {
+  plugin_skill_dirs: 'enabled_plugin_skill_dirs_with_config',
+  plugin_discovery: 'discover_enabled_plugins_with_config',
+  plugin_settings: 'load_all_settings',
 } as const
 
 /** The function that reads each skills switch, in the file ENGINE_PLACES names for it (martha#839). */
@@ -451,16 +462,94 @@ function joinedFrom(text: string, base: string): string | undefined {
  * the function, never a shorter list.
  */
 function checkoutSkillRootsIn(source: EngineSource): CheckoutSkillRoots {
+  pluginRootsCarriedIn(source)
   return { skill_folders: skillFoldersIn(source), ...pluginRootsIn(source) }
 }
 
-/** The folders `all_skill_dirs_with_config` joins onto the working directory, or a throw naming the function. */
+/** A use of a name that a reader accounts for: its shape, and whether it stands exactly once or any number of times. */
+interface AKnownUse {
+  readonly shape: string
+  readonly once: boolean
+}
+
+const once = (shape: string): AKnownUse => ({ shape, once: true })
+const anyNumberOf = (shape: string): AKnownUse => ({ shape, once: false })
+
+/** How often `name` stands in `text` as a name of its own: never as part of a longer name, nor as a field after a dot. */
+const usesOf = (text: string, name: string): number => [...text.matchAll(new RegExp(`(?<![.\\w])${name}\\b`, 'g'))].length
+
+/**
+ * Every use of the checkout's root `name` in the body of `fn`, accounted for by `known`, each `once` shape standing
+ * exactly once. A use anywhere else is a throw naming the function: a folder built from the root there is a skill root
+ * this reader would never list, so the gate would never ask for it (martha#614).
+ */
+function everyUseKnown(body: string, name: string, known: readonly AKnownUse[], fn: string, path: string): void {
+  let rest = body
+  for (const { shape, once: standsOnce } of known) {
+    const found = [...rest.matchAll(new RegExp(shape, 'g'))].length
+    if (standsOnce && found !== 1) throw new Error(`${path} uses ${name} in ${fn} ${String(found)} times as /${shape}/, and this reader knows it once`)
+    rest = rest.replace(new RegExp(shape, 'g'), '')
+  }
+  const left = usesOf(rest, name)
+  if (left > 0) throw new Error(`${path} uses ${name} in ${fn} ${String(left)} more times than this reader knows, so a skill root built from it there would never be listed`)
+}
+
+/** The parameter `fn` takes the checkout's root in: its first, an `Option<&Path>`. */
+const rootParameterOf = (text: string, fn: string, path: string): string => captured(text, new RegExp(`fn ${fn}\\(\\s*(\\w+): Option<&Path>`), `the root ${fn} takes`, path)
+
+/** The name `if let Some(<name>) = <root> {` binds the root to in the body of `fn`. */
+const boundFrom = (body: string, root: string, fn: string, path: string): string => captured(body, new RegExp(`if let Some\\((\\w+)\\) = ${root} \\{`), `the name ${fn} binds ${root} to`, path)
+
+/**
+ * The checkout's root on its way to the plugin skills, every use accounted for (martha#614): the plugin skill folders
+ * pass it only to the discovery; the discovery only to the settings loader and, bound, to project_plugin_dir; the loader
+ * only, bound, to the two settings files. Any other use is a throw, never a root left unlisted. A closure the discovery
+ * gives a plugin's own folder under the same name rebinds it, and is no use of the root.
+ */
+function pluginRootsCarriedIn(source: EngineSource): void {
+  const carriers = ENGINE_PLACES.plugin_skill_dirs
+  const carrierText = fileOf(source, carriers)
+  const carrier = CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs
+  const finder = CHECKOUT_ROOT_CARRIERS.plugin_discovery
+  const loader = CHECKOUT_ROOT_CARRIERS.plugin_settings
+  const carried = rootParameterOf(carrierText, carrier, carriers)
+  everyUseKnown(functionBody(carrierText, carrier, carriers), carried, [once(`\\b${finder}\\(${carried}, config\\)`)], carrier, carriers)
+
+  const plugins = ENGINE_PLACES.plugin_discovery
+  const discovery = fileOf(source, plugins)
+  const found = rootParameterOf(discovery, finder, plugins)
+  const finderBody = functionBody(discovery, finder, plugins)
+  const root = boundFrom(finderBody, found, finder, plugins)
+  everyUseKnown(finderBody, found, [once(`\\b${loader}\\(${found}\\)`), once(`if let Some\\(${root}\\) = ${found} \\{`)], finder, plugins)
+  const rebound = `\\|\\((\\w+), ${root}\\)\\|\\s*DiscoveredPlugin \\{\\s*\\1,\\s*${root},`
+  everyUseKnown(finderBody, root, [once(`if let Some\\(${root}\\)`), once(`\\b${SKILL_ROOT_READERS.plugin_folder}\\(${root}\\)`), anyNumberOf(rebound)], finder, plugins)
+
+  const loaded = rootParameterOf(discovery, loader, plugins)
+  const loaderBody = functionBody(discovery, loader, plugins)
+  const settingsRoot = boundFrom(loaderBody, loaded, loader, plugins)
+  everyUseKnown(loaderBody, loaded, [once(`if let Some\\(${settingsRoot}\\) = ${loaded} \\{`)], loader, plugins)
+  const settingsFile = (local: boolean): AKnownUse => once(`\\b${SKILL_ROOT_READERS.plugin_settings}\\(${settingsRoot}, ${String(local)}\\)`)
+  everyUseKnown(loaderBody, settingsRoot, [once(`if let Some\\(${settingsRoot}\\)`), settingsFile(false), settingsFile(true)], loader, plugins)
+}
+
+/**
+ * The folders `all_skill_dirs_with_config` joins onto the working directory, or a throw naming the function. Every use
+ * of the working directory is accounted for: the one `if let` that binds it, and the call that hands it to the plugin
+ * skill folders; and every use of its binding is the binding itself or an entry of the list. A folder pushed from it
+ * anywhere else is a throw, never a list that leaves it out.
+ */
 function skillFoldersIn(source: EngineSource): readonly string[] {
   const skills = ENGINE_PLACES.skill_folders
-  const dirs = functionBody(fileOf(source, skills), SKILL_ROOT_READERS.skill_folders, skills)
-  const [, workingDir, listed] = /if let Some\((\w+)\) = working_dir \{\s*for path in \[([^\]]*)\]/.exec(dirs) ?? []
-  if (workingDir === undefined || listed === undefined) throw new Error(`${skills} says nothing of the skill folders ${SKILL_ROOT_READERS.skill_folders} reads from the working directory`)
-  const entries = listed.split(',').filter((entry) => entry.trim() !== '')
+  const reader = SKILL_ROOT_READERS.skill_folders
+  const text = fileOf(source, skills)
+  const dirs = functionBody(text, reader, skills)
+  const root = rootParameterOf(text, reader, skills)
+  const workingDir = boundFrom(dirs, root, reader, skills)
+  const list = `for path in \\[\\s*${workingDir}\\b[^\\]]*\\]`
+  const listed = captured(dirs, new RegExp(`if let Some\\(${workingDir}\\) = ${root} \\{\\s*(${list})`), `the skill folders ${reader} reads from ${root}`, skills)
+  everyUseKnown(dirs, root, [once(`if let Some\\(${workingDir}\\) = ${root} \\{`), once(`\\b${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}\\(${root}, config\\)`)], reader, skills)
+  everyUseKnown(dirs, workingDir, [once(`if let Some\\(${workingDir}\\)`), once(list)], reader, skills)
+  const entries = listed.slice(listed.indexOf('[') + 1, listed.lastIndexOf(']')).split(',').filter((entry) => entry.trim() !== '')
   const skill_folders = entries.map((entry) => joinedFrom(entry, workingDir)).filter((folder) => folder !== undefined)
   if (skill_folders.length !== entries.length) throw new Error(`${skills} lists ${String(entries.length)} skill folders and ${String(skill_folders.length)} are in a shape this reader knows`)
   return skill_folders
