@@ -11,9 +11,14 @@
 //   - `git-guard/git`, a shell shim that runs the judge with the launch's own node, put first on the member's PATH;
 //   - `git-guard/guard.json`, what the judge is given: the real git a call is handed to, the misses file, and Martha's
 //     own git settings, so the shim recognises Martha's own runs without spelling the settings a second time;
-//   - `git-guard/src/...`, the judge and the two protocols it speaks with, each kept at the place it has in this tree so
-//     the judge's two imports resolve in the copy exactly as they do here;
+//   - `git-guard/src/...`, the judge, the guard's protocol, the words it shares with the shells and the relay's
+//     protocol, each kept at the place it has in this tree so the judge's imports resolve in the copy exactly as they
+//     do here;
 //   - `git-guard/git-hooks/reference-transaction`, the hook seam (c) runs, which git is pointed at by `core.hooksPath`.
+//
+// What the two programs of the shell say is the business of `write_the_shell_a_git_guard_places` (martha#755): which of
+// git's calls and which transaction start the judge is a decision of that slice's own, and this file writes what it
+// returns and decides nothing about it.
 //
 // The shim never writes the member's row. The row is one file written whole, and a second writer on a timeout path is
 // both a torn write and a second process started exactly when the machine is already too slow to answer. So a miss —
@@ -41,7 +46,8 @@ import type { TheHooksALaunchRuns } from '../refuse_code_a_checkout_runs_itself/
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theRowWithTheLine, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theMissesLine } from '../guard_workspace/guard_workspace.ts'
-import { PREPARED, THE_MEMBER_HAD_IT, theHadNameOf, theKeptNameOf, WHAT_THE_JUDGE_NEVER_TAKES } from './guard_protocol.ts'
+import { theShimFor } from '../write_the_shell_a_git_guard_places/the_shells_of_a_git_guard.ts'
+import { THE_HOOK_NAME } from '../write_the_shell_a_git_guard_places/the_words_the_guard_programs_share.ts'
 
 /** The folder inside a launch's relay directory that holds the shim, the judge and what the judge is given. */
 export const THE_GUARD_DIRECTORY_NAME = 'git-guard'
@@ -49,19 +55,20 @@ export const THE_GUARD_DIRECTORY_NAME = 'git-guard'
 /** The folder inside it that holds the hook git is pointed at for a member's runs. */
 export const THE_HOOKS_DIRECTORY_NAME = 'git-hooks'
 
-/** The name on the member's PATH, and the name of the hook: what git's own words call them. */
+/** The name on the member's PATH: what git's own words call it. The hook's name is the shell slice's. */
 export const THE_SHIM_NAME = 'git'
-const THE_HOOK_NAME = 'reference-transaction'
 
-/** The judge, the guard's protocol and the relay's: the three files of this tree the launch carries. */
+/** The judge, the guard's protocol, the words it shares with the shells, and the relay's: the launch carries each. */
 const THE_JUDGE_NAME = 'judge_a_git_call.ts'
 const THE_GUARD_PROTOCOL_NAME = 'guard_protocol.ts'
+const THE_WORDS_NAME = 'the_words_the_guard_programs_share.ts'
 const THE_PROTOCOL_NAME = 'relay_protocol.ts'
 
 /** Where each stands in this tree and in the copy: the one import each file has resolves from either (see the header). */
 const THE_TREES_ROOT_NAME = 'src'
 const THE_JUDGES_PLACE_IN_THE_TREE = `guard_the_git_a_member_runs/${THE_JUDGE_NAME}`
 const THE_GUARD_PROTOCOLS_PLACE_IN_THE_TREE = `guard_the_git_a_member_runs/${THE_GUARD_PROTOCOL_NAME}`
+const THE_WORDS_PLACE_IN_THE_TREE = `write_the_shell_a_git_guard_places/${THE_WORDS_NAME}`
 const THE_PROTOCOLS_PLACE_IN_THE_TREE = `claude_code_relay/hooks/${THE_PROTOCOL_NAME}`
 
 /** The file the judge is given, written beside the judge itself, which reads it as `./guard.json`. */
@@ -105,12 +112,6 @@ export interface TheGitGuard {
 export type TheGuardsMaking = TheGitGuard | { readonly refusal: string }
 
 const REFUSED = 'The member is not started: its git guard could not be placed'
-
-/** This slice's own folder, where the judge is checked in. */
-const THE_GUARD_SOURCE = fileURLToPath(new URL('.', import.meta.url))
-
-/** The relay's hooks folder, where the protocol is checked in. */
-const THE_PROTOCOL_SOURCE = fileURLToPath(new URL(`../claude_code_relay/hooks/${THE_PROTOCOL_NAME}`, import.meta.url))
 
 /** Where the misses a launch could not judge are appended, in the launch's own relay directory. */
 export const theMissesFileIn = (relayDirectory: string): string => join(relayDirectory, MISSES_FILE_NAME)
@@ -172,8 +173,8 @@ function writeTheGuard(directory: string, hooks: string, judge: string, node: st
   const folders = carryTheJudgesFiles(directory, judge)
   mkdirSync(hooks, { mode: THE_GUARD_WHILE_BEING_WRITTEN })
   writeFileSync(join(dirname(judge), THE_CONFIG_NAME), `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx', mode: THE_GUARD_FILE_MODE })
-  writeFileSync(join(directory, THE_SHIM_NAME), theShimFor(THE_SHIM_NAME, node, judge), { flag: 'wx', mode: THE_SHIM_MODE })
-  writeFileSync(join(hooks, THE_HOOK_NAME), theShimFor(THE_HOOK_NAME, node, judge), { flag: 'wx', mode: THE_SHIM_MODE })
+  writeFileSync(join(directory, THE_SHIM_NAME), theShimFor(THE_SHIM_NAME, node, judge, realGit), { flag: 'wx', mode: THE_SHIM_MODE })
+  writeFileSync(join(hooks, THE_HOOK_NAME), theShimFor(THE_HOOK_NAME, node, judge, realGit), { flag: 'wx', mode: THE_SHIM_MODE })
   // The guard's folders are closed to every write once what they hold is written, deepest first.
   const written = [...folders, hooks, directory]
   for (const folder of written.sort((one, other) => other.length - one.length)) chmodSync(folder, THE_GUARD_DIRECTORY_MODE)
@@ -182,9 +183,10 @@ function writeTheGuard(directory: string, hooks: string, judge: string, node: st
 /** The judge and the two protocols, each at the place it has in this tree, so the imports resolve in the copy. */
 function carryTheJudgesFiles(directory: string, judge: string): readonly string[] {
   const places: readonly (readonly [string, string])[] = [
-    [join(THE_GUARD_SOURCE, THE_JUDGE_NAME), judge],
-    [join(THE_GUARD_SOURCE, THE_GUARD_PROTOCOL_NAME), join(directory, THE_TREES_ROOT_NAME, THE_GUARD_PROTOCOLS_PLACE_IN_THE_TREE)],
-    [THE_PROTOCOL_SOURCE, join(directory, THE_TREES_ROOT_NAME, THE_PROTOCOLS_PLACE_IN_THE_TREE)],
+    [fileURLToPath(new URL(THE_JUDGE_NAME, import.meta.url)), judge],
+    [fileURLToPath(new URL(THE_GUARD_PROTOCOL_NAME, import.meta.url)), join(directory, THE_TREES_ROOT_NAME, THE_GUARD_PROTOCOLS_PLACE_IN_THE_TREE)],
+    [fileURLToPath(new URL(`../write_the_shell_a_git_guard_places/${THE_WORDS_NAME}`, import.meta.url)), join(directory, THE_TREES_ROOT_NAME, THE_WORDS_PLACE_IN_THE_TREE)],
+    [fileURLToPath(new URL(`../claude_code_relay/hooks/${THE_PROTOCOL_NAME}`, import.meta.url)), join(directory, THE_TREES_ROOT_NAME, THE_PROTOCOLS_PLACE_IN_THE_TREE)],
   ]
   const folders: string[] = []
   for (const [from, to] of places) {
@@ -201,38 +203,6 @@ function foldersBetween(stop: string, folder: string): readonly string[] {
   for (let at = folder; at !== stop && at.startsWith(`${stop}/`); at = dirname(at)) inside.unshift(at)
   return inside
 }
-
-/**
- * The shell script the member's git and the clone's hook are: the launch's own node, the judge, and the mode, then the
- * words the caller handed it unchanged. A shell script rather than a shebang on the judge, because the node a launch
- * runs on can stand anywhere, and a script's first line is the one place a path with no length limit is safe.
- *
- * The hook starts node only for the state the judge judges (martha#755): git calls it for every state of every
- * transaction, seven times for one commit, and node for a state the judge answers 0 to at once is a whole start for
- * nothing. Any other state ends in the shell with 0, which is what the judge answers it, and git does not need the
- * hook to read its input.
- */
-export function theShimFor(mode: string, node: string, judge: string): string {
-  const exec = `exec ${singleQuoted(node)} ${singleQuoted(judge)} ${singleQuoted(mode)} "$@"`
-  return [
-    '#!/bin/sh',
-    `# Martha's git guard (martha#562): the judge decides, and the real git runs what it allows.`,
-    `# The judge's node takes none of these from the member; each is kept for the real git (martha#772).`,
-    ...WHAT_THE_JUDGE_NEVER_TAKES.flatMap(keptAndCleared),
-    ...(mode === THE_HOOK_NAME ? [`case "$1" in ${singleQuoted(PREPARED)}) ${exec} ;; esac`, 'exit 0'] : [exec]),
-    '',
-  ].join('\n')
-}
-
-/** The shim's lines for one variable the judge never takes: its value and whether it was set, kept, then it is unset. */
-function keptAndCleared(variable: string): readonly string[] {
-  const kept = theKeptNameOf(variable)
-  const had = theHadNameOf(variable)
-  return [`${kept}="\${${variable}-}" ${had}="\${${variable}+${THE_MEMBER_HAD_IT}}"`, `export ${kept} ${had}`, `unset ${variable}`]
-}
-
-/** One word as a shell reads it as itself: in single quotes, the quote it holds ended and started again. */
-const singleQuoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`
 
 /**
  * The member's environment with the guard's folder first on its PATH, so every git the shell, a script or a tool start

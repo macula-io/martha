@@ -13,7 +13,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { GIT_CALL_PATH, PREPARED, REF_TRANSACTION_PATH } from './guard_protocol.ts'
+import { GIT_CALL_PATH, REF_TRANSACTION_PATH } from './guard_protocol.ts'
+import { PREPARED, THE_HOOK_NAME } from '../write_the_shell_a_git_guard_places/the_words_the_guard_programs_share.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
@@ -21,7 +22,8 @@ import { RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_director
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { theRowWithNothingSaid, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { theMissesLine } from '../guard_workspace/guard_workspace.ts'
+import { theMissesLine, THE_COMMANDS_THE_WORKSPACE_RULES_READ } from '../guard_workspace/guard_workspace.ts'
+import { THE_COMMANDS_THE_COMMIT_RULE_READS } from '../judge_the_commit_a_member_is_about_to_make/judge_the_commit_a_member_is_about_to_make.ts'
 import {
   foldTheMisses,
   MISSES_FILE_NAME,
@@ -175,6 +177,32 @@ async function aLauncherIn(t: TestContext, answer: { readonly status: number; re
   }
 }
 
+/** A launcher that answers each question by its own path, and keeps what it was asked (martha#755). */
+async function aLauncherAnsweringByPath(
+  t: TestContext,
+  verdicts: Readonly<Record<string, { readonly status: number; readonly body: string }>>,
+): Promise<AFakeLauncher> {
+  const socket = join(shortRelayRoot(t), RELAY_SOCKET_NAME)
+  const asked: AFakeLauncher['asked'] = []
+  const server: Server = createServer((request, response) => {
+    const chunks: Buffer[] = []
+    request.on('data', (chunk: Buffer) => chunks.push(chunk))
+    request.on('end', () => {
+      const path = request.url ?? ''
+      asked.push({ path, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown> })
+      const answer = verdicts[path] ?? { status: 500, body: JSON.stringify({ unreadable: 'no verdict for this path' }) }
+      response.writeHead(answer.status, { 'content-type': 'application/json' })
+      response.end(answer.body)
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(socket, resolve))
+  return {
+    socket,
+    asked,
+    close: () => new Promise<void>((resolve) => (server.close(() => resolve()), server.closeAllConnections())),
+  }
+}
+
 /** Where a launch's guard is placed, and the real git it hands an allowed call to. */
 interface APlacedGuard {
   readonly directory: string
@@ -294,7 +322,7 @@ test('the guard git is pointed at is the only hook folder, and its shim and fold
   // The folder git is pointed at holds the launch's one hook and nothing else, which is what makes every event staying
   // off safe: no file a checkout wrote can be in it (martha#562 r=1, martha#24).
   assert.equal(placed.guard.hooks.directory, join(placed.guard.directory, THE_HOOKS_DIRECTORY_NAME))
-  assert.deepEqual(readdirSync(placed.guard.hooks.directory), ['reference-transaction'])
+  assert.deepEqual(readdirSync(placed.guard.hooks.directory), [THE_HOOK_NAME])
 })
 
 /** A clone with a branch of another member's, and the launch's hooks pointed at the guard's. */
@@ -321,7 +349,7 @@ function aCloneUnderTheGuard(directory: string, socket: string, programs?: TheGu
   const named = join(directory, 'a-hook-the-checkout-names')
   writeFileSync(named, `#!/bin/sh\ntouch ${touched}\n`)
   chmodSync(named, 0o755)
-  gitIn(clone, 'config', 'hook.a-checkout-named.event', 'reference-transaction')
+  gitIn(clone, 'config', 'hook.a-checkout-named.event', THE_HOOK_NAME)
   gitIn(clone, 'config', 'hook.a-checkout-named.command', named)
   const empty = join(directory, 'an-empty-place')
   mkdirSync(empty)
@@ -415,12 +443,14 @@ test("the judge takes neither the member's NODE_OPTIONS nor its NODE_COMPILE_CAC
   const planted = aPlantedNodeIn(directory, [directory, under.clone])
   const env = { ...under.env, ...planted.env }
 
-  const shim = await theRunOf('/bin/sh', ['-c', 'git status'], { cwd: directory, env })
-  const hook = await theRunOf('/usr/bin/git', ['-c', 'user.name=Ann', '-c', 'user.email=ann@example.invalid', 'commit', '--quiet', '--allow-empty', '-m', 'a commit the hook judges'], { cwd: under.clone, env })
+  // A command a rule reads, so the shim starts the judge: a command no rule reads starts none at all (martha#755).
+  const shim = await theRunOf('/bin/sh', ['-c', 'git branch --list'], { cwd: under.clone, env })
+  // A delete, because that is the one transaction the hook still starts its judge for (martha#755).
+  const hook = await theRunOf('/usr/bin/git', ['branch', '-D', 'uranus/9'], { cwd: under.clone, env })
 
   // Both judges ran, or this test proves nothing about them: each asked the launcher its own question.
   assert.equal(shim.status, 0, `the shim's call did not run: ${shim.stderr}`)
-  assert.equal(hook.status, 0, `the commit did not run: ${hook.stderr}`)
+  assert.equal(hook.status, 0, `the delete did not run: ${hook.stderr}`)
   assert.ok(launcher.asked.some((question) => question.path === GIT_CALL_PATH), "the shim's judge never ran")
   assert.ok(launcher.asked.some((question) => question.path === REF_TRANSACTION_PATH), "the hook's judge never ran")
   // Every door that was open is named, not only the first: each one is its own route into the judge.
@@ -474,8 +504,8 @@ test("the real git, and everything it starts, still gets the member's own NODE_O
 })
 
 // How often a guarded git call starts node (martha#755): git calls the `reference-transaction` hook for every state of
-// every transaction, and the judge judges only the one that can still stop it. A start for any other state judges
-// nothing and costs a whole node start, which a loaded machine pays several times over on every commit.
+// every transaction, and the judge judges only the one that can still stop it. A start for anything else judges nothing
+// and costs a whole node start, which a loaded machine pays several times over on every commit.
 
 /** A node that writes the judge's mode and its first word to `starts`, one start a line, then runs the real node. */
 function aNodeThatCountsItsStartsIn(directory: string): { readonly node: string; readonly starts: string } {
@@ -486,27 +516,81 @@ function aNodeThatCountsItsStartsIn(directory: string): { readonly node: string;
   return { node, starts }
 }
 
-test('a guarded commit starts the judge once for the call and once for each transaction it can still stop (martha#755)', async (t) => {
-  const directory = aDirectory(t, 'martha-755-starts-')
+// A judge start is bought per call and per transaction, so the guard buys one only where a rule could refuse (martha#755):
+// a call of a command no rule reads, and a transaction that deletes no branch, are both answered without one.
+
+/** The author and committer a commit in a temporary clone needs, so no test depends on the box's own git config. */
+const ANN = { GIT_AUTHOR_NAME: 'Ann', GIT_AUTHOR_EMAIL: 'ann@example.invalid', GIT_COMMITTER_NAME: 'Ann', GIT_COMMITTER_EMAIL: 'ann@example.invalid' }
+
+/** The judge starts a run left behind, one line a start, as the counting node wrote them. */
+const theStartsIn = (starts: string): readonly string[] => (existsSync(starts) ? readFileSync(starts, 'utf8').split('\n').filter((line) => line !== '') : [])
+
+test('a call no rule reads reaches the real git and starts no judge at all (martha#755)', async (t) => {
+  const directory = aDirectory(t, 'martha-755-read-only-')
   mkdirSync(join(directory, 'launch'), { recursive: true })
   const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ allow: 1 }) })
   t.after(() => launcher.close())
   const counting = aNodeThatCountsItsStartsIn(directory)
   const under = aCloneUnderTheGuard(directory, launcher.socket, { node: counting.node, realGit: '/usr/bin/git' })
-  // Placing the guard and making the clone start no judge of their own; only what the member's commit starts counts.
   rmSync(counting.starts, { force: true })
 
-  const ann = { GIT_AUTHOR_NAME: 'Ann', GIT_AUTHOR_EMAIL: 'ann@example.invalid', GIT_COMMITTER_NAME: 'Ann', GIT_COMMITTER_EMAIL: 'ann@example.invalid' }
-  const ran = await theRunOf('/bin/sh', ['-c', 'git commit --quiet --allow-empty -m "a commit the guard judges"'], { cwd: under.clone, env: { ...under.env, ...ann } })
+  const ran = await theRunOf('/bin/sh', ['-c', 'git status --porcelain'], { cwd: under.clone, env: under.env })
+
+  assert.equal(ran.status, 0, `the read-only call did not run: ${ran.stderr}`)
+  const started = theStartsIn(counting.starts)
+  assert.deepEqual(started, [], `a call the rules cannot refuse started the judge: ${started.join('; ')}`)
+  assert.deepEqual(launcher.asked, [], 'a call the rules cannot refuse was asked about')
+})
+
+test('a guarded commit starts the judge once, for the call, and for no transaction it cannot refuse (martha#755)', async (t) => {
+  const directory = aDirectory(t, 'martha-755-commit-starts-')
+  mkdirSync(join(directory, 'launch'), { recursive: true })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ allow: 1 }) })
+  t.after(() => launcher.close())
+  const counting = aNodeThatCountsItsStartsIn(directory)
+  const under = aCloneUnderTheGuard(directory, launcher.socket, { node: counting.node, realGit: '/usr/bin/git' })
+  rmSync(counting.starts, { force: true })
+
+  const ran = await theRunOf('/bin/sh', ['-c', 'git commit --quiet --allow-empty -m "a commit the guard judges"'], { cwd: under.clone, env: { ...under.env, ...ANN } })
 
   assert.equal(ran.status, 0, `the commit did not run: ${ran.stderr}`)
-  const started = existsSync(counting.starts) ? readFileSync(counting.starts, 'utf8').trim().split('\n') : []
-  const forTheHook = started.filter((start) => !start.startsWith(`${THE_SHIM_NAME} `)).map((start) => start.slice(start.indexOf(' ') + 1))
-  const forNothing = forTheHook.filter((state) => state !== PREPARED)
-  assert.deepEqual(forNothing, [], forNothing.map((state) => `the hook started node for \`${state}\``).join('\n'))
-  assert.deepEqual(started.filter((start) => start.startsWith(`${THE_SHIM_NAME} `)), [`${THE_SHIM_NAME} commit`], `the shim did not start the judge once for the call: ${started.join('; ')}`)
-  assert.equal(forTheHook.length, 2, `the hook started the judge ${forTheHook.length} times for the commit's two transactions: ${started.join('; ')}`)
-  assert.deepEqual(launcher.asked.map((question) => question.path), [GIT_CALL_PATH, REF_TRANSACTION_PATH, REF_TRANSACTION_PATH], 'the launcher was not asked once for the call and once for each transaction')
+  const started = theStartsIn(counting.starts)
+  assert.deepEqual(started, [`${THE_SHIM_NAME} commit`], `one commit started the judge ${started.length} time(s): ${started.join('; ')}`)
+  assert.deepEqual(launcher.asked.map((question) => question.path), [GIT_CALL_PATH], 'the launcher was asked about a transaction no rule can refuse')
+})
+
+test("a delete of another member's branch still starts the judge on the hook, and is still stopped (martha#755)", async (t) => {
+  const directory = aDirectory(t, 'martha-755-delete-')
+  mkdirSync(join(directory, 'launch'), { recursive: true })
+  const launcher = await aLauncherAnsweringByPath(t, {
+    [GIT_CALL_PATH]: { status: 200, body: JSON.stringify({ allow: 1 }) },
+    [REF_TRANSACTION_PATH]: { status: 200, body: JSON.stringify({ deny: "uranus/9 is another member's branch" }) },
+  })
+  t.after(() => launcher.close())
+  const under = aCloneUnderTheGuard(directory, launcher.socket)
+
+  const ran = await theRunOf('/usr/bin/git', ['branch', '-D', 'uranus/9'], { cwd: under.clone, env: under.env })
+
+  assert.notEqual(ran.status, 0, "a delete of another member's branch was not stopped")
+  assert.equal(gitIn(under.clone, 'branch', '--list', 'uranus/9'), 'uranus/9', 'the branch was deleted past the hook')
+  assert.match(ran.stderr, /is another member's branch/)
+  assert.deepEqual(launcher.asked.map((question) => question.path), [REF_TRANSACTION_PATH], 'the hook did not ask about the delete it can refuse')
+})
+
+// The shim's list of judged commands is the rules' own (martha#755): the writer reads it from the slices that would
+// refuse a call, so a rule that starts reading a command is a command the shim starts judging, and the two cannot drift.
+test('the shim starts the judge for exactly the commands its rules read, and for no other (martha#755)', (t) => {
+  const directory = aDirectory(t, 'martha-755-commands-')
+  mkdirSync(join(directory, 'launch'), { recursive: true })
+  const placed = putTheGuardIn(join(directory, 'launch'), process.execPath, aRealGitIn(directory))
+  const shim = 'directory' in placed ? readFileSync(join(placed.directory, THE_SHIM_NAME), 'utf8') : ''
+
+  const theRulesRead = [...THE_COMMANDS_THE_WORKSPACE_RULES_READ, ...THE_COMMANDS_THE_COMMIT_RULE_READS]
+  const passedToTheRealGit = theRulesRead.filter((command) => !shim.includes(`'${command}'`))
+  assert.deepEqual(passedToTheRealGit, [], `the shim hands the real git a command its rules read: ${passedToTheRealGit.join(', ')}`)
+  // And the other way round: a command no rule reads, which the judge could only answer allow to.
+  const readOnly = ['status', 'log', 'diff', 'show'].filter((command) => shim.includes(`'${command}'`))
+  assert.deepEqual(readOnly, [], `the shim starts the judge for a command no rule reads: ${readOnly.join(', ')}`)
 })
 
 /** The code lines of a source file with their numbers, its comment lines left out: what runs, not what explains it. */
@@ -518,8 +602,8 @@ const theCodeOf = (source: string): readonly { readonly line: string; readonly n
 // writer to one spelling of the state (#755 design A1): PREPARED's value is read through the import, never typed here.
 test("the hook's state word is written from PREPARED, and never typed in the guard's writer (martha#755 A1)", () => {
   const word = new RegExp(`(?<![\\w$])${PREPARED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`)
-  const typed = theCodeOf(readFileSync(new URL('./the_guard_of_a_launch.ts', import.meta.url), 'utf8'))
+  const typed = theCodeOf(readFileSync(new URL('../write_the_shell_a_git_guard_places/the_shells_of_a_git_guard.ts', import.meta.url), 'utf8'))
     .filter(({ line }) => word.test(line))
-    .map(({ line, number }) => `the_guard_of_a_launch.ts:${number}: ${line.trim()}`)
+    .map(({ line, number }) => `the_shells_of_a_git_guard.ts:${number}: ${line.trim()}`)
   assert.deepEqual(typed, [], `the guard's writer types PREPARED's value rather than importing it:\n${typed.join('\n')}`)
 })

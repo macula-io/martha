@@ -82,7 +82,7 @@ export interface AGuardedCall {
 }
 
 /** The prefix a branch ref carries, which a call may write or leave off: `refs/heads/hygiea/562` and `hygiea/562`. */
-const A_BRANCH_REF = 'refs/heads/'
+export const A_BRANCH_REF = 'refs/heads/'
 
 /** The words a call writes its options with, and the ones a rule reads by name: a branch made, a branch removed or moved. */
 const MAKE_A_BRANCH = new Set(['-b', '-B', '--orphan'])
@@ -106,6 +106,13 @@ const ADD = 'add'
 const REMOVE = 'remove'
 const MOVE = 'move'
 const WORKTREE_PRUNE = 'prune'
+
+/**
+ * The git commands whose calls these rules read: a call of any other command is one they say nothing against, and so one
+ * the guard's shim need not start a judge for (martha#755). Built from the constants above, never spelled again, so a
+ * command this file starts reading is a command the shim starts judging.
+ */
+export const THE_COMMANDS_THE_WORKSPACE_RULES_READ: readonly string[] = [BRANCH, CHECKOUT, PUSH, SWITCH, UPDATE_REF, WORKTREE]
 
 /** What a call is told when it would make a clone stop being a clone of its default branch. */
 const A_CLONE_IS_NO_PLACE_TO_BRANCH =
