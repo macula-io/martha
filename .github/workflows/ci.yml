@@ -9,66 +9,22 @@ permissions:
   contents: read
 
 jobs:
-  # The wordmark must stay well-formed SVG, or GitHub shows a broken image.
+  # Every link to a file or a heading of this repository resolves. Links to
+  # other sites are not checked: lychee runs --offline (DECIDED 2026-11-19 "Links:
+  # internal only"), because in two weeks every red they caused was a site
+  # refusing or failing the checker, never a link of ours gone dead.
   #
-  # The parse runs this repository's own Node code on the Node the other jobs pin
-  # (martha#271). It used to be xmllint, installed from the Ubuntu archive through
-  # apt; on 2026-11-11 a hosted runner could not resolve archive.ubuntu.com, and
-  # this job went red in the install with nothing of this repository run. The
-  # planted logo below holds the check to the other half: an SVG a browser shows
-  # as a broken image still goes red here, by name.
-  logos:
-    name: logos are valid SVG
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - name: plant a broken logo
-        run: |
-          mkdir -p "${{ runner.temp }}/logos-self-test"
-          printf '<svg xmlns="http://www.w3.org/2000/svg"><g></svg>\n' > "${{ runner.temp }}/logos-self-test/broken-logo.svg"
-      - name: the check bites
-        # Exit 1 (refused) is required, not any non-zero: exit 2 is "could not
-        # look", which must never read as a bite either.
-        run: |
-          status=0
-          npm run --silent check:logos -- "${{ runner.temp }}"/logos-self-test/*.svg \
-            > "${{ runner.temp }}/logos-self-test/verdict.txt" 2>&1 || status=$?
-          if [ "$status" -ne 1 ]; then
-            cat "${{ runner.temp }}/logos-self-test/verdict.txt"
-            exit 1
-          fi
-          grep -q broken-logo.svg "${{ runner.temp }}/logos-self-test/verdict.txt"
-      - name: the logos are valid SVG
-        run: npm run --silent check:logos -- assets/*.svg
-
-  # Every link in every document resolves, relative ones included. A host that
-  # answers slowly is retried before its link is called broken; the badge URLs
-  # are scanned like any other link, so a renamed workflow still fails here.
-  #
-  # Two kinds of slowness, two retries. lychee's own `--max-retries` covers a
-  # request that TIMED OUT. It does not cover a host that answers 408/429/5xx:
-  # once a response is a RejectedStatusCode, lychee 0.24.2 retries 429 alone, so
-  # a 408 from shields.io failed this job in 10.7 s with no retry made
-  # (martha#231, after martha#40). `check_every_link_resolves` therefore repeats
-  # a run that failed only on those statuses, and fails at once -- by name -- on
-  # a failure no host recovers from, a 404 or a file that is not there. The
-  # planted dead link is held to both halves: lychee must refuse it, and so must
-  # the command the scan actually runs.
+  # A missing file or heading fails at once, by name. The planted dead link is
+  # held to both halves: lychee must refuse it, and so must the command the scan
+  # actually runs.
   links:
     name: links resolve
     runs-on: ubuntu-latest
     env:
-      # Retry and timeout options, defined once and used by both runs below.
-      # A timeout is retried, and the wait doubles: five tries of 30 s with
-      # 3 s, 6 s, 12 s and 24 s between them, so a link that is really gone
-      # fails within about 3 min 15 s and a slow host has all that time to
-      # answer.
-      LYCHEE_OPTIONS: '--no-progress --include-fragments --max-retries 4 --retry-wait-time 3 --timeout 30'
+      # The options, defined once and used by both runs below: --offline keeps
+      # every request off the network, so only this repository's own files and
+      # headings are checked.
+      LYCHEE_OPTIONS: '--no-progress --include-fragments --offline'
     steps:
       - uses: actions/checkout@v7
       # This job runs this repository's own Node code now (check_every_link_resolves),
@@ -121,11 +77,9 @@ jobs:
           fi
           grep -q missing-page.md "${{ runner.temp }}/links-self-test/verdict.txt"
       - name: every link resolves
-        # The check itself, and its retry of a host that said "not now". A green
-        # here means every link was seen to resolve; a red names the links.
+        # The check itself. A green here means every internal link was seen to
+        # resolve; a red names the links.
         run: npm run --silent check:links -- '**/*.md'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # The publish gate (issue #2): no outsider's text reaches a shell-holding
   # member without a control, and a path added without one fails here by name.
@@ -278,163 +232,6 @@ jobs:
       - run: npm ci
       - run: npm run --silent check:host-ceilings
 
-  # A member a run left behind (martha#472): the check reads this machine's /proc, so every job here is a run of it over
-  # a machine that holds no member of a run's, and answers 0. That it BITES is a test's, not a job's: a launch record
-  # names a real child of the test's own, killed and shown gone, in
-  # read_a_kernel_and_a_home/a_member_a_run_left_behind.node-test.ts, which runs this gate over the real /proc beside
-  # a real child, and which the suite runs.
-  no-member-outlives-its-run:
-    name: no member outlives its run
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run --silent check:no-member-outlives-its-run
-
-  # The workspace's layout, as a check that fails by name (martha#562, port-map step 9): every clone on its default
-  # branch and clean, every worktree where the crew declared it, one clone per repository.
-  #
-  # The job runs the entry with --self-test, and not the plain run, because this repository declares no layout: a plain
-  # run here would always take the nothing-declared answer and be green whatever the check did. The self-test plants a
-  # workspace under the runner's temp directory, requires the drift to be named at the planted clone's own path, and
-  # requires a planted workspace that matches its layout to name nothing.
-  workspace-layout:
-    name: the workspace matches its layout
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run --silent check:workspace-layout -- --self-test
-      # The plain run too, and not only the self-test: this repository declares no layout, so here it answers the
-      # nothing-declared line and exits 0. It proves the script reaches the entry it names, which the self-test alone
-      # would not (martha#741 counts a step that runs only a --self-test as no run of the check).
-      - run: npm run --silent check:workspace-layout
-
-  # A trial's evidence can say why it observed nothing (martha#694): a line that ended "not-observed" and kept no ACP
-  # transcript beside it is a verdict nobody can read, and the same rule the driver keeps while a line runs is applied
-  # here to a whole evidence directory. The self-test plants the missing-transcript line and its twin, and requires the
-  # first refused by name and the second passing; the plain run judges a directory the step before plants, so the entry
-  # is reached for real and not only through its self-test (martha#741 counts a self-test alone as no run).
-  trial-evidence:
-    name: a trial's evidence can say why it observed nothing
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run --silent check:trial-evidence -- --self-test
-      - run: mkdir -p "$RUNNER_TEMP/trial-evidence/line-1" && printf '%s\n' '{"verdict":"not-observed"}' > "$RUNNER_TEMP/trial-evidence/line-1/result.json" && printf '%s\n' '{"at":0,"direction":"sent","message":{"jsonrpc":"2.0"}}' > "$RUNNER_TEMP/trial-evidence/line-1/acp.jsonl"
-      - run: npm run --silent check:trial-evidence -- --dir "$RUNNER_TEMP/trial-evidence"
-
-  # No launcher outlives its run (martha#559): a launch test's `script -qec ... launcher.ts` pair is a terminal held
-  # open, and a run killed hard leaves them piled up until the next launch test stops reporting. The job is a run over a
-  # machine that holds none, and answers 0. That it BITES is a test's, and so is every line of the rule: a kernel the
-  # test plants holds a killed run's chain and must be named, and the same chain under a live runner must not be —
-  # prove_the_core/a_test_leaves_nothing_behind/the_launchers_a_run_left.node-test.ts, which the suite runs.
-  no-launcher-outlives-its-run:
-    name: no launcher outlives its run
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run --silent check:no-launcher-outlives-its-run
-
-  # No restore of installer/ reaches a release (martha#695, T1): the dry packer restores installer/ from the tag its
-  # version was published at, inside a clone of its own, and that must never happen on the release path -- a release
-  # that restored its installer/ would ship a tree its tag does not hold while its pin named the published installer
-  # (martha#84). The job reads the release workflow, every script its run: lines name and every local uses: ./ action,
-  # and names the actions from other repositories as not read. That it BITES is a test's:
-  # prove_the_core/the_release_is_proven/no_restore_reaches_the_release.node-test.ts plants the restore in a copy of the workflow, in a
-  # script it runs and in a local action, and each must exit 1 with the line printed.
-  no-restore-in-the-release:
-    name: no restore of installer/ in the release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run --silent check:no-restore-in-the-release
-
-  # Nothing in the core reads a kept transcript (martha#646, D4): the copy is kept for the owner after a launch ends, and
-  # a slice that read it would give the core an input the launch gate never saw. The job reads every source of src/ and
-  # names any read of the place, by file and line. That it BITES is this job's own plant, the drift-bites family's shape:
-  # a later slice that reads the place by its own constant must exit 1 with the file and line printed, and the tree
-  # without it must pass. The place's declaration is copied from the checkout, never spelled here, so a rename moves both.
-  nothing-reads-the-kept-transcripts:
-    name: nothing reads the kept transcripts
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run --silent check:nothing-reads-the-kept-transcripts
-      - name: the check bites
-        run: |
-          planted="${{ runner.temp }}/kept-transcripts-self-test"
-          rm -rf "$planted"
-          mkdir -p "$planted/src/keep_martha_state_outside_the_checkout" "$planted/src/a_later_slice"
-          cp src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts "$planted/src/keep_martha_state_outside_the_checkout/"
-          printf 'export const a = 1\n' > "$planted/src/a_later_slice/plain.ts"
-          no_reader=0
-          npm run --silent check:nothing-reads-the-kept-transcripts -- --root "$planted" > "$planted/clean.txt" 2>&1 || no_reader=$?
-          if [ "$no_reader" -ne 0 ]; then
-            cat "$planted/clean.txt"
-            exit 1
-          fi
-          cat > "$planted/src/a_later_slice/reads_the_place.ts" <<'READER'
-          import { readFileSync } from 'node:fs'
-          import { join } from 'node:path'
-
-          import { TRANSCRIPTS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-
-          export const read = (stateRoot: string): string => readFileSync(join(stateRoot, TRANSCRIPTS_PLACE, 'one.jsonl'), 'utf8')
-          READER
-          status=0
-          npm run --silent check:nothing-reads-the-kept-transcripts -- --root "$planted" > "$planted/verdict.txt" 2>&1 || status=$?
-          if [ "$status" -ne 1 ]; then
-            cat "$planted/verdict.txt"
-            exit 1
-          fi
-          grep -q "a_later_slice/reads_the_place.ts:6: readFileSync names the kept place" "$planted/verdict.txt"
-
-  # No member works without its crew tools (martha#658 part 3): a session that lost its crew tools works on unseen, and
-  # the launcher keeps an open window for its member until a later session holds them again. The job is a run over a
-  # machine that holds no Martha state, and answers 0. That it BITES is a test's: a window kept through the crew's own
-  # store for a member that lost them and worked on must fail by name, and the same member once held again must pass —
-  # src/check_no_member_works_without_its_crew_tools/the_gates_answers.node-test.ts, which the suite runs.
-  no-member-works-without-its-crew-tools:
-    name: no member works without its crew tools
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run --silent check:no-member-works-without-its-crew-tools
-
   # Martha's names are its own (martha#468): no file, folder, tool, marker or variable of Martha's may be a name
   # crew-code also gives something, or a person reading a path, a transcript or a tool name cannot tell which crew a
   # thing belongs to. It runs as a job and as a node test, so no range gate reads green while the check did not run.
@@ -503,6 +300,51 @@ jobs:
           grep -q "src/one/a.ts -> src/two/b.ts -> src/one/a.ts" "$planted/verdict.txt"
           grep -q "installer/one.ts -> installer/two.ts -> installer/one.ts" "$planted/verdict.txt"
 
+  # Nothing in the core reads a kept transcript (martha#646, D4): the copy is kept for the owner after a launch ends, and
+  # a slice that read it would give the core an input the launch gate never saw. The job reads every source of src/ and
+  # names any read of the place, by file and line. That it BITES is this job's own plant, the drift-bites family's shape:
+  # a later slice that reads the place by its own constant must exit 1 with the file and line printed, and the tree
+  # without it must pass. The place's declaration is copied from the checkout, never spelled here, so a rename moves both.
+  nothing-reads-the-kept-transcripts:
+    name: nothing reads the kept transcripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:nothing-reads-the-kept-transcripts
+      - name: the check bites
+        run: |
+          planted="${{ runner.temp }}/kept-transcripts-self-test"
+          rm -rf "$planted"
+          mkdir -p "$planted/src/keep_martha_state_outside_the_checkout" "$planted/src/a_later_slice"
+          cp src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts "$planted/src/keep_martha_state_outside_the_checkout/"
+          printf 'export const a = 1\n' > "$planted/src/a_later_slice/plain.ts"
+          no_reader=0
+          npm run --silent check:nothing-reads-the-kept-transcripts -- --root "$planted" > "$planted/clean.txt" 2>&1 || no_reader=$?
+          if [ "$no_reader" -ne 0 ]; then
+            cat "$planted/clean.txt"
+            exit 1
+          fi
+          cat > "$planted/src/a_later_slice/reads_the_place.ts" <<'READER'
+          import { readFileSync } from 'node:fs'
+          import { join } from 'node:path'
+
+          import { TRANSCRIPTS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+
+          export const read = (stateRoot: string): string => readFileSync(join(stateRoot, TRANSCRIPTS_PLACE, 'one.jsonl'), 'utf8')
+          READER
+          status=0
+          npm run --silent check:nothing-reads-the-kept-transcripts -- --root "$planted" > "$planted/verdict.txt" 2>&1 || status=$?
+          if [ "$status" -ne 1 ]; then
+            cat "$planted/verdict.txt"
+            exit 1
+          fi
+          grep -q "a_later_slice/reads_the_place.ts:6: readFileSync names the kept place" "$planted/verdict.txt"
+
   # The relay loads in the recorded host (martha#104). The host reads a hooks module before it runs it and refuses it
   # whole for a rule it holds; a refused relay runs no gate, and the relay's unit tests drive a stand-in engine that
   # holds none of those rules. This installs Claude Code at the version the adapter was recorded from (read from the
@@ -543,7 +385,7 @@ jobs:
       # The Bash answers harness can fail too (martha#812): the comparison names every difference, and the live mode
       # takes no case from a host that never answers. No host and no npm: the comparison is driven with recordings the
       # tests write, and the live mode with a stand-in `claude`, which is only a path to the harness.
-      - run: prove_the_relay_loads/prove_the_bash_answers_bites.sh
+      - run: prove_the_relay_loads/prove_the_bash_answers/prove_the_bash_answers_bites.sh
 
   # The engine drift check can fail (macula-io/martha#541, package 10): the recorder's --check passes on a tree that
   # says what the recording says and fails, naming the fact, on one that does not, with no engine checkout. Then it
@@ -836,10 +678,11 @@ jobs:
   #   gone, no constant holds its value for the whole-tree run to compare against,
   #   and every literal still holding it would pass there.
   #
-  # The self-test plants one case per rule and requires each to be named. The two
-  # planted repositories below prove each gate bites as the job runs it, so the
-  # live steps are not the only evidence: a literal planted beside the constant it
-  # restates must turn each run red, by file and by constant name.
+  # The self-test plants one case per rule and requires each to be named. The
+  # planted repository below proves the gate bites as the job runs it, so the live
+  # step is not the only evidence: a literal a commit adds beside the constant it
+  # restates must turn the run red, by file and by constant name. Only the lines a
+  # change adds are judged (DECIDED 2026-11-19 "Restated values: new lines only").
   restated-values:
     name: no literal restates a defined value
     runs-on: ubuntu-latest
@@ -879,26 +722,6 @@ jobs:
             > "$repo/verdict.txt" 2>&1 || status=$?
           if [ "$status" -ne 1 ]; then cat "$repo/verdict.txt"; exit 1; fi
           grep -q "planted/b.ts:1: 'a-planted-value' restates planted/a.ts PLANTED" "$repo/verdict.txt"
-      - name: the check bites on a literal anywhere in the tree, with no range
-        # The same planted pair, in one commit, judged as the whole-tree step
-        # below runs: no range, so no line counts as new and only the tree is read.
-        run: |
-          repo="${{ runner.temp }}/restated-value-whole-tree"
-          mkdir -p "$repo/src/planted"
-          git -C "$repo" init -q
-          git -C "$repo" config user.email planted@example.invalid
-          git -C "$repo" config user.name planted
-          printf "export const PLANTED = 'a-planted-value'\n" > "$repo/src/planted/a.ts"
-          printf "const name = 'a-planted-value'\n" > "$repo/src/planted/b.ts"
-          git -C "$repo" add -A
-          git -C "$repo" commit -q -m tree
-          status=0
-          npm run --silent check:restated-values -- --root "$repo" \
-            > "$repo/verdict.txt" 2>&1 || status=$?
-          if [ "$status" -ne 1 ]; then cat "$repo/verdict.txt"; exit 1; fi
-          grep -q "planted/b.ts:1: 'a-planted-value' restates planted/a.ts PLANTED" "$repo/verdict.txt"
-      - name: no literal anywhere in the tree restates a defined value
-        run: npm run --silent check:restated-values
       - name: no literal restates a defined value, in the range or a value it defines
         run: npm run --silent check:restated-values -- --range "$BASE_SHA..$HEAD_SHA"
 
