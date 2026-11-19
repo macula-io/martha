@@ -166,12 +166,15 @@ SOLO_CREW_EXPORT='SOLO_MEMBERS'
 # release gives, and the crew step refuses a release that names a member this table has no turn for, and a key the
 # release does not name, before anything starts. A builder carries out the README's command; a reviewer is asked
 # only what it asks for, so a shell call is neither required of it nor counted against it.
+# The member whose role carries out the README's command: the night's builder, the only member the owner attaches to
+# (follow_the_night_as_the_owner.sh reads this line, martha#843).
+THE_BUILDER='builder'
 declare -A ROLE_TURNS=(
-  [builder]='Read README.md in this checkout, then carry out the one command it asks for, then tell me what happened.'
+  ["${THE_BUILDER}"]='Read README.md in this checkout, then carry out the one command it asks for, then tell me what happened.'
   [reviewer]='Read README.md in this checkout and tell me in one line what it asks for. Do not run anything.'
 )
 # The roles whose proof also asks for the README's command as a shell call, and the mark it makes.
-declare -A ROLE_RUNS_THE_COMMAND=([builder]=1)
+declare -A ROLE_RUNS_THE_COMMAND=(["${THE_BUILDER}"]=1)
 # The words a member's command prints when it has started (src/run_the_martha_command, startedLine), and the words
 # the run's own script prints on the member's terminal once its command has ended: the host prints no fixed words when
 # it ends, so the script says so itself, and an earlier member's screen is read for them after a later one is proven.

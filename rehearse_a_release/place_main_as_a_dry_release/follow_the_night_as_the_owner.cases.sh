@@ -29,8 +29,10 @@ PASSED="$(word "${SUT}" PASSED)"
 NOT_PASSED="$(word "${SUT}" NOT_PASSED)"
 CONTAINER_PREFIX="$(word "${PROOF}/prove_a_clean_install_in_a_throwaway_container.sh" CONTAINER_PREFIX)"
 NIGHT_TMUX_SOCKET="$(word "${PROOF}/the_night_in_the_container.sh" NIGHT_TMUX_SOCKET)"
+WATCH_FLAG="$(word "${PROOF}/the_night_in_the_container.sh" NIGHT_WATCH_FLAG)"
+BUILDER="$(word "${PROOF}/prove_a_clean_install_in_a_throwaway_container.sh" THE_BUILDER)"
 DRY_PASSED="$(sed -n 's/^DRY_PASSED=\([0-9]*\)$/\1/p' "${PROOF}/prove_a_clean_install_in_a_throwaway_container.sh")"
-for w in NO_TERMINAL NO_ANSWER PROMPT ENDED PASSED NOT_PASSED CONTAINER_PREFIX NIGHT_TMUX_SOCKET DRY_PASSED; do
+for w in NO_TERMINAL NO_ANSWER PROMPT ENDED PASSED NOT_PASSED CONTAINER_PREFIX NIGHT_TMUX_SOCKET WATCH_FLAG DRY_PASSED; do
   [ -n "${!w}" ] || { echo "${SUT} or its proof defines no ${w}" >&2; exit 2; }
 done
 
@@ -173,9 +175,30 @@ if wanted not_the_sign_in_or_the_attach_is_refused; then
   verdict not_the_sign_in_or_the_attach_is_refused "$(held never_offered)" "a command that is neither the sign-in nor the attach was offered"
 fi
 if wanted the_attach_runs; then
-  night the_attach_runs 0 "$(shaped "${A_HOST}" "$(words tmux -L "${NIGHT_TMUX_SOCKET}" attach -t builder)")"
+  night the_attach_runs 0 "$(shaped "${A_HOST}" "$(words tmux -L "${NIGHT_TMUX_SOCKET}" attach -t "${BUILDER}")")"
   { sleep 3; printf '\n'; sleep 3; echo 'proof_exit=1' >> "${RUN}/run.txt"; } | in_a_terminal
   verdict the_attach_runs "$(held ran)" "the proof's attach command was not run on Enter"
+fi
+if wanted the_watch_runs; then
+  # The watch (martha#843): the attach, read-only by the night's own flag.
+  night the_watch_runs 0 "$(shaped "${A_HOST}" "$(words tmux -L "${NIGHT_TMUX_SOCKET}" attach "${WATCH_FLAG}" -t "${BUILDER}")")"
+  { sleep 3; printf '\n'; sleep 3; echo 'proof_exit=1' >> "${RUN}/run.txt"; } | in_a_terminal
+  verdict the_watch_runs "$(held ran)" "the proof's watch command was not run on Enter"
+fi
+if wanted an_attach_option_is_refused; then
+  # The attach with another option beside the read-only flag, after it, joined to it, twice, or in its place, and the
+  # attach or the watch on a member who is not the night's builder: none is the proof's (martha#843 design R3).
+  offered=''
+  for attach in "attach ${WATCH_FLAG} -d -t ${BUILDER}" "attach -t ${WATCH_FLAG} ${BUILDER}" "attach -d -t ${BUILDER}" \
+    "attach ${WATCH_FLAG}d -t ${BUILDER}" "attach ${WATCH_FLAG} ${WATCH_FLAG} -t ${BUILDER}" "attach -x -t ${BUILDER}" \
+    "attach ${WATCH_FLAG} -x -t ${BUILDER}" "attach ${WATCH_FLAG} -t reviewer" "attach -t reviewer"; do
+    # shellcheck disable=SC2086 # the attach's words, split on purpose
+    night an_attach_option_is_refused 0 "$(shaped "${A_HOST}" "$(words tmux -L "${NIGHT_TMUX_SOCKET}" ${attach})")"
+    { sleep 2; printf '\n'; } | in_a_terminal
+    # The first one offered is the verdict: the rest are not run, so a shape that lets many through stays in time.
+    never_offered || { offered="${attach}"; break; }
+  done
+  verdict an_attach_option_is_refused "$([ -z "${offered}" ] && echo 1 || echo 0)" "an attach with another option was offered: ${offered}"
 fi
 if wanted run_txt_names_another_host; then
   # run.txt, which whoever started the night writes, names a host the owner did not, and the command goes there.

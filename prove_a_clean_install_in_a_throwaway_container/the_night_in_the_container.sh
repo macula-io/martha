@@ -73,9 +73,35 @@ NIGHT_TOKEN_DROP="${CONTAINER_HOME}/.night-token"
 # session runs after its command ends, so its last screen stays readable.
 NIGHT_TMUX_SOCKET='night'
 NIGHT_PANE_HOLD='exec sleep infinity'
+# The night server's bounds on what a member's pane can send to the owner's terminal (martha#843), set once as the
+# server starts, before any member's pane exists: a member's notification may pass through to a client attached to
+# its pane (allow-passthrough, a pane option, set for every pane to come), and no pane may set the owner's clipboard
+# (set-clipboard off, which its default `external` already refuses, said here so no tmux.conf can open it). Before the
+# owner attaches writable for the yes, the builder's pane is shut again (NIGHT_PASSTHROUGH_OFF), and until then the
+# owner watches read-only (NIGHT_WATCH_ATTACH), so nothing a client types reaches a pane.
+# These are speed bumps, not walls, until #847: the server runs as the members' own user, so a member's code can run
+# `tmux -L night` itself and undo each of them, or type into its own pane. They stop a stray escape, not a member set
+# on undoing them.
+NIGHT_TMUX_BOUNDS=(set-option -g allow-passthrough on ';' set-option -s set-clipboard off)
+# The option and its value only: tmux reads a target before them, so it is set as `set-option -p -t <pane> ...`.
+NIGHT_PASSTHROUGH_OFF=(allow-passthrough off)
+# The read-only flag is a word of its own, so the owner's follow script reads it as it reads the socket's name.
+NIGHT_WATCH_FLAG='-r'
+NIGHT_WATCH_ATTACH=(attach "${NIGHT_WATCH_FLAG}")
+# The night's crew rings the owner's bells (martha#843): `martha init` declares none, as every switch is off unasked, so
+# the clone's declaration is given `house_rules.owner_bell` before any member starts there.
+NIGHT_BELLS_ON='const fs = require("node:fs"); const [file] = process.argv.slice(1); const d = JSON.parse(fs.readFileSync(file, "utf8")); d.house_rules = { ...d.house_rules, owner_bell: true }; fs.writeFileSync(file, JSON.stringify(d, null, 2) + "\n")'
+NIGHT_DECLARATION='.martha/martha.json'
 # Where each member's session keeps every byte it draws (tmux pipe-pane), and the gate its member waits on until that
 # keeping has begun. Made after the clean start has been judged, so it is not a stranger to it.
 NIGHT_SCREENS="${CONTAINER_HOME}/.night-screens"
+# The proof's own read-only client on the builder's session (martha#843): every byte tmux sends it is recorded at
+# <watched>.rec, and the pid of its tmux client at <watched>.pid, so the session's listing tells it from the owner's. It
+# records under a terminal type every image's ncurses knows. Only what the watch guard says of it is kept: its bytes are
+# the builder's screen, which the kept record never holds once the token is placed.
+NIGHT_WATCHED="${NIGHT_SCREENS}/watched"
+NIGHT_WATCH_TERM='xterm-256color'
+NIGHT_WATCH_PART='watch.json'
 # The container's own process list after the stop: pid, state, command line. Only the container's idle process (its
 # pid 1) and this listing itself may be there; any other process, a member's or a host's it started, is left over. A
 # zombie (state Z) has ended and holds nothing open: the idle process does not reap, so it is not counted.
@@ -160,9 +186,10 @@ night_tools_step() {
 
 # The script that makes the clone from the bundle on its standard input, then declares the crew there.
 night_clone_script() {
-  printf 'set -eu; export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; mkdir -p %s; cat > %s.bundle; git clone -q -b %s %s.bundle %s; rm %s.bundle; cd %s; git remote set-url origin %s; git config user.name %s; git config user.email %s; martha init; git remote get-url origin' \
+  printf 'set -eu; export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; mkdir -p %s; cat > %s.bundle; git clone -q -b %s %s.bundle %s; rm %s.bundle; cd %s; git remote set-url origin %s; git config user.name %s; git config user.email %s; martha init; node -e %s %s; git remote get-url origin' \
     "${CONTAINER_HOME}" "$(dirname "${NIGHT_CLONE}")" "${NIGHT_CLONE}" "$(remote_word "${NIGHT_BRANCH}")" "${NIGHT_CLONE}" "${NIGHT_CLONE}" \
-    "${NIGHT_CLONE}" "${NIGHT_CLONE}" "$(remote_word "$(night_origin)")" "$(remote_word "${CHECKOUT_AUTHOR}")" "$(remote_word "${CHECKOUT_AUTHOR_EMAIL}")"
+    "${NIGHT_CLONE}" "${NIGHT_CLONE}" "$(remote_word "$(night_origin)")" "$(remote_word "${CHECKOUT_AUTHOR}")" "$(remote_word "${CHECKOUT_AUTHOR_EMAIL}")" \
+    "$(remote_word "${NIGHT_BELLS_ON}")" "$(remote_word "${NIGHT_DECLARATION}")"
 }
 
 # The clone's origin: the repository by its https address, with no token in it.
@@ -293,7 +320,7 @@ night_gate() { printf '%s/%s.go' "${NIGHT_SCREENS}" "$1"; }
 night_start_session() {
   local name="$1"
   on_the_host podman exec "${CONTAINER}" mkdir -p "${NIGHT_SCREENS}" > /dev/null 2>&1 \
-    && night_tmux new-session -d -s "${name}" -x "${TERMINAL_COLUMNS}" -y "${TERMINAL_ROWS}" "$(night_member_script "${name}")" > /dev/null 2>&1 \
+    && night_tmux start-server ';' "${NIGHT_TMUX_BOUNDS[@]}" ';' new-session -d -s "${name}" -x "${TERMINAL_COLUMNS}" -y "${TERMINAL_ROWS}" "$(night_member_script "${name}")" > /dev/null 2>&1 \
     && night_tmux pipe-pane -o -t "${name}" "cat >> ${NIGHT_SCREENS}/${name}.log" > /dev/null 2>&1 \
     && on_the_host podman exec "${CONTAINER}" touch "$(night_gate "${name}")" > /dev/null 2>&1
 }
@@ -634,6 +661,89 @@ night_the_owners_second_steps() {
   log "  3. detach: Ctrl-b, then d — the run waits for the landing; the window closes $(night_closing_at "${NIGHT_YES_WINDOW_S}")"
 }
 
+# The owner's watch command: their terminal attached read-only to the builder's session, before the package is typed,
+# so every ring of the builder's is sent while they watch (martha#843: a client that attaches later is sent nothing).
+night_watch_command() {
+  printf 'ssh -t %s %s' "$(remote_word "${HOST}")" "$(remote_word "$(remote_words podman exec -it "${CONTAINER}" tmux -L "${NIGHT_TMUX_SOCKET}" "${NIGHT_WATCH_ATTACH[@]}" -t "$(night_builder)")")"
+}
+
+# What the proof's own client runs: its pid noted, then that very process becomes the read-only tmux client.
+night_watch_script() {
+  printf 'echo $$ > %s.pid; exec tmux -L %s %s -t %s' "${NIGHT_WATCHED}" "${NIGHT_TMUX_SOCKET}" "${NIGHT_WATCH_ATTACH[*]}" "$(remote_word "$(night_builder)")"
+}
+
+# The proof's own client started, detached in the container, recording every byte it is sent; its keyboard a pipe that
+# never writes, so it types nothing and never ends on its own. It goes with the container.
+night_watcher_start() {
+  on_the_host podman exec -d "${CONTAINER}" sh -c "sleep infinity | TERM=${NIGHT_WATCH_TERM} script -qfc $(remote_word "$(night_watch_script)") ${NIGHT_WATCHED}.rec" > /dev/null 2>&1
+}
+
+# The builder's session's clients now: pid, terminal and flags, one a line.
+night_watch_clients() { night_tmux list-clients -t "$(night_builder)" -F '#{client_pid} #{client_tty} #{client_flags}' 2> /dev/null; }
+
+# The pid of the proof's own client, once it has noted it.
+night_watcher_pid() { on_the_host podman exec "${CONTAINER}" cat "${NIGHT_WATCHED}.pid" 2> /dev/null | tr -d '[:space:]'; }
+
+# Whether a client other than the proof's own watches the builder's session read-only.
+night_owner_watching() {
+  local pid
+  pid="$(night_watcher_pid)"
+  [ -n "${pid}" ] && night_watch_clients | awk -v pid="${pid}" '$1 != pid && $3 ~ /(^|,)read-only(,|$)/ { found = 1 } END { exit found ? 0 : 1 }'
+}
+
+# The watch step: the proof's own client attached, the owner's watch printed, and the night waiting, within the owner's
+# window, for the owner's read-only client, before the package is typed.
+night_watch_step() {
+  local waited=0
+  night_watcher_start || { failed 'night watch' "the proof's own read-only client could not be started on $(night_builder)'s session"; return 1; }
+  log "the owner's watch, in a terminal of your own, before the package is typed:"
+  log "  1. run this command, which shows $(night_builder)'s terminal read-only; keep it open until the run ends:"
+  owner_command "$(night_watch_command)"
+  log "  2. nothing to type there: the run types the package once you watch; the window closes $(night_closing_at "${NIGHT_YES_WINDOW_S}")"
+  until night_owner_watching; do
+    if [ "${waited}" -ge "${NIGHT_YES_WINDOW_S}" ]; then
+      failed owner "not watching $(night_builder)'s terminal read-only within ${NIGHT_YES_WINDOW_S}s"
+      return 1
+    fi
+    sleep "${NIGHT_ROWS_POLL_S}"
+    waited=$((waited + NIGHT_ROWS_POLL_S))
+  done
+  ok 'night watch' "the owner watches $(night_builder)'s terminal read-only"
+}
+
+# The watch file the watch guard reads: the package, the builder, the session's clients now, and the proof's own pid.
+night_write_the_watch() {
+  node -e 'const [file, p, b, clients, recorder] = process.argv.slice(1); require("node:fs").writeFileSync(file, JSON.stringify({ package: p, builder: b, clients, recorder }) + "\n")' \
+    "${NIGHT_DIR}/${NIGHT_WATCH_PART}" "${NIGHT_PACKAGE}" "$(night_builder)" "$(night_watch_clients)" "$(night_watcher_pid)"
+}
+
+# The watch rows now: the bytes the proof's own client was sent, read straight from the container into the guard and
+# never written on this host, and the watch file of this moment.
+night_watch_now() {
+  night_write_the_watch
+  on_the_host podman exec "${CONTAINER}" cat "${NIGHT_WATCHED}.rec" 2> /dev/null | node --no-warnings "${NIGHT_GUARDS}" watch "${NIGHT_DIR}/${NIGHT_WATCH_PART}"
+}
+
+# The ring step (martha#843): once the landing is asked, the night waits, within the work window, for the builder's
+# ring and the VERDICT line to be on the screen the owner watches, the owner's client listed; the watch file of that
+# moment is kept. Then the builder's pane is shut, before the owner is asked to attach writable for the yes: from here
+# no escape of the builder's reaches a client, so nothing it sends the owner's terminal is answered as typed keys.
+night_ring_step() {
+  local waited=0 why
+  while ! why="$(night_watch_now 2>&1)"; do
+    if [ "${waited}" -ge "${NIGHT_WORK_WINDOW_S}" ]; then
+      failed 'night ring' "$(one_line "${why#"${NIGHT_GUARDS_SAY}"}")"
+      return 1
+    fi
+    sleep "${NIGHT_ROWS_POLL_S}"
+    waited=$((waited + NIGHT_ROWS_POLL_S))
+  done
+  ok 'night ring' "$(night_builder)'s ring and the VERDICT reached the screen the owner watches read-only"
+  night_tmux set-option -p -t "$(night_builder)" "${NIGHT_PASSTHROUGH_OFF[@]}" > /dev/null 2>&1 \
+    || { failed 'night shut' "$(night_builder)'s pane could not be shut before the owner attaches writable"; return 1; }
+  ok 'night shut' "$(night_builder)'s pane passes nothing through to a client from here on"
+}
+
 # The night file the claims read: the package, its range (the base the night started on, the tip the pull request's
 # head as GitHub reads it, empty before it is read), both members, their kept transcripts, the crew's kept rows, and
 # when the owner's attach command was printed (empty before it is), which the owner's yes must follow.
@@ -701,8 +811,10 @@ night_landing_row() {
 # The night's landing steps, after it is ready, in order; the first failure ends them. The record is kept in the
 # finish, whatever happened, before the container goes.
 night_landing_steps() {
+  night_watch_step || return 1
   night_package_step || return 1
   night_ask_step || return 1
+  night_ring_step || return 1
   night_yes_step || return 1
   NIGHT_LANDED=1
 }
@@ -826,7 +938,7 @@ CURL
   cat > "${dir}/martha" << 'MARTHA'
 #!/usr/bin/env bash
 # martha init, as far as the night's clone can tell: the crew declared in the folder it runs in.
-if [ "${1:-}" = init ]; then : > the-stand-in-init-ran; fi
+if [ "${1:-}" = init ]; then : > the-stand-in-init-ran; mkdir -p .martha; printf '{"house_rules":{}}\n' > .martha/martha.json; fi
 MARTHA
   cat > "${dir}/night-podman" << 'NIGHTPODMAN'
 #!/usr/bin/env bash
@@ -886,7 +998,7 @@ case "${words}" in
     ;;
   *'git clone'*)
     [ -n "${input}" ] || exit 1
-    PATH="${here}:${PATH}" sh -c "$(printf '%s' "${@: -1}" | in_home)"
+    PATH="${here}:${here}/night-node:${PATH}" sh -c "$(printf '%s' "${@: -1}" | in_home)"
     ;;
   *'find . -mindepth 1'*) sh -c "$(printf '%s' "${@: -1}" | in_home)" ;;
   *' find '*' -xdev'*)
@@ -895,7 +1007,7 @@ case "${words}" in
     if [ -f "${standin}/night.plants-in-clone" ]; then : > "$(cat "${standin}/night.plants-in-clone")/CLAUDE.md"; fi
     find "${standin}/home" -xdev | sed "s#^${standin}/home#${home}#"
     ;;
-  *'tmux -L night new-session'*)
+  *'tmux -L night start-server ; '*' new-session '*)
     # The session's command waits on its gate, as the run's does: the stand-in member starts only once the gate the
     # command names is there. Then it draws as the host does: its started line, and then a full-screen draw (the
     # alternate screen) that leaves that line off the pane, where the folder question's words are placed by moving the
@@ -927,6 +1039,22 @@ case "${words}" in
     drawn="$(tr -d '\r' < "${standin}/tmux.${@: -1}.screen")"
     printf '%s\n' "${drawn##*$'\033[?1049h'}"
     ;;
+  *'script -qfc'*'attach -r -t'*)
+    # The proof's own read-only client (martha#843): its pid noted, and from now on every byte the session it watches
+    # draws, as tmux sends a client of it.
+    name="$(printf '%s' "${words}" | sed -n 's/.*attach -r -t \([^ ;]*\).*/\1/p' | tr -d "'\\\\\"")"
+    mkdir -p "${standin}/home/.night-screens"
+    printf '4101\n' > "${standin}/home/.night-screens/watched.pid"
+    tail -c 0 -F "${standin}/tmux.${name}.screen" >> "${standin}/home/.night-screens/watched.rec" 2> /dev/null &
+    printf '%s\n' "$!" >> "${standin}/night.pids"
+    ;;
+  *'tmux -L night list-clients'*)
+    # The proof's own client once it has noted its pid, and the owner's read-only one unless the case's night.no-watch.
+    pid="$(cat "${standin}/home/.night-screens/watched.pid" 2> /dev/null)"
+    if [ -n "${pid}" ]; then printf '%s /dev/pts/1 attached,ignore-size,read-only\n' "${pid}"; fi
+    if [ -n "${pid}" ] && [ ! -f "${standin}/night.no-watch" ]; then printf '4202 /dev/pts/2 attached,focused,ignore-size,read-only\n'; fi
+    ;;
+  *'tmux -L night set-option -p'*) printf '%s\n' "$*" > "${standin}/night.shut" ;;
   *'.night-screens'*)
     # The run's own execs on the folder that keeps the sessions' bytes: made, a gate touched, a kept file read.
     mapped=()
@@ -951,6 +1079,12 @@ case "${words}" in
             "${standin}/home/${clones}/synthetic-bot/martha-live-x" synthetic-bot/martha-live-x#1 \
             "$(sed -n 's/^BASE=//p' "${standin}/run/repository.env")" "$(cat "${here}/night.tip")" "${name}" \
             "$(printf '%s' "${key}" | sed 's/.*hand it off to \([^.]*\)\..*/\1/')" || exit 1
+          # The VERDICT arriving on the builder's screen, and the builder's ring as tmux hands it on (martha#843),
+          # unless the case's night.no-ring.
+          if [ ! -f "${standin}/night.no-ring" ]; then
+            node --no-warnings --input-type=module -e 'const [repo, member, p] = process.argv.slice(1); const r = await import(`${repo}/src/ring_the_owner/ring_the_owner.ts`); const c = await import(`${repo}/src/land_a_package_on_a_throwaway_repository/the_nights_claims.ts`); process.stdout.write(`\nVERDICT ${p} ${c.THE_VERDICT}\n${r.notificationOf(r.notificationIdOf(member), "landing", "yes")}`)' \
+              "$(cat "${here}/repo.path")" "${name}" synthetic-bot/martha-live-x#1 >> "${standin}/tmux.${name}.screen" || exit 1
+          fi
           ;;
       esac
     done
@@ -1070,7 +1204,11 @@ case "${1:-} ${2:-}" in
   *) exit 1 ;;
 esac
 GH
-  chmod +x "${dir}/throwaway" "${dir}/curl" "${dir}/martha" "${dir}/night-podman" "${dir}/night-bin/gh"
+  # node in the clone, as the container's own: the binary itself, found under the self-test's own HOME, since a node
+  # that is a version manager's shim reads HOME and answers nothing under the case's home (exit 126 on an asdf host).
+  mkdir -p "${dir}/night-node"
+  printf '#!/bin/sh\nexec %s "$@"\n' "$(remote_word "$(node -p process.execPath)")" > "${dir}/night-node/node"
+  chmod +x "${dir}/throwaway" "${dir}/curl" "${dir}/martha" "${dir}/night-podman" "${dir}/night-bin/gh" "${dir}/night-node/node"
 }
 
 # A night case: the proof's own case, its setup files (a bot with id 4242, a token nobody else holds) and its pins
@@ -1097,13 +1235,15 @@ night_expect() {
     --owner-commands "${standin}/owner_commands"
 }
 
-# Whether the owner's commands file holds the night's two commands and nothing else, each byte for byte the line
-# printed under its step: the follow script runs only what is in that file (the threat model on #639).
+# Whether the owner's commands file holds the night's three commands and nothing else, each byte for byte the line
+# printed under its step: the follow script runs only what is in that file (the threat model on #639). The watch
+# (martha#843) comes between the first act and the second.
 night_owner_commands_kept() {
   local out="$1" commands="$2" printed
   printed="$(grep -A1 -xF -e '  1. run this command, which approves the crew and opens Claude Code in the checkout:' \
+    -e "  1. run this command, which shows builder's terminal read-only; keep it open until the run ends:" \
     -e "  1. run this command, which attaches to builder's terminal in the container:" "${out}" | grep '^  ssh -t ' | sed 's/^  //')"
-  [ "$(wc -l < "${commands}")" -eq 2 ] || { echo "the self-test: the owner's commands file does not hold the night's two commands: $(wc -l < "${commands}") line(s)" >&2; return 1; }
+  [ "$(wc -l < "${commands}")" -eq 3 ] || { echo "the self-test: the owner's commands file does not hold the night's three commands: $(wc -l < "${commands}") line(s)" >&2; return 1; }
   [ "$(cat "${commands}")" = "${printed}" ] || { echo "the self-test: the owner's commands file is not the commands printed under their steps" >&2; return 1; }
 }
 
@@ -1128,6 +1268,35 @@ night_second_steps_printed() {
   case "${line}" in
     '  3. detach: Ctrl-b, then d — the run waits for the landing; the window closes '[0-2][0-9]:[0-5][0-9]) : ;;
     *) echo "the self-test: the owner's second act does not end on the marker with its window: ${line}" >&2; return 1 ;;
+  esac
+}
+
+# Whether the first line `first` matches comes before the first line `then` matches, in `out`.
+night_in_order() {
+  local first then
+  first="$(grep -n -- "$2" "$1" | head -1 | cut -d: -f1)"
+  then="$(grep -n -- "$3" "$1" | head -1 | cut -d: -f1)"
+  [ -n "${first}" ] && [ -n "${then}" ] && [ "${first}" -lt "${then}" ]
+}
+
+# Whether the owner's watch was printed as the list they follow: the heading, step 1 with the read-only attach to the
+# builder's session on its own line under it, exactly the night's read-only words, and the window on step 2.
+night_watch_printed() {
+  local out="$1" at line
+  at="$(grep -nxF -- "the owner's watch, in a terminal of your own, before the package is typed:" "${out}" | head -1 | cut -d: -f1)"
+  [ -n "${at}" ] || { echo "the self-test: the owner's watch was not printed as a list (no heading)" >&2; return 1; }
+  line="$(sed -n "$((at + 1))p" "${out}")"
+  [ "${line}" = "  1. run this command, which shows builder's terminal read-only; keep it open until the run ends:" ] \
+    || { echo "the self-test: the owner's watch's first step is not the numbered one: ${line}" >&2; return 1; }
+  line="$(sed -n "$((at + 2))p" "${out}")"
+  case "${line}" in
+    "  ssh -t 'a-host' "*"'\''tmux'\'' '\''-L'\'' '\''night'\'' '\''attach'\'' '\''-r'\'' '\''-t'\'' '\''builder'\''"*) : ;;
+    *) echo "the self-test: the owner's watch is not the read-only attach to the builder's session: ${line}" >&2; return 1 ;;
+  esac
+  line="$(sed -n "$((at + 3))p" "${out}")"
+  case "${line}" in
+    '  2. nothing to type there: the run types the package once you watch; the window closes '[0-2][0-9]:[0-5][0-9]) : ;;
+    *) echo "the self-test: the owner's watch does not end on its window: ${line}" >&2; return 1 ;;
   esac
 }
 
@@ -1167,9 +1336,22 @@ night_self_test() {
   asked_for '^  2. approve the checkout, then the throwaway clone: type yes where martha approve asks, nothing where it asks nothing$' "${standin}/out" \
     || nfail 'the owner'"'"'s steps do not follow approve in both places'
   for name in "${SELF_TEST_MEMBERS[@]}"; do
-    asked_for "tmux -L night new-session -d -s ${name} .*cd ${CONTAINER_HOME}/${NIGHT_CLONES}/synthetic-bot/martha-live-x; martha start " "${standin}/calls" \
+    asked_for "tmux -L night start-server ; .* ; new-session -d -s ${name} .*cd ${CONTAINER_HOME}/${NIGHT_CLONES}/synthetic-bot/martha-live-x; martha start " "${standin}/calls" \
       || nfail "${name} was not started again by its own command, in the clone, in tmux"
   done
+  # The night server's bounds (martha#843), set as each session starts: what they do is the real-tmux cases' (the ring
+  # on the night's tmux); that the night sets them is this.
+  asked_for "tmux -L night start-server ; $(printf '%s ' "${NIGHT_TMUX_BOUNDS[@]}"); new-session " "${standin}/calls" || nfail 'the night server was started without its bounds'
+  [ "$(json_field "${standin}/home/${NIGHT_CLONES}/synthetic-bot/martha-live-x/${NIGHT_DECLARATION}" 'house_rules.owner_bell')" = true ] \
+    || nfail "the clone's crew does not ring the owner's bells"
+  # The watch before the package, the ring on the watched screen, and the builder's pane shut before the owner's
+  # writable attach is printed (martha#843 R1).
+  night_watch_printed "${standin}/out" || failures=$((failures + 1))
+  asked_for '^ok night ring: builder' "${standin}/out" || nfail "the builder's ring was not found on the watched screen"
+  [ "$(cat "${standin}/night.shut" 2> /dev/null)" = "tmux -L night set-option -p -t builder ${NIGHT_PASSTHROUGH_OFF[*]}" ] || nfail "the builder's pane was not shut"
+  night_in_order "${standin}/out" '^ok night watch: ' '^Take the package\|^ok night ask: ' || nfail 'the package went before the owner watched'
+  night_in_order "${standin}/out" '^ok night shut: ' "^the owner's second act" || nfail "the owner was asked to attach writable before the builder's pane was shut"
+  [ -f "${standin}/run/${NIGHT_WATCH_PART}" ] || nfail 'the watch file of the ring was not kept'
   # Each member's folder question answered twice: in the checkout, then again in the clone.
   [ "$(grep -c $'\033\[B' "${standin}/typed" 2> /dev/null)" = "$((2 * ${#SELF_TEST_MEMBERS[@]}))" ] \
     || nfail "the folder question was not answered for each member in the clone"
@@ -1202,6 +1384,19 @@ night_self_test() {
   asked_for "^FAIL owner: no yes within ${MARTHA_CLEAN_INSTALL_NIGHT_YES_WINDOW_S}s: the owner said yes: " "${standin}/out" || nfail 'a night with no yes was not named as the owner'"'"'s'
   [ -f "${standin}/run/${NIGHT_KEPT_PART}/builder.jsonl" ] || nfail 'a night with no yes kept no record'
   night_closed_after_tear_down "${standin}" || failures=$((failures + 1))
+
+  # The owner never watches (martha#843): named as the owner's, and the package never typed.
+  standin="${root}/night-no-watch"; night_case "${standin}" night.no-watch
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for "^FAIL owner: not watching builder's terminal read-only within " "${standin}/out" || nfail 'a night the owner never watched was not named as the owner'"'"'s'
+  [ ! -e "${standin}/night.package-typed" ] || nfail 'the package was typed with nobody watching'
+
+  # The builder's ring never reaches the watched screen (martha#843): named by its row, the pane not shut, and the
+  # owner never asked to attach writable.
+  standin="${root}/night-no-ring"; night_case "${standin}" night.no-ring
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for "^FAIL night ring: the builder's ring was sent to the owner's screen: " "${standin}/out" || nfail 'a ring that never reached the watched screen was not named by its row'
+  if grep -q "^the owner's second act" "${standin}/out"; then nfail 'the owner'"'"'s second command was printed with no ring seen'; fi
 
   # The builder's transcript does not hold the typed package at the night's first read, while both launches hold other
   # turns: the night waits on and lands, never refusing the launches as not told apart (Saturnus, #639 PR 821 r=2).
@@ -1357,7 +1552,7 @@ night_self_test() {
   # --night with no run folder is refused with the arguments.
   expect_status 2 "${root}" 'a-host' --night || failures=$((failures + 1))
 
-  for standin in night-ready night-opening-late night-opening-never night-no-yes night-no-ask night-container-goes night-slow-rows night-other-ask night-three-launches night-yes-before-attach night-head-moves night-token-kept night-token-in-log night-no-handoff night-not-on-main night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
+  for standin in night-ready night-opening-late night-opening-never night-no-watch night-no-ring night-no-yes night-no-ask night-container-goes night-slow-rows night-other-ask night-three-launches night-yes-before-attach night-head-moves night-token-kept night-token-in-log night-no-handoff night-not-on-main night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
     if [ -e "${root}/${standin}/container.present" ]; then nfail "the ${standin} run left its container behind"; fi
   done
   return $((failures > 0))

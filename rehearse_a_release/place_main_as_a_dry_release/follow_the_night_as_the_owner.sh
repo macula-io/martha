@@ -11,6 +11,8 @@
 #     in the terminal. The first: approve each crew place where martha approve asks (nothing where it says Nothing to
 #     approve), sign in to Claude, answer the folder question yes, then /exit. The second, once the builder has queued
 #     the landing: it attaches to the builder's terminal; answer the landing's menu yes, then detach with Ctrl-b, then d.
+#     Between them, before the package is typed, the watch (martha#843): it shows the builder's terminal read-only, so
+#     the builder's ring reaches the owner's terminal; keep it open until the night ends.
 #   - when the driver writes proof_exit=, result= or interrupted= to run.txt, the night has ended: this prints
 #     run.txt and one last line, PASSED with exit 0 when proof_exit= equals the dry_passed= the driver read from the
 #     proof, and NOT_PASSED naming what ended it, with exit 1, otherwise.
@@ -20,9 +22,10 @@
 # which the proof alone writes, and is refused unless it is exactly `ssh -t '<the owner's host>' '<podman exec -it …>'`,
 # one word quoted the way the proof quotes, with no control character in it, and that word is one of the proof's two
 # commands: podman exec -it in the night's own container (the proof's CONTAINER_PREFIX, then its pid and a number, and
-# nothing between -it and that name), running either `sh -lc '<one word>'` (the sign-in) or `tmux -L <the night's
-# NIGHT_TMUX_SOCKET> attach -t <a member>` (the attach). Both names are read from the proof beside this script, never
-# spelled here (Saturnus, #639 PR 821 r=1). The steps shown under it are
+# nothing between -it and that name), running either `sh -lc '<one word>'` (the sign-in), `tmux -L <the night's
+# NIGHT_TMUX_SOCKET> attach -t <the night's builder>` (the attach), or the same attach with exactly the night's NIGHT_WATCH_FLAG
+# before -t (the watch, martha#843). The names are read from the proof beside this script, never spelled here
+# (Saturnus, #639 PR 821 r=1). The steps shown under it are
 # read from proof.log under the line that echoes that exact command, their control characters stripped; they are only
 # shown, never run.
 #
@@ -72,6 +75,10 @@ CONTAINER_PREFIX="$(a_scripts_word "${PROOF}/${PROOF_DIR}.sh" CONTAINER_PREFIX)"
   || { echo "the proof at ${PROOF} defines no CONTAINER_PREFIX" >&2; exit "${REFUSED}"; }
 NIGHT_TMUX_SOCKET="$(a_scripts_word "${PROOF}/the_night_in_the_container.sh" NIGHT_TMUX_SOCKET)" \
   || { echo "the proof at ${PROOF} defines no NIGHT_TMUX_SOCKET" >&2; exit "${REFUSED}"; }
+WATCH_FLAG="$(a_scripts_word "${PROOF}/the_night_in_the_container.sh" NIGHT_WATCH_FLAG)" \
+  || { echo "the proof at ${PROOF} defines no NIGHT_WATCH_FLAG" >&2; exit "${REFUSED}"; }
+BUILDER="$(a_scripts_word "${PROOF}/${PROOF_DIR}.sh" THE_BUILDER)" \
+  || { echo "the proof at ${PROOF} defines no THE_BUILDER" >&2; exit "${REFUSED}"; }
 if ! { [ -t 0 ] && [ -t 1 ]; }; then
   echo "${NO_TERMINAL}" >&2
   exit "${REFUSED}"
@@ -116,7 +123,10 @@ the_proofs_shape() {
   [[ "${inner}" =~ ^"${REMOTE_LEAD}${CONTAINER_PREFIX}"-[0-9]+-[0-9]+\'\ (.*)$ ]] || { echo "it does not run podman exec -it in the night's container"; return 1; }
   rest="${BASH_REMATCH[1]}"
   [[ "${rest}" =~ ^\'sh\'\ \'-lc\'\ \'([^\']|\'\\\'\')*\'$ ]] && return 0
-  [[ "${rest}" =~ ^\'tmux\'\ \'-L\'\ \'"${NIGHT_TMUX_SOCKET}"\'\ \'attach\'\ \'-t\'\ \'[a-z0-9-]+\'$ ]] && return 0
+  # The attach, and the watch (martha#843): the attach with the night's read-only flag before -t and no other option.
+  # Both name the night's builder and no other member: the builder's is the only terminal the night offers the owner.
+  [ "${rest}" = "'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '-t' '${BUILDER}'" ] && return 0
+  [ "${rest}" = "'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '${WATCH_FLAG}' '-t' '${BUILDER}'" ] && return 0
   echo 'what it runs in the container is not the sign-in or the attach'; return 1
 }
 

@@ -36,7 +36,7 @@ const runTheCases = (script, only = []) =>
 test('every case holds on the owner\'s follow script', { timeout: RUN_WITHIN_MS + 5_000 }, () => {
   const run = runTheCases(SCRIPT)
   assert.equal(run.status, 0, `${run.stdout}${run.stderr}`)
-  assert.match(run.stdout, /^cases: 22 of 22 held$/m)
+  assert.match(run.stdout, /^cases: 24 of 24 held$/m)
 })
 
 /**
@@ -61,7 +61,12 @@ const MUTANTS = [
   { name: 'any command of four words is taken for podman exec -it in the night\'s container', line: "in the night's container\"; return 1; }", to: '  [[ "${inner}" =~ ^[^\\ ]*\\ [^\\ ]*\\ [^\\ ]*\\ [^\\ ]*\\ (.*)$ ]] || return 1', killedBy: 'another_container_is_refused' },
   { name: 'anything is run in the container', line: 'is not the sign-in or the attach', to: '  return 0', killedBy: 'not_the_sign_in_or_the_attach_is_refused' },
   { name: 'the sign-in is not one of the shapes', line: "=~ ^\\'sh\\'", to: '', killedBy: 'live_night_runs_the_command' },
-  { name: 'the attach is not one of the shapes', line: "=~ ^\\'tmux\\'", to: '', killedBy: 'the_attach_runs' },
+  { name: "the attach is not one of the shapes", line: "'attach' '-t' '${BUILDER}'\" ] && return 0", to: "", killedBy: "the_attach_runs" },
+  { name: "the watch is not one of the shapes", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "", killedBy: "the_watch_runs" },
+  { name: "the watch takes any member", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '${WATCH_FLAG}' '-t' '\"*\"'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
+  { name: "the attach takes any member", line: "'attach' '-t' '${BUILDER}'\" ] && return 0", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '-t' '\"*\"'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
+  { name: "the watch flag may carry more letters", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '${WATCH_FLAG}\"*\"' '-t' '${BUILDER}'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
+  { name: "any option of the attach is taken for the watch", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' \"*\"'-t' '${BUILDER}'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
   { name: 'the count of whole lines says a missing file aloud, as before r=2', line: 'complete="$(', to: '  complete="$(wc -l < "${COMMANDS}" 2> /dev/null || echo 0)"', killedBy: 'the_commands_file_not_there_yet' },
   { name: 'every ended night says it passed', line: 'if [ -z "${why}" ]', to: '  if true; then', killedBy: 'a_failed_night_says_it_did_not_pass' },
   { name: 'no ended night says it passed', line: 'if [ -z "${why}" ]', to: '  if false; then', killedBy: 'a_dry_pass_says_it_passed' },
