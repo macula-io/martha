@@ -8,12 +8,12 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { createServer, type Server } from 'node:http'
-import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { GIT_CALL_PATH } from './guard_protocol.ts'
+import { GIT_CALL_PATH, PREPARED, REF_TRANSACTION_PATH } from './guard_protocol.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
@@ -182,10 +182,16 @@ interface APlacedGuard {
   readonly env: Record<string, string>
 }
 
-/** Places the guard in `directory`, as a launch does, with a real git that says it ran. */
-function aGuardIn(directory: string, socket: string): APlacedGuard {
-  const realGit = aRealGitIn(directory)
-  const placed = putTheGuardIn(join(directory, 'launch'), process.execPath, realGit)
+/** The node a guard starts its judge on, and the real git it hands an allowed call to. */
+interface TheGuardsPrograms {
+  readonly node: string
+  readonly realGit: string
+}
+
+/** Places the guard in `directory`, as a launch does: by default on this node, with a real git that says it ran. */
+function aGuardIn(directory: string, socket: string, programs?: TheGuardsPrograms): APlacedGuard {
+  const { node, realGit } = programs ?? { node: process.execPath, realGit: aRealGitIn(directory) }
+  const placed = putTheGuardIn(join(directory, 'launch'), node, realGit)
   assert.ok('directory' in placed, `the guard could not be placed: ${'refusal' in placed ? placed.refusal : ''}`)
   const env = thePathWithTheGuardFirst({ PATH: `${join(directory, 'real-bin')}:/usr/bin:/bin`, [RELAY_SOCKET_VARIABLE]: socket }, placed.directory) as Record<string, string>
   return { directory, guard: placed, env }
@@ -302,8 +308,8 @@ interface ACloneUnderTheGuard {
 const gitIn = (cwd: string, ...args: readonly string[]): string => execFileSync('/usr/bin/git', [...args], { cwd, encoding: 'utf8' }).trim()
 
 /** A clone cut from nothing, with `uranus/9` on a branch, run under the settings a launch gives a member's git. */
-function aCloneUnderTheGuard(directory: string, socket: string): ACloneUnderTheGuard {
-  const placed = aGuardIn(directory, socket)
+function aCloneUnderTheGuard(directory: string, socket: string, programs?: TheGuardsPrograms): ACloneUnderTheGuard {
+  const placed = aGuardIn(directory, socket, programs)
   const clone = join(directory, 'acme', 'widget')
   mkdirSync(join(directory, 'acme'))
   gitIn(directory, 'init', '--quiet', '--initial-branch=main', clone)
@@ -366,4 +372,154 @@ test("a checkout's own config-named hook runs none for the event the launch keep
   assert.notEqual(ran.status, 0, `the delete was not stopped: ${ran.stderr}`)
   assert.deepEqual(launcher.asked.map((question) => question.body), [{ updates: [{ ref: 'refs/heads/uranus/9', deletes: true }] }])
   assert.equal(existsSync(under.aHookTheCheckoutNames), false, "the hook the checkout names in its own config ran under the launch's switches")
+})
+
+// The judge's own process (martha#772): the shim and the hook start the launch's node on the launch's judge, and what a
+// member's environment carries must not choose the code that node runs. The two variables are spelled here, never read
+// from the guard's own list of them, so a list that loses one is caught by name rather than planting nothing.
+const A_PRELOAD_VARIABLE = 'NODE_OPTIONS'
+const A_CACHE_VARIABLE = 'NODE_COMPILE_CACHE'
+
+/** What a member planted for every node it starts, and where each plant shows that it was taken. */
+interface APlantedNode {
+  readonly env: Record<string, string>
+  /** The file the planted preload appends to whenever a node runs it. */
+  readonly mark: string
+  /** The member's own compile cache folder, empty until a node writes its entries there. */
+  readonly cache: string
+}
+
+/**
+ * A member environment that plants code for the judge: a preload that leaves a mark, a compile cache of the member's,
+ * and a `node.config.json` in each folder git runs from, which node reads only when a flag asks it to (route 3 of the
+ * design) — so a flag that reached the judge by any road is caught here too.
+ */
+function aPlantedNodeIn(directory: string, workingFolders: readonly string[]): APlantedNode {
+  const planted = join(directory, 'planted')
+  mkdirSync(planted)
+  const mark = join(planted, 'the-planted-preload-ran')
+  const preload = join(planted, 'preload.mjs')
+  writeFileSync(preload, `import { appendFileSync } from 'node:fs'\nappendFileSync(${JSON.stringify(mark)}, process.argv.slice(2).join(' ') + '\\n')\n`)
+  for (const folder of workingFolders) writeFileSync(join(folder, 'node.config.json'), `${JSON.stringify({ nodeOptions: { import: [preload] } })}\n`)
+  const cache = join(planted, 'the-members-own-compile-cache')
+  mkdirSync(cache)
+  return { env: { [A_PRELOAD_VARIABLE]: `--import=${preload}`, [A_CACHE_VARIABLE]: cache }, mark, cache }
+}
+
+test("the judge takes neither the member's NODE_OPTIONS nor its NODE_COMPILE_CACHE, on the shim or on the hook (martha#772)", async (t) => {
+  const directory = aDirectory(t, 'martha-772-door-')
+  mkdirSync(join(directory, 'launch'), { recursive: true })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ allow: 1 }) })
+  t.after(() => launcher.close())
+  const under = aCloneUnderTheGuard(directory, launcher.socket)
+  const planted = aPlantedNodeIn(directory, [directory, under.clone])
+  const env = { ...under.env, ...planted.env }
+
+  const shim = await theRunOf('/bin/sh', ['-c', 'git status'], { cwd: directory, env })
+  const hook = await theRunOf('/usr/bin/git', ['-c', 'user.name=Ann', '-c', 'user.email=ann@example.invalid', 'commit', '--quiet', '--allow-empty', '-m', 'a commit the hook judges'], { cwd: under.clone, env })
+
+  // Both judges ran, or this test proves nothing about them: each asked the launcher its own question.
+  assert.equal(shim.status, 0, `the shim's call did not run: ${shim.stderr}`)
+  assert.equal(hook.status, 0, `the commit did not run: ${hook.stderr}`)
+  assert.ok(launcher.asked.some((question) => question.path === GIT_CALL_PATH), "the shim's judge never ran")
+  assert.ok(launcher.asked.some((question) => question.path === REF_TRANSACTION_PATH), "the hook's judge never ran")
+  // Every door that was open is named, not only the first: each one is its own route into the judge.
+  const open = [
+    ...(existsSync(planted.mark) ? [`the member's NODE_OPTIONS reached the judge (the planted preload ran for: ${readFileSync(planted.mark, 'utf8').trim().replaceAll('\n', '; ')})`] : []),
+    ...(readdirSync(planted.cache).length > 0 ? [`the judge took the member's NODE_COMPILE_CACHE (it wrote ${readdirSync(planted.cache).join(', ')} there)`] : []),
+  ]
+  assert.deepEqual(open, [], open.join('\n'))
+})
+
+/** A real git that says the whole environment it was started with, one `NAME=value` a line. */
+function aRealGitThatSaysItsEnvironmentIn(directory: string): string {
+  const bin = join(directory, 'real-bin')
+  mkdirSync(bin)
+  const realGit = join(bin, 'git')
+  writeFileSync(realGit, '#!/bin/sh\nexec env\n')
+  chmodSync(realGit, 0o755)
+  return realGit
+}
+
+/** What a started program's `env` said, as names and values; a value may hold `=`, a name never does. */
+const theEnvironmentSaid = (said: string): Map<string, string> =>
+  new Map(said.split('\n').filter((line) => line.includes('=')).map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]))
+
+/** The names a shell adds to what it is given, which no program of the guard's sets. */
+const WHAT_A_SHELL_ADDS = new Set(['PWD', 'OLDPWD', 'SHLVL', '_'])
+
+test("the real git, and everything it starts, still gets the member's own NODE_OPTIONS and NODE_COMPILE_CACHE, set, empty or unset (martha#772)", async (t) => {
+  const directory = aDirectory(t, 'martha-772-kept-')
+  mkdirSync(join(directory, 'launch'), { recursive: true })
+  const placed = putTheGuardIn(join(directory, 'launch'), process.execPath, aRealGitThatSaysItsEnvironmentIn(directory))
+  assert.ok('directory' in placed, `the guard could not be placed: ${'refusal' in placed ? placed.refusal : ''}`)
+  // No launcher socket: the judge hands the call straight to the real git, which is the path every allowed call ends on.
+  const base = thePathWithTheGuardFirst({ PATH: `${join(directory, 'real-bin')}:/usr/bin:/bin` }, placed.directory) as Record<string, string>
+
+  const cases: readonly { readonly given: Record<string, string>; readonly said: string }[] = [
+    { given: { [A_PRELOAD_VARIABLE]: '--max-old-space-size=512', [A_CACHE_VARIABLE]: '' }, said: 'one set, one set empty' },
+    { given: {}, said: 'both unset' },
+  ]
+  for (const one of cases) {
+    const given = { ...base, ...one.given }
+    const ran = await theRunOf('/bin/sh', ['-c', 'git status'], { cwd: directory, env: given })
+    assert.equal(ran.status, 0, `${one.said}: the call did not run: ${ran.stderr}`)
+    const seen = theEnvironmentSaid(ran.stdout)
+    for (const name of [A_PRELOAD_VARIABLE, A_CACHE_VARIABLE]) {
+      assert.equal(seen.get(name), given[name], `${one.said}: the real git was not handed the member's ${name} as the member had it`)
+    }
+    const added = [...seen.keys()].filter((name) => !(name in given) && !WHAT_A_SHELL_ADDS.has(name))
+    assert.deepEqual(added, [], `${one.said}: the real git was handed names the member never set`)
+  }
+})
+
+// How often a guarded git call starts node (martha#755): git calls the `reference-transaction` hook for every state of
+// every transaction, and the judge judges only the one that can still stop it. A start for any other state judges
+// nothing and costs a whole node start, which a loaded machine pays several times over on every commit.
+
+/** A node that writes the judge's mode and its first word to `starts`, one start a line, then runs the real node. */
+function aNodeThatCountsItsStartsIn(directory: string): { readonly node: string; readonly starts: string } {
+  const starts = join(directory, 'the-judges-starts')
+  const node = join(directory, 'a-counting-node')
+  writeFileSync(node, `#!/bin/sh\nprintf '%s %s\\n' "$2" "$3" >> ${JSON.stringify(starts)}\nexec ${JSON.stringify(process.execPath)} "$@"\n`)
+  chmodSync(node, 0o755)
+  return { node, starts }
+}
+
+test('a guarded commit starts the judge once for the call and once for each transaction it can still stop (martha#755)', async (t) => {
+  const directory = aDirectory(t, 'martha-755-starts-')
+  mkdirSync(join(directory, 'launch'), { recursive: true })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ allow: 1 }) })
+  t.after(() => launcher.close())
+  const counting = aNodeThatCountsItsStartsIn(directory)
+  const under = aCloneUnderTheGuard(directory, launcher.socket, { node: counting.node, realGit: '/usr/bin/git' })
+  // Placing the guard and making the clone start no judge of their own; only what the member's commit starts counts.
+  rmSync(counting.starts, { force: true })
+
+  const ann = { GIT_AUTHOR_NAME: 'Ann', GIT_AUTHOR_EMAIL: 'ann@example.invalid', GIT_COMMITTER_NAME: 'Ann', GIT_COMMITTER_EMAIL: 'ann@example.invalid' }
+  const ran = await theRunOf('/bin/sh', ['-c', 'git commit --quiet --allow-empty -m "a commit the guard judges"'], { cwd: under.clone, env: { ...under.env, ...ann } })
+
+  assert.equal(ran.status, 0, `the commit did not run: ${ran.stderr}`)
+  const started = existsSync(counting.starts) ? readFileSync(counting.starts, 'utf8').trim().split('\n') : []
+  const forTheHook = started.filter((start) => !start.startsWith(`${THE_SHIM_NAME} `)).map((start) => start.slice(start.indexOf(' ') + 1))
+  const forNothing = forTheHook.filter((state) => state !== PREPARED)
+  assert.deepEqual(forNothing, [], forNothing.map((state) => `the hook started node for \`${state}\``).join('\n'))
+  assert.deepEqual(started.filter((start) => start.startsWith(`${THE_SHIM_NAME} `)), [`${THE_SHIM_NAME} commit`], `the shim did not start the judge once for the call: ${started.join('; ')}`)
+  assert.equal(forTheHook.length, 2, `the hook started the judge ${forTheHook.length} times for the commit's two transactions: ${started.join('; ')}`)
+  assert.deepEqual(launcher.asked.map((question) => question.path), [GIT_CALL_PATH, REF_TRANSACTION_PATH, REF_TRANSACTION_PATH], 'the launcher was not asked once for the call and once for each transaction')
+})
+
+/** The code lines of a source file with their numbers, its comment lines left out: what runs, not what explains it. */
+const theCodeOf = (source: string): readonly { readonly line: string; readonly number: number }[] =>
+  source.split('\n').map((line, index) => ({ line, number: index + 1 })).filter(({ line }) => !/^\s*(\/\/|\/\*\*|\*)/.test(line))
+
+// check:restated-values judges a whole string literal, but not a word typed inside a template's text (martha#776), and
+// the hook's `case` pattern is a word in shell text the writer builds. So until #776 lands, this test is what holds the
+// writer to one spelling of the state (#755 design A1): PREPARED's value is read through the import, never typed here.
+test("the hook's state word is written from PREPARED, and never typed in the guard's writer (martha#755 A1)", () => {
+  const word = new RegExp(`(?<![\\w$])${PREPARED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`)
+  const typed = theCodeOf(readFileSync(new URL('./the_guard_of_a_launch.ts', import.meta.url), 'utf8'))
+    .filter(({ line }) => word.test(line))
+    .map(({ line, number }) => `the_guard_of_a_launch.ts:${number}: ${line.trim()}`)
+  assert.deepEqual(typed, [], `the guard's writer types PREPARED's value rather than importing it:\n${typed.join('\n')}`)
 })

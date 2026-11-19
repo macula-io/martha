@@ -258,9 +258,12 @@ export type TheEngineStart = TheEngineStarted | { readonly refusal: string }
 /**
  * Starts the engine as `goose acp` in a process group of its own, in the approved checkout, on an
  * environment that is exactly `environment`. Its stdio is piped, since the ACP client on the other end
- * is Martha's own and there is no terminal in this.
+ * is Martha's own and there is no terminal in this. An environment with no PATH is refused here, by name:
+ * the engine would run every tool on whatever its shell falls back to, and the next one to notice would be a
+ * reader three layers away finding `undefined` (martha#781).
  */
 export async function startTheEngine(facts: RecordedEngine, binary: string, places: ThePlacesOfALaunch, environment: Readonly<Record<string, string>>): Promise<TheEngineStart> {
+  if (!environment['PATH']) return { refusal: `The member is not started: the environment a launch hands ${binary} holds no PATH.` }
   const child = spawn(binary, [facts.acp_command], { cwd: places.checkout, env: environment, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
   const failed = await new Promise<Error | undefined>((resolve) => {
     child.once('spawn', () => resolve(undefined))
