@@ -57,8 +57,9 @@ export const THE_CHECK_PROGRAM = 'src/check_a_host_directory_stays_under_its_cei
 /** What a landing's answer says when the tree it lands brings no ceilings check to run (martha#604). */
 export const NO_CEILINGS_CHECKED = 'No ceilings were checked: this repository has no ceilings check.'
 
-/** What a landing's answer says when a head's merged tree no longer holds the ceilings check: none was run from it on. */
-export const noCeilingsCheckedFrom = (pr: number): string => `No ceilings were checked from PR ${String(pr)} on: its merged tree holds no ceilings check.`
+/** What a landing's answer says when some heads' merged trees held the ceilings check and these did not: none was run on their merges. */
+export const noCeilingsCheckedOn = (prs: readonly number[]): string =>
+  `No ceilings were checked on the merge of ${prs.map((pr) => `PR ${String(pr)}`).join(', ')}: a merged tree that holds no ceilings check runs none.`
 
 /** What a dry run's line for a head that lands says where the tree brings no ceilings check (martha#604). */
 export const NO_CEILINGS_AHEAD = 'a forecast: no ceilings are checked, because this repository has no ceilings check'
@@ -73,12 +74,12 @@ export interface TheRepositorysChecks {
 }
 
 /**
- * The checks the tree holds, read from the commit the batch was cut from: what the answer and the dry run say a batch is
- * held to. The ceilings check and the redo of generated files are programs the tree holds, and a tree holding neither is
- * held to nothing, with the answer saying so. What a tree is held to is its own repository's to say. Each merge is then
- * held to what its own merged tree holds (theChecksTheMergeHolds), so a head that deletes one of these programs lands and
- * is held to nothing from its merge on; one that edits it is held to the program the merged tree holds, which the review
- * of that head is what stands against.
+ * The checks the tree holds, read from the commit the batch was cut from: what the dry run says a batch is held to. The
+ * ceilings check and the redo of generated files are programs the tree holds, and a tree holding neither is held to
+ * nothing, with the answer saying so. What a tree is held to is its own repository's to say. The landing holds each merge
+ * to what its own merged tree holds (theChecksTheMergeHolds), and its answer names the merges that ran no ceilings check:
+ * a head that deletes one of these programs lands and is held to nothing on its merge, and one that edits it is held to
+ * the program the merged tree holds, which the review of that head is what stands against.
  */
 export async function theChecksTheTreeHolds(host: Pick<HostContract, 'processes'>, path: string, base: string): Promise<TheRepositorysChecks> {
   return { ceilings: await theTreeHolds(host, path, base, THE_CHECK_PROGRAM), redo: await theTreeHolds(host, path, base, THE_REDO_PROGRAM) }
@@ -173,8 +174,6 @@ interface TheCutBatch {
   readonly branch: string
   /** The default branch's tip when the integration branch was cut: the base the check reads the range against. */
   readonly base: string
-  /** The checks the tree itself holds, read from that base: the only ones a landing runs (martha#604). */
-  readonly checks: TheRepositorysChecks
 }
 
 /**
@@ -196,8 +195,7 @@ export async function landPassedWorkAsOneBatch(host: LandingHost, member: string
   if ('refused' in stood) return stood
   const cut = await cutTheBatchBranch(host, batch.path, batch, origin.origin)
   if ('refused' in cut) return cut
-  const checks = await theChecksTheTreeHolds(host, batch.path, cut.ok.base)
-  const the_cut: TheCutBatch = { batch, origin: origin.origin, work: work.work, checks, ...cut.ok }
+  const the_cut: TheCutBatch = { batch, origin: origin.origin, work: work.work, ...cut.ok }
   const landing = await mergeEveryHeadAndPush(host, member, the_cut)
   const back = await theCloneBackWhereItStood(host, batch.path, the_cut.branch, stood.ok)
   return withTheCloneBack(landing, back)
@@ -386,7 +384,7 @@ async function theBranchTheCloneStandsOn(host: LandingHost, path: string): Promi
 }
 
 /** Cuts `land/<date>-<n>` from the origin's default branch, and answers it with the base it started from. */
-async function cutTheBatchBranch(host: LandingHost, path: string, batch: TheBatch, origin: TheOrigin): Promise<Step<Omit<TheCutBatch, 'batch' | 'origin' | 'work' | 'checks'>>> {
+async function cutTheBatchBranch(host: LandingHost, path: string, batch: TheBatch, origin: TheOrigin): Promise<Step<Omit<TheCutBatch, 'batch' | 'origin' | 'work'>>> {
   const base = await gitSaid(host, path, ['rev-parse', '--verify', '--quiet', origin.default_branch])
   if (base === undefined) return no(`${path} cannot read ${origin.default_branch}: fetch there, then try again.`)
   const branch = await theBatchBranchName(host, path, host.clock.now())
@@ -450,8 +448,8 @@ interface TheMerges {
   readonly left_out: readonly LeftOut[]
   /** The commits a clash is traced along: the default branch's tip, then each landing merge made so far. */
   readonly steps: readonly AStep[]
-  /** The first head landed whose merged tree holds no ceilings check: no ceilings were checked from its merge on. */
-  readonly unchecked_from: LandedWork | undefined
+  /** The heads landed whose merged tree holds no ceilings check, in order: no ceilings were checked on their merges. */
+  readonly unchecked: readonly LandedWork[]
 }
 
 /**
@@ -461,7 +459,7 @@ interface TheMerges {
  * Both are the repository's own checks, as its tree holds them: where it holds neither, neither runs (martha#604).
  */
 async function mergeEveryHead(host: LandingHost, cut: TheCutBatch, work: readonly LandedWork[]): Promise<Step<TheMerges>> {
-  let merges: TheMerges = { landed: [], redone: [], left_out: [], steps: [{ commit: cut.base, label: `${cut.origin.default_branch} at ${cut.base.slice(0, SHORT_SHA)}` }], unchecked_from: undefined }
+  let merges: TheMerges = { landed: [], redone: [], left_out: [], steps: [{ commit: cut.base, label: `${cut.origin.default_branch} at ${cut.base.slice(0, SHORT_SHA)}` }], unchecked: [] }
   for (const one of work) {
     const next = await mergeOneHeadOrLeaveItOut(host, cut.batch.path, merges, one)
     if ('refused' in next) return next
@@ -484,8 +482,8 @@ async function mergeOneHeadOrLeaveItOut(host: LandingHost, path: string, merges:
   const tip = await gitSaid(host, path, ['rev-parse', 'HEAD'])
   if (tip === undefined) return no(`the merge of ${one.package} holds no commit git will name.`)
   const redone = settled.ok.length === 0 ? merges.redone : [...merges.redone, { package: one.package, pr: one.pr, what: settled.ok }]
-  const unchecked_from = merges.unchecked_from ?? (merged.ceilings ? undefined : one)
-  return { ok: { ...merges, landed: [...merges.landed, one], redone, steps: [...merges.steps, { commit: tip, label: `PR ${String(one.pr)}` }], unchecked_from } }
+  const unchecked = merged.ceilings ? merges.unchecked : [...merges.unchecked, one]
+  return { ok: { ...merges, landed: [...merges.landed, one], redone, steps: [...merges.steps, { commit: tip, label: `PR ${String(one.pr)}` }], unchecked } }
 }
 
 /** The merges with one more head left out. */
@@ -675,14 +673,18 @@ async function pushTheBatch(host: LandingHost, member: string, cut: TheCutBatch,
       ? ''
       : ` Generated files were redone for ${merged.redone.map((one) => `${one.package} (PR ${String(one.pr)}): ${one.what.join(', ')}`).join('; ')}.`
   // What the owner reads before saying yes says whether any check held the tree it is about to put on the default branch.
-  const ceilings_said = theCeilingsSaid(cut.checks.ceilings, merged.unchecked_from)
+  const ceilings_said = theCeilingsSaid(merged.landed, merged.unchecked)
   return { told: `${sent.sent}. The range the owner says yes to is ${cut.base}..${tip}, over ${landed}.${redone_said}${ceilings_said}` }
 }
 
-/** What the answer says of the ceilings: none checked at all, none from the first head whose merged tree dropped the check, or nothing. */
-function theCeilingsSaid(the_base_checks: boolean, unchecked_from: LandedWork | undefined): string {
-  if (!the_base_checks) return ` ${NO_CEILINGS_CHECKED}`
-  return unchecked_from === undefined ? '' : ` ${noCeilingsCheckedFrom(unchecked_from.pr)}`
+/**
+ * What the answer says of the ceilings, from what the merges ran, never from the base alone: nothing when every merge
+ * ran the check, that none were checked when no merge did, and otherwise the heads whose merges ran none.
+ */
+function theCeilingsSaid(landed: readonly LandedWork[], unchecked: readonly LandedWork[]): string {
+  if (unchecked.length === 0) return ''
+  if (unchecked.length === landed.length) return ` ${NO_CEILINGS_CHECKED}`
+  return ` ${noCeilingsCheckedOn(unchecked.map((one) => one.pr))}`
 }
 
 /** Pushes one branch to the origin's same name; throws what git said when it will not. */
