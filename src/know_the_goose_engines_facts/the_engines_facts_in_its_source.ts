@@ -593,9 +593,6 @@ function pathResolutionIn(source: EngineSource): PathResolution {
   }
 }
 
-/** The table the engine keeps one row per session in (#541 package A): the name its schema creates it under. */
-export const SESSIONS_TABLE = 'sessions'
-
 /**
  * The engine's session store (#541 package A, design r=5 R1''), read from its session manager: the file named by
  * `DB_NAME`, the one journal mode its pool is opened in, and the columns the schema creates the sessions table with; and
@@ -609,12 +606,15 @@ function sessionStoreIn(source: EngineSource): SessionStore {
   const modes = [...text.matchAll(/\.journal_mode\(sqlx::sqlite::SqliteJournalMode::(\w+)\)/g)].map((found) => found[1] ?? '')
   const [journal_mode] = modes
   if (modes.length !== 1 || journal_mode === undefined) throw new Error(`${path} opens its store in ${String(modes.length)} journal modes, not one`)
-  const schema = captured(text, new RegExp(`CREATE TABLE IF NOT EXISTS ${SESSIONS_TABLE} \\(([^;]*?)\\n\\s*\\)\\n`), `the ${SESSIONS_TABLE} table`, path)
+  // The one table the engine keeps a row per session in, by the name its schema creates it under: said here only.
+  const found = /CREATE TABLE IF NOT EXISTS (sessions) \(([^;]*?)\n\s*\)\n/.exec(text)
+  const [, table, schema] = found ?? []
+  if (table === undefined || schema === undefined) throw new Error(`no sessions table in ${path}`)
   const columns = schema.split(',').map((line) => line.trim().split(/\s+/)[0] ?? '').filter((column) => column !== '')
   return {
     file: captured(text, /pub const DB_NAME: &str = "([^"]+)";/, 'the store file', path),
     journal_mode,
-    table: SESSIONS_TABLE,
+    table,
     columns,
     extension_states: [...extensionStatesIn(source), contextRelevanceIn(source)],
   }
