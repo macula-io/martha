@@ -158,13 +158,14 @@ test('#860 ruling: the same session picking its package up at a later null readi
   assert.deepEqual([spend.byPackage[0]?.silent, spend.byPackage[0]?.unknownBaseline], [[], [SESSION]], 'a session that reported a cost was named as reporting none')
 })
 
-test('#860: the writer\'s memory is one file per member, written only once its rows were kept (mutant: memory written first)', async () => {
+test('#860: the writer\'s memory is one file per member, and a row the store refused stays owed in it until it is appended (mutant: a refused row remembered as kept)', async () => {
   const writer = aWriter()
   writer.hold(THE_PACKAGE)
   const refusing: TheUsagePlaces = { ...writer.places, ledger: { ...writer.places.ledger, stores: { rows: { append: () => Promise.reject(new Error('the disk is full')), read: async () => [] } } } }
   const said = await keepWhatTheSessionSpent(refusing, asked(0.5, true))
   assert.match(said ?? '', /could not keep what builder's session spent \(the disk is full\)/)
-  assert.equal(writer.place.holding.has(theUsageFile(MEMBER)), false, 'a reading the store refused was remembered, so it would never be taken again')
+  const owed = (JSON.parse(writer.place.holding.get(theUsageFile(MEMBER)) ?? '{}') as { owed?: readonly { usd: number; opens: number }[] }).owed
+  assert.deepEqual(owed?.map((one) => [one.usd, one.opens]), [[0.5, 1]], 'a reading the store refused was remembered as kept, so it would never be taken again')
   await kept(writer, asked(0.5, true))
   assert.deepEqual(theCostsIn(await writer.stream(THE_PACKAGE)), [[0.5, 1]], 'the refused reading was not taken again')
 })
@@ -200,4 +201,47 @@ test('#860 r=2: a hand-over whose opening the store refused opens the new hold a
   const spend = theSpendBetween({ from: 0, to: Number.MAX_SAFE_INTEGER, usage: new Map([[THE_PACKAGE, await writer.stream(THE_PACKAGE)], [ANOTHER_PACKAGE, await writer.stream(ANOTHER_PACKAGE)]]), crew: [] })
   assert.ok(!('refused' in spend))
   assert.deepEqual(spend.byPackage.map((one) => [one.package, one.usd.metered, one.sessions]), [[THE_PACKAGE, 0.5, 1], [ANOTHER_PACKAGE, 0.25, 1]], 'the turn after a refused opening went to the package it was not run under')
+})
+
+/** The writer with its memory refusing the `nth` write from now (1 = the next), and keeping every other. */
+function refusingTheMemory(writer: AWriter, nth: number): TheUsagePlaces {
+  let writes = 0
+  const place = writer.place
+  return { ...writer.places, kept: { ...place, keep: (name, text) => ((writes += 1) === nth ? { refusal: 'the crew\'s place is full' } : place.keep(name, text)) } }
+}
+
+/** What each package spent in the writer's streams, with how many sessions held it. */
+async function theSpendOf(writer: AWriter): Promise<readonly unknown[]> {
+  const spend = theSpendBetween({ from: 0, to: Number.MAX_SAFE_INTEGER, usage: new Map([[THE_PACKAGE, await writer.stream(THE_PACKAGE)], [ANOTHER_PACKAGE, await writer.stream(ANOTHER_PACKAGE)]]), crew: [] })
+  assert.ok(!('refused' in spend))
+  return spend.byPackage.map((one) => [one.package, one.usd.metered, one.sessions])
+}
+
+test('#860 r=4: a hand-over whose closing row was appended and whose memory was then refused books the next turn to the new package (mutants: the memory written only after a row, the rows owed dropped)', async () => {
+  const writer = aWriter()
+  writer.hold(THE_PACKAGE)
+  await kept(writer, asked(0.25, true))
+  writer.hold(ANOTHER_PACKAGE)
+  writer.later()
+  // The first write names the rows owed; the second, after the closing row is appended, is refused.
+  assert.match(await keepWhatTheSessionSpent(refusingTheMemory(writer, 2), asked(0.75)) ?? '', /the crew's place is full/, 'the refused memory was not said')
+  await kept(writer, asked(1))
+  const old = await writer.stream(THE_PACKAGE)
+  assert.deepEqual(theCostsIn(old), [[0.25, 1], [0.75, 0], [0.75, 0]], 'the old hold was closed again at a reading of a turn the new package ran')
+  assert.equal(old[2]?.row['at'], old[1]?.row['at'], 'the closing row was appended again as another reading, not as the same one')
+  assert.deepEqual(theCostsIn(await writer.stream(ANOTHER_PACKAGE)), [[0.75, 1], [1, 0]], 'the new hold did not open at the reading that named it')
+  assert.deepEqual(await theSpendOf(writer), [[THE_PACKAGE, 0.5, 1], [ANOTHER_PACKAGE, 0.25, 1]], 'the turn after the refused memory went to the package it was not run under')
+})
+
+test('#860 r=4: an opening appended again after its memory was refused is read as the same hold, never a second session (mutant: a repeated row read as another)', async () => {
+  const writer = aWriter()
+  writer.hold(THE_PACKAGE)
+  await kept(writer, asked(0.25, true))
+  writer.hold(ANOTHER_PACKAGE)
+  writer.later()
+  // The first write names the rows owed, the second follows the closing row, the third (refused) follows the opening.
+  assert.match(await keepWhatTheSessionSpent(refusingTheMemory(writer, 3), asked(0.75)) ?? '', /the crew's place is full/)
+  await kept(writer, asked(1))
+  assert.deepEqual(theCostsIn(await writer.stream(ANOTHER_PACKAGE)), [[0.75, 1], [0.75, 1], [1, 0]], 'the owed opening was not appended again as it was')
+  assert.deepEqual(await theSpendOf(writer), [[THE_PACKAGE, 0.5, 1], [ANOTHER_PACKAGE, 0.25, 1]], 'the opening appended again was read as a second hold')
 })

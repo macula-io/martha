@@ -77,11 +77,21 @@ interface AHold {
   readonly readings: AUsageRead[]
 }
 
-/** The holds of one stream's readings, each split at the reading that opens it. */
+/**
+ * A reading's every field, in one order: two rows that say the same are the same reading. The writer appends a row
+ * again, the same at the same instant, when its memory was refused right after the row was kept.
+ */
+const theWholeOf = (reading: AUsageRead): string =>
+  JSON.stringify([reading.package, reading.member, reading.host, reading.model, reading.session, reading.started_at, reading.opens, reading.at_start, reading.usd, reading.unknown_price, reading.billing, reading.at])
+
+/** The holds of one stream's readings, each split at the reading that opens it; a repeated row is read once. */
 function theHoldsIn(readings: readonly AUsageRead[]): readonly AHold[] {
   const open = new Map<string, AHold>()
   const holds: AHold[] = []
+  const seen = new Set<string>()
   for (const reading of readings) {
+    if (seen.has(theWholeOf(reading))) continue
+    seen.add(theWholeOf(reading))
     const key = `${reading.session}\u0000${String(reading.started_at)}`
     const held = open.get(key)
     if (reading.opens === 1 || held === undefined) {
