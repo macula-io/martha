@@ -26,9 +26,8 @@ const PROBE_MARK = 'MARTHA_SEA_PROBE_MARK'
 const RERAN = 'the single executable ran its own main'
 const HOOKED = 'the module imported first ran'
 
-/** The resource and segment Node looks for its blob in, and the fuse it flips; the fuse is read from the binary. */
+/** The resource Node looks for its blob in, and the fuse it flips; the fuse is read from the binary. */
 const BLOB_RESOURCE = 'NODE_SEA_BLOB'
-const MACHO_SEGMENT = 'NODE_SEA'
 
 class CouldNotTry extends Error {}
 
@@ -56,10 +55,7 @@ function buildTheSingleExecutable(dir: string): string {
   mkdirSync(join(dir, 'bin'))
   copyFileSync(process.execPath, sea)
   chmodSync(sea, 0o755)
-  const darwin = process.platform === 'darwin'
-  if (darwin) ran('codesign', ['--remove-signature', sea])
-  ran(process.execPath, [POSTJECT, sea, BLOB_RESOURCE, blob, '--sentinel-fuse', fuseOf(process.execPath), ...(darwin ? ['--macho-segment-name', MACHO_SEGMENT] : [])])
-  if (darwin) ran('codesign', ['--sign', '-', sea])
+  ran(process.execPath, [POSTJECT, sea, BLOB_RESOURCE, blob, '--sentinel-fuse', fuseOf(process.execPath)])
   return sea
 }
 

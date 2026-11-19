@@ -196,3 +196,28 @@ export function theOwnersAsks(where: WhereTheAsksAreKept): TheOwnersAsks {
     notes,
   }
 }
+
+/** The bits of a mode that say who may read, write and enter. */
+const THE_PERMISSION_BITS = 0o777
+
+/**
+ * The mode of the directory a launch serves its socket in: only the owner's user enters it, so another user cannot
+ * reach the socket in the moment between `listen` making it and the socket's own mode being set (#541 9a, note (b)).
+ */
+export const THE_SOCKETS_PLACE_MODE = 0o700
+
+/** The socket's directory as `lstat` sees it, never followed: enough to judge it. */
+export interface ASocketsPlaceSeen {
+  readonly is_directory: boolean
+  readonly uid: number
+  readonly mode: number
+}
+
+/** Why the directory a socket would be served in is not the owner's user's alone; undefined when it is. */
+export function whyTheSocketsPlaceIsOpen(place: string, seen: ASocketsPlaceSeen | undefined, owner_uid: number): string | undefined {
+  if (seen === undefined) return `${place} is not there`
+  if (!seen.is_directory) return `${place} is not a directory of its own: a link or a file stands there`
+  if (seen.uid !== owner_uid) return `${place} belongs to user ${seen.uid}, not this user ${owner_uid}`
+  const mode = seen.mode & THE_PERMISSION_BITS
+  return mode === THE_SOCKETS_PLACE_MODE ? undefined : `${place} is mode ${mode.toString(8)}, not ${THE_SOCKETS_PLACE_MODE.toString(8)}`
+}
