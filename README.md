@@ -125,8 +125,9 @@ writes anything is in [the installer's README](installer/README.md).
 
 ### On Windows: inside WSL2 (Ubuntu)
 
-Martha runs on Linux. On Windows, run it inside WSL2 with Ubuntu. Every step
-after the first is typed in the Ubuntu shell, not in PowerShell or cmd.
+Martha runs on Linux x86_64. On an x86_64 Windows PC, run it inside WSL2 with
+Ubuntu. Every step after the first is typed in the Ubuntu shell, not in
+PowerShell or cmd.
 
 1. In PowerShell, as administrator, install Ubuntu under WSL2. Restart if
    Windows asks, then open Ubuntu from the Start menu and create your Linux
