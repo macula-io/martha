@@ -17,6 +17,7 @@ import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_
 import { AGENTS_MD_FILE, ENGINE_FAMILIES, ENGINE_HINTS_FILE, fingerprintOf, readLaunchState, theTextAStartLoads, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { theToolServersEntry } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts'
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { LAUNCHER_RECORD_NAME } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
@@ -75,9 +76,15 @@ const A_TOOL_SERVER = { socket_path: join(tmpdir(), 'a-relay-a-test-names.sock')
 const A_TOKEN = { token: A_TOOL_SERVER.token }
 
 /** The relay root a test's launches make their directories in: this user's, 0700, made once. */
+/**
+ * Each launch root's relay root, made once by `anApprovedLaunch`: a short one (martha#79), because a launch's socket sits
+ * in it and a root under the suite's own temporary folder leaves a socket address too long for Linux.
+ */
+const RELAY_ROOTS = new Map<string, string>()
+
 function aRelayRootIn(root: string): string {
-  const relay = join(root, 'a-relay-root')
-  mkdirSync(relay, { recursive: true, mode: 0o700 })
+  const relay = RELAY_ROOTS.get(root)
+  assert.ok(relay !== undefined, `no relay root was made for ${root}`)
   return relay
 }
 
@@ -127,6 +134,8 @@ function anApprovedLaunch(t: TestContext, { approved = true } = {}): { readonly 
   git(checkout, 'commit', '-q', '-m', 'start')
   const root = join(home, 'launch')
   mkdirSync(join(root, 'snapshots'), { recursive: true })
+  RELAY_ROOTS.set(root, shortRelayRoot(t))
+  t.after(() => RELAY_ROOTS.delete(root))
   const state = readLaunchState({ host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: checkout, stop_dir: home }, thisMachine)
   const place: SnapshotPlace = {
     host: RECORDED_GOOSE_ENGINE.engine_name,
