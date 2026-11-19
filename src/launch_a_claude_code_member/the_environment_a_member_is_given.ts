@@ -8,7 +8,10 @@
 // how a home's state root is found, and which sessions the crew has recorded: one append-only stream per session under
 // its rows place, named and decoded by the row store's own names (../row_streams_directory).
 //
-// The environment is built in this order: what it inherits without the crew's state, the gate's switches, the member's
+// It is handed no variable kitty sets for the programs it starts either (#572 T6, #547 S6): a member run in a kitty tab
+// must not find that kitty's remote-control line or window.
+//
+// The environment is built in this order: what it inherits without the crew's state or kitty's, the gate's switches, the member's
 // own config folder, and the launcher's own state home last, so neither an inherited value nor a switch can point a
 // member at another state root.
 
@@ -16,6 +19,7 @@ import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
+import { withoutKittysVariables } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { streamOfDirectoryName } from '../row_streams_directory/row_streams_directory.ts'
@@ -73,7 +77,7 @@ export function theEnvironmentAMemberIsGiven(asking: AMembersEnvironment): Recor
     session_ids: sessionIdsRecordedIn(asking.crew.rows),
   })
   return {
-    ...launchEnvironment(kept, asking.switches, asking.host),
+    ...launchEnvironment(withoutKittysVariables(kept), asking.switches, asking.host),
     ...theMembersConfigEnvironment(asking.member_config),
     ...theCrewsStateAMemberIsGiven(asking.crew.state_root),
   }
