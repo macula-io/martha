@@ -57,14 +57,22 @@ holds 1,312 opens in all, all of them under the launch's own places or the binar
 | # | Line | Verdict | What was seen |
 |---|---|---|---|
 | 1 | Nothing of the owner's home reaches the session | **pass** | 10 markers planted (three skill directories, two recipe directories, two agent directories, and `~/.config/goose`'s config, settings and a plugin). No marker in any request body or in the answer, and no open under the home. |
-| 2 | Nothing of an unapproved checkout reaches the session | **pass**, with a named gap | 13 markers planted (a plugin, both settings files, three skill directories, three agent directories, two recipe directories, a check, `REVIEW.md`). No marker reached the session. **The gate half of this line is not observed in this package**: Martha's launch gate names the Claude Code host's files only, and Goose's rows arrive with packages 7-8. |
+| 2 | Nothing of an unapproved checkout reaches the session | **pass** (2026-11-19, martha#614) | Skills are on now, so a launch of this checkout would hand its skills to the model: the line is the launch gate's refusal, with no launch. The checkout holds the 13 markers; the real gate (engine host, nothing approved) refused it, naming `.agents/skills`, `.goose/skills`, `.claude/skills`, `.agents/plugins`, `.config/goose/settings.json` and `.config/goose/settings.local.json`. On 2026-11-17, before the gate had Goose's rows, the line launched and saw no marker reach the session. |
 | 3 | Every tool call is asked about, and a once-rejection stops it | **pass** | Three calls arrived as `session/request_permission`: shell `allow_once`, shell `reject_once`, write `reject_once`. The allowed call made its file; neither rejected call made anything; the model received both refusals. |
 | 4 | A subagent's tool call reaches the same client | **pass** | Launched with `--with-builtin developer,summon`. The model called `delegate`, and the subagent's own shell call (`echo subagent-ran`) arrived at the client as a permission request. |
 | 5 | Once-answers only; the permission store stays empty | **pass** | One `allow_once` given; `permissions/tool_permissions.json` under the launch's config root was absent at the end. |
 | 6 | One full turn on a model with no Anthropic link | **pass** | A turn on `ministral-3:3b` ended `end_turn`, 167 characters, two model requests. |
 | 7 | Killing the process group ends Goose and everything it started | **pass** | With a shell tool call run first, `SIGTERM` to the launch's process group left no process behind (`pgrep -g` empty). |
 | 8 | Relayed `!` and `/` text arrives as plain text | **pass** | `[owner message]` then `!touch …` made no file and reached the model as text; `/clear` did not clear the history (the earlier turn was still in the next request body). |
-| 9 | The tool list is exactly the allow-list | **fail** | The model was offered `write`, `edit`, `shell`, `tree`, `read_image` — and `load_skill`. |
+| 9 | The tool list is Developer's and the skill loader, and a typed `/<skill>` reaches the model as text | **not-observed** (2026-11-19, martha#614), twice | The member typed `/martha-trial-approved` with slash commands off. The turn's request offered exactly `edit`, `load_skill`, `read_image`, `shell`, `tree`, `write`, listed `martha-trial-approved` outside the user's words, and carried the typed text: each of these holds. In both launches the cap allows, `ministral-3:3b` did not call `load_skill` for the skill, so the loading half is not seen. On 2026-11-17, before skills were on, this line failed: `load_skill` was offered when nothing was meant to be. |
+
+### The 2026-11-19 run of lines 2 and 9 (martha#614)
+
+Lines 2 and 9 were run again after approved skills were turned on (DECIDED 2026-11-18 "Approved skills on (Recommended)"
+and "Switch built-ins off (Recommended)"). The engine was the fork `macula-apps/martha-engine` at `12574353e`, the
+commit Martha's recording names, built with `cargo build -p goose-cli --bin martha-engine --no-default-features
+--features portable-default`; the binary reports `martha-engine 1.60.0`. The model was the same `ministral-3:3b`. Line
+2 was run once; line 9 was launched twice, the cap. Its loading half waits on a model that calls the loader.
 
 ## What failed, by name
 
