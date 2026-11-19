@@ -221,7 +221,8 @@ function settingsPlaceOf(env: Readonly<Record<string, string | undefined>>, star
  * never written by a member's host any more, so the owner's default stays where the owner left it by construction;
  * the owner's file is read only at launch, to finish a switch a launch from before martha#602 left open.
  */
-const theMembersSwitchPlace = (start: AStartOnItsHost, config_dir: string): OwnersDefaultPlace | Refused => settingsPlaceOf(theMembersConfigEnvironment(config_dir), start)
+const theMembersSwitchPlace = (start: AStartOnItsHost, config_dir: string): OwnersDefaultPlace | Refused =>
+  settingsPlaceOf(theMembersConfigEnvironment(config_dir), start)
 
 /**
  * What the member is started on: the approval's fingerprint, and what its own writes are checked against while it
@@ -258,8 +259,9 @@ function signedShapeNames(state: MarthaState): readonly string[] {
  * call the `git` on a member's PATH is handed judged, and every ref a transaction deletes read for whose branch it is.
  * No layout declared, nothing is judged, and the crew's tools are handed no guard at all.
  */
-const theGitGuardPlaceOf = (settings: CrewSettings, member: string, leftovers: CrewStore): TheGitGuardPlaces =>
-  theGitGuardPlacesOf(theWorkspaceTheCrewDeclared(settings), member, thisMachine, leftovers) ?? {}
+function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: CrewStore): TheGitGuardPlaces {
+  return theGitGuardPlacesOf(theWorkspaceTheCrewDeclared(settings), member, thisMachine, leftovers) ?? {}
+}
 
 /**
  * What this launch hands its end: the crew's own store, and the workspace its declaration lays out (martha#693,
@@ -277,6 +279,7 @@ export const leftoversOfALaunch = (settings: CrewSettings, crew: CrewStore) => (
 export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeMemberLaunch {
   // One raising for this launch, and one channel carrier: the carrier counts a handed message taken in when the mod
   // reports the member's next main turn started (martha#253).
+  const channel = start.channel
   return {
     member_name: start.member,
     node_id: start.node_id,
@@ -298,12 +301,12 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeM
     crew_tools: (sessions, member) =>
       crewToolsOver({ ...theGitGuardPlaceOf(start.settings, start.member, start.crew_stores.crew),
         member: start.member,
-        ledger: start.channel,
+        ledger: channel,
         beats: dashboardRowsIn(start.places.dashboard),
         root: start.root,
         documents: start.documents,
         stores: { crew: start.crew_stores.crew },
-        carrier: carryingTo({ member: start.member, host: start.channel }),
+        carrier: carryingTo({ member: start.member, host: channel }),
         sessions,
         // What the launch watches of the crew tools it served (martha#658): 697 handed the member's
         // served window here, where the tools are built now that the launch body moved (#703).
