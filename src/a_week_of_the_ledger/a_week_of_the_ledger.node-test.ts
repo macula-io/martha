@@ -24,7 +24,10 @@ import {
   aWeekOfTheLedger,
   theBoundsOfTheWeek,
   theDurationOf,
+  theLineOfAPackage,
   theLinesOf,
+  theOwnersWaitIn,
+  thePackageWeek,
   theWeekOf,
   type AnAskedWeek,
   type AWeek,
@@ -212,11 +215,42 @@ test("the crew's week counts each figure once, with a recovery counted under rew
 test("the owner's wait is the queue's own rule: a settle that leaves an ask unticked is not an answer, and a take never is", async (t) => {
   const week = answered(aWeekOfTheLedger(await theWeekOnDisk(t)))
   const waited = week.crew.ownersWait
-  assert.equal(waited.asked, 3, 'the asks made in the week are not three')
-  assert.equal(waited.answered, 2, 'the ask ticked in a later batch was not counted as answered, or the one left unticked was')
+  assert.equal(waited!.asked, 3, 'the asks made in the week are not three')
+  assert.equal(waited!.answered, 2, 'the ask ticked in a later batch was not counted as answered, or the one left unticked was')
+  assert.equal(waited!.stillWaiting, 1)
+  assert.equal(waited!.totalMs, at(16, 10, 30) - at(16, 10) + (at(18, 9) - at(17, 10)), 'the waits are not the answer minus the ask')
+  assert.equal(waited!.longest?.ms, at(18, 9) - at(17, 10), 'the longest wait did not run to the second settle')
+})
+
+test('a row after the week has not happened in it: a landing after its end leaves the package open, a settle after it leaves the ask waiting', () => {
+  const bounds = theBoundsOfTheWeek(THE_WEEK)
+  if ('refused' in bounds) assert.fail(bounds.refused)
+  const one = thePackageWeek(A_PACKAGE, [
+    { kind: 'checkpoint_reached', at: at(17), package: A_PACKAGE, member: 'Hygiea', note: 'in the week' },
+    { kind: 'package_landed', at: at(26), package: A_PACKAGE, member: 'Hygiea', note: 'the week after' },
+  ] as never, bounds)
+  assert.ok(one !== undefined)
+  assert.equal(one!.landedAt, undefined, 'a landing after the week was read as the package landing')
+  assert.equal(one!.cycleMs, undefined, 'a cycle was read to a landing after the week')
+  assert.equal(one!.landedInTheWeek, false)
+  assert.equal(one!.lastAt, at(17), 'the last row is not the last row inside the week')
+
+  const asks = [
+    { position: 0, row: { kind: ASK_QUEUED, question: 'Q?', asked_by: 'Hygiea', since: at(18) } },
+    { position: 1, row: { kind: ASKS_SETTLED, batch: 1, yes: [0], at: at(27), by: 'the owner' } },
+  ] as never
+  const waited = theOwnersWaitIn(asks, bounds)
+  assert.equal(waited.asked, 1)
+  assert.equal(waited.answered, 0, 'a settle after the week was counted as the answer')
   assert.equal(waited.stillWaiting, 1)
-  assert.equal(waited.totalMs, at(16, 10, 30) - at(16, 10) + (at(18, 9) - at(17, 10)), 'the waits are not the answer minus the ask')
-  assert.equal(waited.longest?.ms, at(18, 9) - at(17, 10), 'the longest wait did not run to the second settle')
+})
+
+test('a week whose ask queue could not be read says so and prints no owner-wait line', () => {
+  const week = answered(aWeekOfTheLedger({ week: THE_WEEK, ledgers: [], asks: undefined, skipped: ['owner_asks (could not be read: the store refused it)'] }))
+  assert.equal(week.crew.ownersWait, undefined)
+  const lines = theLinesOf(week)
+  assert.ok(lines.every((line) => !line.startsWith('owner wait: ')), 'the view printed an owner-wait line for a queue it could not read')
+  assert.ok(lines.some((line) => line === 'skipped: owner_asks (could not be read: the store refused it)'))
 })
 
 test('the view prints the week it read, says money is not in the rows, and quotes an ask with its control characters stripped', async (t) => {
@@ -226,6 +260,16 @@ test('the view prints the week it read, says money is not in the rows, and quote
   assert.equal(lines[1], 'packages: 3 touched, 1 landed, 2 carried in, 1 still open')
   assert.ok(lines.some((line) => /^money: not in the rows/.test(line)), 'the view did not say money is not in the rows')
   assert.ok(lines.some((line) => line.startsWith(`${A_PACKAGE} — cycle 10 d 10 h`)), 'a package line did not carry its cycle')
+  assert.equal(
+    theLineOfAPackage(week.packages.find((one) => one.package === A_PACKAGE)!),
+    `${A_PACKAGE} — cycle 10 d 10 h (carried in), landed Fri 20 Nov 10:00 UTC | owner wait not in the rows | 2 review rounds, 1 fix after a release | acts 2 acts announced, 2 concluded, 1 retried | 9 rows`,
+    'a package line does not read as the owner reads it, plural fixes and all',
+  )
+  assert.equal(
+    lines.find((line) => line.startsWith('work: ')),
+    'work: 3 review rounds, 2 fixes after a release, 2 recoveries (1 retried), 1 forced refresh',
+    'the crew work line does not read as the owner reads it, plural fixes and all',
+  )
   const quoted = lines.find((line) => line.startsWith('owner wait: '))
   assert.ok(quoted !== undefined)
   assert.ok(quoted.includes('A red question?'), 'the quoted ask did not print as its own words')
@@ -237,6 +281,7 @@ test('a week with no row answers nothing in this week, and a stream the command 
   assert.equal(empty.crew.touched, 0)
   assert.deepEqual(empty.packages, [])
   assert.equal(theLinesOf(empty)[1], 'packages: 0 touched, 0 landed, 0 carried in, 0 still open')
+  assert.ok(theLinesOf(empty).includes('nothing in this week'), 'a week with no row did not say nothing is in it')
 
   const withSkipped = answered(aWeekOfTheLedger({ week: THE_WEEK, ledgers: [], asks: [], skipped: ['ledger/not-a-package (not a package name)'] }))
   assert.ok(theLinesOf(withSkipped).some((line) => line === 'skipped: ledger/not-a-package (not a package name)'))

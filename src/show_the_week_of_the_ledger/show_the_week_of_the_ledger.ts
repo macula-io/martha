@@ -7,7 +7,7 @@
 
 import { readdirSync } from 'node:fs'
 
-import { aWeekOfTheLedger, theLinesOf, theWeekOf } from '../a_week_of_the_ledger/a_week_of_the_ledger.ts'
+import { aWeekOfTheLedger, theBoundsOfTheWeek, theLinesOf, theWeekOf } from '../a_week_of_the_ledger/a_week_of_the_ledger.ts'
 import { crewRowsDirectory } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import {
   LEDGER_STREAM_PREFIX,
@@ -19,6 +19,7 @@ import {
 import { OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { rowStreamsDirectory, streamOfDirectoryName } from '../row_streams_directory/row_streams_directory.ts'
 import { EXIT_DONE, refused, type LinesShownToTheOwner } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
+import type { StoredRow } from '../host_contract/host_contract.ts'
 
 /** A terminal the week prints on: the owner's own lines, and the last line it reads. */
 export type AWeekOnATerminal = LinesShownToTheOwner & { readonly out: (line: string) => void }
@@ -80,12 +81,23 @@ export function weekOf(act: string, argv: readonly string[]): { readonly act: st
 
 /** `martha week [YYYY-Www]`: the lines the owner reads, or the refusal that ends the command. */
 export async function showTheWeek(io: AWeekOnATerminal, places: APlaceOfTheWeek, asked: AWeekAsked): Promise<number> {
+  const week = asked.args[0] ?? theWeekOf(Date.now())
+  // The word is judged before any stream is read (r=2): a week that is not one is not answered from an empty directory.
+  const bounds = theBoundsOfTheWeek(week)
+  if ('refused' in bounds) return refused(io, bounds.refused)
   const rows = crewRowsDirectory(places.state.state_root, places.root)
   if ('refusal' in rows) return refused(io, rows.refusal)
   const host: LedgerHost = { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(rows.path) } }
-  const { ledgers, skipped } = await theLedgersUnder(rows.path, host)
-  const asks = await host.stores.rows.read(OWNER_ASKS_STREAM)
-  const answer = aWeekOfTheLedger({ week: asked.args[0] ?? theWeekOf(Date.now()), ledgers, asks, skipped })
+  const { ledgers, skipped: theStreamsSkipped } = await theLedgersUnder(rows.path, host)
+  const skipped = [...theStreamsSkipped]
+  // A store that refuses the ask stream leaves the week without its owner-wait line, and the stream is named (r=2).
+  let asks: readonly StoredRow[] | undefined
+  try {
+    asks = await host.stores.rows.read(OWNER_ASKS_STREAM)
+  } catch (error) {
+    skipped.push(`${OWNER_ASKS_STREAM} (could not be read: ${error instanceof Error ? error.message : String(error)})`)
+  }
+  const answer = aWeekOfTheLedger({ week, ledgers, asks, skipped })
   if ('refused' in answer) return refused(io, answer.refused)
   for (const line of theLinesOf(answer.week)) io.out(line)
   return EXIT_DONE

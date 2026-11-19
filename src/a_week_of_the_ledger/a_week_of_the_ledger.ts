@@ -124,7 +124,8 @@ export interface TheWeeksCrew {
   readonly landed: number
   readonly carriedIn: number
   readonly stillOpen: number
-  readonly ownersWait: TheOwnersWait
+  /** The owner's wait, or undefined when the ask queue could not be read at all (r=2): the view then says no wait line. */
+  readonly ownersWait: TheOwnersWait | undefined
   readonly reviewRounds: number
   readonly fixesAfterRelease: number
   readonly recoveries: number
@@ -145,7 +146,7 @@ export interface TheWeek {
 export interface AnAskedWeek {
   readonly week: string
   readonly ledgers: readonly { readonly package: string; readonly rows: readonly LedgerRow[] }[]
-  readonly asks: readonly StoredRow[]
+  readonly asks: readonly StoredRow[] | undefined
   readonly skipped?: readonly string[]
 }
 
@@ -179,13 +180,14 @@ export function thePackageWeek(
   const inTheRowList = rows.filter((row) => inTheWeek(row.at, bounds))
   const [first] = rows
   if (first === undefined || inTheRowList.length === 0) return undefined
-  const landed = rows.find((row) => row.kind === PACKAGE_LANDED)
+  // A row after the week has not happened in it: a landing after its end leaves the package still open here (r=2).
+  const landed = rows.find((row) => row.kind === PACKAGE_LANDED && row.at < bounds.to)
   const recoveries = inTheRowList.filter(isRecoveryRow)
   return {
     package: package_name,
     carriedIn: first.at < bounds.from,
     firstAt: first.at,
-    lastAt: rows.at(-1)?.at ?? first.at,
+    lastAt: inTheRowList.at(-1)?.at ?? first.at,
     landedAt: landed?.at,
     landedInTheWeek: landed !== undefined && inTheWeek(landed.at, bounds),
     cycleMs: landed === undefined ? undefined : landed.at - first.at,
@@ -203,7 +205,8 @@ const sinceOf = (row: StoredRow): number | undefined => (typeof row.row['since']
 
 /** The asks made in the week, each with when the owner answered it, by the queue's own rule. */
 function theWaitsOf(asks: readonly StoredRow[], bounds: TheWeeksBounds): readonly { readonly ms: number; readonly question: string }[] {
-  const settles = asks.filter((row) => row.row['kind'] === ASKS_SETTLED)
+  // A settle after the week has not answered it: the ask was still waiting when the week ended (r=2).
+  const settles = asks.filter((row) => row.row['kind'] === ASKS_SETTLED && typeof row.row['at'] === 'number' && (row.row['at'] as number) < bounds.to)
   const answeredAt = (id: number): number | undefined => {
     const settled = settles.find((settle) => Array.isArray(settle.row['yes']) && (settle.row['yes'] as unknown[]).includes(id))
     const at = settled?.row['at']
@@ -237,7 +240,7 @@ export function theOwnersWaitIn(asks: readonly StoredRow[], bounds: TheWeeksBoun
 }
 
 /** The crew's week: each package counted once, and the owner's wait from the ask queue. */
-function theCrewOf(packages: readonly APackagesWeek[], ownersWait: TheOwnersWait, forcedRefreshes: number): TheWeeksCrew {
+function theCrewOf(packages: readonly APackagesWeek[], ownersWait: TheOwnersWait | undefined, forcedRefreshes: number): TheWeeksCrew {
   const by = theZeroOfTheKinds()
   for (const one of packages) for (const kind of OUTWARD_ACTS) by[kind] += one.acts.by[kind]
   return {
@@ -271,7 +274,7 @@ export function aWeekOfTheLedger(asked: AnAskedWeek): AWeek {
   const forcedRefreshes = asked.ledgers.flatMap((ledger) => ledger.rows).filter(
     (row) => isAnActAnnouncedRow(row) && row.act.kind === REFRESH_FORCED && inTheWeek(row.at, bounds),
   ).length
-  const crew = theCrewOf(packages, theOwnersWaitIn(asked.asks, bounds), forcedRefreshes)
+  const crew = theCrewOf(packages, asked.asks === undefined ? undefined : theOwnersWaitIn(asked.asks, bounds), forcedRefreshes)
   return { week: { bounds, crew, packages: [...packages].sort((a, b) => a.package.localeCompare(b.package)), skipped: asked.skipped ?? [] } }
 }
 
@@ -294,22 +297,26 @@ export function theLineOfAPackage(one: APackagesWeek): string {
     ? `still open, last row ${theDayOf(one.lastAt)}`
     : `cycle ${theDurationOf(one.cycleMs)}${one.carriedIn ? ' (carried in)' : ''}, landed ${theDayOf(one.landedAt ?? one.firstAt)}`
   const acts = `${theCount(one.acts.announced, 'act')} announced, ${String(one.acts.concluded)} concluded, ${String(one.acts.attempts)} retried`
-  return `${one.package} — ${cycle} | owner wait not in the rows | ${theCount(one.reviewRounds, 'review round')}, ${theCount(one.fixesAfterRelease, 'fix')} after a release, ${String(one.retriedOnce)} retried | acts ${acts} | ${theCount(one.rowsWritten, 'row')}`
+  return `${one.package} — ${cycle} | owner wait not in the rows | ${theCount(one.reviewRounds, 'review round')}, ${theCount(one.fixesAfterRelease, 'fix', 'fixes')} after a release | acts ${acts} | ${theCount(one.rowsWritten, 'row')}`
 }
 
 /** The week as the owner reads it: the bounds first, then the crew, then each package. */
 export function theLinesOf(week: TheWeek): readonly string[] {
   const { bounds, crew } = week
-  const longest = crew.ownersWait.longest
-  const waits = `owner wait: ${theCount(crew.ownersWait.asked, 'ask')}, ${String(crew.ownersWait.answered)} answered, ${String(crew.ownersWait.stillWaiting)} still waiting; ${theDurationOf(crew.ownersWait.totalMs)} in all${longest === undefined ? '' : `; the longest ${theDurationOf(longest.ms)} — "${longest.question}"`}`
+  const wait = crew.ownersWait
+  const longest = wait?.longest
+  const waits = wait === undefined
+    ? []
+    : [`owner wait: ${theCount(wait.asked, 'ask')}, ${String(wait.answered)} answered, ${String(wait.stillWaiting)} still waiting; ${theDurationOf(wait.totalMs)} in all${longest === undefined ? '' : `; the longest ${theDurationOf(longest.ms)} — "${longest.question}"`}`]
   const kinds = OUTWARD_ACTS.map((kind) => `${kind.replace(/_/g, ' ')} ${String(crew.acts.by[kind])}`).join(', ')
   return [
     bounds.printed,
     `packages: ${String(crew.touched)} touched, ${String(crew.landed)} landed, ${String(crew.carriedIn)} carried in, ${String(crew.stillOpen)} still open`,
-    waits,
-    `work: ${theCount(crew.reviewRounds, 'review round')}, ${theCount(crew.fixesAfterRelease, 'fix')} after a release, ${theCount(crew.recoveries, 'recovery', 'recoveries')} (${String(crew.retriedOnce)} retried), ${theCount(crew.forcedRefreshes, 'forced refresh', 'forced refreshes')}`,
+    ...waits,
+    `work: ${theCount(crew.reviewRounds, 'review round')}, ${theCount(crew.fixesAfterRelease, 'fix', 'fixes')} after a release, ${theCount(crew.recoveries, 'recovery', 'recoveries')} (${String(crew.retriedOnce)} retried), ${theCount(crew.forcedRefreshes, 'forced refresh', 'forced refreshes')}`,
     `acts: ${theCount(crew.acts.announced, 'act')} announced, ${String(crew.acts.concluded)} concluded (${kinds}); ${theCount(crew.acts.attempts, 'attempt')} after a failure`,
     'money: not in the rows (martha#860 carries the row that would hold it)',
+    ...(week.packages.length === 0 ? ['nothing in this week'] : []),
     ...week.skipped.map((one) => `skipped: ${one}`),
     ...week.packages.map((one) => theLineOfAPackage(one)),
   ]
