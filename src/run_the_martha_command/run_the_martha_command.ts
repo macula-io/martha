@@ -28,11 +28,14 @@ import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../appro
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
-import { declareCrew, OWNER_BELL } from '../declare_crew/declare_crew.ts'
+import { declareCrew, OWNER_BELL, sameMemberName } from '../declare_crew/declare_crew.ts'
+import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
+import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
+import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, readApprovals, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, nodeIdsFor, openState, readApprovals, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -44,7 +47,7 @@ import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.
 import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
-import { drawTheCrewStrip, holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
+import { drawTheCrewStrip, holdOnThisTerminal, isRunning, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, refused, showingSafely, tellOwnerOn } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
 import { bellsOf, theBellsTold, theFlipNamed } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
@@ -69,7 +72,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] |martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -302,6 +305,27 @@ async function crew(io: CommandIo, places: Places): Promise<number> {
   return EXIT_DONE
 }
 
+/**
+ * `martha crew add|remove|set-model|set-host` (martha#307): the change, read back through the reader and the start's
+ * reviewer rule (../declare_crew/change_a_member.ts), then written over the declaration. A member is removed only
+ * while it is not running, as `martha stop` reads it, and an added member gets its node id as `martha init` makes one.
+ */
+async function changeTheCrew(io: CommandIo, places: Places, change: CrewChange): Promise<number> {
+  if (change.kind === REMOVE) {
+    const crew = await crewsPlacesOf(io, places)
+    if (typeof crew === 'string') return refused(io, crew)
+    const declared = crew.settings.members.find((member) => sameMemberName(member.name, change.member))
+    if (declared !== undefined && isRunning(crew, declared.name)) return refused(io, `${declared.name} is running, so it stays on the crew. Stop it first: martha ${STOP} ${declared.name}`)
+  }
+  const outcome = await aChangedDeclaration(documents, places.root, THE_VOCABULARIES_OF_HOST, change)
+  if ('refusal' in outcome) return refused(io, outcome.refusal)
+  const unwritten = writeAChangedDeclaration(places.root, outcome)
+  if (unwritten !== undefined) return refused(io, unwritten)
+  const ids = change.kind === ADD ? nodeIdsFor(places.state, [change.member]) : undefined
+  theChangeTold(change, outcome, THE_VOCABULARIES_OF_HOST).forEach(tellOwnerOn(io))
+  return ids !== undefined && 'refusal' in ids ? refused(io, ids.refusal) : EXIT_DONE
+}
+
 /** `martha stop [<member>]` (martha#312): one member, or every running one; each outcome told to the owner. */
 async function stop(io: CommandIo, places: Places, member: string | undefined): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
@@ -426,7 +450,7 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 }
 
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
-export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', 'crew', '--version']
+export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', '--version']
 /** The acts that take exactly one argument (martha#129). */
 export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release']
 
@@ -453,6 +477,14 @@ export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: read
   [RESTART]: restartOf,
   start: startOf,
   answer: answerOf,
+  crew: crewOf,
+}
+
+/** `crew`, which draws the strip, or `crew <verb> <member> …`, the owner's change to one member (martha#307). */
+function crewOf(act: string, argv: readonly string[]): Asked | undefined {
+  if (argv.length === 1) return { act, args: [] }
+  const change = theCrewChangeAsked(argv.slice(1))
+  return change === undefined ? undefined : { act, member: change.member, args: argv.slice(1) }
 }
 
 /** `start <member> [-- <claude arguments>]`. */
@@ -574,9 +606,12 @@ const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Place
   answer: (io, places, asked) => answerInAProject(io, places, asked.member, asked.args),
 }
 
-/** Whether an act is the owner's own: one of theirs, `start` (every word no act takes), or a flip of a member's bells. */
+/**
+ * Whether an act is the owner's own: one of theirs, `start` (every word no act takes), a flip of a member's bells, or a
+ * change to a member of the crew (martha#307).
+ */
 const isAnOwnersOwnAct = (asked: Asked, act: ((io: CommandIo, places: Places, asked: Asked) => Promise<number>) | undefined): boolean =>
-  act === undefined || Object.hasOwn(THE_OWNERS_OWN_ACTS, asked.act) || (act === ACTS_IN_A_PROJECT['bells'] && asked.member !== undefined)
+  act === undefined || Object.hasOwn(THE_OWNERS_OWN_ACTS, asked.act) || ((act === ACTS_IN_A_PROJECT['bells'] || act === ACTS_IN_A_PROJECT['crew']) && asked.member !== undefined)
 
 /**
  * Why an owner's act is refused here, inside a member (martha#619): read once, at the verb's entry, over the launch
@@ -604,7 +639,7 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   gate: (io, places, asked) => theGate(io, places, asked.member),
   bells: (io, places, asked) => bells(io, places, asked),
   ls: (io, places) => ls(io, places),
-  crew: (io, places) => crew(io, places),
+  crew: (io, places, asked) => (asked.member === undefined ? crew(io, places) : changeTheCrew(io, places, theCrewChangeAsked(asked.args)!)),
   [STOP]: (io, places, asked) => stop(io, places, asked.member),
   [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),
 }

@@ -21,11 +21,13 @@ import {
   declareCrewOnHosts,
   HOST,
   MODEL,
+  theHostOfMember,
   type CrewSettings,
   type Member,
   type TheVocabulariesOfHost,
 } from './declare_crew.ts'
 import { sameMemberName } from './member_names.ts'
+import { hostRuns } from './a_hosts_model_vocabulary.ts'
 import { notOnTheCrew } from '../see_who_is_free/see_who_is_free.ts'
 import { aReviewerMembersModelRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 
@@ -119,4 +121,81 @@ export async function aChangedDeclaration(documents: DocumentStore, root: string
 function theMemberChanged(settings: CrewSettings, change: CrewChange): Member | undefined {
   if (change.kind === REMOVE) return undefined
   return settings.members.find((member) => sameMemberName(member.name, change.member))
+}
+
+/** The switches `add` takes, and the words that name a default instead of a value. */
+export const MODEL_SWITCH = '--model'
+export const HOST_SWITCH = '--host'
+/** `set-model <member> --host-default`: the member runs the host's own model. */
+export const HOST_DEFAULT = '--host-default'
+/** `set-host <member> --crew-default`: the member starts on the crew's host. */
+export const CREW_DEFAULT = '--crew-default'
+
+/** A word that names a member, a role, a model or a host: not empty, and no switch. */
+const aValue = (word: string | undefined): word is string => word !== undefined && word !== '' && !word.startsWith('-')
+
+/** A value, or null when the word is the one that names the default; undefined when it is neither. */
+const valueOrDefault = (word: string | undefined, default_word: string): string | null | undefined => (word === default_word ? null : aValue(word) ? word : undefined)
+
+/** `add`'s switches, each at most once with a value after it; undefined when they are no way `add` is used. */
+function addSwitches(words: readonly string[]): { model: string | null; host: string | null } | undefined {
+  const given: Record<string, string> = {}
+  for (let i = 0; i < words.length; i += 2) {
+    const [name, value] = [words[i]!, words[i + 1]]
+    if ((name !== MODEL_SWITCH && name !== HOST_SWITCH) || Object.hasOwn(given, name) || !aValue(value)) return undefined
+    given[name] = value
+  }
+  return { model: given[MODEL_SWITCH] ?? null, host: given[HOST_SWITCH] ?? null }
+}
+
+/** The change the words after `martha crew` ask for, or undefined when they are no way a verb is used. */
+export function theCrewChangeAsked(words: readonly string[]): CrewChange | undefined {
+  const [verb, member, ...rest] = words
+  if (!aValue(member)) return undefined
+  if (verb === REMOVE) return rest.length === 0 ? { kind: REMOVE, member } : undefined
+  if (verb === ADD) {
+    const [role, ...switches] = rest
+    const given = aValue(role) ? addSwitches(switches) : undefined
+    return given === undefined ? undefined : { kind: ADD, member, role: role!, ...given }
+  }
+  if (rest.length !== 1) return undefined
+  if (verb === SET_MODEL) {
+    const model = valueOrDefault(rest[0], HOST_DEFAULT)
+    return model === undefined ? undefined : { kind: SET_MODEL, member, model }
+  }
+  if (verb !== SET_HOST) return undefined
+  const host = valueOrDefault(rest[0], CREW_DEFAULT)
+  return host === undefined ? undefined : { kind: SET_HOST, member, host }
+}
+
+/** What the changed member is now, in one line. */
+function theChangeInALine(change: CrewChange, settings: CrewSettings): string {
+  if (change.kind === ADD) return `${change.member} is on the crew now, as ${change.role}.`
+  if (change.kind === REMOVE) return `${change.member} is off the crew now. Its node id stays in Martha's state, so adding ${change.member} again keeps it.`
+  if (change.kind === SET_MODEL) return `${change.member}'s model is ${change.model ?? "the host's own"} now.`
+  return `${change.member}'s host is ${change.host ?? `the crew's, ${settings.host},`} now.`
+}
+
+/**
+ * When a member's model is one its host does not run, which the host's models it does (DECIDED 2026-11-19: no new
+ * check, so the change is written and the owner is told).
+ */
+function theModelsItsHostRuns(change: CrewChange, settings: CrewSettings, vocabularies: TheVocabulariesOfHost): readonly string[] {
+  const member = change.kind === REMOVE ? undefined : theMemberChanged(settings, change)
+  if (member === undefined || member.model === null) return []
+  const host = theHostOfMember(settings, member), vocabulary = vocabularies.get(host)
+  if (vocabulary === undefined || hostRuns(vocabulary, member.model)) return []
+  return [`${host} runs ${vocabulary.names.join(', ')}, and ${member.model} is not one of them, so ${member.name} may not start on it.`]
+}
+
+/** The lines the owner is told once the change is written. */
+export function theChangeTold(change: CrewChange, outcome: Extract<TheChange, { readonly after: string }>, vocabularies: TheVocabulariesOfHost): readonly string[] {
+  const declaration = outcome.settings.paths.declaration
+  return [
+    theChangeInALine(change, outcome.settings),
+    ...theModelsItsHostRuns(change, outcome.settings, vocabularies),
+    ...(change.kind === SET_MODEL || change.kind === SET_HOST ? [`A running ${change.member} takes it at its next restart.`] : []),
+    ...(outcome.reformatted ? [`${declaration} was not in the format martha init writes, and is written in it now.`] : []),
+    `${declaration} is a file of the checkout: commit it when you are ready.`,
+  ]
 }

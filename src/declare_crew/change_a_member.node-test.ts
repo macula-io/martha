@@ -9,7 +9,7 @@ import { test } from 'node:test'
 
 import { CLOSED_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, HOST, soloDeclaration, SOLO_MEMBERS, THE_ENGINES_HOST, THE_HOST_A_MEMBER_RAN_ON, type TheVocabulariesOfHost } from './declare_crew.ts'
-import { ADD, aChangedDeclaration, REMOVE, SET_HOST, SET_MODEL, type CrewChange } from './change_a_member.ts'
+import { ADD, aChangedDeclaration, CREW_DEFAULT, HOST_DEFAULT, HOST_SWITCH, MODEL_SWITCH, REMOVE, SET_HOST, SET_MODEL, theChangeTold, theCrewChangeAsked, type CrewChange } from './change_a_member.ts'
 
 const ROOT = '/project'
 const DECLARATION = join(ROOT, DECLARATION_DIRECTORY, DECLARATION_FILE)
@@ -145,4 +145,49 @@ test('#307 R1: a change that leaves a reviewer member off the crew\'s review mod
   // The same crew takes the change that keeps the reviewer on its model, and a builder's model is not held to it.
   assert.ok('after' in await changed(held, { kind: ADD, member: 'second-reviewer', role: REVIEWER.role, model: 'some-model', host: null }))
   assert.ok('after' in await changed(held, { kind: SET_MODEL, member: BUILDER.name, model: 'other-model' }))
+})
+
+test('#307: the words after `martha crew` read as one change, and words no verb takes read as none', () => {
+  assert.deepEqual(theCrewChangeAsked([ADD, 'scout', 'builder']), { kind: ADD, member: 'scout', role: 'builder', model: null, host: null })
+  assert.deepEqual(theCrewChangeAsked([ADD, 'scout', 'builder', HOST_SWITCH, THE_ENGINES_HOST, MODEL_SWITCH, 'm1']), { kind: ADD, member: 'scout', role: 'builder', model: 'm1', host: THE_ENGINES_HOST })
+  assert.deepEqual(theCrewChangeAsked([REMOVE, 'scout']), { kind: REMOVE, member: 'scout' })
+  assert.deepEqual(theCrewChangeAsked([SET_MODEL, 'scout', 'm1']), { kind: SET_MODEL, member: 'scout', model: 'm1' })
+  assert.deepEqual(theCrewChangeAsked([SET_MODEL, 'scout', HOST_DEFAULT]), { kind: SET_MODEL, member: 'scout', model: null })
+  assert.deepEqual(theCrewChangeAsked([SET_HOST, 'scout', THE_ENGINES_HOST]), { kind: SET_HOST, member: 'scout', host: THE_ENGINES_HOST })
+  assert.deepEqual(theCrewChangeAsked([SET_HOST, 'scout', CREW_DEFAULT]), { kind: SET_HOST, member: 'scout', host: null })
+  for (const words of [
+    [], ['rename', 'scout'], [ADD, 'scout'], [ADD, '-scout', 'builder'], [ADD, 'scout', '--role'], [ADD, 'scout', 'builder', MODEL_SWITCH],
+    [ADD, 'scout', 'builder', MODEL_SWITCH, 'a', MODEL_SWITCH, 'b'], [ADD, 'scout', 'builder', '--focus', 'x'], [REMOVE], [REMOVE, 'scout', 'extra'],
+    [SET_MODEL, 'scout'], [SET_MODEL, 'scout', CREW_DEFAULT], [SET_MODEL, 'scout', 'a', 'b'], [SET_HOST, 'scout', HOST_DEFAULT], [SET_HOST, 'scout', ''],
+  ]) assert.equal(theCrewChangeAsked(words), undefined, words.join(' '))
+})
+
+test('#307: the owner is told the change, that the file is theirs to commit, and when a running member takes it', async () => {
+  const set = await changed(solo(), { kind: SET_MODEL, member: BUILDER.name, model: 'not-a-model' })
+  assert.ok('after' in set)
+  const told = theChangeTold({ kind: SET_MODEL, member: BUILDER.name, model: 'not-a-model' }, set, VOCABULARIES)
+  assert.ok(told.includes(`${BUILDER.name}'s model is not-a-model now.`), told.join('\n'))
+  // No new check (DECIDED 2026-11-19): a model the host does not run is written, and the owner is told what it runs.
+  assert.ok(told.includes(`${THE_HOST_A_MEMBER_RAN_ON} runs some-model, other-model, and not-a-model is not one of them, so ${BUILDER.name} may not start on it.`), told.join('\n'))
+  assert.ok(told.includes(`A running ${BUILDER.name} takes it at its next restart.`), told.join('\n'))
+  assert.ok(told.includes(`${DECLARATION} is a file of the checkout: commit it when you are ready.`), told.join('\n'))
+  const known = await changed(solo(), { kind: SET_MODEL, member: BUILDER.name, model: 'some-model' })
+  assert.ok('after' in known)
+  assert.ok(!theChangeTold({ kind: SET_MODEL, member: BUILDER.name, model: 'some-model' }, known, VOCABULARIES).some((line) => line.includes('is not one of them')))
+  const compact = await changed(JSON.stringify(JSON.parse(solo())), { kind: REMOVE, member: REVIEWER.name })
+  assert.ok('after' in compact)
+  const removed = theChangeTold({ kind: REMOVE, member: REVIEWER.name }, compact, VOCABULARIES)
+  assert.ok(removed.includes(`${DECLARATION} was not in the format martha init writes, and is written in it now.`), removed.join('\n'))
+  assert.ok(!removed.some((line) => line.includes('restart')))
+})
+
+test('#307: the declaration is read once, so the text checked is the text changed, whatever a later read would see', async () => {
+  // The first read sees the crew; every later read sees a file the reader refuses. A slice that read it twice would
+  // check one text and change another.
+  let reads = 0
+  const changing = { read: async (path: string) => (path === DECLARATION ? (reads++ === 0 ? solo() : 'not json') : Promise.reject(new Error(path))) }
+  const outcome = await aChangedDeclaration(changing, ROOT, VOCABULARIES, { kind: REMOVE, member: REVIEWER.name })
+  assert.ok('after' in outcome, 'refusal' in outcome ? outcome.refusal : '')
+  assert.equal(outcome.before, solo())
+  assert.equal(reads, 1)
 })
