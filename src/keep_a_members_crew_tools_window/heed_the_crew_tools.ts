@@ -26,6 +26,7 @@ import {
   theBackLineOf,
   theNoticeOf,
   theOwedLineOf,
+  theTimesLineOf,
   theWindowOf,
   theWindowRow,
   theWindowStep,
@@ -109,11 +110,57 @@ export function countForTheWindow(places: TheWindowPlaces, session: string, call
   if (counted !== undefined) keepTheWindow(place, counted)
 }
 
-/** What a starting session is handed of its member's window: the owed line while the window is open, else nothing. */
-export function theOwedLineAtStart(places: TheWindowPlaces): string | null {
+/** The window one start's hand read, kept on the launch's own state until that start is answered (martha#658 Done-when 4). */
+export interface AHandedWindow {
+  readonly session: string
+  readonly from: number
+}
+
+/** What a starting session is handed of its member's window: the beats line, and the window that hand read. */
+export interface TheBeatsAtAStart {
+  readonly line: string
+  readonly window: AHandedWindow
+}
+
+/**
+ * What a starting session is handed of its member's window: the beats line, once, whenever the window owes them — open,
+ * or closed and not yet handed — and never to the session that lost the tools itself (martha#658 Done-when 4). Null
+ * when there is nothing to hand.
+ */
+export function theOwedLineAtStart(places: TheWindowPlaces, session_id: string): TheBeatsAtAStart | null {
   const place = placeOf(places)
-  const open = place === undefined ? undefined : theWindowOf(place, places.member)
-  return open === undefined || open.to !== undefined ? null : theOwedLineOf(open)
+  const window = place === undefined ? undefined : theWindowOf(place, places.member)
+  if (window === undefined || window.beats_handed === true || window.session === session_id) return null
+  return { line: theOwedLineOf(window), window: { session: window.session, from: window.from } }
+}
+
+/**
+ * The mark the start that read this window leaves once it is taken: `beats_handed` is written only when the file still
+ * holds the window that hand read — the same loss start, and the same session — so a new loss that opened in the
+ * meantime is never overwritten by the old window, and a file that moved on is left unmarked, the named race (martha#658
+ * Done-when 4).
+ */
+export function theBeatsMarkedOn(places: TheWindowPlaces, read: AHandedWindow): void {
+  const place = placeOf(places)
+  if (place === undefined) return
+  const window = theWindowOf(place, places.member)
+  if (window === undefined || window.session !== read.session || window.from !== read.from) return
+  keepTheWindow(place, { ...window, beats_handed: true })
+}
+
+/** A start's own line, with the window its beats were handed off, for the start's answer to mark once it is taken. */
+export interface TheStartHand {
+  readonly line: TheStartLine | null
+  /** Absent when the hand carried no beats, so an answer has nothing to mark. */
+  readonly beats_read?: AHandedWindow
+}
+
+/** The line a starting session is handed, with the beats owed for its member's window after it: Martha's own words. */
+export function withTheOwedLine(places: TheWindowPlaces, session_id: string, line: TheStartLine | null): TheStartHand {
+  const owed = places.served_tools === undefined ? null : theOwedLineAtStart(places, session_id)
+  if (owed === null) return { line }
+  const withBeats: TheStartLine = { line: line === null ? owed.line : `${line.line}\n\n${owed.line}`, taken_in: line?.taken_in ?? [] }
+  return { line: withBeats, beats_read: owed.window }
 }
 
 /**
@@ -129,30 +176,27 @@ export function theBeatOverTheCrewTools(places: TheWindowPlaces, sessionOf: () =
   }
 }
 
-/** The line a starting session is handed, with what it owes for its member's open window after it: Martha's own words. */
-export function withTheOwedLine(places: TheWindowPlaces, line: TheStartLine | null): TheStartLine | null {
-  const owed = places.served_tools === undefined ? null : theOwedLineAtStart(places)
-  return owed === null ? line : { line: line === null ? owed : `${line.line}\n\n${owed}`, taken_in: line?.taken_in ?? [] }
-}
-
 /** An answer to one of the crew's tool calls: Martha's words, or a refusal. */
 type AnAnswerToTheSession = { readonly answer: string } | { readonly refused: string }
 
-/** Whether a closed window owes its returning session a line it has not been handed yet: its own session earned it back. */
-const owesItsSessionALine = (window: ACrewToolsWindow | undefined): window is ACrewToolsWindow =>
-  window !== undefined && window.to !== undefined && window.closed_by === SAME_SESSION && window.owed_handed !== true
+/**
+ * Whether a closed window owes the session that lost its tools its own times, and has them still to tell: its own
+ * session earned the tools back (martha#658 Done-when 4).
+ */
+const owesItsSessionTheTimes = (window: ACrewToolsWindow | undefined, session: string): window is ACrewToolsWindow =>
+  window !== undefined && window.to !== undefined && window.closed_by === SAME_SESSION && window.times_told !== true && window.session === session
 
 /**
- * The report's answer with the beats a returning session owes after it, handed once (martha#658 Done-when 4): a session
- * that lost its own crew tools and earned them back is told what it owes, not only the times. The close leaves the mark
- * absent; this report writes it, so the line is handed once. The read, the decision and the write are synchronous with
- * no await between them, so the beat cannot open a new loss between them.
+ * The report's answer with the times a returning session is owed after it, handed once (martha#658 Done-when 4): a
+ * session that lost its own crew tools and earned them back is told when the loss began and ended, and nothing else —
+ * "a returning session gets only the times". A refused answer is left alone and unmarked, so the times go on the next
+ * successful report. The read, the decision and the write are synchronous with no await between them.
  */
-export function withTheOwedLineOnAReturn(places: TheWindowPlaces, answer: AnAnswerToTheSession): AnAnswerToTheSession {
+export function withTheTimesLineOnAReturn(places: TheWindowPlaces, session: string, answer: AnAnswerToTheSession): AnAnswerToTheSession {
   const place = placeOf(places)
   if ('refused' in answer || place === undefined) return answer
   const window = theWindowOf(place, places.member)
-  if (!owesItsSessionALine(window)) return answer
-  keepTheWindow(place, { ...window, owed_handed: true })
-  return { answer: `${answer.answer}\n\n${theOwedLineOf(window)}` }
+  if (!owesItsSessionTheTimes(window, session)) return answer
+  keepTheWindow(place, { ...window, times_told: true })
+  return { answer: `${answer.answer}\n\n${theTimesLineOf(window)}` }
 }

@@ -60,10 +60,15 @@ export interface ACrewToolsWindow {
   readonly to?: number
   readonly closed_by?: ClosedBy
   /**
-   * Set by the report that hands the returning session its owed line (martha#658 Done-when 4), and only when the file
-   * still holds this closed window at that moment. The close itself leaves it absent.
+   * Set once the first successor that starts is handed the beats this window owes (martha#658 Done-when 4), on an open
+   * window or a closed one, and only when the file still holds this window at that moment. The close leaves it absent.
    */
-  readonly owed_handed?: true
+  readonly beats_handed?: true
+  /**
+   * Set by the report that tells the session which lost its own tools when the loss began and ended (martha#658
+   * Done-when 4), and only on a window its own session closed. The close leaves it absent.
+   */
+  readonly times_told?: true
 }
 
 
@@ -153,10 +158,17 @@ export function theBackLineOf(window: ACrewToolsWindow): string {
   return window.to === undefined ? `${back}.` : `${back}; ${theOwedCountsOf(window)}.`
 }
 
-/** What a successor is handed at its start while its member's window is open: the window, and the beats it owes. */
+/** What the session that lost its own tools is told once it holds them again: when the loss began and ended, and nothing
+ * else — no counts, no advice (martha#658 Done-when 4, "a returning session gets only the times"). */
+export function theTimesLineOf(window: ACrewToolsWindow): string {
+  return `Your session ${window.session} lost its crew tools at ${timeOf(window.from)} and held them again at ${timeOf(window.to ?? window.from)}.`
+}
+
+/** What a successor is handed at its start for the beats a window owes (martha#658 Done-when 4): the third person for
+ * the loss, the second for what the session reading it owes. The same words serve an open window and a closed one. */
 export function theOwedLineOf(window: ACrewToolsWindow): string {
   return (
-    `Your session ${window.session} lost its crew tools at ${timeOf(window.from)} and ran ${String(window.turns)} turn(s) without them. ` +
+    `Session ${window.session} lost its crew tools at ${timeOf(window.from)} and ran ${String(window.turns)} turn(s) without them. ` +
     `You owe one ${REPORT_WHERE_THE_WORK_STANDS} now, and ${theMilestonesOf(window)} it made in that time.`
   )
 }
@@ -201,8 +213,12 @@ const isTheOpening = (w: Record<string, unknown>): boolean =>
 /** Whether a kept window's closing fields read: both absent while it is open, both present once it closed. */
 const isTheClosing = (w: Record<string, unknown>): boolean =>
   (w['to'] === undefined ? w['closed_by'] === undefined : isCount(w['to']) && CLOSED_BY.includes(w['closed_by'] as ClosedBy)) &&
-  // The mark is the report's, written on a closed window only: on an open one it is no window this writer made.
-  (w['owed_handed'] === undefined || (w['owed_handed'] === true && w['to'] !== undefined))
+  // The beats are handed once, by the first start that takes them, whether the window is open or closed: any mark but
+  // `true` is no window this writer made.
+  (w['beats_handed'] === undefined || w['beats_handed'] === true) &&
+  // The times are the report's own, told only to the session that lost the tools: a window no other session closed
+  // cannot carry them.
+  (w['times_told'] === undefined || (w['times_told'] === true && w['closed_by'] === SAME_SESSION))
 
 /** The member's window, as its file in the place holds it; undefined when it has none or the file is not one. */
 export function theWindowOf(place: CrewPlace, member: string): ACrewToolsWindow | undefined {
