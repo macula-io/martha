@@ -13,7 +13,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-import type { Observation } from './the_nine_lines.ts'
+import type { Observation } from '../the_nine_lines.ts'
 
 /** The file the driver writes the exchange into, one JSON object per message. */
 export const THE_TRANSCRIPT = 'acp.jsonl'
