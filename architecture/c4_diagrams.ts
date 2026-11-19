@@ -222,6 +222,14 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: 'a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it',
   },
   {
+    name: 'compare_two_host_recordings',
+    why: 'what two recordings of the host say once the minifier\'s names are taken out (martha#811); only record_claude_code_host loads it, to run --check',
+  },
+  {
+    name: 'follow_what_host_code_calls',
+    why: 'the definitions a recorded text of the host reaches in its bundle (martha#811); only record_claude_code_host loads it, to record and to --check',
+  },
+  {
     name: 'record_the_goose_engine',
     why: 'a script run by hand, npm run record:goose-engine, when the Goose engine moves to a new version (martha#541); the daily engine drift job runs its --check, and no member ever loads it',
   },

@@ -111,6 +111,8 @@
       "src/launch_a_claude_code_member/remember_own_write_of_a_call.ts"
     ],
     "programParts": {
+      "src/compare_two_host_recordings": "src/record_claude_code_host",
+      "src/follow_what_host_code_calls": "src/record_claude_code_host",
       "src/declare_a_launch_probe": "src/probe_launch_hosts",
       "src/probe_a_checkouts_own_config": "src/probe_launch_hosts",
       "src/probe_the_hosts_auto_memory": "src/probe_launch_hosts",
@@ -118,7 +120,7 @@
       "src/probe_the_owners_own_folders": "src/probe_launch_hosts"
     },
     "packageImports": {
-      "typescript": "prove_the_core",
+      "typescript": ["prove_the_core", "src/compare_two_host_recordings", "src/follow_what_host_code_calls", "src/record_claude_code_host"],
       "eslint": "prove_the_core",
       "saxes": "src"
     },
