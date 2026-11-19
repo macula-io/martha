@@ -78,9 +78,9 @@ export const REFRESH_FORCED = 'refresh_forced'
 export const OUTWARD_ACTS = ['push', 'handoff', 'room_message', 'tag', REFRESH_FORCED] as const
 export type OutwardActKind = (typeof OUTWARD_ACTS)[number]
 
-export const ACT_ANNOUNCED = 'act_announced'
-export const ACT_CONCLUDED = 'act_concluded'
-export const RECOVERY_DECIDED = 'recovery_decided'
+const ACT_ANNOUNCED = 'act_announced'
+const ACT_CONCLUDED = 'act_concluded'
+const RECOVERY_DECIDED = 'recovery_decided'
 
 /**
  * The row a package's contract is kept on (martha#513): the version the package is held to, and the contract it holds.
@@ -180,6 +180,12 @@ export type ContractKeptRow = RowCommon & {
 }
 
 export type LedgerRow = MilestoneRow | ActAnnouncedRow | ActConcludedRow | RecoveryRow | ContractKeptRow
+
+/** Whether a row of a package's ledger announced an outward act (martha#308): the week counts these by kind. */
+export const isAnActAnnouncedRow = (row: LedgerRow): row is ActAnnouncedRow => row.kind === ACT_ANNOUNCED
+
+/** Whether a row of a package's ledger is the conclusion of an outward act (martha#308). */
+export const isAnActConcludedRow = (row: LedgerRow): row is ActConcludedRow => row.kind === ACT_CONCLUDED
 
 /** Whether a row of a package's ledger is a recovery it decided. */
 export const isRecoveryRow = (row: LedgerRow): row is RecoveryRow => row.kind === RECOVERY_DECIDED

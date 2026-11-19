@@ -14,12 +14,12 @@
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { StoredRow } from '../host_contract/host_contract.ts'
 import {
-  ACT_ANNOUNCED,
-  ACT_CONCLUDED,
   FIX_SHIPPED_AFTER_RELEASE,
+  isAnActAnnouncedRow,
+  isAnActConcludedRow,
+  isRecoveryRow,
   OUTWARD_ACTS,
   PACKAGE_LANDED,
-  RECOVERY_DECIDED,
   REFRESH_FORCED,
   RETRIED_ONCE,
   REVIEW_ROUND_CLOSED,
@@ -159,12 +159,12 @@ const theZeroOfTheKinds = (): Record<OutwardActKind, number> =>
 /** The acts of one package's week, its attempts being the recoveries that sent an act a second time. */
 function theActsOf(rowsInTheWeek: readonly LedgerRow[]): TheActsOfAPackage {
   const by = theZeroOfTheKinds()
-  const announced = rowsInTheWeek.filter((row): row is Extract<LedgerRow, { kind: typeof ACT_ANNOUNCED }> => row.kind === ACT_ANNOUNCED)
+  const announced = rowsInTheWeek.filter(isAnActAnnouncedRow)
   for (const row of announced) by[row.act.kind] += 1
-  const retried = rowsInTheWeek.filter((row) => row.kind === RECOVERY_DECIDED && row.decision === RETRIED_ONCE)
+  const retried = rowsInTheWeek.filter((row) => isRecoveryRow(row) && row.decision === RETRIED_ONCE)
   return {
     announced: announced.length,
-    concluded: rowsInTheWeek.filter((row) => row.kind === ACT_CONCLUDED).length,
+    concluded: rowsInTheWeek.filter(isAnActConcludedRow).length,
     attempts: retried.length,
     by,
   }
@@ -180,7 +180,7 @@ export function thePackageWeek(
   const [first] = rows
   if (first === undefined || inTheRowList.length === 0) return undefined
   const landed = rows.find((row) => row.kind === PACKAGE_LANDED)
-  const recoveries = inTheRowList.filter((row) => row.kind === RECOVERY_DECIDED)
+  const recoveries = inTheRowList.filter(isRecoveryRow)
   return {
     package: package_name,
     carriedIn: first.at < bounds.from,
@@ -269,7 +269,7 @@ export function aWeekOfTheLedger(asked: AnAskedWeek): AWeek {
     return one === undefined ? [] : [one]
   })
   const forcedRefreshes = asked.ledgers.flatMap((ledger) => ledger.rows).filter(
-    (row) => row.kind === ACT_ANNOUNCED && row.act.kind === REFRESH_FORCED && inTheWeek(row.at, bounds),
+    (row) => isAnActAnnouncedRow(row) && row.act.kind === REFRESH_FORCED && inTheWeek(row.at, bounds),
   ).length
   const crew = theCrewOf(packages, theOwnersWaitIn(asked.asks, bounds), forcedRefreshes)
   return { week: { bounds, crew, packages: [...packages].sort((a, b) => a.package.localeCompare(b.package)), skipped: asked.skipped ?? [] } }
