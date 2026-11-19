@@ -118,5 +118,13 @@
       ".goosehints",
       "AGENTS.md"
     ]
+  },
+  "skills_advertised": {
+    "setting": "GOOSE_SKILLS_ADVERTISED",
+    "when_unset": true
+  },
+  "builtin_skills_advertised": {
+    "setting": "GOOSE_BUILTIN_SKILLS_ADVERTISED",
+    "when_unset": true
   }
 }

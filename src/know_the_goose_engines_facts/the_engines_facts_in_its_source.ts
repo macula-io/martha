@@ -54,6 +54,16 @@ export interface EngineFacts {
    * its order. A launch records exactly these, so none is typed by hand.
    */
   readonly hint_files: { readonly setting: string; readonly goose_hints: string; readonly agents_md: string; readonly when_unset: readonly string[] }
+  /** The setting that offers the model skills at all (`load_skill` and the list in the prompt), and its unset default (martha#839). */
+  readonly skills_advertised: ASkillsSwitch
+  /** The setting that offers the model the engine's compiled-in skills on their own, and its unset default (martha#839). */
+  readonly builtin_skills_advertised: ASkillsSwitch
+}
+
+/** A switch the engine reads with `get_param::<bool>` through a constant: the setting it names, and what an unset one means. */
+export interface ASkillsSwitch {
+  readonly setting: string
+  readonly when_unset: boolean
 }
 
 /** Reads one checkout of the engine: a file's text, or undefined when there is none; a directory's entries, or []. */
@@ -76,7 +86,12 @@ export const ENGINE_PLACES = {
   openai_provider: 'crates/goose-providers/src/openai.rs',
   delegate_tool: 'crates/goose/src/agents/platform_extensions/summon.rs',
   hint_files: 'crates/goose/src/hints/load_hints.rs',
+  skills_advertised: 'crates/goose/src/agents/services.rs',
+  builtin_skills_advertised: 'crates/goose/src/skills/mod.rs',
 } as const
+
+/** The function that reads each skills switch, in the file ENGINE_PLACES names for it (martha#839). */
+export const SKILLS_SWITCH_READERS = { skills_advertised: 'skills_advertised', builtin_skills_advertised: 'builtin_skills_advertised' } as const
 
 /** The constants the engine declares its two hint file names as, in the file that reads them (martha#785). */
 export const HINT_FILE_CONSTANTS = { goose_hints: 'GOOSE_HINTS_FILENAME', agents_md: 'AGENTS_MD_FILENAME' } as const
@@ -98,6 +113,8 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'openai provider', read: (source) => ({ openai_provider: openaiProviderIn(source) }) },
   { part: 'subagent models', read: (source) => ({ subagent_models: subagentModelsIn(source) }) },
   { part: 'hint files', read: (source) => ({ hint_files: hintFilesIn(source) }) },
+  { part: 'skills switch', read: (source) => ({ skills_advertised: skillsSwitchIn(source, 'skills_advertised') }) },
+  { part: 'built-in skills switch', read: (source) => ({ builtin_skills_advertised: skillsSwitchIn(source, 'builtin_skills_advertised') }) },
 ]
 
 /** A file the part needs, or a throw that names it. */
@@ -255,6 +272,22 @@ function hintFilesIn(source: EngineSource): EngineFacts['hint_files'] {
     goose_hints: valueOf(HINT_FILE_CONSTANTS.goose_hints),
     agents_md: valueOf(HINT_FILE_CONSTANTS.agents_md),
     when_unset: constants.map(valueOf),
+  }
+}
+
+/**
+ * A skills switch (martha#839): the body of the function that reads it, the constant it passes to `get_param::<bool>`,
+ * that constant's value in the same file, and the default `unwrap_or` gives an unset one.
+ */
+function skillsSwitchIn(source: EngineSource, which: keyof typeof SKILLS_SWITCH_READERS): ASkillsSwitch {
+  const path = ENGINE_PLACES[which]
+  const text = fileOf(source, path)
+  const reader = SKILLS_SWITCH_READERS[which]
+  const body = captured(text, new RegExp(`pub fn ${reader}\\(config: &Config\\)\\s*->\\s*bool\\s*\\{([^}]*)\\}`), `the ${reader} switch`, path)
+  const constant = captured(body, /get_param::<bool>\((\w+)\)/, `the constant ${reader} reads`, path)
+  return {
+    setting: captured(text, new RegExp(`pub const ${constant}: &str = "([^"]+)";`), `the value of ${constant}`, path),
+    when_unset: captured(body, /unwrap_or\((true|false)\)/, `the default of ${reader}`, path) === 'true',
   }
 }
 
