@@ -18,7 +18,9 @@ import {
   DECLARATION_VERSION,
   HOLD_REVIEWS,
   HOST,
+  MODE_TEXTS_DIRECTORY,
   REVIEW_MODEL,
+  ROLE_TEXTS_DIRECTORY,
   SOLO_MODE,
   THE_ENGINES_HOST,
   THE_HOST_A_MEMBER_RAN_ON,
@@ -27,6 +29,8 @@ import {
   type CrewSettings,
 } from '../declare_crew/declare_crew.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
+import type { HandoverStampStore } from '../host_contract/host_contract.ts'
+import type { Approval } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -34,6 +38,7 @@ import {
   THE_LAUNCHERS_OF_HOST,
   leftoversOfALaunch,
   noLauncherFor,
+  theLaunchOfAClaudeCodeStart,
   theStartOfAHost,
   theStartOfAMember,
   type AHostsLauncher,
@@ -202,4 +207,116 @@ test('a start hands its launch the workspace its declaration lays out, and the c
   assert.deepEqual(declared.workspace, { clones: LAID_OUT.clones, worktrees: LAID_OUT.worktrees, members: ['Hygiea', 'Uranus'] })
   assert.equal(declared.crew, crew, 'the crew store the launch end keeps what a killed command left in is not the one the start was given')
   assert.equal(leftoversOfALaunch(layoutDeclared(false), crew).workspace, undefined, 'a crew that declared no layout handed its launch a workspace anyway')
+})
+
+/**
+ * The places and names a planted start carries (martha#784). Every one is a value of its own, so a field read back
+ * from the built launch names the input it came from: a literal at the call site matches none of them.
+ */
+const PLANTED = {
+  member: 'Hygiea',
+  root: '/planted/project/place',
+  home: '/planted/owners/home',
+  snapshots: '/planted/state/snapshots',
+  crew: '/planted/equipage/directory',
+  conventions: '/planted/equipage/directory/notes-of-the-equipage.md',
+  mode: 'amendment-mode',
+  roles: ['reader-of-the-docket', 'keeper-of-the-docket'],
+  clones: '/planted/layout/first-places',
+  worktrees: '/planted/layout/second-places',
+} as const
+
+/** The one yes the owner gave the planted start, whose fingerprint and tree appear nowhere else. */
+const THE_APPROVAL: Approval = {
+  fingerprint: 'planted-approval-fingerprint',
+  approved_at: '2026-11-19T00:00:00.000Z',
+  entries: [],
+  tree: 'planted-tree-id',
+}
+
+/** The crew text files the planted declaration names, built from the declaration's own fields and not from a helper. */
+const THE_PLANTED_CREW_TEXTS = [
+  join(PLANTED.crew, ROLE_TEXTS_DIRECTORY, `${PLANTED.roles[0]}.md`),
+  join(PLANTED.crew, ROLE_TEXTS_DIRECTORY, `${PLANTED.roles[1]}.md`),
+  join(PLANTED.crew, MODE_TEXTS_DIRECTORY, `${PLANTED.mode}.md`),
+  PLANTED.conventions,
+]
+
+/** A declaration carrying what the launch's four fields read: the crew's place, its texts, its layout and its members. */
+const thePlantedDeclaration = (): CrewSettings =>
+  ({
+    paths: { crew: PLANTED.crew, conventions: PLANTED.conventions },
+    mode: { name: PLANTED.mode, roles: PLANTED.roles, may: {} },
+    house_rules: { workspace_layout: true, clones: PLANTED.clones, worktrees: PLANTED.worktrees },
+    members: [{ name: PLANTED.member }, { name: 'Themis' }],
+  }) as unknown as CrewSettings
+
+/** A start whose every field is a planted value, so what a real start builds is read back against its inputs. */
+function aPlantedStart(t: TestContext): AStartOnItsHost {
+  // The approval's own-writes store is kept beside Martha's state, so the planted state is a directory of this test's
+  // own, removed with it: every other place below is read, never written.
+  const state = mkdtempSync(join(tmpdir(), 'martha-a-planted-start-'))
+  t.after(() => removeTheTree(state))
+  const { host } = hostForTests()
+  const noStamps: HandoverStampStore = { read: () => undefined, write: () => undefined }
+  return {
+    member: PLANTED.member,
+    node_id: 'planted-node-id',
+    model: null,
+    approval: THE_APPROVAL,
+    settings: thePlantedDeclaration(),
+    root: PLANTED.root,
+    home: PLANTED.home,
+    args: [],
+    prompt: undefined,
+    inherited: { PATH: '/planted/path' },
+    stdio: 'inherit',
+    documents: host.stores.documents,
+    state: { directory: state, state_root: '/planted/state/root' },
+    places: {
+      state_root: '/planted/state/root',
+      rows: '/planted/state/the-row-streams',
+      dashboard: '/planted/state/the-beats',
+      launch_records: '/planted/state/launch-records',
+      relay_root: '/planted/state/relays',
+      mesh_servers: '/planted/state/mesh-servers',
+      relay_journal: '/planted/state/journal',
+    },
+    snapshot_root: PLANTED.snapshots,
+    crew_stores: { crew: host.stores.crew, stamps: noStamps },
+    restart: {},
+    channel: { clock: { now: () => 1_700_000_000_000 }, stores: { rows: host.stores.rows } },
+    command: '/planted/path/the-hosts-own-command',
+    tellOwner: () => undefined,
+  }
+}
+
+test('#784: a real start hands its launcher the launch it built, so a literal at the call site fails here by name', (t) => {
+  // The launch tests build their own request and the start tests swap the whole host launcher, so this is the one place
+  // that reads what `startOnClaudeCode` would really hand on: each field below, and nothing derived from a helper that
+  // builds it, so a call site handing a literal (the survivor martha#784 names, `leftovers.workspace: undefined`) goes red.
+  const planted = aPlantedStart(t)
+  const launch = theLaunchOfAClaudeCodeStart(planted)
+
+  // Its place: the three places the start was given, and the host it was started on.
+  assert.equal(launch.place.host, CLAUDE_CODE, 'the launch was started on a host the start did not name')
+  assert.equal(launch.place.launch_dir, PLANTED.root, 'the launch was not given the project place the start decided')
+  assert.equal(launch.place.stop_dir, PLANTED.home, 'the launch was not given the home its gate stops at')
+  assert.equal(launch.place.snapshot_root, PLANTED.snapshots, 'the launch was not given the snapshot root the start decided')
+
+  // Its leftovers: the crew's own store the start holds, and the layout its declaration lays out.
+  assert.equal(launch.leftovers?.crew, planted.crew_stores.crew, 'the launch was given a crew store that is not the one the start holds')
+  assert.deepEqual(
+    launch.leftovers?.workspace,
+    { clones: PLANTED.clones, worktrees: PLANTED.worktrees, members: [PLANTED.member, 'Themis'] },
+    'the launch was handed no workspace, or not the one its planted declaration lays out',
+  )
+
+  // Its crew text files: the files the declaration names, read from the planted places.
+  assert.deepEqual(launch.place.crew_text_files, THE_PLANTED_CREW_TEXTS, 'the launch was not handed the crew text files its declaration names')
+
+  // Its approval: the owner's one yes, and the member whose own writes are kept for this launch.
+  assert.deepEqual(launch.place.approved_fingerprints, [THE_APPROVAL.fingerprint], 'the launch was not held to the approval the start was given')
+  assert.equal(launch.place.approved_tree, THE_APPROVAL.tree, 'the launch was not read under the tree the owner approved')
+  assert.equal(launch.place.since_approval?.member, PLANTED.member, 'the launch kept no own writes for the member that was started')
 })
