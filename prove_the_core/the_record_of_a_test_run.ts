@@ -27,16 +27,10 @@ import { mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { isAbsolute, join } from 'node:path'
 import process from 'node:process'
 
+import { SYSTEM_TEMPORARY_DIRECTORY } from '../src/drive_the_recorded_host/short_relay_root.ts'
 import { linuxProcessIdentities } from '../src/linux_process_identity/process_identity_from_proc.ts'
 
 const NAME = 'the_record_of_a_test_run'
-
-/**
- * The temporary directory POSIX systems keep at a fixed, short path, whatever TMPDIR says. Stated here, once: the record
- * root falls back to it, and `short_relay_root.ts` — which is loaded by no launch — takes its relay root's base from here
- * too, so the two never look in two places (martha#802, R5).
- */
-export const SYSTEM_TEMPORARY_DIRECTORY = '/tmp'
 
 /** The directory the records live under, inside the runtime base: the one name `test:mine` and `stop:my-run` share. */
 export const RECORDS_DIRECTORY = 'martha-test-runs'
