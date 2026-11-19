@@ -12,6 +12,7 @@
 // number nobody holds anything to, and says the map and the lists have drifted.
 
 import { HOST_CEILINGS_SCRIPT } from '../../prove_the_core/declared_in_package_json.ts'
+import { aKeyDeclaredTwiceInWords } from '../../prove_the_core/keys_declared_twice.ts'
 import { NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import type { DeclaredDirectory, HostList } from './declared_host_directories.ts'
 import { standsAbove } from './record_the_ceilings.ts'
@@ -34,6 +35,8 @@ export type Finding =
     }
   | { readonly kind: 'no_ceiling'; readonly list: HostList; readonly directory: string }
   | { readonly kind: 'stale_ceiling'; readonly directory: string }
+  /** A key package.json declares more than once, which the parsed manifest every other reader sees hides (martha#753). */
+  | { readonly kind: 'duplicate_key'; readonly key: string; readonly lines: readonly number[]; readonly spellings: readonly string[] }
 
 /** The command that brings every ceiling down to its directory's count. */
 export const RECORD_COMMAND = `${NPM} run ${HOST_CEILINGS_SCRIPT} -- --record`
@@ -98,5 +101,7 @@ export function describe(finding: Finding): string {
       return `${LIST_NAME[finding.list]} names ${finding.directory}, which has no ceiling in martha.hostCeilings`
     case 'stale_ceiling':
       return `martha.hostCeilings names ${finding.directory}, which is in neither ${LIST_NAME.hostAdapters} nor ${LIST_NAME.hostGlue}`
+    case 'duplicate_key':
+      return aKeyDeclaredTwiceInWords(finding)
   }
 }
