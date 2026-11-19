@@ -43,8 +43,19 @@ const FACTS = RECORDED_GOOSE_ENGINE
 /** How long a test waits for a stand-in engine to write what it was run with, or for its group to be gone. */
 const THE_WAIT_A_TEST_GIVES_MS = 3_000
 
-/** A provider and a model a test names, and one setting of that provider's, so nothing here is the tree's. */
-const A_MODEL = { provider: 'a-provider-a-test-names', model: 'a-model-a-test-names', settings: { A_SETTING_A_TEST_NAMES: 'a-value-a-test-names' } }
+/** A setting the provider's recording names: the only kind of setting a declaration may carry (martha#797). */
+function aRecordedSetting(): string {
+  const setting = FACTS.openai_provider.settings[0]
+  if (setting === undefined) throw new Error('the recording names no provider setting, so no declaration could carry one')
+  return setting
+}
+
+/**
+ * The provider, one of its settings and a model a test names. The provider and the setting are the recording's
+ * own rather than names of the test's: since martha#797 a launch refuses a provider nothing recorded and a
+ * setting no recording names, so a made-up one would refuse every launch this file builds.
+ */
+const A_MODEL = { provider: FACTS.openai_provider.name, model: 'a-model-a-test-names', settings: { [aRecordedSetting()]: 'a-value-a-test-names' } }
 
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-goose-launch-'))
@@ -168,20 +179,43 @@ test('a recording that names neither the mode nor the kept extension refuses ins
   assert.throws(() => theConfigOfALaunch(noExtension, A_MODEL), new RegExp(THE_EXTENSION_A_MEMBER_KEEPS))
 })
 
-test('a key that is not a word cannot start a line of the config of its own, and a value cannot carry a line break (martha#541)', () => {
-  // A setting's key comes from the member's declaration, and a key holding a colon would write a second one.
-  assert.throws(() => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { 'a key: a value of its own': 'a-value-a-test-names' } }))
-  assert.throws(() => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { A_SETTING_A_TEST_NAMES: 'a value\nwith a line of its own' } }))
+test('a setting no recording names is refused before it is written, and a recorded setting cannot carry a line break (martha#541, #797)', () => {
+  // A setting's key comes from the member's declaration, and since #797 it is judged against the provider's
+  // recording before any line is written: a key holding a colon is refused as unrecorded, by name. The config's
+  // own word check stays for the keys the launch writes itself, which a model setting can no longer reach.
+  assert.throws(
+    () => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { 'a key: a value of its own': 'a-value-a-test-names' } }),
+    (error: unknown) => error instanceof Error && error.message.includes('a key: a value of its own'),
+  )
+  assert.throws(() => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { [aRecordedSetting()]: 'a value\nwith a line of its own' } }), /line break/)
 })
 
-test('a provider setting under the engine\'s own prefix is refused, so the subagent model cannot be written into the config root (martha#541)', () => {
+test('a provider setting under the engine\'s own prefix is refused in its own words, so the subagent model cannot be written into the config root (martha#541, #797)', () => {
   // The engine's own settings carry the prefix of the variable that moves its root, and the subagent model
   // and provider are among them: either one written here would move a delegate's model without Martha naming it.
+  // Since #797 the allow-list would refuse this key too, so pinning the key's name alone would leave the prefix
+  // check unpinned; what this holds is that the refusal says the true thing about why, which is why it stays.
   const enginesOwn = FACTS.path_root_variable.split('_')[0] ?? ''
+  const borrowed = `${enginesOwn}_A_SETTING_A_TEST_NAMES`
   assert.throws(
-    () => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { [`${enginesOwn}_A_SETTING_A_TEST_NAMES`]: 'a-value-a-test-names' } }),
-    new RegExp(`${enginesOwn}_A_SETTING_A_TEST_NAMES`),
+    () => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { [borrowed]: 'a-value-a-test-names' } }),
+    (error: unknown) => error instanceof Error && error.message.includes(borrowed) && error.message.includes("carries the engine's own prefix"),
   )
+})
+
+test('a declaration naming the setting that replaces the engine\'s hint files is refused by the launch, leaving no root, no home and no snapshot (martha#797)', async (t) => {
+  const { root, place } = anApprovedLaunch(t)
+  const refused = await launchTheGooseEngine({
+    facts: FACTS,
+    binary: aStandInEngineIn(root),
+    launch_root: root,
+    place,
+    model: { ...A_MODEL, settings: { [FACTS.hint_files.setting]: `["${FACTS.hint_files.goose_hints}"]` } },
+  })
+  assert.ok('refusal' in refused, 'a declaration naming the hint-files setting started an engine')
+  assert.match(refused.refusal, new RegExp(FACTS.hint_files.setting))
+  assert.deepEqual(readdirSync(place.snapshot_root), [], 'a refused launch left a snapshot behind')
+  assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch made its root')
 })
 
 test('the launch gets a root and a home of its own, made new and 0700, and neither is reused (martha#541)', (t) => {
