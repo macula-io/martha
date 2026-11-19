@@ -95,16 +95,22 @@ export function theWindowStep(open: ACrewToolsWindow | undefined, fact: ServedTo
     const { at, cause_neutral, causes, failed_servers } = fact
     return { step: 'opened', window: { member, session, from: at, cause_neutral, causes, failed_servers, turns: 0, pushes: 0, merges: 0 } }
   }
+  // The close's spread keeps every mark the open window carried, `beats_handed` among them: a close is never the place
+  // one is dropped (martha#658).
   if (fact.state === 'held' && isOpen(open)) return { step: 'closed', window: { ...open, to: fact.at, closed_by: closedByOf(open, session, predecessor) } }
   return { step: 'none' }
 }
 
-/** The window with one more main turn counted, when it is open and the turn is the window's own session's. */
+/**
+ * The window with one more main turn counted, when it is open and the turn is the window's own session's. The spread
+ * keeps every mark the file holds, `beats_handed` among them: a count is never the place one is dropped (martha#658).
+ */
 export function aTurnCounted(window: ACrewToolsWindow | undefined, session: string): ACrewToolsWindow | undefined {
   return isOpen(window) && window.session === session ? { ...window, turns: window.turns + 1 } : undefined
 }
 
-/** The window with the pushes and merges of one shell line counted, when it is open and the call is its session's. */
+/** The window with the pushes and merges of one shell line counted, when it is open and the call is its session's. Its
+ * spread keeps the marks too, as `aTurnCounted`'s does: counting never un-hands the beats (martha#658). */
 export function aShellLineCounted(window: ACrewToolsWindow | undefined, session: string, line: string): ACrewToolsWindow | undefined {
   if (!isOpen(window) || window.session !== session) return undefined
   const fields = readTheGitCallsInAShellLine(line)
