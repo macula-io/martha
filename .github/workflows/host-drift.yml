@@ -36,6 +36,9 @@ on:
       - 'src/record_claude_code_host/**'
       - 'prove_the_recorded_host_is_current/**'
       - 'prove_the_relay_loads/prove_the_order_of_the_dialogs.mjs'
+      - 'prove_the_relay_loads/prove_the_bash_answers.mjs'
+      - 'prove_the_relay_loads/the_wait_a_probe_gives_a_screen.mjs'
+      - 'prove_the_relay_loads/the_recorded_host_installed.sh'
       - '.github/workflows/host-drift.yml'
 
 permissions:
@@ -60,3 +63,13 @@ jobs:
       # change that order, so it is measured here, on the host the step above installed.
       - name: the order the host raises its dialog events in
         run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_order_of_the_dialogs.mjs "${{ runner.temp }}/dialog-order"
+      # The Bash answers (martha#812): what the host answers a tool.call hook for the commands the recording holds, one
+      # run of the host per case, through a scratch plugin. Proven first on a known host — the release the recording is
+      # of, installed beside latest — and only then taken on this release, whose answers are the ones that count. A run
+      # that cannot take a case exits 2 naming it, so a green step means every case was taken.
+      - name: the recorded release, to prove the harness on a known host
+        run: prove_the_relay_loads/the_recorded_host_installed.sh "${{ runner.temp }}/the-recorded-host"
+      - name: the Bash answers on the recorded release (the control)
+        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-recorded-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_bash_answers.mjs "${{ runner.temp }}/bash-answers-control"
+      - name: the Bash answers on this release
+        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_bash_answers.mjs "${{ runner.temp }}/bash-answers"
