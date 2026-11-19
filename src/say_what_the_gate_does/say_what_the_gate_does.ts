@@ -97,7 +97,7 @@ export interface TheAskOfTheGate {
 /**
  * `gate [--member <name>]`: the act, and the member whose lines were asked for; undefined when the words are no way
  * the command is used. The switch is this report's own vocabulary, so it is read here beside the report rather than
- * in ../run_the_martha_command, an adapter that composes slices and has a ceiling.
+ * in ../run_the_martha_command, an adapter that composes slices.
  */
 export function gateOf(act: string, argv: readonly string[]): TheAskOfTheGate | undefined {
   const [, switchWord, member] = argv
