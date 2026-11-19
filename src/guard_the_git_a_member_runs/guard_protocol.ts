@@ -63,6 +63,23 @@ export function heardGitVerdict(status: number, text: string): HeardGitVerdict {
 }
 
 /**
+ * What a member's environment carries that would choose the code the judge's own node runs (martha#772): a preload or
+ * any node flag, and a compile cache whose entries node runs in place of the judge's files, checked only by a sum anyone
+ * can compute. The shim and the hook keep each one, start the judge without it, and the judge hands it back to the real
+ * git, so the member's git and everything git starts still get exactly what the member set.
+ */
+export const WHAT_THE_JUDGE_NEVER_TAKES = ['NODE_OPTIONS', 'NODE_COMPILE_CACHE'] as const
+
+/** The name a variable the judge never takes is kept under while the judge runs, for the real git it hands a call to. */
+export const theKeptNameOf = (variable: string): string => `MARTHA_GUARD_KEPT_${variable}`
+
+/** The name that says whether the member had the variable at all, which an empty value alone cannot say. */
+export const theHadNameOf = (variable: string): string => `MARTHA_GUARD_HAD_${variable}`
+
+/** What `theHadNameOf` holds when the member had the variable, empty or not; it is unset or empty when it did not. */
+export const THE_MEMBER_HAD_IT = '1'
+
+/**
  * How long a shim waits for the launcher before it gives the call to the real git (martha#562). The launcher answers
  * from git itself — a clone's branches, its default branch and its worktrees — so the wait is long enough for three
  * reads of a large checkout and short enough that a member's shell does not hang on a launcher that has gone.

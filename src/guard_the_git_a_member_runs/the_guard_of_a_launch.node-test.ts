@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { GIT_CALL_PATH } from './guard_protocol.ts'
+import { GIT_CALL_PATH, REF_TRANSACTION_PATH } from './guard_protocol.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
@@ -366,4 +366,103 @@ test("a checkout's own config-named hook runs none for the event the launch keep
   assert.notEqual(ran.status, 0, `the delete was not stopped: ${ran.stderr}`)
   assert.deepEqual(launcher.asked.map((question) => question.body), [{ updates: [{ ref: 'refs/heads/uranus/9', deletes: true }] }])
   assert.equal(existsSync(under.aHookTheCheckoutNames), false, "the hook the checkout names in its own config ran under the launch's switches")
+})
+
+// The judge's own process (martha#772): the shim and the hook start the launch's node on the launch's judge, and what a
+// member's environment carries must not choose the code that node runs. The two variables are spelled here, never read
+// from the guard's own list of them, so a list that loses one is caught by name rather than planting nothing.
+const A_PRELOAD_VARIABLE = 'NODE_OPTIONS'
+const A_CACHE_VARIABLE = 'NODE_COMPILE_CACHE'
+
+/** What a member planted for every node it starts, and where each plant shows that it was taken. */
+interface APlantedNode {
+  readonly env: Record<string, string>
+  /** The file the planted preload appends to whenever a node runs it. */
+  readonly mark: string
+  /** The member's own compile cache folder, empty until a node writes its entries there. */
+  readonly cache: string
+}
+
+/**
+ * A member environment that plants code for the judge: a preload that leaves a mark, a compile cache of the member's,
+ * and a `node.config.json` in each folder git runs from, which node reads only when a flag asks it to (route 3 of the
+ * design) — so a flag that reached the judge by any road is caught here too.
+ */
+function aPlantedNodeIn(directory: string, workingFolders: readonly string[]): APlantedNode {
+  const planted = join(directory, 'planted')
+  mkdirSync(planted)
+  const mark = join(planted, 'the-planted-preload-ran')
+  const preload = join(planted, 'preload.mjs')
+  writeFileSync(preload, `import { appendFileSync } from 'node:fs'\nappendFileSync(${JSON.stringify(mark)}, process.argv.slice(2).join(' ') + '\\n')\n`)
+  for (const folder of workingFolders) writeFileSync(join(folder, 'node.config.json'), `${JSON.stringify({ nodeOptions: { import: [preload] } })}\n`)
+  const cache = join(planted, 'the-members-own-compile-cache')
+  mkdirSync(cache)
+  return { env: { [A_PRELOAD_VARIABLE]: `--import=${preload}`, [A_CACHE_VARIABLE]: cache }, mark, cache }
+}
+
+test("the judge takes neither the member's NODE_OPTIONS nor its NODE_COMPILE_CACHE, on the shim or on the hook (martha#772)", async (t) => {
+  const directory = aDirectory(t, 'martha-772-door-')
+  mkdirSync(join(directory, 'launch'), { recursive: true })
+  const launcher = await aLauncherIn(t, { status: 200, body: JSON.stringify({ allow: 1 }) })
+  t.after(() => launcher.close())
+  const under = aCloneUnderTheGuard(directory, launcher.socket)
+  const planted = aPlantedNodeIn(directory, [directory, under.clone])
+  const env = { ...under.env, ...planted.env }
+
+  const shim = await theRunOf('/bin/sh', ['-c', 'git status'], { cwd: directory, env })
+  const hook = await theRunOf('/usr/bin/git', ['-c', 'user.name=Ann', '-c', 'user.email=ann@example.invalid', 'commit', '--quiet', '--allow-empty', '-m', 'a commit the hook judges'], { cwd: under.clone, env })
+
+  // Both judges ran, or this test proves nothing about them: each asked the launcher its own question.
+  assert.equal(shim.status, 0, `the shim's call did not run: ${shim.stderr}`)
+  assert.equal(hook.status, 0, `the commit did not run: ${hook.stderr}`)
+  assert.ok(launcher.asked.some((question) => question.path === GIT_CALL_PATH), "the shim's judge never ran")
+  assert.ok(launcher.asked.some((question) => question.path === REF_TRANSACTION_PATH), "the hook's judge never ran")
+  // Every door that was open is named, not only the first: each one is its own route into the judge.
+  const open = [
+    ...(existsSync(planted.mark) ? [`the member's NODE_OPTIONS reached the judge (the planted preload ran for: ${readFileSync(planted.mark, 'utf8').trim().replaceAll('\n', '; ')})`] : []),
+    ...(readdirSync(planted.cache).length > 0 ? [`the judge took the member's NODE_COMPILE_CACHE (it wrote ${readdirSync(planted.cache).join(', ')} there)`] : []),
+  ]
+  assert.deepEqual(open, [], open.join('\n'))
+})
+
+/** A real git that says the whole environment it was started with, one `NAME=value` a line. */
+function aRealGitThatSaysItsEnvironmentIn(directory: string): string {
+  const bin = join(directory, 'real-bin')
+  mkdirSync(bin)
+  const realGit = join(bin, 'git')
+  writeFileSync(realGit, '#!/bin/sh\nexec env\n')
+  chmodSync(realGit, 0o755)
+  return realGit
+}
+
+/** What a started program's `env` said, as names and values; a value may hold `=`, a name never does. */
+const theEnvironmentSaid = (said: string): Map<string, string> =>
+  new Map(said.split('\n').filter((line) => line.includes('=')).map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]))
+
+/** The names a shell adds to what it is given, which no program of the guard's sets. */
+const WHAT_A_SHELL_ADDS = new Set(['PWD', 'OLDPWD', 'SHLVL', '_'])
+
+test("the real git, and everything it starts, still gets the member's own NODE_OPTIONS and NODE_COMPILE_CACHE, set, empty or unset (martha#772)", async (t) => {
+  const directory = aDirectory(t, 'martha-772-kept-')
+  mkdirSync(join(directory, 'launch'), { recursive: true })
+  const placed = putTheGuardIn(join(directory, 'launch'), process.execPath, aRealGitThatSaysItsEnvironmentIn(directory))
+  assert.ok('directory' in placed, `the guard could not be placed: ${'refusal' in placed ? placed.refusal : ''}`)
+  // No launcher socket: the judge hands the call straight to the real git, which is the path every allowed call ends on.
+  const base = thePathWithTheGuardFirst({ PATH: `${join(directory, 'real-bin')}:/usr/bin:/bin` }, placed.directory) as Record<string, string>
+
+  const cases: readonly { readonly given: Record<string, string>; readonly said: string }[] = [
+    { given: { [A_PRELOAD_VARIABLE]: '--max-old-space-size=512', [A_CACHE_VARIABLE]: '' }, said: 'one set, one set empty' },
+    { given: {}, said: 'both unset' },
+  ]
+  for (const one of cases) {
+    const given = { ...base, ...one.given }
+    const ran = await theRunOf('/bin/sh', ['-c', 'git status'], { cwd: directory, env: given })
+    assert.equal(ran.status, 0, `${one.said}: the call did not run: ${ran.stderr}`)
+    const seen = theEnvironmentSaid(ran.stdout)
+    for (const name of [A_PRELOAD_VARIABLE, A_CACHE_VARIABLE]) {
+      assert.equal(seen.get(name), given[name], `${one.said}: the real git was not handed the member's ${name} as the member had it`)
+    }
+    const added = [...seen.keys()].filter((name) => !(name in given) && !WHAT_A_SHELL_ADDS.has(name))
+    assert.deepEqual(added, [], `${one.said}: the real git was handed names the member never set`)
+  }
 })
