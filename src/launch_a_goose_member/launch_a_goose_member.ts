@@ -64,6 +64,7 @@
 // The launch gate's rows for Goose's own files, and the inbound-path rows, are the rest of packages 7-8.
 
 import { spawn, type ChildProcess } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { accessSync, constants, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getuid } from 'node:process'
@@ -75,6 +76,8 @@ import { prepareLaunch, theRecordOfTheTextAStartLoads, type ATextAStartLoads, ty
 import { realOrResolved } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { makeRelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
+import { recordTheLauncher, recordTheMember, sweepLeftoverLaunchDirectories } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { theToolServersEntry } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts'
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { theFoldersReadBackWhole, theRootsWatch } from './the_roots_watch.ts'
@@ -304,6 +307,10 @@ const refused = (why: string): { readonly refusal: string } => ({ refusal: `The 
 
 /** One launch of a Goose member, as it runs. */
 export interface AGooseLaunch {
+  /** The launch's own directory in the relay root (design G2): its root, its home, its launcher record and the crew's socket. */
+  readonly directory: string
+  /** The socket the crew's tool server posts to, in the launch's directory; the caller serves it. */
+  readonly socket_path: string
   readonly places: ThePlacesOfALaunch
   /** The config file written for this launch, under its own root. */
   readonly config_at: string
@@ -325,7 +332,7 @@ export interface AGooseLaunch {
    * taken before the engine started. Why the member must stop, or undefined.
    */
   readonly settings_still_hold: () => string | undefined
-  /** Stops the engine whole and reads the permission store; says whether the engine had to be stopped and what it saved. */
+  /** Stops the engine whole, reads the permission store, then removes the launch's directory; says whether the engine had to be stopped and what it saved. */
   readonly end: () => Promise<TheEndOfALaunch>
 }
 
@@ -347,22 +354,35 @@ export interface AGooseLaunchAsked {
    * (martha#541, C2's residual on C3 to C9).
    */
   readonly place: SnapshotPlace
-  /** The folder a launch's root and home are made in, outside the owner's home. */
-  readonly launch_root: string
+  /**
+   * This user's relay root, outside the owner's home (design G2): the launch's own directory is made in it, the same way a
+   * Claude Code launch makes its own, so one sweep clears what a launcher killed hard left of either.
+   */
+  readonly relay_root: string
   readonly model: TheModelALaunchRuns
-  /** The relay socket the crew's tool server posts to, and the token it carries: the launch's own, minted for it. */
-  readonly tool_server: { readonly socket_path: string; readonly token: string }
+  /** The token the crew's tool server carries: the launch's own, minted for it. Its socket is in the launch's directory. */
+  readonly tool_server: { readonly token: string }
   /** The owner's Claude Code settings watch (`hookSettingsWatch(...).check`), run first in every re-check: why the owner's settings now turn hooks off, or undefined. */
   readonly owners_settings: () => string | undefined
   /** A test's hand on the config root (and the secrets file beside it) between their write and the engine's start; a real launch gives none. */
   readonly before_the_start?: (config_at: string) => void
+  /** A test's hand right after the launcher is recorded, before anything else of the launch is written; a real launch gives none. */
+  readonly when_the_launcher_is_recorded?: (directory: string) => void
+  /** A test's hand between the engine's spawn and its record; a real launch gives none. */
+  readonly before_the_member_is_recorded?: (pid: number) => Promise<void>
 }
 
 /**
- * One launch, whole: decides on the place through `prepareLaunch`, makes the places, writes the config root, records
- * the checkout's text the engine will attach, and starts the engine. `end()` stops it, reads the permission store and
- * removes the gate's snapshot. A refusal, at any step, leaves nothing of the launch's own — nor the snapshot —
- * behind and starts nothing.
+ * One launch, whole: decides on the place through `prepareLaunch`, sweeps what launches killed hard left in the relay
+ * root, makes the launch's own directory there and records the launcher in it, makes the places, writes the config root,
+ * records the checkout's text the engine will attach, starts the engine and records it. `end()` stops it, reads the
+ * permission store and removes the gate's snapshot and the launch's directory. A refusal, at any step, leaves nothing of
+ * the launch's own — nor the snapshot — behind and starts nothing.
+ *
+ * The order is design G2's: the launcher is recorded before any key is written, so a directory a sweep leaves alone (one
+ * with no record) never holds one, and a launcher killed hard after that leaves a record whose processes are gone, which
+ * the next start of any member sweeps, key included. Between the spawn and the engine's record the record names only the
+ * launcher; a launcher that dies there closes the engine's stdin, and the engine ends on it.
  */
 export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AGooseLaunch | { readonly refusal: string }> {
   if (asked.place.host !== asked.facts.engine_name) {
@@ -376,8 +396,25 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
   // there is no inherited value for them to drop.
   const prepared = prepareLaunch(asked.place, thisMachine)
   if (!prepared.allow) return { refusal: prepared.refusal }
-  const made = theLaunchMadeBy(asked, prepared)
-  if ('refusal' in made) return made
+  sweepLeftoverLaunchDirectories(asked.relay_root)
+  const directory = makeRelayDirectory(join(asked.relay_root, randomUUID()))
+  if (!directory.made) {
+    removeTheTree(prepared.snapshot_dir)
+    return { refusal: directory.refusal }
+  }
+  const notStarted = (why: string): { readonly refusal: string } => {
+    directory.remove()
+    removeTheTree(prepared.snapshot_dir)
+    return refused(why)
+  }
+  const recorded = recordTheLauncher(directory.directory)
+  if (recorded !== undefined) return notStarted(recorded)
+  asked.when_the_launcher_is_recorded?.(directory.directory)
+  const made = theLaunchMadeBy(asked, prepared, directory)
+  if ('refusal' in made) {
+    directory.remove()
+    return made
+  }
   const { places, config_at, text_a_start_loads } = made
   // The root read back just before the engine reads it (martha#541 C1, guard row 3): the servers it names are a fact of
   // this launch, and a root that names any server but the crew's, or is not the text this launch wrote, starts nothing.
@@ -385,11 +422,6 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
   const secrets = { at: theSecretsFileOf(asked.facts, places.root), written: made.secrets }
   const readBack = theRootAsItWasWritten(asked.facts, config_at, made.config, secrets)
   const whole = theFoldersReadBackWhole(asked.facts, places.root)
-  const notStarted = (why: string): { readonly refusal: string } => {
-    for (const folder of [places.root, places.home]) removeTheTree(folder)
-    removeTheTree(prepared.snapshot_dir)
-    return refused(why)
-  }
   if ('refusal' in readBack) return notStarted(readBack.refusal)
   if ('refusal' in whole) return notStarted(whole.refusal)
   // The snapshot is taken here, after the read-back and before the spawn, so nothing of the engine's is in it.
@@ -404,9 +436,17 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
 
   const started = await startTheEngine(asked.facts, asked.binary, places, theEnvironmentOfALaunch(asked.facts, places))
   if ('refusal' in started) {
-    for (const folder of [places.root, places.home]) removeTheTree(folder)
+    directory.remove()
     removeTheTree(prepared.snapshot_dir)
     return started
+  }
+  await asked.before_the_member_is_recorded?.(started.pid)
+  const member = recordTheMember(directory.directory, started.pid)
+  if (member !== undefined) {
+    const ended = started.exited
+    started.stop()
+    await ended
+    return notStarted(member)
   }
 
   const end = async (): Promise<TheEndOfALaunch> => {
@@ -415,9 +455,11 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
     started.stop()
     await ended
     removeTheTree(prepared.snapshot_dir)
-    return { stopped, permissions: thePermissionStoreIsStillEmpty(places.root) }
+    const permissions = thePermissionStoreIsStillEmpty(places.root)
+    directory.remove()
+    return { stopped, permissions }
   }
-  return { places, config_at, text_a_start_loads, servers: readBack.servers, engine: started, settings_still_hold, end }
+  return { directory: directory.directory, socket_path: directory.socket_path, places, config_at, text_a_start_loads, servers: readBack.servers, engine: started, settings_still_hold, end }
 }
 
 /**
@@ -451,7 +493,7 @@ function whyTheSecretsFileIsNotAsWritten(secrets: { readonly at: string; readonl
  * which promises that the engine was exec'd and not that it has run, so a record read after the start cannot be made to
  * differ on purpose. It matters little: the engine reads the same files again on every model request (A25 and A26).
  */
-function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly places: ThePlacesOfALaunch; readonly config_at: string; readonly config: string; readonly secrets: string; readonly text_a_start_loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
+function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLaunch, { readonly allow: true }>, directory: { readonly directory: string; readonly socket_path: string }): { readonly places: ThePlacesOfALaunch; readonly config_at: string; readonly config: string; readonly secrets: string; readonly text_a_start_loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
   const leaveNothingBehind = (why: string, folders: readonly string[] = []): { readonly refusal: string } => {
     for (const folder of folders) removeTheTree(folder)
     removeTheTree(prepared.snapshot_dir)
@@ -464,14 +506,14 @@ function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLau
   }
   const recorded = theRecordOfTheTextAStartLoads(asked.place, thisMachine)
   if ('refusal' in recorded) return leaveNothingBehind(recorded.refusal)
-  const made = thePlacesOfALaunch(asked.launch_root, realOrResolved(thisMachine, asked.place.launch_dir))
+  const made = thePlacesOfALaunch(directory.directory, realOrResolved(thisMachine, asked.place.launch_dir))
   if ('refusal' in made) return leaveNothingBehind(made.refusal)
   const { places } = made
 
   let config: string
   let secrets: string
   try {
-    const entry = theToolServersEntry(asked.facts.stdio_extension, { ...asked.tool_server, checkout: places.checkout })
+    const entry = theToolServersEntry(asked.facts.stdio_extension, { socket_path: directory.socket_path, token: asked.tool_server.token, checkout: places.checkout })
     config = theConfigOfALaunch(asked.facts, asked.model, { key: THE_CREWS_TOOL_SERVER, entry })
     secrets = theSecretsOfALaunch(asked.facts, asked.model)
   } catch (error) {

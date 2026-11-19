@@ -7,7 +7,7 @@
 // test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -19,6 +19,8 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theToolServersEntry } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts'
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
+import { LAUNCHER_RECORD_NAME } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
+import { killGroup } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import {
   THE_EXTENSION_A_MEMBER_KEEPS,
   THE_EXTENSIONS_SETTING,
@@ -30,8 +32,6 @@ import {
 import {
   A_LAUNCHS_FOLDERS_MODE,
   THE_PATH_A_LAUNCH_GIVES,
-  THE_HOME_OF_A_LAUNCH,
-  THE_ROOT_OF_A_LAUNCH,
   launchTheGooseEngine,
   startTheEngine,
   theConfigFileOf,
@@ -70,6 +70,16 @@ const A_MODEL = { provider: FACTS.openai_provider.name, model: 'a-model-a-test-n
 
 /** A relay socket and a token a test names: the launch's own would be minted, and nothing here reads either. */
 const A_TOOL_SERVER = { socket_path: join(tmpdir(), 'a-relay-a-test-names.sock'), token: 'a-token-a-test-names' }
+
+/** The token a launch's crew tool server carries; its socket is the launch's own. */
+const A_TOKEN = { token: A_TOOL_SERVER.token }
+
+/** The relay root a test's launches make their directories in: this user's, 0700, made once. */
+function aRelayRootIn(root: string): string {
+  const relay = join(root, 'relay')
+  mkdirSync(relay, { recursive: true, mode: 0o700 })
+  return relay
+}
 
 /** The owner's settings watch of a launch whose test is not about it: the settings hold. */
 const THE_OWNERS_SETTINGS_HOLD = (): undefined => undefined
@@ -246,16 +256,16 @@ test('a declaration naming the setting that replaces the engine\'s hint files is
   const refused = await launchTheGooseEngine({
     facts: FACTS,
     binary: aStandInEngineIn(root),
-    launch_root: root,
+    relay_root: aRelayRootIn(root),
     place,
     model: { ...A_MODEL, settings: { [FACTS.hint_files.setting]: `["${FACTS.hint_files.goose_hints}"]` } },
-    tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD,
+    tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD,
   })
   assert.ok('refusal' in refused, 'a declaration naming the hint-files setting started an engine')
   assert.match(refused.refusal, new RegExp(FACTS.hint_files.setting))
   assert.deepEqual(readdirSync(place.snapshot_root), [], 'a refused launch left a snapshot behind')
-  assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch made its root')
-  assert.equal(existsSync(join(root, THE_HOME_OF_A_LAUNCH)), false, 'a refused launch made its home')
+  assert.deepEqual(readdirSync(aRelayRootIn(root)), [], 'a refused launch made its root')
+  assert.deepEqual(readdirSync(aRelayRootIn(root)), [], 'a refused launch made its home')
 })
 
 test('the launch gets a root and a home of its own, made new and 0700, and neither is reused (martha#541)', (t) => {
@@ -422,13 +432,13 @@ test('an environment that hands the engine no PATH, or an empty one, is refused 
 
 test('one launch writes its root, starts the engine and ends with the permission store still empty; a binary that is not there refuses (martha#541)', async (t) => {
   const { root, place } = anApprovedLaunch(t)
-  const refused = await launchTheGooseEngine({ facts: FACTS, binary: join(root, 'not-there'), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD })
+  const refused = await launchTheGooseEngine({ facts: FACTS, binary: join(root, 'not-there'), relay_root: aRelayRootIn(root), place, model: A_MODEL, tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD })
   assert.ok('refusal' in refused, 'a missing engine binary started a launch')
 
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), relay_root: aRelayRootIn(root), place, model: A_MODEL, tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD })
   assert.ok('engine' in launch, 'the launch was refused')
   t.after(() => launch.engine.stop())
-  assert.equal(readFileSync(launch.config_at, 'utf8'), theConfigOfALaunch(FACTS, A_MODEL, { key: THE_CREWS_TOOL_SERVER, entry: theToolServersEntry(FACTS.stdio_extension, { ...A_TOOL_SERVER, checkout: launch.places.checkout }) }))
+  assert.equal(readFileSync(launch.config_at, 'utf8'), theConfigOfALaunch(FACTS, A_MODEL, { key: THE_CREWS_TOOL_SERVER, entry: theToolServersEntry(FACTS.stdio_extension, { ...A_TOOL_SERVER, socket_path: launch.socket_path, checkout: launch.places.checkout }) }))
   assert.equal(realpathSync(launch.config_at).startsWith(realpathSync(launch.places.root)), true)
 
   const ended = await launch.end()
@@ -440,7 +450,7 @@ test('a launch whose engine had already ended says it was not stopped, and still
   const { root, place } = anApprovedLaunch(t)
   const briefly = join(root, 'an-engine-that-has-finished')
   writeFileSync(briefly, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: briefly, launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: briefly, relay_root: aRelayRootIn(root), place, model: A_MODEL, tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD })
   assert.ok('engine' in launch, 'the launch was refused')
   t.after(() => launch.engine.stop())
   await launch.engine.exited
@@ -491,21 +501,21 @@ test('a launch on a checkout the owner has not approved is refused before anythi
   const [family] = ENGINE_FAMILIES.plugins
   mkdirSync(dirname(join(checkout, family ?? '')), { recursive: true })
   writeFileSync(join(checkout, family ?? ''), 'a plugin the gate reads\n')
-  const refused = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD })
+  const refused = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), relay_root: aRelayRootIn(root), place, model: A_MODEL, tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD })
   assert.ok('refusal' in refused, 'an unapproved checkout started an engine')
   assert.match(refused.refusal, /approv/i)
   assert.deepEqual(readdirSync(place.snapshot_root), [], 'a refused launch left a snapshot behind')
-  assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch made its root')
+  assert.deepEqual(readdirSync(aRelayRootIn(root)), [], 'a refused launch made its root')
 })
 
 test('a place naming another host is refused, and an approved launch records its hints, each naming the file and the source it is (martha#541)', async (t) => {
   const { root, place, checkout } = anApprovedLaunch(t)
-  const wrongHost = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place: { ...place, host: 'opencode' }, model: A_MODEL, tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD })
+  const wrongHost = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), relay_root: aRelayRootIn(root), place: { ...place, host: 'opencode' }, model: A_MODEL, tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD })
   assert.ok('refusal' in wrongHost, 'a place for another host started the engine')
 
   writeFileSync(join(checkout, ENGINE_HINTS_FILE), 'a hint\n')
   writeFileSync(join(checkout, AGENTS_MD_FILE), 'an agents file\n')
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), relay_root: aRelayRootIn(root), place, model: A_MODEL, tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD })
   assert.ok('engine' in launch, 'the launch was refused')
   t.after(() => launch.engine.stop())
   assert.deepEqual(launch.text_a_start_loads.map((one) => one.file), [ENGINE_HINTS_FILE, AGENTS_MD_FILE])
@@ -523,24 +533,24 @@ async function aLaunchOfAnEditedRoot(t: TestContext, edit: (config: string) => s
   const refused = await launchTheGooseEngine({
     facts: FACTS,
     binary: aStandInEngineIn(root),
-    launch_root: root,
+    relay_root: aRelayRootIn(root),
     place,
     model: A_MODEL,
-    tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD,
+    tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD,
     before_the_start: (config_at) => writeFileSync(config_at, edit(readFileSync(config_at, 'utf8'))),
   })
   if ('engine' in refused) t.after(() => refused.engine.stop())
   assert.ok('refusal' in refused, 'a launch whose config root was edited before the start started the engine')
   assert.deepEqual(readdirSync(place.snapshot_root), [], 'a refused launch left a snapshot behind')
-  assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch left its root, and the edited config in it')
-  assert.equal(existsSync(join(root, THE_HOME_OF_A_LAUNCH)), false, 'a refused launch left its home')
+  assert.deepEqual(readdirSync(aRelayRootIn(root)), [], 'a refused launch left its root, and the edited config in it')
+  assert.deepEqual(readdirSync(aRelayRootIn(root)), [], 'a refused launch left its home')
   assert.equal(existsSync(join(root, 'the-cwd')), false, 'the stand-in engine ran')
   return refused.refusal
 }
 
 test('a launch reads its config root back before the engine starts, and the servers it names, the crew\'s alone, are a fact of the launch (martha#541 C1 R1)', async (t) => {
   const { root, place } = anApprovedLaunch(t)
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), relay_root: aRelayRootIn(root), place, model: A_MODEL, tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD })
   assert.ok('engine' in launch, 'the launch was refused')
   t.after(() => launch.engine.stop())
   assert.deepEqual(launch.servers, [THE_CREWS_TOOL_SERVER])
@@ -564,7 +574,7 @@ test('a config root edited between its write and the start, its servers untouche
 
 test('a launch writes the secrets to the recorded file beside its config, 0600, and none of them into the config (#541 package A; mutant: secrets.yaml written 0644)', async (t) => {
   const { root, place } = anApprovedLaunch(t)
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), relay_root: aRelayRootIn(root), place, model: A_MODEL, tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD })
   assert.ok('engine' in launch, `the launch was refused: ${'refusal' in launch ? launch.refusal : ''}`)
   t.after(() => launch.engine.stop())
   const at = theSecretsFileOf(FACTS, launch.places.root)
@@ -582,15 +592,15 @@ async function aLaunchOfAChangedSecretsFile(t: TestContext, change: (at: string)
   const refused = await launchTheGooseEngine({
     facts: FACTS,
     binary: aStandInEngineIn(root),
-    launch_root: root,
+    relay_root: aRelayRootIn(root),
     place,
     model: A_MODEL,
-    tool_server: A_TOOL_SERVER, owners_settings: THE_OWNERS_SETTINGS_HOLD,
+    tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD,
     before_the_start: (config_at) => change(join(dirname(config_at), FACTS.secret_storage.file)),
   })
   if ('engine' in refused) t.after(() => refused.engine.stop())
   assert.ok('refusal' in refused, 'a launch whose secrets file was changed before the start started the engine')
-  assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch left its root, and the secrets in it')
+  assert.deepEqual(readdirSync(aRelayRootIn(root)), [], 'a refused launch left its root, and the secrets in it')
   assert.equal(existsSync(join(root, 'the-cwd')), false, 'the stand-in engine ran')
   return refused.refusal
 }
@@ -608,7 +618,7 @@ test('a secrets file opened to others between its write and the start is refused
 test("after a result the launch re-checks in order: the owner's settings, the files it wrote, then config/ and .agents/ whole (#541 package A, design G1 row checkTheSettingsStillHold; mutants: a check dropped, the order changed)", async (t) => {
   const { root, place } = anApprovedLaunch(t)
   let owners: string | undefined
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER, owners_settings: () => owners })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), relay_root: aRelayRootIn(root), place, model: A_MODEL, tool_server: A_TOKEN, owners_settings: () => owners })
   assert.ok('engine' in launch, `the launch was refused: ${'refusal' in launch ? launch.refusal : ''}`)
   t.after(() => launch.engine.stop())
   assert.equal(launch.settings_still_hold(), undefined, 'a root as written holds')
@@ -628,4 +638,137 @@ test("after a result the launch re-checks in order: the owner's settings, the fi
   writeFileSync(added, 'x')
   assert.ok(launch.settings_still_hold()?.includes(`${added} was added`), 'a file added to config/ is seen')
   await launch.end()
+})
+
+test('the launcher is recorded before anything else of the launch is written, the engine once it runs, and the end leaves nothing in the relay root (#541 package A, design G2; mutants: the key written before the record, the engine not recorded, the directory kept)', async (t) => {
+  const { root, place } = anApprovedLaunch(t)
+  const relay = aRelayRootIn(root)
+  let seen: string[] | undefined
+  const launch = await launchTheGooseEngine({
+    facts: FACTS,
+    binary: aStandInEngineIn(root),
+    relay_root: relay,
+    place,
+    model: A_MODEL,
+    tool_server: A_TOKEN,
+    owners_settings: THE_OWNERS_SETTINGS_HOLD,
+    when_the_launcher_is_recorded: (directory) => {
+      seen = readdirSync(directory)
+    },
+  })
+  assert.ok('engine' in launch, `the launch was refused: ${'refusal' in launch ? launch.refusal : ''}`)
+  t.after(() => launch.engine.stop())
+  assert.deepEqual(seen, [LAUNCHER_RECORD_NAME], 'something of the launch was written before its launcher was recorded')
+  assert.equal(dirname(launch.directory), relay)
+  assert.equal(dirname(launch.socket_path), launch.directory, "the crew's socket is not in the launch's directory")
+  const record = JSON.parse(readFileSync(join(launch.directory, LAUNCHER_RECORD_NAME), 'utf8')) as { launcher: { pid: number }; member?: { pid: number } }
+  assert.equal(record.launcher.pid, process.pid)
+  assert.equal(record.member?.pid, launch.engine.pid, 'the engine is not in the record')
+  await launch.end()
+  assert.deepEqual(readdirSync(relay), [], "the end left the launch's directory")
+})
+
+/** Where a launcher in a child stops and says where it is: before the engine's start, or between its spawn and its record. */
+type APause = 'before_the_start' | 'before_the_member_is_recorded'
+
+/**
+ * A launcher in a child process of its own, so a test can kill it hard and never the test runner: it launches with the
+ * place and binary given, says where it is on its stdout at the pause, and stays there. Killed with its group after
+ * the test, whatever is left of it.
+ */
+function aLauncherInAChild(t: TestContext, root: string, asked: { readonly place: SnapshotPlace; readonly binary: string; readonly relay_root: string }, pause: APause): ChildProcess {
+  const here = new URL('.', import.meta.url).pathname
+  const script = join(root, 'a-launcher-in-a-child.mts')
+  writeFileSync(
+    script,
+    [
+      "import { writeSync } from 'node:fs'",
+      `import { launchTheGooseEngine } from ${JSON.stringify(join(here, 'launch_a_goose_member.ts'))}`,
+      `import { RECORDED_GOOSE_ENGINE } from ${JSON.stringify(join(here, '..', 'know_the_goose_engines_facts', 'recorded_goose_engine.ts'))}`,
+      'const asked = JSON.parse(process.argv[2])',
+      'const say = (what: unknown): void => { writeSync(1, `${JSON.stringify(what)}\n`) }',
+      'const pauses = {',
+      // A synchronous hook holds the launcher where it is by blocking its thread; the async one by never settling.
+      "  before_the_start: { before_the_start: (config_at: string) => { say({ config_at }); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0) } },",
+      '  before_the_member_is_recorded: { before_the_member_is_recorded: (pid: number) => { say({ pid }); return new Promise<void>(() => { setInterval(() => {}, 1 << 30) }) } },',
+      '}',
+      'await launchTheGooseEngine({ ...asked, facts: RECORDED_GOOSE_ENGINE, owners_settings: () => undefined, ...pauses[process.argv[3] as keyof typeof pauses] })',
+      '',
+    ].join('\n'),
+  )
+  // The launcher's own stdin is a pipe whose writer is another process that never writes or ends, not this runner:
+  // Node closes its end of a child's stdin pipe when the child exits, so an engine that took the launcher's stdin
+  // instead of a pipe of its own would see an end it should not, and pass.
+  const writer = spawn('sleep', ['300'], { stdio: ['ignore', 'pipe', 'ignore'], detached: true })
+  const child = spawn(process.execPath, [script, JSON.stringify({ ...asked, model: A_MODEL, tool_server: A_TOKEN }), pause], { stdio: [writer.stdout, 'pipe', 'inherit'], detached: true })
+  // The launcher holds its own copy of the pipe now; this runner's is closed, so it holds no handle past the test.
+  writer.stdout.destroy()
+  t.after(async () => {
+    await Promise.all(
+      [child, writer].map(async (one) => {
+        if (one.pid === undefined || one.exitCode !== null || one.signalCode !== null) return
+        const gone = new Promise((resolve) => one.once('exit', resolve))
+        killGroup(one.pid)
+        await gone
+      }),
+    )
+  })
+  return child
+}
+
+/** The first line a launcher in a child says, parsed; a child that ends or says nothing in time fails the test. */
+async function theFirstLineOf(child: ChildProcess): Promise<Record<string, unknown>> {
+  let said = ''
+  return await new Promise((resolve, reject) => {
+    const late = setTimeout(() => reject(new Error(`the launcher in a child said nothing in ${THE_WAIT_A_TEST_GIVES_MS} ms`)), THE_WAIT_A_TEST_GIVES_MS * 3)
+    child.stdout?.on('data', (chunk: Buffer) => {
+      said += chunk.toString('utf8')
+      if (!said.includes('\n')) return
+      clearTimeout(late)
+      resolve(JSON.parse(said.slice(0, said.indexOf('\n'))) as Record<string, unknown>)
+    })
+    child.once('exit', (code) => reject(new Error(`the launcher in a child ended (${code}) before it said where it was`)))
+  })
+}
+
+/** Kills a launcher in a child with SIGKILL, its own process only, and waits until it is gone. */
+async function killedHard(child: ChildProcess): Promise<void> {
+  const gone = new Promise((resolve) => child.once('exit', resolve))
+  child.kill('SIGKILL')
+  await gone
+}
+
+test("a launcher killed hard after the key is written leaves a directory the next launch's start sweeps, key included (#541 package A, design G2 proof; mutant: no sweep at the start)", async (t) => {
+  const { root, place } = anApprovedLaunch(t)
+  const relay = aRelayRootIn(root)
+  const child = aLauncherInAChild(t, root, { place, binary: aStandInEngineIn(root), relay_root: relay }, 'before_the_start')
+  const { config_at } = await theFirstLineOf(child)
+  assert.equal(typeof config_at, 'string')
+  const [left] = readdirSync(relay)
+  assert.ok(left !== undefined, 'the launcher in a child made no directory')
+  const directory = join(relay, left)
+  const launchRoot = dirname(dirname(String(config_at)))
+  assert.ok(existsSync(theSecretsFileOf(FACTS, launchRoot)), 'the key is not written yet, so this proves nothing about it')
+  await killedHard(child)
+  const next = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), relay_root: relay, place, model: A_MODEL, tool_server: A_TOKEN, owners_settings: THE_OWNERS_SETTINGS_HOLD })
+  assert.ok('engine' in next, `the next launch was refused: ${'refusal' in next ? next.refusal : ''}`)
+  t.after(() => next.engine.stop())
+  assert.equal(existsSync(directory), false, "the next start left the killed launch's directory, and its key")
+  await next.end()
+})
+
+test("an engine whose launcher is killed between the spawn and the engine's record ends: its stdin closes (#541 package A, design G2 step 2 build claim; mutant: the engine's stdin not the launcher's pipe)", async (t) => {
+  const { root, place } = anApprovedLaunch(t)
+  const binary = join(root, 'an-engine-that-reads-its-stdin')
+  // The engine's ACP server reads its client on stdin; this stand-in does only that, and ends at its end.
+  writeFileSync(binary, ['#!/bin/sh', 'cat > /dev/null', ''].join('\n'), { mode: 0o700 })
+  const child = aLauncherInAChild(t, root, { place, binary, relay_root: aRelayRootIn(root) }, 'before_the_member_is_recorded')
+  const { pid } = await theFirstLineOf(child)
+  assert.equal(typeof pid, 'number')
+  const engine = Number(pid)
+  t.after(() => killGroup(engine))
+  assert.ok(theGroupIsThere(engine), 'the engine had ended before its launcher was killed, so this proves nothing')
+  await killedHard(child)
+  for (let waited = 0; waited < THE_WAIT_A_TEST_GIVES_MS && theGroupIsThere(engine); waited += 25) await new Promise((resolve) => setTimeout(resolve, 25))
+  assert.equal(theGroupIsThere(engine), false, `the engine ${engine} still runs ${THE_WAIT_A_TEST_GIVES_MS} ms after its launcher was killed`)
 })
