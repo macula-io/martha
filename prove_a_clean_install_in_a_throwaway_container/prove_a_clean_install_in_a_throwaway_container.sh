@@ -253,9 +253,13 @@ MEMBER_FILES='' MEMBER_TEXT=''
 # Where the self-test found a kept record's headings and the tear-down, for the checks that read between them.
 KEPT_AT='' SCREEN_AT='' TORN_AT=''
 
+# One line of the run's: on a night, through the token's redactor first, so neither the terminal nor the log file ever
+# holds the token (martha#639 section 5, R4).
 log() {
-  printf '%s\n' "$*" >&3
-  if [ -n "${LOG_FILE}" ]; then printf '%s\n' "$*" >> "${LOG_FILE}"; fi
+  local line="$*"
+  if night_redacts; then line="$(night_redacted_line "${line}")"; fi
+  printf '%s\n' "${line}" >&3
+  if [ -n "${LOG_FILE}" ]; then printf '%s\n' "${line}" >> "${LOG_FILE}"; fi
 }
 
 # A step that passed, and one that did not: both name the step, and the failure says in one line what went wrong.
@@ -1020,6 +1024,7 @@ finish() {
   fi
   # The night's repository goes after the container that held its clone and the token, whatever happened.
   if ! night_close; then status=1; fi
+  if ! night_log_held_no_token; then status=1; fi
   if [ -n "${INTERRUPTED}" ]; then
     failed run "interrupted by ${INTERRUPTED}"
     status=1

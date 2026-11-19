@@ -26,11 +26,16 @@
 # - then the token: read from its 0600 file on the crew host and passed on standard input at every hop (ssh, then
 #   `podman exec -i`) into a 0600 file in the node user's home, read by `gh auth login --with-token`, and removed. It
 #   is never an argument at any hop. gh in the container must then answer as the bot recorded at setup;
+# - then the package (section 1) typed into the builder's session as the owner's turn; the night waits, within its work
+#   window, for the builder to queue the landing's ask in the clone's crew rows, then reads the pull request's head from
+#   GitHub (the throwaway script's read-back), prints the owner's second command (attach to the builder's session, say
+#   yes to the landing's menu, detach), and waits, within its yes window, for the landing to show in the crew's rows;
+# - in the finish, before the container goes and whatever happened after the night got ready: the clone's transcripts,
+#   rows and screens kept in the run folder, every byte through the token's redactor, and section 6's claims read from
+#   that kept record and from GitHub's read-back. On a night every line the run says goes through the redactor too; a
+#   token found anywhere fails the night by name (section 5, R4);
 # - at the end, whatever happened, after the container is gone: the repository deleted by keep_a_throwaway_repository.sh,
 #   which only takes GitHub's 404 as gone.
-#
-# The night after that (the package typed, the HANDOFF and VERDICT read, the owner's yes, the landing) is the next
-# part of #639 and not here: this part ends with the members up in the clone with the bot's login.
 
 # The script that makes and deletes the night's repository: this folder's own, or the stand-in a self-test names.
 NIGHT_THROWAWAY="${MARTHA_CLEAN_INSTALL_THROWAWAY:-${HERE}/keep_a_throwaway_repository.sh}"
@@ -361,6 +366,8 @@ NIGHT_LAUNCH_TRANSCRIPTS='the-members-own-config/projects/*/*.jsonl'
 # Where the run folder keeps the night's record, and the night file the claims read.
 NIGHT_KEPT_PART='kept'
 NIGHT_FILE_PART='night.json'
+# The mark a line the token had reached leaves in the run folder.
+NIGHT_TOKEN_IN_LOG_PART='token-in-log'
 # What the throwaway script's read-back writes in the run folder: GitHub's record of the pull request and of main.
 NIGHT_LANDED_PART='landed.json'
 # The package's issue, the one the throwaway script opens; the round and CI words the night's lines carry come from
@@ -473,6 +480,34 @@ night_keep_screens() {
   done
 }
 
+# Whether the run's lines go through the redactor: on a night, whose token file is on this host from the start.
+night_redacts() { a_night && [ -r "${NIGHT_TOKEN_FILE}" ]; }
+
+# One line, through the redactor. A line the token had reached is said redacted, and the run notes it in the run
+# folder, since a line can be said from inside a command substitution, whose variables the run never sees.
+night_redacted_line() {
+  local said status=0
+  said="$(printf '%s' "$1" | node --no-warnings "${NIGHT_GUARDS}" redact "${NIGHT_TOKEN_FILE}" 2> /dev/null)" || status=$?
+  case "${status}" in
+    0) printf '%s' "${said}" ;;
+    1) : > "${NIGHT_DIR}/${NIGHT_TOKEN_IN_LOG_PART}"; printf '%s' "${said}" ;;
+    *) printf '%s' '(a line the redactor could not read was left out)' ;;
+  esac
+}
+
+# The run's lines checked once more at its end: a line the token had reached fails the night by name.
+night_log_held_no_token() {
+  if ! a_night || [ ! -e "${NIGHT_DIR}/${NIGHT_TOKEN_IN_LOG_PART}" ]; then return 0; fi
+  rm -f "${NIGHT_DIR}/${NIGHT_TOKEN_IN_LOG_PART}"
+  failed 'night log' "$(night_token_reached_words)"
+  return 1
+}
+
+# The kept record's own words for a token found in it.
+night_token_reached_words() {
+  node --no-warnings -e 'import(process.argv[1]).then((m) => process.stdout.write(m.THE_TOKEN_REACHED_THE_RECORD))' "${REPO}/src/land_a_package_on_a_throwaway_repository/the_kept_record.ts"
+}
+
 # The record step: the clone's transcripts, rows and screens copied out of the container while the members still run
 # (a launch's snapshot goes with it), every byte through the redactor first. A token found in any of it is redacted
 # there and fails the night by name.
@@ -487,7 +522,7 @@ night_record_step() {
   reached="${reached}$(night_keep_rows "${rows}" "${kept}/rows")" || { failed 'night record' "the crew's rows at ${rows} could not be kept"; return 1; }
   night_keep_screens "${kept}" || { failed 'night record' 'a member'"'"'s screen could not be kept'; return 1; }
   if [ -n "${reached}" ]; then
-    failed 'night record' "$(node --no-warnings -e 'import(process.argv[1]).then((m) => process.stdout.write(m.THE_TOKEN_REACHED_THE_RECORD))' "${REPO}/src/land_a_package_on_a_throwaway_repository/the_kept_record.ts")"
+    failed 'night record' "$(night_token_reached_words)"
     return 1
   fi
   ok 'night record' "every launch's transcript, the crew's rows and each member's screen kept in ${kept}, through the redactor"
@@ -678,6 +713,8 @@ printf 'throwaway %s\n' "$1" >> "${standin}/calls"
 case "$1" in
   open)
     if [ -f "${standin}/night.open-fails" ]; then echo 'FAIL who: the calls answer as another account' >&2; exit 1; fi
+    # A case whose night.open-says-token exists stands for a line of the open's that carries the token.
+    if [ -f "${standin}/night.open-says-token" ]; then echo "a line with $(cat "${standin}/live/token") in it"; fi
     mkdir -p "$2/first"
     git -C "$2/first" init -q -b main
     printf '# A throwaway repository\n' > "$2/first/README.md"
@@ -1056,6 +1093,13 @@ night_self_test() {
   if grep -rqF -- "${NIGHT_SELF_TEST_TOKEN}" "${standin}/run" "${standin}/out" "${standin}/err"; then nfail 'the token reached the kept record or the log'; fi
   [ -f "${standin}/run/${NIGHT_KEPT_PART}/builder.jsonl" ] || nfail 'a transcript with the token in it was not kept redacted'
 
+  # R4 in the log: a line the run says carries the token: said redacted, and the night fails by name.
+  standin="${root}/night-token-in-log"; night_case "${standin}" night.open-says-token
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for '^FAIL night log: the token reached the kept record$' "${standin}/out" || nfail 'a token in a line of the run was not named'
+  if grep -qF -- "${NIGHT_SELF_TEST_TOKEN}" "${standin}/out" "${standin}/err"; then nfail 'the token reached the run'"'"'s lines'; fi
+  asked_for '^  a line with .* in it$' "${standin}/out" || nfail 'the line that carried the token was not said, redacted'
+
   # Row 1: the builder never hands off: the claims fail by the row's name.
   standin="${root}/night-no-handoff"; night_case "${standin}" night.no-handoff
   night_expect 1 "${standin}" || failures=$((failures + 1))
@@ -1127,7 +1171,7 @@ night_self_test() {
   # --night with no run folder is refused with the arguments.
   expect_status 2 "${root}" 'a-host' --night || failures=$((failures + 1))
 
-  for standin in night-ready night-no-yes night-no-ask night-token-kept night-no-handoff night-not-on-main night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
+  for standin in night-ready night-no-yes night-no-ask night-token-kept night-token-in-log night-no-handoff night-not-on-main night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
     if [ -e "${root}/${standin}/container.present" ]; then nfail "the ${standin} run left its container behind"; fi
   done
   return $((failures > 0))
