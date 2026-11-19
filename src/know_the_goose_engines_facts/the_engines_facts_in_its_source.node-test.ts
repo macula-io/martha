@@ -464,3 +464,41 @@ test('an approve-mode allow this reader does not know, or an approval that no lo
     assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
   }
 })
+
+/** The part that reads the engine's own folders (#541 package A), asked inside a test so a broken reader fails that test by name. */
+const foldersPart = (): string | undefined => partReading('engine_folders')
+
+test("the engine's own folders are read as its paths module picks them: each kind joined to a path root, and the layout's folder or one under the home without one (#541 package A, design G1; mutants: a join dropped, the layout's folder read as the home)", () => {
+  const recorded = RECORDED_FACTS.engine_folders
+  const changed = {
+    under_root: { ...Object.fromEntries(Object.entries(recorded.under_root).map(([kind, parts]) => [kind, [...parts, `${kind}_moved`]])), a_new_kind: ['a_new_folder'] },
+    without_root: { ...Object.fromEntries(Object.entries(recorded.without_root).map(([kind, place]) => [kind, 'layout' in place ? { layout: `${place.layout}_moved` } : { home: [...place.home, `${kind}_moved`] }])), a_new_kind: { home: ['a_new_folder'] } },
+  }
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, engine_folders: changed })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.engine_folders, changed)
+})
+
+test('a folder kind only one arm names, or a folder picked in a shape this reader does not know, makes the folders unreadable by name (#541 package A; mutants: each throw dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const paths = files[ENGINE_PLACES.paths] ?? ''
+  const [kind] = Object.keys(RECORDED_FACTS.engine_folders.under_root)
+  assert.ok(kind !== undefined)
+  const arm = `                DirType::${kind.charAt(0).toUpperCase()}${kind.slice(1)} => `
+  const at = paths.indexOf(`        } else {\n            let strategy`)
+  const withRoot = paths.indexOf(arm)
+  const withoutRoot = paths.indexOf(arm, at)
+  assert.ok(at > 0 && withRoot > 0 && withoutRoot > at, 'the tree names the kind in both arms')
+  const lineAt = (from: number): string => paths.slice(from, paths.indexOf('\n', from) + 1)
+  const cases = [
+    ['under a path root and', paths.replace(lineAt(withRoot), '')],
+    ['under a path root as', paths.replace(lineAt(withRoot), `${arm}elsewhere.join("${kind}"),\n`)],
+    ['without a path root as', `${paths.slice(0, withoutRoot)}${arm}PathBuf::from("/${kind}"),\n${paths.slice(withoutRoot + lineAt(withoutRoot).length)}`],
+  ] as const
+  for (const [why, broken] of cases) {
+    assert.notEqual(broken, paths, `${why}: the tree did not change`)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.paths]: broken }))
+    assert.deepEqual(unreadable.map(({ part }) => part), [foldersPart()], why)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
+  }
+})

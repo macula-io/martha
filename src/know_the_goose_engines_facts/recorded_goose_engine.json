@@ -279,6 +279,58 @@
     ],
     "unadvertised": "request_was_advertised"
   },
+  "engine_folders": {
+    "under_root": {
+      "config": [
+        "config"
+      ],
+      "data": [
+        "data"
+      ],
+      "state": [
+        "state"
+      ],
+      "plugins": [
+        ".agents",
+        "plugins"
+      ],
+      "agents": [
+        ".agents",
+        "agents"
+      ],
+      "agents_home": [
+        ".agents"
+      ]
+    },
+    "without_root": {
+      "config": {
+        "layout": "config_dir"
+      },
+      "data": {
+        "layout": "data_dir"
+      },
+      "state": {
+        "layout": "state_dir"
+      },
+      "plugins": {
+        "home": [
+          ".agents",
+          "plugins"
+        ]
+      },
+      "agents": {
+        "home": [
+          ".agents",
+          "agents"
+        ]
+      },
+      "agents_home": {
+        "home": [
+          ".agents"
+        ]
+      }
+    }
+  },
   "secret_storage": {
     "keyring_switch": "GOOSE_DISABLE_KEYRING",
     "file": "secrets.yaml"

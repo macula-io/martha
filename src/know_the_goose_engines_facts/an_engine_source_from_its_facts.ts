@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, PATH_RESOLVER, RESOLUTION_BASES, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type DeveloperTool, type EngineFacts, type EngineSource, type PathResolution, type ApproveModeUnasked, type PlatformExtension, type SecretStorage, type SessionStore, type ToolNaming } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PLACES, FOLDER_PICKER, GOOSE_CRATE, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, PATH_RESOLVER, RESOLUTION_BASES, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type DeveloperTool, type EngineFacts, type EngineSource, type PathResolution, type ApproveModeUnasked, type EngineFolders, type PlatformExtension, type SecretStorage, type SessionStore, type ToolNaming } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -128,7 +128,7 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.workspace]: `[workspace]\nmembers = ["crates/*"]\n\n[workspace.package]\nedition = "2024"\nversion = "${facts.engine_version}"\n`,
     [ENGINE_PLACES.engine_name]: `macro_rules! engine_name {\n    () => {\n        "${facts.engine_name}"\n    };\n}\n`,
     [ENGINE_PLACES.cli]: `        Some(Command::Acp { .. }) => "${facts.acp_command}",\n`,
-    [ENGINE_PLACES.paths]: `    pub(crate) fn path_root() -> Option<PathBuf> {\n        Self::validated_path_root(std::env::var_os("${facts.path_root_variable}"))\n    }\n`,
+    [ENGINE_PLACES.paths]: `impl Paths {\n${engineFolders(facts.engine_folders)}    pub(crate) fn path_root() -> Option<PathBuf> {\n        Self::validated_path_root(std::env::var_os("${facts.path_root_variable}"))\n    }\n}\n`,
     [ENGINE_PLACES.slash_commands]: `pub fn slash_commands_enabled() -> bool {\n    crate::config::Config::global()\n        .get_param::<bool>("${facts.slash_commands.setting}")\n        .unwrap_or(${String(facts.slash_commands.when_unset)})\n}\n`,
     [ENGINE_PLACES.modes]: `pub enum GooseMode {\n    #[default]\n${modes}}\n`,
     ...oneFilePerPath([
@@ -272,6 +272,21 @@ function approveModeUnasked(unasked: ApproveModeUnasked): Readonly<Record<string
       '            .collect();\n        if to_inspect.is_empty() {\n            return Ok(requests.iter().map(|_| ApprovalDecision::Allow).collect());\n        }\n',
     ].join(''),
   }
+}
+
+/**
+ * The engine's paths module as it picks a folder (#541 package A): each kind joined to the root under a path root, and
+ * after the `else` the layout's folder (state with the data folder to fall back on) or a folder under the home; another
+ * function before it with an arm of the same shape, which is not this one.
+ */
+function engineFolders(folders: EngineFolders): string {
+  const joins = (parts: readonly string[]): string => parts.map((part) => `.join("${part}")`).join('')
+  const withRoot = Object.entries(folders.under_root).map(([kind, parts]) => `                DirType::${pascalCase(kind)} => base${joins(parts)},\n`).join('')
+  const withoutRoot = Object.entries(folders.without_root).map(([kind, place]) => `                DirType::${pascalCase(kind)} => ${'layout' in place ? `strategy.${place.layout}().unwrap_or(strategy.data_dir())` : `strategy.home_dir()${joins(place.home)}`},\n`).join('')
+  return [
+    '    fn another_dir(dir_type: DirType) -> PathBuf {\n        if let Some(base) = Self::path_root() {\n            match dir_type {\n                DirType::Other => base.join("other"),\n            }\n        } else {\n            match dir_type {\n                DirType::Other => strategy.other_dir(),\n            }\n        }\n    }\n\n',
+    `    fn ${FOLDER_PICKER.function}(dir_type: DirType) -> PathBuf {\n        ${FOLDER_PICKER.with_root} {\n            match dir_type {\n${withRoot}            }\n        } else {\n            let strategy = choose();\n\n            match dir_type {\n${withoutRoot}            }\n        }\n    }\n\n`,
+  ].join('')
 }
 
 /** The same tree as a reader, for a test that never touches the disk. */

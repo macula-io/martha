@@ -108,7 +108,23 @@ export interface EngineFacts {
    * so these are what that stop catches; a new way to go unasked turns the drift check red.
    */
   readonly approve_mode_unasked: ApproveModeUnasked
+  /**
+   * The folders the engine keeps for itself (#541 package A, design G1 and r=4 R1), by the kind its paths module names
+   * them with: under a path root, the folders it joins to the root; without one, where the platform layout puts them,
+   * as the layout's own function or a folder under the home. The launch refuses a member's write into either, so a
+   * folder the engine moves turns the drift check red rather than a guard that watches the old place.
+   */
+  readonly engine_folders: EngineFolders
 }
+
+/** Each folder kind of the engine: the folders joined to a path root, and the place it takes without one. */
+export interface EngineFolders {
+  readonly under_root: Readonly<Record<string, readonly string[]>>
+  readonly without_root: Readonly<Record<string, EngineFolderWithoutRoot>>
+}
+
+/** A folder the engine takes without a path root: the platform layout's own folder of a kind, or a folder under the home. */
+export type EngineFolderWithoutRoot = { readonly layout: string } | { readonly home: readonly string[] }
 
 /** What approve mode runs unasked: the user permission levels that allow, and the filter that lets an uninspected call run. */
 export interface ApproveModeUnasked {
@@ -251,6 +267,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'path resolution', read: (source) => ({ path_resolution: pathResolutionIn(source) }) },
   { part: 'session store', read: (source) => ({ session_store: sessionStoreIn(source) }) },
   { part: 'approve mode unasked', read: (source) => ({ approve_mode_unasked: approveModeUnaskedIn(source) }) },
+  { part: 'engine folders', read: (source) => ({ engine_folders: engineFoldersIn(source) }) },
   { part: 'secret storage', read: (source) => ({ secret_storage: secretStorageIn(source) }) },
 ]
 
@@ -673,6 +690,37 @@ function approveModeUnaskedIn(source: EngineSource): ApproveModeUnasked {
   const unadvertised = captured(text, /\.filter\(\|request\| (\w+)\(messages, request\)\)/, 'the filter before the check', approval)
   if (!/if to_inspect\.is_empty\(\) \{\s*return Ok\(requests\.iter\(\)\.map\(\|_\| ApprovalDecision::Allow\)/.test(text)) throw new Error(`${approval} no longer allows the calls ${unadvertised} keeps out of the check`)
   return { user_permissions, unadvertised }
+}
+
+/** The function of the paths module that picks each folder, and the arm a path root takes. */
+export const FOLDER_PICKER = { function: 'get_dir', with_root: 'if let Some(base) = Self::path_root()' } as const
+
+/**
+ * The engine's own folders (#541 package A), read from the paths module's `get_dir`: the arm a path root takes joins
+ * each kind to the root, and the arm after its `else` takes the platform layout's folder or one under the home. A kind
+ * the two arms do not both name, or a line in another shape, is unreadable, never a folder the guard leaves out.
+ */
+function engineFoldersIn(source: EngineSource): EngineFolders {
+  const path = ENGINE_PLACES.paths
+  const body = bodyOf(fileOf(source, path), FOLDER_PICKER.function, path)
+  const at = body.indexOf(FOLDER_PICKER.with_root)
+  const otherwise = body.indexOf('} else {', at)
+  if (at < 0 || otherwise < 0) throw new Error(`${path} ${FOLDER_PICKER.function} takes no path root arm and another`)
+  const kinds = (arm: string): ReadonlyArray<readonly [string, string]> => [...arm.matchAll(/DirType::(\w+) => ([^,]+),/g)].map((found) => [snakeCase(found[1] ?? ''), (found[2] ?? '').replace(/\s+/g, '')])
+  const joined = (chain: string): readonly string[] => [...chain.matchAll(/\.join\("([^"]+)"\)/g)].map((found) => found[1] ?? '')
+  const under_root = Object.fromEntries(kinds(body.slice(at, otherwise)).map(([kind, chain]) => {
+    if (!new RegExp(`^base(\\.join\\("[^"]+"\\))+$`).test(chain)) throw new Error(`${path} puts ${kind} under a path root as ${chain}, in a shape this reader does not know`)
+    return [kind, joined(chain)]
+  }))
+  const without_root = Object.fromEntries(kinds(body.slice(otherwise)).map(([kind, chain]): readonly [string, EngineFolderWithoutRoot] => {
+    const layout = /^strategy\.(\w+)\(\)(\.unwrap_or\(strategy\.\w+\(\)\))?$/.exec(chain)?.[1]
+    if (layout !== undefined && layout !== 'home_dir') return [kind, { layout }]
+    if (/^strategy\.home_dir\(\)(\.join\("[^"]+"\))+$/.test(chain)) return [kind, { home: joined(chain) }]
+    throw new Error(`${path} puts ${kind} without a path root as ${chain}, in a shape this reader does not know`)
+  }))
+  const named = (folders: object): string => Object.keys(folders).sort().join(' ')
+  if (Object.keys(under_root).length === 0 || named(under_root) !== named(without_root)) throw new Error(`${path} names ${named(under_root)} under a path root and ${named(without_root)} without one`)
+  return { under_root, without_root }
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */
