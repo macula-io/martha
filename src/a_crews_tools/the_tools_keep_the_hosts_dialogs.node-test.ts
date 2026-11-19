@@ -191,7 +191,7 @@ test('#380 r=2: what a session says about itself keeps the dialog the launcher o
   member.clock.at += 1_000
   member.theHostSaid({ said: 'permission', call: A_CALL }, member.clock.at)
   member.clock.at += 1_000
-  const answered = await member.tools.answer(THE_REFRESH_ASK, { usage: { context: { percent: 10 }, cost: { usd: 0.1 } }, turn_id: 't-1', answer: '' }, SESSION)
+  const answered = await member.tools.answer(THE_REFRESH_ASK, { usage: { startedAt: 0, context: { percent: 10 }, cost: { usd: 0.1 } }, turn_id: 't-1', answer: '' }, SESSION)
   assert.ok('answer' in answered, `the refresh question was refused: ${'refused' in answered ? answered.refused : ''}`)
   assert.equal(member.theRow().host.contextPercent, 10, 'what the session said about itself landed')
   assert.deepEqual(member.theDialogs(), [THE_DIALOGS_KEY], 'the refresh question wrote the tools\' own copy of the row, and dropped the dialog the launcher opened after it')

@@ -49,7 +49,7 @@ const documents = { read: (path: string) => readFile(path, 'utf8') }
  * answer it ended on. A session's start is the empty turn, which is the one reading of it there is.
  */
 const questionOf = (percent: number, cost_usd: number | null, turn_id: string, answer: string): Record<string, unknown> => ({
-  usage: { context: { percent }, cost: { usd: cost_usd } },
+  usage: { startedAt: 0, context: { percent }, cost: { usd: cost_usd } },
   turn_id,
   answer,
 })

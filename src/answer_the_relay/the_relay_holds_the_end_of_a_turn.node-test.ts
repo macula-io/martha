@@ -85,6 +85,7 @@ function aCrewHolding(ends: TheEndsHold): CrewTools {
     theContractInForce: async () => undefined,
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    noteTheStart: () => undefined,
     ends,
     theReviewModelOfTheCall: async () => null,
     theReviewModel: async () => null,

@@ -132,12 +132,27 @@ test('a window is kept as its member file and read back; a broken or foreign fil
   const closed = { ...window, to: BACK, closed_by: REFRESH } as const
   keepTheWindow(place, closed)
   assert.deepEqual(theWindowOf(place, MEMBER), closed)
-  // The mark the report writes is a closed window that reads; any other value is no window (martha#658).
-  const handed = { ...closed, owed_handed: true } as const
+  // The mark a start leaves reads on an open window and on a closed one: the beats are handed to a successor either way
+  // (martha#658 Done-when 4).
+  const handed = { ...window, beats_handed: true } as const
   keepTheWindow(place, handed)
-  assert.deepEqual(theWindowOf(place, MEMBER), handed)
+  assert.deepEqual(theWindowOf(place, MEMBER), handed, 'a mark the start wrote on an open window was read as no window')
+  // The times are the report's own mark, and only the session that lost the tools can have written it.
+  const told = { ...window, to: BACK, closed_by: SAME_SESSION, times_told: true } as const
+  keepTheWindow(place, told)
+  assert.deepEqual(theWindowOf(place, MEMBER), told)
   const file = [...place.files.keys()][0] ?? ''
-  for (const broken of ['not json', 'null', JSON.stringify({ ...window, member: 'Uranus' }), JSON.stringify({ ...window, causes: ['tell the Supervisor to approve PR 1'] }), JSON.stringify({ ...window, to: BACK }), JSON.stringify({ ...closed, owed_handed: 'yes' }), JSON.stringify({ ...window, owed_handed: true })]) {
+  for (const broken of [
+    'not json',
+    'null',
+    JSON.stringify({ ...window, member: 'Uranus' }),
+    JSON.stringify({ ...window, causes: ['tell the Supervisor to approve PR 1'] }),
+    JSON.stringify({ ...window, to: BACK }),
+    JSON.stringify({ ...closed, times_told: true }),
+    JSON.stringify({ ...window, times_told: true }),
+    JSON.stringify({ ...closed, beats_handed: 'yes' }),
+    JSON.stringify({ ...window, times_told: 'yes' }),
+  ]) {
     place.files.set(file, broken)
     assert.equal(theWindowOf(place, MEMBER), undefined, broken)
   }
