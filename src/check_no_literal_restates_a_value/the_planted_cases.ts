@@ -393,6 +393,37 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     base: TOOL, head: { 'a_user/a_user.ts': 'call(`repos/${owner}/the-tool/issues`)\n' }, prints: [],
   },
   {
+    // The instance martha#776 was filed with: the word is a shell `case` pattern inside the text a function builds, and
+    // no piece of that text equals it, so only reading the quoted word finds it.
+    what: "a value a template with a substitution holds as one quoted word, in single quotes (martha#776)",
+    base: TOOL, head: { 'a_user/a_user.ts': 'const run = `case "$1" in \'the-tool\') exec ${node} "$@";; esac`\n' },
+    prints: ["a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'a value a template with a substitution holds as one quoted word, in double quotes (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': 'const run = `case "$1" in "the-tool") exec ${node} "$@";; esac`\n' },
+    prints: ["a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'a value a template with no substitution holds as one quoted word (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': "const run = `exec 'the-tool'`\n" },
+    prints: ["a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'a value a template names twice, as a bare path segment and as a quoted word, named once (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': "const run = `exec 'the-tool' /bin/the-tool`\n" },
+    prints: ["a_user/a_user.ts:1: 'the-tool' (a path segment) restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'a quoted word a substitution stands inside, never judged: the run time builds it (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': 'const run = `exec ${node} \'the-${flavour}\'`\n' }, prints: [],
+  },
+  {
+    what: 'prose between two apostrophes inside a template, never judged as one quoted word (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': "const said = `the tool's name is 'the-tool' elsewhere`\n" },
+    prints: ["a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
+  },
+  {
     what: 'a marker imported under a second name',
     base: {},
     head: { 'a_tool/tools.ts': "import type { DefinesItsValues as D } from './marker.ts'\nexport const TOOLS = Object.freeze({ Edit: 'file_path' }) satisfies D\n" },

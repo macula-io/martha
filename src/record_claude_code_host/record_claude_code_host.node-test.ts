@@ -46,7 +46,8 @@ const FRONTMATTER_PATTERN = nameIn(PARSER_HEAD, /\.match\(([\w$]+)\);$/)
  * The markdown parts (martha#146), in the shapes the host spells them: the
  * frontmatter parser closed after its recorded opening, the pattern it matches
  * as a literal, the loader and the one function that calls it, called with
- * each kind, the skills loader's managed folder, and the output-style schema.
+ * each kind, and the output-style schema. The skills loader's managed folder is the recorded skills loader's own
+ * (martha#747), which RECORDED_PARTS carries whole.
  */
 const MARKDOWN_PARTS: Readonly<Record<string, string>> = {
   frontmatter_reader: `${PARSER_HEAD}return 0};${BOM_STRIP}`,
@@ -55,7 +56,6 @@ const MARKDOWN_PARTS: Readonly<Record<string, string>> = {
   markdown_kinds: [
     `function Wq(e,n,r){return Kq(()=>${LOADER}(e,n,r,0))}`,
     ...RECORDED_HOST.markdown_kinds.map((kind) => `Wq("${kind}",0)`),
-    `let h=Lg(${MANAGED}(),".claude","${RECORDED_HOST.markdown_kinds[0] ?? ''}"),k=1;t(\`Loading skills from: managed=\${h}\`)`,
   ].join(';'),
   output_style_schema: `var Uq=p(()=>u(${RECORDED_HOST.output_style_schema}))`,
   // The session-init response's field the launcher reads the owner's styles folder from (martha#154), in the shape a
@@ -199,6 +199,8 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
     `function jw(){return Ce(${MANAGED}(),"${RECORDED_HOST.managed_settings.file}")}`,
   ].join(';'),
   ...MARKDOWN_PARTS,
+  // The skills loader, the bare-mode test and the catalog reader it calls, each as recorded (martha#747).
+  skills_loader: [RECORDED_HOST.skills_loader, RECORDED_HOST.bare_mode_test, RECORDED_HOST.host_skill_catalog].join(';'),
   ...PLACE_PARTS,
   ...RULE_PARTS,
   ...DIALOG_PARTS,

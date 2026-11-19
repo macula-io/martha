@@ -17,7 +17,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { SYSTEM_TEMPORARY_DIRECTORY } from '../src/drive_the_recorded_host/short_relay_root.ts'
+import { SYSTEM_TEMPORARY_DIRECTORY } from '../src/host_contract/host_contract.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 import {

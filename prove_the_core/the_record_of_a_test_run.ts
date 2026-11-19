@@ -27,7 +27,7 @@ import { mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { isAbsolute, join } from 'node:path'
 import process from 'node:process'
 
-import { SYSTEM_TEMPORARY_DIRECTORY } from '../src/drive_the_recorded_host/short_relay_root.ts'
+import { SYSTEM_TEMPORARY_DIRECTORY } from '../src/host_contract/host_contract.ts'
 import { linuxProcessIdentities } from '../src/linux_process_identity/process_identity_from_proc.ts'
 
 const NAME = 'the_record_of_a_test_run'

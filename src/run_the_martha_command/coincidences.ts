@@ -13,19 +13,9 @@ import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { LONGEST_MESSAGE } from '../send_a_crew_message/send_a_crew_message.ts'
-import { SYSTEM_TEMPORARY_DIRECTORY } from '../drive_the_recorded_host/short_relay_root.ts'
 
 /** Why `crew` is the command's word for the strip: the owner's verb, never the channel's name for every member. */
 const THE_STRIPS_VERB = "the owner's verb that draws the crew strip (martha#572); the channel's word for every member is another value"
-
-/**
- * Why `'/tmp'` is written by literal where the launcher names the runtime directory its relay root goes under (#802).
- * The same directory the relay root falls back to, and the same rule; it is written here rather than imported because a
- * host adapter may not import a program, and importing it would make a launch load drive_the_recorded_host, which the
- * components page says nothing this release runs loads.
- */
-const THE_LAUNCHERS_OWN_FALLBACK_RUNTIME =
-  'the launcher\'s fallback runtime directory when the member names none: the same directory the relay root takes, written here because a launch may not load drive_the_recorded_host'
 
 export const COINCIDENCES: readonly Exception[] = [
   { value: CONFIG, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
@@ -42,5 +32,4 @@ export const COINCIDENCES: readonly Exception[] = [
   // The act the owner types, spelled like the Goose engine's mode that asks its client (martha#541).
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'run_the_martha_command/run_the_martha_command.ts', reason: THE_ACT_THE_OWNER_TYPES },
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
-  { value: SYSTEM_TEMPORARY_DIRECTORY, file: 'run_the_martha_command/run_the_martha_command.ts', reason: THE_LAUNCHERS_OWN_FALLBACK_RUNTIME },
 ]

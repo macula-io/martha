@@ -67,6 +67,9 @@ export interface RowStore {
   read(stream: string): Promise<readonly StoredRow[]>
 }
 
+/** The temporary directory POSIX systems keep at a fixed, short path, whatever TMPDIR says: where a root for a socket falls. */
+export const SYSTEM_TEMPORARY_DIRECTORY = '/tmp'
+
 /** The code an append rejects with when the stream is not at the length it expected. */
 export const ROW_STREAM_MOVED = 'ROW_STREAM_MOVED'
 
