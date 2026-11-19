@@ -20,7 +20,7 @@ import { RECORDED_BASH_RESULTS, type RecordedBashCase } from './claude_code_bash
 const THE_CHECKOUT = realpathSync(join(import.meta.dirname, '..', '..'))
 
 /** The harness, as CI runs it: the program, never one of its functions. */
-const THE_HARNESS = join(THE_CHECKOUT, 'prove_the_relay_loads', 'prove_the_bash_answers.mjs')
+const THE_HARNESS = join(THE_CHECKOUT, 'prove_the_relay_loads', 'prove_the_bash_answers', 'prove_the_bash_answers.mjs')
 
 /** A case of the recording's own shape: the recorded first case answers every fixture unless a test changes it. */
 const A_RECORDED_CASE: RecordedBashCase = RECORDED_BASH_RESULTS.cases[0] as RecordedBashCase

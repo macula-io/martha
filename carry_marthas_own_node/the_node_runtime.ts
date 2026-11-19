@@ -22,9 +22,9 @@ export const NODE_DIST = 'https://nodejs.org/dist'
 /** The file of nodejs.org's own sha256 for every archive of a release. */
 export const NODE_SHASUMS = 'SHASUMS256.txt'
 
-/** The platforms a standalone Martha ships for, in nodejs.org's own `<os>-<arch>` words: Linux only
- * (DECIDED 2026-11-19 "we build for linux, not windows or macOS"). */
-export const PLATFORMS = ['linux-arm64', 'linux-x64'] as const
+/** The platforms a standalone Martha ships for, in nodejs.org's own `<os>-<arch>` words: linux-x64 alone
+ * (DECIDED 2026-11-19 "we build for linux, not windows or macOS" and DECIDED 2026-11-19 "Drop arm64 (Recommended)"). */
+export const PLATFORMS = ['linux-x64'] as const
 
 export type Platform = (typeof PLATFORMS)[number]
 

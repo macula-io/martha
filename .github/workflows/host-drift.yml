@@ -41,9 +41,9 @@ on:
       - 'src/record_claude_code_host/**'
       - 'prove_the_recorded_host_is_current/**'
       - 'prove_the_relay_loads/prove_the_order_of_the_dialogs.mjs'
-      - 'prove_the_relay_loads/prove_the_bash_answers.mjs'
+      - 'prove_the_relay_loads/prove_the_bash_answers/prove_the_bash_answers.mjs'
       - 'prove_the_relay_loads/the_wait_a_probe_gives_a_screen.mjs'
-      - 'prove_the_relay_loads/the_recorded_host_installed.sh'
+      - 'prove_the_relay_loads/prove_the_bash_answers/the_recorded_host_installed.sh'
       - '.github/workflows/host-drift.yml'
 
 permissions:
@@ -75,10 +75,10 @@ jobs:
       # recording check failed: a new release fails it on its version alone, and its answers are what the re-record needs.
       - name: the recorded release, to prove the harness on a known host
         if: ${{ !cancelled() }}
-        run: prove_the_relay_loads/the_recorded_host_installed.sh "${{ runner.temp }}/the-recorded-host"
+        run: prove_the_relay_loads/prove_the_bash_answers/the_recorded_host_installed.sh "${{ runner.temp }}/the-recorded-host"
       - name: the Bash answers on the recorded release (the control)
         if: ${{ !cancelled() }}
-        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-recorded-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_bash_answers.mjs "${{ runner.temp }}/bash-answers-control"
+        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-recorded-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_bash_answers/prove_the_bash_answers.mjs "${{ runner.temp }}/bash-answers-control"
       - name: the Bash answers on this release
         if: ${{ !cancelled() }}
-        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_bash_answers.mjs "${{ runner.temp }}/bash-answers"
+        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_bash_answers/prove_the_bash_answers.mjs "${{ runner.temp }}/bash-answers"
