@@ -3,7 +3,7 @@
 // run: the guard's tests write a checkout's own `.git/config` with `git config`, which is git's own subcommand and not
 // the CONFIG of find_what_a_later_git_run_reads, a file the guard never reads.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/coincidences.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 

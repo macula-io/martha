@@ -9,7 +9,7 @@
 import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 
 /** Where a path really leads, so a checkout reached through a symlink is still the checkout. */
 const realpathOf = (path: string): string => {

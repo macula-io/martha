@@ -38,7 +38,7 @@ import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_wor
 import { GIT, GITHUB_CLI, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { A_HOLD_REFUSES } from '../hold_a_package_back_from_a_batch/hold_a_package_back_from_a_batch.ts'
 import { STANDING_CLOSE, closeAStandingItem, recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
-import { HOST_CEILINGS_SCRIPT, manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { HOST_CEILINGS_SCRIPT, manifestPathOf, type Manifest } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import {
   A_DRY_RUN,
   FAST_FORWARD_DESCRIPTION,
@@ -47,6 +47,7 @@ import {
   LAND_BATCH_DESCRIPTION,
   NO_CEILINGS_AHEAD,
   NO_CEILINGS_CHECKED,
+  noCeilingsCheckedFrom,
   REDONE_GENERATED,
   THE_CEILINGS_STILL_AHEAD,
   THE_CHECK_PROGRAM,
@@ -208,9 +209,12 @@ function theProcessesALandingMeets(runs: TheRuns | undefined, under: (request: P
       const ran = spawnSync(process.execPath, [THE_REDO_IN_THIS_TREE, ...redo], { cwd: request.cwd, encoding: 'utf8' })
       return { exit_code: ran.status, stdout: ran.stdout, stderr: ran.stderr }
     }
-    const here = the_programs[request.args[0] ?? '']
-    if (here === undefined) return under(request)
+    const program = request.args[0] ?? ''
+    const real = the_programs[program]
+    if (real === undefined) return under(request)
     runs?.programs.push(request)
+    // A tree that does not hold the program runs what it holds, which is nothing: node answers as it would there.
+    const here = existsSync(join(request.cwd, program)) ? real : join(request.cwd, program)
     const ran = spawnSync(process.execPath, [here, ...request.args.slice(1)], { cwd: request.cwd, encoding: 'utf8' })
     return { exit_code: ran.status, stdout: ran.stdout, stderr: ran.stderr }
   }
@@ -982,6 +986,34 @@ test('#381 #339: two heads merge cleanly and leave the tree over a ceiling: the 
   const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
   const words = aBatchLeftOneOut(fixture, landed, base, [ours], { package: at(packages, 1), pr: 282 })
   assert.ok(words.includes(`${AN_ADAPTER}: 4 lines of code, ceiling 3`), `the answer did not name the directory that is over its ceiling: ${words}`)
+})
+
+test('a head that deletes the ceilings check lands, and nothing is checked on the tree it merges into (mutant: decide from the base)', async (t) => {
+  // The batch that lands a head removing the check runs the landing as the default branch holds it: the check is decided
+  // on each merged tree, so the merge that deletes it is not run against a program its own tree no longer holds.
+  const fixture = aRepository(t)
+  const base = theBaseTreeOfABatch(fixture, {
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
+    [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
+  })
+  const ours = aBranchWriting(fixture, 'passed0', base, { 'work0.txt': 'work 0\n' })
+  gitIn(fixture.clone, 'checkout', '--quiet', '-b', 'passed1', base)
+  gitIn(fixture.clone, 'rm', '--quiet', THE_CHECK_PROGRAM)
+  commitIn(fixture.clone, 'the work that deletes the ceilings check')
+  gitIn(fixture.clone, 'push', '--quiet', 'origin', 'passed1')
+  const theirs = gitIn(fixture.clone, 'rev-parse', 'HEAD')
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const runs: TheRuns = { npm: [], programs: [] }
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.ok('told' in landed, `the batch was refused: ${wordsOf(landed)}`)
+  assert.ok(!landed.told.includes('Left out'), `the head that deletes the ceilings check was left out: ${landed.told}`)
+  const branch = at(theLandBranchesOnOrigin(fixture), 0)
+  assert.deepEqual(theMergesOf(fixture, branch, 2), [ours, theirs], 'the land branch does not land both heads, in order')
+  const checked = runs.programs.filter((run) => run.args[0] === THE_CHECK_PROGRAM)
+  assert.equal(checked.length, 1, 'the ceilings check was not run on the first merge alone')
+  assert.ok(landed.told.includes(noCeilingsCheckedFrom(282)), `the answer does not name the head from which no ceilings were checked: ${landed.told}`)
 })
 
 test('#423: the dry run of two heads the landing leaves one of out on the ceilings answers each lands only as a forecast that still faces them (mutant: a plain lands)', async (t) => {

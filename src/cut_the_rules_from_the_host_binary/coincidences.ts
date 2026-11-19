@@ -2,7 +2,7 @@
 // meaning something else by them, each with its reason (martha#289). Read by the restated-values check as a syntax
 // tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** Why `'.claude'` is written by literal in the fixture this slice writes in the shape of the host's sign-in rule (martha#776). */

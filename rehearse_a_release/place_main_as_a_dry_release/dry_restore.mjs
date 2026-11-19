@@ -7,7 +7,7 @@
 // marked by this subject, and two things look for the mark: the release workflow's own step
 // (pack_a_release/refuse_a_dry_restore_tag.sh), which refuses a tag whose history holds a commit carrying it, and the
 // check that no script the release runs restores installer/ from another ref
-// (prove_the_core/no_restore_reaches_the_release.node-test.ts). The packer reads this constant; nothing spells it twice.
+// (prove_the_core/the_release_is_proven/no_restore_reaches_the_release.node-test.ts). The packer reads this constant; nothing spells it twice.
 
 /** The subject of the dry packer's commit, and the one mark a dry commit can be recognised by. */
 export const DRY_RESTORE_SUBJECT = 'dry: installer/ restored from its tag, in a dry run\'s own clone'
