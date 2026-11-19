@@ -10,7 +10,8 @@
 // is refused without this public tree having to name it.
 
 import { digestStartsFinder } from './public_digest.ts'
-import { GITHUB_TOKEN_PREFIXES, HEX_DIGIT, ID_HEX_DIGITS, PUBLIC_TEXT_PATTERNS } from './public_text.ts'
+import { GITHUB_TOKEN_PREFIXES, TOKEN_BODY } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import { HEX_DIGIT, ID_HEX_DIGITS, PUBLIC_TEXT_PATTERNS } from './public_text.ts'
 
 export interface Rules {
   // Email domains this repository may name.
@@ -46,6 +47,11 @@ export interface Hit {
 export type Visibility = 'public' | 'not_public'
 // Throws when it cannot tell: the check then cannot be made, and never passes.
 export type Resolve = (owner: string, repo: string) => Promise<Visibility>
+
+// A GitHub token: one of its prefixes and a body at least TOKEN_BODY long, so a word that only starts the same way (a
+// variable named `ghs_`) is not one. The prefixes and the length are the owner's to-do list's, which refuses the same
+// in a command; like the hex class, it has no word boundary (martha#904).
+const GITHUB_TOKEN = `(${GITHUB_TOKEN_PREFIXES.join('|')})[A-Za-z0-9_]{${TOKEN_BODY},}`
 
 // The scan's own synthetic forms, one per class. Each is a whole-value match.
 export const SYNTHETIC = {
@@ -131,7 +137,7 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
     {
       // A GitHub token in a post is a key to whatever it reaches, for as long as it lives (martha#904).
       what: 'a GitHub token',
-      matches: (text) => each(PUBLIC_TEXT_PATTERNS.github_token, text),
+      matches: (text) => each(GITHUB_TOKEN, text),
       accepts: synthetic(SYNTHETIC.github_token),
     },
   ]

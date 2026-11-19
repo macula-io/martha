@@ -19,7 +19,6 @@ import { OWNER, type Act, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { HostContract, Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
-import { GITHUB_TOKEN_PREFIXES, TOKEN_BODY_CHARACTERS } from '../check_nothing_private_gets_in/public_text.ts'
 
 /** The stream the owner's list lives in, in the crew's row streams. */
 export const OWNER_TODO_STREAM = 'owner_todo'
@@ -62,11 +61,17 @@ export const SWEEP_INTERVAL_MS = 45_000
  */
 export const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u
 
+/**
+ * A GitHub token's prefixes: the classic personal, OAuth, user-to-server, server-to-server and refresh forms, and the
+ * fine-grained one. The private scan refuses the same in any text it reads (martha#904).
+ */
+export const GITHUB_TOKEN_PREFIXES = ['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'github_pat_'] as const
+
 /** The prefixes of the secrets a command may not hold: a row names a variable, never its value. */
 export const TOKEN_PREFIXES = [...GITHUB_TOKEN_PREFIXES, 'glpat-', 'xoxb-', 'xoxp-', 'sk-ant-', 'AKIA', 'npm_', 'hf_'] as const
 
-/** How many characters of a token's body follow its prefix before a word is read as a secret: the private scan's own. */
-const TOKEN_BODY = TOKEN_BODY_CHARACTERS
+/** How many characters of a token's body follow its prefix before a word is read as a secret; the private scan's too. */
+export const TOKEN_BODY = 16
 
 /** The longest command a row holds, in characters. */
 export const MAX_COMMAND = 500

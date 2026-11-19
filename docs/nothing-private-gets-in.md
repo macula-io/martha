@@ -105,9 +105,9 @@ Out of reach of this check, and said here so nobody assumes otherwise:
   `ID_HEX_DIGITS` in `public_text.ts`), and the shared pattern stays POSIX ERE,
   so a `grep -E` reader refuses any line that holds such a run.
 - **A GitHub token is one of its prefixes and a body long enough to be one** (martha#904).
-  The prefixes and the shortest body are defined once (`GITHUB_TOKEN_PREFIXES`,
-  `TOKEN_BODY_CHARACTERS` in `public_text.ts`), and the owner's to-do list reads
-  the same two when it refuses a token in a command. A word that only starts the
+  The prefixes and the shortest body are defined once, by the owner's to-do list,
+  which refuses a token in a command (`GITHUB_TOKEN_PREFIXES`, `TOKEN_BODY` in
+  `keep_the_owners_todo_list.ts`), and the scan reads the same two. A word that only starts the
   same way, a variable named `ghs_` say, is shorter and passes. The class has no
   word boundary, as the hex class has none, so a token glued to the text before
   it is still refused. It is the scan's own line behind the live run's kept-record
