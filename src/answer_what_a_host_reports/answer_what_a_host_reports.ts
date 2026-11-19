@@ -367,8 +367,11 @@ async function aSessionStartedIn(held: TheSessionsHeld, start: AStartingSession)
   if (held.sessions.has(start.session_id)) return { taken: '' }
   await held.places.records.load(start.session_id)
   const started = startSessionAs(held.places.records.store, await asTheCrewsRefresh(held, start))
-  const line = await theLineThisSessionStartsOn(held.places.crew)
+  const line = await theLineThisSessionStartsOn(held.places.crew, start.session_id)
   const why = await held.keep(handedAtStart(held.places, started, line))
+  // The beats a hand carried are marked only once the start is taken, and dropped unmarked when it is refused, so a
+  // refused start leaves the next one the beats (martha#658 Done-when 4).
+  held.places.crew?.noteTheStart(start.session_id, why === undefined)
   return why === undefined ? { taken: handedAtThisStart(held.places.crew_text, line?.line ?? null) } : { refused: why }
 }
 
@@ -620,12 +623,13 @@ async function aCrewToolAskedIn(held: TheSessionsHeld, ask: ACrewToolAsked): Pro
 /**
  * The line this session is handed as it starts (martha#254 test 10): the acts of the package this member holds that
  * were sent with no outcome recorded. Null when the member holds no package, nothing of it is waiting, or the ledger
- * cannot be read: a start the ledger could not be read for is still a start.
+ * cannot be read: a start the ledger could not be read for is still a start. The session's id is the host's own start
+ * event's, and it is that id the crew's window hand guards on (martha#658 Done-when 4).
  */
-async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<TheStartLine | null> {
+async function theLineThisSessionStartsOn(crew: CrewTools | undefined, session_id: string): Promise<TheStartLine | null> {
   if (crew === undefined) return null
   try {
-    return await crew.theLineToHandAtStart()
+    return await crew.theLineToHandAtStart(session_id)
   } catch {
     return null
   }

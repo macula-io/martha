@@ -63,6 +63,10 @@ interface TheCrewSays {
   /** The session a clear was told in, for the session id the crew is waiting for. */
   readonly predecessors?: Readonly<Record<string, string>>
   readonly line?: TheStartLine | null
+  /** The session ids the crew's start line was built for, in order (martha#658). */
+  readonly asked?: string[]
+  /** Every start the crew was told of, in order: the session's id, and whether its start was taken (martha#658). */
+  readonly starts?: { session: string; taken: boolean }[]
 }
 
 function aCrew(says: TheCrewSays): CrewTools {
@@ -72,7 +76,11 @@ function aCrew(says: TheCrewSays): CrewTools {
     startBeating: () => () => {},
     theContractInForce: async () => undefined,
     startSweeping: () => () => {},
-    theLineToHandAtStart: async () => says.line ?? null,
+    theLineToHandAtStart: async (session_id) => {
+      says.asked?.push(session_id)
+      return says.line ?? null
+    },
+    noteTheStart: (session_id, taken) => void says.starts?.push({ session: session_id, taken }),
     ends: holdingTheEnds(),
     thePredecessorOf: async (session_id) => says.predecessors?.[session_id] ?? null,
     theSpendInForce: async () => undefined,
@@ -159,6 +167,27 @@ test('#541 1b: a fresh start is kept with what the launch hands it, and answered
 
   assert.deepEqual(answer, { taken: `${THE_CREW_TEXT}\n\n${THE_START_LINE}` })
   assert.deepEqual(pathsIn(answers, 'session-a'), [PATH_OF_SOURCE.server_instructions, PATH_OF_SOURCE.package_contract])
+})
+
+test('#658: the crew builds the start line for the host\'s own session id, and is told that start was taken', async (t) => {
+  const says: TheCrewSays = { line: { line: THE_START_LINE, taken_in: [THE_LINE_CARRIES] }, asked: [], starts: [] }
+  const { answers } = anEntry(t, says)
+
+  await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+
+  assert.deepEqual(says.asked, ['session-a'], 'the crew built the line for a session other than the one the host started')
+  assert.deepEqual(says.starts, [{ session: 'session-a', taken: true }], 'the start taken was not noted to the crew, so its beats were never marked handed')
+})
+
+test('#658: a refused start is noted as refused, so the hand that start read is dropped unmarked', async (t) => {
+  const says: TheCrewSays = { line: { line: THE_START_LINE, taken_in: [] }, starts: [] }
+  const entry = anEntry(t, says)
+  entry.failing.flush.add('session-a')
+
+  const refused = await entry.answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+
+  assert.ok('refused' in refused, 'a start whose record could not be kept was answered taken')
+  assert.deepEqual(says.starts, [{ session: 'session-a', taken: false }], 'a refused start was noted as taken, so its beats would never be handed again')
 })
 
 test('#541 1b: a second start of a session the entry holds is taken and wipes nothing it kept (martha#255)', async (t) => {
