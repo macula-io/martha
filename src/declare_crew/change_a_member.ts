@@ -30,11 +30,12 @@ import { hostRuns } from './a_hosts_model_vocabulary.ts'
 import { notOnTheCrew } from '../see_who_is_free/see_who_is_free.ts'
 import { aReviewerMembersModelRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 
-/** The verbs, as the owner types them after `martha crew`. */
-export const ADD = 'add'
-export const REMOVE = 'remove'
-export const SET_MODEL = 'set-model'
-export const SET_HOST = 'set-host'
+/**
+ * The verbs, as the owner types them after `martha crew`: one list, so each word is defined once. A list rather than a
+ * constant each, since `remove` is also git's verb, meaning something else in every slice that runs it.
+ */
+export const CREW_VERBS = ['add', 'remove', 'set-model', 'set-host'] as const
+export const [ADD, REMOVE, SET_MODEL, SET_HOST] = CREW_VERBS
 
 /** One change to one member. A null model is the host's own; a null host is the crew's. */
 export type CrewChange =
@@ -122,9 +123,12 @@ function theMemberChanged(settings: CrewSettings, change: CrewChange): Member | 
   return settings.members.find((member) => sameMemberName(member.name, change.member))
 }
 
-/** The switches `add` takes, and the words that name a default instead of a value. */
-export const MODEL_SWITCH = '--model'
-export const HOST_SWITCH = '--host'
+/**
+ * The switches `add` takes, as one list for the same reason as the verbs: `--model` is also a host's own switch. Then
+ * the words that name a default instead of a value.
+ */
+export const ADDS_SWITCHES = ['--model', '--host'] as const
+export const [MODEL_SWITCH, HOST_SWITCH] = ADDS_SWITCHES
 /** `set-model <member> --host-default`: the member runs the host's own model. */
 export const HOST_DEFAULT = '--host-default'
 /** `set-host <member> --crew-default`: the member starts on the crew's host. */

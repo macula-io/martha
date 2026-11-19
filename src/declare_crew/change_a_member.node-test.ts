@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { RESTART } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, HOST, soloDeclaration, SOLO_MEMBERS, THE_ENGINES_HOST, THE_HOST_A_MEMBER_RAN_ON, type TheVocabulariesOfHost } from './declare_crew.ts'
 import { ADD, aChangedDeclaration, CREW_DEFAULT, HOST_DEFAULT, HOST_SWITCH, MODEL_SWITCH, REMOVE, SET_HOST, SET_MODEL, theChangeTold, theCrewChangeAsked, type CrewChange } from './change_a_member.ts'
@@ -178,7 +179,7 @@ test('#307: the owner is told the change, that the file is theirs to commit, and
   assert.ok('after' in compact)
   const removed = theChangeTold({ kind: REMOVE, member: REVIEWER.name }, compact, VOCABULARIES)
   assert.ok(removed.includes(`${DECLARATION} was not in the format martha init writes, and is written in it now.`), removed.join('\n'))
-  assert.ok(!removed.some((line) => line.includes('restart')))
+  assert.ok(!removed.some((line) => line.includes(RESTART)))
 })
 
 test('#307: the declaration is read once, so the text checked is the text changed, whatever a later read would see', async () => {

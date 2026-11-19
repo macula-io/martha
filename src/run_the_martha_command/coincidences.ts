@@ -20,12 +20,14 @@ const THE_STRIPS_VERB = "the owner's verb that draws the crew strip (martha#572)
 export const COINCIDENCES: readonly Exception[] = [
   { value: CONFIG, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: CONFIG, file: 'run_the_martha_command/run_the_martha_command.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'run_the_martha_command/change_the_crew.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: STATE_ROOT_NAME, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: THE_REPOSITORYS_OWN_NAME },
   { value: EMPTY_DIRECTORY_NAME, file: 'run_the_martha_command/run_the_martha_command.ts', reason: THE_TAG_OF_NOTHING_TO_APPROVE },
   // A test's bound on one act of the command under test (martha#441): an act it holds may start a member, and it must
   // still end. The tree's half minute is the launcher's wait for a host answer, which this test never drives.
   { value: HOST_ANSWER_TIMEOUT_MS, file: 'run_the_martha_command/every_act_is_held_to_the_floor.node-test.ts', reason: 'how long one act of the command under test may take; the tree\'s half minute is the launcher\'s wait for a host answer, which this test never drives' },
   { value: THE_WHOLE_CREW, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: THE_STRIPS_VERB },
+  { value: THE_WHOLE_CREW, file: 'run_the_martha_command/change_the_crew.node-test.ts', reason: THE_STRIPS_VERB },
   // A test's bound on `martha crew`'s first frame (martha#572): how long a node start and one look may take.
   { value: LONGEST_MESSAGE, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: 'how long the test waits for martha crew to draw its first frame; the longest crew message is a length, not a time' },
   // The act the owner types, spelled like the Goose engine's mode that asks its client (martha#541).
