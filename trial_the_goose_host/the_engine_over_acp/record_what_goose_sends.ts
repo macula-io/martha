@@ -7,7 +7,7 @@
 
 import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { createServer, request as sendRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { createServer, request as sendRequest, type ClientRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { URL } from 'node:url'
 
 import type { TheModelPace } from '../the_cap_a_line_gets/the_cap_a_line_gets.ts'
@@ -45,6 +45,8 @@ export class RecordingProxy {
   readonly #target: URL
   readonly #books: TheProxysBooks
   #server: Server | undefined
+  /** The requests this proxy has open to the model, and has not seen end or fail yet (martha#732). */
+  readonly #openToTheModel = new Set<ClientRequest>()
 
   constructor(target: string, books: TheProxysBooks = {}) {
     this.#target = new URL(target)
@@ -62,7 +64,15 @@ export class RecordingProxy {
     })
   }
 
+  /**
+   * Ends the proxy, and every request it still has open to the model (martha#732): a launch whose turn was cut at
+   * its bound stops the engine, and a request the model is still answering keeps the launch's node alive until the
+   * model finishes — on the fork's run, until the runner reaped the launch at its whole bound, about nine minutes a
+   * line, which is what put the job over its own limit at line 7. The driver ends with the verdict it wrote.
+   */
   stop(): Promise<void> {
+    for (const one of this.#openToTheModel) one.destroy()
+    this.#openToTheModel.clear()
     return new Promise<void>((settle) => {
       this.#server?.close(() => settle())
     })
@@ -89,6 +99,8 @@ export class RecordingProxy {
         answer.on('end', () => this.#noteAnAnswer(request.url ?? '', answer.statusCode ?? 0, startedAt))
       },
     )
+    this.#openToTheModel.add(upstream)
+    upstream.on('close', () => this.#openToTheModel.delete(upstream))
     upstream.on('error', () => {
       response.writeHead(502, { 'content-type': 'text/plain' })
       response.end('the trial proxy could not reach the model')

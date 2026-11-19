@@ -14,7 +14,7 @@ import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
-import { test, type TestContext } from 'node:test'
+import { after, test, type TestContext } from 'node:test'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { RELAY_COPY_NAME, removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
@@ -106,6 +106,10 @@ process.once('exit', () => {
   RUN_THIS_FILE_IS.close()
   removeTheTree(dirname(THE_RUNS_END))
 })
+
+// And taken down when the file's tests are done, which is before the guard judges what this file left (martha#724): a
+// directory it makes is this file's to remove, whether the run ends by force-exit or another way.
+after(() => removeTheTree(dirname(THE_RUNS_END)))
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({

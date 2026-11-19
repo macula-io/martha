@@ -449,7 +449,7 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
   const journal_directory = relayJournalDirectory(environment.XDG_STATE_HOME, run.checkout)
   // The run's end of the lifeline its member is held by (#472): whatever becomes of this run, its end closes and the
   // launcher takes the member down. The read end is the child's fourth stream; the write end is this process's alone.
-  const { terminal, lifeline } = spawnOnAPtyHoldingALifeline(PTY_RUNNER, command, { cwd: run.checkout, env: environment }, runtime)
+  const { terminal, end } = spawnOnAPtyHoldingALifeline(PTY_RUNNER, command, { cwd: run.checkout, env: environment }, runtime)
   let shown = ''
   // Each stream is decoded as it arrives rather than chunk by chunk, so a character split across two chunks still
   // reads whole (martha#264). One decoder per stream, because a partial character on one is not the other's to finish.
@@ -498,12 +498,14 @@ export async function driveTheRecordedHost(run: RecordedHostRun): Promise<Record
     await until('end of martha start', () => exit_code !== undefined)
     return { requests: heard, shown, exit_code: exit_code ?? null }
   } finally {
-    if (exit_code === undefined && terminal.pid !== undefined) process.kill(-terminal.pid, 'SIGKILL')
-    await ended
-    await model.close()
-    // The run is over: its end of the lifeline goes with it, as it would if this process had died (martha#472).
-    lifeline.close()
-    // A launch killed mid-run leaves its read-only relay copy here (martha#117).
-    removeTheTree(runtime)
+    // The run is over: script and the command's whole session end, its end of the lifeline goes with it as it would if
+    // this process had died (martha#472), and only then is the runtime removed, which a launch killed mid-run leaves
+    // its read-only relay copy in (martha#117). Killing script's own group alone left the command's session writing
+    // there (martha#724).
+    try {
+      await end()
+    } finally {
+      await model.close()
+    }
   }
 }
