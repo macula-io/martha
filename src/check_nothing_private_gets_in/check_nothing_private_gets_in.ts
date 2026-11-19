@@ -226,7 +226,7 @@ const shorthandHitsOf = (line: Line, rules: Rules, print: Printing): Hit[] =>
     .map((found) => found[1] ?? '')
     .filter((name) => name.toLowerCase() !== rules.ownRepo.toLowerCase())
     .filter((name) => !(rules.allowSynthetic && whole(SYNTHETIC.repo_owner).test(name)))
-    .map((name) => ({
+    .map(() => ({
       where: print.clean(line.where),
       what: `a shorthand reference to another repository ${WITHHELD}: write owner/repo#n so it can be checked`,
     }))
