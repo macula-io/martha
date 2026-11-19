@@ -45,7 +45,8 @@ export const MEMBER_CONFIG_FOLDER = 'the-members-own-config'
 
 /** Only the launcher's user reads or writes the folder and its files. */
 export const MEMBER_CONFIG_MODE = 0o700
-const FILE_MODE = 0o600
+/** The mode of every file the folder holds: only the launcher's user reads it. */
+export const FILE_MODE = 0o600
 
 /** The member's user settings: the owner's account connectors off, its skills not synced (martha#602). */
 export const MEMBERS_OWN_SETTINGS: Readonly<Record<string, boolean>> = { [CONNECTORS_OFF_SETTING]: true, [SYNC_OFF_SETTING]: false }

@@ -41,7 +41,8 @@ import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { CLAUDE_SKILLS, RESERVED_SKILL_NAMES, theCarriedSkills } from './carry_the_approved_skills.ts'
+import { CLAUDE_SKILLS, theCarriedSkills } from './carry_the_approved_skills.ts'
+import { SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../load_the_hosts_markdown/the_skills_folders.ts'
 
 // Every test reads real directories and real git checkouts through the real
 // reader, and removes them when it ends.
@@ -1089,7 +1090,8 @@ test('T3: a skill rewritten after the state is read is refused, and no snapshot 
   assert.deepEqual(readdirSync(snapshot_root), [], 'no snapshot is left behind')
 })
 
-for (const name of RESERVED_SKILL_NAMES) {
+// Named from the folders file, not from the reserved list itself: a name dropped from that list keeps its test, and fails.
+for (const name of [SYNCED_SKILLS_FOLDER, TRASH_FOLDER]) {
   test(`T5: a skill folder named ${name} is refused by name, even approved (martha#747)`, (t) => {
     const place = scratch(t)
     put(place.checkout, `${CLAUDE_SKILLS}/${name}/SKILL.md`, A_SKILL)

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { bareModeVariableOf, hostSkillCatalogVariableOf, theSkillsLoaderHolds, type TheSkillsLoader } from './the_skills_loader.ts'
+import { bareModeVariableOf, hostSkillCatalogVariableOf, theSkillsLoaderHolds, theSkillsLoaderIn, type TheSkillsLoader } from './the_skills_loader.ts'
 
 // T8 (martha#747): the recorded skills loader is held to what a launch relies on, and a host whose loader stops doing
 // any of it fails by name. Every changed loader here is the committed one with one statement altered, so each case
@@ -55,4 +55,22 @@ test('T8: the catalog variable is read from the reader\'s own warning, and a rea
   assert.equal(hostSkillCatalogVariableOf(renamed), 'A_RENAMED_CATALOG')
   const uncalled = { ...RECORDED, host_skill_catalog: RECORDED.host_skill_catalog.replace(/^function ([\w$]+)\(/, 'function Zq9(') }
   assert.throws(() => theSkillsLoaderHolds(uncalled), /does not call the recorded host skill catalog reader/)
+})
+
+test('T8: a loader whose bare-mode return comes only after its user-scope read fails by name', () => {
+  const moved = loaderWith(`if(${BARE}())return(`, 'if(0)return(')
+  const changed = { ...moved, skills_loader: `${moved.skills_loader.slice(0, -1)};if(${BARE}())return(0)}` }
+  assert.throws(() => theSkillsLoaderHolds(changed), /does not return on the bare-mode test before its user-scope read/)
+})
+
+test('T8: a loader that keeps both guarded project reads and adds an unguarded one fails by name', () => {
+  const changed = { ...RECORDED, skills_loader: `${RECORDED.skills_loader.slice(0, -1)};void ${BARE}("projectSettings")}` }
+  assert.throws(() => theSkillsLoaderHolds(changed), /reads project skills 3 time\(s\) outside bare mode, 2 of them under its projectSettings guard/)
+})
+
+test("T8: the cutter passes over a function of another shape that shares the bare-mode test's minified name", () => {
+  const decoy = `function ${BARE}(){return 1}`
+  const text = [decoy, RECORDED.bare_mode_test, RECORDED.host_skill_catalog, RECORDED.skills_loader].join(';')
+  assert.equal(theSkillsLoaderIn(text).bare_mode_test, RECORDED.bare_mode_test)
+  assert.throws(() => theSkillsLoaderIn([decoy, RECORDED.host_skill_catalog, RECORDED.skills_loader].join(';')), /holds 0 of the bare-mode test, not one/)
 })

@@ -10,10 +10,10 @@ import { test, type TestContext } from 'node:test'
 
 import { API_KEY_ANSWERS_KEY, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, hostTrustsTheFolder, KEY_TAIL_LENGTH } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { CONFIG_DIR_VARIABLE, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { CONFIG_DIR_VARIABLE, SKILLS_KIND, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { USER_SETTINGS_FILE, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { CONNECTORS_OFF_SETTING, makeTheMembersConfig, MEMBER_CONFIG_MODE, theMembersConfigEnvironment } from './give_a_member_its_own_config.ts'
+import { CONNECTORS_OFF_SETTING, FILE_MODE, makeTheMembersConfig, MEMBER_CONFIG_MODE, theMembersConfigEnvironment } from './give_a_member_its_own_config.ts'
 
 /** A launch that carries no skill. */
 const NO_SKILLS: Readonly<Record<string, Uint8Array>> = {}
@@ -89,4 +89,23 @@ test('a key handed to the member is answered yes by its tail alone, and an empty
   const empty = join(dir, 'with-an-empty-key')
   assert.deepEqual(makeTheMembersConfig(empty, checkout, '', NO_SKILLS), { made: true })
   assert.ok(!(API_KEY_ANSWERS_KEY in (JSON.parse(readFileSync(join(empty, HOST_TRUST_RECORD_FILE), 'utf8')) as Record<string, unknown>)))
+})
+
+test("the carried skills are written under the folder the host reads as user-scope skills, byte-equal, in files only the launcher's user reads (martha#747)", (t) => {
+  const dir = scratch(t)
+  const checkout = join(dir, 'checkout')
+  mkdirSync(checkout)
+  const folder = join(dir, 'the-members-folder')
+  const skill = new TextEncoder().encode('---\nname: x\ndescription: a skill\n---\nbody\n')
+  const script = new TextEncoder().encode('#!/bin/sh\necho a script the skill names\n')
+  assert.deepEqual(makeTheMembersConfig(folder, checkout, undefined, { 'x/SKILL.md': skill, 'x/scripts/run.sh': script }), { made: true })
+  assert.deepEqual(readdirSync(folder).sort(), [HOST_TRUST_RECORD_FILE, SKILLS_KIND, USER_SETTINGS_FILE].sort())
+  assert.deepEqual(readFileSync(join(folder, SKILLS_KIND, 'x', 'SKILL.md')), Buffer.from(skill))
+  assert.deepEqual(readFileSync(join(folder, SKILLS_KIND, 'x', 'scripts', 'run.sh')), Buffer.from(script))
+  for (const file of [join('x', 'SKILL.md'), join('x', 'scripts', 'run.sh')]) {
+    assert.equal(lstatSync(join(folder, SKILLS_KIND, file)).mode & 0o777, FILE_MODE, file)
+  }
+  for (const sub of [SKILLS_KIND, join(SKILLS_KIND, 'x'), join(SKILLS_KIND, 'x', 'scripts')]) {
+    assert.equal(lstatSync(join(folder, sub)).mode & 0o777, MEMBER_CONFIG_MODE, sub)
+  }
 })
