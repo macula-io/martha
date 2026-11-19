@@ -230,7 +230,7 @@ test('a launch whose terminal is a tmux pane sends its notification through tmux
   const inside = rung({ TMUX: '/tmp/tmux-1000/night,4242,0' })
   assert.equal(inside.length, 1, 'one write, on the change into needs you')
   assert.ok(inside[0]?.startsWith(`${THE_BELL}${passthrough}`), 'the bare bell, then the notification inside the passthrough')
-  const outside = rung({ TERM: 'xterm-256color' })
+  const outside = rung({ TMUX: '' })
   assert.equal(outside.length, 1)
   assert.equal(outside[0]?.includes(passthrough), false, 'a launch outside tmux sends the notification as it is')
 })
