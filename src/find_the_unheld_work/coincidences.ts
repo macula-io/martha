@@ -1,7 +1,7 @@
 // The coincidences of find_the_unheld_work: words its own files spell like a constant held elsewhere, meaning something
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { BACKLOG } from '../declare_crew/declare_crew.ts'
 
 /** Why `backlog` is spelled here: it is a label on GitHub, chosen by the people who triage issues. */

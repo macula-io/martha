@@ -2,7 +2,7 @@
 // something else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never
 // run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { THE_FAILED_TASK_STATUS } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 
 /** Why `failed` here is not Claude Code's status of a failed agent task: it is ACP's status of a tool call that did not run. */

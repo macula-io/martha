@@ -2,7 +2,7 @@
 // something else by them, each with its reason (martha#289, #437). Read by the restated-values check as a syntax tree,
 // never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { SKILLS_KIND } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'

@@ -34,7 +34,7 @@ REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
 NAME="prove_the_relay_loads"
 HARNESS="src/drive_the_recorded_host/drive_the_recorded_host.ts"
 MARKER_FILE="src/check_every_recorded_host_test_is_run/recorded_host_skip.ts"
-OUTPUT_CHECK="./prove_the_core/no_test_output_carries_the_environment.ts"
+OUTPUT_CHECK="./prove_the_core/no_test_reaches_a_secret/no_test_output_carries_the_environment.ts"
 cd "${REPO}"
 # The time limit, force-exit and the guard, from their one definition (the_runs_bounds.sh).
 source "${REPO}/prove_the_relay_loads/the_runs_bounds.sh"

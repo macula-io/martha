@@ -1,7 +1,7 @@
 // The coincidences of name_a_node_by_its_petname: words its own files spell like a constant held elsewhere, meaning
 // something else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { THE_SAVE_WAIT_MS } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 
 /**

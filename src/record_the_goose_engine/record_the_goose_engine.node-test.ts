@@ -87,6 +87,19 @@ test('a shell tool the engine renames fails by shell_tool, so the shell hold nev
   assert.match(ran.stdout, /\ndiffers: shell_tool\n$/)
 })
 
+test('an environment name the engine starts dropping from a tool server entry fails by stdio_extension, so no variable the server needs is silently removed', (t) => {
+  const stdio = RECORDED_FACTS.stdio_extension
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, stdio_extension: { ...stdio, disallowed_env: [...stdio.disallowed_env, 'A_NAME_NOW_DROPPED'] } }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: stdio_extension\n$/)
+})
+
+test("a session key the engine moves in a tool call's meta fails by tool_call_session_key, so the server never answers in no session", (t) => {
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, tool_call_session_key: `${RECORDED_FACTS.tool_call_session_key}-moved` }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: tool_call_session_key\n$/)
+})
+
 test('two facts that differ are both named, in order', (t) => {
   const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, acp_command: `${RECORDED_FACTS.acp_command}x`, path_root_variable: `${RECORDED_FACTS.path_root_variable}_X` }))
   assert.equal(ran.status, 1)

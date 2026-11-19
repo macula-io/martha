@@ -1,7 +1,7 @@
 // The coincidences of a_crews_tools: words its own files spell like a constant held elsewhere, meaning something
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'

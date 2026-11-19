@@ -28,9 +28,9 @@ import { HOSTS } from '../src/refuse_launch_of_unapproved_config/refuse_launch_o
 import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
 // The host draws its screen a word at a time, moving the cursor where the spaces would be, so every screen this probe
 // matches is read plainly: the one reader both probes use (#693).
-import { AT_ITS_PROMPT, says } from '../prove_the_core/a_screen_drawn_in_pieces.ts'
+import { AT_ITS_PROMPT, says } from '../prove_the_core/read_what_a_host_drew/a_screen_drawn_in_pieces.ts'
 // Whether the clear actually ran: the host writes it down, and nothing the probe can see says so (#693).
-import { theClearRan } from '../prove_the_core/a_clear_the_host_recorded.ts'
+import { theClearRan } from '../prove_the_core/read_what_a_host_drew/a_clear_the_host_recorded.ts'
 
 /** The host, at the version the adapter was recorded from: the same variable the recorded-host tests read. */
 const HOST = process.env.MARTHA_RECORDED_HOST

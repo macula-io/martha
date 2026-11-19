@@ -8,7 +8,7 @@
 import { spawnSync } from 'node:child_process'
 import { posix } from 'node:path'
 
-import { PACKAGES, testGlobsOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { PACKAGES, testGlobsOf, type Manifest } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import {
   claimsIn,

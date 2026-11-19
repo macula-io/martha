@@ -207,20 +207,22 @@ jobs:
       # catch binding the compiler never looks at.
       - run: npx tsc --noEmit
       - run: npm test
-      # macOS's default TMPDIR is long and is reached through a link
-      # (/var -> /private/var), martha#79. The suite runs again under that shape,
-      # longer than the default, so a path built under TMPDIR with no room left
-      # for a socket, or a path compared without resolving the link, fails here.
+      # A TMPDIR can be long and reached through a link on Linux too (martha#79):
+      # a unix socket address holds 107 bytes here, and a path built under a
+      # long TMPDIR with no room left for one fails with EINVAL (this step caught
+      # it in #541 package 9a). The suite runs again under such a TMPDIR, so a
+      # path with no room for a socket, or a path compared without resolving the
+      # link, fails here.
       - name: the suite under a long TMPDIR reached through a link
         env:
           PRIVATE_VAR: ${{ runner.temp }}/private/var
           LINKED_VAR: ${{ runner.temp }}/var
-          MAC_SHAPED_TMP: folders/zz/abcdefghijklmnopqrstuvwxyz0123/T
+          LONG_TMP: folders/zz/abcdefghijklmnopqrstuvwxyz0123/T
         run: |
-          mkdir -p "$PRIVATE_VAR/$MAC_SHAPED_TMP"
-          chmod 700 "$PRIVATE_VAR/$MAC_SHAPED_TMP"
+          mkdir -p "$PRIVATE_VAR/$LONG_TMP"
+          chmod 700 "$PRIVATE_VAR/$LONG_TMP"
           ln -s "$PRIVATE_VAR" "$LINKED_VAR"
-          TMPDIR="$LINKED_VAR/$MAC_SHAPED_TMP" npm test
+          TMPDIR="$LINKED_VAR/$LONG_TMP" npm test
 
   # The structural floor (martha#87): no function nests deeper than two levels,
   # branches past the complexity cap or runs past the length cap. The caps live
@@ -339,7 +341,7 @@ jobs:
   # open, and a run killed hard leaves them piled up until the next launch test stops reporting. The job is a run over a
   # machine that holds none, and answers 0. That it BITES is a test's, and so is every line of the rule: a kernel the
   # test plants holds a killed run's chain and must be named, and the same chain under a live runner must not be —
-  # prove_the_core/the_launchers_a_run_left.node-test.ts, which the suite runs.
+  # prove_the_core/a_test_leaves_nothing_behind/the_launchers_a_run_left.node-test.ts, which the suite runs.
   no-launcher-outlives-its-run:
     name: no launcher outlives its run
     runs-on: ubuntu-latest
@@ -357,7 +359,7 @@ jobs:
   # that restored its installer/ would ship a tree its tag does not hold while its pin named the published installer
   # (martha#84). The job reads the release workflow, every script its run: lines name and every local uses: ./ action,
   # and names the actions from other repositories as not read. That it BITES is a test's:
-  # prove_the_core/no_restore_reaches_the_release.node-test.ts plants the restore in a copy of the workflow, in a
+  # prove_the_core/the_release_is_proven/no_restore_reaches_the_release.node-test.ts plants the restore in a copy of the workflow, in a
   # script it runs and in a local action, and each must exit 1 with the line printed.
   no-restore-in-the-release:
     name: no restore of installer/ in the release

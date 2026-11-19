@@ -8,7 +8,7 @@
     "node": ">=24.18.1"
   },
   "scripts": {
-    "test": "node ./prove_the_core/keep_a_test_run_in_one_temporary_root.ts prove_the_relay_loads/run_the_recorded_host_runs.sh && node ./prove_the_core/keep_a_test_run_in_one_temporary_root.ts node prove_the_core/run_the_installer_job.ts && env -u MARTHA_RECORDED_HOST node ./prove_the_core/keep_a_test_run_in_one_temporary_root.ts node ./prove_the_core/no_test_output_carries_the_environment.ts node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts' 'carry_marthas_own_node/**/*.node-test.ts' 'trial_the_goose_host/**/*.node-test.ts' 'rehearse_a_release/**/*.node-test.mjs'",
+    "test": "node ./prove_the_core/a_test_run_keeps_one_temporary_root/keep_a_test_run_in_one_temporary_root.ts prove_the_relay_loads/run_the_recorded_host_runs.sh && node ./prove_the_core/a_test_run_keeps_one_temporary_root/keep_a_test_run_in_one_temporary_root.ts node prove_the_core/the_release_is_proven/run_the_installer_job.ts && env -u MARTHA_RECORDED_HOST node ./prove_the_core/a_test_run_keeps_one_temporary_root/keep_a_test_run_in_one_temporary_root.ts node ./prove_the_core/no_test_reaches_a_secret/no_test_output_carries_the_environment.ts node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts 'src/**/*.node-test.ts' 'architecture/**/*.node-test.ts' 'prove_the_core/**/*.node-test.ts' 'carry_marthas_own_node/**/*.node-test.ts' 'trial_the_goose_host/**/*.node-test.ts' 'rehearse_a_release/**/*.node-test.mjs'",
     "typecheck": "tsc --noEmit",
     "test:file": "prove_the_relay_loads/run_the_tests_of_one_file.sh",
     "check:private": "node src/check_nothing_private_gets_in/main.ts",
@@ -21,8 +21,8 @@
     "check:restated-values": "node src/check_no_literal_restates_a_value/main.ts",
     "check:recorded-host-runs": "node src/check_every_recorded_host_test_is_run/main.ts",
     "check:no-member-outlives-its-run": "node src/check_no_member_outlives_its_run/main.ts",
-    "check:no-launcher-outlives-its-run": "node prove_the_core/no_launcher_outlives_its_run.ts",
-    "check:no-restore-in-the-release": "node prove_the_core/no_restore_reaches_the_release.ts",
+    "check:no-launcher-outlives-its-run": "node prove_the_core/a_test_leaves_nothing_behind/no_launcher_outlives_its_run.ts",
+    "check:no-restore-in-the-release": "node prove_the_core/the_release_is_proven/no_restore_reaches_the_release.ts",
     "check:no-member-works-without-its-crew-tools": "node src/check_no_member_works_without_its_crew_tools/main.ts",
     "check:no-import-cycle": "node src/check_no_import_cycle/main.ts",
     "check:workspace-layout": "node src/check_the_workspace_layout/main.ts",
@@ -97,6 +97,7 @@
       "src/run_an_owner_signed_command",
       "src/run_the_martha_command",
       "src/run_the_nodes_own_npm_alone",
+      "src/serve_the_crews_tools_to_an_engine",
       "src/serve_the_relay_to_a_launch",
       "src/serve_the_owners_answers",
       "src/start_a_member",
@@ -124,7 +125,7 @@
       "src/claude_code_relay": 717,
       "src/cut_the_rules_from_the_host_binary": 395,
       "src/dashboard_rows_directory": 103,
-      "src/declare_a_solo_crew": 68,
+      "src/declare_a_solo_crew": 102,
       "src/drive_the_recorded_host": 557,
       "src/empty_directory_of_a_launch": 24,
       "src/end_a_launch": 152,
@@ -143,9 +144,9 @@
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
       "src/launch_a_claude_code_member": 553,
-      "src/launch_a_goose_member": 229,
+      "src/launch_a_goose_member": 249,
       "src/linux_process_identity": 332,
-      "src/list_stop_and_restart_the_crew": 99,
+      "src/list_stop_and_restart_the_crew": 103,
       "src/load_the_hosts_markdown": 427,
       "src/owners_settings_directory": 173,
       "src/place_the_hosts_settings": 127,
@@ -155,17 +156,18 @@
       "src/refuse_settings_that_turn_hooks_off": 203,
       "src/row_streams_directory": 164,
       "src/run_an_owner_signed_command": 562,
-      "src/run_the_martha_command": 458,
+      "src/run_the_martha_command": 484,
       "src/run_the_nodes_own_npm_alone": 165,
-      "src/serve_the_relay_to_a_launch": 243,
-      "src/serve_the_owners_answers": 246,
+      "src/serve_the_crews_tools_to_an_engine": 282,
+      "src/serve_the_relay_to_a_launch": 266,
+      "src/serve_the_owners_answers": 251,
       "src/start_a_member": 167,
       "src/start_the_member_on_its_host": 211,
       "src/start_the_member_on_the_owners_terminal": 86,
       "src/sweep_leftover_launch_directories": 153,
       "src/ask_git_what_a_member_is_about_to_change": 78,
       "src/tell_the_member_a_line": 42,
-      "src/a_launch_end_on_this_machine": 119
+      "src/a_launch_end_on_this_machine": 124
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",
@@ -177,7 +179,8 @@
     "sliceCap": 600,
     "sliceCeilings": {
       "src/check_no_literal_restates_a_value": 660,
-      "src/land_passed_work_as_one_batch": 614
+      "src/land_passed_work_as_one_batch": 614,
+      "src/declare_crew": 619
     },
     "packageImports": {
       "typescript": "prove_the_core",

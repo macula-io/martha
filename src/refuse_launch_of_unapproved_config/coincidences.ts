@@ -1,7 +1,7 @@
 // The coincidences of refuse_launch_of_unapproved_config: words its own files spell like a constant held elsewhere, meaning something
 // else by them, each with its reason (martha#289, #437). Read by the restated-values check as a syntax tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { TREE_PARAMETER } from '../install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts'
 import { THE_TAG_OF_A_READ_TREE } from '../judge_a_checkouts_tree/coincidences.ts'
 import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
@@ -17,7 +17,7 @@ const A_WRITERS_HALF_MINUTE = 'the timeout a writer that unblocks a FIFO read is
 
 /**
  * Why the user settings file may be spelled here (martha#437): the constant that holds it lives in a host adapter, and a
- * core slice may import only another slice (prove_the_core/no_setting_outside_the_declaration), so the name is written
+ * core slice may import only another slice (prove_the_core/what_the_core_may_reach/no_setting_outside_the_declaration), so the name is written
  * where the launch files are read. Single-sourcing it means moving the constant below both files — Jupiter's O1 on
  * PR 469, a package of its own.
  */

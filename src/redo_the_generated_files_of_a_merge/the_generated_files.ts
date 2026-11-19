@@ -7,7 +7,7 @@
 
 import { relative } from 'node:path'
 
-import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
+import { manifestPathOf } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
 
 /** What stands between the words for each redone path on the one line the redo prints. */
 export const THE_WORDS_BETWEEN = '; '

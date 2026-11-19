@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { DeclaredCoincidence } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
+import type { DeclaredCoincidence } from '../../prove_the_core/a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts'
 import { entriesOutsideTheirSlice, lineOfAnEntryOutsideItsSlice } from './a_slice_excuses_only_its_own_files.ts'
 
 const entry = (declared_in: string, file: string): DeclaredCoincidence => ({ value: 'the-tool', file, reason: 'r', declared_in, line: 3 })
