@@ -20,7 +20,6 @@ import {
   DeclarationRefused,
   declareCrewOnHosts,
   HOST,
-  MODEL,
   theHostOfMember,
   type CrewSettings,
   type Member,
@@ -82,13 +81,13 @@ function withField(member: Fields, key: string, value: unknown): Fields {
 /** The members after the change; or why the member it names is not on the crew. */
 function membersAfter(members: readonly Fields[], change: CrewChange): readonly Fields[] | string {
   if (change.kind === ADD) {
-    const optional = { ...(change.model === null ? {} : { [MODEL]: change.model }), ...(change.host === null ? {} : { [HOST]: change.host }) }
+    const optional = { ...(change.model === null ? {} : { model: change.model }), ...(change.host === null ? {} : { [HOST]: change.host }) }
     return [...members, { name: change.member, role: change.role, ...optional }]
   }
   const at = members.findIndex((member) => typeof member['name'] === 'string' && sameMemberName(member['name'], change.member))
   if (at === -1) return `${notOnTheCrew(change.member, members.map((member) => String(member['name'])))}.`
   if (change.kind === REMOVE) return members.filter((_, i) => i !== at)
-  const changed = change.kind === SET_MODEL ? withField(members[at]!, MODEL, change.model) : withField(members[at]!, HOST, change.host ?? undefined)
+  const changed = change.kind === SET_MODEL ? { ...members[at]!, model: change.model } : withField(members[at]!, HOST, change.host ?? undefined)
   return members.map((member, i) => (i === at ? changed : member))
 }
 
