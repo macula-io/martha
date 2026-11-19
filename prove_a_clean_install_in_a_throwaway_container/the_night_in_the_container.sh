@@ -489,7 +489,8 @@ night_keep_rows() {
 # them, each through the redactor; then named by whose it is: the one holding the package's opening is the builder's,
 # the other the reviewer's. Echoes `reached` when the token was in one. The night starts two launches in the clone, so
 # more than two, or more than one holding the opening, cannot be told apart and is refused by name, exit 3, the reason on
-# standard error (Saturnus, #639 PR 821 r=2); with `whole`, the record's own read, fewer is refused too.
+# standard error (Saturnus, #639 PR 821 r=2); with `whole`, the record's own read, fewer is refused too. While the night
+# waits, no launch holding the opening yet is not a refusal: the builder's transcript may not hold the typed turn yet.
 night_keep_transcripts() {
   local root="$1" kept="$2" whole="${3:-}" launch file reached='' status launches=0 holders=0 others=0
   mkdir -m 700 -p "${kept}/launches"
@@ -509,7 +510,7 @@ night_keep_transcripts() {
     [ -s "${file}" ] || continue
     if grep -qF -- "$(night_package_opening)" "${file}"; then holders=$((holders + 1)); else others=$((others + 1)); fi
   done
-  if [ "${holders}" -gt 1 ] || [ "${others}" -gt 1 ] || { [ -n "${whole}" ] && [ "${holders}" -ne 1 ]; }; then
+  if [ "${holders}" -gt 1 ] || { [ "${holders}" -eq 1 ] && [ "${others}" -gt 1 ]; } || { [ -n "${whole}" ] && [ "${holders}" -ne 1 ]; }; then
     printf '%s launches in the clone'"'"'s state hold the package'"'"'s opening and %s do not, expected 1 and 1\n' "${holders}" "${others}" >&2
     return 3
   fi
@@ -601,6 +602,8 @@ night_asked() {
   rm -rf "${kept}"
   night_keep_transcripts "$(sed -n 1p <<< "$(night_places)")" "${kept}" > /dev/null || status=$?
   [ "${status}" -eq 0 ] || return "$((status == 3 ? 3 : 2))"
+  # No launch holds the package's opening yet: the builder has not asked, as far as the night can tell.
+  [ -s "${kept}/$(night_builder).jsonl" ] || return 1
   night_write_the_night "${kept}" "${now}"
   node --no-warnings "${NIGHT_GUARDS}" asked "${NIGHT_DIR}/${NIGHT_FILE_PART}" < /dev/null > /dev/null 2>&1
 }
@@ -1094,6 +1097,13 @@ case "${words}" in
       sleep "$(cat "${standin}/night.slow-rows")"
       echo read >> "${standin}/night.rows-reads"
     fi
+    # A case whose night.opening-late exists stands for a builder whose transcript does not hold the typed package yet
+    # the first time the night reads it: that read leaves the opening out.
+    if [ -f "${standin}/night.opening-late" ] && [[ "${words}" == *"/snapshots/'launch-b'/"* ]] && [ ! -f "${standin}/night.opening-read" ]; then
+      : > "${standin}/night.opening-read"
+      sh -c "$(printf '%s' "${@: -1}" | in_home)" | grep -vF 'Take the package' | sed "s#${standin}/home#${home}#g"
+      exit 0
+    fi
     sh -c "$(printf '%s' "${@: -1}" | in_home)" | sed "s#${standin}/home#${home}#g"
     ;;
   *"${home}/.local/state/martha/"*)
@@ -1301,7 +1311,7 @@ night_closed_after_tear_down() {
 # The night's cases: one that gets ready, and one for each guard that must stop it by name.
 night_self_test() {
   local root="$1" standin failures=0 deb night_ask_passes
-  local NIGHT_SLOW_ROWS_S=2
+  local NIGHT_SLOW_ROWS_S=2 NIGHT_OPENING_LATE_WINDOW_S=60
   NIGHT_SELF_TEST_TOKEN='github_pat_a-word-only-the-night-cases-hold'
   write_night_stand_ins "${STAND_INS}"
   sed -i 's#^case "${1:-}" in$#if [ -x "$(dirname "$0")/night-podman" ]; then "$(dirname "$0")/night-podman" "$@"; s=$?; [ "${s}" -eq 99 ] || exit "${s}"; fi\ncase "${1:-}" in#' "${STAND_INS}/podman"
@@ -1386,6 +1396,15 @@ night_self_test() {
   night_expect 1 "${standin}" || failures=$((failures + 1))
   asked_for "^FAIL night ring: the builder's ring was sent to the owner's screen: " "${standin}/out" || nfail 'a ring that never reached the watched screen was not named by its row'
   if grep -q "^the owner's second act" "${standin}/out"; then nfail 'the owner'"'"'s second command was printed with no ring seen'; fi
+
+  # The builder's transcript does not hold the typed package at the night's first read, while both launches hold other
+  # turns: the night waits on and lands, never refusing the launches as not told apart (Saturnus, #639 PR 821 r=2).
+  standin="${root}/night-opening-late"; night_case "${standin}" member.trust
+  : > "${standin}/night.opening-late"
+  # A work window that holds the second pass: each pass copies the record out, which outlasts the cases' own window.
+  MARTHA_CLEAN_INSTALL_NIGHT_WORK_WINDOW_S="${NIGHT_OPENING_LATE_WINDOW_S}" night_expect 0 "${standin}" || failures=$((failures + 1))
+  [ -f "${standin}/night.opening-read" ] || nfail 'the night never read a builder transcript without the opening'
+  if grep -q '^FAIL night ask: ' "${standin}/out"; then nfail 'a builder transcript without the opening yet failed the ask'; fi
 
   # The crew queues no ask: named, and the owner's second command never printed.
   standin="${root}/night-no-ask"; night_case "${standin}" night.no-ask
@@ -1520,7 +1539,7 @@ night_self_test() {
   # --night with no run folder is refused with the arguments.
   expect_status 2 "${root}" 'a-host' --night || failures=$((failures + 1))
 
-  for standin in night-ready night-no-watch night-no-ring night-no-yes night-no-ask night-container-goes night-slow-rows night-other-ask night-three-launches night-yes-before-attach night-head-moves night-token-kept night-token-in-log night-no-handoff night-not-on-main night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
+  for standin in night-ready night-opening-late night-no-watch night-no-ring night-no-yes night-no-ask night-container-goes night-slow-rows night-other-ask night-three-launches night-yes-before-attach night-head-moves night-token-kept night-token-in-log night-no-handoff night-not-on-main night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
     if [ -e "${root}/${standin}/container.present" ]; then nfail "the ${standin} run left its container behind"; fi
   done
   return $((failures > 0))
