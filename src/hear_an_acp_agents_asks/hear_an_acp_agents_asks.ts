@@ -21,10 +21,17 @@
 // turn, the turn ended, or the agent's output ended; ../speak_acp_to_an_agent aborts the decision's `withdrawn` signal
 // then). Any later answer answers nothing and says why: too late, already answered, or no ask held under that key.
 //
+// ONE ASK PER KEY, NEVER OVERWRITTEN. An agent's id for a call is unique within its session only, and providers number
+// them call_0, call_1, … in every session, so an ask's key names its session as well as its call: two sessions asking
+// under the same call id are two asks, each answered and withdrawn on its own. A second ask under a key already held
+// (the same session reusing a call id it has not finished) is refused once and noted; the ask already held keeps its row.
+//
 // AN ANSWER WITH NO OWNER ACT BEHIND IT. The route an answer comes in by is a socket of the owner's own OS user, so a
 // member can write to it and skip `martha answer`. That is a speed bump, said plainly (DECIDED 2026-11-18 "Speed bumps,
-// said plainly"). What holds: each answer is matched against the record `martha answer` writes before it sends. An answer
-// with no record behind it is still applied, and it is kept with `owner_act: false` and noted, so it shows.
+// said plainly"). Each answer is looked for in the record `martha answer` writes before it sends, and an answer with no
+// record behind it is still applied, kept with `owner_act: false` and noted. That catches only an answer sent to the
+// socket without the record: the record is the owner's own user's file too, and so is the entry that says where an act
+// was typed, so a member that writes the socket can write a matching line first, and then nothing shows.
 
 import type { ADecision } from '../speak_acp_to_an_agent/answer_a_permission_once.ts'
 import type { APermissionRequest, Decide } from '../speak_acp_to_an_agent/the_acp_client.ts'
@@ -92,6 +99,9 @@ export interface AnAnswerKept {
 /** Why an ask that is no longer open closed. */
 type WhyItClosed = 'answered' | 'withdrawn'
 
+/** The key one ask is held, listed and answered under: its call's own key, and the session it was asked in. */
+export const theKeyOfAnAsk = (request: APermissionRequest, tool: string): string => `${theKeyOfAPermission('', tool, request.rawInput, request.toolCallId)}@${request.sessionId}`
+
 /** Why a late answer answered nothing, by why its ask closed; and for a key never held. */
 export const TOO_LATE = 'too late: the ask was withdrawn when its turn was cancelled or ended, and the call did not run'
 export const ALREADY_ANSWERED = 'the ask was already answered'
@@ -146,7 +156,12 @@ export function theOwnersAsks(where: WhereTheAsksAreKept): TheOwnersAsks {
   }
 
   const waitOnTheOwner = (request: APermissionRequest, tool: string, withdrawn: AbortSignal): Promise<ADecision> => {
-    const ask: AnOpenAsk = { key: theKeyOfAPermission('', tool, request.rawInput, request.toolCallId), session_id: request.sessionId, tool_call_id: request.toolCallId, tool, title: request.title, input: request.rawInput, opened_at: where.now() }
+    const key = theKeyOfAnAsk(request, tool)
+    if (held.has(key)) {
+      notes.push(`a second ask under ${key} was refused: the ask already held under that key keeps it`)
+      return Promise.resolve('reject')
+    }
+    const ask: AnOpenAsk = { key, session_id: request.sessionId, tool_call_id: request.toolCallId, tool, title: request.title, input: request.rawInput, opened_at: where.now() }
     const answered = new Promise<ADecision>((settle) => held.set(ask.key, { ask, settle }))
     where.screen.heard(ask.session_id, { said: 'permission', call: { id: request.toolCallId, tool, input: request.rawInput } }, ask.opened_at)
     const withdraw = (): void => {

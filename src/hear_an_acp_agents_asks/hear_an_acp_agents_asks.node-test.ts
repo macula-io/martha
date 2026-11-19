@@ -9,19 +9,20 @@ import process from 'node:process'
 import { test } from 'node:test'
 
 import { ALLOW_ONCE, REJECT_ONCE } from '../speak_acp_to_an_agent/answer_a_permission_once.ts'
-import { AcpClient, type ATurn } from '../speak_acp_to_an_agent/the_acp_client.ts'
+import { AcpClient, type APermissionRequest, type ATurn, type Decide } from '../speak_acp_to_an_agent/the_acp_client.ts'
 import type { AnAgentScript } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 import { theOwnersScreen, type TheScreenKeeper } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import type { WhatTheHostSaid } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { theKeyOfAPermission, whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
+import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { ALREADY_ANSWERED, NOT_HELD, TOO_LATE, theOwnersAsks, theWayAfterTheGate, type AnAnswerHeard, type TheGate, type TheOwnersAsks } from './hear_an_acp_agents_asks.ts'
 
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
 /** A tool name of the test's own, so a list or a gate that named a real tool instead of the one asked cannot pass. */
 const THE_TOOL = 'the-tests-own-tool'
 const A_CALL = { id: 'call-9a', title: 'the-tests-own-tool: echo hi', input: { command: 'echo hi' } }
-const THE_KEY = theKeyOfAPermission('', THE_TOOL, A_CALL.input, A_CALL.id)
+/** The key the owner answers A_CALL by in `session`: the call's own id and the session it was asked in, spelled out here. */
+const theKeyIn = (session: string): string => `permission:${A_CALL.id}@${session}`
 const MEMBER = 'Vesta'
 
 const allowing: TheGate = () => ({ verdict: 'allow', tool: THE_TOOL })
@@ -106,13 +107,13 @@ test('an allowed call off the list waits on the owner: the row asks, the bell ri
   await withTheAsks({ turns: [[{ call: A_CALL }]] }, allowing, [], async (client, sessionId, at) => {
     const turn = client.prompt(sessionId, 'go')
     await at.asked
-    assert.deepEqual(at.asks.open().map((ask) => [ask.key, ask.tool, ask.title, ask.tool_call_id]), [[THE_KEY, THE_TOOL, A_CALL.title, A_CALL.id]])
+    assert.deepEqual(at.asks.open().map((ask) => [ask.key, ask.tool, ask.title, ask.tool_call_id]), [[theKeyIn(sessionId), THE_TOOL, A_CALL.title, A_CALL.id]])
     const row = at.store.row()
     assert.ok(row !== null)
     assert.equal(whatTheOwnerIsShown(row).state, 'needs-you')
     assert.match(whatTheOwnerIsShown(row).needs, new RegExp(`permission for ${THE_TOOL}`))
     assert.equal(at.bells.length, 1, 'the bell rings once, on the change into needs-you')
-    assert.deepEqual(at.asks.answer({ key: THE_KEY, answer: 'allow', act: 'act-1' }), { did: 'answered', owner_act: true })
+    assert.deepEqual(at.asks.answer({ key: theKeyIn(sessionId), answer: 'allow', act: 'act-1' }), { did: 'answered', owner_act: true })
     assert.deepEqual(heardFor(await turn), { heard: ALLOW_ONCE, runs: 1, saves: 0 })
     assert.equal(whatTheOwnerIsShown(at.store.row()!).state, 'working', 'the row is the member\'s own again')
     assert.equal(at.bells.length, 1, 'and closing rings nothing')
@@ -124,7 +125,7 @@ test('the owner\'s reject refuses the call once', async () => {
   await withTheAsks({ turns: [[{ call: A_CALL }]] }, allowing, [], async (client, sessionId, at) => {
     const turn = client.prompt(sessionId, 'go')
     await at.asked
-    assert.equal(at.asks.answer({ key: THE_KEY, answer: 'reject', act: 'act-2' }).did, 'answered')
+    assert.equal(at.asks.answer({ key: theKeyIn(sessionId), answer: 'reject', act: 'act-2' }).did, 'answered')
     assert.deepEqual(heardFor(await turn), { heard: REJECT_ONCE, runs: 0, saves: 0 })
     assert.equal(whatTheOwnerIsShown(at.store.row()!).state, 'working')
   }, ['act-2'])
@@ -153,7 +154,7 @@ test('a cancel while the owner has not answered: the agent hears cancelled, the 
     assert.deepEqual(heardFor(await turn), { heard: 'cancelled', runs: 0, saves: 0 })
     assert.equal(whatTheOwnerIsShown(at.store.row()!).state, 'working')
     assert.deepEqual(at.asks.open(), [])
-    assert.deepEqual(at.asks.answer({ key: THE_KEY, answer: 'allow', act: 'act-3' }), { did: 'answered-nothing', why: TOO_LATE })
+    assert.deepEqual(at.asks.answer({ key: theKeyIn(sessionId), answer: 'allow', act: 'act-3' }), { did: 'answered-nothing', why: TOO_LATE })
     assert.deepEqual(at.asks.kept, [], 'a late answer is not kept as an answer')
   }, ['act-3'])
 })
@@ -166,7 +167,7 @@ test('a turn that ends with the ask still open withdraws it: the row clears and 
     client.end()
     await assert.rejects(turn)
     assert.equal(whatTheOwnerIsShown(at.store.row()!).state, 'working')
-    assert.deepEqual(at.asks.answer({ key: THE_KEY, answer: 'allow', act: 'act-4' }), { did: 'answered-nothing', why: TOO_LATE })
+    assert.deepEqual(at.asks.answer({ key: theKeyIn(sessionId), answer: 'allow', act: 'act-4' }), { did: 'answered-nothing', why: TOO_LATE })
   }, ['act-4'])
 })
 
@@ -175,8 +176,8 @@ test('an answer naming a key that is not held answers nothing; one already answe
     assert.deepEqual(at.asks.answer({ key: 'permission:no-such-call', answer: 'allow', act: 'act-5' }), { did: 'answered-nothing', why: NOT_HELD })
     const turn = client.prompt(sessionId, 'go')
     await at.asked
-    assert.equal(at.asks.answer({ key: THE_KEY, answer: 'reject', act: 'act-5' }).did, 'answered')
-    assert.deepEqual(at.asks.answer({ key: THE_KEY, answer: 'allow', act: 'act-5' }), { did: 'answered-nothing', why: ALREADY_ANSWERED })
+    assert.equal(at.asks.answer({ key: theKeyIn(sessionId), answer: 'reject', act: 'act-5' }).did, 'answered')
+    assert.deepEqual(at.asks.answer({ key: theKeyIn(sessionId), answer: 'allow', act: 'act-5' }), { did: 'answered-nothing', why: ALREADY_ANSWERED })
     assert.deepEqual(heardFor(await turn), { heard: REJECT_ONCE, runs: 0, saves: 0 }, 'the second answer changed nothing')
   }, ['act-5'])
 })
@@ -185,10 +186,10 @@ test('an answer with no owner act behind it is still applied, and is kept and no
   await withTheAsks({ turns: [[{ call: A_CALL }]] }, allowing, [], async (client, sessionId, at) => {
     const turn = client.prompt(sessionId, 'go')
     await at.asked
-    assert.deepEqual(at.asks.answer({ key: THE_KEY, answer: 'allow', act: 'an-act-no-record-holds' }), { did: 'answered', owner_act: false })
+    assert.deepEqual(at.asks.answer({ key: theKeyIn(sessionId), answer: 'allow', act: 'an-act-no-record-holds' }), { did: 'answered', owner_act: false })
     assert.deepEqual(heardFor(await turn), { heard: ALLOW_ONCE, runs: 1, saves: 0 })
-    assert.deepEqual(at.asks.kept.map((kept) => [kept.key, kept.answer, kept.owner_act]), [[THE_KEY, 'allow', false]])
-    assert.match(at.asks.notes.join('\n'), new RegExp(`${THE_KEY} was answered allow with no owner act behind it`))
+    assert.deepEqual(at.asks.kept.map((kept) => [kept.key, kept.answer, kept.owner_act]), [[theKeyIn(sessionId), 'allow', false]])
+    assert.match(at.asks.notes.join('\n'), new RegExp(`${theKeyIn(sessionId)} was answered allow with no owner act behind it`))
   })
 })
 
@@ -200,4 +201,46 @@ test('a gate that throws is a refusal, and the owner is never asked', async () =
     assert.deepEqual(heardFor(await client.prompt(sessionId, 'go')), { heard: REJECT_ONCE, runs: 0, saves: 0 })
     assert.deepEqual(at.heard, [])
   })
+})
+
+/** The asks of one launch with no agent behind them: each Decide is called by the test, as the ACP client would. */
+function asksWithNoAgent(): { asks: TheOwnersAsks; decide: Decide } {
+  const asks = theOwnersAsks({ screen: aWatchedScreen(aStore(), []).screen, now: () => 1, anOwnerActStandsBehind: () => true })
+  return { asks, decide: asks.decide(allowing, []) }
+}
+
+/** A request for A_CALL's tool under the call id providers give in every session, asked in `session`. */
+const askedIn = (session: string): APermissionRequest => ({ sessionId: session, toolCallId: 'call_1', title: A_CALL.title, rawInput: A_CALL.input })
+
+/** Every promise already settled has run its callbacks: the gate is awaited before an ask is held. */
+const settled = (): Promise<void> => new Promise((settle) => setImmediate(settle))
+
+test('two sessions asking under the same call id are two asks: each is answered and withdrawn on its own', async () => {
+  const { asks, decide } = asksWithNoAgent()
+  const first = new AbortController()
+  const second = new AbortController()
+  const firstDecided = decide(askedIn('session-one'), first.signal)
+  const secondDecided = decide(askedIn('session-two'), second.signal)
+  await settled()
+  assert.deepEqual(asks.open().map((ask) => [ask.key, ask.session_id]), [
+    ['permission:call_1@session-one', 'session-one'],
+    ['permission:call_1@session-two', 'session-two'],
+  ])
+  assert.deepEqual(asks.answer({ key: 'permission:call_1@session-one', answer: 'allow', act: 'act-6' }), { did: 'answered', owner_act: true })
+  assert.equal(await firstDecided, 'allow', 'the answer reached the ask it named')
+  assert.deepEqual(asks.open().map((ask) => ask.key), ['permission:call_1@session-two'], 'the other session still waits')
+  second.abort()
+  assert.equal(await secondDecided, 'reject', 'its withdrawal found it and closed it')
+  assert.deepEqual(asks.open(), [])
+})
+
+test('a second ask under a key already held is refused once and noted; the held ask keeps its key and its answer', async () => {
+  const { asks, decide } = asksWithNoAgent()
+  const firstDecided = decide(askedIn('session-one'), new AbortController().signal)
+  await settled()
+  assert.equal(await decide(askedIn('session-one'), new AbortController().signal), 'reject', 'the second ask under a held key never waits')
+  assert.match(asks.notes.join('\n'), /a second ask under permission:call_1@session-one was refused/)
+  assert.deepEqual(asks.open().map((ask) => ask.key), ['permission:call_1@session-one'])
+  asks.answer({ key: 'permission:call_1@session-one', answer: 'allow', act: 'act-7' })
+  assert.equal(await firstDecided, 'allow', 'the ask held first is the one the answer reaches')
 })

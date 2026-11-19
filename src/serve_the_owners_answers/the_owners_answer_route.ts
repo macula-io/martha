@@ -11,8 +11,10 @@
 //
 // A SPEED BUMP, said plainly (DECIDED 2026-11-18 "Speed bumps, said plainly"). A member runs as the owner's own OS
 // user, so it can read the route record and write to the socket itself, skipping `martha answer` and its refusal. The
-// mode bits keep out other users only. What holds against a member is the owner act's record: an answer no
-// `martha answer` recorded is applied and kept as such (`owner_act: false`), so it shows.
+// mode bits keep out other users only. An answer no `martha answer` recorded is applied and kept as such
+// (`owner_act: false`), so it shows; but that catches only an answer sent to the socket without the record. The record,
+// owner_answers.jsonl, and the entry that says where an act was typed are the owner's own user's files too, so a member
+// that writes the socket can append a matching line first, and then nothing shows.
 
 import { chmodSync, lstatSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createConnection, createServer, type Server } from 'node:net'
