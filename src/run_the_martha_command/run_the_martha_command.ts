@@ -545,8 +545,9 @@ function theFirstApprovalAt(places: Places): string | undefined {
 
 /**
  * An owner's act that writes a record, made, then its lines named in the log of where the owner's acts were typed
- * (martha#619): the record first, the entries after it, and only for an act that ended done. What the act shows the
- * owner of that log is printed here, once the entry is kept, never inside the act (martha#765).
+ * (martha#619): the record first, the entries after it, for every line the act added, whether it ended done or not: a
+ * `martha answer` the launch refuses has kept its line first, and with no entry it would read as forged (#541 9a).
+ * What the act shows the owner of that log is printed here, once the entry is kept, never inside the act (martha#765).
  */
 async function recordedWhereItWasTyped(io: CommandIo, places: Places, asked: Asked, act: (io: CommandIo, places: Places, asked: Asked) => Promise<number>): Promise<number> {
   const file = theRecordFilesOf(places)[asked.act]
@@ -554,11 +555,11 @@ async function recordedWhereItWasTyped(io: CommandIo, places: Places, asked: Ask
   if (file !== undefined) theCutoverTakenOnce(places, at)
   const before = file === undefined ? 0 : linesOf(file).length
   const done = await act(io, places, asked)
-  if (done !== EXIT_DONE || file === undefined) return done
+  if (file === undefined) return done
   const unkept = keepWhereItWasTyped(places, asked.act, before, at, seenFromThisProcess())
-  if (unkept !== undefined) io.err(`The act is made, but where it was typed is not kept: ${unkept}`)
+  if (unkept !== undefined) io.err(`${done === EXIT_DONE ? 'The act is made' : 'The act ended refused, after its record kept a line'}, but where it was typed is not kept: ${unkept}`)
   // Kept, so the listing can be read: an entry that could not be kept would show the owner's own act as forged.
-  else if (asked.act === 'approve') ([['Your approvals, and where each was typed (martha#619):', 'approve'], ['Your pinned keys, and where each was typed:', 'pin-key']] as const).forEach(([what, act]) => {
+  else if (done === EXIT_DONE && asked.act === 'approve') ([['Your approvals, and where each was typed (martha#619):', 'approve'], ['Your pinned keys, and where each was typed:', 'pin-key']] as const).forEach(([what, act]) => {
     const lines = whatTheOwnerReadsOf(places, act, theFirstApprovalAt(places))
     if (lines.length > 0) [what, ...lines].forEach((line) => io.out(line))
   })

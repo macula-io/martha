@@ -18,13 +18,36 @@
 
 import { chmodSync, lstatSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createConnection, createServer, type Server } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { getuid } from 'node:process'
 import { randomUUID } from 'node:crypto'
 
 import { THE_OWNERS_ANSWERS, type AnAnswerHeard, type AnOpenAsk, type TheOwnersAsks, type WhatAnAnswerDid } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
 
 /** The socket's mode: only the owner's user reads or writes it. */
 export const THE_ANSWER_SOCKETS_MODE = 0o600
+
+/**
+ * The mode of the directory a launch serves its socket in: only the owner's user enters it, so another user cannot
+ * reach the socket in the moment between `listen` making it and the socket's own mode being set (#541 9a, note (b)).
+ */
+export const THE_SOCKETS_PLACE_MODE = 0o700
+
+/** The socket's directory as `lstat` sees it, never followed: enough to judge it. */
+export interface ASocketsPlaceSeen {
+  readonly is_directory: boolean
+  readonly uid: number
+  readonly mode: number
+}
+
+/** Why the directory a socket would be served in is not the owner's user's alone; undefined when it is. */
+export function whyTheSocketsPlaceIsOpen(place: string, seen: ASocketsPlaceSeen | undefined, owner_uid: number): string | undefined {
+  if (seen === undefined) return `${place} is not there`
+  if (!seen.is_directory) return `${place} is not a directory of its own: a link or a file stands there`
+  if (seen.uid !== owner_uid) return `${place} belongs to user ${seen.uid}, not this user ${owner_uid}`
+  const mode = seen.mode & PERMISSION_BITS
+  return mode === THE_SOCKETS_PLACE_MODE ? undefined : `${place} is mode ${mode.toString(8)}, not ${THE_SOCKETS_PLACE_MODE.toString(8)}`
+}
 
 /** The crew's place the route records are kept in, one per member. */
 export const THE_ANSWER_ROUTES_PLACE = 'owner-answers'
@@ -87,10 +110,15 @@ export interface TheRouteServed {
 }
 
 /**
- * Serves `asks` on a new socket at `socket_path`, inside a directory the launch made for itself. The socket is made
- * 0600 before the route is handed back, and a path already there is refused, never reused.
+ * Serves `asks` on a new socket at `socket_path`, inside a directory the launch made for itself. That directory is judged
+ * before anything listens: this user's own, mode 0700, never a link. The socket is made 0600 before the route is handed
+ * back, and a path already there is refused, never reused.
  */
 export async function serveTheOwnersAnswers(socket_path: string, asks: TheOwnersAsks): Promise<TheRouteServed | { readonly refusal: string }> {
+  const place = dirname(socket_path)
+  const seen = lstatSync(place, { throwIfNoEntry: false })
+  const open = whyTheSocketsPlaceIsOpen(place, seen && { is_directory: seen.isDirectory(), uid: seen.uid, mode: seen.mode }, getuid?.() ?? -1)
+  if (open !== undefined) return { refusal: `the answer route is not served: ${open}` }
   if (lstatSync(socket_path, { throwIfNoEntry: false }) !== undefined) return { refusal: `the answer route is not served: ${socket_path} is already there` }
   const server: Server = createServer((socket) => {
     let buffered = ''

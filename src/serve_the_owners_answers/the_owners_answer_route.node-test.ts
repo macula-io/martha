@@ -2,7 +2,7 @@
 // package 9a). Each case serves a real Unix socket in a directory of its own and removes that directory when it ends.
 
 import assert from 'node:assert/strict'
-import { chmodSync, lstatSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import process from 'node:process'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -21,11 +21,13 @@ import {
   serveTheOwnersAnswers,
   THE_ANSWER_SOCKETS_MODE,
   THE_OWNERS_ANSWERS_FILE,
+  THE_SOCKETS_PLACE_MODE,
   theLineOfAnAnswer,
   theMembersWithARoute,
   theRouteOf,
   theRouteRecordOf,
   type TheRouteServed,
+  whyTheSocketsPlaceIsOpen,
 } from './the_owners_answer_route.ts'
 
 const PERMISSION_BITS = 0o777
@@ -210,4 +212,43 @@ test('`martha answer` refuses with no terminal, sends nothing it could not recor
       await served.close()
     }
   })
+})
+
+test('a socket is served only in a directory this user owns, mode 0700 exactly; any other is refused before listen (#541 9a slice 2, note (b))', async () => {
+  await inAPlace(async (place) => {
+    for (const mode of [THE_SOCKETS_PLACE_MODE | 0o050, THE_SOCKETS_PLACE_MODE | 0o005, THE_SOCKETS_PLACE_MODE & ~0o100]) {
+      const open = join(place, `open-${mode.toString(8)}`)
+      mkdirSync(open)
+      chmodSync(open, mode)
+      const socket = join(open, 'answers.sock')
+      const served = await serveTheOwnersAnswers(socket, someAsks([]))
+      assert.ok('refusal' in served, `a place mode ${mode.toString(8)} was served in`)
+      assert.match(served.refusal, new RegExp(`mode ${mode.toString(8)}, not ${THE_SOCKETS_PLACE_MODE.toString(8)}`))
+      chmodSync(open, THE_SOCKETS_PLACE_MODE)
+      assert.equal(lstatSync(socket, { throwIfNoEntry: false }), undefined, 'the socket was made before the place was judged')
+    }
+  })
+})
+
+test('a socket\'s directory reached through a link, or not there, is refused before listen, never followed (#541 9a slice 2, note (b))', async () => {
+  await inAPlace(async (place) => {
+    const own = join(place, 'own')
+    mkdirSync(own, { mode: THE_SOCKETS_PLACE_MODE })
+    const linked = join(place, 'linked')
+    symlinkSync(own, linked)
+    const throughALink = await serveTheOwnersAnswers(join(linked, 'answers.sock'), someAsks([]))
+    assert.ok('refusal' in throughALink, 'a place reached through a link was served in')
+    assert.match(throughALink.refusal, /not a directory of its own/)
+    assert.equal(lstatSync(join(own, 'answers.sock'), { throwIfNoEntry: false }), undefined, 'the socket was made through the link')
+    const gone = await serveTheOwnersAnswers(join(place, 'not-there', 'answers.sock'), someAsks([]))
+    assert.ok('refusal' in gone, 'a place not there was served in')
+    assert.match(gone.refusal, /is not there/)
+  })
+})
+
+test('a socket\'s directory another user owns is refused, whatever its mode (#541 9a slice 2, note (b))', () => {
+  const owner = 4242
+  const seen = { is_directory: true, uid: owner, mode: THE_SOCKETS_PLACE_MODE }
+  assert.equal(whyTheSocketsPlaceIsOpen('a-place', seen, owner), undefined)
+  assert.match(whyTheSocketsPlaceIsOpen('a-place', { ...seen, uid: owner + 1 }, owner) ?? '', new RegExp(`belongs to user ${owner + 1}, not this user ${owner}`))
 })
