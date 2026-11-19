@@ -24,7 +24,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -42,6 +42,7 @@ import { refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.
 import { theHandoverPrompt } from '../write_my_handover/write_my_handover.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { crewRowsDirectoryOf, driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, standInCallId, whatTheLaunchSaw, type ModelRequest } from './drive_the_recorded_host.ts'
+import { OPEN_WORK_MS } from './wait_while_the_host_keeps_showing.ts'
 import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
@@ -50,29 +51,22 @@ const OWNER_TURN = 'Do the first task.'
 const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: [CLAUDE_CODE_SHELL_TOOL] } })
 const GIT_NAME = 'martha-test'
 const GIT_EMAIL = 'martha-test@example.invalid'
-/** The file that defines the time limit every recorded-host run carries (--test-timeout), and the line that says it. */
-const THE_RUNS_BOUNDS = join(import.meta.dirname, '..', '..', 'prove_the_relay_loads', 'the_runs_bounds.sh')
-const THE_RUNS_TIMEOUT_LINE = /^RUN_TIMEOUT_MS=(\d+)$/m
+/** How often the run looks for the ordered end, and the tool for the run's word that it came. */
+const A_LOOK_MS = 250
 /**
- * The time limit node gives this file's one case, read from its one definition and never typed again here. A run
- * that outlasts it is cancelled with node's own words, before any of this file's can say why (martha#891 r=1 R1).
+ * How far inside the driver's own budget for an open call the long tool ends: well above A_LOOK_MS, the tool's own
+ * step, and the driver's poll, so the tool has returned before the driver names it as stuck.
  */
-const theRunsTimeoutMs = (): number => {
-  const said = THE_RUNS_TIMEOUT_LINE.exec(readFileSync(THE_RUNS_BOUNDS, 'utf8'))?.[1]
-  if (said === undefined) throw new Error(`${THE_RUNS_BOUNDS} defines no RUN_TIMEOUT_MS, so this file cannot keep its waits inside it`)
-  return Number(said)
-}
+const INSIDE_THE_DRIVERS_BUDGET_MS = 10_000
 /**
  * How long the long tool waits at most for the end to be ordered (martha#891). It no longer sleeps a fixed time the
  * runner's speed could outlast — run 44598893743's second beat came after a fixed 150 s had already run out — but
- * until the run has seen the end ordered, so on any runner the end is ordered while the tool still runs. This bound
- * only ends a run whose end never came, and that run then fails by name as one that cannot judge the order. So it
- * sits two minutes inside the run's time limit: the silence below takes one of them, and the run's start the other,
- * so the case's own words come before node cancels it.
+ * until the run has seen the end ordered, so on any runner the end is ordered while the tool still runs. While it
+ * runs, the driver counts no silence but spends OPEN_WORK_MS on the open call, and names the tool as stuck once that
+ * is spent. So the tool ends inside it: a run whose end comes only after the tool has returned is then judged by
+ * this case's own words (whyTheOrderCannotBeJudged), not by the driver's (martha#891 r=2).
  */
-const THE_LONG_TOOLS_BOUND_MS = theRunsTimeoutMs() - 2 * MINUTE_MS
-/** How often the run looks for the ordered end, and the tool for the run's word that it came. */
-const A_LOOK_MS = 250
+const THE_LONG_TOOLS_BOUND_MS = OPEN_WORK_MS - INSIDE_THE_DRIVERS_BUDGET_MS
 /**
  * A long tool: a process still running when a beat orders the end, ending once `marker` exists (the run writes it when
  * it sees the end ordered) or at its bound, well inside the shell tool's own limit. Not a bare `sleep`, which the host
@@ -90,10 +84,19 @@ const THE_WAITING_MESSAGE = 'A message that waited in the crew channel while the
 /** The first sentence of the handover prompt a refresh someone asked for submits: how a request is known to carry it. */
 const THE_HANDOVER_ASK = theHandoverPrompt({ at_limit: false, percent: 0 }).split('.')[0] ?? ''
 /**
- * How long the host may show nothing new: the turn waits in its long tool while the mod's beats come a minute apart, so
- * the run waits a beat past the tool's own bound before calling the host silent.
+ * How long the host may show nothing new. The long tool's wait is an open call, which the driver does not count as
+ * silence, so this covers only the idle member after the tool has returned: one of the mod's beats, a minute apart,
+ * for an end that comes late, and the same margin again.
  */
-const END_SILENCE_MS = THE_LONG_TOOLS_BOUND_MS + MINUTE_MS
+const END_SILENCE_MS = MINUTE_MS + INSIDE_THE_DRIVERS_BUDGET_MS
+/**
+ * How long after the long tool is offered the run stops waiting for an end that never came: the tool's bound and one
+ * beat after it. The mod's beats keep the host showing something, so neither the driver's silence nor its open-call
+ * budget would end such a run, and node's --test-timeout would cancel it in node's words (martha#891 r=2).
+ */
+const AN_END_NEVER_CAME_MS = THE_LONG_TOOLS_BOUND_MS + MINUTE_MS
+/** What the run says when no end was ordered while the long tool ran or a beat after it. */
+const THE_END_NEVER_CAME = 'no end was ordered while the long tool ran or a beat after it, so this run cannot judge the order'
 const END = { text: 'Done.' }
 /**
  * The request whose turn runs the long tool (martha#498): the end has to ride that call's own answer for the order of
@@ -230,6 +233,11 @@ test('an end ordered while a long tool runs is carried after that tool\'s report
   const streams = theCrewsStreams(project)
   const theEndWasOrdered = join(project.home, THE_END_WAS_ORDERED)
   const stopLooking = endTheLongToolOnceTheEndIsOrdered(t, project, theEndWasOrdered)
+  // When the long tool was offered: an end that has not come by AN_END_NEVER_CAME_MS after it ends the run here, so the
+  // case says why in its own words rather than being cancelled.
+  let theLongToolOfferedAt: number | undefined
+  const theEndNeverCame = (): boolean =>
+    theLongToolOfferedAt !== undefined && Date.now() - theLongToolOfferedAt > AN_END_NEVER_CAME_MS && !existsSync(theEndWasOrdered)
   const run = async () =>
     await driveTheRecordedHost({
       claude: recordedHost(),
@@ -238,12 +246,13 @@ test('an end ordered while a long tool runs is carried after that tool\'s report
       owner_turn: OWNER_TURN,
       requests: 8,
       silence_ms: END_SILENCE_MS,
-      completesWhen: (requests) => afterTheLongTurn(requests).some((request) => whatTheModelSaw(request).includes(THE_HANDOVER_ASK)),
+      completesWhen: (requests) => afterTheLongTurn(requests).some((request) => whatTheModelSaw(request).includes(THE_HANDOVER_ASK)) || theEndNeverCame(),
       script: async ({ number }) => {
         // First the member asks for its own refresh, which the next beat takes up; then a turn that will not end.
         if (number === 1) return { tool: `mcp__martha__${REFRESH_THIS_SESSION}`, input: { reason: 'the test moves this member off its context' } }
         if (number !== THE_LONG_TOOLS_REQUEST) return END
         await appendToTheChannel(streams, { from: 'the-owner', to: [MEMBER], text: THE_WAITING_MESSAGE, sent_at: Date.now() })
+        theLongToolOfferedAt = Date.now()
         return { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: theLongTool(theEndWasOrdered), description: 'a tool still running when the end is ordered', timeout: THE_SHELL_LIMIT_MS } }
       },
     })
@@ -251,6 +260,8 @@ test('an end ordered while a long tool runs is carried after that tool\'s report
     throw new Error(`the run did not end as a member does: ${String(error).split('\n')[0]}`, { cause: whatTheLaunchSaw(error) })
   }).finally(stopLooking)
   const { requests, shown } = ran
+  // The run looked for the end and never saw it (the long tool's marker was never written): nothing after it is judged.
+  if (!existsSync(theEndWasOrdered)) assert.fail(THE_END_NEVER_CAME)
   // A member the after-tool gate stopped ends on SIGKILL; one that was handed over ends on the owner's /exit.
   assert.equal(ran.exit_code, 0, `the member did not end as the owner ended it, so something stopped it:\n${plainTextOf(shown).slice(-3000)}`)
   // Judged only once the journal says the end rode the long call's own answer (martha#498): an end ordered after that
