@@ -316,6 +316,25 @@ jobs:
       # would not (martha#741 counts a step that runs only a --self-test as no run of the check).
       - run: npm run --silent check:workspace-layout
 
+  # A trial's evidence can say why it observed nothing (martha#694): a line that ended "not-observed" and kept no ACP
+  # transcript beside it is a verdict nobody can read, and the same rule the driver keeps while a line runs is applied
+  # here to a whole evidence directory. The self-test plants the missing-transcript line and its twin, and requires the
+  # first refused by name and the second passing; the plain run judges a directory the step before plants, so the entry
+  # is reached for real and not only through its self-test (martha#741 counts a self-test alone as no run).
+  trial-evidence:
+    name: a trial's evidence can say why it observed nothing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:trial-evidence -- --self-test
+      - run: mkdir -p "$RUNNER_TEMP/trial-evidence/line-1" && printf '%s\n' '{"verdict":"not-observed"}' > "$RUNNER_TEMP/trial-evidence/line-1/result.json" && printf '%s\n' '{"at":0,"direction":"sent","message":{"jsonrpc":"2.0"}}' > "$RUNNER_TEMP/trial-evidence/line-1/acp.jsonl"
+      - run: npm run --silent check:trial-evidence -- --dir "$RUNNER_TEMP/trial-evidence"
+
   # No launcher outlives its run (martha#559): a launch test's `script -qec ... launcher.ts` pair is a terminal held
   # open, and a run killed hard leaves them piled up until the next launch test stops reporting. The job is a run over a
   # machine that holds none, and answers 0. That it BITES is a test's, and so is every line of the rule: a kernel the
@@ -474,6 +493,10 @@ jobs:
           node-version: '24'
       - run: npm ci
       - run: prove_the_recorded_host_is_current/prove_the_drift_check_bites.sh
+      # The Bash answers harness can fail too (martha#812): the comparison names every difference, and the live mode
+      # takes no case from a host that never answers. No host and no npm: the comparison is driven with recordings the
+      # tests write, and the live mode with a stand-in `claude`, which is only a path to the harness.
+      - run: prove_the_relay_loads/prove_the_bash_answers_bites.sh
 
   # The engine drift check can fail (macula-io/martha#541, package 10): the recorder's --check passes on a tree that
   # says what the recording says and fails, naming the fact, on one that does not, with no engine checkout. Then it

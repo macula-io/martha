@@ -34,6 +34,8 @@
 
 import { CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 
+export { SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+
 /** The variable from which Claude Code loads plugin folders, when it is set and not blank. */
 export const PLUGIN_DIRS_VARIABLE = 'CLAUDE_CODE_PLUGIN_DIRS'
 
@@ -166,14 +168,6 @@ export const HOOKS_SPELLINGS: ReadonlyArray<{ readonly rule: string; readonly fo
   { rule: 'an alias used as a key', found: (frontmatter) => /(^|[\s{,[])\*[^\s,:{}[\]]+\s*:/.test(frontmatter) },
 ]
 
-/** The folder under the owner's skills folder that Claude Code fills from their Claude account (martha#243). */
-export const SYNCED_SKILLS_FOLDER = 'synced'
-
-/** The kind of the owner's markdown the host syncs into: the recording names it, and a test fails if it stops. */
-export const SKILLS_KIND = 'skills'
-
-/** The folder the host moves skills it no longer runs into. It loads a SKILL.md directly in it, and nothing below an entry (martha#243). */
-export const TRASH_FOLDER = '.trash'
 
 /** The setting with which the owner or the admin turns account skill sync off, which the host reads as `=== false`. */
 export const SYNC_OFF_SETTING = 'syncClaudeAiSkills'

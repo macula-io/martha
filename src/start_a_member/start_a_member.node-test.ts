@@ -97,9 +97,14 @@ function git(cwd: string, ...args: string[]): void {
  * of the hooks, so a test that starts a member and says nothing else still tears down cleanly.
  */
 async function thePlaceEnds(place: Place): Promise<void> {
-  for (const started of place.membersStarted) started.stop('the test is over')
-  await Promise.all(place.membersStarted.map((started) => started.stopped))
-  removeTheTree(place.home)
+  // The home goes whatever came before it fails to do (martha#724): a member that will not stop is no reason to leave
+  // the directory this place made in the temp directory for the guard to judge.
+  try {
+    for (const started of place.membersStarted) started.stop('the test is over')
+    await Promise.all(place.membersStarted.map((started) => started.stopped))
+  } finally {
+    removeTheTree(place.home)
+  }
 }
 
 /** A member started on a place, which the place ends before its home goes (martha#272). */
@@ -727,9 +732,11 @@ test('a member started from the crew answers the crew\'s tools over its relay (m
   const place = placeFor(t, {})
   await declared(place)
   const fake = fakeClaude(place)
-  const started = await startMember(requestFor(place, fake.command, BUILDER!.name, []))
+  // Started on the place, so the place ends the member before its home goes (martha#272): a member stopped after the
+  // removal writes its launch record into a tree that is no longer there, and the record it makes is a leftover
+  // (martha#724).
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
   assert.ok(started.started, started.started ? '' : started.refusal)
-  t.after(async () => (started.stop('the test is over'), await started.stopped))
 
   const socket_path = await launchedSocket(place.relay_root, t)
   const heard = await postOverSocket(socket_path, TOOL_ANSWER_PATH, toolCallBody('session-254', THE_TOOLS_ASK, {}))

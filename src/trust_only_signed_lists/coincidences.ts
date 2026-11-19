@@ -13,5 +13,6 @@ export const SSHS_OWN_HASH_NAME = 'ssh\'s name for the hash a signature uses (SS
 
 export const COINCIDENCES: readonly Exception[] = [
   { value: THE_WHOLE_CREW, file: 'trust_only_signed_lists/trust_only_signed_lists.ts', reason: A_FIELD_OF_A_SIGNED_LIST },
+  { value: THE_WHOLE_CREW, file: 'trust_only_signed_lists/trust_only_signed_lists.node-test.ts', reason: A_FIELD_OF_A_SIGNED_LIST },
   { value: TREE_HASH, file: 'trust_only_signed_lists/ssh_signature.ts', reason: SSHS_OWN_HASH_NAME },
 ]

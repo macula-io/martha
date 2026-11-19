@@ -58,8 +58,14 @@ export interface TheCapMadeOf {
   readonly marginMs: number
   /** What is left of the launch's own bound at this moment. */
   readonly remainingMs: number
-  /** The bound that actually runs: the idle bound, or what is left of the launch, whichever is smaller. */
+  /** The bound a turn starting now would get: the idle bound, or what is left of the launch, whichever is smaller. */
   readonly ms: number
+  /**
+   * The widest bound a turn of this line was actually given, or 0 before one was (martha#732). A turn keeps the
+   * bound it was given for as long as it runs, so this is the value the line ran under, which `ms` alone stops
+   * naming once an answer has renewed a bound with a narrower one.
+   */
+  readonly ranUnderMs: number
   /** Whether the idle bound fits inside what is left: false is the arithmetic the check names. */
   readonly fits: boolean
 }
@@ -73,10 +79,13 @@ export interface TheCapALineGets {
   ms(): number
   /** The values this bound was made of. */
   made(): TheCapMadeOf
+  /** A turn was given `ms`, which is the widest bound this line has run under until a wider one is given (martha#732). */
+  noteABoundWasGiven(ms: number): void
 }
 
 /** The bound a turn gets: the model's own slowest answer plus its margin, renewed on every answer. */
 export function theCapFor(pace: TheModelPace, remaining: () => number): TheCapALineGets {
+  let ranUnderMs = 0
   const idle = (): number => {
     const roundTrip = pace.theSlowestAnswerSoFar()
     return roundTrip === 0 ? Number.POSITIVE_INFINITY : roundTrip + Math.round(roundTrip * THE_MARGIN_OVER_A_ROUND_TRIP)
@@ -84,6 +93,9 @@ export function theCapFor(pace: TheModelPace, remaining: () => number): TheCapAL
   return {
     pace, remaining,
     ms: () => Math.min(idle(), remaining()),
+    noteABoundWasGiven: (ms: number) => {
+      if (ms > ranUnderMs) ranUnderMs = ms
+    },
     made: () => {
       const roundTrip = pace.theSlowestAnswerSoFar()
       const wanted = idle()
@@ -93,6 +105,7 @@ export function theCapFor(pace: TheModelPace, remaining: () => number): TheCapAL
         marginMs: roundTrip === 0 ? 0 : Math.round(roundTrip * THE_MARGIN_OVER_A_ROUND_TRIP),
         remainingMs: left,
         ms: Math.max(0, Math.min(wanted, left)),
+        ranUnderMs,
         fits: left > 0 && (roundTrip === 0 || wanted <= left),
       }
     },

@@ -96,8 +96,8 @@ function receiptDecision(call: AnsweredBash, name: string, receipt: Receipt | un
 /** The host's count of the messages it produced for the call: a number, never text the model reads. */
 export const HOST_MESSAGE_COUNT = 'ref'
 
-/** The answer with HOST_MESSAGE_COUNT left out, when it is a number; every other key stays. */
-function withoutRef(answer: unknown): unknown {
+/** The answer with HOST_MESSAGE_COUNT left out, when it is a number; every other key stays. The record's taker reads this too (martha#812). */
+export function withoutRef(answer: unknown): unknown {
   if (typeof answer !== 'object' || answer === null || Array.isArray(answer)) return answer
   const { [HOST_MESSAGE_COUNT]: count, ...rest } = answer as Readonly<Record<string, unknown>>
   return typeof count === 'number' ? rest : answer

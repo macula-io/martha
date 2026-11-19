@@ -499,6 +499,18 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
   {
+    id: 'A27',
+    what: 'the skills of the approved checkout (.claude/skills), copied into the member\'s own config folder, whose descriptions the host lists to the model and whose text, and any script it names, the model is told to follow (martha#747)',
+    klass: 'delivered',
+    control: {
+      kind: 'approved-text',
+      gate: 'owner-approved-launch-config',
+      residual:
+        "every file under the start folder's .claude/skills is an entry of the approval, so the bytes the member's host loads are the bytes the owner read and approved, and an edit refuses the next launch until the owner approves again. What the owner approves is instructions: skill text the model will follow much as it follows the owner's own words, and Martha does not judge what a skill tells the model to do. A script a skill names runs only when the model calls a tool, so it passes the member's normal shell gate like any other command, and nothing runs at launch. A skill whose frontmatter can declare hooks is refused (martha#146), at launch and after every call; a member may not write its own skills folder (martha#136), as a speed bump; the skills of folders above the checkout's start are fingerprinted but not carried. Not closed: a host the owner starts by hand with project settings on reads the checkout's own .claude/skills live, as C1 and C2 say of the rest, so the adapter must refuse that session a place in the crew; bare mode, which would skip the copies, is dropped from the member's environment and refused as a switch.",
+    },
+    attestation: 'none',
+  },
+  {
     id: 'B1',
     what: "the model's own mesh read tools, served by the mesh server the launcher starts from its recorded tree, compared file by file, with an environment built from HOME, PATH and the entry's reviewed settings and every other variable emptied (martha#65), and confined by the launcher's resolve hook to loading node's own modules and files of that tree (martha#73). Not closed: a same-user edit of that tree during a session, which only the next launch refuses; a dependency's environment read that names no literal key, which the scan lists when it reads by a computed key and does not see when it never names the environment at all, and either way does not refuse (martha#72); and whatever the tree's own code chooses to do, since the hook confines resolution only (a process.dlopen on an absolute path, or a node child or worker started with its own arguments, for example), which is that code's choice, compared file by file",
     klass: 'fetched',
