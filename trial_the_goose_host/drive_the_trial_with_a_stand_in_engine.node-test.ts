@@ -102,6 +102,7 @@ createInterface({ input: process.stdin }).on('line', () => undefined)
 
 /** A model that answers a chat after `chatMs` and the model-info request at once, as the provider sends them. */
 async function aStandInModel(chatMs: number): Promise<{ url: string; stop: () => Promise<void> }> {
+  const stillToAnswer = new Set<ReturnType<typeof setTimeout>>()
   const server = createServer((request, response) => {
     request.resume()
     request.on('end', () => {
@@ -109,15 +110,108 @@ async function aStandInModel(chatMs: number): Promise<{ url: string; stop: () =>
         response.writeHead(200, { 'content-type': 'application/json' })
         response.end('{"done":true}')
       }
-      if ((request.url ?? '').includes('api/show')) answer()
-      else setTimeout(answer, chatMs)
+      if ((request.url ?? '').includes('api/show')) return answer()
+      const later: ReturnType<typeof setTimeout> = setTimeout(() => { stillToAnswer.delete(later); answer() }, chatMs)
+      stillToAnswer.add(later)
     })
   })
   await new Promise<void>((settle) => server.listen(0, '127.0.0.1', () => settle()))
   const address = server.address()
   const port = typeof address === 'object' && address !== null ? address.port : 0
-  return { url: `http://127.0.0.1:${String(port)}`, stop: () => new Promise<void>((settle) => server.close(() => settle())) }
+  return {
+    url: `http://127.0.0.1:${String(port)}`,
+    // An answer still waiting is the case's own doing, not the next case's: it is dropped with the model that owed
+    // it (a launch cut at its bound leaves the model still answering, martha#732).
+    stop: () => {
+      for (const one of stillToAnswer) clearTimeout(one)
+      stillToAnswer.clear()
+      return new Promise<void>((settle) => server.close(() => settle()))
+    },
+  }
 }
+
+/**
+ * A model that answers its requests at two different speeds, chosen by what the request says: the engine's own
+ * bookkeeping request (Goose asks the model for a title while the turn it belongs to is still running) is the
+ * shortest chat it makes, and the turn's own request is the longest. Both are chat requests to the proxy.
+ */
+async function aStandInModelWithTwoSpeeds(fastMs: number, slowMs: number): Promise<{ url: string; stop: () => Promise<void> }> {
+  const stillToAnswer = new Set<ReturnType<typeof setTimeout>>()
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = []
+    request.on('data', (chunk: Buffer) => chunks.push(chunk))
+    request.on('end', () => {
+      const answer = (): void => {
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end('{"done":true}')
+      }
+      if ((request.url ?? '').includes('api/show')) return answer()
+      const asked = Buffer.concat(chunks).toString('utf8')
+      const later: ReturnType<typeof setTimeout> = setTimeout(() => {
+        stillToAnswer.delete(later)
+        answer()
+      }, asked.includes(THE_BOOKKEEPINGS_MARK) ? fastMs : slowMs)
+      stillToAnswer.add(later)
+    })
+  })
+  await new Promise<void>((settle) => server.listen(0, '127.0.0.1', () => settle()))
+  const address = server.address()
+  const port = typeof address === 'object' && address !== null ? address.port : 0
+  return {
+    url: `http://127.0.0.1:${String(port)}`,
+    stop: () => {
+      for (const one of stillToAnswer) clearTimeout(one)
+      stillToAnswer.clear()
+      return new Promise<void>((settle) => server.close(() => settle()))
+    },
+  }
+}
+
+/** What the model's two requests say, so the stand-in answers each at its own speed. */
+const THE_BOOKKEEPINGS_MARK = 'name this session'
+const THE_TURNS_MARK = 'the turn in hand'
+
+/**
+ * An engine that asks the model two things on one prompt, as Goose does: a short bookkeeping request of its own
+ * (a title) and the turn's own request, both chats to the same model, the bookkeeping one answered first. The
+ * engine sends a session update when the first lands, as Goose does, and answers the prompt only after the second.
+ */
+const AN_ENGINE_THAT_ASKS_FOR_A_TITLE_TOO = `#!${process.execPath}
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { createInterface } from 'node:readline'
+
+const root = process.env.GOOSE_PATH_ROOT ?? ''
+let base = 'http://127.0.0.1:11434'
+try {
+  const config = readFileSync(join(root, 'config', 'config.yaml'), 'utf8')
+  base = /OLLAMA_HOST:\\s*(\\S+)/.exec(config)?.[1] ?? base
+} catch {}
+
+const post = (body) => fetch(new URL('/v1/chat/completions', base), {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+})
+const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n')
+const result = (id, value) => send({ jsonrpc: '2.0', id, result: value })
+
+createInterface({ input: process.stdin }).on('line', (line) => {
+  let message
+  try { message = JSON.parse(line) } catch { return }
+  if (message.method === 'initialize') return result(message.id, { protocolVersion: 1 })
+  if (message.method === 'session/new') {
+    return result(message.id, { sessionId: 'a-stand-in-session', modes: { currentModeId: 'approve' } })
+  }
+  if (message.method !== 'session/prompt') return
+  Promise.resolve()
+    .then(() => post({ model: 'a-model', messages: [{ role: 'user', content: ${JSON.stringify(THE_BOOKKEEPINGS_MARK)} }] }))
+    .then(() => send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'a-stand-in-session', update: { sessionUpdate: 'session_info_update' } } }))
+    .then(() => post({ model: 'a-model', messages: [{ role: 'user', content: ${JSON.stringify(THE_TURNS_MARK)} }] }))
+    .then(() => {
+      send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'a-stand-in-session', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'the stand-in engine answered' } } } })
+      result(message.id, { stopReason: 'end_turn' })
+    })
+})
+`
 
 /** The engine source the launch config is read from: Developer, which the launch keeps, and Skills as an extension. */
 const AN_ENGINE_SOURCE: Readonly<Record<string, string>> = {
@@ -255,6 +349,52 @@ test('a turn the launch\'s end cuts reads not-observed, with the arithmetic, so 
     // which is not what this case observes; the say begins with the observation either way.
     assert.match(result.say, /^the line observed nothing: no answer within \d+ ms, the launch's end: a \d+ ms round-trip plus its \d+ ms margin is \d+ ms, beyond the \d+ ms left of the launch/,
       'the cut carries the arithmetic, not only the word no')
+  } finally {
+    await model.stop()
+  }
+})
+
+/**
+ * A bookkeeping answer at the model's fastest may not cut the turn's own request, which is the model at its slowest
+ * (martha#732, found on the fork's run 44417856422): Goose asks the model for a title while the turn is in flight, and
+ * that answer is the shortest chat the engine makes. It landed first, set the pace, and the bound it made cut the
+ * turn's own request a third of a second later, so every line read not-observed at about thirty seconds.
+ */
+const A_BOOKKEEPING_CHAT_MS = 300
+const THE_TURNS_CHAT_MS = 6_000
+
+test('a bookkeeping answer at the model\'s fastest cannot cut the turn\'s own request at its slowest (martha#732)', async () => {
+  const model = await aStandInModelWithTwoSpeeds(A_BOOKKEEPING_CHAT_MS, THE_TURNS_CHAT_MS)
+  try {
+    const { evidence } = await theDriverFor(1, '2', model.url, AN_ENGINE_THAT_ASKS_FOR_A_TITLE_TOO)
+    const result = JSON.parse(readFileSync(join(evidence, 'line-1', 'result.json'), 'utf8')) as {
+      verdict: string; say: string; cap: { roundTripMs: number }
+    }
+    assert.doesNotMatch(result.say, /no answer within/, `the turn was not cut by the bookkeeping answer: ${result.say}`)
+    assert.notEqual(result.verdict, 'not-observed', 'the line reached a verdict of its own')
+    assert.ok(result.cap.roundTripMs >= THE_TURNS_CHAT_MS,
+      `the turn's own answer is what the pace learned: ${JSON.stringify(result.cap)}`)
+  } finally {
+    await model.stop()
+  }
+})
+
+/**
+ * A launch whose verdict is written leaves nothing answering the model (martha#732): nine lines have to fit the job's
+ * own limit, and a cut that keeps the model's request open holds the driver until the runner reaps it at the launch's
+ * whole bound. On the fork's run that was about nine minutes a line, and the job hit its 120 minutes at line 7.
+ */
+const A_CHAT_STILL_ANSWERED_AFTER_THE_CUT_MS = 60_000
+
+test('the driver leaves no request answering the model once the line has its verdict (martha#732)', async () => {
+  const model = await aStandInModel(A_CHAT_STILL_ANSWERED_AFTER_THE_CUT_MS)
+  try {
+    const began = Date.now()
+    const { evidence } = await theDriverFor(1, aLaunchLeaving(SLOW_LAUNCH_LEFT_MS), model.url, aStandInEngine(true))
+    const took = Date.now() - began
+    assert.ok(existsSync(join(evidence, 'line-1', 'result.json')), 'the line wrote its verdict under the bound')
+    assert.ok(took < A_CHAT_STILL_ANSWERED_AFTER_THE_CUT_MS / 3,
+      `the driver ended with its verdict, not with the model's answer: ${String(took)} ms`)
   } finally {
     await model.stop()
   }
