@@ -73,7 +73,7 @@ function hintFiles(hints: EngineFacts['hint_files']): string {
 
 /** A skills switch as the engine writes it (martha#839): a constant naming the setting, and the function reading it. */
 function skillsSwitch(reader: string, switched: ASkillsSwitch): string {
-  const constant = `${reader.toUpperCase()}_SETTING`
+  const constant = `SETTING_READ_BY_${reader}`
   return [
     `pub const ${constant}: &str = "${switched.setting}";\n\n`,
     `pub fn ${reader}(config: &Config) -> bool {\n    config\n        .get_param::<bool>(${constant})\n        .unwrap_or(${String(switched.when_unset)})\n}\n`,

@@ -4,7 +4,7 @@
 
 import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
-import { SKILLS_KIND } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { SKILLS_KIND } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 export const COINCIDENCES: readonly Exception[] = [
   // ENGINE_PLACES names files in the Goose engine's source tree as that tree spells them: `crates/goose/src/config/` is
