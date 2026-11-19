@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SKILLS_SWITCH_READERS, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -165,4 +165,43 @@ test('a skills switch whose function is gone is unreadable by its own part, neve
     assert.equal(unreadable.length, 1, which)
     assert.match(unreadable[0]?.why ?? '', new RegExp(`the ${SKILLS_SWITCH_READERS[which]} switch`), which)
   }
+})
+
+test('a skill folder the engine adds or renames is read from the engine, not taken from the recording (martha#614)', () => {
+  const roots = RECORDED_FACTS.checkout_skill_roots
+  const [first = '', ...rest] = roots.skill_folders
+  const changed = { ...roots, skill_folders: [`${first}-renamed`, ...rest, '.another/skills'], plugin_folder: `${roots.plugin_folder}-renamed` }
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, checkout_skill_roots: changed })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.checkout_skill_roots, changed)
+})
+
+test('a skill folder the engine reads from the home is never read as one of the checkout\'s (martha#614)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.skill_folders] ?? ''
+  assert.match(text, /dirs::home_dir\(\)/, 'the tree has no home folder, so this test would prove nothing')
+  const { facts } = engineFactsIn(anEngineSourceSaying(files))
+  assert.deepEqual(facts.checkout_skill_roots?.skill_folders, RECORDED_FACTS.checkout_skill_roots.skill_folders)
+})
+
+test('each function that decides a skill root, renamed, makes the skill roots unreadable by name, never a shorter list (martha#614)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const places = { skill_folders: ENGINE_PLACES.skill_folders, plugin_folder: ENGINE_PLACES.plugin_discovery, plugin_settings: ENGINE_PLACES.plugin_discovery }
+  for (const [which, path] of Object.entries(places) as Array<[keyof typeof SKILL_ROOT_READERS, string]>) {
+    const reader = SKILL_ROOT_READERS[which]
+    const renamed = (files[path] ?? '').replace(`fn ${reader}(`, 'fn another_function(')
+    assert.notEqual(renamed, files[path], `${reader} is not in the tree`)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: renamed }))
+    assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'], reader)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(reader), reader)
+  }
+})
+
+test('a skill folder in a shape the reader does not know makes the skill roots unreadable, never a shorter list (martha#614)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.skill_folders
+  const planted = (files[path] ?? '').replace('for path in [\n', 'for path in [\n            wd.join(format!(".{}/skills", name)),\n')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: planted }))
+  assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'])
+  assert.match(unreadable[0]?.why ?? '', /in a shape this reader knows/)
 })

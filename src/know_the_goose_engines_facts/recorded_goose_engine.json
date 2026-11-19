@@ -126,5 +126,17 @@
   "builtin_skills_advertised": {
     "setting": "GOOSE_BUILTIN_SKILLS_ADVERTISED",
     "when_unset": true
+  },
+  "checkout_skill_roots": {
+    "skill_folders": [
+      ".agents/skills",
+      ".goose/skills",
+      ".claude/skills"
+    ],
+    "plugin_folder": ".agents/plugins",
+    "plugin_settings": [
+      ".config/goose/settings.json",
+      ".config/goose/settings.local.json"
+    ]
   }
 }

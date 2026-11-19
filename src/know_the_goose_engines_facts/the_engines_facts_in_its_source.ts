@@ -58,6 +58,20 @@ export interface EngineFacts {
   readonly skills_advertised: ASkillsSwitch
   /** The setting that offers the model the engine's compiled-in skills on their own, and its unset default (martha#839). */
   readonly builtin_skills_advertised: ASkillsSwitch
+  /**
+   * The places in the checkout it starts in that the engine reads skills and plugins from (martha#614): its skill
+   * folders, its project plugin folder (every child of it is a plugin, enabled unless a settings file says otherwise),
+   * and the two project settings files that switch plugins. The gate reads its families from these, so a folder the
+   * engine renames or adds is a drift the check names, never a skill that reaches the model past the gate.
+   */
+  readonly checkout_skill_roots: CheckoutSkillRoots
+}
+
+/** Where a checkout gives the engine skills, each path relative to the checkout (martha#614). */
+export interface CheckoutSkillRoots {
+  readonly skill_folders: readonly string[]
+  readonly plugin_folder: string
+  readonly plugin_settings: readonly string[]
 }
 
 /** A switch the engine reads with `get_param::<bool>` through a constant: the setting it names, and what an unset one means. */
@@ -88,6 +102,15 @@ export const ENGINE_PLACES = {
   hint_files: 'crates/goose/src/hints/load_hints.rs',
   skills_advertised: 'crates/goose/src/agents/services.rs',
   builtin_skills_advertised: 'crates/goose/src/skills/mod.rs',
+  skill_folders: 'crates/goose/src/skills/mod.rs',
+  plugin_discovery: 'crates/goose/src/plugins/discovery.rs',
+} as const
+
+/** The function that decides each of a checkout's skill roots, in the file ENGINE_PLACES names for it (martha#614). */
+export const SKILL_ROOT_READERS = {
+  skill_folders: 'all_skill_dirs_with_config',
+  plugin_folder: 'project_plugin_dir',
+  plugin_settings: 'project_settings_path',
 } as const
 
 /** The function that reads each skills switch, in the file ENGINE_PLACES names for it (martha#839). */
@@ -115,6 +138,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'hint files', read: (source) => ({ hint_files: hintFilesIn(source) }) },
   { part: 'skills switch', read: (source) => ({ skills_advertised: skillsSwitchIn(source, 'skills_advertised') }) },
   { part: 'built-in skills switch', read: (source) => ({ builtin_skills_advertised: skillsSwitchIn(source, 'builtin_skills_advertised') }) },
+  { part: 'checkout skill roots', read: (source) => ({ checkout_skill_roots: checkoutSkillRootsIn(source) }) },
 ]
 
 /** A file the part needs, or a throw that names it. */
@@ -289,6 +313,44 @@ function skillsSwitchIn(source: EngineSource, which: keyof typeof SKILLS_SWITCH_
     setting: captured(text, new RegExp(`pub const ${constant}: &str = "([^"]+)";`), `the value of ${constant}`, path),
     when_unset: captured(body, /unwrap_or\((true|false)\)/, `the default of ${reader}`, path) === 'true',
   }
+}
+
+/** The body of `fn <name>(`, up to the first line that closes a top-level item, or a throw naming the function. */
+function functionBody(text: string, name: string, path: string): string {
+  return captured(text, new RegExp(`fn ${name}\\([\\s\\S]*?\\{([\\s\\S]*?)\\n\\}`), `the function ${name}`, path)
+}
+
+/** The path a chain `<base>.join("a").join("b")` builds, as "a/b", or undefined when the text holds no such chain. */
+function joinedFrom(text: string, base: string): string | undefined {
+  const chain = new RegExp(`\\b${base}((?:\\.join\\("[^"]+"\\))+)`).exec(text)?.[1]
+  return chain === undefined ? undefined : [...chain.matchAll(/\.join\("([^"]+)"\)/g)].map((found) => found[1] ?? '').join('/')
+}
+
+/**
+ * A checkout's skill roots (martha#614), each from the function that decides it: the folders
+ * `all_skill_dirs_with_config` joins onto the working directory, the folder `project_plugin_dir` joins onto the project
+ * root, and the two files `project_settings_path` builds there. A shape this reader does not know is a throw that names
+ * the function, never a shorter list.
+ */
+function checkoutSkillRootsIn(source: EngineSource): CheckoutSkillRoots {
+  const skills = ENGINE_PLACES.skill_folders
+  const dirs = functionBody(fileOf(source, skills), SKILL_ROOT_READERS.skill_folders, skills)
+  const [, workingDir, listed] = /if let Some\((\w+)\) = working_dir \{\s*for path in \[([^\]]*)\]/.exec(dirs) ?? []
+  if (workingDir === undefined || listed === undefined) throw new Error(`${skills} says nothing of the skill folders ${SKILL_ROOT_READERS.skill_folders} reads from the working directory`)
+  const entries = listed.split(',').filter((entry) => entry.trim() !== '')
+  const skill_folders = entries.map((entry) => joinedFrom(entry, workingDir)).filter((folder) => folder !== undefined)
+  if (skill_folders.length !== entries.length) throw new Error(`${skills} lists ${String(entries.length)} skill folders and ${String(skill_folders.length)} are in a shape this reader knows`)
+  const plugins = ENGINE_PLACES.plugin_discovery
+  const discovery = fileOf(source, plugins)
+  const pluginBody = functionBody(discovery, SKILL_ROOT_READERS.plugin_folder, plugins)
+  const plugin_folder = joinedFrom(pluginBody, 'project_root')
+  if (plugin_folder === undefined) throw new Error(`${plugins} says nothing of the folder ${SKILL_ROOT_READERS.plugin_folder} joins`)
+  const settingsBody = functionBody(discovery, SKILL_ROOT_READERS.plugin_settings, plugins)
+  const [, local, shared] = /let file = if local \{\s*"([^"]+)"\s*\} else \{\s*"([^"]+)"\s*\};/.exec(settingsBody) ?? []
+  const folder = /project_root((?:\.join\("[^"]+"\))+)\.join\(file\)/.exec(settingsBody)?.[1]
+  if (local === undefined || shared === undefined || folder === undefined) throw new Error(`${plugins} says nothing of the files ${SKILL_ROOT_READERS.plugin_settings} builds`)
+  const settingsFolder = joinedFrom(`project_root${folder}`, 'project_root') ?? ''
+  return { skill_folders, plugin_folder, plugin_settings: [`${settingsFolder}/${shared}`, `${settingsFolder}/${local}`] }
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */

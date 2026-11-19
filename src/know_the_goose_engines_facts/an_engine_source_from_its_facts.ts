@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SKILLS_SWITCH_READERS, type ASkillsSwitch, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, type ASkillsSwitch, type CheckoutSkillRoots, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -80,6 +80,39 @@ function skillsSwitch(reader: string, switched: ASkillsSwitch): string {
   ].join('')
 }
 
+/** A path as the engine builds it: `<base>.join("a").join("b")` for "a/b". */
+const joined = (base: string, path: string): string => `${base}${path.split('/').map((part) => `.join("${part}")`).join('')}`
+
+/** The engine's skill folders as `skills/mod.rs` builds them from the working directory, then its home (martha#614). */
+function skillFolders(roots: CheckoutSkillRoots): string {
+  const listed = roots.skill_folders.map((folder) => `            ${joined('wd', folder)},\n`).join('')
+  return [
+    `fn ${SKILL_ROOT_READERS.skill_folders}(working_dir: Option<&Path>, config: &Config) -> Vec<SkillDirectory> {\n    let mut dirs = Vec::new();\n`,
+    `    if let Some(wd) = working_dir {\n        for path in [\n${listed}        ] {\n            dirs.push(SkillDirectory { path });\n        }\n    }\n`,
+    `    if let Some(h) = dirs::home_dir().as_ref() {\n        dirs.push(SkillDirectory { path: ${joined('h', '.agents/skills')} });\n    }\n    dirs\n}\n`,
+  ].join('')
+}
+
+/** The project plugin folder and the two settings files, as `plugins/discovery.rs` builds them (martha#614). */
+function pluginDiscovery(roots: CheckoutSkillRoots): string {
+  const [shared = '', local = ''] = roots.plugin_settings
+  const folderOf = (file: string): string => file.slice(0, file.lastIndexOf('/'))
+  const nameOf = (file: string): string => file.slice(file.lastIndexOf('/') + 1)
+  if (folderOf(shared) !== folderOf(local)) throw new Error(`the two plugin settings files ${shared} and ${local} are in different folders, which the engine never builds`)
+  return [
+    `fn ${SKILL_ROOT_READERS.plugin_folder}(project_root: &Path) -> PathBuf {\n    ${joined('project_root', roots.plugin_folder)}\n}\n\n`,
+    `fn ${SKILL_ROOT_READERS.plugin_settings}(project_root: &Path, local: bool) -> PathBuf {\n    let file = if local {\n        "${nameOf(local)}"\n    } else {\n        "${nameOf(shared)}"\n    };\n`,
+    `    ${joined('project_root', folderOf(shared))}.join(file)\n}\n`,
+  ].join('')
+}
+
+/** Files that share a path are one file, their texts in the order given: two parts may be decided in the same file. */
+function oneFilePerPath(files: ReadonlyArray<readonly [string, string]>): Readonly<Record<string, string>> {
+  const merged: Record<string, string> = {}
+  for (const [path, text] of files) merged[path] = `${merged[path] ?? ''}${text}`
+  return merged
+}
+
 /** Every file of a tree that says `facts`, by its path in the checkout. */
 export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, string>> {
   const modes = facts.mode.values.map((mode) => `    #[strum(message = "a mode")]\n    ${pascalCase(mode)},\n`).join('')
@@ -98,7 +131,11 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.delegate_tool]: delegateTool(facts.subagent_models),
     [ENGINE_PLACES.hint_files]: hintFiles(facts.hint_files),
     [ENGINE_PLACES.skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.skills_advertised, facts.skills_advertised),
-    [ENGINE_PLACES.builtin_skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.builtin_skills_advertised, facts.builtin_skills_advertised),
+    ...oneFilePerPath([
+      [ENGINE_PLACES.builtin_skills_advertised, skillsSwitch(SKILLS_SWITCH_READERS.builtin_skills_advertised, facts.builtin_skills_advertised)],
+      [ENGINE_PLACES.skill_folders, skillFolders(facts.checkout_skill_roots)],
+      [ENGINE_PLACES.plugin_discovery, pluginDiscovery(facts.checkout_skill_roots)],
+    ]),
     [ENGINE_PLACES.openai_provider]: `pub const OPEN_AI_PROVIDER_NAME: &str = "${facts.openai_provider.name}";\npub const OPEN_AI_DEFAULT_BASE_PATH: &str = "${facts.openai_provider.default_base_path}";\n            vec![\n${settings}            ],\n`,
   }
 }
