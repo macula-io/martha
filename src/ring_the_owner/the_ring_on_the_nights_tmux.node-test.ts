@@ -13,6 +13,7 @@
 
 import assert from 'node:assert/strict'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { once } from 'node:events'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -83,7 +84,14 @@ function aNightServer(t: TestContext, place: string, pane: string): string[] {
 function aClient(t: TestContext, tmux: string[], attach: string[], record: string): ChildProcess {
   const words = ['tmux', ...tmux, ...attach, '-t', MEMBER].map((word) => `'${word}'`).join(' ')
   const client = spawn('script', ['-qfec', words, record], { env: { ...process.env, TERM: 'xterm-256color' }, stdio: ['pipe', 'ignore', 'ignore'] })
-  t.after(() => client.kill())
+  // Its keyboard closed and its exit awaited, so neither the pipe nor `script` outlives the case.
+  t.after(async () => {
+    client.stdin?.end()
+    if (client.exitCode !== null || client.signalCode !== null) return
+    const gone = once(client, 'exit')
+    client.kill()
+    await gone
+  })
   return client
 }
 

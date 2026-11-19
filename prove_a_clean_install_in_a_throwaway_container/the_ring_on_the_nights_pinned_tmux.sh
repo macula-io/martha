@@ -43,7 +43,7 @@ summary="${debs}/summary"
 status=0
 "${TOOL}" run --rm -e MARTHA_TESTS_TMUX_REQUIRED=1 -e "MARTHA_TESTS_TMUX_VERSION=${version}" \
   -v "${REPO}:/repo" -v "${debs}:/debs:ro" -w /repo "${image}" \
-  bash -c "dpkg -i /debs/*.deb > /dev/null && npm ci --ignore-scripts --silent && node --test --test-reporter=spec ${CASES}" \
+  bash -c "dpkg -i /debs/*.deb > /dev/null && npm ci --ignore-scripts --silent && node --test --test-timeout=60000 --test-force-exit --import=./prove_the_core/fail_a_test_file_that_leaves_something_running.ts --test-reporter=spec ${CASES}" \
   > "${summary}" 2>&1 || status=$?
 cat "${summary}"
 [ "${status}" -eq 0 ] || { said "the cases exited ${status} on tmux ${version} in ${image}"; exit 1; }
