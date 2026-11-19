@@ -133,7 +133,7 @@ test('#860 R4: a reading the store refused is said on the row, the order left al
   await aTurnEnds(crew, '', 0)
   // A file where the crew's usage place belongs: the store refuses the place, so the writer cannot remember its reading.
   const usage_place = join(crew.home, THE_CREW_FILES, USAGE_PLACE)
-  rmSync(usage_place, { recursive: true, force: true })
+  removeTheTree(usage_place)
   writeFileSync(usage_place, 'not a place\n')
   assert.deepEqual(await aTurnEnds(crew, 't-1', 0.25), { carry: 'none' }, 'a reading the store refused held the flow up')
   const said = crew.beats.read(MEMBER)?.refresh
@@ -154,7 +154,7 @@ test('#860 R4: a refusal on the turn the flow writes its own phase is said besid
   const crew = await aCrewOfTools()
   await aTurnEnds(crew, '', 0)
   const usage_place = join(crew.home, THE_CREW_FILES, USAGE_PLACE)
-  rmSync(usage_place, { recursive: true, force: true })
+  removeTheTree(usage_place)
   writeFileSync(usage_place, 'not a place\n')
   const asked = askAMemberToRefresh({ stores: { crew: keepTheCrewsFilesAsDirectories(join(crew.home, THE_CREW_FILES)) } }, MEMBER, 'the owner asked for it', STARTED_AT)
   assert.equal(asked, undefined, 'the test could not ask for a refresh')
