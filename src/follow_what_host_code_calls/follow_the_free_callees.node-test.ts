@@ -160,3 +160,37 @@ for (const reference of NOT_A_CALL_OF_ONE) {
     assert.throws(() => calleesIn(aSlot(`function S(e){X=e}${reference}`)), (error: unknown) => error instanceof Unreadable && error.message.includes(', S, is used other than called with one value'))
   })
 }
+
+// Module shapes the bundle's index does not read (martha#811 r=2, Mars): each is followed or unreadable by name, never
+// passed over in silence.
+const runTimeRefusal = (error: unknown): boolean => error instanceof Unreadable && error.message.includes('imports a module of the bundle at run time')
+
+test('a setter a module reaches through a run-time import is unreadable, naming it (martha#811 r=2 (a); mutant: run-time importers not read)', () => {
+  const slot = `${CHUNK}\nvar X=()=>{return};function S(e){X=e}${THE_TEXT}export{S as Sx};\n`
+  const caller = `${CHUNK}\n(await import("/$bunfs/root/slot.js")).Sx(()=>9);\n`
+  assert.throws(() => calleesIn(slot + caller), (error: unknown) => error instanceof Unreadable && error.message.includes('exported as Sx, and a module that imports at run time names it'))
+})
+
+/** A slot whose setter is exported where it is declared, and a module that imports it and calls it with `value`. */
+function anInlineExport(value: string): string {
+  const slot = `${CHUNK}\nvar X=()=>{return};export function S(e){X=e}${THE_TEXT}\n`
+  const caller = `${CHUNK}\nimport{S as T}from"/$bunfs/root/slot.js";function a(){return ${value}}T(()=>a());\n`
+  return slot + caller
+}
+
+test('a setter exported where it is declared has its importers\' calls recorded and followed (martha#811 r=2 (b); mutant: an inline export not read)', () => {
+  assert.equal(calleesIn(anInlineExport('1')).functions[0]?.function, 'var X=()=>{return};export function S(e){X=e};T(()=>a())')
+  assert.deepEqual(differing(anInlineExport('1'), anInlineExport('1')), [])
+  assert.deepEqual(differing(anInlineExport('1'), anInlineExport('2')), [FIELD])
+})
+
+test('the chase through a binding of a run-time import is unreadable, naming the import (martha#811 r=2 (c); mutant: run-time imports not refused)', () => {
+  assert.throws(() => calleesIn(`var ns=await import("/$bunfs/root/f.js");${THE_TEXT.replace('X(1)', 'ns.Fx(1)')}`, THE_TEXT.replace('X(1)', 'ns.Fx(1)')), runTimeRefusal)
+  const inline = 'async function G(){return(await import("/$bunfs/root/f.js")).Fx(1)}'
+  assert.throws(() => calleesIn(`${inline}`, inline), runTimeRefusal)
+})
+
+test('a platform module imported at run time reaches no code of the bundle, and is read (martha#811 r=2 (c); mutant: every run-time import refused)', () => {
+  const text = 'function G(){return fs.readFileSync("a")}'
+  assert.deepEqual(calleesIn(`var fs=await import("node:fs");${text}`, text).functions, [{ function: 'var fs=await import("node:fs")', calls: {} }])
+})

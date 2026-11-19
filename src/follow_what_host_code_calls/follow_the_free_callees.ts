@@ -31,6 +31,11 @@
 // bundle refers to in any other way, passed as a value or called with other than one value, is unreadable. What an
 // embedder passes through a setter the host exports publicly is outside the bundle and is not followed: an accepted
 // residual of #139, as Supervisor ruled on martha#811 r=1 by Raf's r=3 words, beside callbacks passed as values.
+//
+// The index reads a bundle's import and export lists. A setter exported where it is declared is followed through its
+// importers like one an export list names. A module of the bundle imported at run time (`import("/$bunfs/…")`) is past
+// the index: code the chase reads that does it, or a setter exported under a name a run-time importer names, is
+// unreadable, naming it (martha#811 r=2).
 
 import ts from 'typescript'
 
@@ -41,6 +46,8 @@ import type { Depth, GuardCalls } from '../compare_two_host_recordings/what_a_re
 
 /** The path a module of the bundle imports another of its modules by. */
 const BUNDLE_PATH = '/$bunfs/'
+/** How a module imports another at run time, past the import lists the bundle's index reads. */
+const DYNAMIC_IMPORT = 'import('
 /** The mark a CommonJS module carries after the chunk mark: it exports through `module.exports`, never an `export{}`. */
 const COMMON_JS = '@bun-cjs'
 
@@ -128,6 +135,16 @@ export class Bundle {
   }
 
   #importers: Map<string, Array<{ readonly module: Module; readonly local: string }>> | undefined
+
+  /**
+   * Whether a module that imports a module at run time (`import(…)`) names `name` where a property is read or taken
+   * apart (`.name`, `{name`, `"name"`). Such a module reaches an export the import lists never show, so a setter exported
+   * under that name could be called where the follower does not look. Read from the text, so it errs toward refusing.
+   */
+  namedAtRunTime(name: string): boolean {
+    const named = new RegExp(`[.{,"'\`]${name.replace(/[$]/g, '\\$&')}(?![\\w$])`)
+    return this.#modules.some((module) => module.text.includes(DYNAMIC_IMPORT) && named.test(module.text))
+  }
 
   /** Each name an `import{}` from the bundle lists, by the name it imports, with the module and its local name there. */
   #noteTheImports(): Map<string, Array<{ readonly module: Module; readonly local: string }>> {
@@ -353,7 +370,11 @@ function scopeBinding(declared: ts.Identifier): ts.Node {
 /** Every value the bundle passes to `setter`, in its own module and in each module that imports it. */
 function valuesPassedTo(bundle: Bundle, module: Module, setter: ts.SignatureDeclaration): Passed[] {
   const name = setterNameOf(setter)
-  return passedThrough(bundle, { module, file: bundle.fileOf(module), scope: scopeBinding(name), name: name.text }, new Set())
+  const seen = new Set<string>()
+  const passed = passedThrough(bundle, { module, file: bundle.fileOf(module), scope: scopeBinding(name), name: name.text }, seen)
+  // A setter exported where it is declared (`export function S…`) is exported under its own name.
+  const exportedInline = (ts.getCombinedModifierFlags(name.parent as ts.Declaration) & ts.ModifierFlags.Export) !== 0
+  return exportedInline ? [...passed, ...passedThroughTheName(bundle, name.text, seen)] : passed
 }
 
 /** Each identifier of a module's tree spelled `name`. */
@@ -383,9 +404,19 @@ function passedThrough(bundle: Bundle, where: { readonly module: Module; readonl
 
 /** The values passed through each module importing a setter under the name `specifier` exports it by. */
 function passedThroughImporters(bundle: Bundle, specifier: ts.ExportSpecifier, at: ts.Identifier, seen: Set<string>): Passed[] {
-  const exported = specifier.name.text
-  if ((specifier.propertyName ?? specifier.name) !== at || seen.has(exported)) return []
+  return (specifier.propertyName ?? specifier.name) === at ? passedThroughTheName(bundle, specifier.name.text, seen) : []
+}
+
+/**
+ * The values passed through each module importing a setter by the name it is exported under. A module that imports
+ * at run time and names that name could call the setter where no import list shows it: unreadable, naming it.
+ */
+function passedThroughTheName(bundle: Bundle, exported: string, seen: Set<string>): Passed[] {
+  if (seen.has(exported)) return []
   seen.add(exported)
+  if (bundle.namedAtRunTime(exported)) {
+    throw new Unreadable(`a setter of a binding the host's code reaches is exported as ${exported}, and a module that imports at run time names it`)
+  }
   return bundle.importersOf(exported).flatMap(({ module, local }) => {
     const file = bundle.fileOf(module)
     return passedThrough(bundle, { module, file, scope: file, name: local }, seen)
@@ -528,12 +559,30 @@ function reach(bundle: Bundle, depth: Depth, seed: (entryOf: (definition: Defini
   }
   const bound: Bound = (module, nodes, textStart, every) => {
     const file = bundle.fileOf(module)
+    for (const node of nodes) refuseARunTimeImport(node, file)
     const names = nodes.flatMap((node) => freeNamesIn(node, file, every, textStart)).filter((name, index, all) => all.findIndex((other) => other.text === name.text) === index)
     return Object.fromEntries(names.filter((name) => !isAnUnboundGlobal(name, name.text)).map((name) => [name.text, entryOf(definitionOf(bundle, module, name, name.text))]))
   }
   const guard_calls = seed(entryOf, bound)
   if (depth === 'full') for (const entry of reached) entry.calls = calledByEntry(entry, bundle.fileOf(entry.module), bound)
   return { guard_calls, functions: reached.map(({ text, calls }) => ({ function: text, calls })) }
+}
+
+/**
+ * That code the chase reads imports none of the bundle's own modules at run time (`import("/$bunfs/…")`, or a
+ * specifier that is not a literal): what such an import's namespace calls is past the index, so it is unreadable,
+ * naming the import. A platform module imported at run time reaches no code of the bundle.
+ */
+function refuseARunTimeImport(node: ts.Node, file: ts.SourceFile): void {
+  const visit = (at: ts.Node): void => {
+    if (ts.isCallExpression(at) && at.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const [specifier] = at.arguments
+      const aPlatformModule = specifier !== undefined && ts.isStringLiteralLike(specifier) && !specifier.text.startsWith(BUNDLE_PATH)
+      if (!aPlatformModule) throw new Unreadable(`code the host's recorded text reaches imports a module of the bundle at run time (${at.getText(file).slice(0, 80)})`)
+    }
+    ts.forEachChild(at, visit)
+  }
+  visit(node)
 }
 
 /** The free names some code calls, or reads at all when `every`, by the entry each binds to. */
