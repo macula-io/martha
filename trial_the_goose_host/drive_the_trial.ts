@@ -20,7 +20,7 @@ import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSyn
 import { userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
-import { HOME_MARKERS, CHECKOUT_MARKERS, aPlaceFor, plant, writeTheConfig, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
+import { HOME_MARKERS, CHECKOUT_MARKERS, THE_APPROVED_SKILLS_FILE, aPlaceFor, plant, writeTheConfig, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
 import { NoAnswerInTime, promptOver, setTheCapInHand, withTimeout } from './the_engine_over_acp/a_turn_with_goose.ts'
 import { findingsIn, pathsIn, type TraceFindings } from './the_evidence_it_keeps/read_the_trace.ts'
 import { RecordingProxy } from './the_engine_over_acp/record_what_goose_sends.ts'
@@ -196,6 +196,7 @@ async function handOver(acp: GooseOverAcp, place: Place, remaining: () => number
 async function startARun(line: number, options: Options, launchedAt: number): Promise<Running> {
   const place = aPlaceFor(line, options.evidence, options.launch)
   if (line === 1) plant(place.ownerHome, HOME_MARKERS)
+  if (line === 9) plant(place.checkout, [THE_APPROVED_SKILLS_FILE])
   const evidenceForLine = join(options.evidence, `line-${line}`)
   mkdirSync(evidenceForLine, { recursive: true })
   // The model's pace is measured from the proxy's chat answers, into the launch's own evidence, and becomes the

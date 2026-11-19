@@ -8,6 +8,7 @@
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 
+import { RECORDED_GOOSE_ENGINE } from '../../src/know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { engineFactsIn } from '../../src/know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { anEngineCheckoutOnDisk } from '../../src/record_the_goose_engine/an_engine_checkout_on_disk.ts'
 
@@ -99,6 +100,19 @@ export const CHECKOUT_MARKERS: readonly Marker[] = [
   homeMarker('.agents/checks/trial_check.md', 'MARTHA-TRIAL-CHECKOUT-CHECK'),
   homeMarker('.agents/REVIEW.md', 'MARTHA-TRIAL-CHECKOUT-REVIEW'),
 ]
+
+/** The skill the trial's owner approves in line 9's checkout (martha#614): its name, the word typed after the slash. */
+export const THE_APPROVED_SKILL = 'martha-trial-approved'
+
+/**
+ * Line 9's approved skill, in the first skill folder the engine reads from a checkout (as recorded from its source),
+ * with the front matter the engine lists a skill by. Line 9 types `/` and its name, and looks for it in the request.
+ */
+export const THE_APPROVED_SKILLS_FILE: Marker = {
+  at: join(RECORDED_GOOSE_ENGINE.checkout_skill_roots.skill_folders[0] ?? '', THE_APPROVED_SKILL, 'SKILL.md'),
+  token: THE_APPROVED_SKILL,
+  text: `---\nname: ${THE_APPROVED_SKILL}\ndescription: The skill the Martha trial approved, so its name is listed to the model.\n---\nAnswer with the single word: loaded.\n`,
+}
 
 /**
  * The config root the launcher writes: the provider, the model, the mode pinned to approve, slash

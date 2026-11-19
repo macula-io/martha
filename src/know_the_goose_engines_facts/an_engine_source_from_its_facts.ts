@@ -204,3 +204,13 @@ export function anEngineSourceSaying(files: Readonly<Record<string, string>>): E
     list: (directory) => Object.keys(files).filter((path) => path.startsWith(`${directory}/`)).map((path) => path.slice(directory.length + 1)).filter((rest) => !rest.includes('/')),
   }
 }
+
+/**
+ * The two skills switch files of a tree that says `facts`, by their paths in the checkout (martha#614): what a stand-in
+ * fork needs so a launch can read both switch names from it, and nothing else of the engine.
+ */
+export function skillsSwitchFilesSaying(facts: EngineFacts): Readonly<Record<string, string>> {
+  const files = engineFilesSaying(facts)
+  const places = [ENGINE_PLACES.skills_advertised, ENGINE_PLACES.builtin_skills_advertised]
+  return Object.fromEntries(places.map((place) => [place, files[place] ?? '']))
+}
