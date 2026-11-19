@@ -13,6 +13,13 @@
 // night file (package, range, builder, reviewer, builder_transcript, reviewer_transcript), and exits 1 naming the first
 // of section 6's four crew rows the transcripts do not show.
 //
+//   node src/land_a_package_on_a_throwaway_repository/main.ts watch <watch.json>      < every byte the proof's read-only client on the builder's session was sent
+//
+// `watch` reads the package, the builder, the session's client listing at the ring and the pid of the proof's own client
+// from the watch file (package, builder, clients, recorder), and exits 1 naming the first watch row (martha#843) the
+// bytes and the listing do not show. Only its verdict is kept: the bytes are a member's screen, never kept once the
+// token is placed.
+//
 //   node src/land_a_package_on_a_throwaway_repository/main.ts landing <night.json>    < nothing
 //
 // `landing` reads the same four night fields, the builder's transcript and the crew's rows folder (builder_transcript,
@@ -38,6 +45,7 @@ import { whatTheRunMadeIn, whyNotDelete } from './the_delete_guard.ts'
 import { keepAScreen, redactTheToken, THE_TOKEN_REACHED_THE_RECORD, TOKEN_NOT_PLACED, TOKEN_PLACED } from './the_kept_record.ts'
 import { whichCrewClaimFails, type TheNight } from './the_nights_claims.ts'
 import { whichLandingClaimFails } from './the_nights_landing.ts'
+import { whichWatchClaimFails } from './the_owners_watch.ts'
 import { ledgerStreamOf, type LedgerRow } from '../log_ledger/log_ledger.ts'
 import { OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -133,6 +141,20 @@ const claims = (argument: string): Said => {
   return verdictOf(whichCrewClaimFails(file.night, readFileSync(file.field('builder_transcript'), 'utf8'), readFileSync(file.field('reviewer_transcript'), 'utf8')))
 }
 
+/** The watch file's fields, each a non-empty string. */
+const WATCH_FIELDS = ['package', 'builder', 'clients', 'recorder'] as const
+
+/** The watch rows (martha#843), read from the bytes on standard input and the watch file's listing. */
+const watch = (argument: string, input: string): Said => {
+  const read = readJson(readFileSync(argument, 'utf8'))
+  if (typeof read !== 'object' || read === null) return couldNotLook(`${argument} is not a watch's JSON object`)
+  const value = (name: string): unknown => (read as Record<string, unknown>)[name]
+  const missing = WATCH_FIELDS.filter((name) => typeof value(name) !== 'string' || value(name) === '')
+  if (missing.length > 0) return couldNotLook(`${argument} names no ${missing.join(', ')}`)
+  const field = (name: (typeof WATCH_FIELDS)[number]): string => value(name) as string
+  return verdictOf(whichWatchClaimFails({ package: field('package'), builder: field('builder') }, input, field('clients'), field('recorder')))
+}
+
 /**
  * Section 6's landing rows (5 to 7), read from the builder's transcript and the crew's rows folder the night file names,
  * through the rows store's own reader. Nothing on standard input is read.
@@ -150,7 +172,7 @@ export async function landing(argument: string): Promise<Said> {
   }
 }
 
-const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact, screen, claims }
+const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact, screen, claims, watch }
 /** The guards that read a store, and so answer later. */
 const LANDING = 'landing'
 const ASKED = 'asked'
