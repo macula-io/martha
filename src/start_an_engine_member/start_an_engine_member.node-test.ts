@@ -37,7 +37,7 @@ const A_KEY_VARIABLE = 'A_KEY_VARIABLE_A_TEST_NAMES'
 const THE_START_PROMPT = 'the start prompt a test names'
 
 /** How long a test waits for the engine to hear something, at most. */
-const THE_WAIT_MS = 10_000
+const THE_WAIT_MS = 9_000
 const POLL_MS = 25
 
 /** The state key the engine keeps its enabled extensions under, as the recording names it. */
