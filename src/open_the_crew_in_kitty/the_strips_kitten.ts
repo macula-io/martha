@@ -18,7 +18,7 @@ export type AKittenCall = readonly [action: string, ...args: string[]]
 /** The call that titles the strip's own tab `title`; the title is an argument, never an escape sequence (#572). */
 export const theTitleCall = (title: string): AKittenCall => [SET_TAB_TITLE, title]
 
-/** The call that grows (or shrinks) the strip's own window by `rows`, or undefined when it already fits. */
+/** The call that grows (or shrinks) the strip's own window by the number of rows given, or undefined when it already fits. */
 export function theResizeCall(rows: number): AKittenCall | undefined {
   return rows === 0 ? undefined : [RESIZE_WINDOW, '--self', '--axis=vertical', `--increment=${rows}`]
 }

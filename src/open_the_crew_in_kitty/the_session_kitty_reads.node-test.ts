@@ -4,11 +4,12 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CHECKER_FILE, SESSION_FILE } from './open_the_crew_in_kitty.ts'
 import {
   KITTY_FLOOR,
@@ -82,7 +83,7 @@ function kittyRuns(t: TestContext, script: string, ...args: string[]): string | 
     assert.equal(run.status, 0, run.stderr)
     return run.stdout
   } finally {
-    rmSync(dir, { recursive: true, force: true })
+    removeTheTree(dir)
   }
 }
 
@@ -102,7 +103,7 @@ test('K1: kitty\'s own parser reads back the root, each title and each argument 
   const session = theSessionText(TABS)
   assert.ok('text' in session)
   const dir = mkdtempSync(join(tmpdir(), 'martha-kitty-session-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const file = join(dir, SESSION_FILE)
   writeFileSync(file, session.text)
   const said = kittyRuns(t, READ_THE_SESSION, file)
@@ -147,7 +148,7 @@ const THE_REQUESTS: readonly (readonly [string, Record<string, unknown>, boolean
 
 test('K2: kitty\'s own authorizer, with the checker Martha writes, allows the strip its two actions on itself and nothing else', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'martha kitty $checker-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const checker = join(dir, CHECKER_FILE)
   writeFileSync(checker, theCheckerSource(THE_STRIPS_ACTIONS))
   const said = kittyRuns(t, JUDGE, shlexQuoted(checker), JSON.stringify(THE_REQUESTS.map(([name, pcmd, onTerminal, own]) => [name, pcmd, onTerminal, own])))

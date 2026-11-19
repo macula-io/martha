@@ -3,11 +3,12 @@
 // no KITTY_ variable (K3, K4); and the strip's kitten calls only its two actions on itself (K2).
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CHECKER_FILE, SESSION_FILE, openTheCrewInKitty, writeOwnerOnly, type OpeningTheCrew } from './open_the_crew_in_kitty.ts'
 import { KITTY_FLOOR, THE_STRIPS_ACTIONS, theCheckerSource } from './the_session_kitty_reads.ts'
 import { theStripsKitten, type AKittenCall } from './the_strips_kitten.ts'
@@ -68,7 +69,7 @@ test('K1: with every member running nothing is opened, and it says so', () => {
 
 test('K4: a file is written owner-only, in place of a link left where it goes', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'martha-kitty-write-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  t.after(() => removeTheTree(dir))
   const target = join(dir, 'elsewhere')
   writeFileSync(target, 'untouched')
   const path = join(dir, SESSION_FILE)
