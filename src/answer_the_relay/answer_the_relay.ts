@@ -366,7 +366,7 @@ async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrd
 }
 
 /** A tool call's three fields, or undefined when the body is not one. */
-function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>> } | undefined {
+export function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>> } | undefined {
   if (typeof body !== 'object' || body === null) return undefined
   const { session_id, tool, args } = body as Record<string, unknown>
   if (typeof session_id !== 'string' || typeof tool !== 'string') return undefined
