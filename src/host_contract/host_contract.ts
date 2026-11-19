@@ -25,6 +25,24 @@
 // on any other import; the check is in prove_the_core/what_the_core_may_reach/imports_beyond_the_core.ts. This file
 // imports nothing at all: every slice depends on the contract, never the reverse.
 
+/**
+ * How a host's file tools name the file a call touches (#541 package A, design G1). The decisions over a member's calls
+ * take these from the host that runs the member, so an engine's `write` on `path` is judged the way Claude Code's
+ * `Write` on `file_path` is, and a decision handed another host's names never passes every call unseen.
+ */
+export interface HostFileTools {
+  /** The tools whose call writes the file it names. A call of any other tool is not judged as a file write. */
+  readonly writing_tools: readonly string[]
+  /** The arguments a call names a file in. */
+  readonly file_arguments: readonly string[]
+  /** Each tool whose write is kept as the member's own, by the argument that names the file. */
+  readonly own_writes: Readonly<Record<string, string>>
+  /** The tool whose call holds the whole file and the argument holding it, so the file on disk must be those bytes; undefined when the host has none. */
+  readonly whole_file: { readonly tool: string; readonly content: string } | undefined
+  /** The file a path in a call names, as the host resolves it against where the member works and its home. */
+  readonly resolve: (value: string, cwd: string, home: string) => string
+}
+
 /** The time, in milliseconds since the Unix epoch. */
 export interface Clock {
   now(): number

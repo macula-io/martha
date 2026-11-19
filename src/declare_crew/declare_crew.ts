@@ -193,6 +193,30 @@ export const A_BACKLOG_PLACE = /^[A-Za-z0-9][A-Za-z0-9-]*(\/[A-Za-z0-9._-]+)?$/
  */
 export const VOLATILE_PATHS = 'volatile_paths'
 
+/**
+ * Where an engine member's model is reached (martha#541 package A, Q1, DECIDED 2026-11-19 "Yes, one crew setting
+ * (Recommended)"): the top-level key, the endpoint's host, its base path, and the name of the variable that holds the
+ * key in the owner's environment. The key itself is never in the declaration: the start reads that variable and writes
+ * its value into the launch's secrets file alone. A declaration without the key has no endpoint, and an engine member
+ * of that crew is refused at its start, by name.
+ */
+export const ENGINE_ENDPOINT = 'engine_endpoint'
+export const ENGINE_ENDPOINT_REQUIRED_KEYS = ['host'] as const
+export const ENGINE_ENDPOINT_OPTIONAL_KEYS = ['base_path', 'key_from'] as const
+
+/** A name `key_from` may hold: an environment variable's, as a shell spells one. */
+export const AN_ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+/** The schemes an endpoint's host may be reached on. */
+export const ENDPOINT_SCHEMES: readonly string[] = ['http:', 'https:']
+
+/** A declared engine endpoint: the host as a URL, the base path when one is named, and the variable the key is read from when one is named. */
+export interface EngineEndpoint {
+  readonly host: string
+  readonly base_path: string | null
+  readonly key_from: string | null
+}
+
 /** A declared backlog: the places to look in, and how long a member may sit idle beside unheld work before a nudge. */
 export interface Backlog {
   readonly places: readonly string[]
@@ -385,6 +409,8 @@ export interface CrewSettings {
    * own machine roots apply there. Read by ../tell_a_citer_of_a_volatile_path, which never writes a root of its own.
    */
   readonly volatile_paths: readonly string[]
+  /** Where an engine member's model is reached (martha#541 package A), or null when the declaration names none. */
+  readonly engine_endpoint: EngineEndpoint | null
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -400,7 +426,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 const OPTIONAL_MEMBER_KEYS = ['model', HOST] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
@@ -539,6 +565,39 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
     backlog: backlogOf(refuse, value[BACKLOG]),
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
+    engine_endpoint: engineEndpointOf(refuse, value[ENGINE_ENDPOINT]),
+  }
+}
+
+/** The declared engine endpoint, or null when there is none: a host reached over http or https, a base path, and a variable's name. */
+function engineEndpointOf(refuse: Refuse, value: unknown): EngineEndpoint | null {
+  if (value === undefined) return null
+  if (!isObject(value)) return refuse.at(ENGINE_ENDPOINT, `is not ${shapeOf(ENGINE_ENDPOINT_REQUIRED_KEYS, ENGINE_ENDPOINT_OPTIONAL_KEYS)}`)
+  refuse.unknownKeys(value, [...ENGINE_ENDPOINT_REQUIRED_KEYS, ...ENGINE_ENDPOINT_OPTIONAL_KEYS], `${ENGINE_ENDPOINT}.`)
+  const host = value['host']
+  if (!isAnEndpointsHost(host)) return refuse.at(`${ENGINE_ENDPOINT}.host`, `is not a URL on ${ENDPOINT_SCHEMES.join(' or ')}`)
+  const base_path = value['base_path']
+  if (!isAbsentOrText(base_path)) return refuse.at(`${ENGINE_ENDPOINT}.base_path`, 'is not a path')
+  const key_from = value['key_from']
+  if (!isAbsentOrAVariablesName(key_from)) return refuse.at(`${ENGINE_ENDPOINT}.key_from`, 'is not the name of an environment variable: the key itself never goes in the declaration')
+  return { host, base_path: base_path ?? null, key_from: key_from ?? null }
+}
+
+/** A host an endpoint may name: text that is a URL on one of the schemes it is reached over. */
+const isAnEndpointsHost = (value: unknown): value is string => isText(value) && ENDPOINT_SCHEMES.includes(aUrlsScheme(value))
+
+/** Nothing written, or text. */
+const isAbsentOrText = (value: unknown): value is string | undefined => value === undefined || isText(value)
+
+/** Nothing written, or the name of an environment variable. */
+const isAbsentOrAVariablesName = (value: unknown): value is string | undefined => value === undefined || (typeof value === 'string' && AN_ENVIRONMENT_NAME.test(value))
+
+/** A URL's scheme, or nothing when the text is not a URL. */
+function aUrlsScheme(text: string): string {
+  try {
+    return new URL(text).protocol
+  } catch {
+    return ''
   }
 }
 

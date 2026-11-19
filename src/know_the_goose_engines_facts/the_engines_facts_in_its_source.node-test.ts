@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { CHECKOUT_ROOT_CARRIERS, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, TELEMETRY_READERS, TOOL_CALL_META, WORKING_DIRECTORY_AS_THE_ROOT, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, CHECKOUT_ROOT_CARRIERS, DEVELOPER_DIR, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, PATH_RESOLVER, SECRET_STORAGE, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, TELEMETRY_READERS, TOOL_CALL_META, WORKING_DIRECTORY_AS_THE_ROOT, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -258,6 +258,15 @@ test('a meta builder that is gone makes the tool naming unreadable by name, neve
 /** The part that reads the shell tool, by the name a failed read reports. */
 const SHELL_PART = ENGINE_PARTS.find(({ read }) => 'shell_tool' in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS))))?.part
 
+/**
+ * The part that reads the Developer extension's tools (#541 package A): a shell listed or run wrongly is one of those
+ * tools listed or run wrongly, so both parts are unreadable, each by its own name.
+ */
+const DEVELOPER_PART = ENGINE_PARTS.find(({ read }) => 'developer_tools' in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS))))?.part
+
+/** The tool the engine lists right after the shell, whose dispatch arm a second shell arm is put before. */
+const AFTER_THE_SHELL = RECORDED_FACTS.developer_tools[RECORDED_FACTS.developer_tools.findIndex(({ params }) => params === SHELL_TOOL.params) + 1]?.name
+
 test('a shell tool the engine renames is read under its new name, from the list and the dispatch both (#541 part C4)', () => {
   const shell_tool = `${RECORDED_FACTS.shell_tool}_renamed`
   const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, shell_tool })))
@@ -271,7 +280,7 @@ test('a Developer extension that lists no tool on the shell parameters makes the
   const gone = tools.replace(`Self::schema::<${SHELL_TOOL.params}>()`, 'Self::schema::<AnotherParams>()')
   assert.notEqual(gone, tools, 'the built tree lists no shell tool to take away')
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: gone }))
-  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART, DEVELOPER_PART])
   assert.match(unreadable[0]?.why ?? '', new RegExp(`lists 0 tools on ${SHELL_TOOL.params}`))
 })
 
@@ -282,7 +291,7 @@ test('a shell tool listed under one name and run under another is unreadable, ne
   const split = tools.replace(`"${shell}" => match`, `"${shell}_elsewhere" => match`)
   assert.notEqual(split, tools, 'the built tree dispatches no shell tool to rename')
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: split }))
-  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART, DEVELOPER_PART])
   assert.match(unreadable[0]?.why ?? '', new RegExp(`lists the shell tool as ${shell} but runs`))
 })
 
@@ -294,7 +303,7 @@ test('a Developer extension that lists two tools on the shell parameters is unre
   const twice = tools.replace(listed, `Tool::new("${shell}_too".to_string(), description, Self::schema::<${SHELL_TOOL.params}>())\n${listed}`)
   assert.notEqual(twice, tools, 'the built tree lists no shell tool to list twice')
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: twice }))
-  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART, DEVELOPER_PART])
   assert.match(unreadable[0]?.why ?? '', new RegExp(`lists 2 tools on ${SHELL_TOOL.params}`))
 })
 
@@ -302,7 +311,8 @@ test('a Developer extension that runs the shell parameters for a second name, af
   const files = engineFilesSaying(RECORDED_FACTS)
   const tools = files[ENGINE_PLACES.shell_tool] ?? ''
   const shell = RECORDED_FACTS.shell_tool
-  const another = '"another_tool" => match'
+  assert.ok(AFTER_THE_SHELL !== undefined, 'the recording lists no tool after the shell to put a second arm before')
+  const another = `"${AFTER_THE_SHELL}" => match`
   const second = `"${shell}_also" => match Self::parse_args::<${SHELL_TOOL.params}>(arguments) {\n                Ok(params) => run(params),\n                Err(error) => fail(error),\n            },\n            ${another}`
   const twice = tools.replace(another, second)
   assert.notEqual(twice, tools, 'the built tree dispatches no other tool to put a second shell arm before')
@@ -310,6 +320,240 @@ test('a Developer extension that runs the shell parameters for a second name, af
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: twice }))
   assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
   assert.match(unreadable[0]?.why ?? '', new RegExp(`lists the shell tool as ${shell} but runs`))
+})
+
+/** The part that reads a fact, by the name a failed read reports. */
+const partReading = (fact: keyof EngineFacts): string | undefined => ENGINE_PARTS.find(({ read }) => fact in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS))))?.part
+
+test('a secret the provider starts reading, and a keyring switch and secrets file the engine renames, are read under their new names (#541 package A)', () => {
+  const another = RECORDED_FACTS.openai_provider.settings.find((setting) => !RECORDED_FACTS.openai_provider.secrets.includes(setting))
+  assert.ok(another !== undefined, 'every provider setting is already a secret, so no secret can be added')
+  const changed: EngineFacts = {
+    ...RECORDED_FACTS,
+    openai_provider: { ...RECORDED_FACTS.openai_provider, secrets: [...RECORDED_FACTS.openai_provider.secrets, another] },
+    secret_storage: { keyring_switch: `${RECORDED_FACTS.secret_storage.keyring_switch}_RENAMED`, file: `moved-${RECORDED_FACTS.secret_storage.file}` },
+  }
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying(changed)))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.openai_provider, changed.openai_provider)
+  assert.deepEqual(facts.secret_storage, changed.secret_storage)
+})
+
+test('a provider that reads its secrets twice is unreadable by name, never the first list (#541 package A)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.openai_secrets] ?? ''
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.openai_secrets]: `${text}${text}` }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [partReading('openai_provider')])
+  assert.match(unreadable[0]?.why ?? '', /reads secrets 2 times and 2 are in a shape this reader knows, not once/)
+})
+
+test('a secret the provider reads that is none of its settings is unreadable, so no secret escapes the config allow-list (#541 package A)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const [first] = RECORDED_FACTS.openai_provider.secrets
+  assert.ok(first !== undefined)
+  const text = (files[ENGINE_PLACES.openai_secrets] ?? '').replace(`"${first}"`, '"A_SECRET_NO_SETTING_NAMES"')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.openai_secrets]: text }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [partReading('openai_provider')])
+  assert.match(unreadable[0]?.why ?? '', /reads a secret A_SECRET_NO_SETTING_NAMES that is none of the provider's settings/)
+})
+
+test('a keyring switch the engine no longer reads as off when it is true is unreadable, never a switch a launch writes for nothing (#541 package A)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.secret_storage] ?? ''
+  const stricter = text.replace(A_TRUE_SWITCH_COUNTS, 'false')
+  assert.notEqual(stricter, text, 'the built tree reads no true switch to take away')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.secret_storage]: stricter }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [partReading('secret_storage')])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`no longer reads a true ${RECORDED_FACTS.secret_storage.keyring_switch} as off`))
+})
+
+test('a secrets file built some other way than beside the config file is unreadable by name (#541 package A)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.secret_storage] ?? ''
+  const elsewhere = text.replace(`config_dir.join("${RECORDED_FACTS.secret_storage.file}")`, `home_dir().join("${RECORDED_FACTS.secret_storage.file}")`)
+  assert.notEqual(elsewhere, text, 'the built tree joins no secrets file to move')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.secret_storage]: elsewhere }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [partReading('secret_storage')])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`the secrets file beside the config file`))
+})
+
+test('the secret storage and the mode default are both read from the one config file the engine keeps them in (#541 package A)', () => {
+  assert.equal(ENGINE_PLACES.secret_storage, ENGINE_PLACES.mode_when_unset, 'the two facts moved apart: the tree no longer needs to write them into one file')
+  const text = engineFilesSaying(RECORDED_FACTS)[ENGINE_PLACES.secret_storage] ?? ''
+  assert.ok(text.includes('fn resolve_goose_mode(') && text.includes(`fn ${SECRET_STORAGE.file}(`))
+})
+
+/** The tools the recording lists that are not the shell, the ones a test may rename or break without touching the shell part. */
+const NOT_THE_SHELL = RECORDED_FACTS.developer_tools.filter(({ params }) => params !== SHELL_TOOL.params)
+
+test('every Developer tool is read with its name, its parameters and the first text field of those, as the engine lists them (#541 package A; mutants: a field read past the first text one, a name taken from the dispatch alone)', () => {
+  assert.ok(NOT_THE_SHELL.length > 0, 'the recording lists no tool beside the shell, so this case reads only one')
+  const developer_tools = RECORDED_FACTS.developer_tools.map((tool) => (tool.params === SHELL_TOOL.params ? tool : { ...tool, name: `${tool.name}_renamed`, argument: `${tool.argument}_renamed` }))
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, developer_tools })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.developer_tools, developer_tools)
+})
+
+test('a Developer tool listed on one set of parameters and run on another is unreadable by name, never a tool with either (#541 package A)', () => {
+  const [tool] = NOT_THE_SHELL
+  assert.ok(tool !== undefined, 'the recording lists no tool beside the shell')
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tools = files[ENGINE_PLACES.shell_tool] ?? ''
+  const other = tools.replace(`"${tool.name}" => match Self::parse_args::<${tool.params}>`, `"${tool.name}" => match Self::parse_args::<AnotherParams>`)
+  assert.notEqual(other, tools, 'the built tree dispatches no such tool to change')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: other }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [DEVELOPER_PART])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`lists the tool ${tool.name} on ${tool.params} but runs it on \\["AnotherParams"\\]`))
+})
+
+test('Developer parameters declared in two files, or with no text field, are unreadable by name, never an argument guessed (#541 package A)', () => {
+  const [tool] = NOT_THE_SHELL
+  assert.ok(tool !== undefined, 'the recording lists no tool beside the shell')
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const params = `${DEVELOPER_DIR}/params.rs`
+  const declared = files[params] ?? ''
+  const twice = engineFactsIn(anEngineSourceSaying({ ...files, [`${DEVELOPER_DIR}/again.rs`]: declared }))
+  assert.deepEqual(twice.unreadable.map(({ part }) => part), [DEVELOPER_PART])
+  assert.match(twice.unreadable[0]?.why ?? '', new RegExp(`declares ${RECORDED_FACTS.developer_tools[0]?.params ?? ''} in 2 files`))
+  const textless = declared.replace(`pub ${tool.argument}: String,\n    pub another_text: String,`, `pub ${tool.argument}: u32,\n    pub another_text: u64,`)
+  assert.notEqual(textless, declared, 'the built tree declares no such parameters to change')
+  const none = engineFactsIn(anEngineSourceSaying({ ...files, [params]: textless }))
+  assert.deepEqual(none.unreadable.map(({ part }) => part), [DEVELOPER_PART])
+  assert.match(none.unreadable[0]?.why ?? '', new RegExp(`the first text field of ${tool.params}`))
+})
+
+/** The part that reads the engine's path resolution (#541 package A). */
+const RESOLUTION_PART = partReading('path_resolution')
+
+test("the engine's path resolution is read as it is written: a trim, a `~` and the order of its places each read back, never assumed (#541 package A, design r=4 R3; mutants: the trim never seen, the places read in the reader's order)", () => {
+  const recorded = RECORDED_FACTS.path_resolution
+  const changed = { ...recorded, bases: [...recorded.bases].reverse(), trims: !recorded.trims, expands_home: !recorded.expands_home }
+  assert.notDeepEqual(changed.bases, recorded.bases, 'the recording names one place only, so its order reads nothing')
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, path_resolution: changed })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.path_resolution, changed)
+})
+
+test('a resolver that does not return an absolute path as given, or joins a relative one to a place this reader does not know, is unreadable by name (#541 package A)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.path_resolution
+  const written = files[path] ?? ''
+  const rooted = written.replace('if path.is_absolute() {\n        path\n    }', 'if path.is_absolute() {\n        root.join(path)\n    }')
+  const elsewhere = written.replace(`fn ${PATH_RESOLVER}(path: &str, working_dir: Option<&Path>) -> PathBuf {`, `fn ${PATH_RESOLVER}(path: &str, working_dir: Option<&Path>) -> PathBuf {\n    let working_dir = another_place();`).replace('        working_dir\n', '        another_place()\n')
+  for (const [why, broken] of [['does not return an absolute path as given', rooted], ['names no place this reader knows first', elsewhere]] as const) {
+    assert.notEqual(broken, written, `the built resolver has nothing to change for: ${why}`)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: broken }))
+    assert.deepEqual(unreadable.map(({ part }) => part), [RESOLUTION_PART], why)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
+  }
+})
+
+/** The part that reads the engine's session store (#541 package A). */
+const STORE_PART = partReading('session_store')
+
+test("the engine's session store is read as it is written: its file, its journal mode, the sessions table's columns past another table, and every state key (#541 package A, design r=5 R1'; mutants: the first table's columns, a state left out)", () => {
+  const recorded = RECORDED_FACTS.session_store
+  const changed = { ...recorded, file: `moved_${recorded.file}`, journal_mode: `${recorded.journal_mode}Moved`, columns: [...recorded.columns.map((column) => `${column}_renamed`), 'a_new_column'], extension_states: ['a_new_state.v7', ...recorded.extension_states] }
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, session_store: changed })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.session_store, changed)
+})
+
+test('a store opened in two journal modes, or an extension state declared in a shape this reader does not know, is unreadable by name (#541 package A; mutants: either count dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const store = files[ENGINE_PLACES.session_store] ?? ''
+  const twice = `${store}        let more = options.journal_mode(sqlx::sqlite::SqliteJournalMode::Delete);\n`
+  const states = files[ENGINE_PLACES.extension_states] ?? ''
+  const odd = `${states}impl ExtensionState for AnOddState {\n    const VERSION: &'static str = "v1";\n    const EXTENSION_NAME: &'static str = "odd";\n}\n`
+  for (const [why, path, broken] of [['journal modes, not one', ENGINE_PLACES.session_store, twice], ['are in a shape this reader knows', ENGINE_PLACES.extension_states, odd]] as const) {
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: broken }))
+    assert.deepEqual(unreadable.map(({ part }) => part), [STORE_PART], why)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
+  }
+})
+
+/** The part that reads what approve mode runs unasked (#541 package A), asked inside a test so a broken reader fails that test by name. */
+const unaskedPart = (): string | undefined => partReading('approve_mode_unasked')
+
+test("what approve mode runs unasked is read as the engine writes it: each user permission level that allows, past a level that asks and a smart-approve-only allow, and the filter before the check (#541 package A, design r=6 R1''; mutants: the smart-approve allow counted, every level read)", () => {
+  const recorded = RECORDED_FACTS.approve_mode_unasked
+  const changed = { user_permissions: [...recorded.user_permissions, 'ask_before_too'], unadvertised: `${recorded.unadvertised}_too` }
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, approve_mode_unasked: changed })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.approve_mode_unasked, changed)
+})
+
+test('an approve-mode allow this reader does not know, or an approval that no longer allows what its filter keeps out, is unreadable by name (#541 package A; mutants: either throw dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const inspector = files[ENGINE_PLACES.permission_inspector] ?? ''
+  const another = inspector.replace('                        } else {\n', '                        } else if tool_name == "a_tool" {\n                            InspectionAction::Allow\n                        } else {\n')
+  const approval = files[ENGINE_PLACES.tool_approval] ?? ''
+  const asks = approval.replace('ApprovalDecision::Allow', 'ApprovalDecision::Ask { prompt: None }')
+  for (const [why, path, broken] of [['ways this reader does not know', ENGINE_PLACES.permission_inspector, another], ['no longer allows the calls', ENGINE_PLACES.tool_approval, asks]] as const) {
+    assert.notEqual(broken, files[path], `${why}: the tree did not change`)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: broken }))
+    assert.deepEqual(unreadable.map(({ part }) => part), [unaskedPart()], why)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
+  }
+})
+
+/** The part that reads the engine's own folders (#541 package A), asked inside a test so a broken reader fails that test by name. */
+const foldersPart = (): string | undefined => partReading('engine_folders')
+
+test("the engine's own folders are read as its paths module picks them: each kind joined to a path root, and the layout's folder or one under the home without one (#541 package A, design G1; mutants: a join dropped, the layout's folder read as the home)", () => {
+  const recorded = RECORDED_FACTS.engine_folders
+  const changed = {
+    under_root: { ...Object.fromEntries(Object.entries(recorded.under_root).map(([kind, parts]) => [kind, [...parts, `${kind}_moved`]])), a_new_kind: ['a_new_folder'] },
+    without_root: { ...Object.fromEntries(Object.entries(recorded.without_root).map(([kind, place]) => [kind, 'layout' in place ? { layout: `${place.layout}_moved` } : { home: [...place.home, `${kind}_moved`] }])), a_new_kind: { home: ['a_new_folder'] } },
+  }
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, engine_folders: changed })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.engine_folders, changed)
+})
+
+test('a folder kind only one arm names, or a folder picked in a shape this reader does not know, makes the folders unreadable by name (#541 package A; mutants: each throw dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const paths = files[ENGINE_PLACES.paths] ?? ''
+  const [kind] = Object.keys(RECORDED_FACTS.engine_folders.under_root)
+  assert.ok(kind !== undefined)
+  const arm = `                DirType::${kind.charAt(0).toUpperCase()}${kind.slice(1)} => `
+  const at = paths.indexOf(`        } else {\n            let strategy`)
+  const withRoot = paths.indexOf(arm)
+  const withoutRoot = paths.indexOf(arm, at)
+  assert.ok(at > 0 && withRoot > 0 && withoutRoot > at, 'the tree names the kind in both arms')
+  const lineAt = (from: number): string => paths.slice(from, paths.indexOf('\n', from) + 1)
+  const cases = [
+    ['under a path root and', paths.replace(lineAt(withRoot), '')],
+    ['under a path root as', paths.replace(lineAt(withRoot), `${arm}elsewhere.join("${kind}"),\n`)],
+    ['without a path root as', `${paths.slice(0, withoutRoot)}${arm}PathBuf::from("/${kind}"),\n${paths.slice(withoutRoot + lineAt(withoutRoot).length)}`],
+  ] as const
+  for (const [why, broken] of cases) {
+    assert.notEqual(broken, paths, `${why}: the tree did not change`)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.paths]: broken }))
+    assert.deepEqual(unreadable.map(({ part }) => part), [foldersPart()], why)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
+  }
+})
+
+test("each Developer tool's hints are read in from_raw's order, so a hint the engine turns is read turned (#541 package A, design G1; mutants: two hints read in each other's place, a hint read as always false)", () => {
+  const turned = RECORDED_FACTS.developer_tools.map((tool, at) => ({ ...tool, hints: at % 2 === 0 ? { read_only: !tool.hints.read_only, destructive: tool.hints.destructive, open_world: !tool.hints.open_world } : { ...tool.hints, destructive: !tool.hints.destructive } }))
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, developer_tools: turned })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.developer_tools, turned)
+})
+
+test('a Developer tool listed without its hints, or with a hint that is not Some(true) or Some(false), makes the tools unreadable by name (#541 package A; mutant: the throw dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.shell_tool] ?? ''
+  const [first] = RECORDED_FACTS.developer_tools
+  assert.ok(first !== undefined)
+  const annotation = /\n {12}\.annotate\(ToolAnnotations::from_raw\([\s\S]*?\n {12}\)\),/.exec(text)?.[0] ?? ''
+  assert.notEqual(annotation, '', 'the tree annotates its tools')
+  for (const broken of [text.replace(annotation, ','), text.replace(annotation, annotation.replace(/Some\((true|false)\)/, 'None'))]) {
+    assert.notEqual(broken, text)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: broken }))
+    assert.ok(unreadable.some(({ part, why }) => part === partReading('developer_tools') && why.includes(`lists the tool ${first.name} without the hints`)), JSON.stringify(unreadable))
+  }
 })
 
 test('a skill folder the engine adds or renames is read from the engine, not taken from the recording (martha#614)', () => {

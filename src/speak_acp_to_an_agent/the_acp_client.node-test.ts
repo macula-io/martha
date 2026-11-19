@@ -314,3 +314,51 @@ test('a turn the agent ends with a request still undecided answers it cancelled 
   client.end()
   toClient.end()
 })
+
+/** How long a test waits for updates the stand-in sends after a turn's answer: far longer than its own pause. */
+const THE_LATE_UPDATES_ARRIVE_WITHIN_MS = 5_000
+
+test('every update reaches the listener, one after its turn was answered included: a late chunk and a late result (#541 package A, design R4; mutant: the listener after the turn lookup)', async () => {
+  const late = [
+    { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'after the answer' } },
+    { sessionUpdate: 'tool_call_update', toolCallId: A_CALL.id, status: 'completed', rawOutput: 'late' },
+  ]
+  const heard: unknown[] = []
+  let allHeard: () => void = () => undefined
+  const both = new Promise<void>((settle) => (allHeard = settle))
+  const child = spawn(process.execPath, [STAND_IN, JSON.stringify({ turns: [[{ say: 'in the turn' }, { after_the_answer: late.map((update) => ({ update })) }]] })], { stdio: ['pipe', 'pipe', 'inherit'] })
+  const exited = new Promise<void>((settle) => child.once('exit', () => settle()))
+  const client = AcpClient.overAChild(child, allow, (sessionId, update) => {
+    heard.push({ sessionId, update })
+    if (heard.length === 1 + late.length) allHeard()
+  })
+  try {
+    await client.initialize()
+    const { sessionId } = await client.newSession('/')
+    await client.prompt(sessionId, 'go')
+    await Promise.race([both, new Promise<void>((settle) => setTimeout(settle, THE_LATE_UPDATES_ARRIVE_WITHIN_MS).unref())])
+    assert.deepEqual(heard.slice(1), late.map((update) => ({ sessionId, update })))
+  } finally {
+    client.end()
+    if (child.exitCode === null) child.kill()
+    await exited
+  }
+})
+
+test('a listener that throws is noted, and the turn goes on (#541 package A, design R4)', async () => {
+  const child = spawn(process.execPath, [STAND_IN, JSON.stringify({ turns: [[{ say: 'still heard' }]] })], { stdio: ['pipe', 'pipe', 'inherit'] })
+  const exited = new Promise<void>((settle) => child.once('exit', () => settle()))
+  const client = AcpClient.overAChild(child, allow, () => {
+    throw new Error('a listener that fails')
+  })
+  try {
+    await client.initialize()
+    const { sessionId } = await client.newSession('/')
+    assert.equal((await client.prompt(sessionId, 'go')).text, 'still heard')
+    assert.ok(client.notes.some((note) => note.includes('a listener that fails')), JSON.stringify(client.notes))
+  } finally {
+    client.end()
+    if (child.exitCode === null) child.kill()
+    await exited
+  }
+})

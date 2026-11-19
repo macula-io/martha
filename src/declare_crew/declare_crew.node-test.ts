@@ -9,6 +9,7 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import {
   ACTS,
   BACKLOG,
+  ENGINE_ENDPOINT,
   CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   CLONES,
   CREW_CODE_DECLARATION_DIRECTORY,
@@ -713,6 +714,26 @@ test('#319 B: a backlog names at least one organisation or owner/repo, and a who
 test('#319 B: a declaration without a backlog has none, and one with it reads its places and window, 0 included', async () => {
   assert.equal((await declare(solo).settings).backlog, null)
   assert.deepEqual((await declare({ ...solo, [BACKLOG]: { places: ['macula-io', 'macula-io/macula'], idle_minutes: 0 } }).settings).backlog, { places: ['macula-io', 'macula-io/macula'], idle_minutes: 0 })
+})
+
+test('#541 package A: a declaration without an engine endpoint has none, and one with it reads its host, base path and key variable', async () => {
+  assert.equal((await declare(solo).settings).engine_endpoint, null)
+  assert.deepEqual((await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test:8080' } }).settings).engine_endpoint, { host: 'http://a-host.test:8080', base_path: null, key_from: null })
+  assert.deepEqual(
+    (await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', base_path: 'a/path', key_from: 'A_KEY_VARIABLE' } }).settings).engine_endpoint,
+    { host: 'https://a-host.test', base_path: 'a/path', key_from: 'A_KEY_VARIABLE' },
+  )
+})
+
+test('#541 package A: an engine endpoint is a URL on http or https, a path, and a variable name: a key written there is refused by name', async () => {
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: 'http://a-host.test' }, ENGINE_ENDPOINT)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: {} }, `${ENGINE_ENDPOINT}.host`)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'a-host.test' } }, `${ENGINE_ENDPOINT}.host`)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'file:///a-host' } }, `${ENGINE_ENDPOINT}.host`)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', base_path: 7 } }, `${ENGINE_ENDPOINT}.base_path`)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', key_from: 'sk-a key' } }, `${ENGINE_ENDPOINT}.key_from`)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', key: 'sk-a-key' } }, `${ENGINE_ENDPOINT}.key`)
+  await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', key_from: 'sk-a key' } }).settings, /the key itself never goes in the declaration/)
 })
 
 /** A checkout of a made-up repository under a made-up home: this repository is public, so no real path appears here. */

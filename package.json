@@ -98,6 +98,7 @@
       "src/serve_the_relay_to_a_launch",
       "src/serve_the_owners_answers",
       "src/start_a_member",
+      "src/start_an_engine_member",
       "src/start_the_member_on_its_host",
       "src/start_the_member_on_the_owners_terminal",
       "src/sweep_leftover_launch_directories",
