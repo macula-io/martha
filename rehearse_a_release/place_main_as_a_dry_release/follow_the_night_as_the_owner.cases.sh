@@ -27,12 +27,13 @@ PROMPT="$(word "${SUT}" PROMPT)"
 ENDED="$(word "${SUT}" ENDED)"
 PASSED="$(word "${SUT}" PASSED)"
 NOT_PASSED="$(word "${SUT}" NOT_PASSED)"
+SPEED_BUMP="$(word "${SUT}" SPEED_BUMP)"
 CONTAINER_PREFIX="$(word "${PROOF}/prove_a_clean_install_in_a_throwaway_container.sh" CONTAINER_PREFIX)"
 NIGHT_TMUX_SOCKET="$(word "${PROOF}/the_night_in_the_container.sh" NIGHT_TMUX_SOCKET)"
 WATCH_FLAG="$(word "${PROOF}/the_night_in_the_container.sh" NIGHT_WATCH_FLAG)"
 BUILDER="$(word "${PROOF}/prove_a_clean_install_in_a_throwaway_container.sh" THE_BUILDER)"
 DRY_PASSED="$(sed -n 's/^DRY_PASSED=\([0-9]*\)$/\1/p' "${PROOF}/prove_a_clean_install_in_a_throwaway_container.sh")"
-for w in NO_TERMINAL NO_ANSWER PROMPT ENDED PASSED NOT_PASSED CONTAINER_PREFIX NIGHT_TMUX_SOCKET WATCH_FLAG DRY_PASSED; do
+for w in NO_TERMINAL NO_ANSWER PROMPT ENDED PASSED NOT_PASSED SPEED_BUMP CONTAINER_PREFIX NIGHT_TMUX_SOCKET WATCH_FLAG DRY_PASSED; do
   [ -n "${!w}" ] || { echo "${SUT} or its proof defines no ${w}" >&2; exit 2; }
 done
 
@@ -184,6 +185,18 @@ if wanted the_watch_runs; then
   night the_watch_runs 0 "$(shaped "${A_HOST}" "$(words tmux -L "${NIGHT_TMUX_SOCKET}" attach "${WATCH_FLAG}" -t "${BUILDER}")")"
   { sleep 3; printf '\n'; sleep 3; echo 'proof_exit=1' >> "${RUN}/run.txt"; } | in_a_terminal
   verdict the_watch_runs "$(held ran)" "the proof's watch command was not run on Enter"
+fi
+if wanted the_yes_says_it_is_a_speed_bump; then
+  # martha#847: before the writable attach, where the yes is given, the owner is told the yes is a speed bump; before
+  # the read-only watch and the sign-in, where no yes is given, it is not said.
+  night the_yes_says_it_is_a_speed_bump 0 "$(shaped "${A_HOST}" "$(words tmux -L "${NIGHT_TMUX_SOCKET}" attach -t "${BUILDER}")")"
+  { sleep 3; printf '\n'; sleep 3; echo 'proof_exit=1' >> "${RUN}/run.txt"; } | in_a_terminal
+  at_the_yes="$(held says "${SPEED_BUMP}")"
+  night the_watch_says_no_speed_bump 0 "$(shaped "${A_HOST}" "$(words tmux -L "${NIGHT_TMUX_SOCKET}" attach "${WATCH_FLAG}" -t "${BUILDER}")")"
+  { sleep 3; printf '\n'; sleep 3; echo 'proof_exit=1' >> "${RUN}/run.txt"; } | in_a_terminal
+  at_the_watch="$(held says "${SPEED_BUMP}")"
+  verdict the_yes_says_it_is_a_speed_bump "$([ "${at_the_yes}${at_the_watch}" = 10 ] && echo 1 || echo 0)" \
+    "the speed bump was said at the yes: ${at_the_yes}, at the watch: ${at_the_watch} (1 and 0 wanted)"
 fi
 if wanted an_attach_option_is_refused; then
   # The attach with another option beside the read-only flag, after it, joined to it, twice, or in its place, and the
