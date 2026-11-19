@@ -13,7 +13,7 @@ import { CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE } from '../
 import { DEPENDENCIES, LOCK } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { OWN_WRITES_SUFFIX } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { RELAY_JOURNAL_SUFFIX } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 
 /** Why the inventory's own words are spelled by the table rather than imported (martha#468). */
 export const THE_INVENTORY_SPELLS_THE_NAME = 'a name crew-code gives something, as #468\'s inventory lists it; the constant of that word is the name Martha gives it until the rename that takes it away, and the table must not follow that rename'

@@ -1,13 +1,13 @@
 // The picture rule's two halves (martha#627): a change may touch a picture only when it bumps the version, and a
 // change that bumps the version must leave every picture what the generator draws. Both are read off values here, so
 // no test touches git or a tree; the release's own read of a tree is proved end to end in
-// prove_the_core/the_pictures_are_drawn_at_the_release.node-test.ts.
+// prove_the_core/the_release_is_proven/the_pictures_are_drawn_at_the_release.node-test.ts.
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { DIAGRAMS, THE_C4_DIAGRAMS_PROGRAM, THE_PICTURES_THE_C4_DRAWS } from '../../architecture/c4_diagrams.ts'
-import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
+import { manifestPathOf } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import {
   DRAWN_AT_RELEASE,
   bumpsTheVersion,
