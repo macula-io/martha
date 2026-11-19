@@ -190,3 +190,25 @@ async function appendTheReading(ledger: LedgerHost, reading: AUsageRead): Promis
     return `the store could not keep what ${reading.member}'s session spent (${why instanceof Error ? why.message : String(why)})`
   }
 }
+
+/** The row phase that says what the session spent could not be kept (martha#860 R4): the owner's words, never an order. */
+export const SPEND_NOT_KEPT = 'spend_not_kept'
+
+/** A row's phase as the refresh flow writes it: what is happening, and why, in the owner's words. */
+interface ARowPhase {
+  readonly phase: string
+  readonly reason: string
+}
+
+/**
+ * The flow's act, with a reading the store refused said on the row: beside the flow's own phase, never in its place, and
+ * taken off at the next turn's end that keeps a reading, never by a beat that kept nothing. Only the row phase changes:
+ * the order the mod is sent stays the flow's alone, so a refused reading never holds the flow up.
+ */
+export function withWhatWasNotKept<A extends { readonly refresh?: ARowPhase | null }>(act: A, unkept: string | undefined, said: ARowPhase | null | undefined, turn_running: boolean): A {
+  if (unkept !== undefined) {
+    const why = `what the session spent was not kept: ${unkept}`
+    return { ...act, refresh: act.refresh === undefined || act.refresh === null ? { phase: SPEND_NOT_KEPT, reason: why } : { ...act.refresh, reason: `${act.refresh.reason}; ${why}` } }
+  }
+  return act.refresh === undefined && !turn_running && said?.phase === SPEND_NOT_KEPT ? { ...act, refresh: null } : act
+}

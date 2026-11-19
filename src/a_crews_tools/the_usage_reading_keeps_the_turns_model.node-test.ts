@@ -7,7 +7,7 @@
 // The mutant each test kills is named in its title.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -21,14 +21,14 @@ import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { CARRY_A_MODEL, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
+import { askAMemberToRefresh, CARRY_A_MODEL, CARRY_A_TEXT, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import type { RowStore } from '../host_contract/host_contract.ts'
-import { usageStreamOf } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
+import { SPEND_NOT_KEPT, USAGE_PLACE, usageStreamOf } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 import { theSpendBetween } from '../keep_what_a_session_spent/the_spend_between.ts'
 import { crewToolsOver, THE_MODEL_REPORT_ASK, type CrewTools } from './a_crews_tools.ts'
 
@@ -39,6 +39,7 @@ const MEMBER = 'builder'
 const THE_PACKAGE = 'macula-io/martha#860'
 const SESSION = 'a-session'
 const STARTED_AT = 1_794_998_340_000
+const THE_CREW_FILES = 'the-crew-files'
 
 const homeOfAll = mkdtempSync(join(tmpdir(), 'martha-usage-reading-'))
 after(() => removeTheTree(homeOfAll))
@@ -49,6 +50,8 @@ interface ACrew {
   readonly tools: CrewTools
   readonly rows: RowStore
   readonly aTurnLater: () => void
+  readonly home: string
+  readonly beats: ReturnType<typeof dashboardRowsIn>
 }
 
 /** A solo crew whose member runs on its own model and may switch to the crew's reviewer model. */
@@ -71,25 +74,26 @@ async function aCrewOfTools(): Promise<ACrew> {
   const config_dir = join(home, 'the-hosts-config')
   mkdirSync(config_dir, { recursive: true })
   const rows = rowStreamsDirectory(join(home, CREW_ROWS_PLACE))
+  const beats = dashboardRowsIn(join(home, 'row'))
   const tools = crewToolsOver({
     member: MEMBER,
     ledger: { clock: { now: () => clock.at }, stores: { rows } },
-    beats: dashboardRowsIn(join(home, 'row')),
+    beats,
     root,
     documents,
-    stores: { crew: keepTheCrewsFilesAsDirectories(join(home, 'the-crew-files')) },
+    stores: { crew: keepTheCrewsFilesAsDirectories(join(home, THE_CREW_FILES)) },
     models: HOST_MODELS,
     launched_on: OWN_MODEL,
     owners_settings: { config_dir, file: join(config_dir, USER_SETTINGS_FILE), store: ownersSettingsIn(join(config_dir, USER_SETTINGS_FILE), state.state_root) },
   })
-  return { tools, rows, aTurnLater: () => (clock.at += MINUTE_MS) }
+  return { tools, rows, home, beats, aTurnLater: () => (clock.at += MINUTE_MS) }
 }
 
 /** The mod's question at a turn's end, carrying what the session has cost so far. */
-async function aTurnEnds(crew: ACrew, turn_id: string, usd: number): Promise<Record<string, unknown>> {
+async function aTurnEnds(crew: ACrew, turn_id: string, usd: number, more: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
   crew.aTurnLater()
   const usage = { startedAt: STARTED_AT, context: { percent: 5 }, cost: { usd }, rateLimits: [{ kind: 'five_hour', percentUsed: 1 }] }
-  const answered = await crew.tools.answer(THE_REFRESH_ASK, { usage, turn_id, answer: '' }, SESSION)
+  const answered = await crew.tools.answer(THE_REFRESH_ASK, { usage, turn_id, answer: '', ...more }, SESSION)
   assert.ok('answer' in answered, `the flow refused the question: ${'refused' in answered ? answered.refused : ''}`)
   return JSON.parse(answered.answer) as Record<string, unknown>
 }
@@ -122,4 +126,42 @@ test('#860 R1: the turn a switch is ordered at is kept under the model that ran 
     { model: OWN_MODEL, usd: { subscription: 0.5, metered: 0, unknown: 0 } },
     { model: THE_REVIEWER_MODEL, usd: { subscription: 1, metered: 0, unknown: 0 } },
   ], 'the turn the switch was ordered at was put on the model it was switched to')
+})
+
+test('#860 R4: a reading the store refused is said on the row, the order left alone, and taken off once one is kept (mutant: the refusal dropped)', async () => {
+  const crew = await aCrewOfTools()
+  await aTurnEnds(crew, '', 0)
+  // A file where the crew's usage place belongs: the store refuses the place, so the writer cannot remember its reading.
+  const usage_place = join(crew.home, THE_CREW_FILES, USAGE_PLACE)
+  rmSync(usage_place, { recursive: true, force: true })
+  writeFileSync(usage_place, 'not a place\n')
+  assert.deepEqual(await aTurnEnds(crew, 't-1', 0.25), { carry: 'none' }, 'a reading the store refused held the flow up')
+  const said = crew.beats.read(MEMBER)?.refresh
+  assert.equal(said?.phase, SPEND_NOT_KEPT, 'the refusal was not said on the row')
+  assert.match(said?.reason ?? '', /^what the session spent was not kept: Martha keeps no crew files there/, 'the row does not say why')
+
+  rmSync(usage_place, { force: true })
+  // A beat taken while a turn runs keeps nothing, so it takes nothing off either.
+  await aTurnEnds(crew, 't-2', 0.375, { turn_running: 1 })
+  assert.equal(crew.beats.read(MEMBER)?.refresh?.phase, SPEND_NOT_KEPT, 'a beat that kept nothing took the refusal off the row')
+  await aTurnEnds(crew, 't-2', 0.5)
+  assert.equal(crew.beats.read(MEMBER)?.refresh ?? null, null, 'the row still says a reading was not kept after one was')
+  const kept = (await crew.rows.read(usageStreamOf(null))).map((stored) => stored.row['usd'])
+  assert.ok(kept.includes(0.5), 'the reading taken after the store answered again was not kept')
+})
+
+test('#860 R4: a refusal on the turn the flow writes its own phase is said beside that phase, never in its place (mutant: the flow\'s phase replaced)', async () => {
+  const crew = await aCrewOfTools()
+  await aTurnEnds(crew, '', 0)
+  const usage_place = join(crew.home, THE_CREW_FILES, USAGE_PLACE)
+  rmSync(usage_place, { recursive: true, force: true })
+  writeFileSync(usage_place, 'not a place\n')
+  const asked = askAMemberToRefresh({ stores: { crew: keepTheCrewsFilesAsDirectories(join(crew.home, THE_CREW_FILES)) } }, MEMBER, 'the owner asked for it', STARTED_AT)
+  assert.equal(asked, undefined, 'the test could not ask for a refresh')
+  const order = await aTurnEnds(crew, 't-1', 0.25)
+  assert.equal(order['carry'], CARRY_A_TEXT, 'the refresh the owner asked for did not start: the refusal held the flow up')
+  const said = crew.beats.read(MEMBER)?.refresh
+  assert.notEqual(said?.phase, SPEND_NOT_KEPT, 'the flow\'s own phase was replaced by the refusal')
+  assert.match(said?.reason ?? '', /.; what the session spent was not kept: Martha keeps no crew files there/, 'the refusal was not said beside the flow\'s own reason')
+  rmSync(usage_place, { force: true })
 })

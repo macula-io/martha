@@ -52,7 +52,7 @@ import {
 } from './refresh_a_member.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { keepWhatTheSessionSpent, USAGE_PLACE } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
+import { keepWhatTheSessionSpent, USAGE_PLACE, withWhatWasNotKept } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 import { theHostsReadingIn, type Billing } from '../keep_what_a_session_spent/the_hosts_usage.ts'
 import {
   CARRY_THE_END,
@@ -73,10 +73,10 @@ export const THE_REFRESH_ASK = 'the_refresh_of_this_session'
  * context the session just reported — one write, because a second one in the same millisecond is refused as older.
  */
 export type TheAct =
-  | { readonly act: 'none'; readonly refresh?: TheRowPhase }
-  | { readonly act: 'prompt'; readonly text: string; readonly refresh?: TheRowPhase }
-  | { readonly act: typeof CARRY_THE_CLEAR; readonly refresh?: TheRowPhase }
-  | { readonly act: typeof CARRY_THE_END; readonly turn_id: string; readonly refresh?: TheRowPhase }
+  | { readonly act: 'none'; readonly refresh?: TheRowPhase | null }
+  | { readonly act: 'prompt'; readonly text: string; readonly refresh?: TheRowPhase | null }
+  | { readonly act: typeof CARRY_THE_CLEAR; readonly refresh?: TheRowPhase | null }
+  | { readonly act: typeof CARRY_THE_END; readonly turn_id: string; readonly refresh?: TheRowPhase | null }
 
 /** What the member's row says about the flow: its phase, and why, in the owner's words. */
 export interface TheRowPhase {
@@ -169,8 +169,13 @@ const A_STORM_PARK = 'two refreshes inside the window: parked so it cannot loop'
  */
 export async function theRefreshAct(places: TheRefreshPlaces, question: TheSessionsQuestion): Promise<TheAct> {
   // What the session spent, kept before anything is ordered, so its model is the one that ran the turn (martha#860 R1).
-  // A reading the store could not keep is taken again at the next question: it never holds the flow up.
-  await keepWhatTheSessionSpent({ ...places, host: CLAUDE_CODE, kept: places.stores.crew.place(USAGE_PLACE) }, question)
+  // A reading the store could not keep is taken again at the next question: it never holds the flow up, and it is said.
+  const unkept = await keepWhatTheSessionSpent({ ...places, host: CLAUDE_CODE, kept: places.stores.crew.place(USAGE_PLACE) }, question)
+  return withWhatWasNotKept(await theFlowsAct(places, question), unkept, places.beats.read(places.member)?.refresh, question.turn_running)
+}
+
+/** The flow's own act on this question: what it carries forward, starts, or leaves alone. */
+async function theFlowsAct(places: TheRefreshPlaces, question: TheSessionsQuestion): Promise<TheAct> {
   if (!question.turn_running) places.ends.aTurnEnded(question.session_id, question.turn_id)
   const opened = await theOpenFlow(places)
   if ('act' in opened) return opened.act
