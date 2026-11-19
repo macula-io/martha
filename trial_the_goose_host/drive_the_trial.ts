@@ -20,7 +20,7 @@ import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSyn
 import { userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
-import { HOME_MARKERS, CHECKOUT_MARKERS, aPlaceFor, plant, writeTheConfig, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
+import { HOME_MARKERS, CHECKOUT_MARKERS, THE_APPROVED_SKILLS_FILE, aPlaceFor, plant, writeTheConfig, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
 import { NoAnswerInTime, promptOver, setTheCapInHand, withTimeout } from './the_engine_over_acp/a_turn_with_goose.ts'
 import { findingsIn, pathsIn, type TraceFindings } from './the_evidence_it_keeps/read_the_trace.ts'
 import { RecordingProxy } from './the_engine_over_acp/record_what_goose_sends.ts'
@@ -28,7 +28,7 @@ import { GooseOverAcp, type Exchange } from './the_engine_over_acp/speak_acp_to_
 import { TheModelPace, theCapFor, theLaunchesBoundMs, whyTheBoundCannotFit, type TheCapALineGets, type TheCapMadeOf } from './the_cap_a_line_gets/the_cap_a_line_gets.ts'
 import { refusalsIn, THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_it_keeps/the_evidence_says_why.ts'
 import {
-  lineEight, lineFive, lineFour, lineNine, lineOne, lineSix, lineThree, lineTwo, sevenAfterTheKill,
+  lineEight, lineFive, lineFour, lineNine, lineOne, lineSix, lineThree, lineTwoAtTheGate, sevenAfterTheKill,
   type Line, type Observation, type Trial,
 } from './the_nine_lines.ts'
 
@@ -101,9 +101,12 @@ export interface Running {
   readonly cap: TheCapALineGets
 }
 
-/** The lines that ask the session something; line 7 is the kill, and the driver runs it. */
+/**
+ * The lines that ask the session something; line 7 is the kill, and the driver runs it. Line 2 is the launch gate's,
+ * observed before anything starts (martha#614), so it has no launch and no entry here.
+ */
 const LINES: Readonly<Record<number, Line>> = {
-  1: lineOne, 2: lineTwo, 3: lineThree, 4: lineFour, 5: lineFive, 6: lineSix, 8: lineEight, 9: lineNine,
+  1: lineOne, 3: lineThree, 4: lineFour, 5: lineFive, 6: lineSix, 8: lineEight, 9: lineNine,
 }
 
 function optionsFrom(argv: readonly string[]): Options {
@@ -193,7 +196,7 @@ async function handOver(acp: GooseOverAcp, place: Place, remaining: () => number
 async function startARun(line: number, options: Options, launchedAt: number): Promise<Running> {
   const place = aPlaceFor(line, options.evidence, options.launch)
   if (line === 1) plant(place.ownerHome, HOME_MARKERS)
-  if (line === 2) plant(place.checkout, CHECKOUT_MARKERS)
+  if (line === 9) plant(place.checkout, [THE_APPROVED_SKILLS_FILE])
   const evidenceForLine = join(options.evidence, `line-${line}`)
   mkdirSync(evidenceForLine, { recursive: true })
   // The model's pace is measured from the proxy's chat answers, into the launch's own evidence, and becomes the
@@ -435,9 +438,19 @@ export function theObservationOfALineThatThrew(error: unknown): Observation {
   return { verdict: 'fail', say: `the line could not be run: ${error instanceof Error ? error.message : String(error)}`, evidence: {} }
 }
 
+/** Line 2 at the launch gate (martha#614): the unapproved checkout is planted, the gate asked, and nothing started. */
+function runLineTwoAtTheGate(options: Options, evidenceForLine: string): void {
+  const place = aPlaceFor(2, options.evidence, options.launch)
+  plant(place.checkout, CHECKOUT_MARKERS)
+  const observation = lineTwoAtTheGate(place)
+  writeFileSync(join(evidenceForLine, 'result.json'), JSON.stringify({ line: 2, ...observation }, null, 2))
+  console.log(`line 2: ${observation.verdict} — ${observation.say}`)
+}
+
 async function runLine(line: number, options: Options, launchedAt: number): Promise<void> {
   const evidenceForLine = join(options.evidence, `line-${line}`)
   mkdirSync(evidenceForLine, { recursive: true })
+  if (line === 2) return runLineTwoAtTheGate(options, evidenceForLine)
   let running: Running
   try {
     running = await startARun(line, options, launchedAt)

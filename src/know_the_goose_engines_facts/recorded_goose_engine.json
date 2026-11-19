@@ -363,5 +363,17 @@
   "secret_storage": {
     "keyring_switch": "GOOSE_DISABLE_KEYRING",
     "file": "secrets.yaml"
+  },
+  "checkout_skill_roots": {
+    "skill_folders": [
+      ".agents/skills",
+      ".goose/skills",
+      ".claude/skills"
+    ],
+    "plugin_folder": ".agents/plugins",
+    "plugin_settings": [
+      ".config/goose/settings.json",
+      ".config/goose/settings.local.json"
+    ]
   }
 }

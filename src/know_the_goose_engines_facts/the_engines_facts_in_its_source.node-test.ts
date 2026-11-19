@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, PATH_RESOLVER, SECRET_STORAGE, SHELL_TOOL, SKILLS_SWITCH_READERS, TELEMETRY_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, CHECKOUT_ROOT_CARRIERS, DEVELOPER_DIR, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, PATH_RESOLVER, SECRET_STORAGE, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, TELEMETRY_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -553,5 +553,106 @@ test('a Developer tool listed without its hints, or with a hint that is not Some
     assert.notEqual(broken, text)
     const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: broken }))
     assert.ok(unreadable.some(({ part, why }) => part === partReading('developer_tools') && why.includes(`lists the tool ${first.name} without the hints`)), JSON.stringify(unreadable))
+  }
+})
+
+test('a skill folder the engine adds or renames is read from the engine, not taken from the recording (martha#614)', () => {
+  const roots = RECORDED_FACTS.checkout_skill_roots
+  const [first = '', ...rest] = roots.skill_folders
+  const changed = { ...roots, skill_folders: [`${first}-renamed`, ...rest, '.another/skills'], plugin_folder: `${roots.plugin_folder}-renamed` }
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, checkout_skill_roots: changed })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.checkout_skill_roots, changed)
+})
+
+test('a skill folder the engine reads from the home is never read as one of the checkout\'s (martha#614)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.skill_folders] ?? ''
+  assert.match(text, /dirs::home_dir\(\)/, 'the tree has no home folder, so this test would prove nothing')
+  const { facts } = engineFactsIn(anEngineSourceSaying(files))
+  assert.deepEqual(facts.checkout_skill_roots?.skill_folders, RECORDED_FACTS.checkout_skill_roots.skill_folders)
+})
+
+test('each function that decides a skill root, renamed, makes the skill roots unreadable by name, never a shorter list (martha#614)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const places = { skill_folders: ENGINE_PLACES.skill_folders, plugin_folder: ENGINE_PLACES.plugin_discovery, plugin_settings: ENGINE_PLACES.plugin_discovery }
+  for (const [which, path] of Object.entries(places) as Array<[keyof typeof SKILL_ROOT_READERS, string]>) {
+    const reader = SKILL_ROOT_READERS[which]
+    const renamed = (files[path] ?? '').replace(`fn ${reader}(`, 'fn another_function(')
+    assert.notEqual(renamed, files[path], `${reader} is not in the tree`)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: renamed }))
+    assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'], reader)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(reader), reader)
+  }
+})
+
+test('a skill folder in a shape the reader does not know makes the skill roots unreadable, never a shorter list (martha#614)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.skill_folders
+  const planted = (files[path] ?? '').replace('for path in [\n', 'for path in [\n            wd.join(format!(".{}/skills", name)),\n')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: planted }))
+  assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'])
+  assert.match(unreadable[0]?.why ?? '', /in a shape this reader knows/)
+})
+
+/**
+ * Each place a checkout's root could build a skill folder the reader does not list, planted in the tree: the first is
+ * the one Neptunus planted in the real engine at review (martha#614 r=1), a folder pushed from the working directory
+ * after the list; the others hand the root to a folder the discovery, its settings loader or the plugin skill folders
+ * build beside the ones the reader knows.
+ */
+const ROOTS_PLANTED_UNLISTED = [
+  {
+    what: 'a folder pushed from the working directory after the list',
+    place: ENGINE_PLACES.skill_folders,
+    at: '    dirs.extend(plugin_dirs',
+    planted: '    if let Some(wd) = working_dir {\n        dirs.push(SkillDirectory { path: wd.join(".cursor").join("skills") });\n    }\n',
+    fn: SKILL_ROOT_READERS.skill_folders,
+  },
+  {
+    what: 'a plugin folder the discovery reads from the root beside the project one',
+    place: ENGINE_PLACES.plugin_discovery,
+    at: '        found.extend(list_dir_children(&project_plugins_dir)',
+    planted: '        found.extend(list_dir_children(&root.join(".cursor").join("plugins")).into_iter().map(|(name, root)| DiscoveredPlugin { name, root, scope: PluginScope::Project }));\n',
+    fn: CHECKOUT_ROOT_CARRIERS.plugin_discovery,
+  },
+  {
+    what: 'a settings file the loader reads from the root beside the two',
+    place: ENGINE_PLACES.plugin_discovery,
+    at: '        paths.push((SettingsScope::Local,',
+    planted: '        paths.push((SettingsScope::Local, root.join(".cursor").join("settings.json")));\n',
+    fn: CHECKOUT_ROOT_CARRIERS.plugin_settings,
+  },
+  {
+    what: 'the root handed by the plugin skill folders to something besides the discovery',
+    place: ENGINE_PLACES.plugin_skill_dirs,
+    at: '    let plugins_dir',
+    planted: '    let more = project_root.map(|root| root.join(".cursor"));\n',
+    fn: CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs,
+  },
+] as const
+
+test('a skill folder built from the checkout\'s root anywhere the reader does not list makes the skill roots unreadable by name, never the same list (martha#614 r=1, mutant: a use left uncounted)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  for (const { what, place, at, planted, fn } of ROOTS_PLANTED_UNLISTED) {
+    const text = files[place] ?? ''
+    assert.equal(text.split(at).length, 2, `${what}: the tree has no one place to plant it at, so this case would prove nothing`)
+    const { facts, unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [place]: text.replace(at, `${planted}${at}`) }))
+    assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'], what)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(`${place} uses \\w+ in ${fn} `), what)
+    assert.equal(facts.checkout_skill_roots, undefined, what)
+  }
+})
+
+test('each function that carries the checkout\'s root to the plugin skills, renamed, makes the skill roots unreadable by name (martha#614 r=1)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const places = { plugin_skill_dirs: ENGINE_PLACES.plugin_skill_dirs, plugin_discovery: ENGINE_PLACES.plugin_discovery, plugin_settings: ENGINE_PLACES.plugin_discovery }
+  for (const [which, path] of Object.entries(places) as Array<[keyof typeof CHECKOUT_ROOT_CARRIERS, string]>) {
+    const carrier = CHECKOUT_ROOT_CARRIERS[which]
+    const renamed = (files[path] ?? '').replace(`fn ${carrier}(`, 'fn another_function(')
+    assert.notEqual(renamed, files[path], `${carrier} is not in the tree`)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: renamed }))
+    assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'], carrier)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(carrier), carrier)
   }
 })
