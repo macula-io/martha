@@ -1,7 +1,7 @@
 // The coincidences of keep_the_owners_todo_list: words its own files spell like a constant held elsewhere, meaning something
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { A_DRY_RUN } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 
 /**

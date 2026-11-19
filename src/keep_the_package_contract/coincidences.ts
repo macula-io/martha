@@ -2,7 +2,7 @@
 // something else by them, each with its reason (martha#289, #522). Read by the restated-values check as a syntax tree,
 // never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { LAND } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { KEEP_THE_PACKAGE_CONTRACT } from './keep_the_package_contract.ts'
 

@@ -10,8 +10,8 @@
 // written back as the JSON it already is, with every other key where it was, so a
 // record run reads as the numbers it changed.
 
-import type { Manifest } from '../../prove_the_core/declared_in_package_json.ts'
-import { ceilingsOf, sliceCapOf, sliceCeilingsOf, THE_SLICE_CEILINGS_KEY, withCeilings, withTheMap } from '../../prove_the_core/the_host_ceilings.ts'
+import type { Manifest } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { ceilingsOf, sliceCapOf, sliceCeilingsOf, THE_SLICE_CEILINGS_KEY, withCeilings, withTheMap } from '../../prove_the_core/read_the_manifest_and_the_linter/the_host_ceilings.ts'
 
 /** One ceiling the run brought down. */
 export interface Lowering {

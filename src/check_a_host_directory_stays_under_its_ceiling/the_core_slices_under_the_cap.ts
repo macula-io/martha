@@ -13,8 +13,8 @@
 //
 // The judgement is pure. Which directories are there, and how many lines each holds, is read by judge_the_tree.ts.
 
-import type { Manifest } from '../../prove_the_core/declared_in_package_json.ts'
-import { SLICE_CAP_NAME, SLICE_CEILINGS_NAME } from '../../prove_the_core/the_host_ceilings.ts'
+import type { Manifest } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { SLICE_CAP_NAME, SLICE_CEILINGS_NAME } from '../../prove_the_core/read_the_manifest_and_the_linter/the_host_ceilings.ts'
 import { RECORD_COMMAND } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { declaredDirectoriesOf } from './declared_host_directories.ts'
 import { standsAbove } from './record_the_ceilings.ts'
