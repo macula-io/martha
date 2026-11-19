@@ -514,19 +514,6 @@ function checkoutSkillRootsIn(source: EngineSource): CheckoutSkillRoots {
  */
 const JOINS = '(?:\\.join\\("(?!/)(?:(?!\\.\\.)[^"])+"\\))+'
 
-/**
- * How many times `name` is bound in `body` (the function's own text, spaces kept): by a `let`, inside a pattern such
- * as `Some(…)`, by a `for`, as a closure's parameter, or by an `@`.
- */
-function bindingsOf(body: string, name: string): number {
-  const named = new RegExp(`\\b${name}\\b`)
-  const lets = timesIn(body, `\\blet\\s+(?:mut\\s+)?${name}\\b`)
-  const patterns = timesIn(body, `\\b[A-Z]\\w*\\(\\s*(?:ref\\s+)?(?:mut\\s+)?${name}\\s*\\)`)
-  const fors = [...body.matchAll(/\bfor\s+([^{]*?)\s+in\b/g)].filter((found) => named.test(found[1] ?? '')).length
-  const closures = [...body.matchAll(/\|([^|]*)\|/g)].filter((found) => named.test(found[1] ?? '')).length
-  return lets + patterns + fors + closures + timesIn(body, `\\b${name}\\s*@`)
-}
-
 /** How often `pattern` stands in `text`. */
 const timesIn = (text: string, pattern: string): number => [...text.matchAll(new RegExp(pattern, 'g'))].length
 
@@ -561,8 +548,7 @@ function skillFoldersFromKnownBases(source: EngineSource): void {
   const list = captured(body, /letmut(\w+)=Vec::new\(\);/, `the folders ${fn} gathers`, path)
   const plugins = captured(body, new RegExp(`let(\\w+)=${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}\\(`), `the plugin folders ${fn} takes`, path)
   const home = captured(body, /let(\w+)=dirs::home_dir\(\);/, `the home ${fn} reads`, path)
-  if (timesIn(body, `let(?:mut)?${home}=`) !== 1) throw unknownBase(path, fn, `a ${home} that is not dirs::home_dir()`)
-  const homes = homesBoundOnlyFromTheHome(functionBody(text, fn, path), home, path, fn)
+  const homes = [...body.matchAll(new RegExp(`ifletSome\\((\\w+)\\)=${home}\\.as_ref\\(\\)`, 'g'))].map((found) => found[1] ?? '')
   const rooted = `(?:${[workingDir, ...homes].join('|')})${JOINS}`
   const pushed = `${list}\\.push\\(SkillDirectory\\{`
   const extended = `${list}\\.extend\\(${plugins}\\.(?:iter|into_iter)\\(\\)(?:\\.filter\\(\\|\\(_,\\w+\\)\\|\\*\\w+==PluginScope::\\w+\\))?\\.map\\(\\|\\(path,_\\)\\|SkillDirectory\\{`
@@ -575,26 +561,34 @@ function skillFoldersFromKnownBases(source: EngineSource): void {
   const known = `^(?:path|path\\.clone\\(\\)|${rooted}|Paths::config_dir\\(\\)${JOINS})$`
   const value = values.find((folder) => !new RegExp(known).test(folder))
   if (value !== undefined) throw unknownBase(path, fn, value)
-  const binder = leftOver(body, [`for(\\w+)in\\[`, '\\|\\(path,_\\)\\|SkillDirectory'], '(?:letpath|letmutpath|Some\\(path\\)|\\|path\\||\\|\\(path,|forpathin)')
-  if (binder !== undefined) throw unknownBase(path, fn, binder)
+  const expected = new Map<string, number>()
+  const add = (name: string, times: number): void => void expected.set(name, (expected.get(name) ?? 0) + times)
+  add(home, 1 + homes.length)
+  for (const name of homes) add(name, 1)
+  for (const name of new Set(homes)) add(name, [...lists, ...values].filter((folder) => new RegExp(`^${name}${JOINS}$`).test(folder)).length)
+  add(plugins, 1 + timesIn(body, extended))
+  add('path', values.length + timesIn(body, 'path:path\\b') + timesIn(body, 'forpathin\\[') + timesIn(body, '\\|\\(path,_\\)\\|SkillDirectory\\{path'))
+  everyBaseUseKnown(functionBody(text, fn, path), expected, path, fn)
   const uses = timesIn(functionBody(text, fn, path), `(?<![.\\w])${list}\\b(?!::)`)
   if (uses !== 2 + timesIn(body, pushed) + timesIn(body, extended) || !body.endsWith(list)) throw unknownBase(path, fn, `${list}, used ${String(uses)} times`)
 }
 
 /**
- * The names `if let Some(<name>) = <home>.as_ref()` binds in `text` (the function's own text), once per binding. A name
- * bound any other way as well, by a `let`, a pattern, a `for` or a closure, is a throw naming it (Neptunus on PR 893
- * r=1, plants 06 to 09): a folder joined onto it may come from anywhere, so the home is known by what binds it, never
- * by its name alone.
+ * Each name a folder is built from stands in `text` (the function's own text) exactly as often as the shapes this reader
+ * knows put it there, or the check throws naming it (Neptunus on PR 893 r=2, plants 10 to 14). The names are:
+ * - the home: its `let` and each `if let Some(<h>) = <home>.as_ref()`;
+ * - each such `<h>`: that binding, and each folder joined onto it in a list or a push;
+ * - the plugin folders: their `let` and each recognised `extend`;
+ * - `path`: each SkillDirectory's field, each `path: path…` value, each `for path in [` and each `|(path, _)|` closure.
+ *
+ * The reader does not list the ways Rust can bind a name. A tuple, a match arm, a `ref`, a nested pattern or a slice
+ * each write the name once more, so a binding of any shape is one use too many.
  */
-function homesBoundOnlyFromTheHome(text: string, home: string, path: string, fn: string): string[] {
-  const homes = [...squeezed(text).matchAll(new RegExp(`ifletSome\\((\\w+)\\)=${home}\\.as_ref\\(\\)`, 'g'))].map((found) => found[1] ?? '')
-  for (const name of new Set(homes)) {
-    const bound = bindingsOf(text, name)
-    const fromTheHome = homes.filter((found) => found === name).length
-    if (bound !== fromTheHome) throw unknownBase(path, fn, `${name}, bound ${String(bound)} times where ${home}.as_ref() binds it ${String(fromTheHome)}`)
+function everyBaseUseKnown(text: string, known: ReadonlyMap<string, number>, path: string, fn: string): void {
+  for (const [name, times] of known) {
+    const uses = usesOf(text, name)
+    if (uses !== times) throw unknownBase(path, fn, `${name}, which stands ${String(uses)} times where the shapes this reader knows put it ${String(times)}`)
   }
-  return homes
 }
 
 /** Every plugin `discover_enabled_plugins_with_config` finds is a child of the project or the user plugin folder (martha#614 Done-when 6). */
