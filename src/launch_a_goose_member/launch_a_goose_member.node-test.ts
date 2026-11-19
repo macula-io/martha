@@ -179,10 +179,11 @@ test('a recording that names neither the mode nor the kept extension refuses ins
   assert.throws(() => theConfigOfALaunch(noExtension, A_MODEL), new RegExp(THE_EXTENSION_A_MEMBER_KEEPS))
 })
 
-test('a setting no recording names is refused before it is written, and a recorded setting cannot carry a line break (martha#541, #797)', () => {
-  // A setting's key comes from the member's declaration, and since #797 it is judged against the provider's
-  // recording before any line is written: a key holding a colon is refused as unrecorded, by name. The config's
-  // own word check stays for the keys the launch writes itself, which a model setting can no longer reach.
+test('a key that is not a word cannot start a line of the config of its own, and a value cannot carry a line break (martha#541)', () => {
+  // A setting's key comes from the member's declaration, and a key holding a colon must not start a line. Since
+  // #797 such a key is refused as unrecorded before any line is written, so the case's own words hold through
+  // the allow-list; the config's word check stays for the keys the launch writes itself, which a model setting
+  // can no longer reach.
   assert.throws(
     () => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { 'a key: a value of its own': 'a-value-a-test-names' } }),
     (error: unknown) => error instanceof Error && error.message.includes('a key: a value of its own'),
@@ -190,7 +191,7 @@ test('a setting no recording names is refused before it is written, and a record
   assert.throws(() => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { [aRecordedSetting()]: 'a value\nwith a line of its own' } }), /line break/)
 })
 
-test('a provider setting under the engine\'s own prefix is refused in its own words, so the subagent model cannot be written into the config root (martha#541, #797)', () => {
+test('a provider setting under the engine\'s own prefix is refused, so the subagent model cannot be written into the config root (martha#541)', () => {
   // The engine's own settings carry the prefix of the variable that moves its root, and the subagent model
   // and provider are among them: either one written here would move a delegate's model without Martha naming it.
   // Since #797 the allow-list would refuse this key too, so pinning the key's name alone would leave the prefix
