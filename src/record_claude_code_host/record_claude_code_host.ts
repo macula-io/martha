@@ -33,10 +33,9 @@ import { protectedConfigPlacesIn } from '../cut_the_rules_from_the_host_binary/p
 import { signInStoreVariableIn } from '../cut_the_rules_from_the_host_binary/the_sign_in_store.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { failedAgentsReportIn } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
-import { CARRIED, MEMORY_OFF, memoryOffHoldsOf, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
+import { CARRIED, MEMORY_OFF, RECORDING_OF_THE_HOST, memoryOffHoldsOf, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 import { fileModeGuardCallsIn, managedFolderGuardCallsIn } from './what_the_hosts_guards_call.ts'
 
-const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
 const VERSION = /^\d+\.\d+\.\d+$/
 const CHECK = '--check'
 /** Each part the recorder reads from a host's text, by the name a failed read reports. */
@@ -96,7 +95,7 @@ if (binary === undefined || host_version === undefined || !VERSION.test(host_ver
   exit(2)
 }
 
-const committed = JSON.parse(readFileSync(RECORDING, 'utf8')) as Committed
+const committed = JSON.parse(readFileSync(RECORDING_OF_THE_HOST, 'utf8')) as Committed
 const text = readFileSync(binary, 'latin1')
 const { derived, unreadable } = readHost(text)
 
@@ -114,4 +113,4 @@ if (unreadable.length > 0) {
   exit(1)
 }
 const recorded = recordingFrom(committed, host_version, derived as Derived)
-writeFileSync(RECORDING, `${JSON.stringify(recorded, null, 2)}\n`)
+writeFileSync(RECORDING_OF_THE_HOST, `${JSON.stringify(recorded, null, 2)}\n`)
