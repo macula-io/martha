@@ -67,7 +67,7 @@ interface ACrew {
 }
 
 /** The question the mod puts to the launcher, as a real one does at a turn's end. */
-const questionOf = (turn_id: string): Record<string, unknown> => ({ usage: { context: { percent: 5 }, cost: { usd: 0.1 } }, turn_id, answer: '' })
+const questionOf = (turn_id: string): Record<string, unknown> => ({ usage: { startedAt: 0, context: { percent: 5 }, cost: { usd: 0.1 } }, turn_id, answer: '' })
 
 /** Gives the crew's declaration what the tool reads: this member's own model, and the crew's reviewer model. */
 function declareTheModels(root: string, memberModel: string | null): void {

@@ -944,6 +944,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     documents: places.documents,
     models: places.models ?? NO_MODEL_NAMED,
     ledger: places.ledger,
+    row_model: state.row_model,
     began_at: state.began_at,
     ends: state.ends,
   }
