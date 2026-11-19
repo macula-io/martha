@@ -15,7 +15,7 @@ import { ledgerStreamOf, type LedgerRow } from '../log_ledger/log_ledger.ts'
 import { ASK_QUEUED, ASKS_SETTLED, ASKS_TAKEN, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { landing } from './main.ts'
+import { asked, landing } from './main.ts'
 import type { TheNight } from './the_nights_claims.ts'
 import { IT_LANDED, LANDING_ASKED, OWNER_SAID_YES, whichLandingClaimFails, type TheLandingRecord } from './the_nights_landing.ts'
 
@@ -132,4 +132,19 @@ test('the landing verb reads the rows folder through the store and holds (0), re
   assert.match(refused.err ?? '', new RegExp(`^${LANDING_ASKED}: `))
   assert.equal((await landing(night({ rows_folder: '' }))).code, 2)
   assert.equal((await landing(night({ builder_transcript: join(folder, 'missing.jsonl') }))).code, 2)
+})
+
+test('the asked verb holds (0) once the crew has queued an ask of the owner, refuses (1) before, and could not look (2) at no folder', async (t) => {
+  const folder = mkdtempSync(join(tmpdir(), 'martha-639-asked-'))
+  t.after(() => removeTheTree(folder))
+  const rows = join(folder, 'the-crews-rows')
+  mkdirSync(rows, { mode: 0o700 })
+  const store = rowStreamsDirectory(rows)
+  await store.append(ledgerStreamOf(PACKAGE), theLedger()[0] as unknown as Record<string, unknown>)
+  const before = await asked(rows)
+  assert.equal(before.code, 1, 'a ledger row is not an ask')
+  assert.match(before.err ?? '', /has queued no ask of the owner/)
+  await store.append(OWNER_ASKS_STREAM, (theAsks()[0] as StoredRow).row)
+  assert.deepEqual(await asked(rows), { code: 0 })
+  assert.equal((await asked(join(folder, 'no-such-folder'))).code, 2)
 })
