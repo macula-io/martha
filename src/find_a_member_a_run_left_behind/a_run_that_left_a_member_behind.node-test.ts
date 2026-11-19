@@ -78,7 +78,7 @@ test('a member under the owner\'s own home is the owner\'s crew and is never nam
   } finally {
     // Both of them, the link too: its name is this run's pid, so a run that left it would leave a dangling symlink no
     // later run can know is its own or remove (martha#724). The suite's guard fails a test file that leaves one behind,
-    // by name (prove_the_core/every_test_file_cleans_up.ts).
+    // by name (prove_the_core/a_test_run_ends/every_test_file_cleans_up.ts).
     rmSync(link, { force: true })
     removeTheTree(home)
   }

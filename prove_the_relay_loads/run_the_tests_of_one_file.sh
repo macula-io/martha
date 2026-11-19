@@ -8,7 +8,7 @@
 # drifts the moment either changes (martha#669), with the shape martha#683 exists to stop.
 #
 # This is that run without the copy. Its words are stage 3's own, read from package.json through
-# prove_the_core/the_words_one_run_gets.ts: the program, the output check, the names that command unsets, and its bounds.
+# prove_the_core/a_test_run_ends/the_words_one_run_gets.ts: the program, the output check, the names that command unsets, and its bounds.
 # Only the six globs are replaced, by the files named here. The recorded-host and installer stages do not run: a green
 # run here says nothing about them, and `npm test` is still the gate before a handoff.
 #
@@ -23,7 +23,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
 NAME="run_the_tests_of_one_file"
-THE_READER="./prove_the_core/the_words_one_run_gets.ts"
+THE_READER="./prove_the_core/a_test_run_ends/the_words_one_run_gets.ts"
 cd "${REPO}"
 
 refuse() { echo "${NAME}: ${1}" >&2; exit 2; }
@@ -32,7 +32,7 @@ refuse() { echo "${NAME}: ${1}" >&2; exit 2; }
 # that failed there would hand back no words and the run would go on without what they say. The three things that bound a
 # run come from the one place that defines them, and a read that comes back empty refuses too, rather than running
 # anything unbounded.
-the_bounds="$(node --input-type=module -e "import { FORCE_EXIT_FLAG, GUARD_FLAG, TIMEOUT_FLAG } from './prove_the_core/every_test_run_ends.ts'; console.log(TIMEOUT_FLAG); console.log(FORCE_EXIT_FLAG); console.log(GUARD_FLAG)")" \
+the_bounds="$(node --input-type=module -e "import { FORCE_EXIT_FLAG, GUARD_FLAG, TIMEOUT_FLAG } from './prove_the_core/a_test_run_ends/every_test_run_ends.ts'; console.log(TIMEOUT_FLAG); console.log(FORCE_EXIT_FLAG); console.log(GUARD_FLAG)")" \
   || refuse "every_test_run_ends.ts could not be read for the flags that bound a run"
 mapfile -t THE_BOUNDS <<<"${the_bounds}"
 TIMEOUT_FLAG="${THE_BOUNDS[0]:-}"

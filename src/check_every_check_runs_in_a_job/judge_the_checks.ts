@@ -13,7 +13,7 @@
 // Two jobs may run one check; the check asks whether a check is run, never how often. Stated limits, not read: a job's
 // or step's `if:`, `continue-on-error`, and a check run from inside another script the job calls.
 
-import { WORKFLOW } from '../../prove_the_core/the_installer_jobs_steps.ts'
+import { WORKFLOW } from '../../prove_the_core/the_release_is_proven/the_installer_jobs_steps.ts'
 import type { PullRequestTrigger, Workflow } from './read_a_workflow.ts'
 import type { ExcusedCheck } from './the_exceptions.ts'
 

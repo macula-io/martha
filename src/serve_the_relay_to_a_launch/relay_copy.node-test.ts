@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { COINCIDENCE_FILE, isACoincidenceFile } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
+import { COINCIDENCE_FILE, isACoincidenceFile } from '../../prove_the_core/a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts'
 import { RELAY_PLUGIN_DIR } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
 import { makeRelayDirectory } from './relay_directory.ts'
 import * as relayCopy from './relay_copy.ts'
