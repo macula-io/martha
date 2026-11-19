@@ -257,6 +257,31 @@ const DOOR_GROUPS: Readonly<Record<string, DoorGroup>> = {
 /** A group's commands as one sh script that stops at the first that fails. */
 const asOneScript = (commands: readonly string[]): string => ['set -eu', ...commands, ''].join('\n')
 
+/**
+ * What a launched member's own start is given before its first command ends: the launcher's start, the stand-in's
+ * report of the session start, and the shell around the first command.
+ */
+const THE_MEMBERS_START_BOUND_MS = 50_000
+
+/**
+ * What one command of a launched member is given. This file's members run real git and npm through the launch's git
+ * guard while the whole suite runs on the same machine, so a command's cost is the machine's, not the member's: an
+ * `npm install --offline` was still running 42 s in when the suite's own per-test limit cancelled the test, measured
+ * twice (martha#700). One command gets 75 s, so a group's three keep the room the one-test limit never had.
+ */
+const A_COMMANDS_BOUND_MS = 75_000
+
+/** The clock one launched member's test declares: its own start, and one allowance for each command it runs. */
+const theMembersClock = (commands: readonly string[]): number => THE_MEMBERS_START_BOUND_MS + commands.length * A_COMMANDS_BOUND_MS
+
+/** A place spelled with its names only: a group's commands are counted without building one. */
+const NAMED_PLACES: Places = { home: 'home', checkout: 'checkout', husky: 'husky' }
+
+/** The clock a group's tests declare, from the commands the group runs and whether a direnv adds its own. */
+const theOptionsOf = (group: DoorGroup, direnv: Direnv | undefined): { readonly timeout: number } => ({
+  timeout: theMembersClock(group.commands(NAMED_PLACES, direnv)),
+})
+
 const expectedInControl = (group: DoorGroup, direnv: Direnv | undefined): Door[] =>
   [...group.doors, ...group.also]
     .filter((door) => door !== 'config_hook' || gitRunsConfigHooks())
@@ -282,6 +307,20 @@ const THE_CONTROL_DECLARATION = ['test(`every planted door', ' runs with the own
 
 /** The word a declaration of a launched member carries to give the test its own clock rather than the suite's limit. */
 const THE_CLOCKS_ARE_ASKED_FOR = ['theOptionsOf(', 'group, direnv)'].join('')
+
+test('a launched member\'s clock is its start plus one allowance for each command it runs (martha#700)', () => {
+  assert.equal(theMembersClock([]), THE_MEMBERS_START_BOUND_MS, 'a member that runs no command still gets its start')
+  assert.equal(theMembersClock(['a', 'b']), THE_MEMBERS_START_BOUND_MS + 2 * A_COMMANDS_BOUND_MS, 'and one allowance for each command')
+  assert.ok(
+    theMembersClock(DOOR_GROUPS['npm']!.commands(NAMED_PLACES, undefined)) > theMembersClock(DOOR_GROUPS['the husky checkout']!.commands(NAMED_PLACES, undefined)),
+    'the group that runs more commands is given longer, so the clock follows the commands and is no constant',
+  )
+  assert.equal(
+    theOptionsOf(DOOR_GROUPS['npm']!, undefined).timeout,
+    theMembersClock(DOOR_GROUPS['npm']!.commands(NAMED_PLACES, undefined)),
+    'the clock a group declares is the one its own commands make, never a constant handed to every group',
+  )
+})
 
 test('each test of a launched member declares its own clock, so the suite\'s limit does not cancel it on a loaded machine (martha#700)', () => {
   const typed = theCodeOf(readFileSync(new URL('./run_nothing_a_checkout_planted.node-test.ts', import.meta.url), 'utf8'))
@@ -406,7 +445,7 @@ async function theEndOrTheCancel(t: TestContext, started: MemberStarted & { star
 }
 
 function checkoutTests(direnv: Direnv | undefined, which: string, group: DoorGroup): void {
-  test(`every planted door runs with the owner's own environment (the control; ${which})`, (t) => {
+  test(`every planted door runs with the owner's own environment (the control; ${which})`, theOptionsOf(group, direnv), (t) => {
     const place = fixture(t, direnv)
     const ran = spawnSync('sh', ['-c', asOneScript(group.commands(place, direnv))], { cwd: place.checkout, env: place.owner_env, encoding: 'utf8' })
     assert.equal(ran.status, 0, `the member's commands failed: ${ran.stderr}`)
@@ -417,7 +456,7 @@ function checkoutTests(direnv: Direnv | undefined, which: string, group: DoorGro
     )
   })
 
-  test(`a member the launcher started runs none of them (${which})`, async (t) => {
+  test(`a member the launcher started runs none of them (${which})`, theOptionsOf(group, direnv), async (t) => {
     const place = fixture(t, direnv)
     const closed = (name: string): string => {
       const dir = join(place.home, name)
