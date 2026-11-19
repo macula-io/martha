@@ -755,10 +755,13 @@ member_read() {
   member_read_in "${TRANSCRIPTS}" "$1"
 }
 
-# The member named `name` read from the copy Martha kept of its launch, once the live folder has gone with it: the same
-# files and lines, from KEPT_TRANSCRIPTS (martha#646).
-member_read_kept() {
-  member_read_in "${KEPT_TRANSCRIPTS}" "$1"
+# The member named `name` read from `where` in the container, kept as MEMBER_FILES and MEMBER_TEXT: the read the
+# failure capture and the turn checks do, from the live folder or from the copy Martha kept (martha#646).
+read_member_from() {
+  local where="$1" name="$2" read
+  read="$(member_read_in "${where}" "${name}")" || return 1
+  MEMBER_FILES="$(sed -n 's/^file //p' <<< "${read}")"
+  MEMBER_TEXT="$(sed -n 's/^line //p' <<< "${read}")"
 }
 
 # The member named `name` read from `where` in the container: its session files holding the owner's turn to it, one a
@@ -779,10 +782,13 @@ member_files() {
 
 # The member named `name` read now: its session files, and their text.
 read_member() {
-  local read
-  read="$(member_read "$1")" || return 1
-  MEMBER_FILES="$(sed -n 's/^file //p' <<< "${read}")"
-  MEMBER_TEXT="$(sed -n 's/^line //p' <<< "${read}")"
+  read_member_from "${TRANSCRIPTS}" "$1"
+}
+
+# The member named `name` read from the copy Martha kept of its launch, once the live folder has gone with it: the same
+# files and their text, from KEPT_TRANSCRIPTS (martha#646).
+read_member_kept() {
+  read_member_from "${KEPT_TRANSCRIPTS}" "$1"
 }
 
 # Whether one line of the member's text holds both `first` and `second`.
@@ -902,7 +908,7 @@ keep_what_the_member_did() {
   # that ended is read, never said to be a container that could not give it.
   if read_member "${name}" && [ -n "${MEMBER_TEXT}" ]; then
     text="${MEMBER_TEXT}"
-  elif member_read_kept "${name}" && [ -n "${MEMBER_TEXT}" ]; then
+  elif read_member_kept "${name}" && [ -n "${MEMBER_TEXT}" ]; then
     text="${KEPT_COPY_WORDS}${MEMBER_TEXT}"
   else
     text='(the container could not give it, and no copy of it was kept)'
