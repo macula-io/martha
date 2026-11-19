@@ -43,11 +43,11 @@
 // (`theTextAStartLoads`), as ../inbound_paths' A25 and A26 say. The engine reads the same files again on every model
 // request, so the record is the start's reading of them, not the last word on what the engine attaches.
 //
-// Three gaps are named here rather than closed, and none is silent:
-//   - Skills. On the pinned build `load_skill` is offered to every session and is not a platform
-//     extension, so no switch in this config root reaches it (trial line 9 failed on exactly this).
-//     Saturnus's port of the fork's skills switch (#614) closes it, and until it lands a session is
-//     offered one tool beyond the allow-list, which Martha still gates as a tool call like any other.
+// Skills are off: the config root writes both of the engine's skills switches off, read from the recording
+// (martha#839), so `load_skill` and the compiled-in skills are offered to no session. Turning approved skills
+// on is #614's (DECIDED 2026-11-18 "Approved skills on (Recommended)").
+//
+// Two gaps are named here rather than closed, and neither is silent:
 //   - The member's own tool servers. The design puts them in this config root too, but the shape of an
 //     entry is the engine's own and is not in the recording yet, so the launcher writes the built-in
 //     switches only and writes no server until the package that installs one for Goose records it.

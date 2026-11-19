@@ -38,6 +38,12 @@ export const THE_MODE_THAT_ASKS_THE_CLIENT = 'approve'
  */
 export const SLASH_COMMANDS_OFF = false
 
+/**
+ * What both skills switches are set to (martha#839): each setting offers skills when true and the engine reads an unset
+ * one as true, so a launch writes `false` for both and no skill reaches the model. Approved skills are #614's to turn on.
+ */
+export const SKILLS_OFF = false
+
 /** The config key the engine reads the provider from. */
 export const THE_PROVIDER_SETTING = 'GOOSE_PROVIDER'
 
@@ -113,6 +119,8 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
     // Not the opposite of the engine's default: the setting turns slash commands ON, so off is `false`
     // whether the engine would have them on or off in a config that does not name it.
     aLine(facts.slash_commands.setting, SLASH_COMMANDS_OFF),
+    aLine(facts.skills_advertised.setting, SKILLS_OFF),
+    aLine(facts.builtin_skills_advertised.setting, SKILLS_OFF),
     ...Object.entries(model.settings).map(([setting, value]) => aLine(setting, value)),
     aLine(THE_EXTENSIONS_SETTING, ''),
     ...switches,
