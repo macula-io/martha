@@ -28,8 +28,9 @@ import { hostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
 import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { CREWS_PLACE, CREW_ROWS_PLACE, crewStateDirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { OWNER_ACTS_FILE } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
+import { CREWS_PLACE, CREW_ROWS_PLACE, crewStateDirectory, crewSubdirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { OWNER_ACTS_FILE, whatTheOwnerReadsOf } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
+import { keepTheRoute, THE_ANSWER_ROUTES_PLACE, THE_OWNERS_ANSWERS_FILE } from '../serve_the_owners_answers/the_owners_answer_route.ts'
 import { THE_HANDOVER_WRITTEN, HANDOVERS_PLACE, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { theResumePrompt } from '../wake_a_member/wake_a_member.ts'
 import { notRunningToRestart } from '../stop_and_restart_a_member/restart_a_member.ts'
@@ -329,6 +330,55 @@ test('#765: a log that cannot keep where the act was typed is said, and no listi
   assert.equal(run.status, EXIT_DONE, run.said)
   assert.match(run.said, /The act is made, but where it was typed is not kept: /, run.said)
   assert.ok(!run.said.includes('Your approvals'), `the owner was shown a listing over an act the log does not name: ${run.said}`)
+})
+
+/** Martha's state for `place`, with builder's answer route pointing at a socket nothing serves. */
+function aRouteNothingServes(t: TestContext, place: Place) {
+  const state_root = join(place.home, 'state', STATE_ROOT_NAME)
+  const state = openState(state_root, place.root)
+  assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
+  const routes = crewSubdirectory(state_root, place.root, THE_ANSWER_ROUTES_PLACE)
+  assert.ok(!('refusal' in routes), `the test could not open the routes' place: ${'refusal' in routes ? routes.refusal : ''}`)
+  mkdirSync(routes.path, { recursive: true, mode: 0o700 })
+  keepTheRoute(routes.path, { member: 'builder', socket_path: join(shortRelayRoot(t), 'answers.sock'), pid: process.pid })
+  return state
+}
+
+test('a martha answer its launch refuses keeps its line as typed at the owner\'s terminal, never in the shape of a forged one (#541 9a slice 2, note (a))', (t) => {
+  const place = placeFor(t)
+  // The line is kept, then the launch does not take the answer.
+  const state = aRouteNothingServes(t, place)
+  const run = marthaOnATerminal(place, {}, 'answer', 'builder', 'permission:call-1', 'allow')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.match(run.said, /builder's launch did not take the answer/, run.said)
+  // A member's shell, writing the record itself: no martha command, so no entry in the log names its line.
+  appendFileSync(join(state.directory, THE_OWNERS_ANSWERS_FILE), `${JSON.stringify({ act: 'a-forged-act', member: 'builder', key: 'permission:call-1', answer: 'allow', at: '2026-11-19T00:00:00.000Z' })}\n`)
+  const read = whatTheOwnerReadsOf({ state, root: place.root }, 'answer', undefined)
+  assert.match(read.join('\n'), /line 1: typed at \/dev\/pts\/\d+ \(session \d+\)/, read.join('\n'))
+  assert.match(read.join('\n'), /line 2: WRITTEN WITHOUT THE MARTHA COMMAND/, read.join('\n'))
+})
+
+test('a refused act whose line is kept, with a log that cannot keep where it was typed, says the act was refused, never that it was made (#541 9a slice 2)', (t) => {
+  const place = placeFor(t)
+  const state = aRouteNothingServes(t, place)
+  // A directory where the log's file belongs: nothing can be appended to it.
+  mkdirSync(join(state.directory, OWNER_ACTS_FILE))
+  const run = marthaOnATerminal(place, {}, 'answer', 'builder', 'permission:call-1', 'allow')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.match(run.said, /The act ended refused, after its record kept a line, but where it was typed is not kept: /, run.said)
+  assert.ok(!run.said.includes('The act is made'), run.said)
+})
+
+test('an approve the owner refuses shows no listing of the approvals already kept (#541 9a slice 2; mutant: the listing after any act)', (t) => {
+  const place = placeFor(t)
+  writeFileSync(join(place.root, '.mcp.json'), JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@1.0.0'] } } }))
+  const approved = marthaOnATerminalTyping('yes\n', place, {}, 'approve')
+  assert.equal(approved.status, EXIT_DONE, approved.said)
+  assert.ok(approved.said.includes('Your approvals'), `the first approve showed no listing, so its absence below proves nothing: ${approved.said}`)
+  writeFileSync(join(place.root, '.mcp.json'), JSON.stringify({ mcpServers: { probe: { command: 'npx', args: ['-y', 'a-probe-server@2.0.0'] } } }))
+  const refusedOne = marthaOnATerminalTyping('no\n', place, {}, 'approve')
+  assert.equal(refusedOne.status, EXIT_REFUSED, refusedOne.said)
+  assert.ok(!refusedOne.said.includes('Your approvals'), `a refused approve showed the listing: ${refusedOne.said}`)
 })
 
 test('martha --version prints the version package.json carries, and nothing else', (t) => {
