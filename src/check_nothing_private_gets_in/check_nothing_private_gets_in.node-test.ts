@@ -216,6 +216,22 @@ for (const prefix of GITHUB_TOKEN_PREFIXES) {
   })
 }
 
+// GitHub's own token kinds, as its documentation names them, stated here rather than read from the class's list, so
+// a prefix dropped from that list fails by the kind it leaves out instead of taking its own test with it.
+const GITHUBS_TOKEN_KINDS: readonly { readonly kind: string; readonly prefix: string }[] = [
+  { kind: 'a personal access token (classic)', prefix: 'ghp_' },
+  { kind: 'an OAuth access token', prefix: 'gho_' },
+  { kind: 'a user-to-server token', prefix: 'ghu_' },
+  { kind: 'a server-to-server token', prefix: 'ghs_' },
+  { kind: 'a refresh token', prefix: 'ghr_' },
+  { kind: 'a fine-grained personal access token', prefix: 'github_pat_' },
+]
+test('every kind of GitHub token is refused by the scan (martha#904)', async () => {
+  for (const { kind, prefix } of GITHUBS_TOKEN_KINDS) {
+    assert.deepEqual(await hitsOf(`token: ${drawnToken(prefix)}`), [`${TOKEN_CLASS} (value withheld)`], kind)
+  }
+})
+
 test('a word that only starts like a GitHub token is not one: its body is shorter than a token\'s (martha#904)', async () => {
   for (const prefix of GITHUB_TOKEN_PREFIXES) {
     const body = randomBytes(TOKEN_BODY_CHARACTERS).toString('hex').slice(0, TOKEN_BODY_CHARACTERS - 1)
