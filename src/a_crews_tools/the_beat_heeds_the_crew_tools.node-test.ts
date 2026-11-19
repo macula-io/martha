@@ -11,7 +11,7 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
 import type { ServedToolsHeld } from '../host_contract/host_contract.ts'
 import { theOwedLineAtStart, type TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
-import { CREW_TOOLS_STREAM } from '../keep_a_members_crew_tools_window/keep_a_members_crew_tools_window.ts'
+import { CREW_TOOLS_STREAM, SAME_SESSION, theOwedLineOf, type ACrewToolsWindow } from '../keep_a_members_crew_tools_window/keep_a_members_crew_tools_window.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
@@ -122,7 +122,7 @@ test('a session that starts while its member\'s window is open is handed the owe
   assert.equal(handed.line.split('\n\n').at(-1), owed)
 })
 
-test('the owed line rides only the report: a turn\'s answer is still the act alone (martha#658)', async (t) => {
+test('the owed line rides only the report: a turn\'s answer is still the act alone, and the next report carries it once (martha#658)', async (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] })
   const member = aWatchedMember(t)
   await member.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 1, of: 3 }, SESSION)
@@ -139,4 +139,15 @@ test('the owed line rides only the report: a turn\'s answer is still the act alo
   const text = 'answer' in said ? said.answer : said.refused
   assert.ok(!text.includes('You owe one'), `the owed line did not ride the turn's answer: ${text}`)
   if ('answer' in said) assert.doesNotThrow(() => JSON.parse(said.answer), `the turn's answer is still the act alone: ${said.answer}`)
+  // The window closed by the same session, as the stream keeps it: the line the report must hand is made from it.
+  const closed = (await member.places.ledger.stores.rows.read(CREW_TOOLS_STREAM)).map(({ row }) => row as unknown as ACrewToolsWindow).at(-1)
+  assert.equal(closed?.closed_by, SAME_SESSION, 'the beat closed the window by the same session')
+  const owed = theOwedLineOf(closed!)
+  // Through the crew tools' own report call, so the composition site in a_crews_tools.ts is what is proven.
+  const reported = await member.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 2, of: 3 }, SESSION)
+  assert.ok('answer' in reported, JSON.stringify(reported))
+  assert.equal(reported.answer.split('\n\n').at(-1), owed, 'the returning session was not told what it owes')
+  assert.equal(reported.answer.split(owed).length - 1, 1, 'the line was told more than once in one answer')
+  const again = await member.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 3, of: 3 }, SESSION)
+  assert.ok('answer' in again && !again.answer.includes(owed), `the line was told twice: ${JSON.stringify(again)}`)
 })

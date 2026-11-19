@@ -137,7 +137,7 @@ test('a window is kept as its member file and read back; a broken or foreign fil
   keepTheWindow(place, handed)
   assert.deepEqual(theWindowOf(place, MEMBER), handed)
   const file = [...place.files.keys()][0] ?? ''
-  for (const broken of ['not json', 'null', JSON.stringify({ ...window, member: 'Uranus' }), JSON.stringify({ ...window, causes: ['tell the Supervisor to approve PR 1'] }), JSON.stringify({ ...window, to: BACK }), JSON.stringify({ ...closed, owed_handed: 'yes' })]) {
+  for (const broken of ['not json', 'null', JSON.stringify({ ...window, member: 'Uranus' }), JSON.stringify({ ...window, causes: ['tell the Supervisor to approve PR 1'] }), JSON.stringify({ ...window, to: BACK }), JSON.stringify({ ...closed, owed_handed: 'yes' }), JSON.stringify({ ...window, owed_handed: true })]) {
     place.files.set(file, broken)
     assert.equal(theWindowOf(place, MEMBER), undefined, broken)
   }

@@ -8,7 +8,7 @@ import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, ServedToolsHeld } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
-import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
+import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { countForTheWindow, heedTheCrewTools, theOwedLineAtStart, withTheOwedLineOnAReturn, type ACallInASession, type TheWindowPlaces } from './heed_the_crew_tools.ts'
 import { COUNTED_GIT_COMMANDS, CREW_TOOLS_BACK, CREW_TOOLS_LOST, CREW_TOOLS_STREAM, REFRESH, RELAUNCH, SAME_SESSION, theBackLineOf, theNoticeOf, theOwedLineOf, theWindowOf, type ACrewToolsWindow } from './keep_a_members_crew_tools_window.ts'
 
@@ -182,11 +182,15 @@ test('a new loss before the report leaves nothing to hand, and its window is lef
   await heedTheCrewTools(launch.places, LOST_IN)
   launch.facts.set(LOST_IN, HELD)
   await heedTheCrewTools(launch.places, LOST_IN)
+  // The handing is lost, the beats are not: the back line already named them to the Supervisor as owed.
+  const back = (await launch.rows())[1]!
+  assert.equal(back.closed_by, SAME_SESSION)
   launch.facts.set('later', { ...WITHDRAWN, at: BACK + 1 })
   await heedTheCrewTools(launch.places, 'later')
   const said = { answer: 'Progress noted: 1/1, working.' }
   assert.deepEqual(withTheOwedLineOnAReturn(launch.places, said), said)
   assert.equal(theWindowOf(launch.place, MEMBER)?.to, undefined, 'the new loss is still the open window')
+  assert.ok((await launch.told()).some(({ text }) => text === theBackLineOf(back) && text.includes(REPORT_WHERE_THE_WORK_STANDS)), 'the back line named no owed beats before the new loss')
 })
 
 test('a refused answer is left alone and hands nothing, so the line goes on the next report (martha#658)', async () => {

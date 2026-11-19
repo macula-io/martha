@@ -201,7 +201,8 @@ const isTheOpening = (w: Record<string, unknown>): boolean =>
 /** Whether a kept window's closing fields read: both absent while it is open, both present once it closed. */
 const isTheClosing = (w: Record<string, unknown>): boolean =>
   (w['to'] === undefined ? w['closed_by'] === undefined : isCount(w['to']) && CLOSED_BY.includes(w['closed_by'] as ClosedBy)) &&
-  (w['owed_handed'] === undefined || w['owed_handed'] === true)
+  // The mark is the report's, written on a closed window only: on an open one it is no window this writer made.
+  (w['owed_handed'] === undefined || (w['owed_handed'] === true && w['to'] !== undefined))
 
 /** The member's window, as its file in the place holds it; undefined when it has none or the file is not one. */
 export function theWindowOf(place: CrewPlace, member: string): ACrewToolsWindow | undefined {
