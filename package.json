@@ -28,6 +28,7 @@
     "check:workspace-layout": "node src/check_the_workspace_layout/main.ts",
     "check:pictures": "node src/check_the_pictures_change_with_the_version/main.ts",
     "check:every-check-runs-in-a-job": "node src/check_every_check_runs_in_a_job/main.ts",
+    "check:trial-evidence": "node trial_the_goose_host/the_evidence_it_keeps/check_the_trial_evidence.ts",
     "probe:launch": "node src/probe_launch_hosts/probe_hosts.ts",
     "live-run:guards": "node src/land_a_package_on_a_throwaway_repository/main.ts",
     "record:mesh-tools": "node src/record_mesh_server_tools/record_mesh_server_tools.ts",
