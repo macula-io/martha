@@ -15,7 +15,7 @@
 // the member ends, and ends the way the member did; a restart asked of it starts it again on the same terminal. Exit 0 is done, 1 refused, 2 not a way the command is used.
 
 import { spawnSync, type StdioOptions } from 'node:child_process'
-import { readFileSync, realpathSync } from 'node:fs'
+import { readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { constants } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -36,7 +36,10 @@ import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, read
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
-import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { rowStreamsDirectory, streamOfDirectoryName } from '../row_streams_directory/row_streams_directory.ts'
+import { aWeekOfTheLedger, theLinesOf, theWeekOf } from '../a_week_of_the_ledger/a_week_of_the_ledger.ts'
+import { LEDGER_STREAM_PREFIX, readLedger, thePackageOfLedgerStream, type LedgerHost } from '../log_ledger/log_ledger.ts'
+import { OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { wakeAMember } from '../wake_a_member/wake_a_member.ts'
@@ -69,7 +72,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew | martha week [<YYYY-Www>] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -345,6 +348,54 @@ async function release(io: CommandIo, places: Places, member: string): Promise<n
  * member's, typed at the owner's terminal. The act is ../ring_the_owner's; this hands it the crew's own place and tells
  * the owner its answer.
  */
+/** The streams a crew's rows directory keeps, by the name each is a stream of. */
+function streamsUnder(directory: string): readonly string[] {
+  return readdirSync(directory).flatMap((name) => {
+    const stream = streamOfDirectoryName(name)
+    return stream === undefined ? [] : [stream]
+  })
+}
+
+/** What one stream of a crew's ledger rows came to: the package it is read as, or why it was not read as one. */
+type AReadLedger = { readonly package: string; readonly rows: Awaited<ReturnType<typeof readLedger>> }
+
+/** Every package's ledger under a crew's rows directory, and the streams that are no package's ledger, named. */
+async function theLedgersUnder(directory: string, host: LedgerHost): Promise<{ readonly ledgers: readonly AReadLedger[]; readonly skipped: readonly string[] }> {
+  const ledgers: AReadLedger[] = []
+  const skipped: string[] = []
+  for (const stream of streamsUnder(directory)) {
+    if (!stream.startsWith(LEDGER_STREAM_PREFIX)) continue
+    const package_name = thePackageOfLedgerStream(stream)
+    if (package_name === undefined) {
+      skipped.push(`${stream} (not a package name)`)
+      continue
+    }
+    try {
+      ledgers.push({ package: package_name, rows: await readLedger(host, package_name) })
+    } catch (error) {
+      skipped.push(`${stream} (could not be read: ${error instanceof Error ? error.message : String(error)})`)
+    }
+  }
+  return { ledgers, skipped }
+}
+
+/**
+ * `martha week [YYYY-Www]` (martha#308): one ISO week read from the crew's ledger rows and its ask queue — what the
+ * week cost in work, each package's cycle and rework, and how long it waited on the owner. It reads and writes no row;
+ * the week nobody names is the one the clock says, and that is the one place this reads a clock.
+ */
+async function week(io: CommandIo, places: Places, asked: Asked): Promise<number> {
+  const rows = crewRowsDirectory(places.state.state_root, places.root)
+  if ('refusal' in rows) return refused(io, rows.refusal)
+  const host: LedgerHost = { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(rows.path) } }
+  const { ledgers, skipped } = await theLedgersUnder(rows.path, host)
+  const asks = await host.stores.rows.read(OWNER_ASKS_STREAM)
+  const answer = aWeekOfTheLedger({ week: asked.args[0] ?? theWeekOf(Date.now()), ledgers, asks, skipped })
+  if ('refused' in answer) return refused(io, answer.refused)
+  for (const line of theLinesOf(answer.week)) io.out(line)
+  return EXIT_DONE
+}
+
 async function bells(io: CommandIo, places: Places, asked: Asked): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
@@ -441,6 +492,13 @@ export function actOf(argv: readonly string[]): Asked | undefined {
   return parse === undefined ? undefined : parse(act, argv)
 }
 
+/** `week [YYYY-Www]`: no week, or one named, and no switch. */
+function weekOf(act: string, argv: readonly string[]): Asked | undefined {
+  const [, named] = argv
+  if (argv.length === 1) return { act, args: [] }
+  return argv.length === 2 && named !== undefined && named !== '' && !named.startsWith('-') ? { act, args: [named] } : undefined
+}
+
 /** `install [<version>] [<switches>]`: the words, passed on unchanged, when the installer is asked a way it knows. */
 const installOf = (act: string, argv: readonly string[]): Asked | undefined => (installWordsAreAWay(argv.slice(1)) ? { act, args: argv.slice(1) } : undefined)
 
@@ -449,6 +507,7 @@ export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: read
   install: installOf,
   gate: gateOf,
   bells: bellsOf,
+  week: weekOf,
   [STOP]: stopOf,
   [RESTART]: restartOf,
   start: startOf,
@@ -605,6 +664,7 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   bells: (io, places, asked) => bells(io, places, asked),
   ls: (io, places) => ls(io, places),
   crew: (io, places) => crew(io, places),
+  week: (io, places, asked) => week(io, places, asked),
   [STOP]: (io, places, asked) => stop(io, places, asked.member),
   [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),
 }
