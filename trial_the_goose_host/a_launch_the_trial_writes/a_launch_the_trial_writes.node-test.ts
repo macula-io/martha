@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { aPlaceFor, BUILTIN_SKILLS_OFF, CHECKOUT_SKILLS_ON, theSkillsLinesIn, writeTheConfig } from './a_launch_the_trial_writes.ts'
+import { aPlaceFor, theSkillsLinesIn, writeTheConfig } from './a_launch_the_trial_writes.ts'
 import { ENGINE_PLACES, SKILLS_SWITCH_READERS } from '../../src/know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
@@ -109,8 +109,6 @@ test("the launch writes the skills switch on and the built-ins switch off, under
       assert.match(text, /^GOOSE_SLASH_COMMANDS_ENABLED: false$/m, 'and the rest of the root is written as before')
     }
   }
-  assert.equal(CHECKOUT_SKILLS_ON, true, "the switch offers the checkout's skills when true")
-  assert.equal(BUILTIN_SKILLS_OFF, false, 'the switch offers the built-ins when true, so off is false')
 })
 
 test('an engine that drops either skills switch is refused by that part\'s name, never launched with the other alone (martha#614)', () => {

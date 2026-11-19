@@ -10,6 +10,7 @@ import { basename, dirname, join } from 'node:path'
 
 import { RECORDED_GOOSE_ENGINE } from '../../src/know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { engineFactsIn } from '../../src/know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
+import { BUILTIN_SKILLS_OFF, CHECKOUT_SKILLS_ON } from '../../src/derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { anEngineCheckoutOnDisk } from '../../src/record_the_goose_engine/an_engine_checkout_on_disk.ts'
 
 /** Where one line of the trial runs: the owner's stand-in home, and the three places Goose gets. */
@@ -204,11 +205,6 @@ function extensionsYaml(gooseSource: string): string {
 /** The two skills parts of the engine's facts the trial's config root writes (martha#614). */
 const THE_SKILLS_PARTS = { skills_advertised: 'skills switch', builtin_skills_advertised: 'built-in skills switch' } as const
 
-/** The approved checkout's skills reach the model: the engine's skills switch is written on, never left to its default. */
-export const CHECKOUT_SKILLS_ON = true
-
-/** The engine's compiled-in skills reach no model: its built-ins switch is written off (DECIDED 2026-11-18). */
-export const BUILTIN_SKILLS_OFF = false
 
 /**
  * The config root's skills lines (martha#614, DECIDED 2026-11-18 "Approved skills on" and "Switch built-ins off"): the

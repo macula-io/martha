@@ -47,9 +47,9 @@
 // (`theTextAStartLoads`), as ../inbound_paths' A25 and A26 say. The engine reads the same files again on every model
 // request, so the record is the start's reading of them, not the last word on what the engine attaches.
 //
-// Skills are off: the config root writes both of the engine's skills switches off, read from the recording
-// (martha#839), so `load_skill` and the compiled-in skills are offered to no session. Turning approved skills
-// on is #614's (DECIDED 2026-11-18 "Approved skills on (Recommended)").
+// Approved skills are on (martha#614, DECIDED 2026-11-18 "Approved skills on (Recommended)" and "Switch built-ins off
+// (Recommended)"): the config root writes the engine's skills switch on and its built-ins switch off, both read from
+// the recording, so `load_skill` offers the skills of the checkout the launch gate approved and no compiled-in one.
 //
 // One gap is named here rather than closed, and it is not silent:
 //   - The mode a session reports back. The launcher pins the mode that asks in the config root, but the

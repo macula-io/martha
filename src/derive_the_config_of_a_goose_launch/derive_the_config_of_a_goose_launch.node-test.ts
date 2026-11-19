@@ -11,7 +11,7 @@ import { test } from 'node:test'
 
 import { ENGINE_PLACES } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { SKILLS_OFF, theConfigOfALaunch, theServersAConfigNames, THE_EXTENSIONS_SETTING, type AToolServerTheConfigNames, type TheModelALaunchRuns } from './derive_the_config_of_a_goose_launch.ts'
+import { BUILTIN_SKILLS_OFF, CHECKOUT_SKILLS_ON, theConfigOfALaunch, theServersAConfigNames, THE_EXTENSIONS_SETTING, type AToolServerTheConfigNames, type TheModelALaunchRuns } from './derive_the_config_of_a_goose_launch.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 
@@ -89,17 +89,19 @@ test('a recorded setting whose value carries a line break is refused (martha#797
   refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [aRecordedSetting()]: 'a value\nwith a line of its own' }), A_SERVER), ['line break'])
 })
 
-test('both skills switches are written off by the names the recording gives them, whatever the engine does when they are unset (martha#839; mutants: either line dropped)', () => {
-  const switches = [FACTS.skills_advertised.setting, FACTS.builtin_skills_advertised.setting]
-  assert.notEqual(switches[0], switches[1], 'the two switches are one setting, so one line would pass for both')
+test("the skills switch is written on and the built-ins switch off, by the recording's names, whatever the engine does when they are unset (martha#614; mutants: either line dropped or flipped)", () => {
+  const skills = FACTS.skills_advertised.setting
+  const builtins = FACTS.builtin_skills_advertised.setting
+  assert.notEqual(skills, builtins, 'the two switches are one setting, so one line would pass for both')
   for (const when_unset of [true, false]) {
     const facts = { ...FACTS, skills_advertised: { ...FACTS.skills_advertised, when_unset }, builtin_skills_advertised: { ...FACTS.builtin_skills_advertised, when_unset } }
     const lines = theConfigOfALaunch(facts, aDeclaration({}), A_SERVER).split('\n')
-    for (const setting of switches) {
-      assert.deepEqual(lines.filter((line) => line.startsWith(`${setting}:`)), [`${setting}: ${String(SKILLS_OFF)}`], `${setting} with the engine's default ${String(when_unset)}`)
-    }
+    const said = `with the engine's default ${String(when_unset)}`
+    assert.deepEqual(lines.filter((line) => line.startsWith(`${skills}:`)), [`${skills}: true`], `${skills} ${said}`)
+    assert.deepEqual(lines.filter((line) => line.startsWith(`${builtins}:`)), [`${builtins}: false`], `${builtins} ${said}`)
   }
-  assert.equal(SKILLS_OFF, false, 'the switches offer skills when true, so off is false')
+  assert.equal(CHECKOUT_SKILLS_ON, true, "the switch offers the approved checkout's skills when true (DECIDED 2026-11-18 \"Approved skills on\")")
+  assert.equal(BUILTIN_SKILLS_OFF, false, 'the switch offers the built-ins when true, so off is false (DECIDED 2026-11-18 "Switch built-ins off")')
 })
 
 test('the servers a config root names are read back from its text: the one it was written with, and every key under extensions that is no platform extension (martha#541 C1 R1; mutant: the reader skips a key)', () => {
