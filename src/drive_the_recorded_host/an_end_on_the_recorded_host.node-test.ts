@@ -16,6 +16,11 @@
 // waits for that record and fails by name without it. The planted late end — an end ordered after the tool finished,
 // where the record is missing — needs no host, so it is the second `#498` case in
 // ../answer_the_relay/the_relay_holds_the_end_of_a_turn.node-test.ts rather than a case of this file.
+//
+// That named failure still turned the relay job red on a slow runner (martha#891, run 44598893743): the long tool slept
+// a fixed 150 s, and the second beat came after it. So the tool no longer sleeps a fixed time: it runs until the run has
+// seen the end ordered on disk, up to a bound, and the race is gone at its source. A run that can judge and finds the
+// wrong order still fails on the ordering assertion; a run whose end never came within the bound still fails by name.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -27,7 +32,7 @@ import { test, type TestContext } from 'node:test'
 import { REFRESH_THIS_SESSION } from '../a_crews_tools/a_crews_tools.ts'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, HANDOVER_CEILING_MINUTES_LEAST } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, HANDOVER_CEILING_MINUTES_LEAST, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { whyTheOrderCannotBeJudged } from '../end_a_running_turn/the_end_rode_on_a_call.ts'
 import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
@@ -46,22 +51,35 @@ const SETTINGS = JSON.stringify({ permissions: { defaultMode: 'default', allow: 
 const GIT_NAME = 'martha-test'
 const GIT_EMAIL = 'martha-test@example.invalid'
 /**
- * A long tool: a process still running when the second beat orders the end, and done well inside the shell tool's own
- * limit. Not a bare `sleep`, which the host refuses to run in the foreground and answers at once, so the turn never
- * waits. The turn would go on after it; only an end carried in that tool's after-hook stops it there.
+ * How long the long tool waits at most for the end to be ordered (martha#891). It no longer sleeps a fixed time the
+ * runner's speed could outlast — run 44598893743's second beat came after a fixed 150 s had already run out — but
+ * until the run has seen the end ordered, so on any runner the end is ordered while the tool still runs. This bound
+ * only ends a run whose end never came, and that run then fails by name as one that cannot judge the order.
  */
-const THE_LONG_TOOL = 'node -e "setTimeout(() => {}, 150000)"'
-/** The shell tool's own limit for that call, above the wait, so the tool finishes by itself. */
+const THE_LONG_TOOLS_BOUND_MS = 420_000
+/** How often the run looks for the ordered end, and the tool for the run's word that it came. */
+const A_LOOK_MS = 250
+/**
+ * A long tool: a process still running when a beat orders the end, ending once `marker` exists (the run writes it when
+ * it sees the end ordered) or at its bound, well inside the shell tool's own limit. Not a bare `sleep`, which the host
+ * refuses to run in the foreground and answers at once, so the turn never waits. The turn would go on after it; only
+ * an end carried in that tool's after-hook stops it there.
+ */
+const theLongTool = (marker: string): string =>
+  `node -e "const fs = require('fs'); const until = Date.now() + ${String(THE_LONG_TOOLS_BOUND_MS)}; const look = setInterval(() => { if (fs.existsSync(process.argv[1]) || Date.now() > until) clearInterval(look) }, ${String(A_LOOK_MS)})" ${marker}`
+/** The file the run writes once it has seen the end ordered, which ends the long tool. */
+const THE_END_WAS_ORDERED = 'the-end-was-ordered'
+/** The shell tool's own limit for that call, above the tool's bound, so the tool finishes by itself. */
 const THE_SHELL_LIMIT_MS = 600_000
 /** The message that waits in the crew channel for the member to be idle. */
 const THE_WAITING_MESSAGE = 'A message that waited in the crew channel while the long turn ran.'
 /** The first sentence of the handover prompt a refresh someone asked for submits: how a request is known to carry it. */
 const THE_HANDOVER_ASK = theHandoverPrompt({ at_limit: false, percent: 0 }).split('.')[0] ?? ''
 /**
- * How long the host may show nothing new: the turn sleeps while the mod's beats come a minute apart, and the end
- * comes on the second beat at the earliest, so the run waits well past that before calling the host silent.
+ * How long the host may show nothing new: the turn waits in its long tool while the mod's beats come a minute apart, so
+ * the run waits a beat past the tool's own bound before calling the host silent.
  */
-const END_SILENCE_MS = 240_000
+const END_SILENCE_MS = THE_LONG_TOOLS_BOUND_MS + MINUTE_MS
 const END = { text: 'Done.' }
 /**
  * The request whose turn runs the long tool (martha#498): the end has to ride that call's own answer for the order of
@@ -124,6 +142,35 @@ function theCrewsRefreshes(project: Project) {
   return place
 }
 
+/**
+ * Whether the launcher has ordered the end: the flow on disk holds the pending end. The launcher keeps that flow and
+ * takes the hold in one synchronous step (announceTheEnd in ../end_a_running_turn/end_the_running_turn.ts), so once a
+ * run reads it here, the tool's answer that comes after is the one the end rides (martha#891).
+ */
+function theEndIsOrdered(project: Project): boolean {
+  try {
+    const flow = theFlowOf(theCrewsRefreshes(project), MEMBER)
+    return flow !== undefined && !('refusal' in flow) && flow.ending !== undefined
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Writes `marker` once the end is ordered, which ends the long tool: so the end is always ordered while that tool runs,
+ * however slow the runner. Stopped by the function returned, and by the test's end.
+ */
+function endTheLongToolOnceTheEndIsOrdered(t: TestContext, project: Project, marker: string): () => void {
+  const look = setInterval(() => {
+    if (!theEndIsOrdered(project)) return
+    writeFileSync(marker, '')
+    clearInterval(look)
+  }, A_LOOK_MS)
+  const stop = (): void => clearInterval(look)
+  t.after(stop)
+  return stop
+}
+
 /** The text a request carried to the model. */
 const whatTheModelSaw = (request: ModelRequest): string => JSON.stringify(request.body['messages'] ?? null)
 
@@ -167,6 +214,8 @@ function theEndRodeTheCallsAnswer(t: TestContext, run: Project, call: string): v
 test('an end ordered while a long tool runs is carried after that tool\'s report: the member is not stopped, and the handover runs next', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProjectWithTheLeastCeiling(t)
   const streams = theCrewsStreams(project)
+  const theEndWasOrdered = join(project.home, THE_END_WAS_ORDERED)
+  const stopLooking = endTheLongToolOnceTheEndIsOrdered(t, project, theEndWasOrdered)
   const run = async () =>
     await driveTheRecordedHost({
       claude: recordedHost(),
@@ -181,12 +230,12 @@ test('an end ordered while a long tool runs is carried after that tool\'s report
         if (number === 1) return { tool: `mcp__martha__${REFRESH_THIS_SESSION}`, input: { reason: 'the test moves this member off its context' } }
         if (number !== THE_LONG_TOOLS_REQUEST) return END
         await appendToTheChannel(streams, { from: 'the-owner', to: [MEMBER], text: THE_WAITING_MESSAGE, sent_at: Date.now() })
-        return { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: THE_LONG_TOOL, description: 'a tool still running when the end is ordered', timeout: THE_SHELL_LIMIT_MS } }
+        return { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: theLongTool(theEndWasOrdered), description: 'a tool still running when the end is ordered', timeout: THE_SHELL_LIMIT_MS } }
       },
     })
   const ran = await run().catch((error: unknown) => {
     throw new Error(`the run did not end as a member does: ${String(error).split('\n')[0]}`, { cause: whatTheLaunchSaw(error) })
-  })
+  }).finally(stopLooking)
   const { requests, shown } = ran
   // A member the after-tool gate stopped ends on SIGKILL; one that was handed over ends on the owner's /exit.
   assert.equal(ran.exit_code, 0, `the member did not end as the owner ended it, so something stopped it:\n${plainTextOf(shown).slice(-3000)}`)
