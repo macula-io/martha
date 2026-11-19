@@ -5,17 +5,23 @@
 // are slow on purpose, so the bound is held on an idle machine too.
 
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 import { test } from 'node:test'
 
-import type { ASwitchLock, TheOwnersSettingsStore } from '../host_contract/host_contract.ts'
+import type { ASwitchLock, TheOwnersSettingsRead, TheOwnersSettingsStore } from '../host_contract/host_contract.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { theSaveInTheFile, THE_SAVE_STEP_MS, THE_SAVE_WAIT_MS, type AGuardedSwitch, type OwnersDefaultPlace } from './put_the_owners_model_back.ts'
-import { snapshotOf, type TheOwnersSettingsRead } from './the_owners_settings_file.ts'
+import { snapshotOf } from './the_owners_settings_file.ts'
 
 /** What one look at the owner's file costs on a loaded machine: a read that is slow, and that never shows a save. */
 const A_SLOW_LOOK_MS = 30
 
 const THE_OWNERS_SETTINGS = { env: { MARTHA_TEST: '1' }, model: 'sonnet' }
 const THE_BYTES = new TextEncoder().encode(`${JSON.stringify(THE_OWNERS_SETTINGS, null, 2)}\n`)
+
+/** The owner's config folder, and their settings file in it: a place of the test's own, spelled by the host's own name. */
+const THE_OWNERS_CONFIG = '/the/owner'
+const THE_OWNERS_FILE = join(THE_OWNERS_CONFIG, USER_SETTINGS_FILE)
 
 /** One look at the owner's file, as slow as a loaded machine makes it, answering the same bytes every time. */
 const aSlowLook = (): TheOwnersSettingsRead => {
@@ -32,7 +38,7 @@ const theOwnersFile: TheOwnersSettingsStore = {
 }
 
 test('the wait for the host\'s save ends within its bound, however slow a look at the file is (martha#836)', async () => {
-  const place: OwnersDefaultPlace = { store: theOwnersFile, file: '/the/owner/settings.json', config_dir: '/the/owner' }
+  const place: OwnersDefaultPlace = { store: theOwnersFile, file: THE_OWNERS_FILE, config_dir: THE_OWNERS_CONFIG }
   const read = snapshotOf(aSlowLook())
   if ('refusal' in read) assert.fail(read.refusal)
   const guarded: AGuardedSwitch = {
