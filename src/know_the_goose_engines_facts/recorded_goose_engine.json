@@ -115,5 +115,14 @@
   "subagent_models": {
     "kind": "any_name",
     "names": []
+  },
+  "hint_files": {
+    "setting": "CONTEXT_FILE_NAMES",
+    "goose_hints": ".goosehints",
+    "agents_md": "AGENTS.md",
+    "when_unset": [
+      ".goosehints",
+      "AGENTS.md"
+    ]
   }
 }
