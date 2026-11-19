@@ -10,7 +10,7 @@
 // core, and the launcher keeps the two things that touch the machine.
 
 import { theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { NO_BELLS, theBellsFor, theBellsTheOwnerDeclared, type TheBellsSwitch } from '../ring_the_owner/ring_the_owner.ts'
+import { isInsideTmux, NO_BELLS, theBellsFor, theBellsTheOwnerDeclared, type TheBellsSwitch } from '../ring_the_owner/ring_the_owner.ts'
 import { takeAnOwnerDialog, type OwnerDialogEvent } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { NOTHING_IS_ASKED, theAsksAfter, type WhatTheHostIsAsking, type WhatTheHostSaid } from './say_what_the_host_is_asking.ts'
 
@@ -58,8 +58,8 @@ export interface TheScreenOfALaunch {
   readonly muted: () => boolean
   /** Whether the launcher has the owner's terminal at all. */
   readonly on_the_owners_terminal: boolean
-  /** Whether that terminal is a tmux pane (martha#843). */
-  readonly inside_tmux: boolean
+  /** The launcher's environment, which says whether that terminal is a tmux pane (martha#843). */
+  readonly environment: Readonly<Record<string, string | undefined>>
   /** Writes the bell's bytes where the owner is looking. */
   write(bytes: string): void
 }
@@ -76,7 +76,7 @@ export function theOwnersScreenOfALaunch(seen: TheScreenOfALaunch): TheScreenKee
     bells: seen.declared_bells === undefined ? NO_BELLS : theBellsTheOwnerDeclared(seen.declared_bells),
     muted: seen.muted,
     onTheOwnersTerminal: seen.on_the_owners_terminal,
-    insideTmux: seen.inside_tmux,
+    insideTmux: isInsideTmux(seen.environment),
     write: seen.write,
   })
 }

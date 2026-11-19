@@ -162,7 +162,6 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { keptBeatingWhileItRuns } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
-import { isInsideTmux } from '../ring_the_owner/ring_the_owner.ts'
 import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
@@ -531,7 +530,7 @@ function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch, hearing: (journal: Re
   return {
     journal,
     telling: theMembersTelling({ member: launch.member_name, dashboard: launch.places.dashboard, rows: launch.places.rows, journal }),
-    screen: theOwnersScreenOfALaunch({ member: launch.member_name, beats: dashboardRowsIn(launch.places.dashboard), declared_bells: launch.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(launch.stdio), inside_tmux: isInsideTmux(process.env), write: (bytes) => void process.stdout.write(bytes) }),
+    screen: theOwnersScreenOfALaunch({ member: launch.member_name, beats: dashboardRowsIn(launch.places.dashboard), declared_bells: launch.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(launch.stdio), environment: process.env, write: (bytes) => void process.stdout.write(bytes) }),
   }
 }
 

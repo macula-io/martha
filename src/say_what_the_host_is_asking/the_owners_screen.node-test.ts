@@ -219,18 +219,18 @@ test('#380 P1: one answer closing two dialogs closes both, and the row holds nei
 })
 
 test('a launch whose terminal is a tmux pane sends its notification through tmux\'s passthrough, and one outside tmux does not (martha#843)', () => {
-  const rung = (inside_tmux: boolean): string[] => {
+  const rung = (environment: Readonly<Record<string, string | undefined>>): string[] => {
     const wrote: string[] = []
-    const screen = theOwnersScreenOfALaunch({ member: 'Vesta', beats: aStore(aReportedRow()), declared_bells: true, muted: () => false, on_the_owners_terminal: true, inside_tmux, write: (bytes) => void wrote.push(bytes) })
+    const screen = theOwnersScreenOfALaunch({ member: 'Vesta', beats: aStore(aReportedRow()), declared_bells: true, muted: () => false, on_the_owners_terminal: true, environment, write: (bytes) => void wrote.push(bytes) })
     screen.heard('a-session', { said: 'permission', call: A_PERMISSION }, 20)
     return wrote
   }
   const passthrough = TMUX_PASSTHROUGH_OPENING
 
-  const inside = rung(true)
+  const inside = rung({ TMUX: '/tmp/tmux-1000/night,4242,0' })
   assert.equal(inside.length, 1, 'one write, on the change into needs you')
   assert.ok(inside[0]?.startsWith(`${THE_BELL}${passthrough}`), 'the bare bell, then the notification inside the passthrough')
-  const outside = rung(false)
+  const outside = rung({ TERM: 'xterm-256color' })
   assert.equal(outside.length, 1)
   assert.equal(outside[0]?.includes(passthrough), false, 'a launch outside tmux sends the notification as it is')
 })
