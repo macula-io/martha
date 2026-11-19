@@ -13,10 +13,10 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { aPlaceFor } from './a_launch_the_trial_writes.ts'
+import { aPlaceFor } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
 import { THE_KILL_WAIT_MS, THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS, THE_RUNNERS_KILL_AFTER_MS } from './drive_the_trial.ts'
-import { THE_LAUNCH_BOUND_KEY } from './the_cap_a_line_gets.ts'
-import { THE_ENGINE_LOGS, THE_TRANSCRIPT } from './the_evidence_says_why.ts'
+import { THE_LAUNCH_BOUND_KEY } from './the_cap_a_line_gets/the_cap_a_line_gets.ts'
+import { THE_ENGINE_LOGS, THE_TRANSCRIPT } from './the_evidence_it_keeps/the_evidence_says_why.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const ROOT = dirname(dirname(new URL(import.meta.url).pathname))
