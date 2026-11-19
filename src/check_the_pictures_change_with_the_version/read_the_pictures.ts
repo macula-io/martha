@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 import { DIAGRAMS, THE_PICTURES_THE_C4_DRAWS } from '../../architecture/c4_diagrams.ts'
-import { manifestPathOf } from '../../prove_the_core/declared_in_package_json.ts'
+import { manifestPathOf } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { gitSaid } from '../redo_the_generated_files_of_a_merge/git_in_the_repository.ts'
 import type { AChange, APicture } from './check_the_pictures_change_with_the_version.ts'
 

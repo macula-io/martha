@@ -13,7 +13,7 @@
 //   - a FAMILY is a shape rather than a name: a `CREW_`-prefixed variable, the `crew_[a-z_]` prefix, the server a
 //     tool call carries. Each is anchored, so a literal that merely contains the letters is not one of them.
 //
-// What a check reads is what the code says (../../../prove_the_core/the_texts_a_source_spells.ts), never a comment: a
+// What a check reads is what the code says (../../../prove_the_core/read_a_source/the_texts_a_source_spells.ts), never a comment: a
 // comment naming a crew-code name explains a difference and is not one.
 
 /** One name crew-code gives something, and what it gives it to. */

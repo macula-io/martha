@@ -17,7 +17,7 @@
 # would keep every file main added. Before that commit it refuses, by name and as not packable, a tree whose
 # installer/package.json martha names differ from the tag's, because those are the names the release packer reads.
 # The restore commit never reaches a release: pack_a_release/refuse_a_dry_restore_tag.sh refuses a release tag whose
-# history holds the subject, and prove_the_core/no_restore_reaches_the_release.node-test.ts refuses the release path any
+# history holds the subject, and prove_the_core/the_release_is_proven/no_restore_reaches_the_release.node-test.ts refuses the release path any
 # restore at all.
 #
 # The order is the release's own: main's installer packed by `git archive` from the sha, then the restore commit, then

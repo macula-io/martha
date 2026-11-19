@@ -1,7 +1,7 @@
 // One workflow file, read as text into what this check needs of it (martha#741): whether every pull request runs it,
 // and what each of its jobs runs.
 //
-// No YAML parser: the tree has none, and this reader reads the workflows the way prove_the_core/the_installer_jobs_steps
+// No YAML parser: the tree has none, and this reader reads the workflows the way prove_the_core/the_release_is_proven/the_installer_jobs_steps
 // reads its job, by their two-space layout. What it cannot read it never reads as nothing. An `on:` in a form other than
 // the three below, or a `jobs:` with no job header this reader can see, throws, naming the file, so a workflow written
 // another way is a check that could not be made, never a workflow with no trigger or no jobs.

@@ -6,7 +6,7 @@
 // script — has no parser to tell its words from its text, so a name is read there where it stands between characters
 // that cannot be part of one, and a family is judged against each such word.
 
-import { theTextsASourceSpells } from '../../prove_the_core/the_texts_a_source_spells.ts'
+import { theTextsASourceSpells } from '../../prove_the_core/read_a_source/the_texts_a_source_spells.ts'
 import { isScannedSource } from '../host_contract/core_source.ts'
 import { CREW_CODE_NAMES, type CrewCodeName } from './the_crew_code_names.ts'
 

@@ -2,11 +2,11 @@
 //
 // The check that the core imports nothing beyond its own slices, Node and the
 // packages package.json allows reads imports from the syntax tree, in
-// prove_the_core/imports_beyond_the_core.ts; it lives outside the core because it
+// prove_the_core/what_the_core_may_reach/imports_beyond_the_core.ts; it lives outside the core because it
 // imports the TypeScript compiler, which the core may not.
 //
 // Every check that reads the core's code walks it with coreSources, which lives
-// outside the core in prove_the_core/core_sources.ts (it reads the disk, which a
+// outside the core in prove_the_core/read_the_manifest_and_the_linter/core_sources.ts (it reads the disk, which a
 // slice may not), so no check walks fewer files than another.
 
 export interface CoreSource {

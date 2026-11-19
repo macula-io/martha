@@ -28,8 +28,8 @@
 
 import { basename } from 'node:path'
 
-import { manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
-import { aKeyDeclaredTwiceInWords, keysDeclaredTwice } from '../../prove_the_core/keys_declared_twice.ts'
+import { manifestPathOf, type Manifest } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { aKeyDeclaredTwiceInWords, keysDeclaredTwice } from '../../prove_the_core/read_the_manifest_and_the_linter/keys_declared_twice.ts'
 import {
   ceilingsOf,
   CEILINGS_NAME,
@@ -41,7 +41,7 @@ import {
   THE_SLICE_CEILINGS_KEY,
   withCeilings,
   withTheMap,
-} from '../../prove_the_core/the_host_ceilings.ts'
+} from '../../prove_the_core/read_the_manifest_and_the_linter/the_host_ceilings.ts'
 import { theMergeOfThreeTexts } from './the_merge_of_three_texts.ts'
 
 /** What a merge's ceilings come to: the package.json to write, and the words a landing's commit records of it. */
