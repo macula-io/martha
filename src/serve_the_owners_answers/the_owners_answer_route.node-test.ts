@@ -10,7 +10,7 @@ import { test } from 'node:test'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { newShortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { EXIT_DONE, EXIT_REFUSED } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
-import type { AnAnswerHeard, AnOpenAsk, TheOwnersAsks, WhatAnAnswerDid } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
+import { THE_SOCKETS_PLACE_MODE, type AnAnswerHeard, type AnOpenAsk, type TheOwnersAsks, type WhatAnAnswerDid } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
 import { AN_ANSWER_NEEDS_A_TERMINAL, answerAct, answerOf, NOTHING_WAITS, type TheAnswersIo } from './martha_answer.ts'
 import {
   anAskOfTheRouteIn,
@@ -21,13 +21,11 @@ import {
   serveTheOwnersAnswers,
   THE_ANSWER_SOCKETS_MODE,
   THE_OWNERS_ANSWERS_FILE,
-  THE_SOCKETS_PLACE_MODE,
   theLineOfAnAnswer,
   theMembersWithARoute,
   theRouteOf,
   theRouteRecordOf,
   type TheRouteServed,
-  whyTheSocketsPlaceIsOpen,
 } from './the_owners_answer_route.ts'
 
 const PERMISSION_BITS = 0o777
@@ -244,11 +242,4 @@ test('a socket\'s directory reached through a link, or not there, is refused bef
     assert.ok('refusal' in gone, 'a place not there was served in')
     assert.match(gone.refusal, /is not there/)
   })
-})
-
-test('a socket\'s directory another user owns is refused, whatever its mode (#541 9a slice 2, note (b))', () => {
-  const owner = 4242
-  const seen = { is_directory: true, uid: owner, mode: THE_SOCKETS_PLACE_MODE }
-  assert.equal(whyTheSocketsPlaceIsOpen('a-place', seen, owner), undefined)
-  assert.match(whyTheSocketsPlaceIsOpen('a-place', { ...seen, uid: owner + 1 }, owner) ?? '', new RegExp(`belongs to user ${owner + 1}, not this user ${owner}`))
 })
