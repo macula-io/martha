@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { createServer, request as sendRequest, type ClientRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { URL } from 'node:url'
 
-import type { TheModelPace } from './the_cap_a_line_gets.ts'
+import type { TheModelPace } from '../the_cap_a_line_gets/the_cap_a_line_gets.ts'
 import { isAModelChat } from './a_turn_with_goose.ts'
 
 /** The proxy's own log in the launch's evidence: every request, how long the model took, and how it answered. */
