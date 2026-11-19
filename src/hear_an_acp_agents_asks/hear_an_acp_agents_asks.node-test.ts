@@ -15,7 +15,7 @@ import { theOwnersScreen, type TheScreenKeeper } from '../say_what_the_host_is_a
 import type { WhatTheHostSaid } from '../say_what_the_host_is_asking/say_what_the_host_is_asking.ts'
 import { theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
-import { ALREADY_ANSWERED, NOT_HELD, TOO_LATE, theOwnersAsks, theWayAfterTheGate, type AnAnswerHeard, type TheGate, type TheOwnersAsks } from './hear_an_acp_agents_asks.ts'
+import { ALREADY_ANSWERED, NOT_HELD, THE_SOCKETS_PLACE_MODE, TOO_LATE, theOwnersAsks, theWayAfterTheGate, whyTheSocketsPlaceIsOpen, type AnAnswerHeard, type TheGate, type TheOwnersAsks } from './hear_an_acp_agents_asks.ts'
 
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
 /** A tool name of the test's own, so a list or a gate that named a real tool instead of the one asked cannot pass. */
@@ -243,4 +243,15 @@ test('a second ask under a key already held is refused once and noted; the held 
   assert.deepEqual(asks.open().map((ask) => ask.key), ['permission:call_1@session-one'])
   asks.answer({ key: 'permission:call_1@session-one', answer: 'allow', act: 'act-7' })
   assert.equal(await firstDecided, 'allow', 'the ask held first is the one the answer reaches')
+})
+
+test('the answer socket\'s directory is the owner\'s user\'s alone only when it is there, a directory, theirs, and mode 0700 exactly (#541 9a slice 2, note (b))', () => {
+  const owner = 4242
+  const seen = { is_directory: true, uid: owner, mode: THE_SOCKETS_PLACE_MODE }
+  assert.equal(whyTheSocketsPlaceIsOpen('a-place', seen, owner), undefined)
+  assert.match(whyTheSocketsPlaceIsOpen('a-place', undefined, owner) ?? '', /a-place is not there/)
+  assert.match(whyTheSocketsPlaceIsOpen('a-place', { ...seen, is_directory: false }, owner) ?? '', /not a directory of its own/)
+  assert.match(whyTheSocketsPlaceIsOpen('a-place', { ...seen, uid: owner + 1 }, owner) ?? '', new RegExp(`belongs to user ${owner + 1}, not this user ${owner}`))
+  const opened = THE_SOCKETS_PLACE_MODE | 0o010
+  assert.match(whyTheSocketsPlaceIsOpen('a-place', { ...seen, mode: opened }, owner) ?? '', new RegExp(`mode ${opened.toString(8)}, not ${THE_SOCKETS_PLACE_MODE.toString(8)}`))
 })

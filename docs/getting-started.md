@@ -13,6 +13,10 @@ refusals it can print, and what each costs you, are in
 
 ## What you need
 
+On Windows, everything below runs inside WSL2 with Ubuntu, in the Ubuntu shell.
+The README's [Windows section](../README.md#on-windows-inside-wsl2-ubuntu) sets it
+up.
+
 - **Node**, at the version Martha names in its `engines` field. From the Martha
   checkout:
 

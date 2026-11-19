@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SKILLS_SWITCH_READERS, TELEMETRY_READERS, type ASkillsSwitch, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILLS_SWITCH_READERS, SPLITS_ONCE, TELEMETRY_READERS, TOOL_CALL_META, type ASkillsSwitch, type EngineFacts, type EngineSource, type PlatformExtension, type ToolNaming } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -136,9 +136,47 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.telemetry]: telemetry(facts.telemetry),
     [ENGINE_PLACES.skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.skills_advertised, facts.skills_advertised),
     [ENGINE_PLACES.builtin_skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.builtin_skills_advertised, facts.builtin_skills_advertised),
+    [ENGINE_PLACES.tool_call_meta]: toolCallMeta(facts.tool_naming),
+    [ENGINE_PLACES.tool_name_parts]: toolNameParts(facts.tool_naming),
+    [ENGINE_PLACES.shell_tool]: developerTools(facts.shell_tool),
     [ENGINE_PLACES.openai_provider]: `pub const OPEN_AI_PROVIDER_NAME: &str = "${facts.openai_provider.name}";\npub const OPEN_AI_DEFAULT_BASE_PATH: &str = "${facts.openai_provider.default_base_path}";\n            vec![\n${settings}            ],\n`,
   }
 }
+
+/**
+ * A tool call's `_meta` as the engine builds it: each map filled from the inside out, a second key beside the name, as
+ * the engine puts the extension's name there, and another function before it filling a map of the same name, which is not this one.
+ */
+function toolCallMeta(naming: ToolNaming): string {
+  const [outer, middle, inner] = TOOL_CALL_META.maps
+  const [outerKey, middleKey, innerKey] = naming.meta_path
+  return [
+    `fn another_meta() -> Meta {\n    ${outer}.insert("another_outer_key".to_string(), value);\n}\n\n`,
+    `pub(crate) fn ${TOOL_CALL_META.builder}(tool_request: &ToolRequest) -> Option<Meta> {\n`,
+    `    let mut ${inner} = serde_json::Map::new();\n    ${inner}.insert("${innerKey ?? ''}".to_string(), name);\n    ${inner}.insert("another_key".to_string(), extension);\n`,
+    `    let mut ${middle} = serde_json::Map::new();\n    ${middle}.insert("${middleKey ?? ''}".to_string(), serde_json::Value::Object(${inner}));\n`,
+    `    let mut ${outer} = serde_json::Map::new();\n    ${outer}.insert("${outerKey ?? ''}".to_string(), serde_json::Value::Object(${middle}));\n    Some(${outer})\n}\n`,
+  ].join('')
+}
+
+/** How the engine parts a tool's name, at the end the recording says. */
+const toolNameParts = (naming: ToolNaming): string =>
+  `impl<'a> From<&'a str> for ToolNameParts<'a> {\n    fn from(name: &'a str) -> Self {\n        match name.${SPLITS_ONCE[naming.split_at]}("${naming.separator}") {\n            Some((extension_name, tool_name)) => Self { extension_name: Some(extension_name), tool_name },\n            None => Self { extension_name: None, tool_name: name },\n        }\n    }\n}\n`
+
+/**
+ * The Developer extension's tools as the engine writes them: another tool before the shell, the shell built in a block
+ * of its own on its parameters, and the call dispatch parsing those parameters for the shell's name.
+ */
+const developerTools = (shell: string): string =>
+  [
+    `impl DeveloperClient {\n    pub(crate) fn ${SHELL_TOOL.lister}() -> Vec<Tool> {\n        vec![\n`,
+    `            Tool::new(\n                "another_tool".to_string(),\n                "What another tool does.".to_string(),\n                Self::schema::<AnotherParams>(),\n            ),\n`,
+    `            {\n                let description = format!("Execute a command.");\n                Tool::new("${shell}".to_string(), description, Self::schema::<${SHELL_TOOL.params}>())\n            }\n            .with_output_schema::<ShellOutput>(),\n`,
+    `        ]\n    }\n}\n\n`,
+    `impl PlatformExtension for DeveloperClient {\n    async fn call_tool(&self, name: &str) -> Result<CallToolResult, Error> {\n        match name {\n`,
+    `            "${shell}" => match Self::parse_args::<${SHELL_TOOL.params}>(arguments) {\n                Ok(params) => run(params),\n                Err(error) => fail(error),\n            },\n`,
+    `            "another_tool" => match Self::parse_args::<AnotherParams>(arguments) {\n                Ok(params) => other(params),\n                Err(error) => fail(error),\n            },\n        }\n    }\n}\n`,
+  ].join('')
 
 /** The same tree as a reader, for a test that never touches the disk. */
 export function anEngineSourceSaying(files: Readonly<Record<string, string>>): EngineSource {

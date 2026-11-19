@@ -13,8 +13,8 @@
 // case was taken, so the live mode's fail-closed promise is pinned by CI with a stand-in host that never answers, and
 // the comparison itself is the program `--compare` runs. No host and no npm are needed for either.
 //
-//   MARTHA_RECORDED_HOST=/path/to/claude node prove_the_relay_loads/prove_the_bash_answers.mjs <out-dir>
-//   node prove_the_relay_loads/prove_the_bash_answers.mjs --compare <recording> <taken>
+//   MARTHA_RECORDED_HOST=/path/to/claude node prove_the_relay_loads/prove_the_bash_answers/prove_the_bash_answers.mjs <out-dir>
+//   node prove_the_relay_loads/prove_the_bash_answers/prove_the_bash_answers.mjs --compare <recording> <taken>
 //
 // Exit: 0 every case holds, and live every case was taken; 1 a case differs, each named; 2 a case could not be taken,
 // or the run could not be made, named with its evidence.
@@ -26,16 +26,16 @@ import { dirname, join, resolve, sep } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
-import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
-import { withoutRef } from '../src/keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
-import { HOSTS } from '../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { DIALOG_WAIT_MS, WELCOME_WAIT_MS } from './the_wait_a_probe_gives_a_screen.mjs'
+import { CLAUDE_CODE } from '../../src/know_claude_codes_own_facts/claude_code_facts.ts'
+import { withoutRef } from '../../src/keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
+import { HOSTS } from '../../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { DIALOG_WAIT_MS, WELCOME_WAIT_MS } from '../the_wait_a_probe_gives_a_screen.mjs'
 
 /** The recording this harness takes and compares against: the committed one, read where it lives. */
-const RECORDING = fileURLToPath(new URL('../src/claude_code_host/recorded_claude_code_bash_results.json', import.meta.url))
+const RECORDING = fileURLToPath(new URL('../../src/claude_code_host/recorded_claude_code_bash_results.json', import.meta.url))
 
 /** The checkout this harness belongs to: an out-dir inside it would write into the tree the run is proving. */
-const CHECKOUT = realpathSync(fileURLToPath(new URL('..', import.meta.url)))
+const CHECKOUT = realpathSync(fileURLToPath(new URL('../..', import.meta.url)))
 
 /** The host, when the caller reaches for the live mode. */
 const HOST = process.env.MARTHA_RECORDED_HOST

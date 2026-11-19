@@ -170,6 +170,44 @@ function theEnginesOwnPrefix(facts: RecordedEngine): string {
   return variable.slice(0, variable.indexOf('_') + 1)
 }
 
+/** The indentation a key directly under `extensions` is written with, by this slice: one server or switch per key. */
+const AN_EXTENSIONS_KEY = /^ {2}([^\s:][^:]*):/
+
+/**
+ * The tool servers a config root's text names (martha#541 C1, guard row 3): every key directly under `extensions` that is
+ * no platform extension of the recorded engine, in the order the text holds them. It reads the layout this slice writes,
+ * and only that one: the launch reads its root back through this and also holds the bytes to the ones it wrote, so a
+ * root reshaped into a layout this reader does not follow is refused by the bytes, never read as naming nothing.
+ */
+export function theServersAConfigNames(facts: RecordedEngine, text: string): readonly string[] {
+  const platform = new Set(facts.platform_extensions.map((extension) => extension.key))
+  const lines = text.split('\n')
+  const from = lines.indexOf(`${THE_EXTENSIONS_SETTING}:`)
+  if (from < 0) return []
+  const servers: string[] = []
+  for (const line of lines.slice(from + 1)) {
+    if (line !== '' && !line.startsWith(' ')) break
+    const key = AN_EXTENSIONS_KEY.exec(line)?.[1]
+    if (key !== undefined && !platform.has(key)) servers.push(key)
+  }
+  return servers
+}
+
+/**
+ * A config root read back just before the engine reads it (martha#541 C1, guard row 3): the tool servers it names, which
+ * must be `server` alone, and its bytes, which must be the ones the launch wrote; or why the engine is not started on
+ * it. The servers are judged first, so a second server is refused by its name; the bytes then catch any edit the
+ * reader's one layout would not follow.
+ */
+export function theRootReadBack(facts: RecordedEngine, root: { readonly at: string; readonly text: string; readonly written: string }, server: string): { readonly servers: readonly string[] } | { readonly refusal: string } {
+  const servers = theServersAConfigNames(facts, root.text)
+  if (servers.length !== 1 || servers[0] !== server) {
+    return { refusal: `the config root at ${root.at} names the tool servers [${servers.join(', ')}], and a launch starts with ${server} alone.` }
+  }
+  if (root.text !== root.written) return { refusal: `the config root at ${root.at} is not the text this launch wrote, so the engine is not started on it.` }
+  return { servers }
+}
+
 /** One line of the config: a key and its value, a string quoted so no character of it starts a new one. */
 function aLine(key: string, value: string | boolean | number): string {
   if (!A_WORD_OF_A_KEY.test(key.trim())) throw new Error(`a config key ${JSON.stringify(key)} is not a word, and no key may carry a line of its own`)

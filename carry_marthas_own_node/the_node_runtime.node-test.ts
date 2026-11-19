@@ -55,12 +55,15 @@ test('a SHASUMS256.txt is read to the pin, and a platform missing from it is nam
 test('a recording without a version or a hash is refused', () => {
   assert.deepEqual(theNodeRuntime(JSON.stringify({ ...pinned(), version: 'v24' })), { refusal: 'the recording names no X.Y.Z version' })
   const { version, archives } = pinned()
-  assert.deepEqual(theNodeRuntime(JSON.stringify({ version, archives: { ...archives, [PLATFORMS[1]]: { sha256: 'f00' } } })), { refusal: `the recording holds no sha256 for ${PLATFORMS[1]}` })
+  assert.deepEqual(theNodeRuntime(JSON.stringify({ version, archives: { ...archives, [PLATFORMS[0]]: { sha256: 'f00' } } })), { refusal: `the recording holds no sha256 for ${PLATFORMS[0]}` })
 })
 
-test('only the four platforms are made', () => {
+test('only the Linux platforms are made', () => {
   for (const platform of PLATFORMS) assert.equal(platformOf(...(platform.split('-') as [string, string])), platform)
   assert.deepEqual(platformOf('win32', 'x64'), { refusal: 'a standalone Martha is not made for win32-x64' })
+  assert.deepEqual(platformOf('darwin', 'arm64'), { refusal: 'a standalone Martha is not made for darwin-arm64' })
+  // DECIDED 2026-11-19 "Drop arm64 (Recommended)": a standalone Martha ships for linux-x64 alone.
+  assert.deepEqual(platformOf('linux', 'arm64'), { refusal: 'a standalone Martha is not made for linux-arm64' })
 })
 
 test("the names are the installer's and the version is the root package's", () => {

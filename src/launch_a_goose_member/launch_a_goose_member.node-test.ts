@@ -502,3 +502,51 @@ test('a place naming another host is refused, and an approved launch records its
   assert.equal(ended.stopped, true)
   assert.deepEqual(readdirSync(place.snapshot_root), [], "the gate's snapshot was left behind")
 })
+
+/** The engine's mode as the config writes it, and as an edit that keeps every server would change it. */
+const THE_MODE_LINE = `${FACTS.mode.setting}: "${THE_MODE_THAT_ASKS_THE_CLIENT}"`
+
+/** A launch whose config root `edit` changes between its write and the engine's start: refused, leaving nothing, starting nothing. */
+async function aLaunchOfAnEditedRoot(t: TestContext, edit: (config: string) => string): Promise<string> {
+  const { root, place } = anApprovedLaunch(t)
+  const refused = await launchTheGooseEngine({
+    facts: FACTS,
+    binary: aStandInEngineIn(root),
+    launch_root: root,
+    place,
+    model: A_MODEL,
+    tool_server: A_TOOL_SERVER,
+    before_the_start: (config_at) => writeFileSync(config_at, edit(readFileSync(config_at, 'utf8'))),
+  })
+  if ('engine' in refused) t.after(() => refused.engine.stop())
+  assert.ok('refusal' in refused, 'a launch whose config root was edited before the start started the engine')
+  assert.deepEqual(readdirSync(place.snapshot_root), [], 'a refused launch left a snapshot behind')
+  assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch left its root, and the edited config in it')
+  assert.equal(existsSync(join(root, THE_HOME_OF_A_LAUNCH)), false, 'a refused launch left its home')
+  assert.equal(existsSync(join(root, 'the-cwd')), false, 'the stand-in engine ran')
+  return refused.refusal
+}
+
+test('a launch reads its config root back before the engine starts, and the servers it names, the crew\'s alone, are a fact of the launch (martha#541 C1 R1)', async (t) => {
+  const { root, place } = anApprovedLaunch(t)
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
+  assert.ok('engine' in launch, 'the launch was refused')
+  t.after(() => launch.engine.stop())
+  assert.deepEqual(launch.servers, [THE_CREWS_TOOL_SERVER])
+  await launch.end()
+})
+
+test('a config root edited between its write and the start to name a second server is refused by that server\'s name (martha#541 C1 R1; mutant: the server check dropped)', async (t) => {
+  const aSecond = 'a-second-server-a-test-names'
+  const refusal = await aLaunchOfAnEditedRoot(t, (config) => config.replace(`${THE_EXTENSIONS_SETTING}:\n`, `${THE_EXTENSIONS_SETTING}:\n  ${aSecond}:\n    enabled: true\n    cmd: "/bin/sh"\n`))
+  assert.ok(refusal.includes(aSecond), `the refusal does not name the second server: ${refusal}`)
+  assert.ok(refusal.includes(`${THE_CREWS_TOOL_SERVER} alone`), `the refusal does not say which server a launch starts with: ${refusal}`)
+})
+
+test('a config root edited between its write and the start, its servers untouched, is refused as not the text the launch wrote (martha#541 C1 R1; mutant: the bytes check dropped)', async (t) => {
+  const refusal = await aLaunchOfAnEditedRoot(t, (config) => {
+    assert.ok(config.includes(THE_MODE_LINE), `the config does not write ${THE_MODE_LINE}, so this edit would change nothing`)
+    return config.replace(THE_MODE_LINE, `${FACTS.mode.setting}: "${FACTS.mode.when_unset}"`)
+  })
+  assert.match(refusal, /is not the text this launch wrote/)
+})
