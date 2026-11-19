@@ -3,7 +3,8 @@
 // as the engine keeps its own; the facts are spelled too, so a column list copied from the recording proves nothing.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, realpathSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdtempSync, readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -110,4 +111,15 @@ test('a recording whose store lacks a gate column reads nothing as passing; on t
   assert.ok('refusal' in first && first.refusal.includes('no column goose_mode'), JSON.stringify(first))
   assert.deepEqual(theColumnsTheStoreLacks(RECORDED_GOOSE_ENGINE), [])
   assert.equal(theSessionStoreOf(RECORDED_GOOSE_ENGINE, '/r'), '/r/data/sessions.db')
+})
+
+test("a read-back writes nothing the engine reads: the database and its -wal hold the same bytes after it, while the engine's writer holds the store open (#541 package A, design r=5 'The store's journal mode')", (t) => {
+  const { store } = aStore(t)
+  // The -shm is left out on purpose: it is SQLite's shared index of the WAL, and every reader, a read-only one too,
+  // takes a read mark in it on its first read (measured on node:sqlite here). It holds no row and no text a step loads.
+  const bytes = (): string[] => [store, `${store}-wal`].map((file) => createHash('sha256').update(readFileSync(file)).digest('hex'))
+  const before = bytes()
+  const snapshot = snapshotOf(store)
+  assert.equal(theSessionStillHolds(FACTS, store, snapshot), undefined)
+  assert.deepEqual(bytes(), before)
 })
