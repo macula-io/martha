@@ -175,6 +175,23 @@ test('a home directory is refused and never printed: a CI log of a public reposi
   assert.ok(!hits.join('\n').includes(user), `the hit printed the user name: ${hits.join('\n')}`)
 })
 
+// Every other class withholds its value too (martha#855): the reason is the log's, not the class's. Each value is
+// drawn here, so this file carries none, and each is one the strict rules refuse.
+const drawnOctet = () => String(1 + (randomBytes(1)[0] ?? 0) % 254)
+const WITHHELD_CLASSES: readonly { readonly what: string; readonly drawn: () => string }[] = [
+  { what: 'a private address', drawn: () => ['10', drawnOctet(), drawnOctet(), drawnOctet()].join('.') },
+  { what: 'an email address', drawn: () => `u${randomBytes(4).toString('hex')}@d${randomBytes(4).toString('hex')}.test` },
+  { what: `a ${ID_HEX_DIGITS}-hex id`, drawn: () => randomBytes(ID_HEX_DIGITS / 2).toString('hex') },
+]
+for (const { what, drawn } of WITHHELD_CLASSES) {
+  test(`${what} is refused and never printed: a CI log of a public repository is public (martha#855)`, async () => {
+    const value = drawn()
+    const hits = await hitsOf(`see ${value} here`)
+    assert.deepEqual(hits, [`${what} (value withheld)`])
+    assert.ok(!hits.join('\n').includes(value), `the hit printed the value: ${hits.join('\n')}`)
+  })
+}
+
 test('a lab machine name is not a private class: the owner dropped it (martha#773)', async () => {
   for (const text of ['it ran on synth03', 'it ran on SYNTH03', 'docs/synth04-notes.md', 'see synthetic-owner/open-thing and synth07']) {
     assert.deepEqual(await hitsOf(text), [], text)
