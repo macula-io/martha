@@ -14,24 +14,16 @@ jobs:
   # internal only"), because in two weeks every red they caused was a site
   # refusing or failing the checker, never a link of ours gone dead.
   #
-  # Two kinds of slowness, two retries. lychee's own `--max-retries` covers a
-  # request that TIMED OUT. It does not cover a host that answers 408/429/5xx:
-  # once a response is a RejectedStatusCode, lychee 0.24.2 retries 429 alone, so
-  # a 408 from shields.io failed this job in 10.7 s with no retry made
-  # (martha#231, after martha#40). `check_every_link_resolves` therefore repeats
-  # a run that failed only on those statuses, and fails at once -- by name -- on
-  # a failure no host recovers from, a 404 or a file that is not there. The
-  # planted dead link is held to both halves: lychee must refuse it, and so must
-  # the command the scan actually runs.
+  # A missing file or heading fails at once, by name. The planted dead link is
+  # held to both halves: lychee must refuse it, and so must the command the scan
+  # actually runs.
   links:
     name: links resolve
     runs-on: ubuntu-latest
     env:
-      # Retry and timeout options, defined once and used by both runs below.
-      # A timeout is retried, and the wait doubles: five tries of 30 s with
-      # 3 s, 6 s, 12 s and 24 s between them, so a link that is really gone
-      # fails within about 3 min 15 s and a slow host has all that time to
-      # answer.
+      # The options, defined once and used by both runs below: --offline keeps
+      # every request off the network, so only this repository's own files and
+      # headings are checked.
       LYCHEE_OPTIONS: '--no-progress --include-fragments --offline'
     steps:
       - uses: actions/checkout@v7
@@ -85,8 +77,8 @@ jobs:
           fi
           grep -q missing-page.md "${{ runner.temp }}/links-self-test/verdict.txt"
       - name: every link resolves
-        # The check itself, and its retry of a host that said "not now". A green
-        # here means every link was seen to resolve; a red names the links.
+        # The check itself. A green here means every internal link was seen to
+        # resolve; a red names the links.
         run: npm run --silent check:links -- '**/*.md'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
