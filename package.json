@@ -178,7 +178,7 @@
     "sliceCeilings": {
       "src/check_no_literal_restates_a_value": 660,
       "src/land_passed_work_as_one_batch": 614,
-      "src/declare_crew": 618
+      "src/declare_crew": 616
     },
     "packageImports": {
       "typescript": "prove_the_core",
