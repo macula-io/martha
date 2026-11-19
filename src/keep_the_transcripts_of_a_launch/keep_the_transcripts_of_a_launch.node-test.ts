@@ -2,13 +2,14 @@
 // the staging name, the mark beside them and the prune. The choices themselves are held in the slice's own test.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { THE_MARK_FILE, TRANSCRIPTS_LAUNCHES_KEPT } from '../choose_the_transcripts_to_keep/choose_the_transcripts_to_keep.ts'
 import { openState, STATE_FILE_MODE, TRANSCRIPTS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { keepTheTranscriptsOf, pruneTheLaunchesPastTheNewest } from './keep_the_transcripts_of_a_launch.ts'
 
 // The host's own word for a project's transcripts, spelled here as a fixture rather than read from the slice.
@@ -17,7 +18,7 @@ const THE_HOSTS_PROJECTS_PLACE = 'projects'
 /** A home of this test's own, its project, and a member's config folder with one transcript under it. */
 const aLaunchEnding = (t: { after: (fn: () => void) => void }) => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-646-')))
-  t.after(() => rmSync(home, { recursive: true, force: true }))
+  t.after(() => removeTheTree(home))
   const project = join(home, 'project')
   const config = join(home, 'host-config')
   mkdirSync(project)
