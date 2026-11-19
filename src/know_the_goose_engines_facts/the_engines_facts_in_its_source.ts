@@ -502,47 +502,121 @@ function joinedFrom(text: string, base: string): string | undefined {
 function checkoutSkillRootsIn(source: EngineSource): CheckoutSkillRoots {
   pluginRootsCarriedIn(source)
   const roots = { skill_folders: skillFoldersIn(source), ...pluginRootsIn(source) }
-  for (const [place, fn] of FUNCTIONS_THAT_BUILD_SKILL_ROOTS) noFolderWithoutTheRoot(source, place, fn)
+  for (const fromKnownBases of FOLDERS_FROM_KNOWN_BASES) fromKnownBases(source)
   workingDirectoryOnlyAsTheRoot(source)
   return roots
 }
 
-/** Every function a checkout's skill roots are built in, with the place ENGINE_PLACES names its file by (martha#614 Done-when 6). */
-export const FUNCTIONS_THAT_BUILD_SKILL_ROOTS = [
-  ['skill_folders', SKILL_ROOT_READERS.skill_folders],
-  ['plugin_skill_dirs', CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs],
-  ['plugin_discovery', CHECKOUT_ROOT_CARRIERS.plugin_discovery],
-  ['plugin_discovery', CHECKOUT_ROOT_CARRIERS.plugin_settings],
-  ['plugin_discovery', SKILL_ROOT_READERS.plugin_folder],
-  ['plugin_discovery', SKILL_ROOT_READERS.plugin_settings],
-] as const
+/** A `.join("…")` chain of one or more strings, as the engine writes a folder under a base, spaces taken out. */
+const JOINS = '(?:\\.join\\("[^"]+"\\))+'
+
+/** How often `pattern` stands in `text`. */
+const timesIn = (text: string, pattern: string): number => [...text.matchAll(new RegExp(pattern, 'g'))].length
+
+/** `text` with every space and line break taken out, so a shape is matched however the engine lays it out. */
+const squeezed = (text: string): string => text.replace(/\s+/g, '')
 
 /**
- * The shapes a folder takes when the engine builds it without naming the checkout's root (martha#614 Done-when 6): the
- * working directory itself, a path made out of something else, and a string anywhere but in a `.join` onto a path. The
- * engine resolves a relative path against its working directory, so each is a skill root the gate would never ask for.
+ * A throw naming the function and what it builds a folder from (martha#614 Done-when 6): a folder from anything but the
+ * bases this reader knows may be relative, a constant, or what another function returns, and none of those is listed.
  */
-export const FOLDERS_WITHOUT_THE_ROOT = [
-  { shape: 'the working directory', pattern: /\bcurrent_dir\b/ },
-  { shape: 'a path made out of something else', pattern: /\b(?:PathBuf|Path|OsString|OsStr)::(?:from|new)\b|\.into\(\)/ },
-  { shape: 'a string', pattern: /"/ },
-] as const
-
-/** What a function may hold that names no folder: a `.join("…")` onto a path, a log line, the settings file choice. */
-const TEXT_THAT_BUILDS_NO_FOLDER = [
-  /\.join\("[^"]*"\)/g,
-  /\b(?:warn|debug|info|error|trace)!\((?:[^()"]|"(?:[^"\\]|\\.)*"|\([^()]*\))*\)/g,
-  /let file = if local \{\s*"[^"]+"\s*\} else \{\s*"[^"]+"\s*\};/g,
-] as const
-
-/** A throw naming the function and the shape when `fn` builds a folder without naming the checkout's root. */
-function noFolderWithoutTheRoot(source: EngineSource, place: keyof typeof ENGINE_PLACES, fn: string): void {
-  const path = ENGINE_PLACES[place]
-  const body = TEXT_THAT_BUILDS_NO_FOLDER.reduce((rest, known) => rest.replace(known, ''), functionBody(fileOf(source, path), fn, path))
-  const found = FOLDERS_WITHOUT_THE_ROOT.find(({ pattern }) => pattern.test(body))
-  if (found !== undefined) throw new Error(`${path} builds a folder in ${fn} from ${found.shape}, never naming the checkout's root, so a skill root there would never be listed`)
+function unknownBase(path: string, fn: string, what: string): Error {
+  return new Error(`${path} builds a folder in ${fn} from ${what.slice(0, 80)}, none of the bases this reader knows, so a skill root there would never be listed`)
 }
 
+/** The first text in `body` that `pattern` finds once every `known` shape is taken out, or nothing when none is left. */
+function leftOver(body: string, known: readonly string[], pattern: string): string | undefined {
+  const rest = known.reduce((text, shape) => text.replace(new RegExp(shape, 'g'), ''), body)
+  return new RegExp(`(?:${pattern})[^;]*`).exec(rest)?.[0]
+}
+
+/**
+ * Every skill folder `all_skill_dirs_with_config` gathers comes from a base this reader knows (martha#614 Done-when 6):
+ * the working directory or the home joined with strings, the engine's config folder joined with strings, a `for` list
+ * of those, or the plugin skill folders. The list grows only by those, and is what the function gives back.
+ */
+function skillFoldersFromKnownBases(source: EngineSource): void {
+  const path = ENGINE_PLACES.skill_folders
+  const fn = SKILL_ROOT_READERS.skill_folders
+  const text = fileOf(source, path)
+  const body = squeezed(functionBody(text, fn, path))
+  const workingDir = boundFrom(functionBody(text, fn, path), rootParameterOf(text, fn, path), fn, path)
+  const list = captured(body, /letmut(\w+)=Vec::new\(\);/, `the folders ${fn} gathers`, path)
+  const plugins = captured(body, new RegExp(`let(\\w+)=${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}\\(`), `the plugin folders ${fn} takes`, path)
+  const home = captured(body, /let(\w+)=dirs::home_dir\(\);/, `the home ${fn} reads`, path)
+  if (timesIn(body, `let(?:mut)?${home}=`) !== 1) throw unknownBase(path, fn, `a ${home} that is not dirs::home_dir()`)
+  const homes = [...body.matchAll(new RegExp(`ifletSome\\((\\w+)\\)=${home}\\.as_ref\\(\\)`, 'g'))].map((found) => found[1] ?? '')
+  const rooted = `(?:${[workingDir, ...homes].join('|')})${JOINS}`
+  const pushed = `${list}\\.push\\(SkillDirectory\\{`
+  const extended = `${list}\\.extend\\(${plugins}\\.(?:iter|into_iter)\\(\\)(?:\\.filter\\(\\|\\(_,\\w+\\)\\|\\*\\w+==PluginScope::\\w+\\))?\\.map\\(\\|\\(path,_\\)\\|SkillDirectory\\{`
+  const grown = leftOver(body, [pushed, extended], '\\.(?:push|extend|append|insert|chain)\\(')
+  if (grown !== undefined) throw unknownBase(path, fn, grown)
+  const lists = [...body.matchAll(/for(\w+)in([^{]*)\{/g)].flatMap((found) => (found[2] ?? '').replace(/^\[|,?\]$/g, '').split(','))
+  const unlisted = lists.find((entry) => !new RegExp(`^${rooted}$`).test(entry))
+  if (unlisted !== undefined) throw unknownBase(path, fn, unlisted)
+  const values = [...body.matchAll(/SkillDirectory(\{path(?::([^,}]+))?)?/g)].map((found) => (found[1] === undefined ? 'SkillDirectory' : (found[2] ?? 'path')))
+  const known = `^(?:path|path\\.clone\\(\\)|${rooted}|Paths::config_dir\\(\\)${JOINS})$`
+  const value = values.find((folder) => !new RegExp(known).test(folder))
+  if (value !== undefined) throw unknownBase(path, fn, value)
+  const binder = leftOver(body, [`for(\\w+)in\\[`, '\\|\\(path,_\\)\\|SkillDirectory'], '(?:letpath|letmutpath|Some\\(path\\)|\\|path\\||\\|\\(path,|forpathin)')
+  if (binder !== undefined) throw unknownBase(path, fn, binder)
+  const uses = timesIn(functionBody(text, fn, path), `(?<![.\\w])${list}\\b(?!::)`)
+  if (uses !== 2 + timesIn(body, pushed) + timesIn(body, extended) || !body.endsWith(list)) throw unknownBase(path, fn, `${list}, used ${String(uses)} times`)
+}
+
+/** Every plugin `discover_enabled_plugins_with_config` finds is a child of the project or the user plugin folder (martha#614 Done-when 6). */
+function pluginsFromKnownBases(source: EngineSource): void {
+  const path = ENGINE_PLACES.plugin_discovery
+  const fn = CHECKOUT_ROOT_CARRIERS.plugin_discovery
+  const text = fileOf(source, path)
+  const body = squeezed(functionBody(text, fn, path))
+  const root = boundFrom(functionBody(text, fn, path), rootParameterOf(text, fn, path), fn, path)
+  const project = captured(body, new RegExp(`let(\\w+)=${SKILL_ROOT_READERS.plugin_folder}\\(${root}\\);`), `the project plugin folder ${fn} reads`, path)
+  const user = captured(body, /let(\w+)=plugin_install_dir\(\);/, `the user plugin folder ${fn} reads`, path)
+  const bases = `${project}|${user}`
+  const listed = `\\w+\\.extend\\(list_dir_children\\(&(?:${bases})\\)\\.into_iter\\(\\)\\.map\\(\\|\\((\\w+),(\\w+)\\)\\|DiscoveredPlugin\\{\\1,\\2,`
+  const grown = leftOver(body, [listed], '\\.(?:push|extend|append|chain)\\(|list_dir_children\\(|DiscoveredPlugin\\{')
+  if (grown !== undefined) throw unknownBase(path, fn, grown)
+}
+
+/** Every settings file `load_all_settings` reads is the user's or one `project_settings_path` builds (martha#614 Done-when 6). */
+function settingsFromKnownBases(source: EngineSource): void {
+  const path = ENGINE_PLACES.plugin_discovery
+  const fn = CHECKOUT_ROOT_CARRIERS.plugin_settings
+  const text = fileOf(source, path)
+  const body = squeezed(functionBody(text, fn, path))
+  const root = boundFrom(functionBody(text, fn, path), rootParameterOf(text, fn, path), fn, path)
+  const user = /ifletSome\((\w+)\)=user_settings_path\(\)/.exec(body)?.[1]
+  const files = [...(user === undefined ? [] : [user]), `${SKILL_ROOT_READERS.plugin_settings}\\(${root},(?:true|false)\\)`].join('|')
+  const grown = leftOver(body, [`\\w+\\.push\\(\\(SettingsScope::\\w+,(?:${files})\\)\\);`], '\\.(?:push|extend|append|insert|chain)\\(')
+  if (grown !== undefined) throw unknownBase(path, fn, grown)
+}
+
+/** `project_plugin_dir` and `project_settings_path` are the root joined with strings and nothing else (martha#614 Done-when 6). */
+function pluginPathsFromTheRoot(source: EngineSource): void {
+  const path = ENGINE_PLACES.plugin_discovery
+  const text = fileOf(source, path)
+  for (const [fn, tail] of [[SKILL_ROOT_READERS.plugin_folder, ''], [SKILL_ROOT_READERS.plugin_settings, '\\.join\\(file\\)']] as const) {
+    const root = captured(text, new RegExp(`fn ${fn}\\((\\w+): &Path`), `the root ${fn} takes`, path)
+    const body = squeezed(functionBody(text, fn, path)).replace(/^letfile=iflocal\{"[^"]+"\}else\{"[^"]+"\};/, '')
+    if (!new RegExp(`^${root}${JOINS}${tail}$`).test(body)) throw unknownBase(path, fn, body)
+  }
+}
+
+/** The plugin skill folders `enabled_plugin_skill_dirs_with_config` gives back are each plugin's own, from the discovery (martha#614 Done-when 6). */
+function pluginSkillFoldersFromThePlugins(source: EngineSource): void {
+  const path = ENGINE_PLACES.plugin_skill_dirs
+  const fn = CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs
+  const text = fileOf(source, path)
+  const root = rootParameterOf(text, fn, path)
+  const finder = CHECKOUT_ROOT_CARRIERS.plugin_discovery
+  const tail = squeezed(captured(functionBody(text, fn, path), new RegExp(`\\n    ((?:\\w+::)?${finder}\\([\\s\\S]*)$`), `what ${fn} gives back`, path))
+  const plugin = `(?:\\w+::)?${finder}\\(${root},config\\)\\.into_iter\\(\\)\\.flat_map\\(\\|(\\w+)\\|\\{let(\\w+)=\\1\\.root;(?:\\w+::)*installed_skill_dirs\\(&\\2\\)\\.into_iter\\(\\)\\.map\\(move\\|(\\w+)\\|\\(\\3,\\1\\.scope\\)\\)\\}\\)`
+  if (!new RegExp(`^${plugin}(?:\\.filter\\(\\|\\((\\w+),_\\)\\|\\w+\\.insert\\(\\4\\.clone\\(\\)\\)\\))?\\.collect\\(\\)$`).test(tail)) throw unknownBase(path, fn, tail)
+}
+
+/** Each check that a function builds its folders only from bases this reader knows (martha#614 Done-when 6). */
+const FOLDERS_FROM_KNOWN_BASES = [skillFoldersFromKnownBases, pluginsFromKnownBases, settingsFromKnownBases, pluginPathsFromTheRoot, pluginSkillFoldersFromThePlugins] as const
 /**
  * The function that takes the working directory as the checkout's root itself when it is given none: the engine then
  * reads the same folders from it, and the launch starts the engine in the checkout (martha#614 Done-when 6).

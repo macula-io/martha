@@ -106,8 +106,10 @@ function skillFolders(roots: CheckoutSkillRoots): string {
     `fn ${SKILL_ROOT_READERS.skill_folders}(working_dir: Option<&Path>, config: &Config) -> Vec<SkillDirectory> {\n    let mut dirs = Vec::new();\n`,
     `    let plugin_dirs = ${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}(working_dir, config);\n\n`,
     `    if let Some(wd) = working_dir {\n        for path in [\n${listed}        ] {\n            dirs.push(SkillDirectory { path });\n        }\n    }\n`,
-    `    dirs.extend(plugin_dirs.iter().map(|(path, _)| SkillDirectory { path: path.clone() }));\n`,
-    `    if let Some(h) = dirs::home_dir().as_ref() {\n        dirs.push(SkillDirectory { path: ${joined('h', '.agents/skills')} });\n    }\n    dirs\n}\n`,
+    `    dirs.extend(plugin_dirs.iter().filter(|(_, scope)| *scope == PluginScope::Project).map(|(path, _)| SkillDirectory { path: path.clone() }));\n`,
+    `    let home = dirs::home_dir();\n    if let Some(h) = home.as_ref() {\n        dirs.push(SkillDirectory { path: ${joined('h', '.agents/skills')} });\n    }\n`,
+    `    dirs.push(SkillDirectory { path: Paths::config_dir().join("skills") });\n`,
+    `    if let Some(h) = home.as_ref() {\n        for path in [${joined('h', '.claude/skills')}] {\n            dirs.push(SkillDirectory { path });\n        }\n    }\n    dirs\n}\n`,
     `\npub fn ${WORKING_DIRECTORY_AS_THE_ROOT}(working_dir: Option<&Path>) -> Vec<SourceEntry> {\n    let fallback;\n    let wd = match working_dir {\n        Some(p) => Some(p),\n        None => {\n            fallback = std::env::current_dir().ok();\n            fallback.as_deref()\n        }\n    };\n    discover_skills(wd)\n}\n`,
   ].join('')
 }
@@ -120,12 +122,13 @@ function pluginDiscovery(roots: CheckoutSkillRoots): string {
   if (folderOf(shared) !== folderOf(local)) throw new Error(`the two plugin settings files ${shared} and ${local} are in different folders, which the engine never builds`)
   return [
     `pub(crate) fn ${CHECKOUT_ROOT_CARRIERS.plugin_discovery}(\n    project_root: Option<&Path>,\n    config: &Config,\n) -> Vec<DiscoveredPlugin> {\n`,
-    `    let scoped_settings = ${CHECKOUT_ROOT_CARRIERS.plugin_settings}(project_root);\n    let mut found = Vec::new();\n`,
+    `    let scoped_settings = ${CHECKOUT_ROOT_CARRIERS.plugin_settings}(project_root);\n    let user_plugins_dir = plugin_install_dir();\n    let mut found = Vec::new();\n`,
     `    if let Some(root) = project_root {\n        let project_plugins_dir = ${SKILL_ROOT_READERS.plugin_folder}(root);\n`,
     `        found.extend(list_dir_children(&project_plugins_dir).into_iter().map(\n            |(name, root)| DiscoveredPlugin {\n                name,\n                root,\n                scope: PluginScope::Project,\n            },\n        ));\n    }\n`,
-    `    found.extend(list_dir_children(&plugin_install_dir()).into_iter().map(|(name, root)| DiscoveredPlugin {\n        name,\n        root,\n        scope: PluginScope::User,\n    }));\n`,
+    `    found.extend(list_dir_children(&user_plugins_dir).into_iter().map(|(name, root)| DiscoveredPlugin {\n        name,\n        root,\n        scope: PluginScope::User,\n    }));\n`,
     `    found.sort_by(|left, right| left.root.cmp(&right.root));\n    found\n}\n\n`,
     `fn ${CHECKOUT_ROOT_CARRIERS.plugin_settings}(project_root: Option<&Path>) -> Vec<(SettingsScope, PluginSettings)> {\n    let mut paths: Vec<(SettingsScope, PathBuf)> = Vec::new();\n`,
+    `    if let Some(path) = user_settings_path() {\n        paths.push((SettingsScope::User, path));\n    }\n`,
     `    if let Some(root) = project_root {\n        paths.push((SettingsScope::Project, ${SKILL_ROOT_READERS.plugin_settings}(root, false)));\n        paths.push((SettingsScope::Local, ${SKILL_ROOT_READERS.plugin_settings}(root, true)));\n    }\n    paths\n}\n\n`,
     `fn ${SKILL_ROOT_READERS.plugin_folder}(project_root: &Path) -> PathBuf {\n    ${joined('project_root', roots.plugin_folder)}\n}\n\n`,
     `fn ${SKILL_ROOT_READERS.plugin_settings}(project_root: &Path, local: bool) -> PathBuf {\n    let file = if local {\n        "${nameOf(local)}"\n    } else {\n        "${nameOf(shared)}"\n    };\n`,
@@ -137,9 +140,10 @@ function pluginDiscovery(roots: CheckoutSkillRoots): string {
 const pluginSkillDirs = (): string => [
   `pub(crate) fn ${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}(\n    project_root: Option<&Path>,\n    config: &Config,\n) -> Vec<(PathBuf, PluginScope)> {\n`,
   `    let plugins_dir = plugin_install_dir();\n`,
-  `    for update in auto_update_plugins_at_root(&plugins_dir) {\n        if let Err(err) = update.result {\n            warn!(\n                "Failed to auto-update plugin '{}': {}.",\n                update.name, err\n            );\n        }\n    }\n`,
+  `    let mut seen = HashSet::new();\n`,
   `    discovery::${CHECKOUT_ROOT_CARRIERS.plugin_discovery}(project_root, config)\n        .into_iter()\n`,
-  `        .flat_map(|plugin| installed_skill_dirs(&plugin.root).into_iter().map(move |dir| (dir, plugin.scope)))\n        .collect()\n}\n`,
+  `        .flat_map(|plugin| {\n            let plugin_dir = plugin.root;\n            installed_skill_dirs(&plugin_dir).into_iter().map(move |dir| (dir, plugin.scope))\n        })\n`,
+  `        .filter(|(path, _)| seen.insert(path.clone()))\n        .collect()\n}\n`,
 ].join('')
 
 /** Files that share a path are one file, their texts in the order given: two parts may be decided in the same file. */
