@@ -109,12 +109,15 @@ interface AHoldsWindow {
   readonly unknown: boolean
 }
 
-function theWindowOf(hold: AHold, from: number, to: number): AHoldsWindow | undefined {
-  const before = hold.readings.filter((reading) => reading.at < from)
-  const inside = hold.readings.filter((reading) => reading.at >= from && reading.at < to)
-  const last = inside.at(-1)
-  if (last === undefined) return undefined
-  const reference = before.length === 0 ? theBaselineOf(hold.opening) : theHighest([theBaselineOf(hold.opening), ...before.map((reading) => reading.usd)])
+/** What the readings inside the window add above the reference, by billing and by model, and whether one went back. */
+interface TheSpentInside {
+  readonly usd: Dollars
+  readonly byModel: ReadonlyMap<string, Dollars>
+  readonly wentBack: boolean
+}
+
+/** Each reading above the highest before it adds the difference, to its own model and billing; a lower one adds nothing. */
+function theSpentInside(inside: readonly AUsageRead[], reference: number | null): TheSpentInside {
   let running = reference
   let usd = NO_DOLLARS
   let wentBack = false
@@ -127,6 +130,16 @@ function theWindowOf(hold: AHold, from: number, to: number): AHoldsWindow | unde
     byModel.set(reading.model, plus(byModel.get(reading.model) ?? NO_DOLLARS, reading.billing, reading.usd - running))
     running = reading.usd
   }
+  return { usd, byModel, wentBack }
+}
+
+function theWindowOf(hold: AHold, from: number, to: number): AHoldsWindow | undefined {
+  const before = hold.readings.filter((reading) => reading.at < from)
+  const inside = hold.readings.filter((reading) => reading.at >= from && reading.at < to)
+  const last = inside.at(-1)
+  if (last === undefined) return undefined
+  const reference = theHighest([theBaselineOf(hold.opening), ...before.map((reading) => reading.usd)])
+  const { usd, byModel, wentBack } = theSpentInside(inside, reference)
   const reported = inside.some((reading) => reading.usd !== null)
   const silent = reference === null && !reported
   const unknown = reference === null && reported
@@ -136,12 +149,12 @@ function theWindowOf(hold: AHold, from: number, to: number): AHoldsWindow | unde
     host: hold.opening.host,
     model: last.model,
     session: hold.opening.session,
-    usd: silent || unknown ? null : usd,
+    usd: reference === null ? null : usd,
     unknownPrice: inside.some((reading) => reading.unknown_price === 1),
     wentBack,
     wallMs: last.at - Math.max(hold.opening.at, from),
   }
-  return { spend, byModel: silent || unknown ? new Map() : byModel, silent, unknown }
+  return { spend, byModel: reference === null ? new Map() : byModel, silent, unknown }
 }
 
 /** Dollars summed by a key, in the order each key was first met. */
@@ -151,17 +164,21 @@ function summedBy(windows: readonly AHoldsWindow[], keyOf: (window: AHoldsWindow
   return sums
 }
 
+/** The windows of one stream's holds that hold a reading in it, or why one of its rows is no reading. */
+function theWindowsIn(stream: string, rows: readonly StoredRow[], from: number, to: number): readonly AHoldsWindow[] | { readonly refused: string } {
+  const readings = theReadingsIn(stream, rows)
+  if ('refusal' in readings) return { refused: readings.refusal }
+  return theHoldsIn(readings).map((hold) => theWindowOf(hold, from, to)).filter((window): window is AHoldsWindow => window !== undefined)
+}
+
 /** The window's spend, or why one of the rows it was handed is no reading. */
 export function theSpendBetween(asked: TheSpendAsked): TheSpend | { readonly refused: string } {
   const streams: [string, readonly StoredRow[]][] = [...[...asked.usage].map(([work_package, rows]): [string, readonly StoredRow[]] => [usageStreamOf(work_package), rows]), [usageStreamOf(null), asked.crew]]
   const windows: AHoldsWindow[] = []
   for (const [stream, rows] of streams) {
-    const readings = theReadingsIn(stream, rows)
-    if ('refusal' in readings) return { refused: readings.refusal }
-    for (const hold of theHoldsIn(readings)) {
-      const window = theWindowOf(hold, asked.from, asked.to)
-      if (window !== undefined) windows.push(window)
-    }
+    const read = theWindowsIn(stream, rows, asked.from, asked.to)
+    if ('refused' in read) return read
+    windows.push(...read)
   }
   const held = windows.filter((window) => window.spend.package !== null)
   const byModel = new Map<string, Dollars>()

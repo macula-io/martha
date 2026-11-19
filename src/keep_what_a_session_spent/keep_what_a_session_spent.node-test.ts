@@ -35,7 +35,7 @@ function aPlace(): CrewPlace & { readonly holding: Map<string, string> } {
 
 /** The member's row, holding whichever package the test says. */
 function aRow(): { beats: DashboardStore; hold: (package_name: string) => void } {
-  let row: DashboardRow = { ...theRowWithNothingSaid(), member: MEMBER }
+  let row: DashboardRow = { ...theRowWithNothingSaid(), member: MEMBER, session: SESSION, at: STARTED_AT }
   return {
     beats: { read: () => row, change: () => ({ kept: true }) } as unknown as DashboardStore,
     hold: (package_name) => void (row = { ...row, holds: package_name }),
@@ -55,11 +55,11 @@ function aWriter(host_name: AUsageHost = 'claude-code'): AWriter {
   const place = aPlace()
   const row = aRow()
   return {
-    places: { member: MEMBER, host: host_name, beats: row.beats, ledger: host, row_model: MODEL, kept: place },
+    places: { member: MEMBER, host: host_name, beats: row.beats, ledger: host.host, row_model: MODEL, kept: place },
     place,
     hold: row.hold,
     later: () => host.advanceClock(60_000),
-    stream: (package_name) => host.stores.rows.read(usageStreamOf(package_name)),
+    stream: (package_name) => host.host.stores.rows.read(usageStreamOf(package_name)),
   }
 }
 

@@ -70,6 +70,12 @@ function theBillingOf(usage: Fields, answered: boolean): Billing {
   return answered && kinds.every((kind) => kind === A_GATEWAYS_WINDOW) ? METERED : UNKNOWN_BILLING
 }
 
+/** The cost half of a reading: the running total, null when the host priced nothing yet, and whether a price was unknown. */
+const theCostIn = (cost: Fields | undefined): Pick<AHostsReading, 'cost_usd' | 'unknown_price'> => ({
+  cost_usd: typeof cost?.['usd'] === 'number' ? cost['usd'] : null,
+  unknown_price: cost?.['hasUnknownPrice'] === true ? 1 : 0,
+})
+
 /**
  * The host's usage as a reading, or why it is not one. A value that is no object at all is a host that said nothing, as
  * it always was; an object is held to every field above.
@@ -80,12 +86,10 @@ export function theHostsReadingIn(usage: unknown): AHostsReading | string {
   if (refused !== undefined) return refused
   const percent = anObjectAt(usage, 'context')?.['percent']
   const answered = typeof percent === 'number' && Number.isFinite(percent)
-  const cost = anObjectAt(usage, 'cost')
   return {
     percent: answered ? percent : 0,
-    cost_usd: typeof cost?.['usd'] === 'number' ? cost['usd'] : null,
+    ...theCostIn(anObjectAt(usage, 'cost')),
     started_at: usage['startedAt'] as number,
-    unknown_price: cost?.['hasUnknownPrice'] === true ? 1 : 0,
     billing: theBillingOf(usage, answered),
   }
 }
