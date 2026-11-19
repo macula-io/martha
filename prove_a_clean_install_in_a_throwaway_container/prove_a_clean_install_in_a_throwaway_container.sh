@@ -1840,7 +1840,7 @@ self_test() {
   # (martha#646, issue item 3): a member that ended is still read, never said to be a container that could not give it.
   local kept_root kept_copy kept_nowhere kept_log
   kept_root="${root}/the-kept-copy"
-  kept_copy="${kept_root}/state/*/transcripts/*/projects/*/*.jsonl"
+  kept_copy="${kept_root}/state/*/*/transcripts/*/projects/*/*.jsonl"
   kept_nowhere="${kept_root}/no-live-folder/*/*/*/*.jsonl"
   kept_log="${root}/the-kept-copy.log"
   mkdir -p "${kept_root}/state/martha/p/transcripts/launch-1/projects/the-project"
