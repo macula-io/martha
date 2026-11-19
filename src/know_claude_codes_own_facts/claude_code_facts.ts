@@ -44,3 +44,42 @@ export const MCP_CONFIG_SWITCH = '--mcp-config'
  * and the tarball's stub is what stays.
  */
 export const CLAUDE_AUTO_UPDATER_OFF: Readonly<Record<string, string>> = { DISABLE_AUTOUPDATER: '1' }
+
+/** The folder under the owner's skills folder that Claude Code fills from their Claude account (martha#243). */
+export const SYNCED_SKILLS_FOLDER = 'synced'
+
+/** The kind of the owner's markdown the host syncs into: the recording names it, and a test fails if it stops. */
+export const SKILLS_KIND = 'skills'
+
+/** The folder the host moves skills it no longer runs into. It loads a SKILL.md directly in it, and nothing below an entry (martha#243). */
+export const TRASH_FOLDER = '.trash'
+
+/**
+ * The variable that puts the host in bare mode (martha#747): a member in bare mode would load none of the skills its
+ * launch copies, and none of its gate's hooks, so a launch drops it. The recorded bare-mode test is checked to read
+ * this one (../load_the_hosts_markdown/the_skills_loader.ts), so a host that renames it fails by name.
+ */
+export const CLAUDE_CODE_BARE_MODE_VARIABLE = 'CLAUDE_CODE_SIMPLE'
+
+/**
+ * The variable that names the host's skill catalog mount (martha#747): no approval reads that mount, so a launch drops
+ * it. The recorded catalog reader's own warning is checked to name this one, as above.
+ */
+export const CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE = 'CLAUDE_CODE_HOST_SKILL_CATALOG'
+
+/** The skills folder of a Claude Code checkout, as the gate lists it and the approval names its files (martha#747). */
+export const CLAUDE_SKILLS = `${CLAUDE_FOLDER}/${SKILLS_KIND}`
+
+/**
+ * The folder names a checkout's skill may not take (martha#747): `synced`, which the host's skills loader reserves for
+ * the account's synced skills, and `.trash`, which Martha's own scan of a member's skills reads by the markdown loader's
+ * rules. A copied skill under either would be read differently from the way the owner approved it.
+ */
+export const RESERVED_SKILL_NAMES: readonly string[] = [SYNCED_SKILLS_FOLDER, TRASH_FOLDER]
+
+/**
+ * The variables that bring skills in that no approval read, which a launch drops (martha#747): bare mode, in which the
+ * host loads none of the skills a launch copies and reads added folders' skills unguarded, and the host skill catalog,
+ * a mount of skills named by an inherited variable.
+ */
+export const CLAUDE_SKILLS_ELSEWHERE: readonly string[] = [CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE]

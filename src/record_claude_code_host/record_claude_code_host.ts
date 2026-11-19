@@ -29,6 +29,7 @@ import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_ev
 import { classicHookEventsIn, notificationTypesIn } from '../claude_code_host/owner_dialogs_the_host_raises.ts'
 import { filePermissionRulesIn } from '../claude_code_host/file_permission_rules.ts'
 import { markdownTheHostLoadsIn, type MarkdownTheHostLoads } from '../load_the_hosts_markdown/markdown_the_host_loads.ts'
+import { theSkillsLoaderIn } from '../load_the_hosts_markdown/the_skills_loader.ts'
 import { protectedConfigPlacesIn } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { signInStoreVariableIn } from '../cut_the_rules_from_the_host_binary/the_sign_in_store.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
@@ -48,6 +49,7 @@ const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string
   { part: 'hook switches', read: hookSwitchesIn },
   { part: 'managed settings place', read: (text) => ({ managed_settings: managedSettingsPlaceIn(text) }) },
   { part: 'markdown the host loads', read: markdownIn },
+  { part: 'skills loader', read: theSkillsLoaderIn },
   { part: 'protected config places', read: protectedConfigPlacesIn },
   { part: 'sign-in store', read: signInStoreVariableIn },
   { part: 'file permission rules', read: (text) => ({ file_permission_rules: filePermissionRulesIn(text) }) },

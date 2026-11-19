@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { passesOnlySwitchesThatLoadNoConfig, SWITCHES_THAT_LOAD_NO_CONFIG, unpassedOwnerArgument } from './pass_only_switches_that_load_no_config.ts'
 
 test('every switch on the list passes, each with a value when it takes one', () => {
@@ -26,4 +27,11 @@ test('a value switch with no value, or with a switch for its value, does not pas
 test('a switch spelled with its value after = is not the switch, and does not pass', () => {
   const [value_switch] = Object.entries(SWITCHES_THAT_LOAD_NO_CONFIG).find(([, takes]) => takes === 'value')!
   assert.equal(passesOnlySwitchesThatLoadNoConfig([`${value_switch}=a-value`]), false)
+})
+
+test("T9b: the host's bare-mode switch, as its recorded bare-mode test spells it, is refused by name (martha#747)", () => {
+  const bare = /\("(--[a-z-]+)"\)\}$/.exec(RECORDED_HOST.bare_mode_test)?.[1]
+  assert.ok(bare !== undefined, RECORDED_HOST.bare_mode_test)
+  assert.ok((unpassedOwnerArgument([bare]) ?? '').startsWith(`${bare} `), 'bare mode is refused, naming it')
+  assert.equal(passesOnlySwitchesThatLoadNoConfig(['--verbose', bare]), false)
 })
