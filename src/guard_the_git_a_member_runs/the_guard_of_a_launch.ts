@@ -21,6 +21,15 @@
 // is the one write a shell can make with no reader able to see half a line as a line. The launcher reads that file on
 // the tick it already keeps, skips a partial last line until it is whole, and folds the misses it has not folded yet
 // into the member's row, which is the launcher's own write.
+//
+// The judge's own node takes nothing from the member's environment that would choose the code it runs (martha#772):
+// neither NODE_OPTIONS (a preload, or any node flag, which is also the only road to a `node.config.json`) nor
+// NODE_COMPILE_CACHE (entries node runs in place of the judge's files, checked only by a sum anyone can compute).
+// Either would change what the judge decides and leave every one of the guard's files as the launch wrote it. So the
+// shim and the hook keep each one under its own name, start the judge without it, and the judge hands it back to the
+// real git: the member's git, and every hook, alias and helper git starts, still get exactly what the member set. The
+// list is WHAT_THE_JUDGE_NEVER_TAKES, in the protocol the judge carries. What this does not close, and why, is the
+// design's threat model on martha#772: the guard is a speed bump, and the real git by its full path is always there.
 
 import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync, type Stats } from 'node:fs'
 import { delimiter, dirname, join } from 'node:path'
@@ -32,6 +41,7 @@ import type { TheHooksALaunchRuns } from '../refuse_code_a_checkout_runs_itself/
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theRowWithTheLine, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theMissesLine } from '../guard_workspace/guard_workspace.ts'
+import { PREPARED, THE_MEMBER_HAD_IT, theHadNameOf, theKeptNameOf, WHAT_THE_JUDGE_NEVER_TAKES } from './guard_protocol.ts'
 
 /** The folder inside a launch's relay directory that holds the shim, the judge and what the judge is given. */
 export const THE_GUARD_DIRECTORY_NAME = 'git-guard'
@@ -196,14 +206,29 @@ function foldersBetween(stop: string, folder: string): readonly string[] {
  * The shell script the member's git and the clone's hook are: the launch's own node, the judge, and the mode, then the
  * words the caller handed it unchanged. A shell script rather than a shebang on the judge, because the node a launch
  * runs on can stand anywhere, and a script's first line is the one place a path with no length limit is safe.
+ *
+ * The hook starts node only for the state the judge judges (martha#755): git calls it for every state of every
+ * transaction, seven times for one commit, and node for a state the judge answers 0 to at once is a whole start for
+ * nothing. Any other state ends in the shell with 0, which is what the judge answers it, and git does not need the
+ * hook to read its input.
  */
 export function theShimFor(mode: string, node: string, judge: string): string {
+  const exec = `exec ${singleQuoted(node)} ${singleQuoted(judge)} ${singleQuoted(mode)} "$@"`
   return [
     '#!/bin/sh',
     `# Martha's git guard (martha#562): the judge decides, and the real git runs what it allows.`,
-    `exec ${singleQuoted(node)} ${singleQuoted(judge)} ${singleQuoted(mode)} "$@"`,
+    `# The judge's node takes none of these from the member; each is kept for the real git (martha#772).`,
+    ...WHAT_THE_JUDGE_NEVER_TAKES.flatMap(keptAndCleared),
+    ...(mode === THE_HOOK_NAME ? [`case "$1" in ${singleQuoted(PREPARED)}) ${exec} ;; esac`, 'exit 0'] : [exec]),
     '',
   ].join('\n')
+}
+
+/** The shim's lines for one variable the judge never takes: its value and whether it was set, kept, then it is unset. */
+function keptAndCleared(variable: string): readonly string[] {
+  const kept = theKeptNameOf(variable)
+  const had = theHadNameOf(variable)
+  return [`${kept}="\${${variable}-}" ${had}="\${${variable}+${THE_MEMBER_HAD_IT}}"`, `export ${kept} ${had}`, `unset ${variable}`]
 }
 
 /** One word as a shell reads it as itself: in single quotes, the quote it holds ended and started again. */
