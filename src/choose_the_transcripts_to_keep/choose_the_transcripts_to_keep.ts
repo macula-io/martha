@@ -34,9 +34,15 @@ export const REDACTED = '[the token, redacted]'
 /** What stands for a whole text that held a token across a line break or a terminal sequence. */
 export const WITHHELD = '[withheld: a token was in this text across a line break or a terminal sequence, so none of it is kept]'
 
+/**
+ * Which bound a note speaks for. The two bounds are equal numbers today, so a note that read the bound's own value to
+ * say which one it was could not tell them apart; it is told, never guessed from the number.
+ */
+export type TheBound = 'file' | 'launch'
+
 /** What stands for a transcript the bound leaves no room for, naming the bound it passed. */
-export const tooLargeToKeep = (bytes: number, bound: number): string =>
-  `[too large to keep: this transcript is ${String(bytes)} bytes, past the ${String(bound)} bytes Martha keeps of one ${bound === TRANSCRIPTS_FILE_BYTES_KEPT ? 'file' : 'launch'}]`
+export const tooLargeToKeep = (bytes: number, bound: number, of: TheBound): string =>
+  `[too large to keep: this transcript is ${String(bytes)} bytes, past the ${String(bound)} bytes Martha keeps of one ${of}]`
 
 /**
  * How short a run after a token's prefix may be and still be a token: a prefix alone is a word, and a secret runs on.
@@ -116,11 +122,11 @@ export function chooseTheTranscripts(holds: WhatTheConfigFolderHolds): TheTransc
   const transcripts = holds.files.filter((one) => isTheHostsTranscript(one.path)).sort((one, other) => one.path.localeCompare(other.path))
   for (const transcript of transcripts) {
     if (transcript.bytes > TRANSCRIPTS_FILE_BYTES_KEPT) {
-      kept.push({ path: transcript.path, text: tooLargeToKeep(transcript.bytes, TRANSCRIPTS_FILE_BYTES_KEPT) })
+      kept.push({ path: transcript.path, text: tooLargeToKeep(transcript.bytes, TRANSCRIPTS_FILE_BYTES_KEPT, 'file') })
       continue
     }
     if (theLaunchesBytes + transcript.bytes > TRANSCRIPTS_LAUNCH_BYTES_KEPT) {
-      kept.push({ path: transcript.path, text: tooLargeToKeep(transcript.bytes, TRANSCRIPTS_LAUNCH_BYTES_KEPT) })
+      kept.push({ path: transcript.path, text: tooLargeToKeep(transcript.bytes, TRANSCRIPTS_LAUNCH_BYTES_KEPT, 'launch') })
       continue
     }
     const redacted = redactTheTokens(transcript.text ?? '', holds.theLaunchKey)

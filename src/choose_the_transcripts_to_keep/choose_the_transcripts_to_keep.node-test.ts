@@ -13,10 +13,13 @@ import {
   TRANSCRIPTS_LAUNCHES_KEPT,
   TRANSCRIPTS_LAUNCH_BYTES_KEPT,
   TRANSCRIPTS_SUFFIX,
+  WITHHELD,
   type WhatTheConfigFolderHolds,
 } from './choose_the_transcripts_to_keep.ts'
 
-const THE_LAUNCH_KEY = 'sk-ant-the-launches-own-key'
+// Deliberately no token shape at all: a key that looked like one would be caught by the shape redaction and would say
+// nothing about the exact-value redaction the launch's own key gets.
+const THE_LAUNCH_KEY = 'launch-key-9f3c2b7e1a'
 
 /** One fixture file: its path under the member's config folder, its size, and its text. */
 const aFile = (path: string, text: string) => ({ path, bytes: Buffer.byteLength(text), text })
@@ -33,6 +36,7 @@ test('only the host\'s own transcripts are kept, never the rest of the member\'s
     aFile(`${HOST_PROJECTS_PLACE}/the-project/notes.txt`, 'not a transcript'),
     aFile(`${HOST_PROJECTS_PLACE}/s-2${TRANSCRIPTS_SUFFIX}`, 'one level too high'),
     aFile(`s-3${TRANSCRIPTS_SUFFIX}`, 'not under projects'),
+    aFile(`another-place/the-project/s-4${TRANSCRIPTS_SUFFIX}`, 'the same shape under another root'),
   ])
   assert.deepEqual(chosen.kept.map((one) => one.path), [aTranscriptPath('s-1')], 'a file that is not the host\'s transcript was kept, or a transcript was left behind')
 })
@@ -52,9 +56,12 @@ test('the key the launch handed the member is redacted by its exact value, whate
 })
 
 test('a token split by a line break is withheld whole, since no piece of the text is the token (martha#646)', () => {
-  const split = `sk-ant-abcdefgh\nijklmnop`
+  // The first piece is shorter than any token's body, so nothing in the text as written matches the shape: only reading
+  // the flattened text finds the token, and no single piece of the text is it.
+  const split = `sk-ant-abc\ndefghijklmnop`
   const chosen = choosing([aFile(aTranscriptPath('s-1'), `{"text":"${split}"}`)])
-  assert.equal(chosen.kept[0]?.text.includes('abcdefgh'), false, 'the part after the line break was kept, so the token can be read across it')
+  assert.equal(chosen.kept[0]?.text, WITHHELD, 'the text a line break split a token across was kept in part')
+  assert.equal(chosen.kept[0]?.text.includes('defghijklmnop'), false, 'the part after the line break was kept, so the token can be read across it')
   assert.deepEqual(chosen.marked, [aTranscriptPath('s-1')], 'a split token was not marked')
 })
 
@@ -63,6 +70,7 @@ test('a transcript over the per-file bound is replaced by a line that says so, n
   const chosen = choosing([{ path, bytes: TRANSCRIPTS_FILE_BYTES_KEPT + 1, text: 'never read whole' }])
   assert.equal(chosen.kept[0]?.path, path)
   assert.match(chosen.kept[0]?.text ?? '', /too large to keep/, 'a file over the bound was not replaced by its note')
+  assert.match(chosen.kept[0]?.text ?? '', /of one file\]$/, 'the note does not name the per-file bound, so the launch bound alone could be what stopped it')
   assert.equal(chosen.kept[0]?.text.includes('never read whole'), false, 'a file over the bound was kept in part')
 })
 
@@ -75,7 +83,7 @@ test('the transcripts of one launch stop at their own bound, and the ones past i
     { path: second, bytes: half + 1, text: 'b'.repeat(16) },
   ])
   assert.equal(chosen.kept.find((one) => one.path === first)?.text.includes('a'.repeat(16)), true, 'a file inside the launch bound was dropped')
-  assert.match(chosen.kept.find((one) => one.path === second)?.text ?? '', /too large to keep/, 'the file that passed the launch bound was kept')
+  assert.match(chosen.kept.find((one) => one.path === second)?.text ?? '', /of one launch\]$/, 'the file that passed the launch bound was kept, or the note names another bound')
 })
 
 test('the worst case the product states is the two constants\' own product, read from them (martha#646, Mars item 3)', () => {

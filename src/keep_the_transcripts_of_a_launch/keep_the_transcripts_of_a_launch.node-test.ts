@@ -2,7 +2,7 @@
 // the staging name, the mark beside them and the prune. The choices themselves are held in the slice's own test.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -60,14 +60,20 @@ test('a member whose config folder is gone is kept with nothing and is no failur
 test('the launches past the newest are pruned by each directory\'s own last change, and the oldest goes (martha#646)', (t) => {
   const ending = aLaunchEnding(t)
   mkdirSync(ending.place, { recursive: true })
+  // The names run the other way to the times on purpose: the newest launch is the first by name, so a prune that
+  // ordered by a directory's name and not by its own last change keeps the wrong ones and fails here by name.
   for (let at = 0; at <= TRANSCRIPTS_LAUNCHES_KEPT; at += 1) {
     const directory = join(ending.place, `launch-${String(at)}`)
     mkdirSync(directory)
-    const when = new Date(Date.UTC(2026, 0, 1) + at * 1000)
+    const when = new Date(Date.UTC(2026, 0, 1) + (TRANSCRIPTS_LAUNCHES_KEPT - at) * 1000)
     utimesSync(directory, when, when)
   }
   const trouble = pruneTheLaunchesPastTheNewest(ending.place)
   assert.deepEqual(trouble, [])
-  assert.throws(() => statSync(join(ending.place, 'launch-0')), 'the oldest launch was not pruned')
-  assert.equal(statSync(join(ending.place, `launch-${String(TRANSCRIPTS_LAUNCHES_KEPT)}`)).isDirectory(), true, 'the newest launch was pruned')
+  assert.throws(() => statSync(join(ending.place, `launch-${String(TRANSCRIPTS_LAUNCHES_KEPT)}`)), 'the launch kept longest ago was not pruned')
+  assert.equal(statSync(join(ending.place, 'launch-0')).isDirectory(), true, 'the launch last kept was pruned')
+  assert.equal(statSync(join(ending.place, `launch-${String(TRANSCRIPTS_LAUNCHES_KEPT - 1)}`)).isDirectory(), true,
+    'the launch the bound still had room for was pruned too, so more than one went')
+  assert.deepEqual(readdirSync(ending.place).sort(), Array.from({ length: TRANSCRIPTS_LAUNCHES_KEPT }, (_, at) => `launch-${String(at)}`).sort(),
+    'the place does not hold exactly the newest launches the bound keeps')
 })

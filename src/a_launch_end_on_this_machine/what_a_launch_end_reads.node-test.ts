@@ -3,13 +3,15 @@
 // group can be told what it ends, and that a list the kernel will not give is unreadable rather than empty.
 
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import type { LaunchMade } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { bootTimeMsUnder, groupIn, processesInGroupUnder, startedAtMs } from './what_a_launch_end_reads.ts'
+import { bootTimeMsUnder, cleanUpIfTheLauncherEnds, groupIn, processesInGroupUnder, startedAtMs } from './what_a_launch_end_reads.ts'
 
 /** A synthetic pid and start, never a real one: this repository is public. */
 const PLUTO = { pid: 4101 }
@@ -71,4 +73,27 @@ test('#693: the group id is read after a command name that holds spaces and brac
   fields[2] = '777'
   assert.equal(groupIn(`${PLUTO.pid} (a (shell)) ${fields.join(' ')}`), 777)
   assert.equal(groupIn('not a stat line'), null)
+})
+
+test('a launcher that exits first keeps the member\'s transcripts after the relay and before the snapshot (martha#646, D1)', () => {
+  const order: string[] = []
+  const made = {
+    relayDirectory: { remove: (): void => void order.push('relay') },
+    keepTranscripts: (): void => void order.push('keep'),
+    removeSnapshot: (): void => void order.push('snapshot'),
+  } as unknown as LaunchMade
+  // A group no kernel holds: the group's own kill runs first and finds nothing, so nothing but the three removals shows.
+  const dead = spawnSync(process.execPath, ['-e', '']).pid
+  const before = new Set(process.listeners('exit'))
+  const off = cleanUpIfTheLauncherEnds(dead, made)
+  const added = process.listeners('exit').filter((one) => !before.has(one))
+  try {
+    assert.equal(added.length, 1, 'the launcher\'s end registered no exit handler, or more than one')
+    added[0]!(0)
+    assert.deepEqual(order, ['relay', 'keep', 'snapshot'],
+      'the keep does not sit between the relay and the snapshot, so the snapshot goes with what the host wrote still in it')
+  } finally {
+    off()
+  }
+  assert.deepEqual(process.listeners('exit').filter((one) => !before.has(one)), [], 'the handler was left registered')
 })

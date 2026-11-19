@@ -53,27 +53,28 @@ const whatTheFolderHolds = (configFolder: string, fileBytesKept: number): readon
   } catch {
     return []
   }
-  const files: AConfigFile[] = []
-  for (const key of keys) {
-    let names: string[]
-    try {
-      names = fs.readdirSync(join(projects, key)).filter((name) => fs.lstatSync(join(projects, key, name), { throwIfNoEntry: false })?.isFile() === true)
-    } catch {
-      continue
-    }
-    for (const name of names) {
-      const path = [HOST_PROJECTS_PLACE, key, name].join('/')
-      let bytes = 0
-      try {
-        bytes = fs.statSync(join(projects, key, name)).size
-      } catch {
-        continue
-      }
-      const text = bytes > fileBytesKept ? undefined : readWhole(join(projects, key, name))
-      files.push({ path, bytes, ...(text === undefined ? {} : { text }) })
-    }
+  return keys.flatMap((key) => theFilesOfOneKey(projects, key, fileBytesKept))
+}
+
+/** One key's files under `projects`: each file it holds, with its text when the bound had room to read it. */
+const theFilesOfOneKey = (projects: string, key: string, fileBytesKept: number): readonly AConfigFile[] => {
+  let names: string[]
+  try {
+    names = fs.readdirSync(join(projects, key)).filter((name) => fs.lstatSync(join(projects, key, name), { throwIfNoEntry: false })?.isFile() === true)
+  } catch {
+    return []
   }
-  return files
+  return names.flatMap((name) => {
+    const path = [HOST_PROJECTS_PLACE, key, name].join('/')
+    let bytes = 0
+    try {
+      bytes = fs.statSync(join(projects, key, name)).size
+    } catch {
+      return []
+    }
+    const text = bytes > fileBytesKept ? undefined : readWhole(join(projects, key, name))
+    return [{ path, bytes, ...(text === undefined ? {} : { text }) }]
+  })
 }
 
 /** A file's text, or undefined when it cannot be read: an unreadable transcript is not kept. */
