@@ -115,9 +115,10 @@ export const ENGINE_FOLDER = '.config/goose'
  * The engine's own hints file (martha#541): its source names it (`GOOSE_HINTS_FILENAME`, crates/goose/src/hints/load_hints.rs)
  * and reads it from the directory the engine starts in, so it is text a checkout puts into every prompt. It starts no
  * code, so this gate does not list it and never refuses a checkout for holding one; a row that says what such text does
- * is the send path's (martha#541 packages 7-8 part C, C3's wiring), not this gate's.
+ * is the send path's (martha#541 packages 7-8 part C, C3's wiring), not this gate's. The name is the recording's, read
+ * from the engine at the pin (martha#785), so an engine that renames the file renames it here.
  */
-export const ENGINE_HINTS_FILE = '.goosehints'
+export const ENGINE_HINTS_FILE: string = RECORDED_GOOSE_ENGINE.hint_files.goose_hints
 
 /**
  * The engine's own files, in the families the design lists them by (martha#541, B1.3): the folders it reads skills,
@@ -143,16 +144,20 @@ export const ENGINE_FAMILIES = {
  */
 export const ENGINE_FILES: readonly string[] = Object.values(ENGINE_FAMILIES).flat()
 
-/** The engine's instruction file, as its own source spells it (crates/goose/src/hints/load_hints.rs, `AGENTS_MD_FILENAME`). */
-export const AGENTS_MD_FILE = 'AGENTS.md'
+/**
+ * The engine's instruction file, as its own source spells it (crates/goose/src/hints/load_hints.rs, `AGENTS_MD_FILENAME`),
+ * read from the recording of the engine at the pin (martha#785).
+ */
+export const AGENTS_MD_FILE: string = RECORDED_GOOSE_ENGINE.hint_files.agents_md
 
 /**
  * The checkout files the engine reads into its prompt with no tool call: the names its own source spells, read at
  * the pinned commit (`GOOSE_HINTS_FILENAME` and `AGENTS_MD_FILENAME` in crates/goose/src/hints/load_hints.rs). The
  * engine reads them at the start and again on every model request. They start nothing, so no gate refuses a checkout
- * for holding one; the launch records each it finds (martha#541, and ../inbound_paths' A25 and A26).
+ * for holding one; the launch records each it finds (martha#541, and ../inbound_paths' A25 and A26). The list is the
+ * one the engine loads when no setting replaces it (`get_context_filenames`), as recorded at the pin (martha#785).
  */
-export const RECORDED_TEXT_FILES: readonly string[] = [ENGINE_HINTS_FILE, AGENTS_MD_FILE]
+export const RECORDED_TEXT_FILES: readonly string[] = RECORDED_GOOSE_ENGINE.hint_files.when_unset
 
 /** One file the engine attaches to its prompt with no tool call: where it is, and the source it is recorded as. */
 export interface ATextAStartLoads {
