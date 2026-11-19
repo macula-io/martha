@@ -1,6 +1,6 @@
 // The Node a standalone Martha carries (martha#547, package S3).
 //
-// This exists so Martha runs from one download on Linux and macOS, with no Node on the user's machine.
+// This exists so Martha runs from one download on Linux, with no Node on the user's machine.
 //
 // A standalone release is Martha's tree beside one pinned Node, not a Node single-executable application. The
 // single executable was tried first and fails two things Martha does at run time
@@ -22,8 +22,9 @@ export const NODE_DIST = 'https://nodejs.org/dist'
 /** The file of nodejs.org's own sha256 for every archive of a release. */
 export const NODE_SHASUMS = 'SHASUMS256.txt'
 
-/** The platforms a standalone Martha ships for, in nodejs.org's own `<os>-<arch>` words. Windows comes later. */
-export const PLATFORMS = ['darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64'] as const
+/** The platforms a standalone Martha ships for, in nodejs.org's own `<os>-<arch>` words: linux-x64 alone
+ * (DECIDED 2026-11-19 "we build for linux, not windows or macOS" and DECIDED 2026-11-19 "Drop arm64 (Recommended)"). */
+export const PLATFORMS = ['linux-x64'] as const
 
 export type Platform = (typeof PLATFORMS)[number]
 

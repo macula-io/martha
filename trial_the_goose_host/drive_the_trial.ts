@@ -204,39 +204,59 @@ async function startARun(line: number, options: Options, launchedAt: number): Pr
   const cap = theCapFor(pace, remaining)
   const proxy = new RecordingProxy(options.ollama, { into: evidenceForLine, pace })
   const port = await proxy.start()
-  writeTheConfig(place, options.model, `http://127.0.0.1:${port}`, options.gooseSource)
-  const tracePath = join(evidenceForLine, 'trace.log')
-  // The exchange is kept as it crosses, one line per message, in the launch's own evidence directory
-  // (martha#694). Written empty first: a launch killed before its first message still leaves the file the
-  // verdict is checked against, rather than a directory that looks as if nothing was asked for.
-  const transcriptPath = join(evidenceForLine, THE_TRANSCRIPT)
-  writeFileSync(transcriptPath, '')
-  const keep = (exchange: Exchange): void => {
-    appendFileSync(transcriptPath, `${JSON.stringify(exchange)}\n`)
-  }
-  // Recorded before the engine starts, so a launch killed during the handshake still has its logs kept; the
-  // exchange joins it once it exists, so the SIGTERM path can keep what arrived before the kill (martha#694).
-  theLaunchInHand = { root: place.root, into: evidenceForLine }
-  const child = startGoose(place, options, line, tracePath)
-  const acp = new GooseOverAcp(child, keep)
-  theLaunchInHand = { root: place.root, into: evidenceForLine, child, close: () => acp.closeTheExchange() }
+  // Everything after the proxy listens is inside this try: a throw between the port and the handshake would otherwise
+  // leave the proxy's server listening, and a server is a handle the driver is kept alive for (martha#725).
+  let child: ChildProcess | undefined
+  let acp: GooseOverAcp | undefined
   try {
+    writeTheConfig(place, options.model, `http://127.0.0.1:${port}`, options.gooseSource)
+    const tracePath = join(evidenceForLine, 'trace.log')
+    // The exchange is kept as it crosses, one line per message, in the launch's own evidence directory
+    // (martha#694). Written empty first: a launch killed before its first message still leaves the file the
+    // verdict is checked against, rather than a directory that looks as if nothing was asked for.
+    const transcriptPath = join(evidenceForLine, THE_TRANSCRIPT)
+    writeFileSync(transcriptPath, '')
+    const keep = (exchange: Exchange): void => {
+      appendFileSync(transcriptPath, `${JSON.stringify(exchange)}\n`)
+    }
+    // Recorded before the engine starts, so a launch killed during the handshake still has its logs kept; the
+    // exchange joins it once it exists, so the SIGTERM path can keep what arrived before the kill (martha#694).
+    theLaunchInHand = { root: place.root, into: evidenceForLine }
+    child = startGoose(place, options, line, tracePath)
+    acp = new GooseOverAcp(child, keep)
+    theLaunchInHand = { root: place.root, into: evidenceForLine, child, close: () => acp?.closeTheExchange() }
     const { sessionId, currentMode } = await handOver(acp, place, remaining)
     return { line, options, place, proxy, acp, child, tracePath, sessionId, currentMode, pace, cap }
   } catch (error) {
-    // A launch with no handshake leaves nothing of its own behind: not its group, not the proxy's port, and its
-    // engine's logs go into this line's evidence rather than being lost with the root (martha#737). The order is the
-    // signal path's — close, kill, copy — and the explicit close is the fallback for the pipe's `end` (martha#694).
-    // A launch a signal is already ending has had all three done for it, and a second kill would be the same end twice.
-    if (!anEndIsUnderwayOnSignal) {
-      acp.closeTheExchange()
-      await killTheGroup(child).catch(() => undefined)
-      keepTheEngineLogs(place.root, evidenceForLine)
-      theLaunchInHand = undefined
-    }
-    await proxy.stop().catch(() => undefined)
+    await theLaunchThatNeverRan({ place, evidenceForLine, proxy, child, acp })
     throw error
   }
+}
+
+/**
+ * What a launch leaves behind when it never got as far as its line: nothing of its own — not its group, not the
+ * proxy's port — with its engine's logs kept in the line's evidence rather than lost with the root (martha#737).
+ *
+ * The order is the signal path's — close, kill, copy — and the close is the fallback for the pipe's `end`
+ * (martha#694). A launch a signal is already ending has had all three done for it, and a second kill would be the
+ * same end twice. The proxy is stopped either way: its server was listening before any of this ran (martha#725).
+ */
+async function theLaunchThatNeverRan({
+  place, evidenceForLine, proxy, child, acp,
+}: {
+  readonly place: Place
+  readonly evidenceForLine: string
+  readonly proxy: RecordingProxy
+  readonly child: ChildProcess | undefined
+  readonly acp: GooseOverAcp | undefined
+}): Promise<void> {
+  if (!anEndIsUnderwayOnSignal) {
+    acp?.close()
+    if (child !== undefined) await killTheGroup(child).catch(() => undefined)
+    keepTheEngineLogs(place.root, evidenceForLine)
+    theLaunchInHand = undefined
+  }
+  await proxy.stop().catch(() => undefined)
 }
 
 function trialOf(running: Running): Trial {
@@ -377,9 +397,11 @@ function onTheRunnersTerm(): void {
 
 async function endARun(running: Running): Promise<{ trace: TraceFindings; groupLeft: string[]; engineLogs: number }> {
   const groupLeft = await killTheGroup(running.child)
-  // The fallback for the pipe's own `end` event, which normally has flushed the last partial message already: a
-  // launch whose stdout ended before any listener could run still keeps what crossed (martha#694). Keeps nothing twice.
-  running.acp.closeTheExchange()
+  // The exchange's rest is kept and the engine's three pipes are closed (martha#725): a process the group kill did not
+  // reach — a builtin extension's own session — can still hold the engine's output open, and a pipe the driver holds
+  // keeps node alive six minutes past a verdict it has already written. The close is also the fallback for the pipe's
+  // own `end` event, which normally has flushed the last partial message already (martha#694). Keeps nothing twice.
+  running.acp.close()
   await running.proxy.stop()
   const engineLogs = keepTheEngineLogs(running.place.root, join(running.options.evidence, `line-${running.line}`))
   theLaunchInHand = undefined
