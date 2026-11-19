@@ -244,13 +244,13 @@ const THE_PICTURE = 'assets/c4-context.svg'
 /** The manifest of a repository that is not Martha's: its own scripts, and nothing of Martha's declared in it. */
 const A_STRANGERS_MANIFEST = `${JSON.stringify({ name: 'demo', private: true, type: 'module', scripts: { test: 'node --test' } }, null, 2)}\n`
 
-/** The script a stranger's repository defines for itself under the name Martha's redo of generated files once had. */
-const A_STRANGERS_REDO_SCRIPT = 'redo:generated'
+/** A script a stranger's repository defines for itself: the dry run must never run it. */
+const A_STRANGERS_REDO_SCRIPT = 'regenerate'
 
-/** The file a stranger's own `redo:generated` writes when anything runs it: a test reads that nothing did (martha#604 r=2). */
+/** The file a stranger's own script writes when anything runs it: a test reads that nothing did (martha#604 r=2). */
 const THE_MARKER_A_STRANGERS_REDO_WRITES = 'the-redo-ran'
 
-/** The manifest of a stranger's repository that defines a `redo:generated` of its own, which exits 0 and leaves a marker. */
+/** The manifest of a stranger's repository that defines a script of its own, which exits 0 and leaves a marker. */
 const A_STRANGERS_MANIFEST_THAT_REDOES = `${JSON.stringify(
   {
     name: 'demo',
@@ -792,7 +792,7 @@ test('#604: a batch lands in a repository that holds none of Martha’s files, a
 })
 
 test('#604 r=2: the dry run of a stranger’s repository runs nothing of its own, not even a redo script it defines', async (t) => {
-  // The stranger's manifest defines a `redo:generated` of its own that exits 0 and leaves a marker. The dry run runs no
+  // The stranger's manifest defines a script of its own that exits 0 and leaves a marker. The dry run runs no
   // script of a repository's at all, so the marker is never written, and the clash is forecast as its builders' own.
   const fixture = aRepository(t)
   const base = aTreeOnTheDefaultBranch(fixture, { 'package.json': A_STRANGERS_MANIFEST_THAT_REDOES, 'README.md': '# demo\n' })
