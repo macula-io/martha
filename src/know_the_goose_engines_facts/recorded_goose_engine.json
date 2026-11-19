@@ -1,8 +1,8 @@
 {
   "_why": "What the Goose engine says about itself, read from its source so the launcher and the adapter derive from the engine and not from a list typed by hand (macula-io/martha#541). Re-record with: npm run record:goose-engine -- <engine checkout> <its commit>.",
-  "engine_commit": "eff9a75e1dd1a80911d5880ceed4eb8caa505e5c",
+  "engine_commit": "12574353e9eca844df1a8fca69d8313329c1dd14",
   "engine_name": "martha-engine",
-  "engine_version": "1.59.0",
+  "engine_version": "1.60.0",
   "acp_command": "acp",
   "path_root_variable": "GOOSE_PATH_ROOT",
   "slash_commands": {
@@ -81,12 +81,6 @@
     },
     {
       "key": "tom",
-      "default_enabled": true,
-      "hidden": false,
-      "feature": null
-    },
-    {
-      "key": "skills",
       "default_enabled": true,
       "hidden": false,
       "feature": null
