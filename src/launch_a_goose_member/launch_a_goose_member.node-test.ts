@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -632,7 +632,7 @@ test("after a result the launch re-checks in order: the owner's settings, the fi
   assert.match(launch.settings_still_hold() ?? '', /is not the text this launch wrote/, 'the files as written are checked before the folders')
   writeFileSync(launch.config_at, config)
   assert.match(launch.settings_still_hold() ?? '', /\.agents was made after the launch wrote its root/)
-  rmSync(agents, { recursive: true })
+  rmdirSync(agents)
   assert.equal(launch.settings_still_hold(), undefined, 'a root put back holds again')
   const added = join(dirname(launch.config_at), 'a-file-a-test-adds.yaml')
   writeFileSync(added, 'x')

@@ -2,7 +2,7 @@
 // the folders the recording names, and the order of the three checks.
 
 import assert from 'node:assert/strict'
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -57,7 +57,7 @@ test('a folder absent at the snapshot and made later is named; one removed is na
   mkdirSync(folder)
   assert.equal(differenceAfter(folder, absent), `${folder} was made after the launch wrote its root`)
   const made = aFolderRead(folder)
-  rmSync(folder, { recursive: true })
+  rmdirSync(folder)
   assert.equal(differenceAfter(folder, made), `${folder} was removed after the launch wrote its root`)
   mkdirSync(join(folder, 'shut'), { recursive: true })
   const readable = aFolderRead(folder)
