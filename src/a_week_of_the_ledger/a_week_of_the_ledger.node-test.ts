@@ -16,7 +16,7 @@ import { test, type TestContext } from 'node:test'
 
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { CREW_ROWS_PLACE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { ledgerStreamOf, readLedger } from '../log_ledger/log_ledger.ts'
+import { ledgerStreamOf, readLedger, REFRESH_FORCED } from '../log_ledger/log_ledger.ts'
 import { ASKS_SETTLED, ASKS_TAKEN, ASK_QUEUED, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -71,7 +71,7 @@ async function theRecordedLedger(stored: ReturnType<typeof rowStreamsDirectory>)
   await keep(stored, A_PACKAGE, { kind: 'checkpoint_reached', at: at(24), note: 'the week after' })
 
   await keep(stored, ANOTHER_PACKAGE, { kind: 'review_round_closed', at: at(17, 9), note: 'r=1 still open' })
-  await keep(stored, ANOTHER_PACKAGE, { kind: 'act_announced', at: at(17, 10), act: { kind: 'refresh_forced', what: 'a hung turn' } })
+  await keep(stored, ANOTHER_PACKAGE, { kind: 'act_announced', at: at(17, 10), act: { kind: REFRESH_FORCED, what: 'a hung turn' } })
   await keep(stored, ANOTHER_PACKAGE, { kind: 'recovery_decided', at: at(17, 11), act: { kind: 'tag', what: 'the release' }, failure: { class: 'a moved tag', evidence: 'the log' }, inspection: { read: 'the log', found: 'the tag had moved' }, decision: 'replanned' })
 
   await keep(stored, A_PACKAGE_LANDED_BEFORE_THE_WEEK, { kind: 'checkpoint_reached', at: at(9), note: 'the week before' })
