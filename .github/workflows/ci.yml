@@ -207,20 +207,22 @@ jobs:
       # catch binding the compiler never looks at.
       - run: npx tsc --noEmit
       - run: npm test
-      # macOS's default TMPDIR is long and is reached through a link
-      # (/var -> /private/var), martha#79. The suite runs again under that shape,
-      # longer than the default, so a path built under TMPDIR with no room left
-      # for a socket, or a path compared without resolving the link, fails here.
+      # A TMPDIR can be long and reached through a link on Linux too (martha#79):
+      # a unix socket address holds 107 bytes here, and a path built under a
+      # long TMPDIR with no room left for one fails with EINVAL (this step caught
+      # it in #541 package 9a). The suite runs again under such a TMPDIR, so a
+      # path with no room for a socket, or a path compared without resolving the
+      # link, fails here.
       - name: the suite under a long TMPDIR reached through a link
         env:
           PRIVATE_VAR: ${{ runner.temp }}/private/var
           LINKED_VAR: ${{ runner.temp }}/var
-          MAC_SHAPED_TMP: folders/zz/abcdefghijklmnopqrstuvwxyz0123/T
+          LONG_TMP: folders/zz/abcdefghijklmnopqrstuvwxyz0123/T
         run: |
-          mkdir -p "$PRIVATE_VAR/$MAC_SHAPED_TMP"
-          chmod 700 "$PRIVATE_VAR/$MAC_SHAPED_TMP"
+          mkdir -p "$PRIVATE_VAR/$LONG_TMP"
+          chmod 700 "$PRIVATE_VAR/$LONG_TMP"
           ln -s "$PRIVATE_VAR" "$LINKED_VAR"
-          TMPDIR="$LINKED_VAR/$MAC_SHAPED_TMP" npm test
+          TMPDIR="$LINKED_VAR/$LONG_TMP" npm test
 
   # The structural floor (martha#87): no function nests deeper than two levels,
   # branches past the complexity cap or runs past the length cap. The caps live
