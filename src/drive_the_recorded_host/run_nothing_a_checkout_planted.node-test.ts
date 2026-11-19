@@ -320,6 +320,11 @@ test('a launched member\'s clock is its start plus one allowance for each comman
     theMembersClock(DOOR_GROUPS['npm']!.commands(NAMED_PLACES, undefined)),
     'the clock a group declares is the one its own commands make, never a constant handed to every group',
   )
+  // A direnv adds commands of its own to the group that runs it, so its tests get their allowances too.
+  const aDirenv: Direnv = { path: '/a/place/of/direnv', version: 'a version', knows_disable: true }
+  const withDirenv = DOOR_GROUPS['the checkout\'s git and its direnv']!
+  assert.equal(theOptionsOf(withDirenv, aDirenv).timeout, theMembersClock(withDirenv.commands(NAMED_PLACES, aDirenv)), 'the clock counts the commands the direnv adds')
+  assert.ok(theOptionsOf(withDirenv, aDirenv).timeout > theOptionsOf(withDirenv, undefined).timeout, 'a group that runs a direnv is given longer than the same group without one')
 })
 
 test('each test of a launched member declares its own clock, so the suite\'s limit does not cancel it on a loaded machine (martha#700)', () => {
