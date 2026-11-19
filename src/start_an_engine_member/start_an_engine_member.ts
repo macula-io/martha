@@ -90,20 +90,38 @@ const NOTHING_REPORTED: TheServedToolsWatch = {
   takeTheCalls: () => [],
 }
 
+/**
+ * What the launch is given before anything is made: the member's model at the crew's endpoint, the owner's settings
+ * file, and the owner's Claude Code settings watch, the same one a Claude Code launch runs (design r=4 R2): a setting
+ * that turns hooks off already refuses the start, and the launch runs it first in every re-check. Or why not.
+ */
+function whatTheLaunchIsGiven(start: AStartOnItsHost) {
+  const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited })
+  if ('refusal' in model) return model
+  const user = userSettingsPath(start.inherited)
+  if ('refusal' in user) return user
+  const managed = RECORDED_HOST.managed_settings
+  const owners = hookSettingsWatch({ user: user.path, home: start.home, approved: undefined, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
+  const already = owners.check()
+  if (already !== undefined) return { refusal: already }
+  return { model, user, managed, owners }
+}
+
+/** The launch's config read back to the declared model, then the crew text composed from what the launch carried; or why not. */
+function theCrewTextOfALaunchHeldToItsModel(start: AStartOnItsHost, launch: AGooseLaunch, model: string): { readonly text: string } | { readonly refusal: string } {
+  const another = whyTheConfigRunsAnotherModel(readFileSync(launch.config_at, 'utf8'), launch.config_at, model)
+  if (another !== undefined) return { refusal: another }
+  const crew = crewTextToHand(start.settings, start.member, launch.carried_files, thisMachine.stores.files)
+  return 'refusal' in crew ? { refusal: `${crew.refusal}, so ${start.member} is handed no crew text` } : crew
+}
+
 /** The engine's entry in the start table: one engine member started, or why not. */
 export async function startOnTheEngine(start: AStartOnItsHost, shared: TheSharedOfAStart, seams: TheEnginesStartSeams = {}): Promise<MemberStarted> {
   const facts = RECORDED_GOOSE_ENGINE
   const notStarted = (why: string): MemberStarted => ({ started: false, refusal: `${NOT_STARTED}: ${why}` })
-  const model = theModelOfAnEngineMember({ facts, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited })
-  if ('refusal' in model) return notStarted(model.refusal)
-  const user = userSettingsPath(start.inherited)
-  if ('refusal' in user) return notStarted(user.refusal)
-  // The owner's Claude Code settings watch, the same one a Claude Code launch runs (design r=4 R2): a setting that turns
-  // hooks off already refuses the start, and the launch runs it first in every re-check.
-  const managed = RECORDED_HOST.managed_settings
-  const owners = hookSettingsWatch({ user: user.path, home: start.home, approved: undefined, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
-  const already = owners.check()
-  if (already !== undefined) return notStarted(already)
+  const before = whatTheLaunchIsGiven(start)
+  if ('refusal' in before) return notStarted(before.refusal)
+  const { model, user, managed, owners } = before
 
   const token = mintALaunchToken()
   const launch = await launchTheGooseEngine({ facts, binary: start.command, place: shared.place, relay_root: start.places.relay_root, model, tool_server: { token }, owners_settings: () => owners.check() })
@@ -112,10 +130,8 @@ export async function startOnTheEngine(start: AStartOnItsHost, shared: TheShared
     await launch.end()
     return notStarted(why)
   }
-  const another = whyTheConfigRunsAnotherModel(readFileSync(launch.config_at, 'utf8'), launch.config_at, model.model)
-  if (another !== undefined) return ending(another)
-  const crew = crewTextToHand(start.settings, start.member, launch.carried_files, thisMachine.stores.files)
-  if ('refusal' in crew) return ending(`${crew.refusal}, so ${start.member} is handed no crew text`)
+  const crew = theCrewTextOfALaunchHeldToItsModel(start, launch, model.model)
+  if ('refusal' in crew) return ending(crew.refusal)
 
   const sessions = new Map<string, HostSession>()
   const session_gate = theSessionsGateKept()

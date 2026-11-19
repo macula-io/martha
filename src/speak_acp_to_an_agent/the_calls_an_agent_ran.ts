@@ -38,6 +38,15 @@ export interface TheCallsAnAgentRan {
   heard(session_id: string, update: unknown): WhatAnUpdateSays
 }
 
+/** An update about one call: its id, its status when it names one, and its fields; undefined for any other update. */
+function aCallsUpdate(update: unknown): { readonly id: string; readonly status: string | undefined; readonly fields: Json } | undefined {
+  if (!isObject(update)) return undefined
+  const kind = update['sessionUpdate']
+  const id = update['toolCallId']
+  if ((kind !== UPDATE.toolCall && kind !== UPDATE.toolCallUpdate) || typeof id !== 'string' || id === '') return undefined
+  return { id, status: typeof update['status'] === 'string' ? update['status'] : undefined, fields: update }
+}
+
 /** The calls an agent ran, judged by rule (a); `nameOf` names a call in a stop, as the caller's host names it. */
 export function theCallsAnAgentRan(nameOf: (call: AToolCall) => string): TheCallsAnAgentRan {
   const asked = new Set<string>()
@@ -46,15 +55,13 @@ export function theCallsAnAgentRan(nameOf: (call: AToolCall) => string): TheCall
   const keyOf = (session_id: string, tool_call_id: string): string => JSON.stringify([session_id, tool_call_id])
   return {
     asked: (session_id, tool_call_id) => void asked.add(keyOf(session_id, tool_call_id)),
-    heard: (session_id, update) => {
-      if (!isObject(update)) return NOTHING
-      const kind = update['sessionUpdate']
-      const id = update['toolCallId']
-      if ((kind !== UPDATE.toolCall && kind !== UPDATE.toolCallUpdate) || typeof id !== 'string' || id === '') return NOTHING
+    heard: (session_id, heard) => {
+      const update = aCallsUpdate(heard)
+      if (update === undefined) return NOTHING
+      const { id, status } = update
       const key = keyOf(session_id, id)
-      const call: AToolCall = { ...calls.get(key), ...toolCallFields(update), toolCallId: id }
+      const call: AToolCall = { ...calls.get(key), ...toolCallFields(update.fields), toolCallId: id }
       calls.set(key, call)
-      const status = typeof update['status'] === 'string' ? update['status'] : undefined
       if (status === undefined || !RAN.includes(status)) return NOTHING
       if (!asked.has(key)) {
         return { stop: `the engine ran call ${id} (${nameOf(call)}) without asking this launch first: its update said ${status} and no permission request for it came before, so the member is stopped (#541 package A, rule (a))` }

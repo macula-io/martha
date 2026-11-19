@@ -78,17 +78,31 @@ function theOnlyRow(facts: Pick<EngineFacts, 'session_store'>, store: string, se
   if (read.rows.length !== 1) return { why: `the session store at ${store} holds ${read.rows.length} sessions, and a launch's store holds its own one` }
   const [row] = read.rows
   if (row === undefined || row[THE_ID_COLUMN] !== session_id) return { why: `the session store at ${store} holds a session that is not this launch's ${session_id}` }
+  const fields = theGateFieldsOf(row)
+  if ('why' in fields) return fields
+  const states = theStatesOf(row[THE_STATES_COLUMN])
+  if ('why' in states) return states
+  const enabled = theOneEnabledState(states.value)
+  if ('why' in enabled) return enabled
+  return { gate: { id: session_id, fields: fields.fields, enabled_extensions: enabled.enabled_extensions }, states: Object.keys(states.value), states_value: states.value }
+}
+
+/** The row's gate columns, each as text or null, or why one is neither. */
+function theGateFieldsOf(row: Record<string, unknown>): { readonly fields: Record<AGateColumn, string | null> } | { readonly why: string } {
   const fields: Partial<Record<AGateColumn, string | null>> = {}
   for (const column of THE_GATE_COLUMNS) {
     const value = textOf(row, column)
     if (value !== null && typeof value === 'object') return value
     fields[column] = value
   }
-  const states = theStatesOf(row[THE_STATES_COLUMN])
-  if ('why' in states) return states
-  const enabled = Object.entries(states.value).filter(([key]) => theStateNamed(key) === THE_ENABLED_EXTENSIONS_STATE)
+  return { fields: fields as Record<AGateColumn, string | null> }
+}
+
+/** The one state of the enabled extensions, as text the snapshot compares, or why there is not exactly one. */
+function theOneEnabledState(states: Record<string, unknown>): { readonly enabled_extensions: string } | { readonly why: string } {
+  const enabled = Object.entries(states).filter(([key]) => theStateNamed(key) === THE_ENABLED_EXTENSIONS_STATE)
   if (enabled.length !== 1) return { why: `the session's ${THE_STATES_COLUMN} holds ${enabled.length} states of its enabled extensions, and a step reads one` }
-  return { gate: { id: session_id, fields: fields as Record<AGateColumn, string | null>, enabled_extensions: JSON.stringify(enabled[0]?.[1]) }, states: Object.keys(states.value), states_value: states.value }
+  return { enabled_extensions: JSON.stringify(enabled[0]?.[1]) }
 }
 
 /** The name a state key carries before its version (`<name>.<version>`). */
@@ -147,23 +161,37 @@ function theModelNamed(stored: string | null): unknown {
 export function theSessionsFirstRead(facts: Pick<EngineFacts, 'session_store'>, store: string, launched: TheSessionLaunched): { readonly snapshot: TheSessionsGate } | { readonly refusal: string } {
   const read = theOnlyRow(facts, store, launched.session_id)
   if ('why' in read) return { refusal: read.why }
+  const unkept = statesTheEngineDoesNotKeep(facts, read.states)
+  const differing = [...theValuesCompared(read, launched), { what: 'the extension states', held: unkept, launched_with: facts.session_store.extension_states, same: unkept.length === 0 }].find(
+    (compared) => !compared.same,
+  )
+  if (differing === undefined) return { snapshot: read.gate }
+  return { refusal: `the session ${launched.session_id} runs with ${differing.what} ${JSON.stringify(differing.held)}, and the launch created it with ${JSON.stringify(differing.launched_with)}` }
+}
+
+/** One value of the session held against the one the launch created it with. */
+interface AValueCompared {
+  readonly what: string
+  readonly held: unknown
+  readonly launched_with: unknown
+  readonly same: boolean
+}
+
+/** The session's values held against the launch's, in the order the first read judges them. */
+function theValuesCompared(read: { readonly gate: TheSessionsGate; readonly states_value: Record<string, unknown> }, launched: TheSessionLaunched): readonly AValueCompared[] {
   const { fields } = read.gate
-  const differs = (what: string, held: unknown, launched_with: unknown): { readonly refusal: string } => ({
-    refusal: `the session ${launched.session_id} runs with ${what} ${JSON.stringify(held)}, and the launch created it with ${JSON.stringify(launched_with)}`,
-  })
-  if (fields.working_dir !== launched.working_dir) return differs('the working folder', fields.working_dir, launched.working_dir)
-  if (fields.goose_mode !== launched.mode) return differs('the mode', fields.goose_mode, launched.mode)
-  if (fields.provider_name !== launched.provider) return differs('the provider', fields.provider_name, launched.provider)
-  const model = theModelNamed(fields.model_config_json)
-  if (model !== launched.model) return differs('the model', model, launched.model)
+  const one = (what: string, held: unknown, launched_with: unknown): AValueCompared => ({ what, held, launched_with, same: held === launched_with })
   const names = theEnabledNames(read.states_value[Object.keys(read.states_value).find((key) => theStateNamed(key) === THE_ENABLED_EXTENSIONS_STATE) ?? ''])
   const wanted = [...launched.extensions].sort()
-  if (names === undefined || names.length !== wanted.length || names.some((name, at) => name !== wanted[at])) return differs('the extensions', names, wanted)
   const filled = EMPTY_AT_THE_START.find((column) => fields[column] !== null)
-  if (filled !== undefined) return differs(filled, fields[filled], null)
-  const unkept = statesTheEngineDoesNotKeep(facts, read.states)
-  if (unkept.length > 0) return differs('the extension states', unkept, facts.session_store.extension_states)
-  return { snapshot: read.gate }
+  return [
+    one('the working folder', fields.working_dir, launched.working_dir),
+    one('the mode', fields.goose_mode, launched.mode),
+    one('the provider', fields.provider_name, launched.provider),
+    one('the model', theModelNamed(fields.model_config_json), launched.model),
+    { what: 'the extensions', held: names, launched_with: wanted, same: names !== undefined && names.length === wanted.length && names.every((name, at) => name === wanted[at]) },
+    ...(filled === undefined ? [] : [one(filled, fields[filled], null)]),
+  ]
 }
 
 /**

@@ -72,12 +72,17 @@ export function theFirstDifference(folder: string, before: AFolderRead, now: AFo
   if ('why' in now) return now.why
   if ('absent' in before) return 'absent' in now ? undefined : `${folder} was made after the launch wrote its root`
   if ('absent' in now) return `${folder} was removed after the launch wrote its root`
-  for (const [path, entry] of before.entries) {
-    const held = now.entries.get(path)
+  return theFirstEntryDifference(folder, before.entries, now.entries)
+}
+
+/** The first entry of a folder read twice that was removed, changed or added between the reads, or undefined. */
+function theFirstEntryDifference(folder: string, before: ReadonlyMap<string, string>, now: ReadonlyMap<string, string>): string | undefined {
+  for (const [path, entry] of before) {
+    const held = now.get(path)
     if (held === undefined) return `${join(folder, path)} was removed after the launch wrote its root`
     if (held !== entry) return `${join(folder, path)} was changed after the launch wrote its root`
   }
-  const added = [...now.entries.keys()].find((path) => !before.entries.has(path))
+  const added = [...now.keys()].find((path) => !before.has(path))
   return added === undefined ? undefined : `${join(folder, added)} was added after the launch wrote its root`
 }
 

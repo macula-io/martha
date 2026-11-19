@@ -393,6 +393,41 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
   if (asked.place.host !== asked.facts.engine_name) {
     return refused(`${asked.place.host} is not the engine this launcher starts (${asked.facts.engine_name}).`)
   }
+  const recorded = theLaunchRecorded(asked)
+  if ('refusal' in recorded) return recorded
+  const { prepared, directory, leaveNothing } = recorded
+  const notStarted = (why: string): { readonly refusal: string } => {
+    leaveNothing()
+    return refused(why)
+  }
+  const made = theLaunchMadeBy(asked, prepared, directory)
+  if ('refusal' in made) {
+    directory.remove()
+    return made
+  }
+  const watched = theRootReadBackAndWatched(asked, made)
+  if ('refusal' in watched) return notStarted(watched.refusal)
+  const started = await theEngineStartedAndRecorded(asked, made.places, directory)
+  if ('refusal' in started) {
+    leaveNothing()
+    return 'started' in started ? started.started : refused(started.refusal)
+  }
+  const end = async (): Promise<TheEndOfALaunch> => {
+    const stopped = !started.hadEnded()
+    const ended = started.exited
+    started.stop()
+    await ended
+    removeTheTree(prepared.snapshot_dir)
+    const permissions = thePermissionStoreIsStillEmpty(made.places.root)
+    directory.remove()
+    return { stopped, permissions }
+  }
+  const { places, config_at, text_a_start_loads } = made
+  return { directory: directory.directory, socket_path: directory.socket_path, places, config_at, text_a_start_loads, servers: watched.servers, carried_files: prepared.carried_files, engine: started, settings_still_hold: watched.settings_still_hold, end }
+}
+
+/** A launch's gate passed, its own directory made in the relay root, and its launcher recorded there; or why not, with nothing left. */
+function theLaunchRecorded(asked: AGooseLaunchAsked): { readonly prepared: APreparedLaunch; readonly directory: ARelayDirectoryMade; readonly leaveNothing: () => void } | { readonly refusal: string } {
   // The gate, before anything is made: `prepareLaunch` decides on the checkout by content and by the owner's approval
   // of this checkout's tree, and copies what the gate carries. Nothing is carried for the engine, because the launcher
   // writes the config root its engine reads; what the call gives this launch is the decision and the snapshot's life.
@@ -407,28 +442,37 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
     removeTheTree(prepared.snapshot_dir)
     return { refusal: directory.refusal }
   }
-  const notStarted = (why: string): { readonly refusal: string } => {
+  const leaveNothing = (): void => {
     directory.remove()
     removeTheTree(prepared.snapshot_dir)
-    return refused(why)
   }
   const recorded = recordTheLauncher(directory.directory)
-  if (recorded !== undefined) return notStarted(recorded)
-  asked.when_the_launcher_is_recorded?.(directory.directory)
-  const made = theLaunchMadeBy(asked, prepared, directory)
-  if ('refusal' in made) {
-    directory.remove()
-    return made
+  if (recorded !== undefined) {
+    leaveNothing()
+    return refused(recorded)
   }
-  const { places, config_at, text_a_start_loads } = made
+  asked.when_the_launcher_is_recorded?.(directory.directory)
+  return { prepared, directory, leaveNothing }
+}
+
+/** A prepared launch the gate allowed. */
+type APreparedLaunch = Extract<PreparedLaunch, { readonly allow: true }>
+/** The launch's own directory in the relay root, made. */
+type ARelayDirectoryMade = Extract<ReturnType<typeof makeRelayDirectory>, { readonly made: true }>
+/** What the launch made before the engine starts. */
+type ALaunchMade = Exclude<ReturnType<typeof theLaunchMadeBy>, { readonly refusal: string }>
+
+/** The root read back as it was written, and the watch over it taken; or why the launch starts nothing. */
+function theRootReadBackAndWatched(asked: AGooseLaunchAsked, made: ALaunchMade): { readonly servers: AGooseLaunch['servers']; readonly settings_still_hold: AGooseLaunch['settings_still_hold'] } | { readonly refusal: string } {
+  const { places, config_at } = made
   // The root read back just before the engine reads it (martha#541 C1, guard row 3): the servers it names are a fact of
   // this launch, and a root that names any server but the crew's, or is not the text this launch wrote, starts nothing.
   asked.before_the_start?.(config_at)
   const secrets = { at: theSecretsFileOf(asked.facts, places.root), written: made.secrets }
   const readBack = theRootAsItWasWritten(asked.facts, config_at, made.config, secrets)
   const whole = theFoldersReadBackWhole(asked.facts, places.root)
-  if ('refusal' in readBack) return notStarted(readBack.refusal)
-  if ('refusal' in whole) return notStarted(whole.refusal)
+  if ('refusal' in readBack) return readBack
+  if ('refusal' in whole) return whole
   // The snapshot is taken here, after the read-back and before the spawn, so nothing of the engine's is in it.
   const settings_still_hold = theRootsWatch({
     owners_settings: asked.owners_settings,
@@ -438,33 +482,23 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
     },
     folders: whole.folders,
   })
+  return { servers: readBack.servers, settings_still_hold }
+}
 
+/**
+ * The engine started and recorded as the launch's member; or, when it did not start, the start's own refusal as it is
+ * (`started`), and when it could not be recorded, the engine stopped and why. The caller leaves nothing of the launch.
+ */
+async function theEngineStartedAndRecorded(asked: AGooseLaunchAsked, places: ThePlacesOfALaunch, directory: ARelayDirectoryMade): Promise<AGooseLaunch['engine'] | { readonly refusal: string; readonly started?: { readonly refusal: string } }> {
   const started = await startTheEngine(asked.facts, asked.binary, places, theEnvironmentOfALaunch(asked.facts, places))
-  if ('refusal' in started) {
-    directory.remove()
-    removeTheTree(prepared.snapshot_dir)
-    return started
-  }
+  if ('refusal' in started) return { refusal: started.refusal, started }
   await asked.before_the_member_is_recorded?.(started.pid)
   const member = recordTheMember(directory.directory, started.pid)
-  if (member !== undefined) {
-    const ended = started.exited
-    started.stop()
-    await ended
-    return notStarted(member)
-  }
-
-  const end = async (): Promise<TheEndOfALaunch> => {
-    const stopped = !started.hadEnded()
-    const ended = started.exited
-    started.stop()
-    await ended
-    removeTheTree(prepared.snapshot_dir)
-    const permissions = thePermissionStoreIsStillEmpty(places.root)
-    directory.remove()
-    return { stopped, permissions }
-  }
-  return { directory: directory.directory, socket_path: directory.socket_path, places, config_at, text_a_start_loads, servers: readBack.servers, carried_files: prepared.carried_files, engine: started, settings_still_hold, end }
+  if (member === undefined) return started
+  const ended = started.exited
+  started.stop()
+  await ended
+  return { refusal: member }
 }
 
 /**

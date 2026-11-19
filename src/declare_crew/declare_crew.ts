@@ -575,15 +575,22 @@ function engineEndpointOf(refuse: Refuse, value: unknown): EngineEndpoint | null
   if (!isObject(value)) return refuse.at(ENGINE_ENDPOINT, `is not ${shapeOf(ENGINE_ENDPOINT_REQUIRED_KEYS, ENGINE_ENDPOINT_OPTIONAL_KEYS)}`)
   refuse.unknownKeys(value, [...ENGINE_ENDPOINT_REQUIRED_KEYS, ...ENGINE_ENDPOINT_OPTIONAL_KEYS], `${ENGINE_ENDPOINT}.`)
   const host = value['host']
-  if (!isText(host) || !ENDPOINT_SCHEMES.includes(aUrlsScheme(host))) return refuse.at(`${ENGINE_ENDPOINT}.host`, `is not a URL on ${ENDPOINT_SCHEMES.join(' or ')}`)
+  if (!isAnEndpointsHost(host)) return refuse.at(`${ENGINE_ENDPOINT}.host`, `is not a URL on ${ENDPOINT_SCHEMES.join(' or ')}`)
   const base_path = value['base_path']
-  if (base_path !== undefined && !isText(base_path)) return refuse.at(`${ENGINE_ENDPOINT}.base_path`, 'is not a path')
+  if (!isAbsentOrText(base_path)) return refuse.at(`${ENGINE_ENDPOINT}.base_path`, 'is not a path')
   const key_from = value['key_from']
-  if (key_from !== undefined && (typeof key_from !== 'string' || !AN_ENVIRONMENT_NAME.test(key_from))) {
-    return refuse.at(`${ENGINE_ENDPOINT}.key_from`, 'is not the name of an environment variable: the key itself never goes in the declaration')
-  }
+  if (!isAbsentOrAVariablesName(key_from)) return refuse.at(`${ENGINE_ENDPOINT}.key_from`, 'is not the name of an environment variable: the key itself never goes in the declaration')
   return { host, base_path: base_path ?? null, key_from: key_from ?? null }
 }
+
+/** A host an endpoint may name: text that is a URL on one of the schemes it is reached over. */
+const isAnEndpointsHost = (value: unknown): value is string => isText(value) && ENDPOINT_SCHEMES.includes(aUrlsScheme(value))
+
+/** Nothing written, or text. */
+const isAbsentOrText = (value: unknown): value is string | undefined => value === undefined || isText(value)
+
+/** Nothing written, or the name of an environment variable. */
+const isAbsentOrAVariablesName = (value: unknown): value is string | undefined => value === undefined || (typeof value === 'string' && AN_ENVIRONMENT_NAME.test(value))
 
 /** A URL's scheme, or nothing when the text is not a URL. */
 function aUrlsScheme(text: string): string {
