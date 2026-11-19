@@ -6,6 +6,9 @@ import { join } from 'node:path'
 
 import { chatsIn, promptOver, tokensFound, toolsIn } from './the_engine_over_acp/a_turn_with_goose.ts'
 import { CHECKOUT_MARKERS, HOME_MARKERS, tokensOf, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
+import { RECORDED_GOOSE_ENGINE } from '../src/know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { thisMachine } from '../src/linux_process_identity/files_and_processes_on_this_machine.ts'
+import { decideLaunch, readLaunchState, type LaunchDecision } from '../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { RecordingProxy } from './the_engine_over_acp/record_what_goose_sends.ts'
 import type { GooseOverAcp } from './the_engine_over_acp/speak_acp_to_goose.ts'
 
@@ -43,17 +46,35 @@ export const lineOne: Line = async (trial) => {
     { markers: tokensOf(HOME_MARKERS), hits, answer: turn.text.slice(0, 600), modelRequests: chatsIn(trial.proxy.received).length })
 }
 
-/** Line 2: nothing of an unapproved checkout reaches the session either. */
-export const lineTwo: Line = async (trial) => {
-  const turn = await promptOver(trial.acp, trial.sessionId,
-    'List, by name, every skill, recipe, agent and check you can use, and say whether you load them from this project. Reply with the names only.')
-  const hits = tokensFound(tokensOf(CHECKOUT_MARKERS), ...chatsIn(trial.proxy.received), turn.text)
-  return say(hits.length === 0 ? 'pass' : 'fail',
-    hits.length === 0 ? 'no marker of the checkout reached the model or the session' : `the checkout reached the session: ${hits.join(', ')}`,
-    {
-      markers: tokensOf(CHECKOUT_MARKERS), hits, answer: turn.text.slice(0, 600),
-      gate: 'not observed in this package: the launch gate names the Claude Code host\'s files only, and Goose\'s rows arrive with packages 7-8',
-    })
+/** The skill roots the gate must name when a checkout holds them: every skill folder, the plugin folder, each settings file. */
+const THE_SKILL_ROOTS = RECORDED_GOOSE_ENGINE.checkout_skill_roots
+const SKILL_ROOT_PATHS: readonly string[] = [...THE_SKILL_ROOTS.skill_folders, THE_SKILL_ROOTS.plugin_folder, ...THE_SKILL_ROOTS.plugin_settings]
+
+/** What the launch gate says of a place before anything starts in it, for the engine's host, with nothing approved. */
+export type AGateAtAPlace = (place: Place) => LaunchDecision
+
+/** The launch gate Martha starts the engine behind (../src/refuse_launch_of_unapproved_config), with nothing approved. */
+export const theLaunchGate: AGateAtAPlace = (place) => {
+  const host = RECORDED_GOOSE_ENGINE.engine_name
+  const state = readLaunchState({ host, launch_dir: place.checkout, stop_dir: place.home }, thisMachine)
+  return decideLaunch({ host, ...state, approved_fingerprints: [] })
+}
+
+/**
+ * Line 2 (martha#614): nothing of an unapproved checkout reaches the session, because the launch gate refuses it before
+ * anything starts. Skills are on now (DECIDED 2026-11-18 "Approved skills on"), so a launch of this checkout would hand
+ * its skills to the model: the line is the gate's refusal, naming each skill root the checkout holds, and no launch.
+ */
+export function lineTwoAtTheGate(place: Place, gate: AGateAtAPlace = theLaunchGate): Observation {
+  const held = SKILL_ROOT_PATHS.filter((root) => existsSync(join(place.checkout, root)))
+  const decision = gate(place)
+  const refusal = decision.allow ? '' : decision.refusal
+  const unnamed = held.filter((root) => !refusal.includes(root))
+  const evidence = { markers: tokensOf(CHECKOUT_MARKERS), held, unnamed, refusal: refusal.slice(0, 2000) }
+  if (held.length === 0) return say('not-observed', 'the checkout holds no skill root, so the gate had nothing to refuse', evidence)
+  if (decision.allow) return say('fail', `the launch gate let an unapproved checkout holding ${held.join(', ')} start`, evidence)
+  if (unnamed.length > 0) return say('fail', `the launch gate refused the checkout without naming ${unnamed.join(', ')}`, evidence)
+  return say('pass', `the launch gate refused the unapproved checkout before anything started, naming ${held.join(', ')}`, evidence)
 }
 
 /** Line 3: every tool call arrives as a permission request, and a once-rejection stops it. */
