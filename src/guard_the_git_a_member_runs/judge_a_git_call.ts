@@ -30,6 +30,7 @@ import {
   GIT_CALL_PATH,
   gitCallBody,
   heardGitVerdict,
+  PREPARED,
   REF_TRANSACTION_PATH,
   refTransactionBody,
   THE_GUARDS_DEADLINE_MS,
@@ -50,9 +51,6 @@ interface TheGuardsConfig {
   readonly misses: string
   readonly settings: readonly (readonly [string, string])[]
 }
-
-/** The state git calls a hook with: only the one before the transaction runs can stop it. */
-const PREPARED = 'prepared'
 
 /** The two modes this file judges, which are also the two names the launch gives its shims. */
 const THE_GIT_MODE = 'git'
