@@ -170,9 +170,15 @@ export type TheSaveSeen =
  * that answer leaves the record the order kept, whose `after` is null: the next launch finishes it by `without_model`,
  * which says the same thing for a file where only the model moved. A file that never moves is not a success either —
  * it is a switch whose save may land later.
+ *
+ * The bound is one stretch of wall clock, never a count of looks (martha#836): a look costs what a read costs, and on a
+ * loaded machine that is many times what it is on an idle one, so counting looks multiplied the cost and a wait the row
+ * calls "within 10000 ms" took half a minute — long enough that the tests making two of them were cancelled by the
+ * suite's per-test limit. One look and one step may run past the bound, and no more.
  */
 export async function theSaveInTheFile(place: OwnersDefaultPlace, guarded: AGuardedSwitch): Promise<TheSaveSeen> {
-  for (let looked = 0; looked < THE_SAVE_WAIT_MS / THE_SAVE_STEP_MS; looked += 1) {
+  const stop = Date.now() + THE_SAVE_WAIT_MS
+  while (Date.now() < stop) {
     const seen = theSaveSeenNow(place, guarded)
     if (seen !== null) return seen
     await new Promise((resolved) => setTimeout(resolved, THE_SAVE_STEP_MS))
