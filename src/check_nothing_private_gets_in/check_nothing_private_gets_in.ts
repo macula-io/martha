@@ -231,13 +231,17 @@ const shorthandHitsOf = (line: Line, rules: Rules, print: Printing): Hit[] =>
       what: `a shorthand reference to another repository ${WITHHELD}: write owner/repo#n so it can be checked`,
     }))
 
-// A lookup that throws stops the check, and its message is printed: whatever it
-// says about the repository it was asked has its lab names replaced first.
+// A lookup that throws stops the check, and its message is printed. The repository it
+// was asked about is withheld there as in a hit (a rate limit or a 5xx says nothing
+// about whether that name is public, martha#855), and the line that named it is said
+// instead; any lab name left is replaced.
 const resolvedOrCleanError = async (resolve: Resolve, reference: RepoReference) => {
   try {
     return await resolve(reference.owner, reference.repo)
   } catch (error) {
-    throw new Error(withoutLabNames(error instanceof Error ? error.message : String(error)))
+    const said = error instanceof Error ? error.message : String(error)
+    const withheld = said.replaceAll(`${reference.owner}/${reference.repo}`, WITHHELD)
+    throw new Error(withoutLabNames(`${withheld} (the repository named at ${reference.where})`))
   }
 }
 

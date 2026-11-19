@@ -48,7 +48,9 @@ const unreachable: Resolve = async () => {
   throw new Error('GitHub answered 503')
 }
 
-const one = (text: string): Source[] => [{ name: 'note.md', lines: [{ where: 'note.md:1', text }] }]
+// Where the one-line source's line is, as a hit or a lookup's error names it.
+const HERE = 'note.md:1'
+const one = (text: string): Source[] => [{ name: 'note.md', lines: [{ where: HERE, text }] }]
 const hitsOf = async (text: string, rules: Rules = strict, resolve: Resolve = resolveFixed) =>
   (await privateHitsIn(one(text), rules, resolve)).map((hit) => hit.what)
 // What each class refuses in a line, value and all: the printed hits withhold every value
@@ -260,7 +262,20 @@ test('a lookup that fails on a lab-named repository stops the check without prin
     throw new Error(`GitHub answered 401 for ${owner}/${repo}`)
   }
   await assert.rejects(hitsOf('see synthetic-owner/ci-synthetic.lab-config#2', strict, failing), (error: Error) => {
-    assert.equal(error.message, 'GitHub answered 401 for synthetic-owner/<lab host>-config')
+    assert.equal(error.message, `GitHub answered 401 for (value withheld) (the repository named at ${HERE})`)
+    return true
+  })
+})
+
+test('a lookup GitHub cannot answer (a rate limit, a 5xx) stops the check without printing the repository it asked about (martha#855)', async () => {
+  const owner = `o${randomBytes(4).toString('hex')}`
+  const repo = `r${randomBytes(4).toString('hex')}`
+  const failing: Resolve = async (asked, named) => {
+    throw new Error(`GitHub answered 503 for ${asked}/${named}`)
+  }
+  await assert.rejects(hitsOf(`see ${owner}/${repo}#2`, strict, failing), (error: Error) => {
+    assert.equal(error.message, `GitHub answered 503 for (value withheld) (the repository named at ${HERE})`)
+    assert.ok(!error.message.includes(owner) && !error.message.includes(repo), error.message)
     return true
   })
 })

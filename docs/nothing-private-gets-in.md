@@ -38,7 +38,9 @@ Each of those can enter through four paths:
    martha#855). A hit names the file, the line and the class, and withholds the
    value: the log keeps it after the text it came from is edited. The path a
    hit is found at is printed, with each lab hostname in it replaced by
-   `<lab host>`.
+   `<lab host>`. A repository lookup GitHub cannot answer (a rate limit, a
+   5xx) stops the check, and its error names the line that named the
+   repository, not the repository.
 
 Out of reach of this check, and said here so nobody assumes otherwise:
 
