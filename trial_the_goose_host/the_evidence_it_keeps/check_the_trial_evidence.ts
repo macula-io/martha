@@ -12,8 +12,8 @@
 // which must be refused by name, and its twin with a transcript, which must pass — judges both by the same path, and
 // removes the tree whatever the verdict.
 //
-// Exit 0 clean, 1 one line per refusal then the count, 2 the check could not be made: no directory to judge, or one
-// that cannot be read. It never passes because it could not look.
+// Exit 0 clean (or no directory named, as above), 1 one line per refusal then the count, 2 the check could not be
+// made: a named directory that cannot be read. It never passes because it could not look.
 
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
