@@ -11,11 +11,17 @@ import { readCheckoutTree } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import {
   decideLaunch,
   fingerprintOf,
+  CLAUDE_CODE_FILES,
   CLAUDE_MEMORY_ELSEWHERE,
   CLAUDE_MEMORY_OFF,
+  ENGINE_FAMILIES,
+  ENGINE_FILES,
+  ENGINE_FOLDER,
+  ENGINE_HINTS_FILE,
   HOSTS,
   LAUNCH_FILES_OF_HOST,
   launchEnvironment,
+  OPENCODE_FILES,
   prepareLaunch,
   readLaunchConfig,
   readLaunchState,
@@ -23,12 +29,16 @@ import {
   snapshotApproved,
   startedWithOf,
   startedWithTheSwitches,
+  theRecordOfTheTextAStartLoads,
+  theRowOfHost,
   type Host,
 } from './refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
-import { DECLARATION_DIRECTORY } from '../declare_crew/declare_crew.ts'
+import { INBOUND_PATHS, INSTRUCTION_FILES } from '../inbound_paths/inbound_paths.ts'
+import { DECLARATION_DIRECTORY, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
+import { THE_PATH_A_LAUNCH_GIVES, theEnvironmentOfALaunch } from '../launch_a_goose_member/launch_a_goose_member.ts'
+import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -42,8 +52,8 @@ const treeAt = (dir: string, stop: string): string | null => {
   return read.kind === 'tree' ? read.tree : null
 }
 
-const [SERVERS, SETTINGS, LOCAL_SETTINGS] = LAUNCH_FILES_OF_HOST['claude-code']
-const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS, OPENCODE_DIR] = LAUNCH_FILES_OF_HOST.opencode
+const [SERVERS, SETTINGS, LOCAL_SETTINGS] = CLAUDE_CODE_FILES
+const [OPENCODE_CONFIG, OPENCODE_CONFIG_WITH_COMMENTS, OPENCODE_DIR] = OPENCODE_FILES
 
 interface Scratch {
   /** The stop directory, standing in for the owner's home. */
@@ -105,6 +115,104 @@ test('a checkout with none of the files starts, on every host', (t) => {
     assert.equal(decision.allow, true, host)
     assert.ok(state.entries.every((entry) => entry.kind === 'absent'), host)
   }
+})
+
+// --- the engine's own files (martha#541, packages 7-8 part C) --------------------
+
+/** The engine's name as a host, read from the recording the way the gate's row is keyed. */
+const ENGINE = RECORDED_GOOSE_ENGINE.engine_name
+
+/** The engine's families that are one file rather than a folder, named by the table rather than read off an extension. */
+const ENGINE_FAMILY_FILES: readonly string[] = [...ENGINE_FAMILIES.settings, ...ENGINE_FAMILIES.review]
+
+/**
+ * The families part C's design lists (B1.3), spelled as the design spells them: this case's own copy, so a family the
+ * table drops, renames or gains fails by name here instead of shrinking the loop below to whatever the table still
+ * holds. A family is a family the engine reads; the two texts that start nothing are C3's, not here.
+ */
+const THE_FAMILIES_THE_DESIGN_LISTS: readonly string[] = [
+  '.agents/plugins',
+  `${ENGINE_FOLDER}/settings.json`,
+  `${ENGINE_FOLDER}/settings.local.json`,
+  '.agents/skills',
+  '.goose/skills',
+  `${CLAUDE_FOLDER}/skills`,
+  '.agents/agents',
+  `${CLAUDE_FOLDER}/agents`,
+  '.goose/agents',
+  '.goose/recipes',
+  '.agents/recipes',
+  '.agents/checks',
+  '.agents/REVIEW.md',
+]
+
+test('the engine files the gate lists are exactly the families the design lists (martha#541 B1.3)', () => {
+  assert.deepEqual([...ENGINE_FILES], [...THE_FAMILIES_THE_DESIGN_LISTS])
+})
+
+/** A file planted in each family: the ones that are one file are planted as themselves, and the folders get a file. */
+const A_FILE_IN_EACH_ENGINE_FAMILY: readonly (readonly [string, string])[] = ENGINE_FILES.map((family) =>
+  ENGINE_FAMILY_FILES.includes(family) ? [family, 'planted'] : [join(family, 'planted'), 'planted'],
+)
+
+/**
+ * Every one of the engine's families is config that starts code by itself, so a checkout holding one of them is refused
+ * until the owner approves this config with this checkout's tree — the same rule Claude Code's files are held to, and a
+ * family that stops being listed (or stops being read) fails by name here (martha#541).
+ */
+test("each of the engine's own families is refused until the owner approves it, naming the file", (t) => {
+  for (const [family, file] of A_FILE_IN_EACH_ENGINE_FAMILY) {
+    const place = scratch(t)
+    put(place.checkout, family, file)
+    const refused = decide(ENGINE, place)
+    assert.equal(refused.decision.allow, false, family)
+    const refusal = refused.decision.allow ? '' : refused.decision.refusal
+    assert.ok(refusal.includes(family), `${family} is not named in: ${refusal}`)
+    assert.equal(decide(ENGINE, place, approve(ENGINE, place)).decision.allow, true, `${family} stays refused after the owner approved it`)
+  }
+})
+
+/**
+ * `.goosehints` and `AGENTS.md` start nothing: the engine reads them into a prompt, so they are text taken in and not a
+ * refusal. A row that puts them in the gate's list would refuse every checkout that carries one, and this case fails by
+ * name there (their own row belongs to the wiring that records that read, martha#541 C3).
+ */
+test('a checkout holding only the engine\'s hints and its AGENTS.md starts, because a text taken in is not a file that starts code', (t) => {
+  const place = scratch(t)
+  put(place.checkout, ENGINE_HINTS_FILE, 'a hint\n')
+  put(place.checkout, INSTRUCTION_FILES.agents, 'an agents file\n')
+  const { state, decision } = decide(ENGINE, place)
+  assert.equal(decision.allow, true, decision.allow ? '' : decision.refusal)
+  assert.ok(state.entries.every((entry) => entry.kind === 'absent'), 'neither file is one the engine starts code from')
+})
+
+/**
+ * The engine reads its config from the root and the home a launch makes for it, and the recording names the variable it
+ * reaches that root through (martha#541): the row keeps an inherited value of either out, and the launch that starts an
+ * engine hands it its own. A row that stopped naming the variable, or a launch that stopped setting it, fails by name
+ * here rather than letting an owner's shell move the engine onto a root nobody approved.
+ */
+test("the engine's launch reads the root the recording names, and the gate's row keeps an inherited one out (martha#541)", () => {
+  const places = { root: '/a/launch/root', home: '/a/launch/home', checkout: '/the/checkout' }
+  assert.deepEqual(theEnvironmentOfALaunch(RECORDED_GOOSE_ENGINE, places), {
+    [RECORDED_GOOSE_ENGINE.path_root_variable]: places.root,
+    HOME: places.home,
+    PATH: THE_PATH_A_LAUNCH_GIVES,
+  })
+
+  const inherited = { HOME: '/an-owners-home', [RECORDED_GOOSE_ENGINE.path_root_variable]: '/an-owners-root' }
+  assert.deepEqual(launchEnvironment(inherited, theRowOfHost(ENGINE).project_config_off, ENGINE), {})
+})
+
+/** The crew's declaration names the engines this gate must list files for, and the engine is one of them (martha#541). */
+test('the host a crew declares as an engine is a host this gate holds a row for', () => {
+  assert.ok(Object.hasOwn(LAUNCH_FILES_OF_HOST, THE_ENGINES_HOST), `${THE_ENGINES_HOST} is declared, and no file list holds it`)
+  assert.ok(Object.hasOwn(HOSTS, THE_ENGINES_HOST), `${THE_ENGINES_HOST} is declared, and no launch row holds it`)
+})
+
+/** The two tables are keyed by the same strings, so no host starts from a row whose files nothing lists (martha#541). */
+test('every host with a launch row has a file list, and every file list a launch row', () => {
+  assert.deepEqual(Object.keys(LAUNCH_FILES_OF_HOST).sort(), Object.keys(HOSTS).sort())
 })
 
 test("a checkout's tool-server config is refused until the owner approves it, and the refusal says what to approve", (t) => {
@@ -221,18 +329,94 @@ test('a checkout outside the stop directory altogether still has its tree read',
   assert.equal(treeAt(place.checkout, elsewhere), git(place.checkout, 'rev-parse', 'HEAD^{tree}'))
 })
 
+test("the record of the engine's hint text refuses when a directory on the way cannot be read (martha#541)", (t) => {
+  const place = scratch(t)
+  // A machine whose file store cannot read one directory it is asked about, as an unreadable parent answers an lstat.
+  const aMachineThatCannotReadADirectory = {
+    ...thisMachine,
+    stores: {
+      ...thisMachine.stores,
+      files: {
+        ...thisMachine.stores.files,
+        kindOf: (at: string) => {
+          // The words a file store's own lstat fails with, kept as node spells them, so the refusal is judged on them.
+          if (at.endsWith(join(sep, '.git'))) throw Object.assign(new Error(`EACCES: permission denied, lstat '${at}'`), { code: 'EACCES' })
+          return thisMachine.stores.files.kindOf(at)
+        },
+      },
+    },
+  }
+  const recorded = theRecordOfTheTextAStartLoads({ host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: place.checkout, stop_dir: place.home }, aMachineThatCannotReadADirectory)
+  if (!('refusal' in recorded)) assert.fail('a directory that could not be read was recorded as though it had been')
+  assert.match(recorded.refusal, /could not be read \(EACCES:/)
+})
+
 // --- where it looks -------------------------------------------------------------
 
-test('a config one directory above the checkout counts; one in the stop directory does not', (t) => {
+test('a config above a checkout whose stop is not an ancestor is neither listed nor fingerprinted (martha#766)', (t) => {
+  const place = scratch(t)
+  const stop = join(place.home, 'elsewhere')
+  mkdirSync(stop)
+  // The owner's own file, one directory above the checkout, and below the stop's sibling: #574's look.
+  put(place.home, join(CLAUDE_FOLDER, USER_SETTINGS_FILE), '{"the owner": "keeps this"}')
+  put(place.checkout, SERVERS, server('echo one'))
+  commitAll(place.checkout, 'a server')
+  const at = { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: stop }
+
+  const before = readLaunchState(at, thisMachine)
+  const above = before.entries.filter((entry) => entry.path.startsWith('../') && entry.kind !== 'absent')
+  assert.deepEqual(above, [], 'the approval names a file above the checkout')
+  assert.ok(before.entries.some((entry) => entry.path === SERVERS && entry.kind === 'file'), "the checkout's own config is not read")
+
+  const approved = fingerprintOf(before)
+  put(place.home, join(CLAUDE_FOLDER, USER_SETTINGS_FILE), '{"the owner": "kept that instead"}')
+  const after = readLaunchState(at, thisMachine)
+  assert.equal(fingerprintOf(after), approved, "the owner editing their own settings changed this checkout's approval")
+  assert.equal(
+    decideLaunch({ host: CLAUDE_CODE, ...after, approved_fingerprints: [approved] }).allow,
+    true,
+    'the approval stopped matching after an edit above the checkout',
+  )
+
+  const prepared = prepareLaunch({ ...at, snapshot_root: join(place.home, 'scratch'), approved_fingerprints: [approved] }, thisMachine)
+  assert.ok('not_carried' in prepared, prepared.allow ? 'the launch kept no list of what it does not load' : prepared.refusal)
+  const notLoaded = 'not_carried' in prepared ? prepared.not_carried.filter((path) => path.startsWith('../')) : []
+  assert.deepEqual(notLoaded, [], 'the launch reports a file above the checkout as not loaded')
+})
+
+test("a config above the checkout's top is no part of the approval, and the stop is still never read (martha#766)", (t) => {
   const place = scratch(t)
   put(place.home, SERVERS, server('the owner keeps this'))
   assert.equal(decide(CLAUDE_CODE, place).decision.allow, true)
 
+  const before = readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine)
+  assert.ok(!before.entries.some((entry) => entry.path === `../../${SERVERS}`), 'the stop directory was read')
+
   put(dirname(place.checkout), SERVERS, server('a parent directory ships this'))
-  const { state, decision } = decide(CLAUDE_CODE, place)
-  assert.equal(decision.allow, false)
-  assert.ok(state.entries.some((entry) => entry.path === `../${SERVERS}` && entry.kind === 'file'))
-  assert.ok(!state.entries.some((entry) => entry.path === `../../${SERVERS}`))
+  const after = readLaunchState({ host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }, thisMachine)
+  assert.ok(!after.entries.some((entry) => entry.path === `../${SERVERS}`), "a config above the checkout's top is in the approval")
+  assert.equal(fingerprintOf(after), fingerprintOf(before), "a config above the checkout's top changed the fingerprint")
+  assert.equal(decide(CLAUDE_CODE, place).decision.allow, true, 'a config above the checkout refused the launch')
+})
+
+test("the checkout's own config above a start inside it counts, and a stop inside it ends the walk first (martha#766)", (t) => {
+  const place = scratch(t)
+  const tools = join(place.checkout, 'tools')
+  mkdirSync(tools)
+  put(place.checkout, SERVERS, server('the checkout ships this'))
+  commitAll(place.checkout, 'a server')
+  const at = { host: CLAUDE_CODE, launch_dir: tools, stop_dir: place.home }
+
+  const first = readLaunchState(at, thisMachine)
+  assert.ok(first.entries.some((entry) => entry.path === `../${SERVERS}` && entry.kind === 'file'), "the checkout's own config above the start is not read")
+  put(place.checkout, SERVERS, server('the checkout ships that instead'))
+  assert.notEqual(fingerprintOf(readLaunchState(at, thisMachine)), fingerprintOf(first), "a change to the checkout's own config above the start did not change the fingerprint")
+
+  // A stop between the start and the top ends the walk before the top does: nothing at or above it is read.
+  put(tools, SERVERS, server('the stop keeps this'))
+  mkdirSync(join(tools, 'deeper'))
+  const inside = readLaunchConfig({ host: CLAUDE_CODE, launch_dir: join(tools, 'deeper'), stop_dir: tools }, thisMachine)
+  assert.ok(inside.every((entry) => !entry.path.startsWith('../')), 'a config at or above the stop inside the checkout was read')
 })
 
 test('the start and the stop are resolved through symlinks before the walk up', (t) => {
@@ -255,8 +439,8 @@ test('starting in the stop directory itself reads only that directory', (t) => {
   assert.ok(entries.every((entry) => !entry.path.startsWith('..')))
 })
 
-test('a start outside the stop directory is read all the way up', (t) => {
-  const { home, checkout } = scratch(t)
+test('a start outside the stop, in no git checkout, is still read all the way up (martha#766)', (t) => {
+  const { home, checkout } = scratch(t, { repository: false })
   const elsewhere = join(home, 'elsewhere')
   mkdirSync(elsewhere)
   const entries = readLaunchConfig({ host: CLAUDE_CODE, launch_dir: checkout, stop_dir: elsewhere }, thisMachine)
@@ -465,7 +649,7 @@ test('a planned Claude Code launch turns project config off and passes the appro
   if (!prepared.allow) return
   assert.ok(prepared.snapshot_dir.startsWith(snapshot_root))
   const { args } = prepared.switches
-  for (const arg of HOSTS['claude-code'].project_config_off.args) assert.ok(args.includes(arg), arg)
+  for (const arg of theRowOfHost(CLAUDE_CODE).project_config_off.args) assert.ok(args.includes(arg), arg)
 
   const servers_copy = args[args.indexOf(MCP_CONFIG_SWITCH) + 1] ?? ''
   const settings_copy = args[args.indexOf('--settings') + 1] ?? ''
@@ -487,7 +671,7 @@ test('a planned OpenCode launch runs its own server with project config off, and
 
   assert.equal(prepared.allow, true)
   if (!prepared.allow) return
-  const off = HOSTS.opencode.project_config_off
+  const off = theRowOfHost('opencode').project_config_off
   for (const arg of off.args) assert.ok(prepared.switches.args.includes(arg), arg)
   for (const [name, value] of Object.entries(off.env)) assert.equal(prepared.switches.env[name], value)
   const carried = Object.values(prepared.switches.env).find((value) => value.startsWith(prepared.snapshot_dir)) ?? ''
@@ -602,8 +786,8 @@ test('a checkout with no config still starts with project config off', (t) => {
     const { prepared } = prepare(host, place, [])
     assert.equal(prepared.allow, true, host)
     if (!prepared.allow) continue
-    assert.deepEqual(prepared.switches.args, HOSTS[host].project_config_off.args, host)
-    assert.deepEqual(prepared.switches.env, HOSTS[host].project_config_off.env, host)
+    assert.deepEqual(prepared.switches.args, theRowOfHost(host).project_config_off.args, host)
+    assert.deepEqual(prepared.switches.env, theRowOfHost(host).project_config_off.env, host)
   }
 })
 
@@ -645,7 +829,7 @@ test('an unapproved launch is refused before anything is copied', (t) => {
 
 for (const host of Object.keys(HOSTS) as readonly Host[]) {
   test(`a start keeps only the environment names ${host}'s declaration lists, and the value or absence of each (martha#135)`, () => {
-    const switches = HOSTS[host].project_config_off
+    const switches = theRowOfHost(host).project_config_off
     const declared = [...Object.keys(switches.env), ...switches.env_dropped]
     const started = startedWithOf(switches, switches.args, { ...switches.env, AN_OWNER_KEY: 'sk-live-nobody-reads-this' })
     assert.deepEqual(Object.keys(started.env).sort(), [...new Set(declared)].sort())
@@ -656,7 +840,7 @@ for (const host of Object.keys(HOSTS) as readonly Host[]) {
   })
 
   test(`an argument sequence that is not one unbroken run in the start does not hold ${host}'s declaration (martha#135)`, () => {
-    const switches = HOSTS[host].project_config_off
+    const switches = theRowOfHost(host).project_config_off
     const [first, ...rest] = switches.args
     if (first === undefined || rest.length === 0) return
     const shuffled = [first, 'something else', ...rest]
@@ -666,12 +850,12 @@ for (const host of Object.keys(HOSTS) as readonly Host[]) {
 }
 
 test('a start with no declaration to measure it against never holds one (martha#135)', () => {
-  assert.equal(startedWithTheSwitches(undefined, HOSTS['claude-code'].project_config_off), false)
+  assert.equal(startedWithTheSwitches(undefined, theRowOfHost(CLAUDE_CODE).project_config_off), false)
   assert.equal(startedWithTheSwitches(startedWithOf(undefined, [], {}), undefined), false)
 })
 
 test("a start that kept a name outside the declaration does not hold it, whatever the name's value (martha#135)", () => {
-  const switches = HOSTS['claude-code'].project_config_off
+  const switches = theRowOfHost(CLAUDE_CODE).project_config_off
   const honest = startedWithOf(switches, switches.args, switches.env)
   assert.equal(startedWithTheSwitches(honest, switches), true)
   // `startedWithOf` keeps no such name today, and this is written past it on purpose: the check inside

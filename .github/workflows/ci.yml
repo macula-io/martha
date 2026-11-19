@@ -293,6 +293,48 @@ jobs:
       - run: npm ci
       - run: npm run --silent check:no-member-outlives-its-run
 
+  # The workspace's layout, as a check that fails by name (martha#562, port-map step 9): every clone on its default
+  # branch and clean, every worktree where the crew declared it, one clone per repository.
+  #
+  # The job runs the entry with --self-test, and not the plain run, because this repository declares no layout: a plain
+  # run here would always take the nothing-declared answer and be green whatever the check did. The self-test plants a
+  # workspace under the runner's temp directory, requires the drift to be named at the planted clone's own path, and
+  # requires a planted workspace that matches its layout to name nothing.
+  workspace-layout:
+    name: the workspace matches its layout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:workspace-layout -- --self-test
+      # The plain run too, and not only the self-test: this repository declares no layout, so here it answers the
+      # nothing-declared line and exits 0. It proves the script reaches the entry it names, which the self-test alone
+      # would not (martha#741 counts a step that runs only a --self-test as no run of the check).
+      - run: npm run --silent check:workspace-layout
+
+  # A trial's evidence can say why it observed nothing (martha#694): a line that ended "not-observed" and kept no ACP
+  # transcript beside it is a verdict nobody can read, and the same rule the driver keeps while a line runs is applied
+  # here to a whole evidence directory. The self-test plants the missing-transcript line and its twin, and requires the
+  # first refused by name and the second passing; the plain run judges a directory the step before plants, so the entry
+  # is reached for real and not only through its self-test (martha#741 counts a self-test alone as no run).
+  trial-evidence:
+    name: a trial's evidence can say why it observed nothing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:trial-evidence -- --self-test
+      - run: mkdir -p "$RUNNER_TEMP/trial-evidence/line-1" && printf '%s\n' '{"verdict":"not-observed"}' > "$RUNNER_TEMP/trial-evidence/line-1/result.json" && printf '%s\n' '{"at":0,"direction":"sent","message":{"jsonrpc":"2.0"}}' > "$RUNNER_TEMP/trial-evidence/line-1/acp.jsonl"
+      - run: npm run --silent check:trial-evidence -- --dir "$RUNNER_TEMP/trial-evidence"
+
   # No launcher outlives its run (martha#559): a launch test's `script -qec ... launcher.ts` pair is a terminal held
   # open, and a run killed hard leaves them piled up until the next launch test stops reporting. The job is a run over a
   # machine that holds none, and answers 0. That it BITES is a test's, and so is every line of the rule: a kernel the
@@ -309,6 +351,25 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run --silent check:no-launcher-outlives-its-run
+
+  # No restore of installer/ reaches a release (martha#695, T1): the dry packer restores installer/ from the tag its
+  # version was published at, inside a clone of its own, and that must never happen on the release path -- a release
+  # that restored its installer/ would ship a tree its tag does not hold while its pin named the published installer
+  # (martha#84). The job reads the release workflow, every script its run: lines name and every local uses: ./ action,
+  # and names the actions from other repositories as not read. That it BITES is a test's:
+  # prove_the_core/no_restore_reaches_the_release.node-test.ts plants the restore in a copy of the workflow, in a
+  # script it runs and in a local action, and each must exit 1 with the line printed.
+  no-restore-in-the-release:
+    name: no restore of installer/ in the release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run --silent check:no-restore-in-the-release
 
   # No member works without its crew tools (martha#658 part 3): a session that lost its crew tools works on unseen, and
   # the launcher keeps an open window for its member until a later session holds them again. The job is a run over a
@@ -457,11 +518,6 @@ jobs:
   posted-text-bites:
     name: the posted text check bites
     runs-on: ubuntu-latest
-    env:
-      # The lab's families are a secret and are never printed. A pull request from a fork gets none,
-      # and the check then runs every other class and says which one it skipped.
-      MARTHA_LAB_HOSTS: ${{ secrets.MARTHA_LAB_HOSTS }}
-      MARTHA_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '1' || '0' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -547,14 +603,11 @@ jobs:
 
   # Nothing private gets in (docs/nothing-private-gets-in.md): no private issue
   # link, internal host name or private remote, in the tree or in any commit of
-  # the range. The lab's machine families are a secret and are never printed.
-  # The self-test proves the live lookup and each family bite before the scan.
+  # the range. The self-test proves the live lookup bites before the scan.
   private:
     name: nothing private
     runs-on: ubuntu-latest
     env:
-      MARTHA_LAB_HOSTS: ${{ secrets.MARTHA_LAB_HOSTS }}
-      MARTHA_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '1' || '0' }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
     steps:

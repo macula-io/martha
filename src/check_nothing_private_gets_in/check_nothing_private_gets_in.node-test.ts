@@ -8,8 +8,6 @@ import { test } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
-  FAMILIES_UNCHECKED,
-  familiesFrom,
   privateHitsIn,
   SYNTHETIC,
   type Resolve,
@@ -25,7 +23,6 @@ import { commitSources, commitsOf, treeSources } from './read_sources.ts'
 // public tree the check reads. The class tests switch the synthetic allowance
 // off, so each class is shown to refuse that very value on its own.
 const strict: Rules = {
-  labHosts: ['synth'],
   publicEmails: ['macula.io'],
   publicAddresses: ['ada@synthetic.invalid'],
   owners: ['synthetic-owner'],
@@ -33,6 +30,9 @@ const strict: Rules = {
   allowSynthetic: false,
 }
 const scanning: Rules = { ...strict, allowSynthetic: true }
+// A lab hostname put together at run time: where a test needs one the real scan
+// refuses (a shorthand, a name that is not synthetic), the source must not hold it.
+const labHost = (name: string) => [name, 'lab'].join('.')
 
 // A fixed answer per repository, so no unit test touches the network.
 const PRIVATE = 'synthetic-owner/private-thing'
@@ -123,9 +123,7 @@ test('a public repository passes, in every form', async () => {
 test('an internal host name is refused, and its value is never printed', async () => {
   const fqdn = await hitsOf('ssh to ci-synthetic.lab')
   assert.deepEqual(fqdn, ['a lab hostname (value withheld)'])
-  const machine = await hitsOf('it ran on synth03')
-  assert.deepEqual(machine, ['a lab machine name (value withheld)'])
-  assert.ok([...fqdn, ...machine].every((what) => !what.includes('synth')))
+  assert.ok(fqdn.every((what) => !what.includes('synth')))
 })
 
 test('a host name inside another class\'s value is withheld there too', async () => {
@@ -150,30 +148,29 @@ test('a lab name is never printed: not in a shorthand, a repository, or the path
   const at = (where: string, text: string): Source[] => [{ name: where, lines: [{ where, text }] }]
   const printed = async (where: string, text: string) =>
     (await privateHitsIn(at(where, text), strict, resolveAny)).map((hit) => `${hit.where} ${hit.what}`)
-  const shorthand = await printed('note.md:1', 'see synthetic-synth04#3')
-  assert.ok(shorthand.some((line) => line.includes('a shorthand reference to another repository (synthetic-<lab host>#...)')), shorthand.join('|'))
-  const repo = await printed('note.md:1', 'see synthetic-owner/synth04-config#2')
+  const shorthand = await printed('note.md:1', `see ${labHost('ci-synthetic')}#3`)
+  assert.ok(shorthand.some((line) => line.includes('a shorthand reference to another repository (<lab host>#...)')), shorthand.join('|'))
+  const repo = await printed('note.md:1', 'see synthetic-owner/ci-synthetic.lab-config#2')
   assert.ok(repo.some((line) => line.includes('a repository that is not public (synthetic-owner/<lab host>-config)')), repo.join('|'))
-  const path = await printed('path docs/synth04-notes.md', 'docs/synth04-notes.md')
-  assert.deepEqual(path, ['path docs/<lab host>-notes.md a lab machine name (value withheld)'])
-  for (const line of [...shorthand, ...repo, ...path]) assert.ok(!line.includes('synth0'), line)
+  const path = await printed('path docs/ci-synthetic.lab-notes.md', 'docs/ci-synthetic.lab-notes.md')
+  assert.deepEqual(path, ['path docs/<lab host>-notes.md a lab hostname (value withheld)'])
+  for (const line of [...shorthand, ...repo, ...path]) assert.ok(!line.includes('ci-synthetic'), line)
 })
 
 test('a lab host is refused in lower, upper and mixed case, and never printed', async () => {
-  for (const text of ['ran on synth04', 'ran on SYNTH04', 'ran on Synth04']) {
-    assert.deepEqual(await hitsOf(text), ['a lab machine name (value withheld)'], text)
-  }
   for (const text of ['ssh to ci-synthetic.lab', 'ssh to CI-SYNTHETIC.LAB', 'ssh to Ci-Synthetic.Lab']) {
     assert.deepEqual(await hitsOf(text), ['a lab hostname (value withheld)'], text)
   }
   const resolveAny: Resolve = async () => 'not_public'
-  const where = 'path docs/SYNTH04-notes.md'
-  const hits = await privateHitsIn([{ name: where, lines: [{ where, text: 'docs/SYNTH04-notes.md' }] }], strict, resolveAny)
-  assert.deepEqual(hits, [{ where: 'path docs/<lab host>-notes.md', what: 'a lab machine name (value withheld)' }])
+  const where = 'path docs/CI-SYNTHETIC.LAB-notes.md'
+  const hits = await privateHitsIn([{ name: where, lines: [{ where, text: 'docs/CI-SYNTHETIC.LAB-notes.md' }] }], strict, resolveAny)
+  assert.deepEqual(hits, [{ where: 'path docs/<lab host>-notes.md', what: 'a lab hostname (value withheld)' }])
 })
 
-test('a machine family is only refused when it is declared', async () => {
-  assert.deepEqual(await hitsOf('it ran on synth03', { ...strict, labHosts: [] }), [])
+test('a lab machine name is not a private class: the owner dropped it (martha#773)', async () => {
+  for (const text of ['it ran on synth03', 'it ran on SYNTH03', 'docs/synth04-notes.md', 'see synthetic-owner/open-thing and synth07']) {
+    assert.deepEqual(await hitsOf(text), [], text)
+  }
 })
 
 test('the crew\'s other private-text classes are refused', async () => {
@@ -187,7 +184,6 @@ test('the crew\'s other private-text classes are refused', async () => {
 test('each synthetic form passes a real scan, so the tests that state them can be public', async () => {
   for (const text of [
     'ssh ops@ci-synthetic.lab',
-    'it ran on synth97',
     'see /home/synthetic/notes',
     'dial 192.168.255.7',
     'mail ada@synthetic.invalid',
@@ -203,8 +199,8 @@ test('the synthetic allowance is the whole value, never a part of it', async () 
   for (const [name, pattern] of Object.entries(SYNTHETIC)) {
     assert.ok(pattern.startsWith('^') && pattern.endsWith('$'), name)
   }
-  // A real machine number beside the synthetic one is still refused.
-  assert.deepEqual(await hitsOf('synth97 then synth03', scanning), ['a lab machine name (value withheld)'])
+  // A real lab hostname beside the synthetic one is still refused.
+  assert.deepEqual(await hitsOf(`ci-synthetic.lab then ${labHost('ci-other')}`, scanning), ['a lab hostname (value withheld)'])
   // A 64-hex id is synthetic only when it is one digit repeated.
   assert.deepEqual((await hitsOf(`${'a'.repeat(ID_HEX_DIGITS - 1)}b`, scanning)).length, 1)
 })
@@ -217,43 +213,18 @@ test('a lookup that fails on a lab-named repository stops the check without prin
   const failing: Resolve = async (owner, repo) => {
     throw new Error(`GitHub answered 401 for ${owner}/${repo}`)
   }
-  await assert.rejects(hitsOf('see synthetic-owner/synth07-config#2', strict, failing), (error: Error) => {
+  await assert.rejects(hitsOf('see synthetic-owner/ci-synthetic.lab-config#2', strict, failing), (error: Error) => {
     assert.equal(error.message, 'GitHub answered 401 for synthetic-owner/<lab host>-config')
     return true
   })
 })
 
 test('printed text loses its lab names in any case', () => {
-  assert.equal(withoutLabNames('could not read docs/Synth07-notes.md on ci-synthetic.LAB', ['synth']), 'could not read docs/<lab host>-notes.md on <lab host>')
+  assert.equal(withoutLabNames('could not read docs/Ci-Synthetic.Lab-notes.md on ci-synthetic.LAB'), 'could not read docs/<lab host>-notes.md on <lab host>')
 })
 
 test('a github.com page that is not a repository is not looked up', async () => {
   assert.deepEqual(await hitsOf('https://github.com/sponsors/synthetic-person', strict, unreachable), [])
-})
-
-// No file kept, and a file that must not be read: the variable, when set, is all that is read.
-const noFile = () => undefined
-const neverRead = () => {
-  throw new Error('the lab families file was read although MARTHA_LAB_HOSTS is set')
-}
-
-test('the lab families come from the environment, and a missing list leaves them unchecked outside a fork', () => {
-  assert.deepEqual(familiesFrom('["synth"]', false, neverRead), { kind: 'declared', labHosts: ['synth'] })
-  assert.deepEqual(familiesFrom(undefined, false, noFile), { kind: 'unchecked', why: FAMILIES_UNCHECKED })
-  assert.deepEqual(familiesFrom('', false, noFile), { kind: 'unchecked', why: FAMILIES_UNCHECKED })
-  assert.equal(familiesFrom(undefined, true, noFile).kind, 'skipped')
-  assert.throws(() => familiesFrom('["a|b"]', false, neverRead), /plain lowercase names/)
-  assert.throws(() => familiesFrom('"synth"', false, neverRead), /plain lowercase names/)
-})
-
-test('a malformed secret is refused without its text in the message', () => {
-  for (const raw of ['[synth, other]', "['synth']", '["synth",]', '{"synth"']) {
-    assert.throws(() => familiesFrom(raw, false, neverRead), (error: Error) => {
-      assert.equal(error.message, 'MARTHA_LAB_HOSTS must be a JSON array of plain lowercase names', raw)
-      assert.ok(!error.message.includes('synth'), raw)
-      return true
-    })
-  }
 })
 
 const gitIn = (root: string, ...args: string[]) =>
@@ -297,21 +268,21 @@ test('a path is read as well as its text, in the tree and in every commit, empty
     gitIn(root, 'add', '.')
     gitIn(root, 'commit', '-q', '-m', 'start')
     const base = gitIn(root, 'rev-parse', 'HEAD')
-    writeFileSync(join(root, 'synth05-empty.md'), '')
-    writeFileSync(join(root, 'synth06.bin'), Buffer.from([0, 1, 2]))
+    writeFileSync(join(root, 'ci-synthetic.lab-empty.md'), '')
+    writeFileSync(join(root, 'ci-synthetic.lab.bin'), Buffer.from([0, 1, 2]))
     gitIn(root, 'add', '.')
     gitIn(root, 'commit', '-q', '-m', 'files whose names are the leak')
     const head = gitIn(root, 'rev-parse', 'HEAD')
 
     const inTree = (await privateHitsIn(treeSources(root), strict, resolveFixed)).map((hit) => `${hit.where} ${hit.what}`)
     assert.deepEqual(inTree.sort(), [
-      'path <lab host>-empty.md a lab machine name (value withheld)',
-      'path <lab host>.bin a lab machine name (value withheld)',
+      'path <lab host>-empty.md a lab hostname (value withheld)',
+      'path <lab host>.bin a lab hostname (value withheld)',
     ])
     const commits = commitsOf(root, `${base}..${head}`)
     const inRange = await privateHitsIn(commits.flatMap((sha) => commitSources(root, sha)), strict, resolveFixed)
     assert.equal(inRange.filter((hit) => hit.where.includes(' path <lab host>')).length, 2)
-    assert.ok(inRange.every((hit) => !`${hit.where} ${hit.what}`.includes('synth0')))
+    assert.ok(inRange.every((hit) => !`${hit.where} ${hit.what}`.includes('ci-synthetic')))
   } finally {
     removeTheTree(root)
   }

@@ -26,10 +26,13 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   HOSTS,
   launchEnvironment,
+  NO_AUTO_UPDATER,
+  theRowOfHost,
   type Host,
   type HostSwitches,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 
 /** The switches a launch that adds nothing asks for: what the member and probe launches start from. */
 const NO_SWITCHES: HostSwitches = { args: [], env: {}, env_dropped: [] }
@@ -41,9 +44,18 @@ const AN_ADDRESS_NOTHING_ANSWERS = 'http://127.0.0.1:9'
 const EVERY_HOST = Object.keys(HOSTS) as Host[]
 
 /** The names and values a host's switch is made of, so a case cannot restate one and drift from the row. */
-const theSwitchOf = (host: Host): [string, string][] => Object.entries(HOSTS[host].env_last)
+const theSwitchOf = (host: Host): [string, string][] => Object.entries(theRowOfHost(host).env_last)
 
-/** Every entry of `host`'s switch is in `environment`, or the message names the launch that starts it without it. */
+/**
+ * The hosts whose row turns their updater off with a switch. Every launch case below reads its switch from the row, so a
+ * host with none is one whose reason says it needs none (NO_AUTO_UPDATER), and asking it for a switch would be asking
+ * it to write one the engine has no use for.
+ */
+const HOSTS_THAT_SWITCH = EVERY_HOST.filter((host) => theSwitchOf(host).length > 0)
+
+/**
+ * Every entry of `host`'s switch is in `environment`, or the message names the launch that starts it without it.
+ */
 function assertTheUpdaterIsOff(launch: string, environment: Readonly<Record<string, string>>, host: Host = CLAUDE_CODE): void {
   const the_switch = theSwitchOf(host)
   assert.ok(the_switch.length > 0, `${host} has no auto-updater switch in its row's env_last, so a launch of it would update itself`)
@@ -55,6 +67,37 @@ function assertTheUpdaterIsOff(launch: string, environment: Readonly<Record<stri
     )
   }
 }
+
+/**
+ * A host is either switched or has a written reason, never both and never neither (martha#541's ruling): a switch with
+ * no reason to be spared and a reason with a switch beside it are each a row that says two things about one updater.
+ * This is the half of the guard a host with no switch is held to, and it names that host when either half is wrong.
+ */
+test('every host either switches its auto-updater off or says in words why it needs no switch, never both and never neither', () => {
+  assert.ok(EVERY_HOST.length > 1, 'there are at least two hosts, or this walk compares nothing')
+  for (const host of EVERY_HOST) {
+    const switched = theSwitchOf(host).length > 0
+    const reason = NO_AUTO_UPDATER[host]
+    const both = switched && reason !== undefined
+    const neither = !switched && reason === undefined
+    assert.equal(both || neither, false, `${host} is ${both ? 'switched in its row and given a reason' : 'given neither a switch nor a reason'}: a host is one or the other`)
+    for (const other of Object.keys(NO_AUTO_UPDATER)) assert.ok(EVERY_HOST.includes(other), `NO_AUTO_UPDATER names ${other}, which is no host of HOSTS`)
+  }
+})
+
+/**
+ * The engine's own reason, which is what lets its row hold no switch (martha#541): it names the pinned commit the two
+ * readings were taken at and both places in the engine where an update could run, since a reason that names neither is a
+ * claim nobody can check.
+ */
+test('the engine needs no auto-updater switch, and its row says why, naming the pinned engine and both places', () => {
+  assert.deepEqual(theSwitchOf(RECORDED_GOOSE_ENGINE.engine_name), [], 'the engine is given a switch it has no use for')
+  const reason = NO_AUTO_UPDATER[RECORDED_GOOSE_ENGINE.engine_name] ?? ''
+  assert.ok(reason.includes(RECORDED_GOOSE_ENGINE.engine_commit), `the engine's reason does not name the pinned commit ${RECORDED_GOOSE_ENGINE.engine_commit}`)
+  for (const place of ['crates/goose-cli/src/cli.rs', 'crates/goose/src/plugins/mod.rs']) {
+    assert.ok(reason.includes(place), `the engine's reason does not name ${place}, where an update it has could run`)
+  }
+})
 
 /** A home of this test's own, removed after it. */
 function aHome(t: TestContext): string {
@@ -72,7 +115,7 @@ function aRunnableFile(home: string, name: string): string {
 }
 
 test('the member and probe launches switch the host auto-updater off', () => {
-  for (const host of EVERY_HOST) {
+  for (const host of HOSTS_THAT_SWITCH) {
     assertTheUpdaterIsOff(`the ${host} member and probe launch (launchEnvironment)`, launchEnvironment({ HOME: '/an-owner-home' }, NO_SWITCHES, host), host)
   }
 })
@@ -80,11 +123,11 @@ test('the member and probe launches switch the host auto-updater off', () => {
 // The one place each switch is spelled as its host reads it (martha#474): every other case reads the row, so a
 // misspelt name or value there would pass all of them and bring back the install over the owner's own copy.
 test("Claude Code's auto-updater switch is spelled as Claude Code reads it", () => {
-  assert.deepEqual(HOSTS[CLAUDE_CODE].env_last, { DISABLE_AUTOUPDATER: '1' })
+  assert.deepEqual(theRowOfHost(CLAUDE_CODE).env_last, { DISABLE_AUTOUPDATER: '1' })
 })
 
 test("OpenCode's auto-updater switch is spelled as OpenCode reads it", () => {
-  assert.deepEqual(HOSTS.opencode.env_last, { OPENCODE_DISABLE_AUTOUPDATE: '1' })
+  assert.deepEqual(theRowOfHost('opencode').env_last, { OPENCODE_DISABLE_AUTOUPDATE: '1' })
 })
 
 test('the recorded host run switches the host auto-updater off', (t) => {
@@ -95,7 +138,7 @@ test('the recorded host run switches the host auto-updater off', (t) => {
 })
 
 test('neither an inherited value nor a switch can turn the updater back on inside a run', () => {
-  for (const host of EVERY_HOST) {
+  for (const host of HOSTS_THAT_SWITCH) {
     const only = theSwitchOf(host)[0]
     assert.ok(only !== undefined, `${host}'s switch is at least one variable to turn off`)
     const [name, value] = only

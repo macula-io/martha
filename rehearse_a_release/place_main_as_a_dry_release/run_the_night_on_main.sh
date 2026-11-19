@@ -27,8 +27,9 @@
 # anything was packed. A proof that exits 0 on a dry layer claims a release's pass, which a dry run never is, so that is
 # FAILED, and so is a run a signal stopped. The packer's exits are not passed through, because its codes collide with
 # the proof's: the packer's NOT_PACKABLE is 3, and the proof's 3 is "the registry carries no release". So a packer that
-# refused or could not run is PACK_FAILED, and a tree whose installer is ahead of its tag is NOT_PACKABLE_TONIGHT,
-# reported as "not packable", never as a pass. Before the proof runs the driver checks that each of its codes is above
+# refused or could not run is PACK_FAILED, and a tree whose installer/ names differ from its tag's is NOT_PACKABLE_TONIGHT,
+# reported as "not packable" in the packer's own words, never as a pass. Before the proof runs the driver checks that each
+# of its codes is above
 # DRY_PASSED, the proof's highest code today, so a proof whose DRY_PASSED moves up to one of them is refused. A code the
 # proof adds above its DRY_PASSED is not seen by that check: the proof's own Exit: line is where a new code is written.
 set -euo pipefail
@@ -136,8 +137,14 @@ run_child "${PACKER}" "${SHA}" "${LAYER}" > "${RUN}/pack.log" 2>&1
 printf 'pack_exit=%s\n' "${CHILD_EXIT}" >> "${RUN}/run.txt"
 if [[ "${CHILD_EXIT}" -ne 0 ]]; then
   if [[ "${CHILD_EXIT}" -eq "${NOT_PACKABLE}" ]]; then
-    printf 'result=not packable: installer ahead of its tag\n' >> "${RUN}/run.txt"
-    printf 'night: not packable: installer ahead of its tag at %s; nothing was proven; evidence %s\n' "${SHA}" "${RUN}" >&2
+    # The packer's own reason, in its own words and read from its own log: NOT_PACKABLE means installer/'s martha names
+    # differ from its tag's, and a wording restated here would drift from the packer's the next time it changed.
+    PACKERS_REASON="$(awk '/^dry: not packable: /{sub(/^dry: not packable: /, ""); print; exit}' "${RUN}/pack.log")"
+    # What NOT_PACKABLE means now, for a packer that said nothing of its own. Given as its own assignment: an apostrophe
+    # inside a `${VAR:-default}` between double quotes ends the parsing early and eats the line's redirection.
+    [[ -n "${PACKERS_REASON}" ]] || PACKERS_REASON="installer/ names differ from its tag's"
+    printf 'result=not packable: %s\n' "${PACKERS_REASON}" >> "${RUN}/run.txt"
+    printf 'night: not packable: %s at %s; nothing was proven; evidence %s\n' "${PACKERS_REASON}" "${SHA}" "${RUN}" >&2
     exit "${NOT_PACKABLE_TONIGHT}"
   fi
   printf 'result=the packer exited %s\n' "${CHILD_EXIT}" >> "${RUN}/run.txt"
@@ -146,13 +153,26 @@ if [[ "${CHILD_EXIT}" -ne 0 ]]; then
 fi
 printf 'layer_sha256=%s\n' "$(sha256sum "${LAYER}" | sed 's/ .*//')" >> "${RUN}/run.txt"
 
+# Main's own installer, when the packer packed one: a drifted tree's proof is given it and its digest, so the night
+# proves main's installer rather than the published one and says so on its result line (martha#695 Done-when 2, #696).
+DRY_INSTALLER_ARGS=()
+PACKED_AS="$(awk '/^dry: main.s installer at .* packed as .* \(sha256:[0-9a-f]+\)$/{print; exit}' "${RUN}/pack.log")"
+if [[ -n "${PACKED_AS}" ]]; then
+  DRY_TARBALL="${PACKED_AS##* packed as }"
+  DRY_TARBALL="${DRY_TARBALL% (sha256:*}"
+  DRY_DIGEST="sha256:${PACKED_AS##* (sha256:}"
+  DRY_DIGEST="${DRY_DIGEST%)}"
+  DRY_INSTALLER_ARGS=(--dry-installer "${DRY_TARBALL}" "${DRY_DIGEST}")
+  printf 'dry_installer=%s %s\n' "${DRY_TARBALL}" "${DRY_DIGEST}" >> "${RUN}/run.txt"
+fi
+
 NIGHT_ARGS=()
 if sed -n 's/^USAGE=//p' "${PROOF}" | sed -n '/\[--night </p' | read -r _; then
   NIGHT_ARGS=(--night "${RUN}/${NIGHT_FOLDER_NAME}")
   printf 'night_folder=%s\n' "${RUN}/${NIGHT_FOLDER_NAME}" >> "${RUN}/run.txt"
 fi
 
-run_child "${PROOF}" "${HOST}" --log "${RUN}/proof.log" "${NIGHT_ARGS[@]}" --dry-layer "${LAYER}" "${SHA}" "${PROOF_EXTRA[@]}"
+run_child "${PROOF}" "${HOST}" --log "${RUN}/proof.log" "${NIGHT_ARGS[@]}" --dry-layer "${LAYER}" "${SHA}" "${DRY_INSTALLER_ARGS[@]}" "${PROOF_EXTRA[@]}"
 PROOF_EXIT="${CHILD_EXIT}"
 printf 'proof_exit=%s\nended=%s\n' "${PROOF_EXIT}" "$(date -Is)" >> "${RUN}/run.txt"
 if [[ "${PROOF_EXIT}" -eq 0 ]]; then

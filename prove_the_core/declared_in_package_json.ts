@@ -47,11 +47,14 @@ export interface Manifest {
  */
 export const manifestPathOf = (repository: string): string => join(repository, MANIFEST)
 
-const MANIFEST = 'package.json'
+/** The manifest's file name. */
+export const MANIFEST = 'package.json'
+
+/** The repository's package.json, as the text on disk: what a reader that must see every declaration reads (martha#753). */
+export const manifestTextOf = (repository: string): string => readFileSync(manifestPathOf(repository), 'utf8')
 
 /** The repository's package.json. */
-export const manifestOf = (repository: string): Manifest =>
-  JSON.parse(readFileSync(manifestPathOf(repository), 'utf8')) as Manifest
+export const manifestOf = (repository: string): Manifest => JSON.parse(manifestTextOf(repository)) as Manifest
 
 /** Text as a regular expression matches it literally. */
 export const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

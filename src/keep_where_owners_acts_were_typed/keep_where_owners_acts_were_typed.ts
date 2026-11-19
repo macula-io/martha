@@ -121,3 +121,4 @@ export function whatTheOwnerReadsOf(place: TheOwnersActsPlace, act: string, firs
   const unreadable = log.unreadable.map((number) => `${OWNER_ACTS_FILE} line ${number} is not an entry, so it vouches for no record.`)
   return [...(late === undefined ? [] : [late]), ...unreadable, ...read]
 }
+

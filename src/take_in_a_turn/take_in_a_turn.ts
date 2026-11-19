@@ -176,6 +176,11 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   // an ask taken from the owner's queue reaches a model as the launcher's own answer to one of the crew's MCP tools,
   // which the seam records on B2 like every other tool result; A21 names the gate on that text, not a source of its own
   ...INBOUND_PATHS.filter((path) => path.control.kind === 'ask-gate').map((path) => path.id),
+  // a turn refused before it is sent never becomes one: the engine would have run it as a command (martha#541, A24)
+  ...INBOUND_PATHS.filter((path) => path.control.kind === 'refused-as-a-command').map((path) => path.id),
+  // the text the engine attaches at a session's start is the launch's own record, made before any turn with the source
+  // it is; no turn of it reaches the seam (martha#541, A25 and A26)
+  ...INBOUND_PATHS.filter((path) => path.control.kind === 'recorded-source').map((path) => path.id),
 ]
 
 /** Registry rows a source can record that the registry does not know. */

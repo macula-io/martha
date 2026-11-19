@@ -32,13 +32,14 @@ import { MESH_SERVER_PACKAGE, RECORDED_MESH_SERVERS } from '../read_a_room_throu
 import { fakeNpmRegistry, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
 import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
-import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, HOSTS, readLaunchState, startedWithOf, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, readLaunchState, startedWithOf, theRowOfHost, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE, streamDirectoryNameOf } from '../row_streams_directory/row_streams_directory.ts'
 import { CREW_ROWS_PLACE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { STATE_HOME_VARIABLE } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
+import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { POLL_MS, until } from '../drive_the_recorded_host/wait_until_the_event.ts'
 import { OWNER_AT_THE_TERMINAL } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { PATH_OF_SOURCE, RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -1650,7 +1651,7 @@ test('the member, its load check, its version check and its session init all run
   // The member's start is preceded by the questions the launcher asks its host: the relay's load check, its version,
   // the session init the styles folder is read from, which runs on the switches a member starts on (#154), and print
   // mode with no prompt, which is where the host says what it makes of the rules the launch wrote (#226).
-  const [firstSwitch] = HOSTS['claude-code'].project_config_off.args
+  const [firstSwitch] = theRowOfHost(CLAUDE_CODE).project_config_off.args
   assert.deepEqual(calls.map((line) => line.split(' ')[1]), ['plugin', '--version', firstSwitch, '--print', '-p'])
   for (const line of calls) assert.equal(line.split(' ')[0], realpathSync(fake.command), line)
 })
@@ -4505,7 +4506,7 @@ test('the crew tools a launch hands over read the sessions map its relay keeps, 
     ...memberLaunch(place, fake.command, place.approved),
     // Exactly the shape the launcher's own wiring uses: the crew tools are built over the accessor the launcher
     // hands over, and that accessor is the thing under test.
-    crew_tools: (sessions) => {
+    crew_tools: (sessions, member) => {
       const crew = crewToolsOver({
         member: 'Mercury',
         ledger: { clock: { now: () => 5_000 }, stores: { rows: rowStreamsDirectory(place.rows) } },
@@ -4515,6 +4516,8 @@ test('the crew tools a launch hands over read the sessions map its relay keeps, 
         stores: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')) },
         stamps,
         sessions,
+        // The watch the launch hands over, which a launch's crew tools must hold (martha#710).
+        served_tools: member.served_tools,
       })
       handed.push(crew)
       return crew
@@ -4541,4 +4544,60 @@ test('the crew tools a launch hands over read the sessions map its relay keeps, 
   assert.equal('refused' in answered ? answered.refused : '', '', 'the launch knows the session that started in it')
   assert.equal(stamped.length, 1, 'the handover was stamped')
   assert.equal(stamped[0]?.predecessor_id, SESSION, 'the stamp names the session the handover came from')
+})
+
+/** The member's row, once it says something, read within `ms`: a tick's work is not the launch's own answer, so the
+ * test waits for the line rather than for the launch. */
+async function theRowSayingWithin(dashboard: string, member: string, ms: number): Promise<string> {
+  const began = Date.now()
+  for (;;) {
+    const needs = dashboardRowsIn(dashboard).read(member)?.needs ?? ''
+    if (needs !== '' || Date.now() - began > ms) return needs
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+}
+
+test('a workspace this launch was given is scanned once it is up, and its drift reaches the row (martha#562 package 2)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+  const member = 'Mercury'
+  dashboardRowsIn(place.dashboard).change(member, () => ({ ...theRowWithNothingSaid(), member, session: 'a-session', at: 1 }))
+  // A clones place holding one plain file: the walk names it rather than dying on it, which is the whole drift this
+  // launch has to report, and it needs no git to be planted.
+  const clonesPlace = join(place.state_root, 'the-clones-place')
+  const worktrees = join(place.state_root, 'the-worktrees-place')
+  mkdirSync(clonesPlace, { recursive: true })
+  mkdirSync(worktrees, { recursive: true })
+  // Resolved, because the scan reports what it followed: CI runs this suite under a temporary directory reached
+  // through a link, where the planted path and the one the walk names differ by the link in front of them.
+  const clones = realpathSync(clonesPlace)
+  writeFileSync(join(clones, 'a-note.md'), 'someone left this here\n')
+  const launch = {
+    ...memberLaunch(place, fake.command, place.approved, lines),
+    hook_settings_check_ms: 20,
+    leftovers: { crew: keepTheCrewsFilesAsDirectories(join(place.rows, 'crew-files')), workspace: { clones, worktrees, members: [member] } },
+  }
+
+  const started = await aMemberStartedIn(t, place, launch)
+
+  assert.equal(started.started, true)
+  assert.equal(
+    await theRowSayingWithin(place.dashboard, member, 5_000),
+    `the workspace drifts from its layout: ${join(clones, 'a-note.md')} is not a directory: the crew's clones are laid out <clones>/<org>/<repo>, and every place between them is one.`,
+  )
+})
+
+test('a launch given no workspace leaves no scan line, and the row keeps whatever it said (martha#562 package 2)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  const lines: string[] = []
+  const member = 'Mercury'
+  dashboardRowsIn(place.dashboard).change(member, () => ({ ...theRowWithNothingSaid(), member, session: 'a-session', at: 1 }))
+
+  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command, place.approved, lines), hook_settings_check_ms: 20 })
+
+  assert.equal(started.started, true)
+  await new Promise((resolve) => setTimeout(resolve, 120))
+  assert.equal(dashboardRowsIn(place.dashboard).read(member)?.needs, '', 'a launch with no layout wrote a line anyway')
 })

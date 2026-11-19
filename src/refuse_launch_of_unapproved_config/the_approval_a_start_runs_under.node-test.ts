@@ -16,7 +16,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import {
   fingerprintOf,
-  LAUNCH_FILES_OF_HOST,
+  CLAUDE_CODE_FILES,
   readLaunchState,
   theApprovalInUse,
   type LaunchPlace,
@@ -24,7 +24,7 @@ import {
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The file a checkout uses to start a tool server: config that starts code by itself. */
-const [SERVERS] = LAUNCH_FILES_OF_HOST[CLAUDE_CODE]
+const [SERVERS] = CLAUDE_CODE_FILES
 
 /** A place to start in, as this machine holds it, and the owner's home it stops at. */
 interface Place {

@@ -1,27 +1,21 @@
 // Run the check: node src/check_nothing_private_gets_in/main.ts [--range <base>..<head>] [--self-test]
 //
-// Environment: MARTHA_LAB_HOSTS (a JSON array of the lab's machine families; a
-// secret in CI), MARTHA_FORK_PR=1 on a pull request from a fork, GITHUB_TOKEN
-// for the repository lookups. Without MARTHA_LAB_HOSTS, the families' digests
-// the owner kept on this machine (read_lab_family_digests.ts, martha#731).
+// Environment: GITHUB_TOKEN for the repository lookups.
 //
 // Exit 0 clean, 1 hits (one line each, `where: what`), 2 the check could not be
-// made. It never passes because it could not look: with no families at all, every
-// other rule runs and prints its hits, and the exit is 2.
+// made. It never passes because it could not look.
 
 import {
   withoutLabNames,
   privateHitsIn,
-  type Families,
   type Hit,
   type Resolve,
-  type Rules,
   type Source,
   type Visibility,
 } from './check_nothing_private_gets_in.ts'
 import { DECLARED } from './declared.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
-import { declaredOrNone, familiesOf, resolveOnGitHub, rulesOf } from './scan_rules_and_visibility.ts'
+import { resolveOnGitHub, rulesOf } from './scan_rules_and_visibility.ts'
 
 const option = (name: string): string | undefined => {
   const at = process.argv.indexOf(name)
@@ -34,40 +28,14 @@ const sourcesOf = (root: string, range: string | undefined): Source[] => [
 ]
 
 // Live proof that the check bites where CI runs it: the real lookup refuses a
-// repository that is not public and passes this one, and each declared family
-// is refused. Nothing it plants is printed.
-const selfTest = async (families: Families, resolve: Resolve): Promise<string[]> => {
+// repository that is not public and passes this one.
+const selfTest = async (resolve: Resolve): Promise<string[]> => {
   const failures: string[] = []
   const expect = async (what: string, got: Promise<Visibility>, want: Visibility) => {
     if ((await got) !== want) failures.push(what)
   }
   await expect('this repository resolves public', resolve('macula-io', DECLARED.ownRepo), 'public')
   await expect('a repository nobody can see resolves not public', resolve('synthetic-owner-martha-316', 'nowhere'), 'not_public')
-  if (families.kind === 'declared') {
-    const rules = rulesOf(families, true)
-    for (const [index, family] of families.labHosts.entries()) failures.push(...(await familyFailures(family, index, rules, resolve)))
-  }
-  return failures
-}
-
-// One declared family, planted where it may hide: what the check fails to refuse,
-// or prints, of it.
-const familyFailures = async (family: string, index: number, rules: Rules, resolve: Resolve): Promise<string[]> => {
-  const failures: string[] = []
-  // In text, in a path, and as a shorthand name: refused each time, printed never.
-  const planted: Source = {
-    name: 'planted',
-    lines: [
-      { where: `family ${index + 1}`, text: `ran on ${family}07` },
-      { where: `path docs/${family}07-notes.md`, text: `docs/${family}07-notes.md` },
-      { where: `family ${index + 1} shorthand`, text: `see ${family}07#3` },
-    ],
-  }
-  const hits = await privateHitsIn([planted], rules, resolve)
-  const refused = hits.filter((hit) => hit.what === 'a lab machine name (value withheld)').length
-  if (refused < 3) failures.push(`family ${index + 1} is not refused in text, a path and a shorthand`)
-  // The planted name, not the bare family: a family may be an everyday word.
-  if (hits.some((hit) => `${hit.where} ${hit.what}`.includes(`${family}07`))) failures.push(`family ${index + 1} is printed`)
   return failures
 }
 
@@ -75,30 +43,17 @@ const report = (hits: readonly Hit[]) => {
   for (const hit of hits) console.log(`${hit.where}: ${hit.what}`)
 }
 
-const sayWhereTheFamiliesCameFrom = (families: Families) => {
-  if (families.kind === 'skipped') console.log(`lab machine families not checked: ${families.why}`)
-  // Kept as digests, the families cannot be planted: the self-test plants none of them.
-  if (families.kind === 'kept') console.log('lab machine families read from this machine\'s digests')
-}
-
 const main = async (): Promise<number> => {
-  const families = familiesOf(process.env)
-  sayWhereTheFamiliesCameFrom(families)
   const resolve = resolveOnGitHub(process.env['GITHUB_TOKEN'])
   if (process.argv.includes('--self-test')) {
-    if (families.kind === 'unchecked') throw new Error(families.why)
-    const failures = await selfTest(families, resolve)
+    const failures = await selfTest(resolve)
     for (const failure of failures) console.log(`does not bite: ${failure}`)
     console.log(failures.length === 0 ? 'check_nothing_private_gets_in: the check bites' : 'check_nothing_private_gets_in: self-test failed')
     return failures.length === 0 ? 0 : 1
   }
   const root = option('--root') ?? process.cwd()
-  const hits = await privateHitsIn(sourcesOf(root, option('--range')), rulesOf(families, true), resolve)
+  const hits = await privateHitsIn(sourcesOf(root, option('--range')), rulesOf(true), resolve)
   report(hits)
-  if (families.kind === 'unchecked') {
-    console.error(`check_nothing_private_gets_in: ${hits.length} hit(s) from the other rules; ${families.why}`)
-    return 2
-  }
   if (hits.length > 0) {
     console.error(`check_nothing_private_gets_in: ${hits.length} hit(s). Keep the reasoning, drop the link: docs/nothing-private-gets-in.md`)
     return 1
@@ -110,8 +65,7 @@ const main = async (): Promise<number> => {
 main().then(
   (code) => process.exit(code),
   (error: unknown) => {
-    const lab = declaredOrNone(process.env)
-    const said = withoutLabNames(error instanceof Error ? error.message : String(error), lab.labHosts, lab.labDigests)
+    const said = withoutLabNames(error instanceof Error ? error.message : String(error))
     console.error(`check_nothing_private_gets_in: the check could not be made: ${said}`)
     process.exit(2)
   },

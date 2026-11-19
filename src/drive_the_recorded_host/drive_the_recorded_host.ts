@@ -31,7 +31,7 @@ import { waitWhileTheHostKeepsShowing, type ProgressWait } from './wait_while_th
 import { startedLine } from '../run_the_martha_command/run_the_martha_command.ts'
 import { crewRowsDirectory, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
-import { HOSTS } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { theRowOfHost } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /**
@@ -230,7 +230,7 @@ export function environmentOf(run: Pick<RecordedHostRun, 'claude' | 'home'>, bas
     [API_KEY_VARIABLE]: STAND_IN_KEY,
     // Last, from Claude Code's own row, as every launch environment spreads it (refuse_launch_of_unapproved_config):
     // nothing above it can turn the auto-updater back on inside a run (martha#460 r=1, martha#474).
-    ...HOSTS[CLAUDE_CODE].env_last,
+    ...theRowOfHost(CLAUDE_CODE).env_last,
   }
 }
 

@@ -10,7 +10,8 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { CORE, manifestOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { CORE, manifestTextOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { keysDeclaredTwice } from '../../prove_the_core/keys_declared_twice.ts'
 import { ceilingExclusionsOf, ceilingsOf, sliceCapOf, sliceCeilingsOf } from '../../prove_the_core/the_host_ceilings.ts'
 import { theLinterLints } from '../../prove_the_core/the_linter_lints_it.ts'
 import { codeLinesOfDirectory } from './a_host_directorys_code_lines.ts'
@@ -62,7 +63,10 @@ async function theTopLevelOf(repository: string, manifest: Manifest): Promise<Th
 
 /** The tree under `repository`, measured and judged. */
 export async function judgeTheTree(repository: string): Promise<Judged> {
-  const manifest = manifestOf(repository)
+  // The text is read once and judged twice: parsed, and as written, where a key declared twice still shows (martha#753).
+  const text = manifestTextOf(repository)
+  const manifest = JSON.parse(text) as Manifest
+  const twice: Finding[] = keysDeclaredTwice(text).map((found) => ({ kind: 'duplicate_key', ...found }))
   const declared = declaredDirectoriesOf(manifest)
   const code = await countsOnDisk(
     repository,
@@ -74,7 +78,7 @@ export async function judgeTheTree(repository: string): Promise<Judged> {
     manifest,
     declared,
     code,
-    findings: findingsOf(declared, ceilingsOf(manifest), code),
+    findings: [...twice, ...findingsOf(declared, ceilingsOf(manifest), code)],
     slices,
     slice_findings: sliceFindingsOf(sliceCapOf(manifest), theCoreCeilingsOf(sliceCeilingsOf(manifest)), slices),
     top_level,

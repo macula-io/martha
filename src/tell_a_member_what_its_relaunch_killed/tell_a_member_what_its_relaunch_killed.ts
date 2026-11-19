@@ -49,7 +49,7 @@ export interface IRunningCommand {
 export interface IDirtyFile {
   /** Relative to the worktree it was found in, spelled as git spells it. */
   readonly path: string
-  /** The worktree's place, when the record was made over more than one; absent when it has only one. */
+  /** The worktree's place, as the record was made over it (martha#719). Absent only in a record kept before every record named its tree. */
   readonly worktree?: string
   /** A digest of the bytes the file held at the end: what rule 4 and rule 5 are judged on. */
   readonly digest: string
@@ -141,7 +141,8 @@ const keyOf = (one: { readonly path: string; readonly worktree?: string }): stri
 export const releaseKeyOf = (one: { readonly path: string; readonly worktree?: string; readonly digest: string }): string =>
   `${keyOf(one)}\u0000${one.digest}`
 
-const nameOf = (one: { readonly path: string; readonly worktree?: string }): string =>
+/** How one file is named to a member: its path, and the tree it stands in when the record names one (martha#719). */
+export const theNameOf = (one: { readonly path: string; readonly worktree?: string }): string =>
   one.worktree === undefined ? one.path : `${one.worktree}: ${one.path}`
 
 /** The files the record keeps as dirty, each once by its worktree and path, in the order they were found. */
@@ -295,12 +296,12 @@ const theFilesSaid = (record: WhatAKilledRunLeft, released: readonly IReleasedPa
       ? []
       : [
           `These files still hold what it was writing: ${namedThenTheRest(
-            leftovers.map(nameOf),
+            leftovers.map(theNameOf),
             record.dropped.leftovers,
           )}.`,
         ]
   if (dirty.length > 0) {
-    return [...leftSaid, `These files differed from HEAD: ${namedThenTheRest(dirty.map(nameOf), record.dropped.files)}.`]
+    return [...leftSaid, `These files differed from HEAD: ${namedThenTheRest(dirty.map(theNameOf), record.dropped.files)}.`]
   }
   if (record.dirty_unreadable === undefined) return leftSaid
   return [...leftSaid, `Which files differed from HEAD could not be read (${shownAsData(record.dirty_unreadable)}).`]
@@ -342,13 +343,27 @@ const theSameFileAs = (kept: IDirtyFile, one: IWhatACommitWouldCarry): boolean =
   (one.worktree === undefined || kept.worktree === undefined || kept.worktree === one.worktree) &&
   kept.digest === one.digest
 
+/** How a refusal opens, and what the member does after restoring what is not theirs: the act the refusal is written for. */
+export interface AWhatAKilledRunStandsIn {
+  readonly opening: string
+  readonly andThen: string
+}
+
+/** The act a commit's refusal is written for: the commit carries what a killed run left, and then the member commits. */
+export const WHAT_A_COMMIT_CARRIES: AWhatAKilledRunStandsIn = { opening: 'this commit carries what a killed run left', andThen: 'commit' }
+
+/** The act a hand-off's refusal is written for: it comes while what a killed run left stands, and then the member hands off (martha#719). */
+export const WHAT_A_HAND_OFF_COMES_WHILE: AWhatAKilledRunStandsIn = { opening: 'this hand-off comes while what a killed run left stands', andThen: 'hand off' }
+
 /**
- * Why a commit would carry what a killed run left, or undefined when it would not. It judges the content (rule 4) on
- * the leftovers that still stand (rule 2), and names the release act as the way through.
+ * Why an act would carry what a killed run left, written for the act it names, or undefined when it would not. It judges
+ * the content (rule 4) on the leftovers that still stand (rule 2), and names the release act as the way through. One
+ * builder, so a commit's refusal and a hand-off's cannot drift apart in either direction (martha#719, N3).
  */
-export const theRefusalOfACommit = (
+export const theRefusalOfWhatAKilledRunLeft = (
   record: WhatAKilledRunLeft,
   carrying: readonly IWhatACommitWouldCarry[],
+  act: AWhatAKilledRunStandsIn,
   released: readonly IReleasedPath[] = [],
 ): string | undefined => {
   const standing = theStandingLeftoversOf(record, released)
@@ -358,11 +373,18 @@ export const theRefusalOfACommit = (
   const commands = [...new Set(caught.map((one) => standingFor(one)?.command_line ?? ''))].filter((one) => one !== '')
   const wasRunning = commands.length === 0 ? '' : ` It was running when the launch ended: ${namedThenTheRest(commands)}.`
   return (
-    `this commit carries what a killed run left: ${namedThenTheRest(caught.map(nameOf))} ` +
+    `${act.opening}: ${namedThenTheRest(caught.map(theNameOf))} ` +
     `(the bytes are the ones kept when the launch ended).${wasRunning} ` +
-    `Restore what is not yours, or take ${THE_RELEASE_ACT} for the paths that are, and then commit.`
+    `Restore what is not yours, or take ${THE_RELEASE_ACT} for the paths that are, and then ${act.andThen}.`
   )
 }
+
+/** Why a commit would carry what a killed run left, or undefined when it would not: the commit's own words. */
+export const theRefusalOfACommit = (
+  record: WhatAKilledRunLeft,
+  carrying: readonly IWhatACommitWouldCarry[],
+  released: readonly IReleasedPath[] = [],
+): string | undefined => theRefusalOfWhatAKilledRunLeft(record, carrying, WHAT_A_COMMIT_CARRIES, released)
 
 /** The record as the one line the crew's store keeps, and the one shape this reads back. */
 export const theKeptText = (record: WhatAKilledRunLeft): string => JSON.stringify(record)

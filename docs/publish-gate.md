@@ -202,11 +202,15 @@ control. `src/refuse_launch_of_unapproved_config/` is five rules:
    only the script an approved hook runs changes the fingerprint. It is read
    before every tool call, so a checkout git reports clean reads as HEAD's own
    tree without staging anything.
-3. **The directories above count**, up to but not including the stop directory
-   the launcher names (the owner's home); a start outside it is read up to the
-   root. This is for a host started by hand, which walks up — OpenCode with no
-   stop at all, so it also reads `~/.opencode` and `~/opencode.json` as project
-   config. A planned launch reads none of them.
+3. **The checkout is the bound**: a config inside the checkout is fingerprinted
+   with it, from the directory the host starts in up to the checkout's top, and
+   never above it. Nothing above the top is read: it is not the checkout author's,
+   the launch never carries it, and a planned launch loads none of it. The stop
+   directory the launcher names (the owner's home) bounds the walk when the start
+   is in no checkout, or in one whose top is the stop or above it, and the stop
+   is read only when the host starts in it. A start the stop is no ancestor of, in no checkout, is
+   read up to the root, and refused when that walk finds any of the listed files,
+   in the start or in any directory above it: nothing there can be approved.
 4. **What the gate cannot pin down is refused**: a symlink, even an approved one;
    a path that is not a plain file or directory; config in a directory that is
    no git checkout, or in one whose top is the stop directory or above it (a
