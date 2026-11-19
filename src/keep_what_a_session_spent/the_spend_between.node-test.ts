@@ -16,6 +16,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import type { StoredRow } from '../host_contract/host_contract.ts'
 import { USAGE_READ, type AUsageRead } from './keep_what_a_session_spent.ts'
 import { theSpendBetween, type TheSpend } from './the_spend_between.ts'
@@ -23,19 +25,18 @@ import { theSpendBetween, type TheSpend } from './the_spend_between.ts'
 const THE_PACKAGE = 'macula-io/martha#860'
 const ANOTHER_PACKAGE = 'macula-io/martha#308'
 const T = 1_794_998_340_000
-const MINUTE = 60_000
-const at = (minutes: number): number => T + minutes * MINUTE
+const at = (minutes: number): number => T + minutes * MINUTE_MS
 const FROM = at(10)
 const TO = at(100)
 
 type AReading = Omit<AUsageRead, 'kind' | 'opens' | 'at_start' | 'unknown_price' | 'at'> & { readonly minute: number; readonly opens?: 0 | 1; readonly at_start?: 0 | 1 }
 
-const MARS = { member: 'mars', host: 'claude-code', session: 'mars-session', started_at: at(-30), billing: 'metered', package: THE_PACKAGE } as const
+const MARS = { member: 'mars', host: CLAUDE_CODE, session: 'mars-session', started_at: at(-30), billing: 'metered', package: THE_PACKAGE } as const
 const MARS_CLEARED = { ...MARS, started_at: at(60) } as const
-const VENUS = { member: 'venus', host: 'claude-code', session: 'venus-session', started_at: at(-5), billing: 'subscription', model: 'sonnet' } as const
+const VENUS = { member: 'venus', host: CLAUDE_CODE, session: 'venus-session', started_at: at(-5), billing: 'subscription', model: 'sonnet' } as const
 const JUNO_SILENT = { member: 'juno', host: 'martha-engine', session: 'juno-silent', started_at: null, billing: 'unknown', model: 'deepseek', package: THE_PACKAGE, usd: null } as const
 const JUNO_UNKNOWN = { ...JUNO_SILENT, session: 'juno-unknown' } as const
-const MERCURIUS = { member: 'mercurius', host: 'claude-code', session: 'mercurius-session', started_at: at(11), billing: 'metered', model: 'haiku' } as const
+const MERCURIUS = { member: 'mercurius', host: CLAUDE_CODE, session: 'mercurius-session', started_at: at(11), billing: 'metered', model: 'haiku' } as const
 
 /** The package's stream, oldest first, as the writer keeps it. */
 const THE_PACKAGES_READINGS: readonly AReading[] = [
@@ -91,7 +92,7 @@ const dollars = (subscription: number, metered: number, unknown = 0) => ({ subsc
 const named = (sessions: readonly { readonly member: string; readonly session: string }[]): readonly string[] => sessions.map((one) => `${one.member}/${one.session}`)
 
 test('#860 §5: each session\'s spend in the window (mutants: the baseline, the window\'s lower reading, the billing split, wallMs\'s start, the model)', () => {
-  const sessions = theRecordedSpend().sessions.map((one) => [one.package, one.member, one.session, one.model, one.usd, one.wentBack, one.wallMs / MINUTE])
+  const sessions = theRecordedSpend().sessions.map((one) => [one.package, one.member, one.session, one.model, one.usd, one.wentBack, one.wallMs / MINUTE_MS])
   assert.deepEqual(sessions, [
     [THE_PACKAGE, 'mars', 'mars-session', 'opus', dollars(0, 1.5), true, 40],
     [THE_PACKAGE, 'venus', 'venus-session', 'sonnet', dollars(0.75, 0), false, 20],

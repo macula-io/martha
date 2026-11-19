@@ -68,7 +68,7 @@ async function aCrewOfTools(): Promise<ACrew> {
   for (const member of held.members) if (member.name === MEMBER) member.model = OWN_MODEL
   held.house_rules = { ...(held.house_rules ?? {}), [REVIEW_MODEL]: THE_REVIEWER_MODEL }
   writeFileSync(declaration, `${JSON.stringify(held, null, 2)}\n`)
-  const config_dir = join(home, 'claude')
+  const config_dir = join(home, 'the-hosts-config')
   mkdirSync(config_dir, { recursive: true })
   const rows = rowStreamsDirectory(join(home, CREW_ROWS_PLACE))
   const tools = crewToolsOver({

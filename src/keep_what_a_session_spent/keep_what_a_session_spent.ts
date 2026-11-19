@@ -65,11 +65,14 @@ export interface AUsageRead {
   readonly at: number
 }
 
+/** The word every usage stream is stored under, and the crew's place each member's last reading is kept in, `<crew>/usage`. */
+export const USAGE_PLACE = 'usage'
+
 /** The stream a package's readings live in, or the crew's: the one place a usage stream is named. */
 export function usageStreamOf(work_package: string | null): string {
-  if (work_package === null) return `usage/${THE_CREWS_USAGE}`
+  if (work_package === null) return `${USAGE_PLACE}/${THE_CREWS_USAGE}`
   if (!WORK_PACKAGE.test(work_package)) throw new Error(`${JSON.stringify(work_package)} is not a work package (owner/repo#n)`)
-  return `usage/${work_package}`
+  return `${USAGE_PLACE}/${work_package}`
 }
 
 const isText = (value: unknown): value is string => typeof value === 'string'
@@ -121,9 +124,6 @@ export interface TheUsagePlaces {
   /** The crew's place the writer keeps its last reading in, or why there is none. */
   readonly kept: CrewPlace | Refused
 }
-
-/** Where the crew keeps each member's last reading, `<crew>/usage`. */
-export const USAGE_PLACE = 'usage'
 
 /** The file one member's last reading is kept in. */
 export const theUsageFile = (member: string): string => `${member}.usage.json`

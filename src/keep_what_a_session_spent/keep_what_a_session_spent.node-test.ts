@@ -10,7 +10,9 @@ import { test } from 'node:test'
 import type { CrewPlace, StoredRow } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { keepWhatTheSessionSpent, theReadingsIn, theUsageFile, usageStreamOf, type AReadingAsked, type AUsageHost, type TheUsagePlaces } from './keep_what_a_session_spent.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { keepWhatTheSessionSpent, theReadingsIn, theUsageFile, usageStreamOf, USAGE_PLACE, type AReadingAsked, type AUsageHost, type TheUsagePlaces } from './keep_what_a_session_spent.ts'
 import { theSpendBetween } from './the_spend_between.ts'
 
 const MEMBER = 'builder'
@@ -25,7 +27,7 @@ const ENGINE: AUsageHost = 'martha-engine'
 function aPlace(): CrewPlace & { readonly holding: Map<string, string> } {
   const holding = new Map<string, string>()
   return {
-    path: '/the-crew/usage',
+    path: `/the-crew/${USAGE_PLACE}`,
     holding,
     keep: (name, text) => void holding.set(name, text),
     read: (name) => (holding.has(name) ? { text: holding.get(name) as string } : undefined),
@@ -50,7 +52,7 @@ interface AWriter {
   readonly stream: (package_name: string | null) => Promise<readonly StoredRow[]>
 }
 
-function aWriter(host_name: AUsageHost = 'claude-code'): AWriter {
+function aWriter(host_name: AUsageHost = CLAUDE_CODE): AWriter {
   const host = hostForTests({ now: STARTED_AT })
   const place = aPlace()
   const row = aRow()
@@ -58,7 +60,7 @@ function aWriter(host_name: AUsageHost = 'claude-code'): AWriter {
     places: { member: MEMBER, host: host_name, beats: row.beats, ledger: host.host, row_model: MODEL, kept: place },
     place,
     hold: row.hold,
-    later: () => host.advanceClock(60_000),
+    later: () => host.advanceClock(MINUTE_MS),
     stream: (package_name) => host.host.stores.rows.read(usageStreamOf(package_name)),
   }
 }
@@ -120,7 +122,7 @@ test('#860: a new session, or the same id started over, opens a hold of its own 
   const writer = aWriter()
   writer.hold(THE_PACKAGE)
   await kept(writer, asked(0.5, true))
-  await kept(writer, asked(0.25, true, { started_at: STARTED_AT + 60_000 }))
+  await kept(writer, asked(0.25, true, { started_at: STARTED_AT + MINUTE_MS }))
   assert.deepEqual(theCostsIn(await writer.stream(THE_PACKAGE)), [[0.5, 1], [0.25, 1]], 'a /clear was kept as the same session going back')
 })
 

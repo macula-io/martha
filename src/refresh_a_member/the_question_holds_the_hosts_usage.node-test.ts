@@ -62,7 +62,7 @@ test('#860 R3: a subscription\'s window says subscription, an empty list after a
 })
 
 test('#860 R5: a question carrying no usage object is a host that said nothing, as before (mutant: no usage refused)', () => {
-  for (const usage of [undefined, null, 'nothing']) {
+  for (const usage of [undefined, null, 'no usage at all']) {
     const question = read(usage)
     assert.deepEqual([question.percent, question.cost_usd, question.started_at, question.unknown_price, question.billing], [0, null, null, 0, 'unknown'])
   }
