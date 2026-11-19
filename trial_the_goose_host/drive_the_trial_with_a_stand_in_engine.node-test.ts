@@ -18,7 +18,7 @@ import { after, test } from 'node:test'
 
 import { THE_LAUNCH_BOUND_KEY } from './the_cap_a_line_gets/the_cap_a_line_gets.ts'
 import { THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS } from './drive_the_trial.ts'
-import { THE_TRANSCRIPT } from './the_evidence_it_keeps/the_evidence_says_why.ts'
+import { NOT_OBSERVED, THE_TRANSCRIPT } from './the_evidence_it_keeps/the_evidence_says_why.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const theDriverRun = promisify(execFile)
@@ -273,12 +273,14 @@ const HANDSHAKE_LEFT_MS = 5_000
 /** Runs the driver for one line, and hands back what the launch left behind. */
 async function theDriverFor(
   line: number, minutes: string, modelUrl: string, engineSource = A_STAND_IN_ENGINE,
+  aRunBefore: (evidence: string) => void = () => undefined,
 ): Promise<{ evidence: string; refused: string }> {
   const work = aFreshDirectory()
   const engine = join(work, 'a-stand-in-engine.mjs')
   writeFileSync(engine, engineSource)
   chmodSync(engine, 0o755)
   const evidence = join(work, 'evidence')
+  aRunBefore(evidence)
   // A home of its own for the driver and the stand-in engine: one that does not exist is a home nothing runs in.
   const home = join(work, 'home')
   mkdirSync(home, { recursive: true })
@@ -409,4 +411,20 @@ test('a launch whose handshake fails keeps what crossed before the kill (PR 733,
     .map((line) => JSON.parse(line) as { direction: string; message: unknown })
   const received = kept.filter(({ direction }) => direction === 'received').map(({ message }) => message)
   assert.deepEqual(received, [{ text: A_MESSAGE_CUT_OFF }], 'the message without its newline is in the transcript, once')
+})
+
+test('a run ends red, naming the line, when its evidence holds a not-observed line that cannot say why (martha#694)', async () => {
+  // An earlier launch left line 2 not-observed with no transcript beside it; this run drives line 1 only. The run is
+  // judged whole at its end, so the line it did not drive is still named, and the run does not exit green.
+  const model = await aStandInModel(100)
+  try {
+    const { evidence, refused } = await theDriverFor(1, '1', model.url, A_STAND_IN_ENGINE, (into) => {
+      mkdirSync(join(into, 'line-2'), { recursive: true })
+      writeFileSync(join(into, 'line-2', 'result.json'), JSON.stringify({ verdict: NOT_OBSERVED }))
+    })
+    assert.ok(existsSync(join(evidence, 'line-1', 'result.json')), 'the line this run drove left its result')
+    assert.match(refused, /line 2: not-observed, and no ACP transcript was kept, so the run cannot say why \(line-2\)/)
+  } finally {
+    await model.stop()
+  }
 })
