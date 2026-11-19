@@ -3,8 +3,8 @@
 // This exists so a member starts only on config its owner has read and approved by content (the launch gate,
 // ../refuse_launch_of_unapproved_config, rule 2), without the owner ever handling a fingerprint by hand.
 //
-// It reads what the launch gate reads, from the project root up to the owner's home: every file a member's host
-// would start something from, and the checkout's work tree. It shows the owner each one (path, kind, sha256),
+// It reads what the launch gate reads: the checkout's own config, from the project root up to the
+// checkout's top, and the checkout's work tree. It shows the owner each one (path, kind, sha256),
 // the tree and the fingerprint, and asks them to type yes. Only `yes` is a yes. The yes is kept outside the
 // checkout (../keep_martha_state_outside_the_checkout) for the next `martha start`.
 //
