@@ -14,9 +14,13 @@
 // too, since nothing of it can be vouched for.
 //
 // A token can stand in a record's own KEY as well as in a value, and a key is as readable as a value is, so keys are
-// redacted too (martha#646 r=3 R7). A line nothing was redacted in is kept exactly as the host wrote it: writing it out
+// redacted too (martha#646 r=3 R7). A line that can be shown clean is kept exactly as the host wrote it: writing it out
 // again would change the numbers past 2^53 and the spacing the host chose, and a reader would be reading the host's
-// transcript no longer (martha#646 r=3 R8). Only a line a redaction applied to is written out again.
+// transcript no longer (martha#646 r=3 R8). Shown clean means its own bytes hold no token and it holds no escape at all:
+// `JSON.parse` keeps only the last value of a repeated key, so a token in a dropped value is in neither the parse nor a
+// reading of the bytes, and a token written `ghp_…` is in the bytes only in a form no shape list names. A line that
+// cannot be shown clean is written out again from the parse — losing the value the parse dropped, never the token
+// (martha#646 r=4 R9).
 //
 // The bounds are the product's own, and they are counted on the bytes actually KEPT: one file past
 // TRANSCRIPTS_FILE_BYTES_KEPT and the files of one launch past TRANSCRIPTS_LAUNCH_BYTES_KEPT are replaced by a line
@@ -73,6 +77,12 @@ export const theWithheldLines = (count: number): string =>
 
 /** What stands for a transcript that could not be read: nothing of it is kept, and it is not silently an empty file. */
 export const COULD_NOT_READ = '[not kept: this transcript could not be read]'
+
+/**
+ * What stands for a transcript that was read and whose redaction threw: it is not that nothing could be read of it, and
+ * saying so would send a reader looking for a broken file (martha#646 r=4).
+ */
+export const COULD_NOT_KEEP = '[not kept: this transcript was read, but its redaction threw, so none of it is kept]'
 
 /**
  * Which bound a note speaks for. The two bounds are equal numbers today, so a note that read the bound's own value to
@@ -211,10 +221,23 @@ interface AKeptLine {
   readonly withheld: boolean
 }
 
+/** Whether `line`'s own bytes hold a token shape or the launch's own key: exact only for a line with no escape in it. */
+const theLinesOwnBytesHoldAToken = (line: string, theLaunchKey: string): boolean =>
+  (theLaunchKey !== '' && line.includes(theLaunchKey)) || [...line.matchAll(THE_TOKEN_SHAPE)].length > 0
+
+/**
+ * Whether a line may be kept exactly as the host wrote it. It must hold no token of its own bytes, and no escape at all:
+ * a token written `ghp_…` is not in the bytes, and a value a repeated key hid is in neither the bytes nor the
+ * parse, since `JSON.parse` keeps only the last value of a repeated key. A line that cannot be shown clean is written
+ * out again from the parse — it loses the value the parse dropped, and never the token (martha#646 r=4 R9).
+ */
+const mayBeKeptAsWritten = (line: string, theLaunchKey: string): boolean =>
+  !line.includes('\\') && !theLinesOwnBytesHoldAToken(line, theLaunchKey)
+
 /**
  * One line of a transcript, kept: parsed as the host wrote it, every string in it — and every key — redacted, and the
- * record written out whole again only when a redaction applied to it; a line nothing was redacted in is kept exactly as
- * the host wrote it, since writing it out again would change the numbers and the spacing the host wrote (martha#646 r=3
+ * record written out whole again when a redaction applied to it; a line that can be shown clean is kept exactly as the
+ * host wrote it, since writing it out again would change the numbers and the spacing the host wrote (martha#646 r=3
  * R8). A line that does not parse is withheld whole.
  *
  * A line the host wrote is one JSON object or array, so a line that begins with neither is not one of its records and is
@@ -233,8 +256,8 @@ function redactOneLine(line: string, theLaunchKey: string, found: { any: boolean
     return { text: WITHHELD_LINE, withheld: true }
   }
   const redacted = redactEveryStringIn(record, theLaunchKey)
-  if (!redacted.found) return { text: line, withheld: false }
-  found.any = true
+  if (!redacted.found && mayBeKeptAsWritten(line, theLaunchKey)) return { text: line, withheld: false }
+  found.any = found.any || redacted.found || theLinesOwnBytesHoldAToken(line, theLaunchKey)
   return { text: JSON.stringify(redacted.value), withheld: false }
 }
 
@@ -301,7 +324,7 @@ function theKeptTextOf(transcript: AConfigFile, theLaunchKey: string, room: numb
     const of: TheBound = room <= TRANSCRIPTS_FILE_BYTES_KEPT ? 'launch' : 'file'
     return { text: tooLargeToKeep(redacted.over, of === 'file' ? TRANSCRIPTS_FILE_BYTES_KEPT : TRANSCRIPTS_LAUNCH_BYTES_KEPT, of), found: false }
   } catch {
-    return { text: COULD_NOT_READ, found: false }
+    return { text: COULD_NOT_KEEP, found: false }
   }
 }
 

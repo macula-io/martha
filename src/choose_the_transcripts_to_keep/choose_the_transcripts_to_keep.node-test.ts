@@ -8,6 +8,7 @@ import { test } from 'node:test'
 import { TOKEN_PREFIXES } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import {
   chooseTheTranscripts,
+  COULD_NOT_KEEP,
   COULD_NOT_READ,
   REDACTED,
   theWithheldLines,
@@ -199,4 +200,36 @@ test('the launch bound stops a file the per-file bound has room for, counted on 
 
 test('the worst case the product states is the two constants\' own product, read from them (martha#646, Mars item 3)', () => {
   assert.equal(TRANSCRIPTS_LAUNCHES_KEPT * TRANSCRIPTS_LAUNCH_BYTES_KEPT, 1024 * 1024 * 1024, 'the kept launches times the bound per launch is not the stated 1 GiB per project')
+})
+
+test('a line whose repeated key hides a token is not kept as written, however the token was written (martha#646 r=4 R9)', () => {
+  // JSON.parse keeps only the last value of a repeated key, so the redaction of the parsed value never sees the first
+  // one — while the line's own bytes still hold it. A line kept as written therefore says nothing about the values the
+  // parse dropped, and one that cannot be shown clean is written out again.
+  const token = `${TOKEN_PREFIXES[0] ?? 'ghp_'}abcdefghijklmnopqrst`
+  // The last shape is the one the bytes cannot show: its token is written as an escape and the parse drops it too, so it
+  // is not kept and not claimed — a line that cannot be shown clean is written out, and nothing of the token is in it.
+  const theShapes: readonly (readonly [string, string, boolean])[] = [
+    ['a duplicate value', `{"a":"${token}","a":"clean"}`, true],
+    ['the launch\'s own key in a duplicate value', `{"a":"${THE_LAUNCH_KEY}","a":"clean"}`, true],
+    ['a duplicate whose value is a number', `{"a":"${token}","a":1}`, true],
+    ['a duplicate whose token is written as an escape', '{"a":"\\u0067hp_abcdefghijklmnopqrst","a":"clean"}', false],
+  ]
+  for (const [what, line, marked] of theShapes) {
+    const chosen = choosing([aFile(aTranscriptPath('s-1'), `${line}\n`)])
+    const kept = chosen.kept[0]?.text ?? ''
+    assert.equal(kept.includes(token), false, `${what} was kept in the clear`)
+    assert.equal(kept.includes(THE_LAUNCH_KEY), false, `${what} kept the launch's own key in the clear`)
+    assert.equal(kept.includes('\\u0067'), false, `${what} kept the token's escaped spelling`)
+    assert.deepEqual(chosen.marked, marked ? [aTranscriptPath('s-1')] : [], `${what} was ${marked ? 'not' : 'claimed to be'} marked for the sidecar`)
+  }
+})
+
+test('a transcript whose redaction throws is kept as its own note, and the file beside it is kept whole (martha#646 r=4 R10, Terra\'s probe K)', () => {
+  // A line nested deeply enough that the walk over the parsed value runs out of stack: it parses, so nothing here is the
+  // withheld-line path, and what keeps it from costing the launch is the one file's own catch.
+  const deep = `${'['.repeat(200_000)}${']'.repeat(200_000)}`
+  const chosen = choosing([aFile(aTranscriptPath('s-1'), `${deep}\n`), aFile(aTranscriptPath('s-2'), aLineOf('the clean one'))])
+  assert.equal(chosen.kept.find((one) => one.path === aTranscriptPath('s-1'))?.text, COULD_NOT_KEEP, 'a transcript whose redaction threw was not kept as the note that says so')
+  assert.equal(chosen.kept.find((one) => one.path === aTranscriptPath('s-2'))?.text, aLineOf('the clean one'), 'one file whose redaction threw cost the launch its other transcripts')
 })
