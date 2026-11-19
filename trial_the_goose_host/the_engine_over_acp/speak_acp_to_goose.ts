@@ -13,8 +13,8 @@
 import type { ChildProcess } from 'node:child_process'
 import type { Readable, Writable } from 'node:stream'
 
-import { answerOnce, type AnOfferedOption, type TheOutcome } from '../src/speak_acp_to_an_agent/answer_a_permission_once.ts'
-import { METHOD_NOT_FOUND } from '../src/speak_acp_to_an_agent/the_acp_client.ts'
+import { answerOnce, type AnOfferedOption, type TheOutcome } from '../../src/speak_acp_to_an_agent/answer_a_permission_once.ts'
+import { METHOD_NOT_FOUND } from '../../src/speak_acp_to_an_agent/the_acp_client.ts'
 /** One message across the pipe, as it crossed it. */
 export interface Exchange {
   /** When it crossed, in milliseconds since the epoch, so two messages can be ordered. */

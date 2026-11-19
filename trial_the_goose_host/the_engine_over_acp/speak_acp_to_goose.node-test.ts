@@ -7,11 +7,11 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
-import { METHOD_NOT_FOUND } from '../src/speak_acp_to_an_agent/the_acp_client.ts'
-import type { AnAgentScript } from '../src/stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
+import { METHOD_NOT_FOUND } from '../../src/speak_acp_to_an_agent/the_acp_client.ts'
+import type { AnAgentScript } from '../../src/stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 import { GooseOverAcp } from './speak_acp_to_goose.ts'
 
-const STAND_IN = join(import.meta.dirname, '..', 'src', 'stand_in_for_an_acp_agent', 'main.ts')
+const STAND_IN = join(import.meta.dirname, '..', '..', 'src', 'stand_in_for_an_acp_agent', 'main.ts')
 const ASKED = 'fs/read_text_file'
 
 test('a request the trial has no answer for is answered with a JSON-RPC error, and noted', async () => {

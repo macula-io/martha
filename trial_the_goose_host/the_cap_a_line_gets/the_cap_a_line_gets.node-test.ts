@@ -13,14 +13,14 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { NoAnswerInTime, withinTheCap } from './a_turn_with_goose.ts'
-import { THE_KILL_WAIT_MS, THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS, whenTheLaunchStarted } from './drive_the_trial.ts'
-import { RecordingProxy } from './record_what_goose_sends.ts'
+import { NoAnswerInTime, withinTheCap } from '../the_engine_over_acp/a_turn_with_goose.ts'
+import { THE_KILL_WAIT_MS, THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS, whenTheLaunchStarted } from '../drive_the_trial.ts'
+import { RecordingProxy } from '../the_engine_over_acp/record_what_goose_sends.ts'
 import {
   THE_LAUNCH_BOUND_KEY, THE_MARGIN_OVER_A_ROUND_TRIP, TheBoundCannotFitTheLaunch, TheModelPace, theCapFor, theLaunchesBoundMs,
   whyTheBoundCannotFit,
 } from './the_cap_a_line_gets.ts'
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const made: string[] = []
 
