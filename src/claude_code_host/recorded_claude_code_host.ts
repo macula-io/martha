@@ -89,8 +89,11 @@ export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlace
   readonly failed_agents_report: ARecordedFailedAgentsReport
 }
 
+/** The file that holds the recording, read here and printed by the README's Install block (martha#541 package 11). */
+export const RECORDING_OF_THE_HOST = new URL('./recorded_claude_code_host.json', import.meta.url)
+
 /** The recording this repository carries. */
-export const RECORDED_HOST: RecordedHost = recordedHostFrom(readFileSync(new URL('./recorded_claude_code_host.json', import.meta.url), 'utf8'))
+export const RECORDED_HOST: RecordedHost = recordedHostFrom(readFileSync(RECORDING_OF_THE_HOST, 'utf8'))
 
 /**
  * A recording, read from its text; or a refusal to load it.

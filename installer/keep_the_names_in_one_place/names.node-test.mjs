@@ -11,6 +11,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { RECORDING_OF_THE_HOST } from '../../src/claude_code_host/recorded_claude_code_host.ts'
 import { RECORDING_OF_THE_ENGINE } from '../../src/know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { readSigners } from '../verify_the_release_signature/verify_the_release_signature.mjs'
 import { NAMES } from './names.mjs'
@@ -331,6 +332,17 @@ test('every version the README prints is read from a file in the tree that holds
   assert.ok(printed.length >= 3, 'the Install block prints the Node, the host and the engine versions')
   const engineRecording = relative(ROOT, fileURLToPath(RECORDING_OF_THE_ENGINE))
   assert.ok(printed.some(({ path }) => path === engineRecording), `README.md prints the engine's version from ${engineRecording}`)
+})
+
+test('the Install block prints each version from the exact file and field that holds it', () => {
+  // A line that reads a string but the wrong one (a `_why`, a package `name`, the engine file on the host line)
+  // passes the check above; each line is held here to its own file and field (martha#541 package 11, review r=1).
+  const printed = theVersionLinesOfTheReadme(read('README.md')).map(({ path, fields }) => ({ path, fields }))
+  assert.deepEqual(printed, [
+    { path: 'package.json', fields: ['engines', 'node'] },
+    { path: relative(ROOT, fileURLToPath(RECORDING_OF_THE_HOST)), fields: ['host_version'] },
+    { path: relative(ROOT, fileURLToPath(RECORDING_OF_THE_ENGINE)), fields: ['engine_version'] }
+  ])
 })
 
 test('the reader of the README version lines bites: a file that is gone and a field it does not hold are both named', () => {
