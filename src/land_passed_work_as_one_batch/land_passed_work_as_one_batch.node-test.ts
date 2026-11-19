@@ -47,7 +47,7 @@ import {
   LAND_BATCH_DESCRIPTION,
   NO_CEILINGS_AHEAD,
   NO_CEILINGS_CHECKED,
-  noCeilingsCheckedFrom,
+  noCeilingsCheckedOn,
   REDONE_GENERATED,
   THE_CEILINGS_STILL_AHEAD,
   THE_CHECK_PROGRAM,
@@ -1013,7 +1013,34 @@ test('a head that deletes the ceilings check lands, and nothing is checked on th
   assert.deepEqual(theMergesOf(fixture, branch, 2), [ours, theirs], 'the land branch does not land both heads, in order')
   const checked = runs.programs.filter((run) => run.args[0] === THE_CHECK_PROGRAM)
   assert.equal(checked.length, 1, 'the ceilings check was not run on the first merge alone')
-  assert.ok(landed.told.includes(noCeilingsCheckedFrom(282)), `the answer does not name the head from which no ceilings were checked: ${landed.told}`)
+  assert.ok(landed.told.includes(noCeilingsCheckedOn([282])), `the answer does not name the head whose merge checked no ceilings: ${landed.told}`)
+})
+
+test('a head that adds the ceilings check to a base without one: the merges before it are named unchecked, and the answer never says none were checked (mutant: decide from the base)', async (t) => {
+  // The base holds no ceilings check, so a sentence decided from the base alone says none were checked, though the second
+  // merge ran it. What the answer says comes from what the merges ran: the first ran none, the second ran the check.
+  const fixture = aRepository(t)
+  theBaseTreeOfABatch(fixture, {
+    'package.json': theManifestOfAPlantedTree({ adapters: [AN_ADAPTER], ceilings: { [AN_ADAPTER]: 2 } }),
+    [`${AN_ADAPTER}/one.ts`]: codeLines('a', 2),
+  })
+  gitIn(fixture.clone, 'rm', '--quiet', THE_CHECK_PROGRAM)
+  commitIn(fixture.clone, 'the base holds no ceilings check')
+  gitIn(fixture.clone, 'push', '--quiet', 'origin', 'main')
+  const base = gitIn(fixture.clone, 'rev-parse', 'HEAD')
+  const ours = aBranchWriting(fixture, 'passed0', base, { 'work0.txt': 'work 0\n' })
+  const theirs = aBranchWriting(fixture, 'passed1', base, { [THE_CHECK_PROGRAM]: String(THE_PROGRAMS_A_TREE_THAT_CHECKS_HOLDS[THE_CHECK_PROGRAM]) })
+  gitIn(fixture.clone, 'checkout', '--quiet', 'main')
+  const runs: TheRuns = { npm: [], programs: [] }
+  const { packages, tests } = await theBatchOfTwo(fixture, [ours, theirs], runs)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.ok('told' in landed, `the batch was refused: ${wordsOf(landed)}`)
+  assert.ok(!landed.told.includes('Left out'), `a head was left out: ${landed.told}`)
+  const checked = runs.programs.filter((run) => run.args[0] === THE_CHECK_PROGRAM)
+  assert.equal(checked.length, 1, 'the ceilings check was not run on the second merge alone')
+  assert.ok(landed.told.includes(noCeilingsCheckedOn([281])), `the answer does not name the head whose merge checked no ceilings: ${landed.told}`)
+  assert.ok(!landed.told.includes(NO_CEILINGS_CHECKED), `the answer says no ceilings were checked, though the second merge checked them: ${landed.told}`)
 })
 
 test('#423: the dry run of two heads the landing leaves one of out on the ceilings answers each lands only as a forecast that still faces them (mutant: a plain lands)', async (t) => {
