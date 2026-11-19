@@ -7,6 +7,11 @@
 // the act again; and an ask is answered at the first settle whose ticked ids list it — the ask queue's own rule, never
 // "the settle of its batch". A package carried in from before the week says so instead of being given a guessed start.
 //
+// The crew's first-pass rate and its acts per member (martha#507) are read from the same rows: a verdict row keeps the
+// crew line it was given with, and its own reader says whether that line reads PASS at the first round; every act row
+// names the member that announced it. A row names no model, so the split the rows can answer is per member, and the
+// view says in one line that the model is not in them.
+//
 // Money is not in these rows, and the view says so rather than printing a zero (DECIDED 2026-11-19 "Work now, money
 // later (Recommended)"; the row that would carry spend is martha#860). An ask carries no package, so owner wait is the
 // crew's, and a package line says so. The reading is pure — no clock, no I/O — so one week answers the same everywhere.
@@ -23,10 +28,13 @@ import {
   REFRESH_FORCED,
   RETRIED_ONCE,
   REVIEW_ROUND_CLOSED,
+  VERDICT_GIVEN,
   type LedgerRow,
+  type MilestoneRow,
   type OutwardActKind,
 } from '../log_ledger/log_ledger.ts'
 import { ASKS_SETTLED, ASK_QUEUED, theQuestion } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 
 const AN_HOUR_MS = 60 * MINUTE_MS
 const A_DAY_MS = 24 * AN_HOUR_MS
@@ -118,6 +126,12 @@ export interface TheOwnersWait {
   readonly longest: { readonly ms: number; readonly question: string } | undefined
 }
 
+/** The verdicts the week saw, and how many of them a review passed at its first round: the crew's first-pass rate. */
+export interface TheFirstPass {
+  readonly verdicts: number
+  readonly passedAtFirst: number
+}
+
 /** The crew's own figures for the week, counted once each. */
 export interface TheWeeksCrew {
   readonly touched: number
@@ -132,6 +146,9 @@ export interface TheWeeksCrew {
   readonly retriedOnce: number
   readonly forcedRefreshes: number
   readonly acts: TheActsOfAPackage
+  /** The week's acts counted per member (martha#507): the whole split its rows can answer, since no row names a model. */
+  readonly members: Readonly<Record<string, number>>
+  readonly firstPass: TheFirstPass
 }
 
 /** One week's answer: the bounds it was read between, the crew's figures, and each package's. */
@@ -239,8 +256,40 @@ export function theOwnersWaitIn(asks: readonly StoredRow[], bounds: TheWeeksBoun
   }
 }
 
+/** The round a verdict's line names as its first: the crew's own protocol writes the round as `r=<N>`. */
+const THE_FIRST_ROUND = '1'
+
+const isAVerdictRow = (row: LedgerRow): row is MilestoneRow => row.kind === VERDICT_GIVEN
+
+/**
+ * Whether a verdict's note reads as a PASS at the first round: the line is read by the same reader that accepted it on
+ * the way in, so the round and the judgement the sender wrote are the ones counted, never a second spelling of them.
+ */
+export function passedAtTheFirstRound(note: string): boolean {
+  const reading = readACrewLine(note)
+  if (!('line' in reading) || reading.line === null) return false
+  const line = reading.line
+  return line.verb === 'VERDICT' && line.verdict === 'PASS' && line.keys['r'] === THE_FIRST_ROUND
+}
+
+/** The week's verdicts, and how many passed at the first round (martha#507): a verdict row keeps its own crew line. */
+export function theFirstPassIn(rows: readonly LedgerRow[]): TheFirstPass {
+  const verdicts = rows.filter(isAVerdictRow)
+  return { verdicts: verdicts.length, passedAtFirst: verdicts.filter((row) => passedAtTheFirstRound(row.note)).length }
+}
+
+/** The week's acts counted per member (martha#507): an act is announced by the member that sent it. */
+export function theMembersIn(rows: readonly LedgerRow[]): Readonly<Record<string, number>> {
+  const members: Record<string, number> = {}
+  for (const row of rows) {
+    if (!isAnActAnnouncedRow(row)) continue
+    members[row.member] = (members[row.member] ?? 0) + 1
+  }
+  return members
+}
+
 /** The crew's week: each package counted once, and the owner's wait from the ask queue. */
-function theCrewOf(packages: readonly APackagesWeek[], ownersWait: TheOwnersWait | undefined, forcedRefreshes: number): TheWeeksCrew {
+function theCrewOf(packages: readonly APackagesWeek[], ownersWait: TheOwnersWait | undefined, rowsInTheWeek: readonly LedgerRow[]): TheWeeksCrew {
   const by = theZeroOfTheKinds()
   for (const one of packages) for (const kind of OUTWARD_ACTS) by[kind] += one.acts.by[kind]
   return {
@@ -253,13 +302,15 @@ function theCrewOf(packages: readonly APackagesWeek[], ownersWait: TheOwnersWait
     fixesAfterRelease: packages.reduce((sum, one) => sum + one.fixesAfterRelease, 0),
     recoveries: packages.reduce((sum, one) => sum + one.recoveries, 0),
     retriedOnce: packages.reduce((sum, one) => sum + one.retriedOnce, 0),
-    forcedRefreshes,
+    forcedRefreshes: rowsInTheWeek.filter((row) => isAnActAnnouncedRow(row) && row.act.kind === REFRESH_FORCED).length,
     acts: {
       announced: packages.reduce((sum, one) => sum + one.acts.announced, 0),
       concluded: packages.reduce((sum, one) => sum + one.acts.concluded, 0),
       attempts: packages.reduce((sum, one) => sum + one.acts.attempts, 0),
       by,
     },
+    members: theMembersIn(rowsInTheWeek),
+    firstPass: theFirstPassIn(rowsInTheWeek),
   }
 }
 
@@ -271,10 +322,8 @@ export function aWeekOfTheLedger(asked: AnAskedWeek): AWeek {
     const one = thePackageWeek(ledger.package, ledger.rows, bounds)
     return one === undefined ? [] : [one]
   })
-  const forcedRefreshes = asked.ledgers.flatMap((ledger) => ledger.rows).filter(
-    (row) => isAnActAnnouncedRow(row) && row.act.kind === REFRESH_FORCED && inTheWeek(row.at, bounds),
-  ).length
-  const crew = theCrewOf(packages, asked.asks === undefined ? undefined : theOwnersWaitIn(asked.asks, bounds), forcedRefreshes)
+  const rowsInTheWeek = asked.ledgers.flatMap((ledger) => ledger.rows.filter((row) => inTheWeek(row.at, bounds)))
+  const crew = theCrewOf(packages, asked.asks === undefined ? undefined : theOwnersWaitIn(asked.asks, bounds), rowsInTheWeek)
   return { week: { bounds, crew, packages: [...packages].sort((a, b) => a.package.localeCompare(b.package)), skipped: asked.skipped ?? [] } }
 }
 
@@ -300,6 +349,20 @@ export function theLineOfAPackage(one: APackagesWeek): string {
   return `${one.package} — ${cycle} | owner wait not in the rows | ${theCount(one.reviewRounds, 'review round')}, ${theCount(one.fixesAfterRelease, 'fix', 'fixes')} after a release | acts ${acts} | ${theCount(one.rowsWritten, 'row')}`
 }
 
+/** The week's first-pass rate as the owner reads it: a fraction of the verdicts, or that there were none. */
+const theFirstPassLine = (first: TheFirstPass): string =>
+  first.verdicts === 0
+    ? 'first pass: no verdict in this week'
+    : `first pass: ${String(first.passedAtFirst)} of ${theCount(first.verdicts, 'verdict')} passed at the first round`
+
+/** The week's acts per member, each member once, sorted by name; or that no act was announced. */
+const theMembersLine = (members: Readonly<Record<string, number>>): string => {
+  const named = Object.entries(members).sort(([a], [b]) => a.localeCompare(b))
+  return named.length === 0
+    ? 'members: no act in this week'
+    : `members: ${named.map(([member, acts]) => `${member} ${theCount(acts, 'act')}`).join(', ')}`
+}
+
 /** The week as the owner reads it: the bounds first, then the crew, then each package. */
 export function theLinesOf(week: TheWeek): readonly string[] {
   const { bounds, crew } = week
@@ -315,6 +378,9 @@ export function theLinesOf(week: TheWeek): readonly string[] {
     ...waits,
     `work: ${theCount(crew.reviewRounds, 'review round')}, ${theCount(crew.fixesAfterRelease, 'fix', 'fixes')} after a release, ${theCount(crew.recoveries, 'recovery', 'recoveries')} (${String(crew.retriedOnce)} retried), ${theCount(crew.forcedRefreshes, 'forced refresh', 'forced refreshes')}`,
     `acts: ${theCount(crew.acts.announced, 'act')} announced, ${String(crew.acts.concluded)} concluded (${kinds}); ${theCount(crew.acts.attempts, 'attempt')} after a failure`,
+    theFirstPassLine(crew.firstPass),
+    theMembersLine(crew.members),
+    'model: not in the rows (a row names its member, never the model)',
     'money: not in the rows (martha#860 carries the row that would hold it)',
     ...(week.packages.length === 0 ? ['nothing in this week'] : []),
     ...week.skipped.map((one) => `skipped: ${one}`),

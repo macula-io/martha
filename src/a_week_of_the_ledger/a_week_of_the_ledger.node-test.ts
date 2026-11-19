@@ -43,6 +43,13 @@ const THE_WEEK = '2026-W47'
 /** The UTC instant of a day in November 2026, at an hour and minute: the fixture's clock, in one place. */
 const at = (day: number, hour = 0, minute = 0): number => Date.UTC(2026, 10, day, hour, minute)
 
+/** A range a verdict's line carries: two commits, forty hex digits each, as the line's own shape asks. */
+const A_RANGE = `${'a'.repeat(40)}..${'b'.repeat(40)}`
+
+/** A verdict's note as the crew's protocol writes it: the verdict that closed a review round keeps its line whole. */
+const aVerdict = (package_name: string, verdict: 'PASS' | 'FAIL', round: number): string =>
+  `VERDICT ${package_name} ${verdict} ${A_RANGE} r=${String(round)} ci=none:paths`
+
 /** A crew's streams directory on disk, removed with everything in it when the test ends. */
 function aCrewRowsPlace(t: TestContext): string {
   const root = mkdtempSync(join(tmpdir(), 'martha-308-week-'))
@@ -56,24 +63,29 @@ async function keep(stored: ReturnType<typeof rowStreamsDirectory>, package_name
 }
 
 /**
- * The recorded ledger the figures are pinned on: `#7` carried in from the week before and landed inside the week,
- * `#8` touched twice, still open, with one recovery sent again and one replanned, `#9` whose rows are all outside the
- * week, so it is not in it at all, and `#10` carried in and landed before the week with one row inside it.
+ * The recorded ledger the figures are pinned on: `#7` carried in from the week before and landed inside the week, with
+ * a first round it failed and a second it passed, `#8` touched twice, still open, with a first round it passed and one
+ * recovery sent again and one replanned, `#9` whose rows are all outside the week, so it is not in it at all, and `#10`
+ * carried in and landed before the week with one row inside it. The acts are two members' (Hygiea's pushes and one
+ * forced refresh, Venus's hand-off), so the per-member split has two names in it.
  */
 async function theRecordedLedger(stored: ReturnType<typeof rowStreamsDirectory>): Promise<void> {
   await keep(stored, A_PACKAGE, { kind: 'checkpoint_reached', at: at(10), note: 'carried in from the week before' })
   await keep(stored, A_PACKAGE, { kind: 'review_round_closed', at: at(17, 10), note: 'r=1 asked for two things' })
+  await keep(stored, A_PACKAGE, { kind: 'verdict_given', at: at(17, 10, 15), note: aVerdict(A_PACKAGE, 'FAIL', 1) })
   await keep(stored, A_PACKAGE, { kind: 'act_announced', at: at(17, 11), act: { kind: 'push', what: 'the branch' } })
-  await keep(stored, A_PACKAGE, { kind: 'act_concluded', at: at(17, 12), announced_at: 2, outcome: { succeeded: true, detail: 'pushed' } })
+  await keep(stored, A_PACKAGE, { kind: 'act_concluded', at: at(17, 12), announced_at: 3, outcome: { succeeded: true, detail: 'pushed' } })
   await keep(stored, A_PACKAGE, { kind: 'recovery_decided', at: at(18, 9), act: { kind: 'push', what: 'the branch' }, failure: { class: 'a timeout', evidence: 'the run' }, inspection: { read: 'the run', found: 'a flake' }, decision: 'retried_once' })
   await keep(stored, A_PACKAGE, { kind: 'review_round_closed', at: at(18, 10), note: 'r=2 passed' })
+  await keep(stored, A_PACKAGE, { kind: 'verdict_given', at: at(18, 10, 15), note: aVerdict(A_PACKAGE, 'PASS', 2) })
   await keep(stored, A_PACKAGE, { kind: 'fix_shipped_after_release', at: at(19, 11), note: 'the fix after ship' })
-  await keep(stored, A_PACKAGE, { kind: 'act_announced', at: at(19, 12), act: { kind: 'handoff', what: 'the verdict' } })
-  await keep(stored, A_PACKAGE, { kind: 'act_concluded', at: at(19, 12, 1), announced_at: 7, outcome: { succeeded: true, detail: 'handed off' } })
+  await keep(stored, A_PACKAGE, { kind: 'act_announced', at: at(19, 12), member: 'Venus', act: { kind: 'handoff', what: 'the verdict' } })
+  await keep(stored, A_PACKAGE, { kind: 'act_concluded', at: at(19, 12, 1), announced_at: 9, outcome: { succeeded: true, detail: 'handed off' } })
   await keep(stored, A_PACKAGE, { kind: 'package_landed', at: at(20, 10), note: 'batch 77' })
   await keep(stored, A_PACKAGE, { kind: 'checkpoint_reached', at: at(24), note: 'the week after' })
 
-  await keep(stored, ANOTHER_PACKAGE, { kind: 'review_round_closed', at: at(17, 9), note: 'r=1 still open' })
+  await keep(stored, ANOTHER_PACKAGE, { kind: 'review_round_closed', at: at(17, 9), note: 'r=1 passed' })
+  await keep(stored, ANOTHER_PACKAGE, { kind: 'verdict_given', at: at(17, 9, 30), note: aVerdict(ANOTHER_PACKAGE, 'PASS', 1) })
   await keep(stored, ANOTHER_PACKAGE, { kind: 'act_announced', at: at(17, 10), act: { kind: REFRESH_FORCED, what: 'a hung turn' } })
   await keep(stored, ANOTHER_PACKAGE, { kind: 'recovery_decided', at: at(17, 11), act: { kind: 'tag', what: 'the release' }, failure: { class: 'a moved tag', evidence: 'the log' }, inspection: { read: 'the log', found: 'the tag had moved' }, decision: 'replanned' })
 
@@ -170,7 +182,7 @@ test('each package of the week answers its cycle, its rework, its acts and its r
   assert.equal(carried!.retriedOnce, 1)
   assert.deepEqual(carried!.acts.by, { push: 1, handoff: 1, room_message: 0, tag: 0, refresh_forced: 0 })
   assert.equal(carried!.acts.concluded, 2)
-  assert.equal(carried!.rowsWritten, 9, 'the rows inside the week are not nine')
+  assert.equal(carried!.rowsWritten, 11, 'the rows inside the week are not eleven')
 
   assert.equal(fresh!.carriedIn, false, 'a package first touched inside the week was read as carried in')
   assert.equal(fresh!.landedAt, undefined, 'a package with no landing row was read as landed')
@@ -262,7 +274,7 @@ test('the view prints the week it read, says money is not in the rows, and quote
   assert.ok(lines.some((line) => line.startsWith(`${A_PACKAGE} — cycle 10 d 10 h`)), 'a package line did not carry its cycle')
   assert.equal(
     theLineOfAPackage(week.packages.find((one) => one.package === A_PACKAGE)!),
-    `${A_PACKAGE} — cycle 10 d 10 h (carried in), landed Fri 20 Nov 10:00 UTC | owner wait not in the rows | 2 review rounds, 1 fix after a release | acts 2 acts announced, 2 concluded, 1 retried | 9 rows`,
+    `${A_PACKAGE} — cycle 10 d 10 h (carried in), landed Fri 20 Nov 10:00 UTC | owner wait not in the rows | 2 review rounds, 1 fix after a release | acts 2 acts announced, 2 concluded, 1 retried | 11 rows`,
     'a package line does not read as the owner reads it, plural fixes and all',
   )
   assert.equal(
@@ -276,11 +288,24 @@ test('the view prints the week it read, says money is not in the rows, and quote
   assert.ok(!quoted.includes('\u001b'), 'the quoted ask carried a control character into the owner\'s terminal')
 })
 
+test("the first pass is the r=1 PASS and no other verdict, and the acts are split per member with the model said to be missing", async (t) => {
+  const week = answered(aWeekOfTheLedger(await theWeekOnDisk(t)))
+  // Three verdicts in the week: #7's FAIL at r=1, #7's PASS at r=2, and #8's PASS at r=1.
+  assert.deepEqual(week.crew.firstPass, { verdicts: 3, passedAtFirst: 1 }, 'the first pass did not count the r=1 PASS and only it')
+  assert.deepEqual(week.crew.members, { Hygiea: 2, Venus: 1 }, 'the week acts were not split per member')
+  const lines = theLinesOf(week)
+  assert.equal(lines.find((line) => line.startsWith('first pass: ')), 'first pass: 1 of 3 verdicts passed at the first round')
+  assert.equal(lines.find((line) => line.startsWith('members: ')), 'members: Hygiea 2 acts, Venus 1 act')
+  assert.equal(lines.find((line) => line.startsWith('model: ')), 'model: not in the rows (a row names its member, never the model)')
+})
+
 test('a week with no row answers nothing in this week, and a stream the command could not use is named as skipped', () => {
   const empty = answered(aWeekOfTheLedger({ week: THE_WEEK, ledgers: [], asks: [] }))
   assert.equal(empty.crew.touched, 0)
   assert.deepEqual(empty.packages, [])
   assert.equal(theLinesOf(empty)[1], 'packages: 0 touched, 0 landed, 0 carried in, 0 still open')
+  assert.ok(theLinesOf(empty).includes('first pass: no verdict in this week'), 'a week with no verdict did not say so')
+  assert.ok(theLinesOf(empty).includes('members: no act in this week'), 'a week with no act did not say so')
   assert.ok(theLinesOf(empty).includes('nothing in this week'), 'a week with no row did not say nothing is in it')
 
   const withSkipped = answered(aWeekOfTheLedger({ week: THE_WEEK, ledgers: [], asks: [], skipped: ['ledger/not-a-package (not a package name)'] }))
