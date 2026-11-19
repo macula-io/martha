@@ -107,6 +107,12 @@ the fingerprint are shortened in this page; yours are 64 hexadecimal characters.
   refuses (`...its input is not one. Run it yourself, in a terminal.`), exits 1.
 - **The approval covers the work tree as well as the files.** Any change in the
   checkout, including the one your member is about to make, makes it stale.
+- **A checkout holding `.claude/skills` needs `martha approve` before a Claude Code
+  member starts in it** (martha#747). Once you approve, the member gets those
+  skills: Martha copies the approved files into the member's own config folder,
+  and its host still never reads the checkout's own. Before this, such a checkout
+  started with its skills ignored, so an approval you gave before holds no skill
+  files and is asked again once.
 
 ## 3. Start the builder
 
