@@ -4,17 +4,22 @@
 //   npm run stop:my-run -- --all-mine         every run recorded in this checkout
 //   npm run stop:my-run -- --token <t>        that run, while it was started in this checkout
 //   npm run stop:my-run -- --force            SIGKILL a group that did not end within the wait
-//   npm run stop:my-run -- --by-cwd <dir>     a plain `npm test` with no record, under that directory
+//   npm run stop:my-run -- --by-cwd <dir>     a plain `npm test` with no record, under that checkout's own top
+//   npm run stop:my-run -- --proc <dir>       read another kernel tree than this machine's (a test seam)
 //
 // A record is YOURS when its worktree is this checkout. Every member on this box runs as the same uid, so the checkout is
 // the only thing that tells one member's run from a peer's — never the command words, which is what killed three of a
 // peer's processes on 2026-11-19: the tool's wrapper, npm and every test file's node all carry the same words, and a
 // pattern match on `cmdline` reaches every session's run on the box.
 //
-// A record whose group leader is gone, or is no longer the process recorded, is reported and removed; a record whose
-// group is still there after the wait is kept, so the handle is never thrown away while the run it names lives.
+// A record whose group is gone, or whose pid now holds another process, is reported and removed; a record whose group is
+// still there after the wait is kept, so the handle is never thrown away while the run it names lives. A leader's end is
+// not the run's: `node --test` starts each test file under it in its group, so a leader killed alone leaves them running,
+// and those are signalled when nothing holds the leader's pid and the group is still there.
 //
-// `--by-cwd` is for a run with no record: a plain `npm test`, or one started before the handle existed. It walks the
+// `--by-cwd` names one checkout's own top: its realpath must be what `git rev-parse --show-toplevel` answers for it, so
+// a folder above a checkout — a home, a worktrees root — is refused rather than walked, because every member's suite runs
+// under one of those and naming it is the broad match this command exists to replace. It walks the
 // kernel, keeps the groups of this user holding a process whose working directory is under the given one AND whose
 // command line is the suite's own (the third stage's program and a `--test` word, read from package.json rather than
 // written down here), and signals each. A group ANY of whose processes runs outside that directory is refused, naming
@@ -25,12 +30,14 @@
 // Exit: 0 every run chosen ended; 1 a run was signalled and its group was still there after the wait; 2 refused, by
 // name, and nothing was signalled for that one.
 
+import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
 import { basename, join, relative } from 'node:path'
 import process from 'node:process'
 
+import { groupIn } from '../src/a_launch_end_on_this_machine/what_a_launch_end_reads.ts'
 import { signalAGroupOnThisMachine } from '../src/linux_process_identity/files_and_processes_on_this_machine.ts'
-import { groupIn, linuxProcessIdentities, PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
+import { linuxProcessIdentities, PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
 import { manifestOf, testCommandsOf } from './declared_in_package_json.ts'
 import {
   everyRecord,
@@ -77,7 +84,7 @@ type TheReadOptions = TheOptions | { readonly refused: string }
 const THE_FLAGS = ['--token', '--by-cwd', '--proc']
 
 /** What this command says to a word that is no flag of its own. */
-const NOT_A_FLAG = 'is not a flag this takes: --token <t>, --all-mine, --force, --by-cwd <dir>'
+const NOT_A_FLAG = 'is not a flag this takes: --token <t>, --all-mine, --force, --by-cwd <dir>, --proc <dir>'
 
 /** The lines this process says, each on its own: a refusal on the error stream, everything else on the other. */
 const say = (stops: readonly AStop[]): void => {
@@ -145,11 +152,43 @@ const killTheGroupLeft = (group: number): void => {
   }
 }
 
-/** One stopped run: SIGTERM through the contract's one call, the wait, and `--force`'s SIGKILL when the wait runs out. */
-async function theGroupStopped(group: number, identity: string | null, force: boolean, when: string): Promise<AStop> {
-  if (identity === null || linuxProcessIdentities.identityOf(group) === null) return { state: 'refused', said: `the group of process ${group} is gone` }
+/**
+ * SIGTERM to a group whose leader has ended. No identity can be compared there, and none need be: the kernel hands a
+ * group id to no other process while a member of that group lives, so the id is still the run the record (or the walk)
+ * named. What is returned is why the signal could not be sent, or nothing.
+ */
+function signalTheGroupItsLeaderLeft(group: number): string | undefined {
+  try {
+    process.kill(-group, 'SIGTERM')
+    return undefined
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code ?? String(error)
+  }
+}
+
+/** SIGTERM through the contract's own call, which compares the identity first: nothing, or why it was not sent. */
+const theContractRefusalToSignal = (group: number, identity: string): string | undefined => {
   const sent = signalAGroupOnThisMachine(group, identity, 'SIGTERM')
-  if (!sent.signalled) return { state: 'refused', said: sent.refusal ?? `the group of process ${group} was not signalled` }
+  return sent.signalled ? undefined : (sent.refusal ?? `the group of process ${group} was not signalled`)
+}
+
+/** SIGTERM to the run `group` names: directly when no leader is left to compare, through the contract when one is. */
+const theGroupsSignalRefused = (group: number, identity: string | null, leaderEnded: boolean): string | undefined =>
+  leaderEnded || identity === null ? signalTheGroupItsLeaderLeft(group) : theContractRefusalToSignal(group, identity)
+
+/**
+ * One stopped run: SIGTERM through the contract's one call, the wait, and `--force`'s SIGKILL when the wait runs out.
+ *
+ * A leader that has ended does not end the run: `node --test` starts each test file under it in its own group, so a
+ * leader killed alone leaves those running, and that is exactly the run a member needs stopped. When nothing holds the
+ * leader's pid and the group is still there, the group is signalled and its record kept until it ends; only a group that
+ * really has gone is reported gone and its record dropped.
+ */
+async function theGroupStopped(group: number, identity: string | null, force: boolean, when: string): Promise<AStop> {
+  const leaderEnded = linuxProcessIdentities.identityOf(group) === null
+  if (leaderEnded && theGroupIsGone(group)) return { state: 'refused', said: `the group of process ${group} is gone` }
+  const refusal = theGroupsSignalRefused(group, identity, leaderEnded)
+  if (refusal !== undefined) return { state: 'refused', said: refusal }
   if (await theGroupEnds(group, THE_WAIT_MS)) return { state: 'ended', said: when }
   if (force) killTheGroupLeft(group)
   if (await theGroupEnds(group, force ? THE_WAIT_MS : 0)) return { state: 'ended', said: when }
@@ -300,11 +339,36 @@ async function theGroupSeenStopped(one: AGroupSeen, force: boolean, directory: s
   return theGroupStopped(one.group, identity, force, `the ${one.candidates.length} process(es) of the suite in group ${one.group} under ${directory} were stopped`)
 }
 
-/** The groups of the suite under `directory` stopped, or the refusal that none of them was. */
+/** The top of the checkout `directory` is in, as git answers for it; nothing when git names no checkout there. */
+function theCheckoutsTop(directory: string): string | undefined {
+  try {
+    const top = execFileSync('git', ['-C', directory, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    return top === '' ? undefined : realpathSync(top)
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The groups of the suite under `directory` stopped, or the refusal that none of them was. `directory` must be one
+ * checkout's own top: a folder above one — a home, a worktrees root — holds every member's suite, and walking it would
+ * be the broad match this command exists to replace.
+ */
 async function theGroupsUnderStopped(directory: string, options: TheOptions): Promise<readonly AStop[]> {
+  let top: string
+  try {
+    top = realpathSync(directory)
+  } catch (error) {
+    return [{ state: 'refused', said: `${directory} could not be read (${(error as Error).message})` }]
+  }
+  const checkoutsTop = theCheckoutsTop(top)
+  if (checkoutsTop !== top) {
+    const where = checkoutsTop === undefined ? 'git names no checkout there' : `its checkout's top is ${checkoutsTop}`
+    return [{ state: 'refused', said: `${directory} is not the top of a checkout (${where}), so nothing under it was signalled: name one checkout's own top` }]
+  }
   let groups: readonly AGroupSeen[]
   try {
-    groups = theGroupsOfTheSuite(options.proc, realpathSync(directory))
+    groups = theGroupsOfTheSuite(options.proc, top)
   } catch (error) {
     return [{ state: 'refused', said: `${directory} could not be read (${(error as Error).message})` }]
   }

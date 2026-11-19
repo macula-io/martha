@@ -204,16 +204,6 @@ export function sessionIn(stat: string): number | null {
   return session !== undefined && /^\d+$/.test(session) ? Number(session) : null
 }
 
-/** The process-group id's place among the fields that follow the command name (field 3 onwards): field 5. */
-const GROUP_AFTER_COMMAND = 5 - 3
-/** The process-group id in one /proc/<pid>/stat line, or null when the line is not one (martha#802). */
-export function groupIn(stat: string): number | null {
-  const command_end = stat.lastIndexOf(')')
-  if (command_end === -1) return null
-  const group = stat.slice(command_end + 1).trim().split(/\s+/)[GROUP_AFTER_COMMAND]
-  return group !== undefined && /^\d+$/.test(group) ? Number(group) : null
-}
-
 /** Where a process is typed in (martha#619): the terminal on its standard input, or null, and its session id, or null. */
 export function whereItIsTypedUnder(proc_root: string, pid: number): { readonly tty: string | null; readonly session: number | null } {
   let tty: string | null = null

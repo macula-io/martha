@@ -80,7 +80,10 @@ process group that record names and nothing else. A record belongs to the
 checkout that started it, because on this box the checkout is the only thing
 that tells one member's run from a peer's. A record whose group is still there
 after the wait is kept, and `--force` kills it; `--by-cwd <dir>` is the fallback
-for a plain `npm test`, under the directory you name and no other.
+for a plain `npm test`, under one checkout's own top and no other: the directory
+must be what `git rev-parse --show-toplevel` answers for it, so a folder above a
+checkout (a home, a worktrees root) is refused, since every member's suite runs
+under one of those.
 
 Stopping a run is not cleaning up after a killed one: a process a test started in
 a group of its own (`detached: true`, `setsid`, `script`, `unshare`) is not

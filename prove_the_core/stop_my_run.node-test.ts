@@ -3,9 +3,11 @@
 // Every case plants real processes of the suite's own shape — node, with `--test`, running a file that waits forever — so
 // what is held is the kernel's answer about a live group, never a stand-in. Each fails under its own name: two runs in
 // one checkout are not confused and stopping one leaves the other; a reused pid is refused by the contract's own words;
-// a group already gone is reported and its record removed; another checkout's token is refused and its run left alone;
-// the walk by working directory finds the groups under the directory it is given and no others; a group half outside
-// that directory is refused whole; and a group that holds this command itself is never signalled.
+// a group already gone is reported and its record removed; a run whose leader ended while its group still runs is
+// stopped, not called gone; another checkout's token is refused and its run left alone;
+// the walk by working directory finds the groups under the directory it is given and no others; a folder above the
+// checkout is refused rather than walked; a group half outside that directory is refused whole; and a group that holds
+// this command itself is never signalled.
 //
 // Every plant is killed and every record removed whatever the case does, and the sweeps wait for the kernel rather than
 // sleeping a fixed time. A killed run's processes are reaped by this file's own event loop, which is why the command is
@@ -13,7 +15,7 @@
 // group to the kernel.
 
 import assert from 'node:assert/strict'
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -25,7 +27,7 @@ import { linuxProcessIdentities, PROC_ROOT } from '../src/linux_process_identity
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 import { withoutTheTestContext } from './every_test_run_ends.ts'
-import { aNewToken, readTheRecord, removeTheRecord, writeTheRecord, type TheRecordOfATestRun } from './the_record_of_a_test_run.ts'
+import { aNewToken, readTheRecord, removeTheRecord, theGroupIsGone, writeTheRecord, type TheRecordOfATestRun } from './the_record_of_a_test_run.ts'
 
 const NAME = 'stop_my_run'
 
@@ -45,6 +47,13 @@ function aScratch(t: TestContext, name: string): string {
   const at = mkdtempSync(join(tmpdir(), `martha-802-stop-${name}-`))
   t.after(() => removeTheTree(at))
   return at
+}
+
+/** A directory git names as the top of a checkout, made at `at`: what `--by-cwd` requires of the directory it is given. */
+function aCheckout(at: string): string {
+  mkdirSync(at, { recursive: true })
+  execFileSync('git', ['init', '-q', at], { stdio: 'ignore' })
+  return realpathSync(at)
 }
 
 /** The file a plant runs: one test that waits forever, a process that ends once the run that started it is gone, and,
@@ -209,6 +218,21 @@ test('#802: a group that is already gone is reported by name, and its record rem
   assert.equal(readTheRecord(record.token), undefined, `${NAME}: a record whose group is gone was kept`)
 })
 
+test('#802: a run whose leader ended while its group still runs is stopped, not called gone', async (t) => {
+  const where = realpathSync(aScratch(t, 'leader-ended'))
+  const plant = aPlant(t, where, {})
+  assert.equal(await untilThePlantedFileLoaded(plant), true, `${NAME}: the planted run's file never loaded, so its group held only its leader and this case proves nothing`)
+  const record = aPlantedRecord(t, plant.pid, where, linuxProcessIdentities.identityOf(plant.pid) ?? '')
+  // The leader ends alone: what it started runs on in its group, and that is the run a member needs stopped.
+  process.kill(plant.pid, 'SIGKILL')
+  assert.equal(await untilSeen(() => linuxProcessIdentities.identityOf(plant.pid) === null, A_PLANT_APPEARS_WITHIN_MS), true, `${NAME}: the planted run's leader never ended`)
+  assert.equal(theGroupIsGone(plant.pid), false, `${NAME}: the group ended with its leader, so this case proves nothing`)
+  const stopped = await theStopper(['--token', record.token], where)
+  assert.equal(stopped.status, 0, `${NAME}: a run whose leader ended but whose group ran was not stopped:\n${stopped.output}`)
+  assert.equal(await untilSeen(() => theGroupIsGone(plant.pid), A_GROUP_GOES_WITHIN_MS), true, `${NAME}: the group it was told to stop is still there`)
+  assert.equal(readTheRecord(record.token), undefined, `${NAME}: the stopped run's record was left behind`)
+})
+
 test('#802: another checkout\'s token is refused, and the run it names is left alone', async (t) => {
   const mine = realpathSync(aScratch(t, 'my-checkout'))
   const theirs = realpathSync(aScratch(t, 'their-checkout'))
@@ -241,7 +265,7 @@ test('#802: with no token, one run is stopped and two are named rather than gues
 })
 
 test('#802: the walk under one directory stops the suite there and not the same suite under another', async (t) => {
-  const here = realpathSync(aScratch(t, 'by-cwd-here'))
+  const here = aCheckout(aScratch(t, 'by-cwd-here'))
   const there = realpathSync(aScratch(t, 'by-cwd-there'))
   const mine = aPlant(t, here, {})
   const theirs = aPlant(t, there, {})
@@ -251,8 +275,22 @@ test('#802: the walk under one directory stops the suite there and not the same 
   assert.equal(isRunning(theirs.pid), true, `${NAME}: the walk stopped the same suite under another directory`)
 })
 
+test('#802: --by-cwd refuses a folder above the checkout, and both runs under it keep running', async (t) => {
+  const parent = realpathSync(aScratch(t, 'above-the-checkouts'))
+  const one = aCheckout(join(parent, 'one'))
+  const other = aCheckout(join(parent, 'other'))
+  const first = aPlant(t, one, {})
+  const second = aPlant(t, other, {})
+  assert.equal(await untilThePlantedFileLoaded(first), true, `${NAME}: one planted run's file never loaded under ${one}`)
+  assert.equal(await untilThePlantedFileLoaded(second), true, `${NAME}: the other planted run's file never loaded under ${other}`)
+  const refused = await theStopper(['--by-cwd', parent], one)
+  assert.equal(refused.status, 2, `${NAME}: a folder above the checkouts was walked:\n${refused.output}`)
+  assert.match(refused.output, /is not the top of a checkout .*so nothing under it was signalled: name one checkout's own top/, `${NAME}: the refusal did not say what the directory must be:\n${refused.output}`)
+  assert.equal(isRunning(first.pid) && isRunning(second.pid), true, `${NAME}: a run under a folder that was refused was signalled`)
+})
+
 test('#802: a group with a process outside the directory is refused whole, and nothing is signalled', async (t) => {
-  const inside = realpathSync(aScratch(t, 'half-inside'))
+  const inside = aCheckout(aScratch(t, 'half-inside'))
   const outside = realpathSync(aScratch(t, 'half-outside'))
   const plant = aPlant(t, inside, { elsewhere: outside })
   assert.equal(await untilSeen(() => statOf(plant.pid) !== undefined, A_PLANT_APPEARS_WITHIN_MS), true, `${NAME}: the planted run did not start`)
@@ -271,7 +309,7 @@ test('#802: a group with a process outside the directory is refused whole, and n
 })
 
 test('#802: the walk never signals the group this command itself runs in', async (t) => {
-  const where = realpathSync(aScratch(t, 'own-group'))
+  const where = aCheckout(aScratch(t, 'own-group'))
   const plant = aPlant(t, where, { detached: false })
   assert.equal(await untilSeen(() => statOf(plant.pid) !== undefined, A_PLANT_APPEARS_WITHIN_MS), true, `${NAME}: the planted run did not start`)
   const stopped = await theStopper(['--by-cwd', where], where)
@@ -281,7 +319,7 @@ test('#802: the walk never signals the group this command itself runs in', async
 })
 
 test('#802: the walk reads the kernel it is given, not this machine\'s (--proc)', async (t) => {
-  const where = realpathSync(aScratch(t, 'planted-kernel-checkout'))
+  const where = aCheckout(aScratch(t, 'planted-kernel-checkout'))
   const kernel = aScratch(t, 'planted-kernel')
   const group = 4242
   mkdirSync(join(kernel, String(group)))
