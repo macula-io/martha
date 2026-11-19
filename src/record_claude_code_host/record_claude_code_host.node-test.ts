@@ -8,20 +8,25 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST, recordedHostFrom } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CHUNK } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { MEMORY_OFF, type Committed } from './carry_over_what_is_restated_by_hand.ts'
-import { fileModeGuardCallsIn, type GuardCalls } from './what_the_hosts_guards_call.ts'
+import { boundNameOf, bundleHolding } from './a_bundle_holding_a_recording.ts'
+import { calleesFieldOf } from '../compare_two_host_recordings/compare_two_recordings.ts'
+import { NOTICE_DAYS, NOTICE_RELEASES } from './how_long_a_notice_lasts.ts'
+import type { GuardCalls } from '../compare_two_host_recordings/what_a_recorded_text_calls.ts'
+import { fileModeGuardCallsIn } from './what_the_hosts_guards_call.ts'
 import { CLAUDE_MEMORY_OFF } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 const RECORDER = fileURLToPath(new URL('./record_claude_code_host.ts', import.meta.url))
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
+const MODELS = new URL('../claude_code_host/recorded_claude_code_models.json', import.meta.url)
 const CHECK = '--check'
 
 /**
@@ -51,7 +56,7 @@ const FRONTMATTER_PATTERN = nameIn(PARSER_HEAD, /\.match\(([\w$]+)\);$/)
  */
 const MARKDOWN_PARTS: Readonly<Record<string, string>> = {
   frontmatter_reader: `${PARSER_HEAD}return 0};${BOM_STRIP}`,
-  frontmatter_pattern: `var a=1,${FRONTMATTER_PATTERN}=/${RECORDED_HOST.frontmatter_pattern}/;`,
+  frontmatter_pattern: `var aKeptDeclarator=1,${FRONTMATTER_PATTERN}=/${RECORDED_HOST.frontmatter_pattern}/;`,
   markdown_loader: RECORDED_HOST.markdown_loader,
   markdown_kinds: [
     `function Wq(e,n,r){return Kq(()=>${LOADER}(e,n,r,0))}`,
@@ -157,8 +162,8 @@ const importing = (calls: Readonly<Record<string, number>>, prefix = MANAGED_EXP
 /** Each function a guard reaches, in a module of its own that imports what it calls and exports itself under a name of the module's. */
 const modulesOf = (guard: GuardCalls, prefix: string): string[] =>
   guard.functions.map((entry, index) => {
-    const name = /^function\*? ?([\w$]+)\(/.exec(entry.function)?.[1] ?? ''
-    return `\n${CHUNK}\n${importing(entry.calls, prefix)}${entry.function}export{${name} as ${exportedAs(index, prefix)}};`
+    const name = boundNameOf(entry.function)
+    return `\n${CHUNK}\n${importing(Object.fromEntries(Object.entries(entry.calls).filter(([called]) => called !== name)), prefix)}${entry.function};export{${name} as ${exportedAs(index, prefix)}};`
   })
 
 /**
@@ -187,16 +192,42 @@ const signInParts = (variable: string): string =>
   ].join(';')
 
 
+/** What the recording says a code field's texts call (martha#811). */
+const recordedCallees = (field: string): GuardCalls => (COMMITTED as unknown as Record<string, GuardCalls>)[calleesFieldOf(field)] ?? { guard_calls: {}, functions: [] }
+
+/** Every definition the recording says a field or a guard reaches (martha#811). */
+const REACHED_TEXTS: readonly string[] = Object.entries(COMMITTED as unknown as Record<string, unknown>)
+  .filter(([field]) => field.endsWith('_callees') || field.endsWith('_guard_calls'))
+  .flatMap(([, list]) => (list as GuardCalls).functions.map((entry) => entry.function))
+
+/** Whether a definition the recording reaches already holds `literal`, so the host holds it there and nowhere else. */
+const reachedHolds = (literal: string): boolean => REACHED_TEXTS.some((text) => text.includes(JSON.stringify(literal)))
+
+/**
+ * The functions the hook set's exits call, as the bundle spells them (martha#811): where the recorder wrote a constant
+ * in by value (martha#122), the definition the follower recorded is the bundle's own text, which reads the constant, and
+ * the constant is defined beside it as the host defines it.
+ */
+const ARGV_CONSTANT = /process\.argv\.includes\(([\w$]+)\)/
+const ARGV_FLAG = /process\.argv\.includes\("([^"]+)"\)/
+const HOOK_EXITS = RECORDED_HOST.hooks_switch_calls.map((text) => {
+  const name = boundNameOf(text)
+  const bundled = REACHED_TEXTS.find((reached) => reached !== text && reached.startsWith(`function ${name}(`) && ARGV_CONSTANT.test(reached))
+  const [constant, flag] = [ARGV_CONSTANT.exec(bundled ?? '')?.[1], ARGV_FLAG.exec(text)?.[1]]
+  return bundled === undefined || constant === undefined || flag === undefined ? { text } : { text: bundled, constant: `var ${constant}="${flag}"` }
+})
+
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
   session_start_schema: RECORDED_HOST.session_start_schema,  prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
   prompt_origin_fallback: RECORDED_HOST.prompt_origin_fallback,
   prompt_origin_subkinds: RECORDED_HOST.prompt_origin_subkinds,
   hooks_switches: RECORDED_HOST.hooks_switches,
-  hooks_switch_calls: RECORDED_HOST.hooks_switch_calls.join(';'),
+  hooks_switch_calls: [...HOOK_EXITS.flatMap((exit) => exit.constant ?? []), ...HOOK_EXITS.map((exit) => exit.text)].join(';'),
+  // Each place in the shape the host spells it, unless a definition the guard reaches holds it already (martha#811).
   managed_settings: [
-    `switch(P()){case"windows":return"C:\\\\ClaudeCode";default:return"${RECORDED_HOST.managed_settings.dir}"}`,
-    `getDropInDir(){return this.dropInDir??=qC(${MANAGED}(),"${RECORDED_HOST.managed_settings.drop_in}")`,
-    `function jw(){return Ce(${MANAGED}(),"${RECORDED_HOST.managed_settings.file}")}`,
+    ...(reachedHolds(RECORDED_HOST.managed_settings.dir) ? [] : [`switch(P()){case"windows":return"C:\\\\ClaudeCode";default:return"${RECORDED_HOST.managed_settings.dir}"}`]),
+    ...(reachedHolds(RECORDED_HOST.managed_settings.drop_in) ? [] : [`getDropInDir(){return this.dropInDir??=qC(${MANAGED}(),"${RECORDED_HOST.managed_settings.drop_in}")`]),
+    ...(reachedHolds(RECORDED_HOST.managed_settings.file) ? [] : [`function jw(){return Ce(${MANAGED}(),"${RECORDED_HOST.managed_settings.file}")}`]),
   ].join(';'),
   ...MARKDOWN_PARTS,
   // The skills loader, the bare-mode test and the catalog reader it calls, each as recorded (martha#747).
@@ -211,19 +242,61 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   guards: guardModules(GUARD),
 }
 
-/** A host text holding `parts`, written to a scratch file the test removes. */
-function hostHolding(t: TestContext, parts: Readonly<Record<string, string>>): string {
+/** A host text holding `parts` and the callees `recording` says the code fields reach, in a scratch file the test removes. */
+function hostHolding(t: TestContext, parts: Readonly<Record<string, string>>, recording: Readonly<Record<string, unknown>> = COMMITTED as unknown as Record<string, unknown>): string {
   const root = mkdtempSync(join(tmpdir(), 'martha-host-drift-'))
   t.after(() => removeTheTree(root))
   const host = join(root, CLAUDE)
-  writeFileSync(host, `#!junk\n${Object.values(parts).join(';other code;')}\n`, 'latin1')
+  writeFileSync(host, `#!junk\n${bundleHolding(parts, recording, RECORDED_PARTS)}\n`, 'latin1')
   return host
 }
 
-/** `--check` run on a host text, as the drift job runs it. */
-function check(host: string, version: string): { status: number | null; stdout: string } {
-  const run = spawnSync(process.execPath, [RECORDER, CHECK, host, version], { encoding: 'utf8' })
+
+/** The models the recording says the host accepts (martha#315). */
+const RECORDED_MODELS = (JSON.parse(readFileSync(MODELS, 'utf8')) as { readonly aliases: readonly string[] }).aliases
+
+/** A release's `sdk-tools.d.ts` as far as --check reads it: `AgentInput.model`, a union of `models` (martha#811). */
+const declarationOf = (models: readonly string[]): string =>
+  `export interface AgentInput {\n  description: string;\n  model?: ${models.map((model) => JSON.stringify(model)).join(' | ')};\n}\n`
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** npm's answer for the package's `time` and `versions`, with each of `released` published `ago` ms before now. */
+function npmAnswerOf(released: ReadonlyArray<{ readonly version: string; readonly ago: number }>): unknown {
+  const all = [{ version: RECORDED_HOST.host_version, ago: 30 * DAY_MS }, ...released]
+  return {
+    time: Object.fromEntries(all.map(({ version, ago }) => [version, new Date(Date.now() - ago).toISOString()])),
+    versions: all.map(({ version }) => version),
+  }
+}
+
+/** What --check reads beside the binary, planted next to it: the declaration, and npm's answer. */
+interface Beside {
+  readonly models?: readonly string[]
+  readonly declaration?: string
+  readonly npm?: unknown
+}
+
+/** `--check` run on a host text, as the drift job runs it, with the declaration and npm's answer planted beside it. */
+function check(host: string, version: string, beside: Beside = {}): { status: number | null; stdout: string } {
+  const declaration = join(dirname(host), 'sdk-tools.d.ts')
+  const npm = join(dirname(host), 'npm-answer.json')
+  writeFileSync(declaration, beside.declaration ?? declarationOf(beside.models ?? RECORDED_MODELS))
+  writeFileSync(npm, typeof beside.npm === 'string' ? beside.npm : JSON.stringify(beside.npm ?? npmAnswerOf([{ version, ago: DAY_MS }])))
+  const run = spawnSync(process.execPath, [RECORDER, CHECK, host, version, declaration, npm], { encoding: 'utf8' })
   return { status: run.status, stdout: run.stdout }
+}
+
+/**
+ * That --check failed on exactly `differs` (the line it prints, fields joined by `, `), with one "first difference" line
+ * for each field in the same order (martha#811). Where in a field it differs is the host's, so only the field is held.
+ */
+function assertDiffers(run: { status: number | null; stdout: string }, differs: string, version = RECORDED_HOST.host_version): void {
+  assert.equal(run.status, 1, run.stdout)
+  const [head, line, ...firsts] = run.stdout.trimEnd().split('\n')
+  assert.equal(head, `recorded ${RECORDED_HOST.host_version}, host ${version}`)
+  assert.equal(line, `differs: ${differs}`)
+  assert.deepEqual(firsts.map((first) => /^first difference: ([\w]+) at ./.exec(first)?.[1]), differs.split(', '))
 }
 
 /** A version that differs from the recorded one in its patch number. */
@@ -251,19 +324,127 @@ test('a recording the user-output-styles field is cut from does not load (martha
   assert.equal(recordedHostFrom(JSON.stringify(recording)).host_version, RECORDED_HOST.host_version)
 })
 
+/** The recorded prompt-origin subkinds with one more planted: a literal of the host's code that changed. */
+const PLANTED_SUBKINDS = RECORDED_HOST.prompt_origin_subkinds.replace('"projects-relay"', '"projects-relay","session-inbox"')
+// The mapper and the fallback reach a definition the subkinds field holds, so what they reach differs with it (martha#811).
+const SUBKINDS_DIFFER = [
+  ...['prompt_origin_fallback', 'prompt_origin_mapper'].filter((field) =>
+    recordedCallees(field).functions.some((entry) => RECORDED_HOST.prompt_origin_subkinds.includes(entry.function)),
+  ),
+  'prompt_origin_subkinds',
+].join(', ')
+
 test('a host whose code differs fails the check, naming the field and nothing of the host\'s code', (t) => {
-  const planted = RECORDED_HOST.prompt_origin_subkinds.replace('"projects-relay"', '"projects-relay","session-inbox"')
-  assert.notEqual(planted, RECORDED_HOST.prompt_origin_subkinds, 'the planted set differs')
-  const run = check(hostHolding(t, { ...RECORDED_PARTS, prompt_origin_subkinds: planted }), RECORDED_HOST.host_version)
-  assert.equal(run.status, 1)
-  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: prompt_origin_subkinds\n`)
+  assert.notEqual(PLANTED_SUBKINDS, RECORDED_HOST.prompt_origin_subkinds, 'the planted set differs')
+  assertDiffers(check(hostHolding(t, { ...RECORDED_PARTS, prompt_origin_subkinds: PLANTED_SUBKINDS }), RECORDED_HOST.host_version), SUBKINDS_DIFFER)
 })
 
-test('a host of another version fails the check by its version alone, even when its code is the same', (t) => {
-  const other = anotherVersion(RECORDED_HOST.host_version)
-  const run = check(hostHolding(t, RECORDED_PARTS), other)
-  assert.equal(run.status, 1)
-  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${other}\ndiffers: host_version\n`)
+/** That --check passed a release of `version` on its version alone, saying a routine re-record is due (martha#811). */
+function assertNotice(run: { status: number | null; stdout: string }, version: string): void {
+  assert.equal(run.status, 0, run.stdout)
+  const [head, notice, ...rest] = run.stdout.trimEnd().split('\n')
+  assert.equal(head, `recorded ${RECORDED_HOST.host_version}, host ${version}`)
+  assert.match(notice ?? '', new RegExp(`^notice: Claude Code ${escapedForRegExp(version)} carries the same facts as the recorded ${escapedForRegExp(RECORDED_HOST.host_version)}: `))
+  assert.deepEqual(rest, [])
+}
+
+/** A text matched as itself inside a pattern. */
+const escapedForRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// DECIDED 2026-11-19 "Every release (Recommended)" (martha#811): a release whose facts are all the recorded ones passes
+// on its version alone, with a notice, whether its patch, minor or major number moved.
+test('a host of another version whose facts are the recorded ones passes the check with a notice that a re-record is due (martha#811)', (t) => {
+  const host = hostHolding(t, RECORDED_PARTS)
+  const [major = 0, minor = 0] = RECORDED_HOST.host_version.split('.').map(Number)
+  for (const version of [anotherVersion(RECORDED_HOST.host_version), [major, minor + 1, 0].join('.'), [major + 1, 0, 0].join('.')]) {
+    assertNotice(check(host, version), version)
+  }
+})
+
+/** That --check failed on `unreadable` alone (the line it prints, parts joined by `, `), naming no fact as differing. */
+function assertUnreadable(run: { status: number | null; stdout: string }, unreadable: string, version = RECORDED_HOST.host_version): void {
+  assert.equal(run.status, 1, run.stdout)
+  assert.deepEqual(run.stdout.trimEnd().split('\n'), [`recorded ${RECORDED_HOST.host_version}, host ${version}`, `unreadable: ${unreadable}`])
+}
+
+// A release whose facts changed fails on its new version as on the recorded one, naming the fields (martha#811). The
+// pass path under a renaming is proven on the real 2.1.328 recording renamed (compare_two_recordings.node-test.ts):
+// the bundle these tests build is the recording's parts with scaffolding between them, not a program a renamer can read.
+test('a release of another version whose literal changed fails naming the fields, with no notice (martha#811)', (t) => {
+  const version = anotherVersion(RECORDED_HOST.host_version)
+  assertDiffers(check(hostHolding(t, { ...RECORDED_PARTS, prompt_origin_subkinds: PLANTED_SUBKINDS }), version), SUBKINDS_DIFFER, version)
+})
+
+test('a release whose declaration accepts other models fails naming models, and one whose declaration cannot be read is unreadable (martha#811)', (t) => {
+  const host = hostHolding(t, RECORDED_PARTS)
+  assertDiffers(check(host, RECORDED_HOST.host_version, { models: [...RECORDED_MODELS, 'a-model-no-recording-names'] }), 'models')
+  assertUnreadable(check(host, RECORDED_HOST.host_version, { declaration: 'export interface SomethingElse {}\n' }), 'models the host accepts')
+})
+
+// R6 (martha#811): what a code field calls is part of its fact. A call the follower cannot bind is unreadable, never
+// passed; a definition the field reaches that changed makes the field differ though its own text did not.
+test('a code field calling a function the host does not define is unreadable, and one whose callee changed differs (martha#811)', (t) => {
+  const unbound = MARKDOWN_PARTS.output_style_schema?.replace(',description:', ',aPlantedKey:aCalleeNoHostDefines(),description:') ?? ''
+  assert.ok(unbound.includes('aCalleeNoHostDefines()'), 'the planted call is in the schema')
+  assertUnreadable(check(hostHolding(t, { ...RECORDED_PARTS, output_style_schema: unbound }), RECORDED_HOST.host_version), 'what output_style_schema calls, output_style_schema')
+  const callees = recordedCallees('session_start_schema')
+  const [first] = callees.functions
+  assert.ok(first !== undefined && first.function.includes('"literal"'), 'the planted callee holds the literal it changes')
+  const changed = { ...callees, functions: [{ ...first, function: first.function.replace('"literal"', '"literals"') }, ...callees.functions.slice(1)] }
+  const recording = { ...(COMMITTED as unknown as Record<string, unknown>), [calleesFieldOf('session_start_schema')]: changed }
+  assertDiffers(check(hostHolding(t, RECORDED_PARTS, recording), RECORDED_HOST.host_version), 'session_start_schema')
+})
+
+/** A definition the recording holds as one name set to another, `var X=Y`, and its name. */
+const AN_ALIAS = /^var ([\w$]+)=[\w$]+$/
+
+// A bundle can set a module's binding lazily, `var X;` and later `X=...` in the module's init, where another release
+// sets it where it is declared (martha#811). The follower writes the one assignment as the declaration's value, so the
+// two read the same.
+test('a host that sets a recorded definition lazily, declared bare and assigned later, passes the check (martha#811)', (t) => {
+  const alias = recordedCallees('output_style_schema').functions.map((entry) => entry.function).find((text) => AN_ALIAS.test(text))
+  const name = alias === undefined ? undefined : AN_ALIAS.exec(alias)?.[1]
+  assert.ok(alias !== undefined && name !== undefined, 'the schema reaches no definition of the form var X=Y')
+  const host = hostHolding(t, RECORDED_PARTS)
+  const text = readFileSync(host, 'latin1')
+  assert.equal(text.split(alias).length, 2, 'the bundle holds the definition once')
+  writeFileSync(host, text.replace(alias, `var ${name};${alias.slice('var '.length)}`), 'latin1')
+  const run = check(host, RECORDED_HOST.host_version)
+  assert.equal(run.status, 0, run.stdout)
+})
+
+/** The versions after the recorded one, `count` of them, each one patch on. */
+function newerVersions(count: number): string[] {
+  const versions: string[] = []
+  for (let version = RECORDED_HOST.host_version; versions.length < count; versions.push(version)) version = anotherVersion(version)
+  return versions
+}
+
+/** That --check failed a release on a notice that has aged. */
+function assertAged(run: { status: number | null; stdout: string }, version: string): void {
+  assert.equal(run.status, 1, run.stdout)
+  const [head, aged, ...rest] = run.stdout.trimEnd().split('\n')
+  assert.equal(head, `recorded ${RECORDED_HOST.host_version}, host ${version}`)
+  assert.match(aged ?? '', /^aged: .+: the re-record is overdue$/)
+  assert.deepEqual(rest, [])
+}
+
+// DECIDED 2026-11-19 "7 days or 5 versions (Recommended)" (martha#811): the notice lasts until the first newer release
+// is NOTICE_DAYS old or NOTICE_RELEASES newer releases exist; a prerelease is no release, and an npm answer that cannot
+// be read never lets a notice pass.
+test('the notice lasts until the first newer release is old enough or enough newer releases exist, and an unread npm answer fails (martha#811)', (t) => {
+  const host = hostHolding(t, RECORDED_PARTS)
+  const [version = ''] = newerVersions(1)
+  const released = (ago: number) => npmAnswerOf([{ version, ago }])
+  assertNotice(check(host, version, { npm: released(NOTICE_DAYS * DAY_MS - 60 * 60 * 1000) }), version)
+  assertAged(check(host, version, { npm: released(NOTICE_DAYS * DAY_MS) }), version)
+  const each = (versions: readonly string[]) => versions.map((one) => ({ version: one, ago: DAY_MS }))
+  assertNotice(check(host, version, { npm: npmAnswerOf(each(newerVersions(NOTICE_RELEASES - 1))) }), version)
+  assertAged(check(host, version, { npm: npmAnswerOf(each(newerVersions(NOTICE_RELEASES))) }), version)
+  const prerelease = `${newerVersions(NOTICE_RELEASES).at(-1) ?? ''}-beta.1`
+  assertNotice(check(host, version, { npm: npmAnswerOf(each([...newerVersions(NOTICE_RELEASES - 1), prerelease])) }), version)
+  assertUnreadable(check(host, version, { npm: 'not an npm answer' }), "npm's release times or versions", version)
+  assertUnreadable(check(host, version, { npm: { versions: [version] } }), "npm's release times or versions", version)
 })
 
 test('a host the recorder cannot read fails the check, naming the part', (t) => {
@@ -275,8 +456,7 @@ test('a host the recorder cannot read fails the check, naming the part', (t) => 
 
 test('a host that picks its sign-in store by another variable fails the check naming the field, and one whose two rules disagree cannot be read (martha#602)', (t) => {
   const renamed = check(hostHolding(t, { ...RECORDED_PARTS, sign_in_store_variable: signInParts('ANOTHER_STORE_DIR') }), RECORDED_HOST.host_version)
-  assert.equal(renamed.status, 1)
-  assert.equal(renamed.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: sign_in_store_variable\n`)
+  assertDiffers(renamed, 'sign_in_store_variable')
   const disagreeing = signInParts(RECORDED_HOST.sign_in_store_variable).replace(/(process\.env\.)[A-Z_]+(,)/, '$1ANOTHER_STORE_DIR$2')
   const run = check(hostHolding(t, { ...RECORDED_PARTS, sign_in_store_variable: disagreeing }), RECORDED_HOST.host_version)
   assert.equal(run.status, 1)
@@ -289,24 +469,26 @@ test('a host that picks its sign-in store by another variable fails the check na
  * (martha#624). The test below holds it outside the recording, so a host that ships it fails there by name.
  */
 const A_KIND_NO_HOST_LOADS = 'planted-kind-no-host-loads'
+/** A function the recorded output-style schema calls, which the bundle binds (martha#811). */
+const SCHEMA_CALLS_FIRST = Object.keys(recordedCallees('output_style_schema').guard_calls)[0] ?? ''
 
 test('a host whose frontmatter pattern, markdown folders or output-style schema differ fails the check, naming the field (martha#146)', (t) => {
   assert.ok(!RECORDED_HOST.markdown_kinds.includes(A_KIND_NO_HOST_LOADS), `the recorded host loads ${A_KIND_NO_HOST_LOADS}, so planting it changes nothing; plant another kind`)
   for (const [field, planted] of [
     ['frontmatter_pattern', MARKDOWN_PARTS.frontmatter_pattern?.replace('\\s*\\n(', '[ \\t]*\\n(')],
     ['markdown_kinds', `${MARKDOWN_PARTS.markdown_kinds ?? ''};Wq("${A_KIND_NO_HOST_LOADS}",0)`],
-    ['output_style_schema', MARKDOWN_PARTS.output_style_schema?.replace('"force-for-plugin":', 'hooks:Jq().optional(),"force-for-plugin":')],
+    // A member built by a function the schema already calls, so the follower binds it and the change is one of meaning.
+    ['output_style_schema', MARKDOWN_PARTS.output_style_schema?.replace('"force-for-plugin":', `hooks:${SCHEMA_CALLS_FIRST}().optional(),"force-for-plugin":`)],
   ] as const) {
     assert.notEqual(planted, MARKDOWN_PARTS[field], `the planted ${field} differs`)
     const run = check(hostHolding(t, { ...RECORDED_PARTS, [field]: planted ?? '' }), RECORDED_HOST.host_version)
-    assert.equal(run.status, 1, field)
-    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: ${field}\n`)
+    assertDiffers(run, `${field}`)
   }
 })
 
 test('a host whose frontmatter pattern carries a flag, or that has two markdown loaders, cannot be read, naming the part (martha#146)', (t) => {
   for (const planted of [
-    { frontmatter_pattern: `var a=1,${FRONTMATTER_PATTERN}=/${RECORDED_HOST.frontmatter_pattern}/m;` },
+    { frontmatter_pattern: `var aKeptDeclarator=1,${FRONTMATTER_PATTERN}=/${RECORDED_HOST.frontmatter_pattern}/m;` },
     { markdown_loader: `${RECORDED_HOST.markdown_loader};${RECORDED_HOST.markdown_loader.replace(`function ${LOADER}(`, 'function Zq(')}` },
   ]) {
     const run = check(hostHolding(t, { ...RECORDED_PARTS, ...planted }), RECORDED_HOST.host_version)
@@ -319,8 +501,7 @@ test('a host that renames the global config it prefers fails the check naming th
   const renamed = PLACE_PARTS.legacy_global_config_names?.replaceAll(PREFERRED_GLOBAL_CONFIG, 'a-renamed-global-config.json') ?? ''
   assert.equal(renamed.includes(PREFERRED_GLOBAL_CONFIG), false, 'the renamed host names only the new file')
   const differs = check(hostHolding(t, { ...RECORDED_PARTS, legacy_global_config_names: renamed }), RECORDED_HOST.host_version)
-  assert.equal(differs.status, 1, differs.stdout)
-  assert.equal(differs.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: legacy_global_config_names\n`)
+  assertDiffers(differs, 'legacy_global_config_names')
   const two = check(hostHolding(t, { ...RECORDED_PARTS, legacy_global_config_names: `${PLACE_PARTS.legacy_global_config_names ?? ''};${PLACE_PARTS.legacy_global_config_names ?? ''}` }), RECORDED_HOST.host_version)
   assert.equal(two.status, 1)
   assert.equal(two.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: protected config places\n`)
@@ -348,8 +529,7 @@ test('a host that adds a protected config-dir place, or renames a folder it runs
   ] as const) {
     assert.notEqual(planted, PLACE_PARTS[field], `the planted ${field} differs`)
     const run = check(hostHolding(t, { ...RECORDED_PARTS, [field]: planted ?? '' }), RECORDED_HOST.host_version)
-    assert.equal(run.status, 1, field)
-    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: ${field}\n`)
+    assertDiffers(run, `${field}`)
   }
 })
 
@@ -371,8 +551,7 @@ test('a host that matches a file tool\'s rules another way fails the check namin
   const planted = RECORDED_HOST.file_permission_rules.matcher.replace('"Edit"', '"Write"')
   assert.notEqual(planted, RECORDED_HOST.file_permission_rules.matcher, 'the planted statement differs')
   const run = check(hostHolding(t, { ...RECORDED_PARTS, file_permission_rules: RULE_PARTS.file_permission_rules?.replace(RECORDED_HOST.file_permission_rules.matcher, planted) ?? '' }), RECORDED_HOST.host_version)
-  assert.equal(run.status, 1, run.stdout)
-  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: file_permission_rules\n`)
+  assertDiffers(run, `file_permission_rules`)
 })
 
 // The two lists the dialogs are heard from are compared like every other part (martha#313, Pluto's correction): a host
@@ -385,8 +564,7 @@ test('a host that adds a hook event a module hears, or a notification type, fail
   ] as const) {
     assert.notEqual(planted, DIALOG_PARTS[field], `the planted ${field} differs`)
     const run = check(hostHolding(t, { ...RECORDED_PARTS, [field]: planted ?? '' }), RECORDED_HOST.host_version)
-    assert.equal(run.status, 1, field)
-    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: ${field}\n`)
+    assertDiffers(run, `${field}`)
   }
 })
 
@@ -425,8 +603,7 @@ test('a host that renames an element of a failed agent\'s report fails the check
   const planted = (REPORT_PARTS.failed_agents_report ?? '').replace('="tool-use-id"', '="task-call-id"')
   assert.notEqual(planted, REPORT_PARTS.failed_agents_report, 'the planted report differs')
   const run = check(hostHolding(t, { ...RECORDED_PARTS, failed_agents_report: planted }), RECORDED_HOST.host_version)
-  assert.equal(run.status, 1, run.stdout)
-  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: failed_agents_report\n`)
+  assertDiffers(run, `failed_agents_report`)
 })
 
 test('a host that no longer builds the report cannot be read, naming the part (martha#390)', (t) => {
@@ -452,12 +629,17 @@ test('a host whose managed-folder guard reaches a changed function, or binds a n
   const changed = withChangedFunction(SECOND_STEP, (source) => source.replace(/\{return(.*)\}$/, '{return!($1)}'))
   const [firstCall = '', firstEntry = 0] = Object.entries(GUARD.guard_calls)[0] ?? []
   const rebound = { ...GUARD, guard_calls: { ...GUARD.guard_calls, [firstCall]: GUARD.functions.length - 1 - firstEntry } }
-  for (const planted of [changed, rebound]) {
+  // The loader calls the guard's first call itself (martha#811 records what the loader calls), so binding that name to
+  // another function changes what the loader reaches too; a change two steps down is past the loader's one level.
+  const loaderCallsIt = firstCall in recordedCallees('markdown_loader').guard_calls
+  for (const [planted, differs] of [
+    [changed, 'managed_folder_guard_calls'],
+    [rebound, loaderCallsIt ? 'managed_folder_guard_calls, markdown_loader' : 'managed_folder_guard_calls'],
+  ] as const) {
     assert.notDeepEqual(planted, GUARD, 'the planted guard differs')
     assert.equal(RECORDED_PARTS.markdown_loader, MARKDOWN_PARTS.markdown_loader, 'the loader itself is byte-equal')
     const run = check(hostHolding(t, { ...RECORDED_PARTS, guards: guardModules(planted) }), RECORDED_HOST.host_version)
-    assert.equal(run.status, 1, run.stdout)
-    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: managed_folder_guard_calls\n`)
+    assertDiffers(run, differs)
   }
 })
 
@@ -512,8 +694,7 @@ test('a host whose memory guard, on check or hosted-mode variable is not the one
     const memory = MEMORY_TEXT.replace(quoted, planted)
     const plant = (guard: GuardCalls): GuardCalls => ({ ...guard, functions: guard.functions.map((entry) => (entry.function === quoted ? { ...entry, function: planted } : entry)) })
     const run = check(hostHolding(t, { ...RECORDED_PARTS, guards: guardModules(plant(GUARD), plant(FILE_GUARD), memory) }), RECORDED_HOST.host_version)
-    assert.equal(run.status, 1, quoted.slice(0, 40))
-    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: ${fields.join(', ')}\n`)
+    assertDiffers(run, `${fields.join(', ')}`)
   }
 })
 
@@ -551,8 +732,7 @@ test('a host whose file-mode memory guard reaches a changed function fails the c
     assert.notDeepEqual(planted, FILE_GUARD, 'the planted callees differ')
     assert.ok(MEMORY_TEXT.includes(file_mode_guard), 'the file-mode guard itself is byte-equal')
     const run = check(hostHolding(t, { ...RECORDED_PARTS, guards: guardModules(GUARD, planted) }), RECORDED_HOST.host_version)
-    assert.equal(run.status, 1, run.stdout)
-    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: file_mode_guard_calls\n`)
+    assertDiffers(run, `file_mode_guard_calls`)
   }
 })
 
@@ -561,8 +741,7 @@ test('a host whose file-mode memory guard binds a name it calls to another funct
   const rebound = { ...FILE_GUARD, guard_calls: { ...FILE_GUARD.guard_calls, [firstCall]: FILE_GUARD.functions.length - 1 - firstEntry } }
   assert.notDeepEqual(rebound, FILE_GUARD, 'the planted binding differs')
   const run = check(hostHolding(t, { ...RECORDED_PARTS, guards: guardModules(GUARD, rebound) }), RECORDED_HOST.host_version)
-  assert.equal(run.status, 1, run.stdout)
-  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: file_mode_guard_calls\n`)
+  assertDiffers(run, `file_mode_guard_calls`)
 })
 
 // The guard is found by the one function that reads the off switch the launch sets (martha#438): a host that reads it
@@ -597,15 +776,17 @@ test('a guard that declares a helper before it reads the off switch is read, not
   const memory = withHelperFirst(MEMORY_TEXT)
   assert.notEqual(memory, MEMORY_TEXT, 'the helper is planted inside the guard')
   const run = check(hostHolding(t, { ...RECORDED_PARTS, guards: guardModules(GUARD, FILE_GUARD, memory) }), RECORDED_HOST.host_version)
-  // The guard's own text changed, which memory_off restates by hand, so the release differs there and nowhere else:
-  // what the guard calls gained the helper it now declares, and no part is unreadable.
-  assert.equal(run.status, 1, run.stdout)
-  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: file_mode_guard_calls, memory_off\n`)
+  // The guard's own text changed, which memory_off restates by hand, so the release differs there and nowhere else: the
+  // helper is declared inside the guard, so it is the guard's own text rather than a callee (martha#811), what the guard
+  // calls is as recorded, and no part is unreadable.
+  assertDiffers(run, MEMORY_OFF)
 })
 
 /**
  * A host that reads the switch inside a function nested in its guard (martha#564's reverse case): the guard's own
- * callees decide, so the guard is found, not the nested function that happens to hold the read.
+ * callees decide, so the guard is found, not the nested function that happens to hold the read. A function nested in
+ * the guard is the guard's own text, never one of its callees (martha#811), so the guard found calls what the recorded
+ * one calls; the nested reader taken for the guard would call nothing.
  */
 const withReadNestedInTheGuard = (memory: string): string =>
   memory.replace(`let e=${OFF_SWITCH_READ};`, `function aReader(){return ${OFF_SWITCH_READ}}let e=aReader();`)
@@ -614,7 +795,8 @@ test("a read inside a function nested in the guard is the guard's, not the neste
   const memory = withReadNestedInTheGuard(MEMORY_TEXT)
   assert.notEqual(memory, MEMORY_TEXT, 'the read is planted inside a function nested in the guard')
   const { guard_calls } = fileModeGuardCallsIn(guardModules(GUARD, FILE_GUARD, memory))
-  assert.deepEqual(Object.keys(guard_calls).sort(), [...Object.keys(FILE_GUARD.guard_calls), 'aReader'].sort())
+  assert.notDeepEqual(Object.keys(FILE_GUARD.guard_calls), [], 'the recorded guard calls something, so a guard that calls nothing is told from it')
+  assert.deepEqual(Object.keys(guard_calls).sort(), Object.keys(FILE_GUARD.guard_calls).sort())
 })
 
 // Both shapes at once (martha#564 r=2): a helper declared before a nested reader is a declaration that does not hold
@@ -624,7 +806,7 @@ test('a helper before a reader nested in the guard leaves the guard the one reco
   const memory = withHelperFirst(withReadNestedInTheGuard(MEMORY_TEXT))
   assert.notEqual(memory, withReadNestedInTheGuard(MEMORY_TEXT), 'the helper is planted before the nested reader')
   const { guard_calls } = fileModeGuardCallsIn(guardModules(GUARD, FILE_GUARD, memory))
-  assert.deepEqual(Object.keys(guard_calls).sort(), [...Object.keys(FILE_GUARD.guard_calls), 'aHelper', 'aReader'].sort())
+  assert.deepEqual(Object.keys(guard_calls).sort(), Object.keys(FILE_GUARD.guard_calls).sort())
 })
 
 // Where the walk ends (martha#564 r=2): a declaration in the module before the read's, whose braces run past the

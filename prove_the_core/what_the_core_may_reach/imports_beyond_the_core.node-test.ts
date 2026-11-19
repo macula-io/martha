@@ -51,8 +51,10 @@ test('a loader module allowed for one file is still named in any other file, and
 
 // eslint joined in martha#87: prove_the_core/read_the_manifest_and_the_linter/structure_stays_flat.node-test.ts reads the structural floor's caps
 // from eslint's resolved config and lints planted functions with them.
-test('tripwire: package.json allows exactly typescript and eslint in prove_the_core, and saxes for the SVG parse in src (martha#271); a new package is a decision, not a drift', () => {
-  assert.deepEqual(packages, { typescript: 'prove_the_core', eslint: 'prove_the_core', saxes: 'src' })
+// typescript joined the host recorder's slice in martha#811: the drift check reads the host's minified code with the
+// parser, to compare two releases under a renaming of the minifier's names.
+test('tripwire: package.json allows exactly typescript and eslint in prove_the_core, typescript in the host recorder and the two slices only it loads, and saxes for the SVG parse in src (martha#271, martha#811); a new package is a decision, not a drift', () => {
+  assert.deepEqual(packages, { typescript: ['prove_the_core', 'src/compare_two_host_recordings', 'src/follow_what_host_code_calls', 'src/record_claude_code_host'], eslint: ['prove_the_core'], saxes: ['src'] })
 })
 
 test('a planted import of a coding tool is named, with its file and line', () => {
@@ -106,7 +108,7 @@ test('an import split over lines is named, at the line it starts on', () => {
 })
 
 test('an allowed package is named outside the one folder declared for it, and only there', () => {
-  const allowed = { typescript: 'prove_the_core' }
+  const allowed = { typescript: ['prove_the_core'] }
   const planted = [
     { path: 'prove_the_core/parse.ts', text: "import ts from 'typescript'" },
     { path: 'prove_the_core/deeper/parse.ts', text: "import ts from 'typescript'" },
@@ -120,6 +122,25 @@ test('an allowed package is named outside the one folder declared for it, and on
     imports('architecture/parse.ts', 'typescript'),
     imports('prove_the_core_too/parse.ts', 'typescript'),
     imports('prove_the_core/other.ts', 'typescript/lib/tsserverlibrary'),
+  ])
+})
+
+test('a package allowed in a core slice is allowed in that slice and under it, and named in a sibling or a slice whose name starts the same (martha#811)', () => {
+  const allowed = { typescript: ['prove_the_core', 'src/record_claude_code_host'] }
+  const planted = [
+    { path: 'src/record_claude_code_host/parse.ts', text: "import ts from 'typescript'" },
+    { path: 'src/record_claude_code_host/deeper/parse.ts', text: "import ts from 'typescript'" },
+    { path: 'prove_the_core/parse.ts', text: "import ts from 'typescript'" },
+    { path: 'src/record_claude_code_host_too/parse.ts', text: "import ts from 'typescript'" },
+    { path: 'src/another_slice/parse.ts', text: "import ts from 'typescript'" },
+    { path: 'src/parse.ts', text: "import ts from 'typescript'" },
+    { path: 'src/record_claude_code_host', text: "import ts from 'typescript'" },
+  ]
+  assert.deepEqual(importsBeyondTheCore(planted, allowed), [
+    imports('src/record_claude_code_host_too/parse.ts', 'typescript'),
+    imports('src/another_slice/parse.ts', 'typescript'),
+    imports('src/parse.ts', 'typescript'),
+    imports('src/record_claude_code_host', 'typescript'),
   ])
 })
 

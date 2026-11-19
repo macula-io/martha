@@ -11,7 +11,11 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
-TESTS="${REPO}/src/record_claude_code_host/record_claude_code_host.node-test.ts"
+# The checker end to end, and the compare it rests on (martha#811): a renaming reads the same, any other change does not.
+TESTS=(
+  "${REPO}/src/record_claude_code_host/record_claude_code_host.node-test.ts"
+  "${REPO}/src/record_claude_code_host/compare_two_recordings.node-test.ts"
+)
 OUT="$(mktemp)"
 trap 'rm -f "${OUT}"' EXIT
 
@@ -22,7 +26,7 @@ cd "${REPO}"
 source "${REPO}/prove_the_relay_loads/the_runs_bounds.sh"
 
 status=0
-node --test --test-timeout="${RUN_TIMEOUT_MS}" "${FORCE_EXIT_FLAG}" "${GUARD_FLAG}" --test-reporter=spec "${TESTS}" > "${OUT}" 2>&1 || status=$?
+node --test --test-timeout="${RUN_TIMEOUT_MS}" "${FORCE_EXIT_FLAG}" "${GUARD_FLAG}" --test-reporter=spec "${TESTS[@]}" > "${OUT}" 2>&1 || status=$?
 count() { sed -nE "s/^ℹ $1 ([0-9]+)$/\1/p" "${OUT}"; }
 tests="$(count tests)"
 passed="$(count pass)"
@@ -32,4 +36,4 @@ if [[ "${status}" -ne 0 || -z "${tests}" || "${tests}" -eq 0 || "${passed}" != "
   echo "prove_the_drift_check_bites: ${passed:-?} of ${tests:-?} tests passed, ${skipped:-?} skipped" >&2
   exit 1
 fi
-echo "prove_the_drift_check_bites: all ${tests} tests of the drift check ran and passed"
+echo "prove_the_drift_check_bites: all ${tests} tests of the drift check and its compare ran and passed"
