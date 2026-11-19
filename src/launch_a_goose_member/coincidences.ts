@@ -21,4 +21,6 @@ const THE_ENGINES_OWN_CONFIG_FOLDER = "the config folder under the engine's path
 
 export const COINCIDENCES: readonly Exception[] = [
   { value: CONFIG, file: 'launch_a_goose_member/launch_a_goose_member.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
+  // The test spells the engine root's folders as the design table names them, so a reader that drops one fails it.
+  { value: CONFIG, file: 'launch_a_goose_member/the_engines_decisions.node-test.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
 ]

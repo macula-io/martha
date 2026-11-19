@@ -29,6 +29,7 @@ import type { HostFileTools } from '../host_contract/host_contract.ts'
 import type { EngineFacts, DeveloperTool } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import type { DeniedPlace } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { XDG_CONFIG_HOME_VARIABLE } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { STATE_HOME_VARIABLE } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
 import { realPathOf } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { ToolResultReading, ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
@@ -135,15 +136,14 @@ export function namesTheLaunchsRoot(input: Readonly<Record<string, unknown>>, fo
   return undefined
 }
 
-/** The variables the XDG layout reads its data and state folders from; the config one is the owner-memory slice's. */
+/** The variable the XDG layout reads its data folder from; the config and state ones are held where they were first needed. */
 export const XDG_DATA_HOME_VARIABLE = 'XDG_DATA_HOME'
-export const XDG_STATE_HOME_VARIABLE = 'XDG_STATE_HOME'
 
 /** Each layout folder the engine names, by the variable that moves it and where it is under the home without one. */
 const THE_LINUX_LAYOUT: Readonly<Record<string, { readonly variable: string; readonly under_home: readonly string[] }>> = {
   config_dir: { variable: XDG_CONFIG_HOME_VARIABLE, under_home: ['.config'] },
   data_dir: { variable: XDG_DATA_HOME_VARIABLE, under_home: ['.local', 'share'] },
-  state_dir: { variable: XDG_STATE_HOME_VARIABLE, under_home: ['.local', 'state'] },
+  state_dir: { variable: STATE_HOME_VARIABLE, under_home: ['.local', 'state'] },
 }
 
 /** The owner's own engine folders, or why they cannot be told. */

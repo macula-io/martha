@@ -19,8 +19,8 @@ import {
   theOwnersEngineFolders,
   theRootsFolders,
   XDG_DATA_HOME_VARIABLE,
-  XDG_STATE_HOME_VARIABLE,
 } from './the_engines_decisions.ts'
+import { STATE_HOME_VARIABLE } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
 import { XDG_CONFIG_HOME_VARIABLE } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 
 /** A tool this test spells, by its hints in the engine's order: read only, destructive, open world. */
@@ -150,7 +150,7 @@ test("the owner's engine folders: a layout folder under its variable only when a
       without_root: { config: { layout: 'config_dir' }, data: { layout: 'data_dir' }, state: { layout: 'state_dir' }, mine: { home: ['.mine', 'sub'] }, again: { home: ['.mine', 'sub'] } },
     },
   }
-  const env = { [XDG_CONFIG_HOME_VARIABLE]: '/xdg/conf', [XDG_DATA_HOME_VARIABLE]: 'relative/data', [XDG_STATE_HOME_VARIABLE]: '' }
+  const env = { [XDG_CONFIG_HOME_VARIABLE]: '/xdg/conf', [XDG_DATA_HOME_VARIABLE]: 'relative/data', [STATE_HOME_VARIABLE]: '' }
   const told = theOwnersEngineFolders(facts, env, '/h')
   assert.ok('folders' in told)
   assert.deepEqual(told.folders.map((folder) => folder.what), ['/xdg/conf/some-engine', '/h/.local/share/some-engine', '/h/.local/state/some-engine', '/h/.mine/sub'])
