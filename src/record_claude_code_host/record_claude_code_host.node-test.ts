@@ -16,7 +16,7 @@ import { RECORDED_HOST, recordedHostFrom } from '../claude_code_host/recorded_cl
 import { CHUNK } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { MEMORY_OFF, type Committed } from './carry_over_what_is_restated_by_hand.ts'
 import { fileModeGuardCallsIn, type GuardCalls } from './what_the_hosts_guards_call.ts'
-import { CLAUDE_MEMORY_OFF } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_MEMORY_OFF } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
@@ -186,6 +186,14 @@ const signInParts = (variable: string): string =>
     `function TNe(n=""){let e=process.env.${variable},t=e!==void 0?!e:!process.env.CLAUDE_CONFIG_DIR,r=e;return r}`,
   ].join(';')
 
+/**
+ * The switch that keeps the host's auto-updater off, as a host holds it (martha#637): the one function that asks the
+ * updater's question, the decision it asks, the check that reads the value, and the value the host's own code gives the
+ * variable in the environment it hands its children, all in one module of the bundle.
+ */
+const switchModules = (recorded = COMMITTED.auto_updater_switch): string =>
+  `\n${CHUNK}\n${recorded.guard};${recorded.decision};${recorded.check};var aChildsEnvironment={${recorded.variable}:"${recorded.off_value}"}`
+
 
 const RECORDED_PARTS: Readonly<Record<string, string>> = {
   session_start_schema: RECORDED_HOST.session_start_schema,  prompt_origin_mapper: RECORDED_HOST.prompt_origin_mapper,
@@ -206,6 +214,8 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   ...DIALOG_PARTS,
   ...REPORT_PARTS,
   sign_in_store_variable: signInParts(RECORDED_HOST.sign_in_store_variable),
+  // The switch that keeps the host's updater off, cut from the host rather than restated (martha#637).
+  auto_updater_switch: switchModules(),
   // Last, so the import of what the managed-folder guard calls is in the loader's module, before the first module of
   // its own; the memory guard restated by hand sits in a module of its own among them (martha#438).
   guards: guardModules(GUARD),
@@ -519,6 +529,50 @@ test('a host whose memory guard, on check or hosted-mode variable is not the one
 
 /** The name a recorded function declares. */
 const declaredName = (source: string): string => /^function\*? ?([\w$]+)\(/.exec(source)?.[1] ?? ''
+
+// The switch that keeps a launch from updating the owner's own install is cut from the host, not restated (martha#637),
+// so a host that reads no such switch fails the recording by name rather than leaving every launch to update itself.
+test('a host that reads no auto-updater switch fails the check naming the part (martha#637)', (t) => {
+  const { auto_updater_switch: _switch, ...without } = RECORDED_PARTS
+  for (const text of [without, { ...without, auto_updater_switch: `${COMMITTED.auto_updater_switch.guard};function aSecondOne(){return cE(Ie(process.env.ANOTHER_SWITCH))}` }]) {
+    const run = check(hostHolding(t, text), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, run.stdout)
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: auto-updater switch\n`)
+  }
+})
+
+// The value is the one the host's own code gives the variable, so a host whose code gives two cannot be told, and one
+// that gives another fails the field rather than passing on a value Martha happened to know (martha#637).
+test('a host whose own code gives the switch another value, or two, fails by the field or the part (martha#637)', (t) => {
+  const { variable, off_value: offValue } = COMMITTED.auto_updater_switch
+  const another = offValue === 'true' ? 'on' : 'true'
+  const changed = switchModules().replaceAll(`${variable}:"${offValue}"`, `${variable}:"${another}"`)
+  const two = `${changed},{${variable}:"${offValue}"}`
+  for (const [planted, expected] of [
+    [changed, 'differs: auto_updater_switch\n'],
+    [two, 'unreadable: auto-updater switch\n'],
+  ] as const) {
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, auto_updater_switch: planted }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, planted.slice(0, 40))
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\n${expected}`)
+  }
+})
+
+// The decision and the check are recorded whole, so a host that moves either toward the updater staying on differs by the
+// field the switch is recorded under, rather than passing because its own question still reads the same (martha#637).
+test('a host whose auto-updater decision or check changed fails the check naming the field (martha#637)', (t) => {
+  const { decision, check: theCheck } = COMMITTED.auto_updater_switch
+  for (const [quoted, planted] of [
+    [decision, decision.replace('{', '{;return null;')],
+    [theCheck, theCheck.replace('includes(n)', 'includes(n)&&0')],
+  ] as const) {
+    assert.notEqual(planted, quoted, 'the planted text differs')
+    const run = check(hostHolding(t, { ...RECORDED_PARTS, auto_updater_switch: switchModules().replace(quoted, planted) }), RECORDED_HOST.host_version)
+    assert.equal(run.status, 1, quoted.slice(0, 40))
+    assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\ndiffers: auto_updater_switch\n`)
+  }
+})
+
 /** The file-mode guard's recorded callee that `test` picks, by the name it declares. */
 function fileGuardCallee(pick: (source: string) => boolean, what: string): string {
   const name = declaredName(FILE_GUARD.functions.find((entry) => pick(entry.function))?.function ?? '')

@@ -13,7 +13,6 @@ import {
   fingerprintOf,
   CLAUDE_CODE_FILES,
   CLAUDE_MEMORY_ELSEWHERE,
-  CLAUDE_MEMORY_OFF,
   ENGINE_FAMILIES,
   ENGINE_FILES,
   ENGINE_FOLDER,
@@ -41,7 +40,7 @@ import { THE_PATH_A_LAUNCH_GIVES, theEnvironmentOfALaunch } from '../launch_a_go
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE_CODE, CLAUDE_FOLDER, CLAUDE_MEMORY_OFF, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { theCarriedSkills } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'

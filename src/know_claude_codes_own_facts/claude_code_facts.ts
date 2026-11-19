@@ -32,18 +32,19 @@ export const MEMORY_FOLDER_OVERRIDE = 'CLAUDE_COWORK_MEMORY_PATH_OVERRIDE'
 export const MCP_CONFIG_SWITCH = '--mcp-config'
 
 /**
- * The variable Claude Code reads to keep its own auto-updater off, and the value that does it (martha#460).
- *
- * A launch hands the host a home of its own, so the host starts with the updater's default, which is on: the owner's
- * own answer lives in the owner's `~/.claude.json`, which a run never reads. A host older than the registry's latest
- * then updates itself, and its update is `npm install --global`, which npm resolves against the NODE prefix and not
- * against HOME. So an install meant for the sandbox lands on the owner's real machine, over whichever Claude Code the
- * owner has there, and npm's own log for it names the owner's global `claude` among the paths it retires (measured on
- * the crew host: 2.1.323 updating to 2.1.325). What it leaves cannot run: the updater's own npm environment carries
- * `npm_config_ignore_scripts=true`, so the package's postinstall never copies the native binary over `bin/claude.exe`
- * and the tarball's stub is what stays.
+ * The variable Claude Code reads to keep its own auto-updater off, and the value that does it, are recorded facts now and
+ * not restated here (martha#460, martha#637): the recorder cuts both from the host's binary and a launch takes them from
+ * the recording (./the_recorded_auto_updater_switch.ts). See there for why a launch switches the updater off at all.
  */
-export const CLAUDE_AUTO_UPDATER_OFF: Readonly<Record<string, string>> = { DISABLE_AUTOUPDATER: '1' }
+
+/**
+ * The variable that turns Claude Code's auto-memory off, and the value that does it (martha#136). Turns it off in the
+ * host's own file mode: the host then loads no memory folder into a member's session and runs no memory pass of its own.
+ * Set by the launcher, so an inherited 0, which beats a settings file's off, never reaches the member (Claude Code
+ * 2.1.318 and 2.1.319, measured). It is a fact about the host rather than a launch decision, so it lives here and the
+ * recorder reads the guard by it (../record_claude_code_host/what_the_hosts_guards_call.ts, martha#637).
+ */
+export const CLAUDE_MEMORY_OFF: Readonly<Record<string, string>> = { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' }
 
 /** The folder under the owner's skills folder that Claude Code fills from their Claude account (martha#243). */
 export const SYNCED_SKILLS_FOLDER = 'synced'

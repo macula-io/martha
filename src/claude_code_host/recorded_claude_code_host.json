@@ -462,5 +462,12 @@
         }
       }
     ]
+  },
+  "auto_updater_switch": {
+    "variable": "DISABLE_AUTOUPDATER",
+    "guard": "function Fnt(){return cE(Ie(process.env.DISABLE_AUTOUPDATER))}",
+    "decision": "function cE(e){if(s.DISABLE_UPDATES)return{type:\"env\",envVar:\"DISABLE_UPDATES\"};if(e)return{type:\"env\",envVar:\"DISABLE_AUTOUPDATER\"};let r=j3e();if(r)return{type:\"env\",envVar:r};let o=ge();if(o.autoUpdates===!1&&(o.installMethod!==\"native\"||o.autoUpdatesProtectedForNative!==!0))return{type:\"config\"};return null}",
+    "check": "function Ie(e){if(!e)return!1;if(typeof e===\"boolean\")return e;let n=String(e).toLowerCase().trim();return[\"1\",\"true\",\"yes\",\"on\"].includes(n)}",
+    "off_value": "1"
   }
 }

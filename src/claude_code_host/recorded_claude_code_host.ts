@@ -20,6 +20,7 @@ import { outputStylesFieldIn, outputStylesFolderIn, type MarkdownTheHostLoads } 
 import { theSkillsLoaderHolds, type TheSkillsLoader } from '../load_the_hosts_markdown/the_skills_loader.ts'
 import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { THE_FAILED_TASK_STATUS, type ARecordedFailedAgentsReport } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
+import type { AutoUpdaterSwitch } from '../record_claude_code_host/the_auto_updater_switch.ts'
 
 export { THE_REFRESH_THE_MOD_RUNS }
 
@@ -59,6 +60,8 @@ export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlace
    * host's code (martha#412).
    */
   readonly memory_off: MemoryOff
+  /** The switch that keeps the host's own auto-updater off, cut from the binary: the variable, the value and the decision (martha#637). */
+  readonly auto_updater_switch: AutoUpdaterSwitch
   /** The host's SessionStart hook-input schema, as its binary spells it. */
   readonly session_start_schema: string
   /**
@@ -103,9 +106,7 @@ export const RECORDED_HOST: RecordedHost = recordedHostFrom(readFileSync(new URL
  */
 /** The recorded sign-in store variable, or a refusal when the recording holds none (martha#602). */
 function signInStoreVariableOf(recording: RecordedHost): string {
-  if (typeof recording.sign_in_store_variable !== 'string' || recording.sign_in_store_variable === '') {
-    throw new Error("The recording does not hold the variable the host picks its sign-in store by, so how a member reaches the owner's sign-in cannot be told (martha#602).")
-  }
+  if (typeof recording.sign_in_store_variable !== 'string' || recording.sign_in_store_variable === '') throw new Error("The recording does not hold the variable the host picks its sign-in store by, so how a member reaches the owner's sign-in cannot be told (martha#602).")
   return recording.sign_in_store_variable
 }
 

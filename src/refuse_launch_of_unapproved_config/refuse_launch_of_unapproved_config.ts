@@ -56,15 +56,16 @@ import { checkoutTheGateReads, readCheckoutTree, realOrResolved, type LaunchHost
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import {
-  CLAUDE_AUTO_UPDATER_OFF,
   CLAUDE_CODE,
   CLAUDE_FOLDER,
+  CLAUDE_MEMORY_OFF,
   CLAUDE_SKILLS,
   CLAUDE_SKILLS_ELSEWHERE,
   MCP_CONFIG_SWITCH,
   MEMORY_FOLDER_OVERRIDE,
   REMOTE_MEMORY_ROOT,
 } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE_AUTO_UPDATER_OFF } from '../know_claude_codes_own_facts/the_recorded_auto_updater_switch.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { aSkillWithAReservedName, isBelowACarriedFolder } from './carry_the_approved_skills.ts'
 
@@ -281,14 +282,6 @@ const OPENCODE_AUTO_UPDATER_OFF: Readonly<Record<string, string>> = { OPENCODE_D
  * what a server is, whatever the approved config says (martha#65 r=3).
  */
 const CLAUDE_COMMAND_ELSEWHERE = ['CLAUDE_CODE_SHELL_PREFIX'] as const
-
-/**
- * Turns Claude Code's auto-memory off: the host then loads no memory folder into
- * a member's session and runs no memory pass of its own in file mode. Set by the
- * launcher, so an inherited 0, which beats a settings file's off, never reaches
- * the member (martha#136; Claude Code 2.1.318 and 2.1.319, measured).
- */
-export const CLAUDE_MEMORY_OFF: Readonly<Record<string, string>> = { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' }
 
 /**
  * Each moves Claude Code's memory, or writes it on a path the off switch does

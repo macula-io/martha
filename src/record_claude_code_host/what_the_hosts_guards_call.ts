@@ -30,8 +30,7 @@
 import { closingBrace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { loaderIn } from '../load_the_hosts_markdown/markdown_the_host_loads.ts'
 import { CHUNK } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
-import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { CLAUDE_MEMORY_OFF } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { CLAUDE_FOLDER, CLAUDE_MEMORY_OFF } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** One function the guard reaches, whole, and the entry each name it calls binds to. */
 export interface GuardFunction {
@@ -205,4 +204,20 @@ export function fileModeGuardCallsIn(text: string): GuardCalls {
   const bundle = bundleOf(text)
   const { at, source } = fileModeGuardIn(text)
   return callsReachedFrom(bundle, moduleAt(bundle, at, FILE_MODE_GUARD), callsIn(source.slice(source.indexOf('('))), FILE_MODE_GUARD)
+}
+
+/**
+ * The one function `name` binds to from the module holding `at`, whole, followed through the bundle's imports, by the
+ * name a failed read reports (martha#637).
+ *
+ * The switch that keeps the host's auto-updater off is read from the function the host asks by its shape rather than by
+ * a name, so the two functions that question reaches are named from there and taken whole: a host that changes which
+ * source says off, or which values it reads as off, differs from the recording by the field they are recorded under.
+ * A name bound any other way is not followed, as for the guards above.
+ */
+export function theFunctionCalledFromIn(text: string, at: number, name: string, what: string): string {
+  const bundle = bundleOf(text)
+  const binding = bindingOf(bundle, moduleAt(bundle, at, what), name, what)
+  if (binding === undefined) throw new Error(`The host names ${name} at a place the ${what} calls, and no module of it declares that name, so what the ${what} decides cannot be told.`)
+  return binding.source
 }

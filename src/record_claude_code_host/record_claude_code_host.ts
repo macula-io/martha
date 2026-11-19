@@ -36,6 +36,7 @@ import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managed
 import { failedAgentsReportIn } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 import { CARRIED, MEMORY_OFF, memoryOffHoldsOf, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 import { fileModeGuardCallsIn, managedFolderGuardCallsIn } from './what_the_hosts_guards_call.ts'
+import { autoUpdaterSwitchIn } from './the_auto_updater_switch.ts'
 
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
 const VERSION = /^\d+\.\d+\.\d+$/
@@ -55,6 +56,7 @@ const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string
   { part: 'file permission rules', read: (text) => ({ file_permission_rules: filePermissionRulesIn(text) }) },
   { part: "a failed agent's report", read: (text) => ({ failed_agents_report: failedAgentsReportIn(text) }) },
   { part: 'file-mode memory guard', read: (text) => ({ file_mode_guard_calls: fileModeGuardCallsIn(text) }) },
+  { part: 'auto-updater switch', read: autoUpdaterSwitchIn },
 ]
 
 /** The markdown the host loads, and what its loader's managed-folder guard calls (martha#146, martha#412). */
