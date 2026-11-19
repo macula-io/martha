@@ -1073,6 +1073,10 @@ test("the gate's hint file names are the ones the engine's recording holds on di
   assert.equal(ENGINE_HINTS_FILE, onDisk.goose_hints, "the engine's hints file is not the recording's")
   assert.equal(AGENTS_MD_FILE, onDisk.agents_md, "the engine's instruction file is not the recording's")
   assert.deepEqual(RECORDED_TEXT_FILES, onDisk.when_unset, 'the files a launch records are not the list the engine loads when no setting replaces it')
+  // At the pin that list holds exactly the two names, so a list built by hand from them, `[ENGINE_HINTS_FILE,
+  // AGENTS_MD_FILE]`, is equal to it and the comparison above cannot tell. It is the recording's own list, not a copy:
+  // an engine that adds a file, drops one or changes their order changes the launch's list with it.
+  assert.equal(RECORDED_TEXT_FILES, RECORDED_GOOSE_ENGINE.hint_files.when_unset, 'the files a launch records are a list built by hand, not the one the engine loads when no setting replaces it')
 })
 
 /** The code lines of a source file with their numbers, its comment lines left out: what runs, not what explains it. */
