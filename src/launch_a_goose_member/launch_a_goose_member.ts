@@ -8,8 +8,12 @@
 // (`$HOME`): skills, recipes, user plugin settings and agent sources. So a launch writes both, per
 // launch, and the owner's home is never read. Inside the root it writes the config the engine loads: the
 // provider and the model the member's model declaration names, the mode that brings every tool call to
-// Martha, slash commands off, and one switch per platform extension the pinned build declares, every one
-// of them off but the one a member keeps.
+// Martha, slash commands off, one switch per platform extension the pinned build declares, every one
+// of them off but the one a member keeps, and the crew's own tool server, the one server the root names
+// (../serve_the_crews_tools_to_an_engine, martha#541 part C, C1). Summon stays off with the rest, so no
+// delegate runs: a delegate call naming its own source or provider, and the model a delegated run reports,
+// have nothing to reach (package 6, Neptunus's scope items 2 and 3). Turning Summon on reopens both, as a
+// package of their own, before any member runs a delegate.
 //
 // Everything written here is read from the recording (`../know_the_goose_engines_facts`, package 10):
 // the variable that moves the root, the mode's setting and the values it takes, the slash-commands
@@ -46,14 +50,11 @@
 // `reject_always`, and a later call then skips the client, so a launch that ends with anything saved is a
 // launch Martha did not gate. A store in a shape this launcher does not know is not read as an empty one.
 //
-// Three gaps are named here rather than closed, and none is silent:
+// Two gaps are named here rather than closed, and neither is silent:
 //   - Skills. On the pinned build `load_skill` is offered to every session and is not a platform
 //     extension, so no switch in this config root reaches it (trial line 9 failed on exactly this).
 //     Saturnus's port of the fork's skills switch (#614) closes it, and until it lands a session is
 //     offered one tool beyond the allow-list, which Martha still gates as a tool call like any other.
-//   - The member's own tool servers. The design puts them in this config root too, but the shape of an
-//     entry is the engine's own and is not in the recording yet, so the launcher writes the built-in
-//     switches only and writes no server until the package that installs one for Goose records it.
 //   - The mode a session reports back. The launcher pins the mode that asks in the config root, but the
 //     engine also reports the mode a session actually runs in, over ACP, and there is no client here to
 //     ask it: a session that reports any other mode must be refused when the client that opens it (part
@@ -68,6 +69,8 @@ import { getuid } from 'node:process'
 import { killGroup } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import type { RecordedEngine } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { theToolServersEntry, type TheToolServersEntry } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts'
+import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 
 /** The one platform extension a member's model is offered: Developer, whose shell and file edits are gated. */
 export const THE_EXTENSION_A_MEMBER_KEEPS = 'developer'
@@ -182,16 +185,20 @@ export function theEnvironmentOfALaunch(facts: RecordedEngine, places: ThePlaces
 
 /**
  * The config root's text for one launch: the provider, the model, the provider's own settings, the mode
- * that asks the client, slash commands off, and one switch for every platform extension the pinned build
- * declares. Throws when the recording does not name the mode or the extension a member keeps, because a
- * config naming a mode the engine does not know runs every call with nothing asking.
+ * that asks the client, slash commands off, one switch for every platform extension the pinned build
+ * declares, and the crew's tool server, switched on. Throws when the recording does not name the mode or
+ * the extension a member keeps, because a config naming a mode the engine does not know runs every call
+ * with nothing asking, and when the server's key is a platform extension's, which would switch that one.
  */
-export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunchRuns): string {
+export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunchRuns, server: TheToolServersEntry): string {
   if (!facts.mode.values.includes(THE_MODE_THAT_ASKS_THE_CLIENT)) {
     throw new Error(`the recorded engine names no mode ${THE_MODE_THAT_ASKS_THE_CLIENT}, so a launch cannot pin it to one that asks`)
   }
   if (!facts.platform_extensions.some((extension) => extension.key === THE_EXTENSION_A_MEMBER_KEEPS)) {
     throw new Error(`the recorded engine names no platform extension ${THE_EXTENSION_A_MEMBER_KEEPS}, so a launch cannot keep one`)
+  }
+  if (facts.platform_extensions.some((extension) => extension.key === THE_CREWS_TOOL_SERVER)) {
+    throw new Error(`the crew's tool server is keyed ${THE_CREWS_TOOL_SERVER}, which is a platform extension's key in the recorded engine`)
   }
   const switches = facts.platform_extensions.flatMap((extension) => [
     aLine(`  ${extension.key}`, ''),
@@ -217,6 +224,9 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
     ...Object.entries(model.settings).map(([setting, value]) => aLine(setting, value)),
     aLine(THE_EXTENSIONS_SETTING, ''),
     ...switches,
+    aLine(`  ${THE_CREWS_TOOL_SERVER}`, ''),
+    aLine('    enabled', true),
+    ...server.flatMap(([key, value]) => theEntrysLines(`    ${key}`, value)),
     '',
   ].join('\n')
 }
@@ -231,12 +241,25 @@ function theEnginesOwnPrefix(facts: RecordedEngine): string {
 }
 
 /** One line of the config: a key and its value, a string quoted so no character of it starts a new one. */
-function aLine(key: string, value: string | boolean): string {
+function aLine(key: string, value: string | boolean | number): string {
   if (!A_WORD_OF_A_KEY.test(key.trim())) throw new Error(`a config key ${JSON.stringify(key)} is not a word, and no key may carry a line of its own`)
-  if (typeof value === 'boolean') return `${key}: ${String(value)}`
-  if (/[\n\r]/.test(value)) throw new Error(`a value written to the config root holds a line break, which no config key may carry`)
+  if (typeof value !== 'string') return `${key}: ${String(value)}`
   if (value === '') return `${key}:`
-  return `${key}: "${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+  return `${key}: ${quoted(value)}`
+}
+
+/** A string as the config writes it: quoted, so no character of it starts a new line or ends the value. */
+function quoted(value: string): string {
+  if (/[\n\r]/.test(value)) throw new Error(`a value written to the config root holds a line break, which no config key may carry`)
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+/** The lines of one key of the server's entry: a value on its own line, a list as items, a mapping as keys under it. */
+function theEntrysLines(key: string, value: TheToolServersEntry[number][1]): string[] {
+  if (typeof value === 'string' || typeof value === 'number') return [aLine(key, value)]
+  const under = `${' '.repeat(key.length - key.trimStart().length)}  `
+  if (Array.isArray(value)) return [aLine(key, ''), ...(value as readonly string[]).map((item) => `${under}- ${quoted(item)}`)]
+  return [aLine(key, ''), ...Object.entries(value).map(([name, text]) => aLine(`${under}${name}`, text))]
 }
 
 /** A launch's engine, as it runs: the group it leads, the way it is ended, and how its end is known. */
@@ -400,6 +423,8 @@ export interface AGooseLaunchAsked {
   /** The approved checkout the member works in, and the engine's working directory. */
   readonly checkout: string
   readonly model: TheModelALaunchRuns
+  /** The relay socket the crew's tool server posts to, and the token it carries: the launch's own, minted for it. */
+  readonly tool_server: { readonly socket_path: string; readonly token: string }
 }
 
 /**
@@ -424,7 +449,8 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
 
   let config: string
   try {
-    config = theConfigOfALaunch(asked.facts, asked.model)
+    const server = theToolServersEntry(asked.facts.stdio_extension, { ...asked.tool_server, checkout: asked.checkout })
+    config = theConfigOfALaunch(asked.facts, asked.model, server)
   } catch (error) {
     return leaveNothingBehind(error instanceof Error ? error.message : String(error))
   }

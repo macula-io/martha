@@ -238,6 +238,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: "one Goose member's launch: its own root and home, the config root it writes, the engine in a process group of its own, and the permission store checked empty when the launch ends (martha#541 packages 7-8); nothing loads it until the one start call picks a member's host, and its tests do today",
   },
   {
+    name: 'serve_the_crews_tools_to_an_engine',
+    why: "the crew's tool server for a Goose member: an MCP server on stdio over the crew's tools, each call answered by the launcher on the launch's relay socket with the launch's own token (martha#541 packages 7-8, part C); a Goose launch writes its entry, the engine starts it, and nothing loads it until the one start call picks a member's host",
+  },
+  {
     name: 'stand_in_for_an_acp_agent',
     why: 'an ACP agent on stdio answered from a script, offering the recorded Goose engine\'s permission answers, for the tests of speak_acp_to_an_agent (martha#541); tests and npm run stand-in:acp-agent load it, and no member ever does',
   },
