@@ -1,5 +1,5 @@
 // The structural floor bites (martha#87). eslint.config.mjs names the caps once: how deep a function may nest,
-// how many ways it may branch, how many lines it may run. This reads them back from eslint's own resolved config
+// how many ways it may branch, how many lines it may run, how many lines a source file may hold. This reads them back from eslint's own resolved config
 // for a source file, never restating a number, and plants a function at each cap and one step over it. The one
 // at the cap passes; the one over fails, naming its rule. A function over a cap with an eslint-disable comment
 // still fails: the floor has no exception carried in the code. CI runs the floor over the whole tree
@@ -19,6 +19,9 @@ const PLANTED = 'src/planted_by_the_floor_test/planted.ts'
 const DEPTH = 'max-depth'
 const COMPLEXITY = 'complexity'
 const LENGTH = 'max-lines-per-function'
+const FILE_LENGTH = 'max-lines'
+// A test file's path beside the planted source: the file cap does not hold a test file.
+const PLANTED_TEST = 'src/planted_by_the_floor_test/planted.node-test.ts'
 const ERROR = 2
 
 interface Cap {
@@ -39,11 +42,11 @@ const capOf = (rules: Partial<Linter.RulesRecord>, rule: string): Cap => {
 const capsOf = async () => {
   const config = (await eslint.calculateConfigForFile(join(repository, PLANTED))) as Linter.Config
   const rules = config.rules ?? {}
-  return { depth: capOf(rules, DEPTH), complexity: capOf(rules, COMPLEXITY), length: capOf(rules, LENGTH) }
+  return { depth: capOf(rules, DEPTH), complexity: capOf(rules, COMPLEXITY), length: capOf(rules, LENGTH), file: capOf(rules, FILE_LENGTH) }
 }
 
-const rulesBrokenBy = async (code: string): Promise<string[]> => {
-  const [result] = await eslint.lintText(code, { filePath: join(repository, PLANTED) })
+const rulesBrokenBy = async (code: string, planted: string = PLANTED): Promise<string[]> => {
+  const [result] = await eslint.lintText(code, { filePath: join(repository, planted) })
   return result!.messages.filter((message) => message.severity === ERROR).map((message) => message.ruleId ?? message.message)
 }
 
@@ -82,6 +85,16 @@ test('a function one line past the length cap fails by name; one at the cap pass
   const { length } = await capsOf()
   assert.deepEqual(await rulesBrokenBy(long(length.max)), [])
   assert.deepEqual(await rulesBrokenBy(long(length.max + 1)), [LENGTH])
+})
+
+// A file `lines` lines long, every one a statement of its own, ending in a newline as `wc -l` counts it.
+const aFileOf = (lines: number) => Array.from({ length: lines }, (_, at) => `export const line${String(at)} = ${String(at)}\n`).join('')
+
+test('a source file one line past the file cap fails by name; one at the cap passes; a test file is not held to it', async () => {
+  const { file } = await capsOf()
+  assert.deepEqual(await rulesBrokenBy(aFileOf(file.max)), [])
+  assert.deepEqual(await rulesBrokenBy(aFileOf(file.max + 1)), [FILE_LENGTH])
+  assert.deepEqual(await rulesBrokenBy(aFileOf(file.max + 1), PLANTED_TEST), [])
 })
 
 test('an eslint-disable comment does not lift a cap: the floor has no exception in the code', async () => {
