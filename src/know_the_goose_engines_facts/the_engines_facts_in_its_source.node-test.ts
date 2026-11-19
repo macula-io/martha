@@ -88,3 +88,34 @@ test("a delegate tool's model that is neither a list nor a string is unreadable,
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.delegate_tool]: typed }))
   assert.deepEqual(unreadable.map(({ part }) => part), [ENGINE_PARTS.find(({ read }) => 'subagent_models' in read(anEngineSourceSaying(files)))?.part])
 })
+
+/** The part that reads the stdio entry, by the name a failed read reports. */
+const STDIO_PART = ENGINE_PARTS.find(({ read }) => 'stdio_extension' in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS))))?.part
+
+test("a field the stdio entry gains is read into its keys, and the next variant's fields are not", () => {
+  const stdio = RECORDED_FACTS.stdio_extension
+  const keys = [...stdio.keys, 'a_new_field']
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, stdio_extension: { ...stdio, keys } })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.stdio_extension?.keys, keys)
+})
+
+test('a dropped environment name in a shape the reader does not know makes the entry unreadable, never a shorter list', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const [first] = RECORDED_FACTS.stdio_extension.disallowed_env
+  assert.ok(first !== undefined, 'the recording names no dropped environment name')
+  const config = files[ENGINE_PLACES.stdio_extension] ?? ''
+  const unquoted = config.replace(`"${first}",`, 'A_CONSTANT_NAME,')
+  assert.notEqual(unquoted, config, 'the built tree holds no quoted name to unquote')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.stdio_extension]: unquoted }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [STDIO_PART])
+})
+
+test('an extension config with no stdio variant is unreadable, never an entry with no keys', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const config = files[ENGINE_PLACES.stdio_extension] ?? ''
+  const renamed = config.replace(/\bStdio \{/, 'Pipe {')
+  assert.notEqual(renamed, config, 'the built tree holds no stdio variant to rename')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.stdio_extension]: renamed }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [STDIO_PART])
+})

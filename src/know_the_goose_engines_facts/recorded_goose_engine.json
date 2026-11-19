@@ -115,5 +115,55 @@
   "subagent_models": {
     "kind": "any_name",
     "names": []
-  }
+  },
+  "stdio_extension": {
+    "tag": "type",
+    "type": "stdio",
+    "keys": [
+      "name",
+      "description",
+      "cmd",
+      "args",
+      "envs",
+      "env_keys",
+      "timeout",
+      "cwd",
+      "bundled",
+      "available_tools"
+    ],
+    "disallowed_env": [
+      "PATH",
+      "PATHEXT",
+      "SystemRoot",
+      "windir",
+      "LD_LIBRARY_PATH",
+      "LD_PRELOAD",
+      "LD_AUDIT",
+      "LD_DEBUG",
+      "LD_BIND_NOW",
+      "LD_ASSUME_KERNEL",
+      "DYLD_LIBRARY_PATH",
+      "DYLD_INSERT_LIBRARIES",
+      "DYLD_FRAMEWORK_PATH",
+      "PYTHONPATH",
+      "PYTHONHOME",
+      "NODE_OPTIONS",
+      "RUBYOPT",
+      "GEM_PATH",
+      "GEM_HOME",
+      "CLASSPATH",
+      "GO111MODULE",
+      "GOROOT",
+      "APPINIT_DLLS",
+      "SESSIONNAME",
+      "ComSpec",
+      "TEMP",
+      "TMP",
+      "LOCALAPPDATA",
+      "USERPROFILE",
+      "HOMEDRIVE",
+      "HOMEPATH"
+    ]
+  },
+  "tool_call_session_key": "agent-session-id"
 }

@@ -3,7 +3,8 @@
 // This exists so a member can work in Goose with nothing about the engine typed by hand: the launcher writes the
 // engine's config root from these facts (which extension keys to switch off, which mode to pin, which variable moves
 // the config root), the adapter answers permission requests from the kinds the engine offers, and the model stand-in
-// listens on the path the engine's OpenAI provider posts to. Each fact is read from the place in the engine's source
+// listens on the path the engine's OpenAI provider posts to. The crew's tool server is written into the config root
+// as the engine's own stdio entry, and answers each call in the session the engine names in the call's meta. Each fact is read from the place in the engine's source
 // that decides it, so a change there is a difference the drift check names, never a launch that quietly trusts an
 // old list.
 //
@@ -48,6 +49,22 @@ export interface EngineFacts {
   readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string }
   /** The model names the delegate tool takes: closed when its schema lists them, open when it takes any text (#541 package 6). */
   readonly subagent_models: ModelVocabulary
+  /** The entry a config's `extensions` holds to start a tool server on stdio (#541 part C, C1). */
+  readonly stdio_extension: StdioExtension
+  /** The key of a tool call's `_meta` the engine names the calling session under, so a tool server answers in that session. */
+  readonly tool_call_session_key: string
+}
+
+/**
+ * How the engine reads an entry that starts a tool server on stdio: the key its variant is tagged by and the value that
+ * picks this variant, every key the variant reads, and the environment names the engine drops from the entry's `envs`
+ * with only a warning, so a variable the launcher needs the server to see is never one the engine silently removes.
+ */
+export interface StdioExtension {
+  readonly tag: string
+  readonly type: string
+  readonly keys: readonly string[]
+  readonly disallowed_env: readonly string[]
 }
 
 /** Reads one checkout of the engine: a file's text, or undefined when there is none; a directory's entries, or []. */
@@ -69,6 +86,8 @@ export const ENGINE_PLACES = {
   acp_server: 'crates/goose/src/acp/server.rs',
   openai_provider: 'crates/goose-providers/src/openai.rs',
   delegate_tool: 'crates/goose/src/agents/platform_extensions/summon.rs',
+  stdio_extension: 'crates/goose-agent/src/extension.rs',
+  session_context: 'crates/goose/src/session_context.rs',
 } as const
 
 /** The crate root the platform extension map's `crate::` paths start from. */
@@ -87,6 +106,8 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'permission options', read: (source) => ({ permission_options: permissionOptionsIn(source) }) },
   { part: 'openai provider', read: (source) => ({ openai_provider: openaiProviderIn(source) }) },
   { part: 'subagent models', read: (source) => ({ subagent_models: subagentModelsIn(source) }) },
+  { part: 'stdio extension', read: (source) => ({ stdio_extension: stdioExtensionIn(source) }) },
+  { part: 'tool call session key', read: (source) => ({ tool_call_session_key: toolCallSessionKeyIn(source) }) },
 ]
 
 /** A file the part needs, or a throw that names it. */
@@ -218,6 +239,36 @@ function subagentModelsIn(source: EngineSource): ModelVocabulary {
   if (listed !== undefined) return vocabularyOf(CLOSED_VOCABULARY, [...listed.matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? ''))
   if (/"type":\s*"string"/.test(model)) return vocabularyOf(OPEN_VOCABULARY, [])
   throw new Error(`${path} gives the delegate tool's model neither a list nor a string`)
+}
+
+/** Rust text with its attributes and line comments taken out: what is left of a field is its name and its type. */
+const withoutAttributesOrComments = (text: string): string => text.replace(/#\[[^\]]*\]/g, '').replace(/\/\/[^\n]*/g, '')
+
+/**
+ * The stdio variant of the engine's extension config: the serde tag of the enum, the name the variant is renamed to on
+ * the wire, the field names it reads, and the list of environment names `Envs` drops. The list's declared length is
+ * held against the names read, so a name in a shape this reader misses is unreadable, never a shorter list.
+ */
+function stdioExtensionIn(source: EngineSource): StdioExtension {
+  const path = ENGINE_PLACES.stdio_extension
+  const text = fileOf(source, path)
+  const tag = captured(text, /#\[serde\(tag = "([^"]+)"\)\]\s*pub enum ExtensionConfig\b/, 'the tag of the extension config', path)
+  const variant = /#\[serde\(rename = "([^"]+)"\)\]\s*Stdio\s*\{([\s\S]*?)\n {4}\},/.exec(text)
+  if (variant?.[1] === undefined || variant[2] === undefined) throw new Error(`${path} says nothing of the stdio variant`)
+  const keys = [...withoutAttributesOrComments(variant[2]).matchAll(/^\s*(\w+)\s*:/gm)].map((found) => found[1] ?? '')
+  if (keys.length === 0) throw new Error(`${path} gives the stdio variant no field`)
+  const listed = /const DISALLOWED_KEYS: \[&'static str; (\d+)\] = \[([\s\S]*?)\];/.exec(text)
+  if (listed?.[1] === undefined || listed[2] === undefined) throw new Error(`${path} says nothing of the disallowed environment names`)
+  const disallowed_env = [...withoutAttributesOrComments(listed[2]).matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? '')
+  if (disallowed_env.length !== Number(listed[1])) {
+    throw new Error(`${path} declares ${listed[1]} disallowed environment names and ${String(disallowed_env.length)} are in a shape this reader knows`)
+  }
+  return { tag, type: variant[1], keys, disallowed_env }
+}
+
+function toolCallSessionKeyIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.session_context
+  return captured(fileOf(source, path), /pub const SESSION_ID_HEADER: &str = "([^"]+)"/, "the session key of a tool call's meta", path)
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */
