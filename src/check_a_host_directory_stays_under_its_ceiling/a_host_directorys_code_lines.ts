@@ -14,7 +14,7 @@
 // prove_the_core/read_a_source/the_code_lines_of_a_source.ts), so commentary and blank lines
 // carry none either.
 
-import { readFileSync, readdirSync, type Dirent } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { codeLinesOf } from '../../prove_the_core/read_a_source/the_code_lines_of_a_source.ts'
@@ -30,10 +30,14 @@ export const isATestFile = (name: string): boolean => TEST_FILE.test(name)
 /** Whether a file spends no budget: a test, or a slice's coincidence declarations (martha#522). */
 const countsForNothing = (name: string): boolean => isATestFile(name) || isACoincidenceFile(name)
 
-/** The lines of code in `entries`, counting every file the linter reads as code except a test file and a coincidence file. */
-async function codeLinesOfEntries(entries: readonly Dirent[], lints: Lints): Promise<number> {
+/**
+ * The lines of code under `directory`, which is named relative to `repository`,
+ * counting every file the linter reads as code except a test file and a
+ * coincidence file.
+ */
+export async function codeLinesOfDirectory(repository: string, directory: string, lints: Lints): Promise<number> {
   let code = 0
-  for (const entry of entries) {
+  for (const entry of readdirSync(join(repository, directory), { recursive: true, withFileTypes: true })) {
     if (!entry.isFile() || countsForNothing(entry.name)) continue
     const path = join(entry.parentPath, entry.name)
     if (!(await lints(path))) continue
@@ -41,11 +45,3 @@ async function codeLinesOfEntries(entries: readonly Dirent[], lints: Lints): Pro
   }
   return code
 }
-
-/** The lines of code under `directory`, which is named relative to `repository`, at any depth. */
-export const codeLinesOfDirectory = (repository: string, directory: string, lints: Lints): Promise<number> =>
-  codeLinesOfEntries(readdirSync(join(repository, directory), { recursive: true, withFileTypes: true }), lints)
-
-/** The lines of code in the files that sit directly in `directory`, none of its folders' (martha#736). */
-export const codeLinesDirectlyIn = (repository: string, directory: string, lints: Lints): Promise<number> =>
-  codeLinesOfEntries(readdirSync(join(repository, directory), { withFileTypes: true }), lints)

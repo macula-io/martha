@@ -3,8 +3,7 @@
 // One path through the check, used by the command CI runs and by the tests that
 // plant trees: the manifest's two lists, each directory's code lines, and the
 // findings; and every core slice under src, its code lines, and what those fail
-// on against the cap (martha#415); and every unit outside src, held to the same cap with no ceiling to excuse it
-// (martha#736). A test that judged by another path would prove
+// on against the cap (martha#415). A test that judged by another path would prove
 // nothing about the run that gates a change.
 
 import { existsSync, readdirSync } from 'node:fs'
@@ -12,14 +11,12 @@ import { join } from 'node:path'
 
 import { CORE, manifestTextOf, type Manifest } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import { keysDeclaredTwice } from '../../prove_the_core/read_the_manifest_and_the_linter/keys_declared_twice.ts'
-import { ceilingExclusionsOf, ceilingsOf, sliceCapOf, sliceCeilingsOf } from '../../prove_the_core/read_the_manifest_and_the_linter/the_host_ceilings.ts'
+import { ceilingsOf, sliceCapOf, sliceCeilingsOf } from '../../prove_the_core/read_the_manifest_and_the_linter/the_host_ceilings.ts'
 import { theLinterLints } from '../../prove_the_core/read_the_manifest_and_the_linter/the_linter_lints_it.ts'
 import { codeLinesOfDirectory } from './a_host_directorys_code_lines.ts'
 import { findingsOf, type Finding } from './check_a_host_directory_stays_under_its_ceiling.ts'
 import { declaredDirectoriesOf, type DeclaredDirectory } from './declared_host_directories.ts'
 import { coreSlicesAmong, sliceFindingsOf, type SliceFinding } from './the_core_slices_under_the_cap.ts'
-import { theTopLevelFolders, theTopLevelUnits } from './the_top_level_units.ts'
-import { theCoreCeilingsOf, topLevelFindingsOf, type TheTopLevel, type TopLevelFinding } from './the_top_level_units_under_the_cap.ts'
 
 /** A tree, measured, and what it fails on. */
 export interface Judged {
@@ -30,9 +27,6 @@ export interface Judged {
   /** Each core slice's code lines, by directory (martha#415). */
   readonly slices: Readonly<Record<string, number>>
   readonly slice_findings: readonly SliceFinding[]
-  /** Each unit outside src, its code lines, and the folders and exclusions they were read under (martha#736). */
-  readonly top_level: TheTopLevel
-  readonly top_level_findings: readonly TopLevelFinding[]
 }
 
 /** Every directory directly under the tree's src, named as package.json names a directory: `src/<name>`. A tree with no
@@ -53,14 +47,6 @@ export async function countsOnDisk(repository: string, directories: readonly str
   return code
 }
 
-/** The units outside src, measured: every top-level folder of code but the ones martha.ceilingExclusions names. */
-async function theTopLevelOf(repository: string, manifest: Manifest): Promise<TheTopLevel> {
-  const exclusions = ceilingExclusionsOf(manifest)
-  const folders = theTopLevelFolders(repository)
-  const judged = folders.filter((folder) => exclusions[folder] === undefined)
-  return { units: await theTopLevelUnits(repository, judged, theLinterLints(repository)), folders, exclusions }
-}
-
 /** The tree under `repository`, measured and judged. */
 export async function judgeTheTree(repository: string): Promise<Judged> {
   // The text is read once and judged twice: parsed, and as written, where a key declared twice still shows (martha#753).
@@ -73,15 +59,12 @@ export async function judgeTheTree(repository: string): Promise<Judged> {
     declared.map((entry) => entry.directory),
   )
   const slices = await countsOnDisk(repository, coreSlicesAmong(theDirectoriesUnderTheCore(repository), manifest))
-  const top_level = await theTopLevelOf(repository, manifest)
   return {
     manifest,
     declared,
     code,
     findings: [...twice, ...findingsOf(declared, ceilingsOf(manifest), code)],
     slices,
-    slice_findings: sliceFindingsOf(sliceCapOf(manifest), theCoreCeilingsOf(sliceCeilingsOf(manifest)), slices),
-    top_level,
-    top_level_findings: topLevelFindingsOf(sliceCapOf(manifest), sliceCeilingsOf(manifest), top_level),
+    slice_findings: sliceFindingsOf(sliceCapOf(manifest), sliceCeilingsOf(manifest), slices),
   }
 }
