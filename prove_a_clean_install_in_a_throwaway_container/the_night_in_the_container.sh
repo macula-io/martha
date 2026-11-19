@@ -1098,8 +1098,9 @@ case "${words}" in
       echo read >> "${standin}/night.rows-reads"
     fi
     # A case whose night.opening-late exists stands for a builder whose transcript does not hold the typed package yet
-    # the first time the night reads it: that read leaves the opening out.
-    if [ -f "${standin}/night.opening-late" ] && [[ "${words}" == *"/snapshots/'launch-b'/"* ]] && [ ! -f "${standin}/night.opening-read" ]; then
+    # the first time the night reads it: that read leaves the opening out. With night.opening-never, every read does.
+    if [[ "${words}" == *"/snapshots/'launch-b'/"* ]] \
+      && { [ -f "${standin}/night.opening-never" ] || { [ -f "${standin}/night.opening-late" ] && [ ! -f "${standin}/night.opening-read" ]; }; }; then
       : > "${standin}/night.opening-read"
       sh -c "$(printf '%s' "${@: -1}" | in_home)" | grep -vF 'Take the package' | sed "s#${standin}/home#${home}#g"
       exit 0
@@ -1406,6 +1407,18 @@ night_self_test() {
   [ -f "${standin}/night.opening-read" ] || nfail 'the night never read a builder transcript without the opening'
   if grep -q '^FAIL night ask: ' "${standin}/out"; then nfail 'a builder transcript without the opening yet failed the ask'; fi
 
+  # No launch ever holds the package's opening within the work window: the builder never asked, named as a crew that
+  # queued no ask, never as rows that could not be read.
+  standin="${root}/night-opening-never"; night_case "${standin}" member.trust
+  : > "${standin}/night.opening-never"
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  [ -f "${standin}/night.opening-read" ] || nfail 'the night never read a builder transcript without the opening'
+  asked_for '^FAIL night ask: the crew queued no ask of the owner for the landing within ' "${standin}/out" \
+    || nfail 'a builder transcript that never held the opening was not named as a crew that queued no ask'
+  if grep -q "^FAIL night ask: the crew's rows could not be read" "${standin}/out"; then
+    nfail 'a builder transcript that never held the opening was read as rows that could not be read'
+  fi
+
   # The crew queues no ask: named, and the owner's second command never printed.
   standin="${root}/night-no-ask"; night_case "${standin}" night.no-ask
   night_expect 1 "${standin}" || failures=$((failures + 1))
@@ -1539,7 +1552,7 @@ night_self_test() {
   # --night with no run folder is refused with the arguments.
   expect_status 2 "${root}" 'a-host' --night || failures=$((failures + 1))
 
-  for standin in night-ready night-opening-late night-no-watch night-no-ring night-no-yes night-no-ask night-container-goes night-slow-rows night-other-ask night-three-launches night-yes-before-attach night-head-moves night-token-kept night-token-in-log night-no-handoff night-not-on-main night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
+  for standin in night-ready night-opening-late night-opening-never night-no-watch night-no-ring night-no-yes night-no-ask night-container-goes night-slow-rows night-other-ask night-three-launches night-yes-before-attach night-head-moves night-token-kept night-token-in-log night-no-handoff night-not-on-main night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
     if [ -e "${root}/${standin}/container.present" ]; then nfail "the ${standin} run left its container behind"; fi
   done
   return $((failures > 0))
