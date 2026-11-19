@@ -39,33 +39,52 @@ export function promptOver(acp: GooseOverAcp, sessionId: string, text: string, c
  * left (PR 733 A1): a model slower than what is left still gets all of it, and a turn the launch's end cuts says
  * so with the arithmetic and reads as not-observed, so it is launched again. Only a turn that starts with nothing
  * left is refused outright. Without a cap the turn waits for the launch's own bound.
+ *
+ * An answer renews a turn's bound but never narrows it (martha#732, the fork's run 44417856422): the bound a turn
+ * has been given is a floor of its own for as long as it runs. The engine asks the model a question of its own — a
+ * title for the session — while the turn's request is still open, and that answer is the shortest chat the engine
+ * makes. Measured into a narrower bound, it cut the turn's own request a third of a second after it landed, and
+ * every line read not-observed at about thirty seconds. So a turn that starts before anything is measured runs
+ * under the launch's own bound to the end, and the pace widens or holds the turns that come after it.
  */
 export function withinTheCap<T>(work: Promise<T>, cap: TheCapALineGets | undefined): Promise<T> {
   if (cap === undefined) return work
   return new Promise<T>((settle, fail) => {
     let timer: ReturnType<typeof setTimeout> | undefined
+    let widest = 0
+    // Every way this turn ends stops listening, the cut included: an answer that lands after the cut would arm a
+    // timer for a turn nobody is waiting for any more, and that timer is what holds the launch open past its own
+    // verdict (martha#732).
+    const stop = (): void => {
+      if (timer !== undefined) clearTimeout(timer)
+      timer = undefined
+      stopListening()
+    }
     const arm = (): void => {
       if (timer !== undefined) clearTimeout(timer)
       const made = cap.made()
       const why = whyTheBoundCannotFit(made)
       if (made.remainingMs <= 0) {
         // Nothing is left to wait in: refused by name rather than run to be reaped by the runner, which would
-        // leave no result at all (R2, R4).
+        // leave no result at all (R2, R4). Nothing is armed, so nothing is left to stop: every later answer is
+        // refused here again, since what is left of the launch only ever shrinks.
         fail(new TheBoundCannotFitTheLaunch(why ?? `the launch has ${String(made.remainingMs)} ms left`))
         return
       }
-      if (!Number.isFinite(made.ms)) return
-      timer = setTimeout(() => fail(new NoAnswerInTime(made.ms, why)), made.ms)
+      widest = Math.max(widest, made.ms)
+      const ms = Math.min(widest, made.remainingMs)
+      cap.noteABoundWasGiven(ms)
+      if (!Number.isFinite(ms)) return
+      timer = setTimeout(() => {
+        stop()
+        fail(new NoAnswerInTime(ms, why))
+      }, ms)
     }
     const stopListening = cap.pace.onEachAnswer(arm)
-    const clear = (): void => {
-      if (timer !== undefined) clearTimeout(timer)
-      stopListening()
-    }
     arm()
     work.then(
-      (value) => { clear(); settle(value) },
-      (error: Error) => { clear(); fail(error) },
+      (value) => { stop(); settle(value) },
+      (error: Error) => { stop(); fail(error) },
     )
   })
 }
