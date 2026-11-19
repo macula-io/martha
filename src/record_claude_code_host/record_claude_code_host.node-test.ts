@@ -18,6 +18,7 @@ import { MEMORY_OFF, type Committed } from './carry_over_what_is_restated_by_han
 import { fileModeGuardCallsIn, type GuardCalls } from './what_the_hosts_guards_call.ts'
 import { CLAUDE_MEMORY_OFF } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import type { AutoUpdaterSwitch } from '../know_claude_codes_own_facts/the_recorded_auto_updater_switch.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
 const RECORDER = fileURLToPath(new URL('./record_claude_code_host.ts', import.meta.url))
@@ -143,6 +144,9 @@ const REPORT_PARTS: Readonly<Record<string, string>> = {
 }
 
 const COMMITTED = JSON.parse(readFileSync(RECORDING, 'utf8')) as Committed
+/** The switch every launch sets, as the facts slice records it: the launch is a slice, so it reads its own file (martha#637). */
+const SWITCH_RECORDING = new URL('../know_claude_codes_own_facts/recorded_auto_updater_switch.json', import.meta.url)
+const RECORDED_SWITCH = (JSON.parse(readFileSync(SWITCH_RECORDING, 'utf8')) as { readonly auto_updater_switch: AutoUpdaterSwitch }).auto_updater_switch
 /** The functions the managed-folder guard reaches, as recorded (martha#412). */
 const GUARD = COMMITTED.managed_folder_guard_calls
 /** The functions the file-mode memory guard reaches, as recorded (martha#438). */
@@ -191,7 +195,7 @@ const signInParts = (variable: string): string =>
  * updater's question, the decision it asks, the check that reads the value, and the value the host's own code gives the
  * variable in the environment it hands its children, all in one module of the bundle.
  */
-const switchModules = (recorded = COMMITTED.auto_updater_switch): string =>
+const switchModules = (recorded = RECORDED_SWITCH): string =>
   `\n${CHUNK}\n${recorded.guard};${recorded.decision};${recorded.check};var aChildsEnvironment={${recorded.variable}:"${recorded.off_value}"}`
 
 
@@ -245,10 +249,12 @@ function anotherVersion(version: string): string {
 
 test('a host that says what the recording says passes the check, and the recording is left as it was', (t) => {
   const before = readFileSync(RECORDING)
+  const switchBefore = readFileSync(SWITCH_RECORDING)
   const run = check(hostHolding(t, RECORDED_PARTS), RECORDED_HOST.host_version)
   assert.equal(run.status, 0, run.stdout)
   assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\n`)
   assert.deepEqual(readFileSync(RECORDING), before)
+  assert.deepEqual(readFileSync(SWITCH_RECORDING), switchBefore, 'the check writes nothing, the switch\'s own recording included')
 })
 
 // The field is required of the recording itself (martha#154): the fold-in the reviewer asked for, a recording that
@@ -539,7 +545,7 @@ const declaredName = (source: string): string => /^function\*? ?([\w$]+)\(/.exec
 // so a host that reads no such switch fails the recording by name rather than leaving every launch to update itself.
 test('a host that reads no auto-updater switch fails the check naming the part (martha#637)', (t) => {
   const { auto_updater_switch: _switch, ...without } = RECORDED_PARTS
-  for (const text of [without, { ...without, auto_updater_switch: `${COMMITTED.auto_updater_switch.guard};function aSecondOne(){return cE(Ie(process.env.ANOTHER_SWITCH))}` }]) {
+  for (const text of [without, { ...without, auto_updater_switch: `${RECORDED_SWITCH.guard};function aSecondOne(){return cE(Ie(process.env.ANOTHER_SWITCH))}` }]) {
     const run = check(hostHolding(t, text), RECORDED_HOST.host_version)
     assert.equal(run.status, 1, run.stdout)
     assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: auto-updater switch\n`)
@@ -549,7 +555,7 @@ test('a host that reads no auto-updater switch fails the check naming the part (
 // The value is the one the host's own code gives the variable, so a host whose code gives two cannot be told, and one
 // that gives another fails the field rather than passing on a value Martha happened to know (martha#637).
 test('a host whose own code gives the switch another value, or two, fails by the field or the part (martha#637)', (t) => {
-  const { variable, off_value: offValue } = COMMITTED.auto_updater_switch
+  const { variable, off_value: offValue } = RECORDED_SWITCH
   const another = offValue === 'true' ? 'on' : 'true'
   const changed = switchModules().replaceAll(`${variable}:"${offValue}"`, `${variable}:"${another}"`)
   const two = `${changed},{${variable}:"${offValue}"}`
@@ -566,7 +572,7 @@ test('a host whose own code gives the switch another value, or two, fails by the
 // The decision and the check are recorded whole, so a host that moves either toward the updater staying on differs by the
 // field the switch is recorded under, rather than passing because its own question still reads the same (martha#637).
 test('a host whose auto-updater decision or check changed fails the check naming the field (martha#637)', (t) => {
-  const { decision, check: theCheck } = COMMITTED.auto_updater_switch
+  const { decision, check: theCheck } = RECORDED_SWITCH
   for (const [quoted, planted] of [
     [decision, decision.replace('{', '{;return null;')],
     [theCheck, theCheck.replace('includes(n)', 'includes(n)&&0')],

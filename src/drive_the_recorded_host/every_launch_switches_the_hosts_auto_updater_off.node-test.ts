@@ -31,7 +31,7 @@ import {
   type Host,
   type HostSwitches,
 } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { RECORDED_AUTO_UPDATER_SWITCH } from '../know_claude_codes_own_facts/the_recorded_auto_updater_switch.ts'
 import { autoUpdaterSwitchIn } from '../record_claude_code_host/the_auto_updater_switch.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
@@ -132,7 +132,7 @@ test("OpenCode's auto-updater switch is spelled as OpenCode reads it", () => {
 // a re-recording that renames the variable or gives it another value is what every launch below then sets, and a row that
 // restated a pair of its own would be one this case names.
 test("Claude Code's row carries exactly the auto-updater switch the recording holds", () => {
-  const recorded = RECORDED_HOST.auto_updater_switch
+  const recorded = RECORDED_AUTO_UPDATER_SWITCH
   assert.deepEqual(theRowOfHost(CLAUDE_CODE).env_last, { [recorded.variable]: recorded.off_value })
 })
 
@@ -155,7 +155,7 @@ test("the pair a launch sets is the host's own code read, not a constant in the 
   const { auto_updater_switch: cut } = autoUpdaterSwitchIn(host)
   assert.equal(cut.variable, A_STAND_INS_SWITCH)
   assert.equal(cut.off_value, A_STAND_INS_OFF)
-  const recorded = RECORDED_HOST.auto_updater_switch
+  const recorded = RECORDED_AUTO_UPDATER_SWITCH
   assert.notDeepEqual({ [cut.variable]: cut.off_value }, { [recorded.variable]: recorded.off_value }, 'the stand-in says its own pair; a case written with the recorded one would pass a recorder that restated it')
 })
 

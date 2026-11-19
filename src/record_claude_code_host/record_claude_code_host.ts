@@ -37,10 +37,19 @@ import { failedAgentsReportIn } from '../read_what_claude_code_says_of_an_agent/
 import { CARRIED, MEMORY_OFF, memoryOffHoldsOf, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 import { fileModeGuardCallsIn, managedFolderGuardCallsIn } from './what_the_hosts_guards_call.ts'
 import { autoUpdaterSwitchIn } from './the_auto_updater_switch.ts'
+import type { AutoUpdaterSwitch } from '../know_claude_codes_own_facts/the_recorded_auto_updater_switch.ts'
 
 const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
+/**
+ * The switch every launch sets, in the facts slice rather than in the recording above (martha#637): a launch is a slice,
+ * and a slice reads no setting outside the declaration, so it cannot load the host adapter's recording. The recorder
+ * writes both files from one read of the binary, and --check holds both to it.
+ */
+const SWITCH_RECORDING = new URL('../know_claude_codes_own_facts/recorded_auto_updater_switch.json', import.meta.url)
 const VERSION = /^\d+\.\d+\.\d+$/
 const CHECK = '--check'
+/** The name the switch's read reports by, as a part of the host that could not be read. */
+const THE_SWITCH = 'auto-updater switch'
 /** Each part the recorder reads from a host's text, by the name a failed read reports. */
 const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string) => Partial<Derived> }> = [
   { part: 'session start schema', read: (text) => ({ session_start_schema: sessionStartSchemaIn(text) }) },
@@ -56,7 +65,6 @@ const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string
   { part: 'file permission rules', read: (text) => ({ file_permission_rules: filePermissionRulesIn(text) }) },
   { part: "a failed agent's report", read: (text) => ({ failed_agents_report: failedAgentsReportIn(text) }) },
   { part: 'file-mode memory guard', read: (text) => ({ file_mode_guard_calls: fileModeGuardCallsIn(text) }) },
-  { part: 'auto-updater switch', read: autoUpdaterSwitchIn },
 ]
 
 /** The markdown the host loads, and what its loader's managed-folder guard calls (martha#146, martha#412). */
@@ -93,6 +101,16 @@ function fieldsThatDiffer(committed: Readonly<Record<string, unknown>>, derived:
   return [...fields].filter((field) => JSON.stringify(committed[field]) !== JSON.stringify(derived[field])).sort()
 }
 
+/** The switch every launch sets, cut from the host's text, or the part that could not be read (martha#637). */
+function switchIn(text: string): { readonly recorded?: { readonly auto_updater_switch: AutoUpdaterSwitch }; readonly unreadable: readonly string[] } {
+  try {
+    return { recorded: autoUpdaterSwitchIn(text), unreadable: [] }
+  } catch (error) {
+    stderr.write(`${THE_SWITCH}: ${error instanceof Error ? error.message : String(error)}\n`)
+    return { unreadable: [THE_SWITCH] }
+  }
+}
+
 const checking = argv[2] === CHECK
 const [binary, host_version] = argv.slice(checking ? 3 : 2)
 if (binary === undefined || host_version === undefined || !VERSION.test(host_version)) {
@@ -101,21 +119,26 @@ if (binary === undefined || host_version === undefined || !VERSION.test(host_ver
 }
 
 const committed = JSON.parse(readFileSync(RECORDING, 'utf8')) as Committed
+const committedSwitch = JSON.parse(readFileSync(SWITCH_RECORDING, 'utf8')) as { readonly auto_updater_switch: AutoUpdaterSwitch }
 const text = readFileSync(binary, 'latin1')
 const { derived, unreadable } = readHost(text)
+const { recorded: recordedSwitch, unreadable: switchUnreadable } = switchIn(text)
 
 if (checking) {
   const restated = memoryOffHoldsOf(committed.memory_off, text) ? [] : [MEMORY_OFF]
-  const differing = unreadable.length > 0 ? [] : [...fieldsThatDiffer(committed as unknown as Record<string, unknown>, { host_version, ...derived }), ...restated].sort()
+  const switchDiffers = recordedSwitch === undefined || JSON.stringify(committedSwitch.auto_updater_switch) === JSON.stringify(recordedSwitch.auto_updater_switch) ? [] : ['auto_updater_switch']
+  const all = [...unreadable, ...switchUnreadable]
+  const differing = all.length > 0 ? [] : [...fieldsThatDiffer(committed as unknown as Record<string, unknown>, { host_version, ...derived }), ...switchDiffers, ...restated].sort()
   stdout.write(`recorded ${committed.host_version}, host ${host_version}\n`)
-  if (unreadable.length > 0) stdout.write(`unreadable: ${unreadable.join(', ')}\n`)
+  if (all.length > 0) stdout.write(`unreadable: ${all.join(', ')}\n`)
   if (differing.length > 0) stdout.write(`differs: ${differing.join(', ')}\n`)
-  exit(unreadable.length > 0 || differing.length > 0 ? 1 : 0)
+  exit(all.length > 0 || differing.length > 0 ? 1 : 0)
 }
 
-if (unreadable.length > 0) {
-  stderr.write(`record_claude_code_host: not recorded, unreadable: ${unreadable.join(', ')}\n`)
+if (unreadable.length > 0 || switchUnreadable.length > 0 || recordedSwitch === undefined) {
+  stderr.write(`record_claude_code_host: not recorded, unreadable: ${[...unreadable, ...switchUnreadable].join(', ')}\n`)
   exit(1)
 }
 const recorded = recordingFrom(committed, host_version, derived as Derived)
 writeFileSync(RECORDING, `${JSON.stringify(recorded, null, 2)}\n`)
+writeFileSync(SWITCH_RECORDING, `${JSON.stringify(recordedSwitch, null, 2)}\n`)

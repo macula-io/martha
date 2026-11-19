@@ -10,13 +10,27 @@
 // It stays an environment variable and not a settings key: the settings answer (`autoUpdates`) lives in the owner's
 // `~/.claude.json`, which a member's own home never reads.
 //
-// The recording is read here as its own file and not through ../claude_code_host/recorded_claude_code_host.ts: that
-// module loads the refresh's taint table, which a launch's own chain already loads, so a value import of it from here
-// closes a loop of imports (check:no-import-cycle). The switch is checked for here, as that module checks the fields it
-// reads.
+// The recording is this slice's own file and not the host adapter's ../claude_code_host/recorded_claude_code_host.json:
+// a slice takes no setting outside the declaration and reaches the machine only through the host contract
+// (prove_the_core/no_setting_outside_the_declaration), so the recorder writes the switch here, where the one reader
+// that is a slice can load it. The recorder writes it from the same read of the binary that fills the adapter's
+// recording, and --check holds both to the host.
 
-import recording from '../claude_code_host/recorded_claude_code_host.json' with { type: 'json' }
-import type { AutoUpdaterSwitch } from '../record_claude_code_host/the_auto_updater_switch.ts'
+import recording from './recorded_auto_updater_switch.json' with { type: 'json' }
+
+/** How one host keeps its own auto-updater off (martha#637). */
+export interface AutoUpdaterSwitch {
+  /** The variable the host reads: set to the value below, the updater stays off. */
+  readonly variable: string
+  /** The function that asks the updater's question, whole. */
+  readonly guard: string
+  /** The function it asks, whole: which source turns the updater off, the switch among them. */
+  readonly decision: string
+  /** The function that decides the switch's value, whole: the values it reads as off. */
+  readonly check: string
+  /** The value the host's own code gives that variable, which is the value every launch sets. */
+  readonly off_value: string
+}
 
 /** The environment a launch adds for the switch: the recorded variable, at the recorded value, and nothing else. */
 export function theAutoUpdaterSwitchOf(recorded: AutoUpdaterSwitch): Readonly<Record<string, string>> {
@@ -32,5 +46,8 @@ function theRecordedSwitch(held: { readonly auto_updater_switch?: AutoUpdaterSwi
   return recordedSwitch
 }
 
+/** The switch this slice's recording holds, for the drift check and for a case that reads it. */
+export const RECORDED_AUTO_UPDATER_SWITCH: AutoUpdaterSwitch = theRecordedSwitch(recording)
+
 /** The switch every Claude Code launch sets, as the committed recording holds it. */
-export const CLAUDE_AUTO_UPDATER_OFF: Readonly<Record<string, string>> = theAutoUpdaterSwitchOf(theRecordedSwitch(recording))
+export const CLAUDE_AUTO_UPDATER_OFF: Readonly<Record<string, string>> = theAutoUpdaterSwitchOf(RECORDED_AUTO_UPDATER_SWITCH)

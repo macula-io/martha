@@ -22,21 +22,8 @@
 // two values for it cannot be told, and is refused.
 
 import { closingBrace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
+import type { AutoUpdaterSwitch } from '../know_claude_codes_own_facts/the_recorded_auto_updater_switch.ts'
 import { theFunctionCalledFromIn } from './what_the_hosts_guards_call.ts'
-
-/** How one host keeps its own auto-updater off (martha#637). */
-export interface AutoUpdaterSwitch {
-  /** The variable the host reads: set to the value below, the updater stays off. */
-  readonly variable: string
-  /** The function that asks the updater's question, whole. */
-  readonly guard: string
-  /** The function it asks, whole: which source turns the updater off, the switch among them. */
-  readonly decision: string
-  /** The function that decides the switch's value, whole: the values it reads as off. */
-  readonly check: string
-  /** The value the host's own code gives that variable, which is the value every launch sets. */
-  readonly off_value: string
-}
 
 /** The one function whose whole body returns a call on a call on the environment's own switch. */
 const A_SWITCH_READ = /function ([\w$]+)\(\)\{return ([\w$]+)\(([\w$]+)\(process\.env\.([A-Z][A-Z0-9_]*)\)\)\}/g
