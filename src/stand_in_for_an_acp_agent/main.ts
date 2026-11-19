@@ -24,6 +24,8 @@ const waiting = new Map<number, (message: Json) => void>()
 const prompts: string[] = []
 let clientCapabilities: unknown
 let nextId = 1000
+/** How long the stand-in waits after a turn's answer before the steps it plays outside the turn. */
+const A_PAUSE_AFTER_THE_ANSWER_MS = 50
 
 const send = (message: Json): void => void stdout.write(`${JSON.stringify(message)}\n`)
 const update = (sessionId: string, body: Json): void => send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId, update: body } })
@@ -59,6 +61,8 @@ async function play(sessionId: string, step: AStep): Promise<void> {
   else if ('line' in step) stdout.write(`${step.line}\n`)
   else if ('echo' in step) say(sessionId, prompts.join('|'))
   else if ('capabilities' in step) say(sessionId, JSON.stringify(clientCapabilities))
+  else if ('update' in step) update(sessionId, step.update)
+  else if ('after_the_answer' in step) return
   else exit(0)
 }
 
@@ -66,8 +70,14 @@ async function prompt(id: unknown, params: Json): Promise<void> {
   const sessionId = String(params['sessionId'])
   const blocks = (params['prompt'] as readonly { text?: string }[] | undefined) ?? []
   prompts.push(blocks.map((block) => block.text ?? '').join(''))
-  for (const step of script.turns[prompts.length - 1] ?? []) await play(sessionId, step)
+  const steps = script.turns[prompts.length - 1] ?? []
+  for (const step of steps) await play(sessionId, step)
   send({ jsonrpc: '2.0', id, result: { stopReason: script.stopReason ?? 'end_turn' } })
+  const late = steps.flatMap((step) => ('after_the_answer' in step ? step.after_the_answer : []))
+  if (late.length === 0) return
+  // A pause, so the answer is read and its turn closed before the late steps arrive: they come outside any turn.
+  await new Promise((settle) => setTimeout(settle, A_PAUSE_AFTER_THE_ANSWER_MS))
+  for (const step of late) await play(sessionId, step)
 }
 
 function greet(id: unknown, message: Json): void {

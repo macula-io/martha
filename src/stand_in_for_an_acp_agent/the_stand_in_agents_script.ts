@@ -17,6 +17,10 @@ export type AStep =
   | { readonly echo: 1 }
   | { readonly capabilities: 1 }
   | { readonly exit: 1 }
+  /** A `session/update` sent as written: a call the engine reports and never asks about, or a status of its own. */
+  | { readonly update: Readonly<Record<string, unknown>> }
+  /** Steps played after the turn's prompt is answered, outside any turn (#541 package A, design R4). */
+  | { readonly after_the_answer: readonly AStep[] }
 
 /** What the stand-in answers: its version and mode, and one list of steps per prompt, in order. */
 export interface AnAgentScript {
