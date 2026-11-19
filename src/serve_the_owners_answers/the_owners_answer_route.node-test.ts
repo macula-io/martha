@@ -2,7 +2,7 @@
 // package 9a). Each case serves a real Unix socket in a directory of its own and removes that directory when it ends.
 
 import assert from 'node:assert/strict'
-import { chmodSync, lstatSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import process from 'node:process'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -10,7 +10,7 @@ import { test } from 'node:test'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { newShortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { EXIT_DONE, EXIT_REFUSED } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
-import type { AnAnswerHeard, AnOpenAsk, TheOwnersAsks, WhatAnAnswerDid } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
+import { THE_SOCKETS_PLACE_MODE, type AnAnswerHeard, type AnOpenAsk, type TheOwnersAsks, type WhatAnAnswerDid } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
 import { AN_ANSWER_NEEDS_A_TERMINAL, answerAct, answerOf, NOTHING_WAITS, type TheAnswersIo } from './martha_answer.ts'
 import {
   anAskOfTheRouteIn,
@@ -209,5 +209,37 @@ test('`martha answer` refuses with no terminal, sends nothing it could not recor
     } finally {
       await served.close()
     }
+  })
+})
+
+test('a socket is served only in a directory this user owns, mode 0700 exactly; any other is refused before listen (#541 9a slice 2, note (b))', async () => {
+  await inAPlace(async (place) => {
+    for (const mode of [THE_SOCKETS_PLACE_MODE | 0o050, THE_SOCKETS_PLACE_MODE | 0o005, THE_SOCKETS_PLACE_MODE & ~0o100]) {
+      const open = join(place, `open-${mode.toString(8)}`)
+      mkdirSync(open)
+      chmodSync(open, mode)
+      const socket = join(open, 'answers.sock')
+      const served = await serveTheOwnersAnswers(socket, someAsks([]))
+      assert.ok('refusal' in served, `a place mode ${mode.toString(8)} was served in`)
+      assert.match(served.refusal, new RegExp(`mode ${mode.toString(8)}, not ${THE_SOCKETS_PLACE_MODE.toString(8)}`))
+      chmodSync(open, THE_SOCKETS_PLACE_MODE)
+      assert.equal(lstatSync(socket, { throwIfNoEntry: false }), undefined, 'the socket was made before the place was judged')
+    }
+  })
+})
+
+test('a socket\'s directory reached through a link, or not there, is refused before listen, never followed (#541 9a slice 2, note (b))', async () => {
+  await inAPlace(async (place) => {
+    const own = join(place, 'own')
+    mkdirSync(own, { mode: THE_SOCKETS_PLACE_MODE })
+    const linked = join(place, 'linked')
+    symlinkSync(own, linked)
+    const throughALink = await serveTheOwnersAnswers(join(linked, 'answers.sock'), someAsks([]))
+    assert.ok('refusal' in throughALink, 'a place reached through a link was served in')
+    assert.match(throughALink.refusal, /not a directory of its own/)
+    assert.equal(lstatSync(join(own, 'answers.sock'), { throwIfNoEntry: false }), undefined, 'the socket was made through the link')
+    const gone = await serveTheOwnersAnswers(join(place, 'not-there', 'answers.sock'), someAsks([]))
+    assert.ok('refusal' in gone, 'a place not there was served in')
+    assert.match(gone.refusal, /is not there/)
   })
 })

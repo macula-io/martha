@@ -2,8 +2,9 @@
 // before and after it, and the log beside them. Every decision is ../record_where_an_owners_act_was_typed's; this
 // reads and writes the project's own state and hands the lines over.
 //
-// The record is written by the act first; the entries are appended after it, only for an act that ended done, one per
-// line the act added. A crash between the two leaves those lines reading "written without the martha command".
+// The record is written by the act first; the entries are appended after it, one per line the act added, whether the
+// act ended done or not (an answer kept before its launch refused it is still the owner's, #541 9a). A crash between
+// the two leaves those lines reading "written without the martha command".
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

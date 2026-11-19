@@ -125,7 +125,7 @@
       "src/claude_code_relay": 717,
       "src/cut_the_rules_from_the_host_binary": 395,
       "src/dashboard_rows_directory": 103,
-      "src/declare_a_solo_crew": 68,
+      "src/declare_a_solo_crew": 102,
       "src/drive_the_recorded_host": 557,
       "src/empty_directory_of_a_launch": 24,
       "src/end_a_launch": 152,
@@ -146,7 +146,7 @@
       "src/launch_a_claude_code_member": 553,
       "src/launch_a_goose_member": 249,
       "src/linux_process_identity": 332,
-      "src/list_stop_and_restart_the_crew": 99,
+      "src/list_stop_and_restart_the_crew": 103,
       "src/load_the_hosts_markdown": 427,
       "src/owners_settings_directory": 173,
       "src/place_the_hosts_settings": 127,
@@ -156,18 +156,18 @@
       "src/refuse_settings_that_turn_hooks_off": 203,
       "src/row_streams_directory": 164,
       "src/run_an_owner_signed_command": 562,
-      "src/run_the_martha_command": 458,
+      "src/run_the_martha_command": 484,
       "src/run_the_nodes_own_npm_alone": 165,
       "src/serve_the_crews_tools_to_an_engine": 282,
       "src/serve_the_relay_to_a_launch": 266,
-      "src/serve_the_owners_answers": 246,
+      "src/serve_the_owners_answers": 251,
       "src/start_a_member": 167,
       "src/start_the_member_on_its_host": 211,
       "src/start_the_member_on_the_owners_terminal": 86,
       "src/sweep_leftover_launch_directories": 153,
       "src/ask_git_what_a_member_is_about_to_change": 78,
       "src/tell_the_member_a_line": 42,
-      "src/a_launch_end_on_this_machine": 119
+      "src/a_launch_end_on_this_machine": 124
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",
@@ -179,7 +179,8 @@
     "sliceCap": 600,
     "sliceCeilings": {
       "src/check_no_literal_restates_a_value": 660,
-      "src/land_passed_work_as_one_batch": 614
+      "src/land_passed_work_as_one_batch": 614,
+      "src/declare_crew": 619
     },
     "packageImports": {
       "typescript": "prove_the_core",
