@@ -119,3 +119,15 @@ test('a call with no commit, or one that is not 40 hex, is refused before anythi
   assert.equal(spawnSync(process.execPath, [RECORDER, CHECK, checkout], { encoding: 'utf8' }).status, 2)
   assert.equal(check(checkout, RECORDED_COMMIT.slice(1)).status, 2)
 })
+
+test('a secret the provider stops reading fails by openai_provider, so a secret is never admitted into the config file (#541 package A)', (t) => {
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, openai_provider: { ...RECORDED_FACTS.openai_provider, secrets: RECORDED_FACTS.openai_provider.secrets.slice(0, 1) } }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: openai_provider\n$/)
+})
+
+test('a keyring switch the engine renames fails by secret_storage, so the key never goes to the keyring (#541 package A)', (t) => {
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, secret_storage: { ...RECORDED_FACTS.secret_storage, keyring_switch: `${RECORDED_FACTS.secret_storage.keyring_switch}_RENAMED` } }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: secret_storage\n$/)
+})

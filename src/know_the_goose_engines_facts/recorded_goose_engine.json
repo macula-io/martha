@@ -104,7 +104,11 @@
       "OPENAI_CUSTOM_HEADERS",
       "OPENAI_TIMEOUT"
     ],
-    "default_base_path": "v1/chat/completions"
+    "default_base_path": "v1/chat/completions",
+    "secrets": [
+      "OPENAI_API_KEY",
+      "OPENAI_CUSTOM_HEADERS"
+    ]
   },
   "subagent_models": {
     "kind": "any_name",
@@ -186,5 +190,9 @@
     "separator": "__",
     "split_at": "first"
   },
-  "shell_tool": "shell"
+  "shell_tool": "shell",
+  "secret_storage": {
+    "keyring_switch": "GOOSE_DISABLE_KEYRING",
+    "file": "secrets.yaml"
+  }
 }

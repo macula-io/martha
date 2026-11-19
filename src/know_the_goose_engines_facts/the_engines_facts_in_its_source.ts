@@ -45,8 +45,16 @@ export interface EngineFacts {
   readonly platform_extensions: readonly PlatformExtension[]
   /** The answers the engine's ACP server offers a client for a tool call, as their wire ids, in its order. */
   readonly permission_options: readonly string[]
-  /** The OpenAI provider: its name, the settings it reads, and the path it posts to under a host. */
-  readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string }
+  /**
+   * The OpenAI provider: its name, the settings it reads, the path it posts to under a host, and the settings it reads
+   * as secrets (#541 package A): those come from the environment or the secret storage, never from the config file.
+   */
+  readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string; readonly secrets: readonly string[] }
+  /**
+   * Where the engine keeps secrets when its keyring is off (#541 package A): the config setting that switches the
+   * system keyring off, and the file beside the config file the secrets are then read from.
+   */
+  readonly secret_storage: SecretStorage
   /** The model names the delegate tool takes: closed when its schema lists them, open when it takes any text (#541 package 6). */
   readonly subagent_models: ModelVocabulary
   /**
@@ -95,6 +103,12 @@ export interface StdioExtension {
   readonly disallowed_env: readonly string[]
 }
 
+/** The engine's secret storage with its keyring off: the switch a config file turns it off with, and the file it reads instead. */
+export interface SecretStorage {
+  readonly keyring_switch: string
+  readonly file: string
+}
+
 /** A switch the engine reads with `get_param::<bool>` through a constant: the setting it names, and what an unset one means. */
 export interface ASkillsSwitch {
   readonly setting: string
@@ -119,6 +133,8 @@ export const ENGINE_PLACES = {
   platform_extensions: 'crates/goose/src/agents/platform_extensions/mod.rs',
   acp_server: 'crates/goose/src/acp/server.rs',
   openai_provider: 'crates/goose-providers/src/openai.rs',
+  openai_secrets: 'crates/goose/src/providers/openai_def.rs',
+  secret_storage: 'crates/goose/src/config/base.rs',
   delegate_tool: 'crates/goose/src/agents/platform_extensions/summon.rs',
   hint_files: 'crates/goose/src/hints/load_hints.rs',
   stdio_extension: 'crates/goose-agent/src/extension.rs',
@@ -159,6 +175,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'built-in skills switch', read: (source) => ({ builtin_skills_advertised: skillsSwitchIn(source, 'builtin_skills_advertised') }) },
   { part: 'tool naming', read: (source) => ({ tool_naming: toolNamingIn(source) }) },
   { part: 'shell tool', read: (source) => ({ shell_tool: shellToolIn(source) }) },
+  { part: 'secret storage', read: (source) => ({ secret_storage: secretStorageIn(source) }) },
 ]
 
 /** The function that builds a tool call's `_meta`, and the maps it fills from the outside in, in the file that builds it. */
@@ -166,6 +183,12 @@ export const TOOL_CALL_META = { builder: 'goose_tool_call_meta', maps: ['meta', 
 
 /** Where the Developer extension names its shell tool: the function that lists its tools, and the parameters the shell's are. */
 export const SHELL_TOOL = { lister: 'get_tools', params: 'ShellParams' } as const
+
+/** The functions of the engine's config module that decide its secret storage with the keyring off (#541 package A). */
+export const SECRET_STORAGE = { switch_in_config: 'keyring_disabled_in_config', switch_value: 'keyring_disabled_value', file: 'secrets_file_path_in' } as const
+
+/** How the engine reads a switched-off keyring's value: a YAML `true` counts, which is what a launch writes. */
+export const A_TRUE_SWITCH_COUNTS = 'value.as_bool().unwrap_or(false)'
 
 /** The two ways Rust's `str` splits once, by the end it splits at. */
 export const SPLITS_ONCE = { first: 'split_once', last: 'rsplit_once' } as const
@@ -284,7 +307,51 @@ function openaiProviderIn(source: EngineSource): EngineFacts['openai_provider'] 
     name: captured(text, /pub const OPEN_AI_PROVIDER_NAME: &str = "([^"]+)"/, 'the provider name', path),
     settings,
     default_base_path: captured(text, /pub const OPEN_AI_DEFAULT_BASE_PATH: &str = "([^"]+)"/, 'the default base path', path),
+    secrets: openaiSecretsIn(source, settings),
   }
+}
+
+/**
+ * The settings the OpenAI provider reads as secrets (#541 package A), from its one `get_secrets` call: the first named
+ * and the list after it. A second call, a call in another shape, or a secret that is none of the provider's settings
+ * is unreadable, never a shorter list: a secret missed here would be admitted into the config file, where the engine
+ * never reads it.
+ */
+function openaiSecretsIn(source: EngineSource, settings: readonly string[]): readonly string[] {
+  const path = ENGINE_PLACES.openai_secrets
+  const text = fileOf(source, path)
+  const calls = [...text.matchAll(/\.get_secrets\(\s*"([^"]+)",\s*&\[([^\]]*)\]\s*,?\s*\)/g)]
+  const written = text.split('.get_secrets(').length - 1
+  const [call] = calls
+  if (written !== 1 || calls.length !== 1 || call?.[1] === undefined || call[2] === undefined) {
+    throw new Error(`${path} reads secrets ${String(written)} times and ${String(calls.length)} are in a shape this reader knows, not once`)
+  }
+  const others = [...call[2].matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? '')
+  if (call[2].split(',').filter((entry) => entry.trim() !== '').length !== others.length) throw new Error(`${path} lists secrets in a shape this reader does not know`)
+  const secrets = [call[1], ...others]
+  const unknown = secrets.find((secret) => !settings.includes(secret))
+  if (unknown !== undefined) throw new Error(`${path} reads a secret ${unknown} that is none of the provider's settings in ${ENGINE_PLACES.openai_provider}`)
+  return secrets
+}
+
+/** The body of the function `name` in `text`, from its opening brace to the brace that closes it at the start of a line. */
+function bodyOf(text: string, name: string, path: string): string {
+  return captured(text, new RegExp(`fn ${name}\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`), `the function ${name}`, path)
+}
+
+/**
+ * The engine's secret storage with its keyring off (#541 package A): the setting a config file switches the keyring off
+ * with, which must be read through the value function that takes a YAML `true`, and the file the secrets are then read
+ * from beside the config file. A switch read another way is unreadable, never a name a launch writes and the engine ignores.
+ */
+function secretStorageIn(source: EngineSource): SecretStorage {
+  const path = ENGINE_PLACES.secret_storage
+  const text = fileOf(source, path)
+  const inConfig = bodyOf(text, SECRET_STORAGE.switch_in_config, path)
+  const keyring_switch = captured(inConfig, new RegExp(`\\.get\\("([^"]+)"\\)\\.map\\(${SECRET_STORAGE.switch_value}\\)`), 'the setting that switches the keyring off', path)
+  if (!bodyOf(text, SECRET_STORAGE.switch_value, path).includes(A_TRUE_SWITCH_COUNTS)) throw new Error(`${path} no longer reads a true ${keyring_switch} as off in ${SECRET_STORAGE.switch_value}`)
+  const file = captured(bodyOf(text, SECRET_STORAGE.file, path), /^\s*config_dir\.join\("([^"]+)"\)\s*$/, 'the secrets file beside the config file', path)
+  return { keyring_switch, file }
 }
 
 /**

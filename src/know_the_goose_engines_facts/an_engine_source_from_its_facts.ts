@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type EngineFacts, type EngineSource, type PlatformExtension, type ToolNaming } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type EngineFacts, type EngineSource, type PlatformExtension, type SecretStorage, type ToolNaming } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -96,6 +96,29 @@ function skillsSwitch(reader: string, switched: ASkillsSwitch): string {
   ].join('')
 }
 
+/** The provider's one secrets read as the engine writes it (#541 package A): the first secret, then the list after it. */
+function openaiSecrets(secrets: readonly string[]): string {
+  const [first, ...rest] = secrets
+  if (first === undefined) throw new Error('a provider that reads no secret cannot be written as one get_secrets call')
+  return `    let is_openai = is_direct_openai_host(&parsed.host);\n    let secrets = config\n        .get_secrets("${first}", &[${rest.map((secret) => `"${secret}"`).join(', ')}])\n        .unwrap_or_default();\n`
+}
+
+/** The secret storage's three functions as the engine's config module writes them (#541 package A). */
+const secretStorage = (storage: SecretStorage): string =>
+  [
+    `\nfn ${SECRET_STORAGE.switch_value}(value: &serde_yaml::Value) -> bool {\n    ${A_TRUE_SWITCH_COUNTS} || value.as_str().is_some_and(|s| s == "true" || s == "1")\n}\n\n`,
+    `fn ${SECRET_STORAGE.switch_in_config}(config_path: &Path) -> bool {\n    std::fs::read_to_string(config_path)\n        .ok()\n        .and_then(|s| parse_yaml_content(&s).ok())\n`,
+    `        .and_then(|m| m.get("${storage.keyring_switch}").map(${SECRET_STORAGE.switch_value}))\n        .unwrap_or(false)\n}\n\n`,
+    `fn ${SECRET_STORAGE.file}(config_dir: &Path) -> PathBuf {\n    config_dir.join("${storage.file}")\n}\n`,
+  ].join('')
+
+/** Files of a tree by path, where two facts the engine decides in one file are written into that one file, in order. */
+function oneFilePerPath(parts: ReadonlyArray<readonly [string, string]>): Readonly<Record<string, string>> {
+  const files: Record<string, string> = {}
+  for (const [path, text] of parts) files[path] = `${files[path] ?? ''}${text}`
+  return files
+}
+
 /** Every file of a tree that says `facts`, by its path in the checkout. */
 export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, string>> {
   const modes = facts.mode.values.map((mode) => `    #[strum(message = "a mode")]\n    ${pascalCase(mode)},\n`).join('')
@@ -108,7 +131,11 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.paths]: `    pub(crate) fn path_root() -> Option<PathBuf> {\n        Self::validated_path_root(std::env::var_os("${facts.path_root_variable}"))\n    }\n`,
     [ENGINE_PLACES.slash_commands]: `pub fn slash_commands_enabled() -> bool {\n    crate::config::Config::global()\n        .get_param::<bool>("${facts.slash_commands.setting}")\n        .unwrap_or(${String(facts.slash_commands.when_unset)})\n}\n`,
     [ENGINE_PLACES.modes]: `pub enum GooseMode {\n    #[default]\n${modes}}\n`,
-    [ENGINE_PLACES.mode_when_unset]: `impl Config {\n    pub(crate) fn resolve_goose_mode(&self) -> Result<GooseMode, ConfigError> {\n        match self.get_param_strict("${facts.mode.setting}") {\n            Ok(mode) => Ok(mode),\n            Err(ConfigError::NotFound(_)) => Ok(GooseMode::${pascalCase(facts.mode.when_unset)}),\n            Err(error) => Err(error),\n        }\n    }\n}\n`,
+    ...oneFilePerPath([
+      [ENGINE_PLACES.mode_when_unset, `impl Config {\n    pub(crate) fn resolve_goose_mode(&self) -> Result<GooseMode, ConfigError> {\n        match self.get_param_strict("${facts.mode.setting}") {\n            Ok(mode) => Ok(mode),\n            Err(ConfigError::NotFound(_)) => Ok(GooseMode::${pascalCase(facts.mode.when_unset)}),\n            Err(error) => Err(error),\n        }\n    }\n}\n`],
+      [ENGINE_PLACES.secret_storage, secretStorage(facts.secret_storage)],
+    ]),
+    [ENGINE_PLACES.openai_secrets]: openaiSecrets(facts.openai_provider.secrets),
     ...platformExtensionMap(facts.platform_extensions),
     [ENGINE_PLACES.acp_server]: `        let options = vec![\n${options}        ];\n`,
     [ENGINE_PLACES.delegate_tool]: delegateTool(facts.subagent_models),

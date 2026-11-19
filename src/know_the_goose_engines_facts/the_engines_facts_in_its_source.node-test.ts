@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILLS_SWITCH_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, SKILLS_SWITCH_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -278,4 +278,65 @@ test('a Developer extension that runs the shell parameters for a second name, af
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: twice }))
   assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
   assert.match(unreadable[0]?.why ?? '', new RegExp(`lists the shell tool as ${shell} but runs`))
+})
+
+/** The part that reads a fact, by the name a failed read reports. */
+const partReading = (fact: keyof EngineFacts): string | undefined => ENGINE_PARTS.find(({ read }) => fact in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS))))?.part
+
+test('a secret the provider starts reading, and a keyring switch and secrets file the engine renames, are read under their new names (#541 package A)', () => {
+  const another = RECORDED_FACTS.openai_provider.settings.find((setting) => !RECORDED_FACTS.openai_provider.secrets.includes(setting))
+  assert.ok(another !== undefined, 'every provider setting is already a secret, so no secret can be added')
+  const changed: EngineFacts = {
+    ...RECORDED_FACTS,
+    openai_provider: { ...RECORDED_FACTS.openai_provider, secrets: [...RECORDED_FACTS.openai_provider.secrets, another] },
+    secret_storage: { keyring_switch: `${RECORDED_FACTS.secret_storage.keyring_switch}_RENAMED`, file: `moved-${RECORDED_FACTS.secret_storage.file}` },
+  }
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying(changed)))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.openai_provider, changed.openai_provider)
+  assert.deepEqual(facts.secret_storage, changed.secret_storage)
+})
+
+test('a provider that reads its secrets twice is unreadable by name, never the first list (#541 package A)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.openai_secrets] ?? ''
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.openai_secrets]: `${text}${text}` }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [partReading('openai_provider')])
+  assert.match(unreadable[0]?.why ?? '', /reads secrets 2 times and 2 are in a shape this reader knows, not once/)
+})
+
+test('a secret the provider reads that is none of its settings is unreadable, so no secret escapes the config allow-list (#541 package A)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const [first] = RECORDED_FACTS.openai_provider.secrets
+  assert.ok(first !== undefined)
+  const text = (files[ENGINE_PLACES.openai_secrets] ?? '').replace(`"${first}"`, '"A_SECRET_NO_SETTING_NAMES"')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.openai_secrets]: text }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [partReading('openai_provider')])
+  assert.match(unreadable[0]?.why ?? '', /reads a secret A_SECRET_NO_SETTING_NAMES that is none of the provider's settings/)
+})
+
+test('a keyring switch the engine no longer reads as off when it is true is unreadable, never a switch a launch writes for nothing (#541 package A)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.secret_storage] ?? ''
+  const stricter = text.replace(A_TRUE_SWITCH_COUNTS, 'false')
+  assert.notEqual(stricter, text, 'the built tree reads no true switch to take away')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.secret_storage]: stricter }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [partReading('secret_storage')])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`no longer reads a true ${RECORDED_FACTS.secret_storage.keyring_switch} as off`))
+})
+
+test('a secrets file built some other way than beside the config file is unreadable by name (#541 package A)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.secret_storage] ?? ''
+  const elsewhere = text.replace(`config_dir.join("${RECORDED_FACTS.secret_storage.file}")`, `home_dir().join("${RECORDED_FACTS.secret_storage.file}")`)
+  assert.notEqual(elsewhere, text, 'the built tree joins no secrets file to move')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.secret_storage]: elsewhere }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [partReading('secret_storage')])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`the secrets file beside the config file`))
+})
+
+test('the secret storage and the mode default are both read from the one config file the engine keeps them in (#541 package A)', () => {
+  assert.equal(ENGINE_PLACES.secret_storage, ENGINE_PLACES.mode_when_unset, 'the two facts moved apart: the tree no longer needs to write them into one file')
+  const text = engineFilesSaying(RECORDED_FACTS)[ENGINE_PLACES.secret_storage] ?? ''
+  assert.ok(text.includes('fn resolve_goose_mode(') && text.includes(`fn ${SECRET_STORAGE.file}(`))
 })
