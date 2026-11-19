@@ -250,7 +250,7 @@ What the plan leaves out, stated rather than hidden:
   the host reads as user-scope skills while project settings stay off. A skill in a
   folder above the start is fingerprinted and listed as not carried. A skill named
   `synced` or `.trash` is refused, and bare mode and the host skill catalog
-  variable are dropped from the member's environment. Row A25 states what is left.
+  variable are dropped from the member's environment. Row A27 states what is left.
 - **The tree does not cover** a file git ignores and does not track — the
   checkout's author cannot ship one; it is written on this machine by a command
   the member ran (A13) — nor the inside of a submodule beyond the commit its

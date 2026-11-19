@@ -157,6 +157,71 @@ export const ENGINE_FAMILIES = {
  */
 export const ENGINE_FILES: readonly string[] = Object.values(ENGINE_FAMILIES).flat()
 
+/** The engine's instruction file, as its own source spells it (crates/goose/src/hints/load_hints.rs, `AGENTS_MD_FILENAME`). */
+export const AGENTS_MD_FILE = 'AGENTS.md'
+
+/**
+ * The checkout files the engine reads into its prompt with no tool call: the names its own source spells, read at
+ * the pinned commit (`GOOSE_HINTS_FILENAME` and `AGENTS_MD_FILENAME` in crates/goose/src/hints/load_hints.rs). The
+ * engine reads them at the start and again on every model request. They start nothing, so no gate refuses a checkout
+ * for holding one; the launch records each it finds (martha#541, and ../inbound_paths' A25 and A26).
+ */
+export const RECORDED_TEXT_FILES: readonly string[] = [ENGINE_HINTS_FILE, AGENTS_MD_FILE]
+
+/** One file the engine attaches to its prompt with no tool call: where it is, and the source it is recorded as. */
+export interface ATextAStartLoads {
+  /** The name the engine's own source spells: one of RECORDED_TEXT_FILES. */
+  readonly file: string
+  /** The file the engine reads, so the record names a file anyone can point at. */
+  readonly at: string
+  readonly source: 'checkout_file'
+}
+
+/**
+ * The files the engine attaches to its prompt with no tool call, from the checkout it starts in, each recorded as
+ * the checkout's own file (`checkout_file`). The engine reads them, at the pinned commit, from the working directory
+ * and every directory up to the git root (`find_git_root`, then `get_local_directories`), root first; when no
+ * directory above holds a `.git`, only the working directory. It reads them again on every model request
+ * (`prompt_manager.rs`'s `with_hints` on each `build_system_prompt`), so this record is the start's reading, and a file
+ * changed after the start reaches the engine with no record naming it.
+ *
+ * Nothing here refuses: the launch decided on the owner's approved tree, and an approved tree's bytes are not text
+ * taken in (2026-11-07, martha#127 and martha#132). This is the record the launch makes of that text, which
+ * ../inbound_paths' A25 and A26 stand for — the Supervisor's ruling of 2026-11-18 on the recorded-source kind.
+ */
+export function theTextAStartLoads({ launch_dir }: LaunchPlace, machine: LaunchHost): readonly ATextAStartLoads[] {
+  return theDirectoriesTheEngineReadsHintsFrom(realOrResolved(machine, launch_dir), machine).flatMap((directory) =>
+    RECORDED_TEXT_FILES.filter((file) => machine.stores.files.kindOf(join(directory, file)).kind === 'file').map((file) => ({ file, at: join(directory, file), source: 'checkout_file' as const })),
+  )
+}
+
+/**
+ * The record a launch makes of the checkout's own text, or the refusal when a directory on the way could not be read:
+ * a record that skipped what it could not read would leave text the engine attaches to its prompt unrecorded, so a
+ * read that fails is a launch that does not start (martha#541).
+ */
+export function theRecordOfTheTextAStartLoads(place: LaunchPlace, machine: LaunchHost): { readonly loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
+  try {
+    return { loads: theTextAStartLoads(place, machine) }
+  } catch (error) {
+    return { refusal: `the checkout's hint files could not be read (${error instanceof Error ? error.message : String(error)})` }
+  }
+}
+
+/**
+ * The directories the engine reads a checkout's hints from, root first: the working directory and each directory
+ * above it up to the first holding `.git`, as the engine walks them, or the working directory alone when nothing
+ * above holds one (the engine's own `find_git_root` returning none).
+ */
+function theDirectoriesTheEngineReadsHintsFrom(start: string, machine: LaunchHost): readonly string[] {
+  const above: string[] = []
+  for (let directory = start; ; directory = dirname(directory)) {
+    above.push(directory)
+    if (machine.stores.files.kindOf(join(directory, '.git')).kind !== 'absent') return above.reverse()
+    if (dirname(directory) === directory) return [start]
+  }
+}
+
 export const LAUNCH_FILES_OF_HOST: Readonly<Record<string, readonly string[]>> = {
   [CLAUDE_CODE]: CLAUDE_CODE_FILES,
   opencode: OPENCODE_FILES,

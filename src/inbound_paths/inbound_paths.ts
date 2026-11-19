@@ -13,7 +13,7 @@
 
 import { admitsInCrewRoom, admitsInSharedRoom, type DeliveryGate } from '../admit_a_room_message/admit_a_room_message.ts'
 import { admitsAnAskToTheOwner } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
-import { admitsLaunch, ENGINE_FAMILIES, type LaunchGate } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { admitsLaunch, AGENTS_MD_FILE, ENGINE_FAMILIES, ENGINE_HINTS_FILE, RECORDED_TEXT_FILES, type LaunchGate } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { passesOnlySwitchesThatLoadNoConfig, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { startsACommand, THE_COMMAND_STARTS } from '../speak_acp_to_an_agent/the_acp_client.ts'
 import { UNHELD_WORK_PATH } from '../find_the_unheld_work/unheld_work_path.ts'
@@ -119,6 +119,13 @@ export const COMMAND_GATES = {
 export type KnownCommandGate = keyof typeof COMMAND_GATES
 
 /**
+ * A checkout file the launcher records as a source of text the model is given: the file's name as the engine's own
+ * source spells it, and whether the launcher records that file. A gate that records every file or none is no control,
+ * so ../check_every_path_is_gated asks it about each recorded name and about a file the engine attaches nothing from.
+ */
+export type SourceGate = (file: string) => boolean
+
+/**
  * The path gates a row may name: a control that checks every path a member's
  * own file tools name (martha#168). The function behind the name is built where
  * the machine is reachable, in the host adapter that holds the guard
@@ -165,6 +172,12 @@ export type KnownPathGate = 'nothing-a-later-git-run-reads'
  * - `refused-as-a-command` — a turn the launcher would send a host whose text starts a command the host runs instead of
  *   handing it to the model is refused before it is sent, so no path text can arrive on becomes a command
  *   (martha#541, shape 2). Only a `delivered` row may declare it, and the check drives the gate once per question.
+ * - `recorded-source` — the launcher records the file this text came out of, before the session starts, with the
+ *   source it is (`checkout_file`): the engine attaches a checkout's hint files to its prompt with no tool call, so
+ *   the text is recorded rather than claimed not to arrive (martha#541's ruling on the hint files). The approval of
+ *   the tree is the control (2026-11-07, martha#127 and martha#132), so the record refuses nothing. Only a
+ *   `delivered` row may declare it, and the check drives the gate over each file the launcher records and one it does
+ *   not.
  */
 export type Control =
   | { readonly kind: 'delivery-gate'; readonly gate: KnownDeliveryGate }
@@ -181,6 +194,7 @@ export type Control =
   | { readonly kind: 'approved-text'; readonly gate: KnownLaunchGate; readonly residual: string }
   | { readonly kind: 'refused-before-launch'; readonly gate: KnownArgumentGate }
   | { readonly kind: 'refused-as-a-command'; readonly gate: KnownCommandGate }
+  | { readonly kind: 'recorded-source'; readonly gate: KnownSourceGate }
   | { readonly kind: 'check_every_path_is_gated'; readonly gate: KnownPathGate; readonly also: readonly Control[] }
   | { readonly kind: 'none' }
 
@@ -205,7 +219,7 @@ export interface InboundPath {
 export const INSTRUCTION_FILES = {
   checkout: 'CLAUDE.md',
   local: 'CLAUDE.local.md',
-  agents: 'AGENTS.md',
+  agents: AGENTS_MD_FILE,
 } as const
 
 /**
@@ -222,6 +236,49 @@ export const INSTRUCTION_TEXT_WORDING = {
   /** Whether a host loads an AGENTS.md at all is not observed, so that text is not pinned. */
   not_observed: 'Whether the host loads an AGENTS.md is not observed',
 } as const
+
+/**
+ * Whether the launcher records a file the engine loads as a source of text: the files above, and no other. The
+ * approval of the tree is the control — the 2026-11-07 decision (martha#127 and martha#132) says an approved tree's
+ * bytes are not text taken in, as a tool read of the same file is exempt today — so this is a record of where the text
+ * came from, never a refusal of it (martha#541, the Supervisor's ruling of 2026-11-18 on the `recorded-source` kind).
+ */
+export const recordsTheCheckoutsText: SourceGate = (file) => RECORDED_TEXT_FILES.includes(file)
+
+/** The source gates a row may name (martha#541): what records the text a checkout attaches to a session. */
+export const SOURCE_GATES = {
+  'a-checkout-file-the-start-records': recordsTheCheckoutsText,
+} as const satisfies Record<string, SourceGate>
+
+export type KnownSourceGate = keyof typeof SOURCE_GATES
+
+/** One checkout file a source gate is asked about: the name the engine's source spells, and whether the launcher records it. */
+export interface SourceProbe {
+  readonly records: boolean
+  readonly what: string
+  readonly file: string
+}
+
+/**
+ * The questions every source gate is asked (martha#541): each name the launcher records is answered as recorded, so a
+ * gate that records nothing is caught, and a file the engine attaches no text from is answered as not recorded, so a
+ * gate that records every file is caught. The names are the table the launcher reads, never restated here.
+ */
+export const SOURCE_PROBES: readonly SourceProbe[] = [
+  ...RECORDED_TEXT_FILES.map((file) => ({ records: true, what: `${file}, which the engine loads`, file })),
+  { records: false, what: 'a file the engine attaches no text from', file: 'README.md' },
+]
+
+/** Why a row naming a source gate is a gap: it is not delivered text, the gate nobody built, or one that answers a question wrong. */
+export function sourceRowGap(path: InboundPath, name: string, source_gates: Readonly<Record<string, SourceGate>>): string | undefined {
+  if (path.klass !== 'delivered') return 'names a recorded source on a path that puts no text into a turn'
+  const gate = source_gates[name]
+  if (gate === undefined) return `names a source gate nobody has built: ${name}`
+  const failed = SOURCE_PROBES.find((probe) => gate(probe.file) !== probe.records)
+  if (failed === undefined) return undefined
+  return failed.records ? `the gate ${name} records no ${failed.what}` : `the gate ${name} records ${failed.what}`
+}
+
 
 /**
  * What one of the engine's launched rows leaves open (martha#541): the launch gate is the one C1 and C2 stand on — Martha
@@ -429,6 +486,20 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
   },
   {
     id: 'A25',
+    what: `the engine reads a checkout's ${ENGINE_HINTS_FILE} into its prompt on every model request, not only when a session starts (crates/goose/src/hints/load_hints.rs, the pinned engine, read again by prompt_manager.rs's with_hints for every build_system_prompt, inference_preparation.rs): from the directory it starts in and every directory up to the git root, and the launcher records each file it finds and the source it is (checkout_file) before the engine starts (../launch_a_goose_member, theTextAStartLoads). Not closed: a hint file changed after the start, which the next request attaches and no record names; a hint file in a subdirectory the engine is pointed at later, which arrives by the same source and is recorded by no start; a file a hint references, which the engine expands within the git root; and a directory above the checkout up to the git root, whose file the record names but the tree's approval does not cover (martha#541)`,
+    klass: 'delivered',
+    control: { kind: 'recorded-source', gate: 'a-checkout-file-the-start-records' },
+    attestation: 'none',
+  },
+  {
+    id: 'A26',
+    what: `the engine reads the checkout's instruction file into its prompt on every model request, not only when a session starts (${INSTRUCTION_FILES.agents}, whose text A16 owns; crates/goose/src/hints/load_hints.rs, the pinned engine, where the name is AGENTS_MD_FILENAME, read again by prompt_manager.rs's with_hints for every build_system_prompt, inference_preparation.rs): from the directory it starts in and every directory up to the git root, and the launcher records each file it finds and the source it is (checkout_file) before the engine starts (../launch_a_goose_member, theTextAStartLoads). Not closed: a hint file changed after the start, which the next request attaches and no record names; a hint file in a subdirectory the engine is pointed at later, which arrives by the same source and is recorded by no start; a file a hint references, which the engine expands within the git root; and a directory above the checkout up to the git root, whose file the record names but the tree's approval does not cover (martha#541)`,
+    klass: 'delivered',
+    control: { kind: 'recorded-source', gate: 'a-checkout-file-the-start-records' },
+    attestation: 'none',
+  },
+  {
+    id: 'A27',
     what: 'the skills of the approved checkout (.claude/skills), copied into the member\'s own config folder, whose descriptions the host lists to the model and whose text, and any script it names, the model is told to follow (martha#747)',
     klass: 'delivered',
     control: {

@@ -162,7 +162,7 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   'A23', // the telling about the run before is handed in that same resume prompt, not taken in as a turn (martha#693)
   'A9', // a forged envelope is not something a host reports
   'A12', // a compaction summary is inherited through the record, not taken in
-  'A25', // the approved checkout's skills are copied into the member's config folder at launch, not taken in as a turn (martha#747)
+  'A27', // the approved checkout's skills are copied into the member's config folder at launch, not taken in as a turn (martha#747)
   'A19', // the crew text the launcher hands at a session's start is the owner's approved bytes, not a sender's words (martha#306)
   UNHELD_WORK_PATH, // the unheld_work answer is a crew tool's MCP result, taken in on B2 like every other (martha#319)
   // a row no text reaches the model on is never taken in: it says why in its control (B1, B8, A16)
@@ -179,6 +179,9 @@ export const REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES: readonly string[] = [
   ...INBOUND_PATHS.filter((path) => path.control.kind === 'ask-gate').map((path) => path.id),
   // a turn refused before it is sent never becomes one: the engine would have run it as a command (martha#541, A24)
   ...INBOUND_PATHS.filter((path) => path.control.kind === 'refused-as-a-command').map((path) => path.id),
+  // the text the engine attaches at a session's start is the launch's own record, made before any turn with the source
+  // it is; no turn of it reaches the seam (martha#541, A25 and A26)
+  ...INBOUND_PATHS.filter((path) => path.control.kind === 'recorded-source').map((path) => path.id),
 ]
 
 /** Registry rows a source can record that the registry does not know. */

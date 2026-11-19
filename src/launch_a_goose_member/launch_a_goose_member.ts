@@ -11,19 +11,9 @@
 // Martha, slash commands off, and one switch per platform extension the pinned build declares, every one
 // of them off but the one a member keeps.
 //
-// Everything written here is read from the recording (`../know_the_goose_engines_facts`, package 10):
-// the variable that moves the root, the mode's setting and the values it takes, the slash-commands
-// setting and what it does when unset, and every platform extension's key and default. Two values the
-// recording cannot supply are Martha's own decisions, and they are declared once, here, and read from
-// here everywhere:
-//
-//   - THE_EXTENSION_A_MEMBER_KEEPS, the one extension whose tools a member's model is offered;
-//   - THE_MODE_THAT_ASKS_THE_CLIENT, the mode in which the engine brings a tool call to its client
-//     rather than running it, which is the whole of Martha's gate over the engine.
-//
-// The test beside this file holds both to the recording, so a renamed extension key or a dropped mode
-// fails a test instead of writing a switch the engine ignores. That matters more than it looks: a
-// malformed mode falls back to `auto` in the engine, which runs every call with nothing asking.
+// The config root's text is §derive_the_config_of_a_goose_launch's decision, not this launch's: it reads the
+// recording and holds Martha's own two values (the extension a member keeps, and the mode that asks). This
+// launch writes it where the engine reads it and starts the engine with it.
 //
 // Two more names the recording does not carry are the engine's own config keys for the provider and the
 // model (THE_PROVIDER_SETTING, THE_MODEL_SETTING), and the rest name what this launcher gives a launch:
@@ -46,6 +36,13 @@
 // `reject_always`, and a later call then skips the client, so a launch that ends with anything saved is a
 // launch Martha did not gate. A store in a shape this launcher does not know is not read as an empty one.
 //
+// The launch is decided through `prepareLaunch` (../refuse_launch_of_unapproved_config), the same call every
+// other host's launch goes through: a checkout holding any of the engine's own config files the owner has not
+// approved starts nothing, and the gate's snapshot is removed whenever the launch ends. The checkout's own hint
+// files, which the engine attaches to its prompt with no tool call, are recorded with the source they are
+// (`theTextAStartLoads`), as ../inbound_paths' A25 and A26 say. The engine reads the same files again on every model
+// request, so the record is the start's reading of them, not the last word on what the engine attaches.
+//
 // Three gaps are named here rather than closed, and none is silent:
 //   - Skills. On the pinned build `load_skill` is offered to every session and is not a platform
 //     extension, so no switch in this config root reaches it (trial line 9 failed on exactly this).
@@ -67,28 +64,11 @@ import { getuid } from 'node:process'
 
 import { killGroup } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import type { RecordedEngine } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { theConfigOfALaunch, type TheModelALaunchRuns } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
+import { prepareLaunch, theRecordOfTheTextAStartLoads, type ATextAStartLoads, type PreparedLaunch, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { realOrResolved } from '../judge_a_checkouts_tree/checkout_tree.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-
-/** The one platform extension a member's model is offered: Developer, whose shell and file edits are gated. */
-export const THE_EXTENSION_A_MEMBER_KEEPS = 'developer'
-
-/** The mode in which the engine brings every tool call to its client instead of running it. */
-export const THE_MODE_THAT_ASKS_THE_CLIENT = 'approve'
-
-/**
- * What the engine's slash-commands switch is set to: the setting turns them on, so off is `false` in every
- * recording, whatever the engine would do with a config that does not name it (martha#541, shape 2 and 3).
- */
-export const SLASH_COMMANDS_OFF = false
-
-/** The config key the engine reads the provider from. */
-export const THE_PROVIDER_SETTING = 'GOOSE_PROVIDER'
-
-/** The config key the engine reads the model from. */
-export const THE_MODEL_SETTING = 'GOOSE_MODEL'
-
-/** The config key every extension's switch sits under. */
-export const THE_EXTENSIONS_SETTING = 'extensions'
 
 /** The folder under the path root the engine keeps its config in. */
 export const THE_CONFIG_FOLDER = 'config'
@@ -126,16 +106,6 @@ export interface ThePlacesOfALaunch {
   readonly home: string
   /** The engine's working directory: the checkout the owner approved. */
   readonly checkout: string
-}
-
-/** What the member's model is, as the crew's declaration for that member names it. */
-export interface TheModelALaunchRuns {
-  /** The provider the engine reaches the model through, by the name the engine knows it by. */
-  readonly provider: string
-  /** The model, by the name that provider accepts. */
-  readonly model: string
-  /** The settings that provider needs to reach its endpoint, written into the config root, never inherited. */
-  readonly settings: Readonly<Record<string, string>>
 }
 
 export type ThePlacesMade = { readonly places: ThePlacesOfALaunch } | { readonly refusal: string }
@@ -178,65 +148,6 @@ function madeNewForThisUser(at: string): string | undefined {
 /** The environment a launch hands its engine, and the whole of it: nothing inherited reaches it. */
 export function theEnvironmentOfALaunch(facts: RecordedEngine, places: ThePlacesOfALaunch): Readonly<Record<string, string>> {
   return { [facts.path_root_variable]: places.root, HOME: places.home, PATH: THE_PATH_A_LAUNCH_GIVES }
-}
-
-/**
- * The config root's text for one launch: the provider, the model, the provider's own settings, the mode
- * that asks the client, slash commands off, and one switch for every platform extension the pinned build
- * declares. Throws when the recording does not name the mode or the extension a member keeps, because a
- * config naming a mode the engine does not know runs every call with nothing asking.
- */
-export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunchRuns): string {
-  if (!facts.mode.values.includes(THE_MODE_THAT_ASKS_THE_CLIENT)) {
-    throw new Error(`the recorded engine names no mode ${THE_MODE_THAT_ASKS_THE_CLIENT}, so a launch cannot pin it to one that asks`)
-  }
-  if (!facts.platform_extensions.some((extension) => extension.key === THE_EXTENSION_A_MEMBER_KEEPS)) {
-    throw new Error(`the recorded engine names no platform extension ${THE_EXTENSION_A_MEMBER_KEEPS}, so a launch cannot keep one`)
-  }
-  const switches = facts.platform_extensions.flatMap((extension) => [
-    aLine(`  ${extension.key}`, ''),
-    aLine('    enabled', extension.key === THE_EXTENSION_A_MEMBER_KEEPS),
-  ])
-  // A provider's own settings are what the model declaration names for its endpoint. A setting under the
-  // engine's own prefix is the engine's, read before the session's model: the subagent model and provider
-  // live there, and either one set in this root moves a delegate's model without Martha naming it
-  // (martha#541 package 6, Neptunus's scope item 1). The launch's environment is built from nothing, so
-  // no such variable can reach the engine either; this closes the config root the same way.
-  const enginePrefix = theEnginesOwnPrefix(facts)
-  const borrowed = Object.keys(model.settings).find((setting) => setting.startsWith(enginePrefix))
-  if (borrowed !== undefined) {
-    throw new Error(`a provider setting ${borrowed} carries the engine's own prefix ${enginePrefix}, and only the engine's settings the launcher derives are written to its config root`)
-  }
-  return [
-    aLine(THE_PROVIDER_SETTING, model.provider),
-    aLine(THE_MODEL_SETTING, model.model),
-    aLine(facts.mode.setting, THE_MODE_THAT_ASKS_THE_CLIENT),
-    // Not the opposite of the engine's default: the setting turns slash commands ON, so off is `false`
-    // whether the engine would have them on or off in a config that does not name it.
-    aLine(facts.slash_commands.setting, SLASH_COMMANDS_OFF),
-    ...Object.entries(model.settings).map(([setting, value]) => aLine(setting, value)),
-    aLine(THE_EXTENSIONS_SETTING, ''),
-    ...switches,
-    '',
-  ].join('\n')
-}
-
-/** A key of the config, indentation included: a word, so no key can start a line of its own. */
-const A_WORD_OF_A_KEY = /^[A-Za-z0-9_-]+$/
-
-/** The prefix the engine's own settings carry, from the variable that moves its root: `GOOSE_` from `GOOSE_PATH_ROOT`. */
-function theEnginesOwnPrefix(facts: RecordedEngine): string {
-  const variable = facts.path_root_variable
-  return variable.slice(0, variable.indexOf('_') + 1)
-}
-
-/** One line of the config: a key and its value, a string quoted so no character of it starts a new one. */
-function aLine(key: string, value: string | boolean): string {
-  if (!A_WORD_OF_A_KEY.test(key.trim())) throw new Error(`a config key ${JSON.stringify(key)} is not a word, and no key may carry a line of its own`)
-  if (typeof value === 'boolean') return `${key}: ${String(value)}`
-  if (/[\n\r]/.test(value)) throw new Error(`a value written to the config root holds a line break, which no config key may carry`)
-  if (value === '') return `${key}:`
-  return `${key}: "${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
 /** A launch's engine, as it runs: the group it leads, the way it is ended, and how its end is known. */
@@ -374,15 +285,28 @@ export function theConfigFileOf(root: string): string {
   return join(root, THE_CONFIG_FOLDER, THE_CONFIG_FILE)
 }
 
+/** One launch's refusal, in the words every refusal of this launcher is given in. */
+const refused = (why: string): { readonly refusal: string } => ({ refusal: `The member is not started: ${why}` })
+
 /** One launch of a Goose member, as it runs. */
 export interface AGooseLaunch {
   readonly places: ThePlacesOfALaunch
   /** The config file written for this launch, under its own root. */
   readonly config_at: string
+  /**
+   * The checkout's own text the engine attaches to the prompt with no tool call, each with the source it is recorded as
+   * (martha#541, the Supervisor's ruling on the `recorded-source` kind): the launch's record of where that text came
+   * from, taken before the engine is started. The engine reads the same files again on every model request, so this is
+   * the start's reading and a file changed later reaches the engine with no record naming it. A clean tree's approval
+   * is the control on it (2026-11-07, martha#127 and martha#132), so the record refuses nothing; it is what
+   * ../inbound_paths's A25 and A26 say the launcher makes.
+   */
+  readonly text_a_start_loads: readonly ATextAStartLoads[]
   readonly engine: TheEngineStarted
   /** Stops the engine whole and reads the permission store; says whether the engine had to be stopped and what it saved. */
   readonly end: () => Promise<TheEndOfALaunch>
 }
+
 
 export interface TheEndOfALaunch {
   /** Whether the engine was still running when the launch was ended. */
@@ -390,55 +314,48 @@ export interface TheEndOfALaunch {
   readonly permissions: ThePermissionStoreRead
 }
 
-/** What one launch is asked for: the engine, the places, and the model the member's declaration names. */
+/** What one launch is asked for: the engine, the place the owner approved, and the model the member's declaration names. */
 export interface AGooseLaunchAsked {
   readonly facts: RecordedEngine
   /** The engine's own binary, built from the recorded commit. */
   readonly binary: string
+  /**
+   * Where the member starts and what the owner approved there, for `prepareLaunch`: the same call every host's launch
+   * goes through, so a Goose checkout is decided on by content with the checkout's tree before anything starts
+   * (martha#541, C2's residual on C3 to C9).
+   */
+  readonly place: SnapshotPlace
   /** The folder a launch's root and home are made in, outside the owner's home. */
   readonly launch_root: string
-  /** The approved checkout the member works in, and the engine's working directory. */
-  readonly checkout: string
   readonly model: TheModelALaunchRuns
 }
 
 /**
- * One launch, whole: makes the places, writes the config root, and starts the engine. `end()` stops it
- * and reads the permission store. A refusal, at any step, leaves nothing of the launch's own behind and
- * starts nothing.
+ * One launch, whole: decides on the place through `prepareLaunch`, makes the places, writes the config root, records
+ * the checkout's text the engine will attach, and starts the engine. `end()` stops it, reads the permission store and
+ * removes the gate's snapshot. A refusal, at any step, leaves nothing of the launch's own — nor the snapshot —
+ * behind and starts nothing.
  */
 export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AGooseLaunch | { readonly refusal: string }> {
-  const refused = (why: string): { readonly refusal: string } => ({ refusal: `The member is not started: ${why}` })
-  try {
-    accessSync(asked.binary, constants.X_OK)
-  } catch {
-    return refused(`${asked.binary} is not a program this user may run.`)
+  if (asked.place.host !== asked.facts.engine_name) {
+    return refused(`${asked.place.host} is not the engine this launcher starts (${asked.facts.engine_name}).`)
   }
-  const made = thePlacesOfALaunch(asked.launch_root, asked.checkout)
+  // The gate, before anything is made: `prepareLaunch` decides on the checkout by content and by the owner's approval
+  // of this checkout's tree, and copies what the gate carries. Nothing is carried for the engine, because the launcher
+  // writes the config root its engine reads; what the call gives this launch is the decision and the snapshot's life.
+  // The switches it returns drop what a host inherits, and this launcher inherits nothing at all: the environment it
+  // hands the engine is built from the three names in `theEnvironmentOfALaunch`, never filtered from the owner's, so
+  // there is no inherited value for them to drop.
+  const prepared = prepareLaunch(asked.place, thisMachine)
+  if (!prepared.allow) return { refusal: prepared.refusal }
+  const made = theLaunchMadeBy(asked, prepared)
   if ('refusal' in made) return made
-  const { places } = made
-  const leaveNothingBehind = (why: string): { readonly refusal: string } => {
-    for (const folder of [places.root, places.home]) removeTheTree(folder)
-    return refused(why)
-  }
-
-  let config: string
-  try {
-    config = theConfigOfALaunch(asked.facts, asked.model)
-  } catch (error) {
-    return leaveNothingBehind(error instanceof Error ? error.message : String(error))
-  }
-  const config_at = theConfigFileOf(places.root)
-  try {
-    mkdirSync(join(places.root, THE_CONFIG_FOLDER), { mode: A_LAUNCHS_FOLDERS_MODE })
-    writeFileSync(config_at, config, { mode: FILE_MODE, flag: 'wx' })
-  } catch (error) {
-    return leaveNothingBehind(`the config root could not be written at ${config_at} (${error instanceof Error ? error.message : String(error)})`)
-  }
+  const { places, config_at, text_a_start_loads } = made
 
   const started = await startTheEngine(asked.facts, asked.binary, places, theEnvironmentOfALaunch(asked.facts, places))
   if ('refusal' in started) {
     for (const folder of [places.root, places.home]) removeTheTree(folder)
+    removeTheTree(prepared.snapshot_dir)
     return started
   }
 
@@ -447,9 +364,52 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
     const ended = started.exited
     started.stop()
     await ended
+    removeTheTree(prepared.snapshot_dir)
     return { stopped, permissions: thePermissionStoreIsStillEmpty(places.root) }
   }
-  return { places, config_at, engine: started, end }
+  return { places, config_at, text_a_start_loads, engine: started, end }
+}
+
+/**
+ * What a launch makes once the gate has decided: the checkout's text the engine will attach, read before anything of
+ * the launch's is made and so before the engine starts, its places and the config root written inside them, or the
+ * refusal. A read that fails is a refusal like any other: nothing of the launch's is left, and no engine starts.
+ *
+ * That order is the code's own and no test pins it: a stand-in engine's first instruction races the line after `spawn`,
+ * which promises that the engine was exec'd and not that it has run, so a record read after the start cannot be made to
+ * differ on purpose. It matters little: the engine reads the same files again on every model request (A25 and A26).
+ */
+function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly places: ThePlacesOfALaunch; readonly config_at: string; readonly text_a_start_loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
+  const leaveNothingBehind = (why: string, folders: readonly string[] = []): { readonly refusal: string } => {
+    for (const folder of folders) removeTheTree(folder)
+    removeTheTree(prepared.snapshot_dir)
+    return refused(why)
+  }
+  try {
+    accessSync(asked.binary, constants.X_OK)
+  } catch {
+    return leaveNothingBehind(`${asked.binary} is not a program this user may run.`)
+  }
+  const recorded = theRecordOfTheTextAStartLoads(asked.place, thisMachine)
+  if ('refusal' in recorded) return leaveNothingBehind(recorded.refusal)
+  const made = thePlacesOfALaunch(asked.launch_root, realOrResolved(thisMachine, asked.place.launch_dir))
+  if ('refusal' in made) return leaveNothingBehind(made.refusal)
+  const { places } = made
+
+  let config: string
+  try {
+    config = theConfigOfALaunch(asked.facts, asked.model)
+  } catch (error) {
+    return leaveNothingBehind(error instanceof Error ? error.message : String(error), [places.root, places.home])
+  }
+  const config_at = theConfigFileOf(places.root)
+  try {
+    mkdirSync(join(places.root, THE_CONFIG_FOLDER), { mode: A_LAUNCHS_FOLDERS_MODE })
+    writeFileSync(config_at, config, { mode: FILE_MODE, flag: 'wx' })
+  } catch (error) {
+    return leaveNothingBehind(`the config root could not be written at ${config_at} (${error instanceof Error ? error.message : String(error)})`, [places.root, places.home])
+  }
+  return { places, config_at, text_a_start_loads: recorded.loads }
 }
 
 /** Whether `at` is a real directory: a link is not one, and neither is a path that is not there. */
