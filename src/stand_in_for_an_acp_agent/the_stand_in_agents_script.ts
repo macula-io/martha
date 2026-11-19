@@ -11,7 +11,7 @@ import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_
 /** One step of a scripted turn. */
 export type AStep =
   | { readonly say: string }
-  | { readonly call: { readonly id: string; readonly title: string; readonly input: unknown }; readonly options?: readonly unknown[] }
+  | { readonly call: { readonly id: string; readonly title: string; readonly input: unknown; readonly name?: string }; readonly options?: readonly unknown[] }
   | { readonly ask: string }
   | { readonly line: string }
   | { readonly echo: 1 }
@@ -28,6 +28,13 @@ export interface AnAgentScript {
 
 /** The engine's own permission options, as it builds them: its kind as its id and its name, in the engine's order. */
 export const THE_ENGINES_OPTIONS = RECORDED_GOOSE_ENGINE.permission_options.map((kind) => ({ optionId: kind, name: kind, kind }))
+
+/**
+ * The `_meta` the engine puts on a call's `tool_call` update to name its tool, at the path the recording holds
+ * (`tool_naming.meta_path`, read from goose_tool_call_meta); the permission request itself carries only a title made for people.
+ */
+export const theEnginesNamingOf = (name: string): Record<string, unknown> =>
+  RECORDED_GOOSE_ENGINE.tool_naming.meta_path.reduceRight<unknown>((inner, key) => ({ [key]: inner }), name) as Record<string, unknown>
 
 /** The session id the stand-in opens. */
 export const STAND_IN_SESSION = 'stand-in-session'

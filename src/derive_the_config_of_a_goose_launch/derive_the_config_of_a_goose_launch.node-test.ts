@@ -11,9 +11,12 @@ import { test } from 'node:test'
 
 import { ENGINE_PLACES } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { SKILLS_OFF, theConfigOfALaunch, type TheModelALaunchRuns } from './derive_the_config_of_a_goose_launch.ts'
+import { SKILLS_OFF, theConfigOfALaunch, theServersAConfigNames, THE_EXTENSIONS_SETTING, type AToolServerTheConfigNames, type TheModelALaunchRuns } from './derive_the_config_of_a_goose_launch.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
+
+/** A tool server a test names: the config writes it after every setting these cases read. */
+const A_SERVER: AToolServerTheConfigNames = { key: 'a-server-a-test-names', entry: [['cmd', 'a-command-a-test-names']] }
 
 /** A setting the provider's recording names, which is the only kind a declaration may carry. */
 function aRecordedSetting(): string {
@@ -38,15 +41,15 @@ function refusedSaying(run: () => unknown, mustSay: readonly string[]): void {
 
 test('only the provider the recording holds can be launched, and a name written beside the recording is refused (martha#797; mutant: the provider check dropped)', () => {
   const recorded = FACTS.openai_provider.name
-  assert.doesNotThrow(() => theConfigOfALaunch(FACTS, aDeclaration({}, recorded)))
+  assert.doesNotThrow(() => theConfigOfALaunch(FACTS, aDeclaration({}, recorded), A_SERVER))
   const unrecorded = `${recorded}-not-recorded`
   assert.notEqual(unrecorded, recorded, 'the unrecorded provider is the recorded one')
-  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({}, unrecorded)), [unrecorded, recorded, 'recording package'])
+  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({}, unrecorded), A_SERVER), [unrecorded, recorded, 'recording package'])
 })
 
 test('a setting that replaces the engine\'s hint files is refused by the name the recording gives it, quoting the value as it is written (martha#797; mutant: the hint-setting check dropped)', () => {
   const value = `["${FACTS.hint_files.goose_hints}"]`
-  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [FACTS.hint_files.setting]: value })), [
+  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [FACTS.hint_files.setting]: value }), A_SERVER), [
     FACTS.hint_files.setting,
     JSON.stringify(value),
     ...FACTS.hint_files.when_unset,
@@ -55,7 +58,7 @@ test('a setting that replaces the engine\'s hint files is refused by the name th
 
 test('an unparsable value under the hint-files setting is refused with the hint words, not with a parse error (martha#797, R3)', () => {
   const notAList = 'not a list of files'
-  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [FACTS.hint_files.setting]: notAList })), [
+  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [FACTS.hint_files.setting]: notAList }), A_SERVER), [
     FACTS.hint_files.setting,
     JSON.stringify(notAList),
     ...FACTS.hint_files.when_unset,
@@ -66,24 +69,24 @@ test('every setting the provider\'s recording names is written as it is (martha#
   // Every entry, never one fixture: an allow-list that admitted only the first would survive a single case.
   for (const setting of FACTS.openai_provider.settings) {
     const value = 'a-value-a-test-names'
-    assert.ok(theConfigOfALaunch(FACTS, aDeclaration({ [setting]: value })).includes(`${setting}: "${value}"`), `${setting} is not written as the recording names it`)
+    assert.ok(theConfigOfALaunch(FACTS, aDeclaration({ [setting]: value }), A_SERVER).includes(`${setting}: "${value}"`), `${setting} is not written as the recording names it`)
   }
 })
 
 test('a setting no recording names is refused, and the refusal says where the list comes from (martha#797; mutant: the allow-list dropped)', () => {
   const unrecorded = `${aRecordedSetting()}-not-recorded`
   assert.equal(FACTS.openai_provider.settings.includes(unrecorded), false, 'the unrecorded setting is one the recording names')
-  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [unrecorded]: 'a-value-a-test-names' })), [unrecorded, FACTS.openai_provider.name, ENGINE_PLACES.openai_provider])
+  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [unrecorded]: 'a-value-a-test-names' }), A_SERVER), [unrecorded, FACTS.openai_provider.name, ENGINE_PLACES.openai_provider])
 })
 
 test('the same name in another case is another key, and refused (martha#797; mutant: the comparison case-folded)', () => {
   const anotherCase = aRecordedSetting().toLowerCase()
   for (const setting of FACTS.openai_provider.settings) assert.notEqual(setting, anotherCase, `${anotherCase} is a name the recording already holds`)
-  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [anotherCase]: 'a-value-a-test-names' })), [anotherCase])
+  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [anotherCase]: 'a-value-a-test-names' }), A_SERVER), [anotherCase])
 })
 
 test('a recorded setting whose value carries a line break is refused (martha#797; mutant: the value check dropped)', () => {
-  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [aRecordedSetting()]: 'a value\nwith a line of its own' })), ['line break'])
+  refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [aRecordedSetting()]: 'a value\nwith a line of its own' }), A_SERVER), ['line break'])
 })
 
 test('both skills switches are written off by the names the recording gives them, whatever the engine does when they are unset (martha#839; mutants: either line dropped)', () => {
@@ -91,10 +94,24 @@ test('both skills switches are written off by the names the recording gives them
   assert.notEqual(switches[0], switches[1], 'the two switches are one setting, so one line would pass for both')
   for (const when_unset of [true, false]) {
     const facts = { ...FACTS, skills_advertised: { ...FACTS.skills_advertised, when_unset }, builtin_skills_advertised: { ...FACTS.builtin_skills_advertised, when_unset } }
-    const lines = theConfigOfALaunch(facts, aDeclaration({})).split('\n')
+    const lines = theConfigOfALaunch(facts, aDeclaration({}), A_SERVER).split('\n')
     for (const setting of switches) {
       assert.deepEqual(lines.filter((line) => line.startsWith(`${setting}:`)), [`${setting}: ${String(SKILLS_OFF)}`], `${setting} with the engine's default ${String(when_unset)}`)
     }
   }
   assert.equal(SKILLS_OFF, false, 'the switches offer skills when true, so off is false')
+})
+
+test('the servers a config root names are read back from its text: the one it was written with, and every key under extensions that is no platform extension (martha#541 C1 R1; mutant: the reader skips a key)', () => {
+  const written = theConfigOfALaunch(FACTS, aDeclaration({}), A_SERVER)
+  assert.deepEqual(theServersAConfigNames(FACTS, written), [A_SERVER.key])
+
+  const aSecond = 'a-second-server-a-test-names'
+  const edited = written.replace(`${THE_EXTENSIONS_SETTING}:\n`, `${THE_EXTENSIONS_SETTING}:\n  ${aSecond}:\n    enabled: true\n    cmd: "a-command-a-test-names"\n`)
+  assert.notEqual(edited, written, 'the edit found no extensions line to put the second server under')
+  assert.deepEqual(theServersAConfigNames(FACTS, edited), [aSecond, A_SERVER.key])
+
+  const theKept = FACTS.platform_extensions.map((extension) => extension.key)
+  assert.ok(theKept.length > 0, 'the recording names no platform extension, so this case reads nothing')
+  for (const key of theKept) assert.ok(written.includes(`\n  ${key}:\n`), `the config does not write the platform extension ${key}, so its exclusion is unpinned`)
 })
