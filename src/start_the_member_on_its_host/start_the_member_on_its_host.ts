@@ -22,12 +22,13 @@ import { delimiter, dirname, join } from 'node:path'
 import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
-import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
+import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { OWNER_BELL, THE_ENGINES_HOST, type CrewSettings, type Member, type TheVocabulariesOfHost } from '../declare_crew/declare_crew.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
+import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { crewTextFilesOf } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
@@ -270,6 +271,45 @@ function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: C
  */
 export const leftoversOfALaunch = (settings: CrewSettings, crew: CrewStore) => ({ crew, workspace: theWorkspaceTheCrewDeclared(settings) })
 
+/** The crew tools' places a host's start does not choose itself: the models it names, how it spawns a subagent, and the settings file its model command saves a switch into. */
+export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings'>
+
+/**
+ * The crew tools' places every host's start shares (martha#541 package A): built here once, with the host's own
+ * places handed in, so a second host's start serves the same tools over the same stores as a Claude Code start.
+ */
+export function theCrewToolsOfAStart(start: AStartOnItsHost, sessions: NonNullable<CrewToolPlaces['sessions']>, served_tools: TheServedToolsWatch, host: TheCrewToolsOfAHost): HoldingTheWatch<CrewToolPlaces> {
+  // One raising for this launch, and one channel carrier: the carrier counts a handed message taken in when the mod
+  // reports the member's next main turn started (martha#253).
+  const channel = start.channel
+  return {
+    ...theGitGuardPlaceOf(start.settings, start.member, start.crew_stores.crew),
+    member: start.member,
+    ledger: channel,
+    beats: dashboardRowsIn(start.places.dashboard),
+    root: start.root,
+    documents: start.documents,
+    stores: { crew: start.crew_stores.crew },
+    carrier: carryingTo({ member: start.member, host: channel }),
+    sessions,
+    // What the launch watches of the crew tools it served (martha#658): 697 handed the member's
+    // served window here, where the tools are built now that the launch body moved (#703).
+    served_tools,
+    // The stamps the host keeps its handovers with (martha#255), under the same crew directory: a handover one
+    // session writes is the one its successor inherits.
+    stamps: start.crew_stores.stamps,
+    // The five tools that act run git and gh through the launcher's own processes, over the declaration's
+    // workspace places: nothing that acts runs inside the member's session (martha#256).
+    processes: thisMachine.processes,
+    settings: start.settings,
+    // What a reboot deletes on this machine, read here and ruled on by ../tell_a_citer_of_a_volatile_path (martha#314).
+    volatile_roots: machineRootsFrom(tmpdir(), process.env['XDG_RUNTIME_DIR']),
+    launched_on: start.model ?? '',
+    ...host,
+    ...start.restart,
+  }
+}
+
 /**
  * The request a Claude Code start hands its launcher (martha#784): one value, built here from the start and handed on
  * whole, as `leftoversOfALaunch` builds one field of it. The launch tests build their own request and the start tests
@@ -277,9 +317,6 @@ export const leftoversOfALaunch = (settings: CrewSettings, crew: CrewStore) => (
  * be replaced by a literal at the call site with every test green.
  */
 export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeMemberLaunch {
-  // One raising for this launch, and one channel carrier: the carrier counts a handed message taken in when the mod
-  // reports the member's next main turn started (martha#253).
-  const channel = start.channel
   return {
     member_name: start.member,
     node_id: start.node_id,
@@ -299,35 +336,13 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeM
     ...(start.hear_relay_place === undefined ? {} : { hearRelayPlace: start.hear_relay_place }),
     turns: turnsRaised(),
     crew_tools: (sessions, member) =>
-      crewToolsOver({ ...theGitGuardPlaceOf(start.settings, start.member, start.crew_stores.crew),
-        member: start.member,
-        ledger: channel,
-        beats: dashboardRowsIn(start.places.dashboard),
-        root: start.root,
-        documents: start.documents,
-        stores: { crew: start.crew_stores.crew },
-        carrier: carryingTo({ member: start.member, host: channel }),
-        sessions,
-        // What the launch watches of the crew tools it served (martha#658): 697 handed the member's
-        // served window here, where the tools are built now that the launch body moved (#703).
-        served_tools: member.served_tools,
-        // The stamps the host keeps its handovers with (martha#255), under the same crew directory: a handover one
-        // session writes is the one its successor inherits.
-        stamps: start.crew_stores.stamps,
-        // The five tools that act run git and gh through the launcher's own processes, over the declaration's
-        // workspace places: nothing that acts runs inside the member's session (martha#256).
-        processes: thisMachine.processes,
-        settings: start.settings,
-        // What a reboot deletes on this machine, read here and ruled on by ../tell_a_citer_of_a_volatile_path (martha#314).
-        volatile_roots: machineRootsFrom(tmpdir(), process.env['XDG_RUNTIME_DIR']),
+      crewToolsOver(theCrewToolsOfAStart(start, sessions, member.served_tools, {
         models: CLAUDE_CODE_MODELS,
-        launched_on: start.model ?? '',
         spawn: CLAUDE_CODE_SUBAGENT_SPAWN,
         // The settings file the host's model command saves a switch into, and the lock that guards it (martha#359): the
         // member's own since martha#602. The owner's file was finished above, before the host started.
         owners_settings: theMembersSwitchPlace(start, member.config_dir),
-        ...start.restart,
-      }),
+      })),
     signed_runs: signedRunsOf(
       receiptsInMemory(),
       (name) => runAKeptShape(start.state, start.root, start.inherited, name, new Date()),
