@@ -619,11 +619,27 @@ const findingsForAQuotedWord = (path: string, line: number, word: string, files:
   return files.has(word) || holdsAnAddress(word) ? whole : [...whole, ...findingsForTheSegments(path, line, pathSegmentsOf(word), files, declared, definitions)]
 }
 
+/**
+ * The findings a template's text names, each value once: a word the text quotes is judged twice when a path separator
+ * already splits it out of the same text — `'refs/the-tool/base'` in a template names `the-tool` as a piece and as a
+ * quoted word's segment — and one copy of a value is one finding, never two (martha#776).
+ */
+const onceEach = (findings: readonly Finding[]): Finding[] => {
+  const seen = new Set<string>()
+  return findings.filter((finding) => {
+    const key = JSON.stringify([finding.literal, finding.module, finding.name, finding.rule, finding.gone])
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 /** What a template's text holds: each piece a path separator splits out, and each word it quotes (martha#437, martha#776). */
-const findingsForTheTemplatesText = (path: string, line: number, text: string, files: ReadonlySet<string>, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] => [
-  ...findingsForTheSegments(path, line, piecesOfALiteral(text), files, declared, definitions),
-  ...quotedWordsIn(text).flatMap((word) => findingsForAQuotedWord(path, line, word, files, declared, definitions)),
-]
+const findingsForTheTemplatesText = (path: string, line: number, text: string, files: ReadonlySet<string>, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] =>
+  onceEach([
+    ...findingsForTheSegments(path, line, piecesOfALiteral(text), files, declared, definitions),
+    ...quotedWordsIn(text).flatMap((word) => findingsForAQuotedWord(path, line, word, files, declared, definitions)),
+  ])
 
 /** The literals of a source that can carry a value: not a module's path, not a property's name, not a type (rule 1 of part b). */
 const literalsThatCarryAValue = (file: ts.SourceFile): ts.Node[] =>
@@ -643,7 +659,7 @@ function findingsAt(node: ts.Node, line: number, path: string, declared: readonl
     : findingsForADefinition(definition, line, declared, definitions, everyDefinition)
   const quoted = ts.isNoSubstitutionTemplateLiteral(node) ? quotedWordsIn(literal).flatMap((word) => findingsForAQuotedWord(path, line, word, files, declared, definitions)) : []
   const asALiteral = files.has(literal) || holdsAnAddress(literal) ? whole : [...whole, ...findingsForTheSegments(path, line, pathSegmentsOf(literal), files, declared, definitions)]
-  return [...asALiteral, ...quoted]
+  return onceEach([...asALiteral, ...quoted])
 }
 
 /**
