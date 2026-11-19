@@ -90,6 +90,12 @@ export function drawTheCrewStrip(places: TheCrewsPlaces, draw: (frame: readonly 
 }
 
 
+/** Whether `member` is running, as `martha stop` reads it: the one reading, so `martha crew remove` cannot read another (martha#307). */
+export function isRunning(places: TheCrewsPlaces, member: string): boolean {
+  const host = stoppingHostOn(places)
+  return theRunningLaunchOf(host.launches(), host.processes, member) !== undefined
+}
+
 /**
  * Stops `member`, or, with none named, every declared member that is running (crew-code's `down`), one after another;
  * resolves to what came of each, in the declaration's order.
@@ -98,7 +104,7 @@ export async function stopTheCrew(places: TheCrewsPlaces, member: string | undef
   const host = stoppingHostOn(places)
   const names = places.settings.members.map((one) => one.name)
   if (member !== undefined && !names.includes(member)) return [{ kind: 'refused', told: `${member} is not on this crew (its members are ${names.join(', ')}).` }]
-  const asked = member === undefined ? names.filter((name) => theRunningLaunchOf(host.launches(), host.processes, name) !== undefined) : [member]
+  const asked = member === undefined ? names.filter((name) => isRunning(places, name)) : [member]
   if (asked.length === 0) return [{ kind: 'not_running', told: 'no member of this crew is running, so nothing was stopped.' }]
   const stopped: Stopped[] = []
   for (const name of asked) stopped.push(await stopAMember(host, { member: name, by: OWNER, reason: OWNERS_STOP_REASON, id: randomUUID() }))
