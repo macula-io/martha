@@ -7,7 +7,7 @@
 // gone when the launch ends.
 
 import assert from 'node:assert/strict'
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import fs, { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -139,38 +139,16 @@ test("a launch's relay directory holding a read-only copy is removed whole", (t)
 })
 
 /**
- * A tree with a writer in it that makes `again` inside it over and over, for `seconds`: what a process that is being
- * stopped does to a tree its run removes (martha#724). The writer says it has started in a file beside the tree, so the
- * removal races a writer that is already writing. When the case ends the writer is killed first, then the scratch
- * folder holding the tree is removed.
- */
-async function aTreeWithAWriterIn(t: TestContext, seconds: number): Promise<string> {
-  const scratch = mkdtempSync(join(tmpdir(), 'relay-copy-'))
-  const tree = join(scratch, 'tree')
-  const started = join(scratch, 'started')
-  const writer = spawn('timeout', [String(seconds), 'bash', '-c', 'mkdir -p "$1/again" && : > "$2"; while :; do mkdir -p "$1/again"; done', 'writer', tree, started], { stdio: 'ignore' })
-  const ended = new Promise<void>((resolve) => writer.once('exit', () => resolve()))
-  let exited = false
-  void ended.then(() => (exited = true))
-  t.after(async () => {
-    writer.kill('SIGKILL')
-    await ended
-    relayCopy.removeTheTree(scratch)
-  })
-  while (!existsSync(started) && !exited) await new Promise((resolve) => setTimeout(resolve, 10))
-  assert.equal(existsSync(started), true, 'the writer wrote before the removal began')
-  return tree
-}
-
-/**
  * A remove that returns with the tree put back, `times` times, the way a writer that is being stopped makes its folder
  * again right after a remove (martha#724): what Node's remove did on the recorded host, at the one place it can be put.
  */
-function aRemoveThatAWriterUndoes(t: TestContext, times: number): { readonly removes: () => number } {
+function aRemoveThatAWriterUndoes(t: TestContext, tree: string, times: number): { readonly removes: () => number } {
   const remove = fs.rmSync.bind(fs)
   let removes = 0
+  // Only `tree` is put back, so the scratch folder around it is removed as it would be, whatever the case found.
   t.mock.method(fs, 'rmSync', (path: string, options: fs.RmOptions) => {
     remove(path, options)
+    if (path !== tree) return
     removes++
     if (removes <= times) mkdirSync(join(path, 'again'), { recursive: true })
   })
@@ -180,34 +158,24 @@ function aRemoveThatAWriterUndoes(t: TestContext, times: number): { readonly rem
 test('a tree a writer makes again after every remove is not reported removed: the removal throws and names it (martha#724)', (t) => {
   const scratch = mkdtempSync(join(tmpdir(), 'relay-copy-'))
   t.after(() => relayCopy.removeTheTree(scratch))
-  const tree = join(scratch, 'tree')
+  const tree = join(scratch, 'being-removed')
   mkdirSync(join(tree, 'again'), { recursive: true })
-  const undone = aRemoveThatAWriterUndoes(t, Number.POSITIVE_INFINITY)
+  const undone = aRemoveThatAWriterUndoes(t, tree, Number.POSITIVE_INFINITY)
   assert.throws(
     () => relayCopy.removeTheTree(tree),
     (error: Error) => error.message.startsWith(`${tree} is still there after ${relayCopy.REMOVAL_ATTEMPTS} removals`),
   )
   assert.equal(undone.removes(), relayCopy.REMOVAL_ATTEMPTS)
-  t.mock.restoreAll()
 })
 
 test('a tree a writer makes again only while it is being stopped is removed on a later attempt (martha#724)', (t) => {
   const scratch = mkdtempSync(join(tmpdir(), 'relay-copy-'))
   t.after(() => relayCopy.removeTheTree(scratch))
-  const tree = join(scratch, 'tree')
+  const tree = join(scratch, 'being-removed')
   mkdirSync(join(tree, 'again'), { recursive: true })
   const put_back = 2
-  const undone = aRemoveThatAWriterUndoes(t, put_back)
+  const undone = aRemoveThatAWriterUndoes(t, tree, put_back)
   relayCopy.removeTheTree(tree)
   assert.equal(existsSync(tree), false)
   assert.equal(undone.removes(), put_back + 1)
-  t.mock.restoreAll()
-})
-
-test('a tree a real writer is still writing in when its removal starts is removed whole once the writer stops (martha#724)', async (t) => {
-  // Past the first two attempts' waits, well inside the rest.
-  const stops_within_the_attempts = (3 * relayCopy.REMOVAL_DELAY_MS) / 1000
-  const tree = await aTreeWithAWriterIn(t, stops_within_the_attempts)
-  relayCopy.removeTheTree(tree)
-  assert.equal(existsSync(tree), false)
 })

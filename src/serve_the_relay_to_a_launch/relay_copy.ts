@@ -111,19 +111,25 @@ const CAME_BACK = 'it came back after the remove'
 export function removeTheTree(directory: string): void {
   let last = CAME_BACK
   for (let attempt = 1; attempt <= REMOVAL_ATTEMPTS; attempt++) {
-    try {
-      openUpFolders(directory)
-      // Through the module object, so a test can put the tree back the way a writer does (relay_copy.node-test.ts).
-      fs.rmSync(directory, { recursive: true, force: true })
-      if (!existsSync(directory)) return
-      last = CAME_BACK
-    } catch (error) {
-      if (!RETRIED_REMOVAL_CODES.has(codeOf(error))) throw error
-      last = codeOf(error)
-    }
+    const left = oneRemovalOf(directory)
+    if (left === undefined) return
+    last = left
     if (attempt < REMOVAL_ATTEMPTS) waitFor(attempt * REMOVAL_DELAY_MS)
   }
   throw new Error(`${directory} is still there after ${REMOVAL_ATTEMPTS} removals (${last}): something is still writing in it.`)
+}
+
+/** One attempt: nothing when the tree is gone, or why it is still there; an error no writer explains is thrown. */
+function oneRemovalOf(directory: string): string | undefined {
+  try {
+    openUpFolders(directory)
+    // Through the module object, so a test can put the tree back the way a writer does (relay_copy.node-test.ts).
+    fs.rmSync(directory, { recursive: true, force: true })
+  } catch (error) {
+    if (!RETRIED_REMOVAL_CODES.has(codeOf(error))) throw error
+    return codeOf(error)
+  }
+  return existsSync(directory) ? CAME_BACK : undefined
 }
 
 /** Blocks this thread for `ms`: a removal is synchronous, and its callers run it in `finally` and `t.after`. */
