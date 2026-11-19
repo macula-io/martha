@@ -23,4 +23,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: CONFIG, file: 'launch_a_goose_member/launch_a_goose_member.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
   // The test spells the engine root's folders as the design table names them, so a reader that drops one fails it.
   { value: CONFIG, file: 'launch_a_goose_member/the_engines_decisions.node-test.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
+  // The watch names the engine's config folder by the kind the engine's paths module gives it, and its test spells it.
+  { value: CONFIG, file: 'launch_a_goose_member/the_roots_watch.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
+  { value: CONFIG, file: 'launch_a_goose_member/the_roots_watch.node-test.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
 ]
