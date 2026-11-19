@@ -113,7 +113,7 @@
       "src/launch_a_claude_code_member/remember_own_write_of_a_call.ts"
     ],
     "hostCeilings": {
-      "src/answer_the_relay": 314,
+      "src/answer_the_relay": 315,
       "src/approve_a_checkouts_config": 69,
       "src/ask_the_host_what_it_loads": 292,
       "src/claude_code_host": 492,
@@ -143,7 +143,7 @@
       "src/keep_the_relays_journal": 254,
       "src/keep_what_the_owner_signed": 97,
       "src/launch_a_claude_code_member": 553,
-      "src/launch_a_goose_member": 776,
+      "src/launch_a_goose_member": 775,
       "src/linux_process_identity": 332,
       "src/list_stop_and_restart_the_crew": 103,
       "src/load_the_hosts_markdown": 427,
