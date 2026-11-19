@@ -79,6 +79,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'run_the_nodes_own_npm_alone',
     'serve_the_crews_tools_to_an_engine',
     'serve_the_relay_to_a_launch',
+    'serve_the_owners_answers',
     'start_a_member',
     'start_the_member_on_its_host',
     'start_the_member_on_the_owners_terminal',
