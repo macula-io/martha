@@ -21,15 +21,16 @@ import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { crewSubdirectory, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
-import { THE_ROOT_OF_A_LAUNCH, THE_STORES_PERMISSIONS_KEY, thePermissionStoreOf } from '../launch_a_goose_member/launch_a_goose_member.ts'
+import { THE_ROOT_OF_A_LAUNCH, THE_STORES_PERMISSIONS_KEY, theConfigFileOf, thePermissionStoreOf } from '../launch_a_goose_member/launch_a_goose_member.ts'
 import { ALREADY_ANSWERED, type AnOpenAsk } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
 import { answerInAProject } from '../serve_the_owners_answers/martha_answer.ts'
 import { askTheRoute, THE_ANSWER_ROUTES_PLACE, theRouteOf } from '../serve_the_owners_answers/the_owners_answer_route.ts'
+import { theFoldersReadBackWhole } from '../launch_a_goose_member/the_roots_watch.ts'
 import { ALLOW_ONCE } from '../speak_acp_to_an_agent/answer_a_permission_once.ts'
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { launcherPlacesOf, startMember, type MemberStartRequest } from '../start_a_member/start_a_member.ts'
-import type { AnAgentScript, AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
+import type { AnAgentScript, AStandInsSessionRow, AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
@@ -102,7 +103,7 @@ function anEngineOnThePath(place: Place, script: AnAgentScript): { readonly dir:
 }
 
 /** The session row the engine writes for a session the launch opened, as the launch created it. */
-const THE_SESSIONS_ROW: AnAgentScript['session_row'] = {
+const THE_SESSIONS_ROW: AStandInsSessionRow = {
   root_variable: FACTS.path_root_variable,
   path: [...(FACTS.engine_folders.under_root['data'] ?? []), FACTS.session_store.file],
   table: FACTS.session_store.table,
@@ -294,23 +295,81 @@ test("#541 package A: the engine's permission request reaches the owner under th
   assert.deepEqual(theAnswersTheEngineHeard(engine.heard), [{ outcome: 'selected', optionId: ALLOW_ONCE }])
 })
 
-test("#541 package A: a write to the session's row while the ask waits stops the member at the call's result, with the entry's words (design r=5 proof; a shell write to the store)", async (t) => {
-  const place = aPlace(t)
-  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[A_SHELL_CALL]], session_row: THE_SESSIONS_ROW })
-  const lines: string[] = []
-  const start = await started(place, engine, lines)
-  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
-  const ask = await untilAnAskIsOpen(place)
-  const store = new DatabaseSync(join(theEnginesRoot(place), ...THE_SESSIONS_ROW.path))
+/** What one write the member's shell could make while its ask waits changes, and what the member's stop then names. */
+interface AWriteWhileTheAskWaits {
+  readonly what: string
+  readonly write: (root: string) => string
+  readonly says: (written: string) => string
+}
+
+/** One statement run on the engine's own session store, as a shell's sqlite3 would run it. */
+function onTheStore(root: string, statement: string): string {
+  const at = join(root, ...THE_SESSIONS_ROW.path)
+  const store = new DatabaseSync(at)
   try {
-    store.prepare(`UPDATE ${THE_SESSIONS_ROW.table} SET goose_mode = ?`).run('auto')
+    store.exec(statement)
   } finally {
     store.close()
   }
-  assert.equal((await theOwnerAnswers(place, ask.key, 'allow')).code, 0)
-  const stopped = await theEndOf(start)
-  assert.ok(stopped.stopped_because?.includes('goose_mode was changed after it started'), `${stopped.stopped_because}\n${lines.join('\n')}`)
-})
+  return at
+}
+
+const TABLE = THE_SESSIONS_ROW.table
+const AN_ADDED_SERVER = 'a-server-a-test-adds'
+const A_SECOND_SESSION = 'a-second-session-a-test-adds'
+
+const WRITES_WHILE_THE_ASK_WAITS: readonly AWriteWhileTheAskWaits[] = [
+  { what: "the session's mode", write: (root) => onTheStore(root, `UPDATE ${TABLE} SET goose_mode = 'auto'`), says: () => 'goose_mode was changed after it started' },
+  { what: "the session's working folder", write: (root) => onTheStore(root, `UPDATE ${TABLE} SET working_dir = '${root}'`), says: () => 'working_dir was changed after it started' },
+  {
+    what: "the session's enabled extensions",
+    write: (root) =>
+      onTheStore(root, `UPDATE ${TABLE} SET extension_data = '${JSON.stringify({ [ENABLED_EXTENSIONS]: { extensions: [THE_EXTENSION_A_MEMBER_KEEPS, THE_CREWS_TOOL_SERVER, AN_ADDED_SERVER].map((name) => ({ name })) } })}'`),
+    says: () => 'enabled extensions were changed after it started',
+  },
+  {
+    what: 'a second session in the store',
+    write: (root) => onTheStore(root, `INSERT INTO ${TABLE} (${THE_SESSIONS_ROW.columns.join(', ')}) SELECT ${THE_SESSIONS_ROW.columns.map((column) => (column === 'id' ? `'${A_SECOND_SESSION}'` : column)).join(', ')} FROM ${TABLE}`),
+    says: (at) => `the session store at ${at} holds 2 sessions`,
+  },
+  {
+    what: "the engine's config file",
+    write: (root) => {
+      const at = theConfigFileOf(root)
+      writeFileSync(at, `${readFileSync(at, 'utf8')}\n`)
+      return at
+    },
+    says: (at) => at,
+  },
+  {
+    what: "a file in the root's agents folder",
+    write: (root) => {
+      const folders = theFoldersReadBackWhole(FACTS, root)
+      assert.ok('folders' in folders, 'refusal' in folders ? folders.refusal : '')
+      const at = join(folders.folders[1] ?? '', 'AGENTS.md')
+      mkdirSync(dirname(at), { recursive: true })
+      writeFileSync(at, 'a line a test writes\n')
+      return at
+    },
+    // The folder is not there when the launch takes its snapshot, so the stop names the folder made, not the file in it.
+    says: (at) => `${dirname(at)} was made after the launch wrote its root`,
+  },
+]
+
+for (const { what, write, says } of WRITES_WHILE_THE_ASK_WAITS) {
+  test(`#541 package A: a write to ${what} while the ask waits stops the member at the call's result, with the entry's words (design r=4/r=5 proofs, a shell's write through the real entry)`, async (t) => {
+    const place = aPlace(t)
+    const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[A_SHELL_CALL]], session_row: THE_SESSIONS_ROW })
+    const lines: string[] = []
+    const start = await started(place, engine, lines)
+    assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+    const ask = await untilAnAskIsOpen(place)
+    const written = write(theEnginesRoot(place))
+    assert.equal((await theOwnerAnswers(place, ask.key, 'allow')).code, 0)
+    const stopped = await theEndOf(start)
+    assert.ok(stopped.stopped_because?.includes(says(written)), `${stopped.stopped_because}\n${lines.join('\n')}`)
+  })
+}
 
 test('#541 package A: a permission store the launch ends with a saved rule in is told to the owner by name at the end', async (t) => {
   const place = aPlace(t)
