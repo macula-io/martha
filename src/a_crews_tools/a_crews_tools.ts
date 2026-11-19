@@ -237,6 +237,12 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * another member's branch that reached git past the shell and past the shim. A place given none refuses nothing.
    */
   readonly refusesTheRefUpdate?: (updates: readonly { readonly ref: string; readonly deletes: boolean }[]) => string | undefined
+  /**
+   * What the killed-run record refuses of a hand-off (martha#719): a `say_to_crew` whose first line is a HANDOFF line,
+   * while a leftover the record kept still stands where the record says it stands. A place given none refuses nothing,
+   * and a crew that declared no workspace layout hands none.
+   */
+  readonly refusesTheHandOff?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
 }
 
 /** The tools a crew's member can call. */
@@ -312,6 +318,12 @@ export interface CrewTools extends TheReviewRule {
    * whether each is a delete. Undefined when nothing refuses it, or when the crew declared no layout.
    */
   refusesTheRefUpdate?(updates: readonly { readonly ref: string; readonly deletes: boolean }[]): string | undefined
+  /**
+   * What the killed-run record refuses of a hand-off (martha#719): a `say_to_crew` whose first line is a HANDOFF line,
+   * while a leftover it kept still stands where the record says it stands. Undefined when nothing refuses it, when the
+   * crew declared no layout, or when a launch handed no guard of this place at all.
+   */
+  refusesTheHandOff?(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined>
 }
 
 /** The tools, in the order the mod registers them, each as the slice that owns it defines it. */
@@ -469,6 +481,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     refusesTheGitIn: async (call) => (held.refusesTheGitCall === undefined ? undefined : held.refusesTheGitCall(call)),
     refusesTheGitOnThePath: async (call) => held.refusesTheGitOnThePath?.(call),
     refusesTheRefUpdate: (updates) => held.refusesTheRefUpdate?.(updates),
+    refusesTheHandOff: async (call) => held.refusesTheHandOff?.(call),
   }
 }
 
