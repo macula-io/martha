@@ -50,6 +50,8 @@ const GOOD_TRANSCRIPT = transcriptOf(aVerify(T1), anAnswer(T2), anAsk(T3))
 
 const SETTLED_AT = 1_795_040_000_000
 const PUSHED_AT = SETTLED_AT + 5_000
+/** The night printed the owner's attach command about half a minute before the yes was settled. */
+const ATTACHED_AT = SETTLED_AT - 31_000
 
 /** The owner_asks stream: ask 0 queued, taken, and settled with `yes`. */
 const theAsks = (yes: readonly number[] = [0], at = SETTLED_AT, question = QUESTION): readonly StoredRow[] => [
@@ -64,7 +66,7 @@ const theLedger = (note = `${BASE}..${TIP} on the owner's yes to ask 0`, pushed 
   { kind: 'package_landed', package: PACKAGE, member: 'ada', at: PUSHED_AT + 1, note },
 ] as unknown as readonly LedgerRow[]
 
-const GOOD: TheLandingRecord = { builderTranscript: GOOD_TRANSCRIPT, asks: theAsks(), ledger: theLedger() }
+const GOOD: TheLandingRecord = { builderTranscript: GOOD_TRANSCRIPT, asks: theAsks(), ledger: theLedger(), attachPrintedAt: ATTACHED_AT }
 const failsAt = (record: Partial<TheLandingRecord>, row: string): void => {
   assert.match(whichLandingClaimFails(NIGHT, { ...GOOD, ...record }) ?? '', new RegExp(`^${row}: `))
 }
@@ -103,6 +105,12 @@ test('a settle that does not list the ask as yes fails the yes row, and so does 
   failsAt({ asks: theAsks([0], PUSHED_AT) }, OWNER_SAID_YES)
 })
 
+test('a yes settled before the owner\'s attach command was printed, or at that moment, fails the yes row (Saturnus, #639 PR 821 r=2)', () => {
+  failsAt({ attachPrintedAt: SETTLED_AT + 1 }, OWNER_SAID_YES)
+  failsAt({ attachPrintedAt: SETTLED_AT }, OWNER_SAID_YES)
+  assert.match(whichLandingClaimFails(NIGHT, { ...GOOD, attachPrintedAt: SETTLED_AT }) ?? '', /not after the owner's attach command was printed/)
+})
+
 test('a ledger with no push of the tip, or a landing noted on another ask or range, fails the landed row', () => {
   failsAt({ ledger: theLedger(undefined, 'c'.repeat(40)) }, IT_LANDED)
   failsAt({ ledger: theLedger(`${BASE}..${TIP} on the owner's yes to ask 1`) }, IT_LANDED)
@@ -122,7 +130,7 @@ test('the landing verb reads the rows folder through the store and holds (0), re
   writeFileSync(join(folder, 'builder.jsonl'), GOOD_TRANSCRIPT)
   const night = (change: Record<string, unknown> = {}): string => {
     const file = join(folder, 'night.json')
-    writeFileSync(file, JSON.stringify({ ...NIGHT, builder_transcript: join(folder, 'builder.jsonl'), rows_folder: rows, ...change }))
+    writeFileSync(file, JSON.stringify({ ...NIGHT, builder_transcript: join(folder, 'builder.jsonl'), rows_folder: rows, attach_printed_at: String(ATTACHED_AT), ...change }))
     return file
   }
   assert.deepEqual(await landing(night()), { code: 0 })
@@ -132,19 +140,38 @@ test('the landing verb reads the rows folder through the store and holds (0), re
   assert.match(refused.err ?? '', new RegExp(`^${LANDING_ASKED}: `))
   assert.equal((await landing(night({ rows_folder: '' }))).code, 2)
   assert.equal((await landing(night({ builder_transcript: join(folder, 'missing.jsonl') }))).code, 2)
+  assert.equal((await landing(night({ attach_printed_at: '' }))).code, 2, 'a night file with no attach time is could-not-look')
+  assert.equal((await landing(night({ attach_printed_at: 'soon' }))).code, 2, 'an attach time that is not digits is could-not-look')
+  const early = await landing(night({ attach_printed_at: String(SETTLED_AT + 1) }))
+  assert.equal(early.code, 1, 'a yes settled before the attach was printed')
+  assert.match(early.err ?? '', new RegExp(`^${OWNER_SAID_YES}: `))
 })
 
-test('the asked verb holds (0) once the crew has queued an ask of the owner, refuses (1) before, and could not look (2) at no folder', async (t) => {
+test('the asked verb holds (0) once the builder has queued the landing\'s ask, refuses (1) on any other ask or none, and could not look (2) at no folder (Saturnus, #639 PR 821 r=2)', async (t) => {
   const folder = mkdtempSync(join(tmpdir(), 'martha-639-asked-'))
   t.after(() => removeTheTree(folder))
   const rows = join(folder, 'the-crews-rows')
   mkdirSync(rows, { mode: 0o700 })
   const store = rowStreamsDirectory(rows)
+  const night = (transcript: string, change: Record<string, unknown> = {}): string => {
+    writeFileSync(join(folder, 'builder.jsonl'), transcript)
+    const file = join(folder, 'night.json')
+    writeFileSync(file, JSON.stringify({ ...NIGHT, range: `${BASE}..`, builder_transcript: join(folder, 'builder.jsonl'), rows_folder: rows, ...change }))
+    return file
+  }
   await store.append(ledgerStreamOf(PACKAGE), theLedger()[0] as unknown as Record<string, unknown>)
-  const before = await asked(rows)
+  const before = await asked(night(GOOD_TRANSCRIPT))
   assert.equal(before.code, 1, 'a ledger row is not an ask')
-  assert.match(before.err ?? '', /has queued no ask of the owner/)
+  assert.match(before.err ?? '', new RegExp(`^${LANDING_ASKED}: `))
+  // Another ask, queued first, as the builder asks it: not the landing's.
+  const OTHER = 'Which name should the greeting use?'
+  await store.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: OTHER, asked_by: 'ada', since: SETTLED_AT - 91_000 })
+  assert.equal((await asked(night(transcriptOf(anAsk(T1, OTHER), aVerify(T2), anAnswer(T3))))).code, 1, 'another ask queued before the landing\'s')
   await store.append(OWNER_ASKS_STREAM, (theAsks()[0] as StoredRow).row)
-  assert.deepEqual(await asked(rows), { code: 0 })
-  assert.equal((await asked(join(folder, 'no-such-folder'))).code, 2)
+  assert.deepEqual(await asked(night(transcriptOf(anAsk(T1, OTHER), aVerify(T1), anAnswer(T2), anAsk(T3)))), { code: 0 })
+  // The tip is not known yet: a verify_range on any tip from the night's base hands the question.
+  assert.deepEqual(await asked(night(transcriptOf(aVerify(T1, 'c'.repeat(40)), anAnswer(T2), anAsk(T3)))), { code: 0 })
+  assert.equal((await asked(night(transcriptOf(anAsk(T1), aVerify(T2), anAnswer(T3))))).code, 1, 'an ask queued before the answer')
+  assert.equal((await asked(night(GOOD_TRANSCRIPT, { rows_folder: join(folder, 'no-such-folder') }))).code, 2)
+  assert.equal((await asked(night(GOOD_TRANSCRIPT, { range: '..' }))).code, 2, 'a range with no base')
 })

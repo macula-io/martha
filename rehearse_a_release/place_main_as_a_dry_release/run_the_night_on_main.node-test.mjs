@@ -12,7 +12,7 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
@@ -220,6 +220,23 @@ test('1. bad arguments are refused before anything is fetched or packed (mutant:
   assertRefusedBeforePacking(night, drive(night, withEvidence(night, '--a-flag-nobody-knows')), /usage:/)
 })
 
+test('1b. each tool the driver runs, missing from PATH, refuses the run by name before anything is packed (mutant: the check dropped)', (t) => {
+  const tools = aDriversWord('DRIVERS_TOOLS').split(' ')
+  const bash = spawnSync('bash', ['-c', 'command -v bash'], { encoding: 'utf8' }).stdout.trim()
+  for (const missing of tools) {
+    const night = aNight(t)
+    // A PATH holding every tool but the missing one, each a link to the real one.
+    const bin = join(night.root, `bin-without-${missing}`)
+    mkdirSync(bin)
+    for (const tool of tools.filter((one) => one !== missing)) {
+      const real = spawnSync('bash', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).stdout.trim()
+      symlinkSync(real, join(bin, tool))
+    }
+    const run = spawnSync(bash, [driverIn(night), ...withEvidence(night)], { encoding: 'utf8', env: { ...envFor(night), PATH: bin }, timeout: 60_000 })
+    assertRefusedBeforePacking(night, { status: run.status, said: `${run.stdout}${run.stderr}`, run: runFolderOf(night) }, new RegExp(`^night: ${missing} is not on your PATH$`, 'm'))
+  }
+})
+
 test('2. a dirty proof tree is refused, and so is a proof or a packer missing its constant (mutants: each read dropped)', (t) => {
   const dirty = aNight(t)
   writeFileSync(join(dirty.dir, 'left-behind.txt'), 'not committed\n')
@@ -280,6 +297,8 @@ test('5. a dry pass is the proof\'s own DRY_PASSED, with the layer kept by its s
   const kept = runTxt(outcome.run)
   assert.equal(kept.get('layer_sha256'), createHash('sha256').update(readFileSync(layer ?? '')).digest('hex'))
   assert.equal(kept.get('proof_exit'), String(PLANTED_DRY_PASSED))
+  // The proof's own dry pass, read from it, for the owner's follow script (Saturnus, #639 PR 821 r=1).
+  assert.equal(kept.get('dry_passed'), String(PLANTED_DRY_PASSED))
   assert.equal(kept.get('sha'), night.head)
   assert.ok(kept.has('ended'))
   assert.deepEqual(recorded(night.record, 'proof.args'), [A_HOST, '--log', join(outcome.run ?? '', 'proof.log'), '--dry-layer', layer, night.head, 'one more', '--two'])

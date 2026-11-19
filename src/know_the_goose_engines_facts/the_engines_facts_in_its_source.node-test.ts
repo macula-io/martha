@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SKILLS_SWITCH_READERS, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -142,4 +142,27 @@ test('a hint file the list names in a shape the reader does not know is unreadab
   const planted = text.replace(`${constant}.to_string()`, `${constant}.to_string(),\n                String::from("NOTES.md")`)
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.hint_files]: planted }))
   assert.deepEqual(unreadable.map(({ part }) => part), [THE_HINT_FILES_PART()])
+})
+
+test('each skills switch is read through the constant its function passes, never the first constant in the file (martha#839)', () => {
+  for (const which of ['skills_advertised', 'builtin_skills_advertised'] as const) {
+    const files = engineFilesSaying(RECORDED_FACTS)
+    const path = ENGINE_PLACES[which]
+    const decoy = `pub const A_DECOY_SETTING: &str = "${RECORDED_FACTS[which].setting}_DECOY";\n`
+    const flipped = (files[path] ?? '').replace(`unwrap_or(${String(RECORDED_FACTS[which].when_unset)})`, `unwrap_or(${String(!RECORDED_FACTS[which].when_unset)})`)
+    const { facts, unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: `${decoy}${flipped}` }))
+    assert.deepEqual(unreadable, [], which)
+    assert.deepEqual(facts[which], { setting: RECORDED_FACTS[which].setting, when_unset: !RECORDED_FACTS[which].when_unset }, which)
+  }
+})
+
+test('a skills switch whose function is gone is unreadable by its own part, never taken as unset (martha#839)', () => {
+  for (const which of ['skills_advertised', 'builtin_skills_advertised'] as const) {
+    const files = engineFilesSaying(RECORDED_FACTS)
+    const path = ENGINE_PLACES[which]
+    const renamed = (files[path] ?? '').replace(`pub fn ${SKILLS_SWITCH_READERS[which]}(`, 'pub fn another_switch(')
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: renamed }))
+    assert.equal(unreadable.length, 1, which)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(`the ${SKILLS_SWITCH_READERS[which]} switch`), which)
+  }
 })

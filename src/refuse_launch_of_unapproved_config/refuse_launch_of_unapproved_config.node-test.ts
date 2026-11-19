@@ -17,6 +17,7 @@ import {
   ENGINE_FAMILIES,
   ENGINE_FILES,
   ENGINE_FOLDER,
+  AGENTS_MD_FILE,
   ENGINE_HINTS_FILE,
   HOSTS,
   LAUNCH_FILES_OF_HOST,
@@ -25,6 +26,7 @@ import {
   prepareLaunch,
   readLaunchConfig,
   readLaunchState,
+  RECORDED_TEXT_FILES,
   recheckLaunch,
   snapshotApproved,
   startedWithOf,
@@ -38,7 +40,7 @@ import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { INBOUND_PATHS, INSTRUCTION_FILES } from '../inbound_paths/inbound_paths.ts'
 import { DECLARATION_DIRECTORY, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { THE_PATH_A_LAUNCH_GIVES, theEnvironmentOfALaunch } from '../launch_a_goose_member/launch_a_goose_member.ts'
-import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { RECORDED_GOOSE_ENGINE, RECORDING_OF_THE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -1162,3 +1164,33 @@ for (const link of SKILL_LINKS) {
     assert.ok(decision.refusal.includes(`${link.at} is a symlink`), decision.refusal)
   })
 }
+// The hint file names are the engine's own, read at the pin and kept in its recording (martha#785). The recording is read
+// here from the file on disk, not through the module the gate imports, so a gate that read some other recording differs.
+test("the gate's hint file names are the ones the engine's recording holds on disk (martha#785)", () => {
+  const onDisk = (JSON.parse(readFileSync(RECORDING_OF_THE_ENGINE, 'utf8')) as typeof RECORDED_GOOSE_ENGINE).hint_files
+  assert.equal(ENGINE_HINTS_FILE, onDisk.goose_hints, "the engine's hints file is not the recording's")
+  assert.equal(AGENTS_MD_FILE, onDisk.agents_md, "the engine's instruction file is not the recording's")
+  assert.deepEqual(RECORDED_TEXT_FILES, onDisk.when_unset, 'the files a launch records are not the list the engine loads when no setting replaces it')
+  // At the pin that list holds exactly the two names, so a list built by hand from them, `[ENGINE_HINTS_FILE,
+  // AGENTS_MD_FILE]`, is equal to it and the comparison above cannot tell. It is the recording's own list, not a copy:
+  // an engine that adds a file, drops one or changes their order changes the launch's list with it.
+  assert.equal(RECORDED_TEXT_FILES, RECORDED_GOOSE_ENGINE.hint_files.when_unset, 'the files a launch records are a list built by hand, not the one the engine loads when no setting replaces it')
+})
+
+/** The code lines of a source file with their numbers, its comment lines left out: what runs, not what explains it. */
+const theCodeOf = (source: string): readonly { readonly line: string; readonly number: number }[] =>
+  source.split('\n').map((line, index) => ({ line, number: index + 1 })).filter(({ line }) => !/^\s*(\/\/|\/\*\*|\*)/.test(line))
+
+// A name typed back equals the recording's, so the comparison above cannot see it, and check:restated-values judges
+// literals against the values TypeScript defines, never a JSON recording's (#785 design A1). So this test reads the
+// gate's source and names any code line that holds one of the engine's hint file names, quoted or bare. The names come
+// in through the import, never typed here.
+test("the gate never types the engine's hint file names; it reads them from the recording (martha#785 A1)", () => {
+  const SOURCE = 'refuse_launch_of_unapproved_config.ts'
+  const { goose_hints, agents_md } = RECORDED_GOOSE_ENGINE.hint_files
+  const words = [goose_hints, agents_md].map((name) => new RegExp(`(?<![\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`))
+  const typed = theCodeOf(readFileSync(new URL(`./${SOURCE}`, import.meta.url), 'utf8'))
+    .filter(({ line }) => words.some((word) => word.test(line)))
+    .map(({ number }) => `${SOURCE}:${number}: types the engine's hint file name rather than reading it from the recording`)
+  assert.deepEqual(typed, [], typed.join('\n'))
+})

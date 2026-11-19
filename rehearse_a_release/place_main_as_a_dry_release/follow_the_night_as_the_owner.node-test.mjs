@@ -12,9 +12,9 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
@@ -23,17 +23,20 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const SCRIPT = join(HERE, 'follow_the_night_as_the_owner.sh')
 const CASES = join(HERE, 'follow_the_night_as_the_owner.cases.sh')
 const SCRIPT_TEXT = readFileSync(SCRIPT, 'utf8')
-/** The cases' own bound is 30 s per case; the whole run of eleven stays inside this. */
-const RUN_WITHIN_MS = 58_000
+/** The proof the script reads its words from, two folders up from it, as a mutant's copy must find it too. */
+const PROOF_DIR = join(HERE, '..', '..', 'prove_a_clean_install_in_a_throwaway_container')
+/** The cases' own bound is 30 s per case; the whole run stays inside this. */
+const RUN_WITHIN_MS = 170_000
 
 /** Runs the cases on `script`, all of them or the one named. @param {string} script @param {string[]} only */
 const runTheCases = (script, only = []) =>
   spawnSync('bash', [CASES, script, ...only], { encoding: 'utf8', timeout: RUN_WITHIN_MS })
 
-test('every case holds on the owner\'s follow script', () => {
+// Every case in one run outlasts the suite's 60 s per test, so this test names its own bound, just above the run's.
+test('every case holds on the owner\'s follow script', { timeout: RUN_WITHIN_MS + 5_000 }, () => {
   const run = runTheCases(SCRIPT)
   assert.equal(run.status, 0, `${run.stdout}${run.stderr}`)
-  assert.match(run.stdout, /^cases: 12 of 12 held$/m)
+  assert.match(run.stdout, /^cases: 24 of 24 held$/m)
 })
 
 /**
@@ -53,14 +56,18 @@ const MUTANTS = [
   },
   { name: 'a control character is not refused', line: "echo 'it holds a control character'", to: '', killedBy: 'a_control_character_is_refused' },
   { name: 'what runs on the host is not held to one quoted word', line: "echo 'what it runs on the host is not one quoted word'", to: '', killedBy: 'more_than_one_word_is_refused' },
-  { name: 'what the host runs is not held to quoted words', line: "echo 'what the host runs is not only quoted words'", to: '', killedBy: 'a_host_command_after_the_exec_is_refused' },
-  { name: 'what runs on the host is not held to podman exec -it', line: "echo 'it does not run podman exec -it on the host'", to: '', killedBy: 'not_a_podman_exec_is_refused' },
-  {
-    name: 'the host is taken from the command, not from run.txt',
-    line: 'HOST="$(from_run_txt host)"',
-    to: 'HOST="$(sed -n "s/^ssh -t \'\\([^\']*\\)\' .*/\\1/p" "${COMMANDS}" | head -1)"',
-    killedBy: 'another_host_is_refused',
-  },
+  { name: 'the host is taken from run.txt, not from the owner', line: '[ "${RUN_HOST}" = "${HOST}" ]', to: 'HOST="${RUN_HOST}"', killedBy: 'run_txt_names_another_host' },
+  { name: 'a host may start with -, as the pattern before r=2 let it', line: 'HOST_NAME=$', to: "HOST_NAME=$'^[A-Za-z0-9._@-]+$'", killedBy: 'a_host_starting_with_a_dash_is_refused' },
+  { name: 'any command of four words is taken for podman exec -it in the night\'s container', line: "in the night's container\"; return 1; }", to: '  [[ "${inner}" =~ ^[^\\ ]*\\ [^\\ ]*\\ [^\\ ]*\\ [^\\ ]*\\ (.*)$ ]] || return 1', killedBy: 'another_container_is_refused' },
+  { name: 'anything is run in the container', line: 'is not the sign-in or the attach', to: '  return 0', killedBy: 'not_the_sign_in_or_the_attach_is_refused' },
+  { name: 'the sign-in is not one of the shapes', line: "=~ ^\\'sh\\'", to: '', killedBy: 'live_night_runs_the_command' },
+  { name: 'the attach is not one of the shapes', line: "=~ ^\\'tmux\\'", to: '', killedBy: 'the_attach_runs' },
+  { name: 'the watch is not one of the shapes', line: '=~ ${watch} ]]', to: '', killedBy: 'the_watch_runs' },
+  { name: 'any option of the attach is taken for the watch', line: 'watch="^', to: `  watch="^'tmux' '-L' '\${NIGHT_TMUX_SOCKET}' 'attach' ('-[a-z]+' )*'-t' '[a-z0-9-]+'$"`, killedBy: 'an_attach_option_is_refused' },
+  { name: 'the count of whole lines says a missing file aloud, as before r=2', line: 'complete="$(', to: '  complete="$(wc -l < "${COMMANDS}" 2> /dev/null || echo 0)"', killedBy: 'the_commands_file_not_there_yet' },
+  { name: 'every ended night says it passed', line: 'if [ -z "${why}" ]', to: '  if true; then', killedBy: 'a_failed_night_says_it_did_not_pass' },
+  { name: 'no ended night says it passed', line: 'if [ -z "${why}" ]', to: '  if false; then', killedBy: 'a_dry_pass_says_it_passed' },
+  { name: 'an interrupted night with a dry pass code passes', line: 'if [ -z "${why}" ]', to: '  if [ "${proof_exit}" = "${dry_passed}" ]; then', killedBy: 'an_interrupted_night_did_not_pass' },
 ]
 
 /**
@@ -80,7 +87,11 @@ for (const mutant of MUTANTS) {
   test(`mutant: ${mutant.name}, killed by ${mutant.killedBy}`, () => {
     const dir = mkdtempSync(join(tmpdir(), 'follow-mutant-'))
     try {
-      const copy = join(dir, 'follow_the_night_as_the_owner.sh')
+      // Laid out as the checkout is, so the copy finds the proof two folders up, as the script does.
+      const folder = join(dir, basename(dirname(HERE)), basename(HERE))
+      mkdirSync(folder, { recursive: true })
+      symlinkSync(PROOF_DIR, join(dir, basename(PROOF_DIR)))
+      const copy = join(folder, 'follow_the_night_as_the_owner.sh')
       writeFileSync(copy, mutated(mutant))
       const run = runTheCases(copy, [mutant.killedBy])
       assert.equal(run.status, 1, `${run.stdout}${run.stderr}`)

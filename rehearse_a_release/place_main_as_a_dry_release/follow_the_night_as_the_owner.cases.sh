@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # follow_the_night_as_the_owner.cases.sh <script> [case]: the owner's follow script's cases (macula-io/martha#639).
 #
-# Each case gives the script a run folder of its own, as the driver leaves one: run.txt naming the host and the
-# owner-commands file, that file, and a proof.log echoing each command with its steps under it. An `ssh` on PATH only
+# Each case gives the script a run folder of its own, as the driver leaves one: run.txt naming the host, the proof's
+# code of a dry pass and the owner-commands file, that file, and a proof.log echoing each command with its steps under
+# it, and gives the script the owner's host. The proof's words a command is held to (its container prefix, its tmux
+# socket, its dry pass) are read from the proof beside the script, as the script reads them. An `ssh` on PATH only
 # records that it ran. Cases that need a terminal run the script under script(1), which gives it a pseudo-terminal,
 # and type into it. What each case proves is whether a command ran, and what the script said. The words the script
 # says are read from the script, never spelled here. With a case named, only that case runs; the follow script's node
@@ -17,13 +19,20 @@ ONLY="${2:-}"
 for tool in script timeout mktemp; do
   command -v "${tool}" > /dev/null || { echo "${tool} is not on PATH" >&2; exit 2; }
 done
-word() { sed -n "s/^$1='\(.*\)'\$/\1/p" "${SUT}"; }
-NO_TERMINAL="$(word NO_TERMINAL)"
-NO_ANSWER="$(word NO_ANSWER)"
-PROMPT="$(word PROMPT)"
-ENDED="$(word ENDED)"
-for w in NO_TERMINAL NO_ANSWER PROMPT ENDED; do
-  [ -n "${!w}" ] || { echo "${SUT} defines no ${w}" >&2; exit 2; }
+word() { sed -n "s/^$2='\(.*\)'\$/\1/p" "$1"; }
+PROOF="$(dirname "${SUT}")/../../prove_a_clean_install_in_a_throwaway_container"
+NO_TERMINAL="$(word "${SUT}" NO_TERMINAL)"
+NO_ANSWER="$(word "${SUT}" NO_ANSWER)"
+PROMPT="$(word "${SUT}" PROMPT)"
+ENDED="$(word "${SUT}" ENDED)"
+PASSED="$(word "${SUT}" PASSED)"
+NOT_PASSED="$(word "${SUT}" NOT_PASSED)"
+CONTAINER_PREFIX="$(word "${PROOF}/prove_a_clean_install_in_a_throwaway_container.sh" CONTAINER_PREFIX)"
+NIGHT_TMUX_SOCKET="$(word "${PROOF}/the_night_in_the_container.sh" NIGHT_TMUX_SOCKET)"
+WATCH_FLAG="$(word "${PROOF}/the_night_in_the_container.sh" NIGHT_WATCH_FLAG)"
+DRY_PASSED="$(sed -n 's/^DRY_PASSED=\([0-9]*\)$/\1/p' "${PROOF}/prove_a_clean_install_in_a_throwaway_container.sh")"
+for w in NO_TERMINAL NO_ANSWER PROMPT ENDED PASSED NOT_PASSED CONTAINER_PREFIX NIGHT_TMUX_SOCKET WATCH_FLAG DRY_PASSED; do
+  [ -n "${!w}" ] || { echo "${SUT} or its proof defines no ${w}" >&2; exit 2; }
 done
 
 WORK="$(mktemp -d)"
@@ -36,23 +45,34 @@ fails=0
 ran_cases=0
 
 A_HOST='a-host-of-the-test'
+OWNERS_HOST="${A_HOST}"
 # One word as the host's shell must read it, quoted the way the proof quotes (remote_word).
 one_word() { local w=${1//\'/\'\\\'\'}; printf "'%s'" "${w}"; }
-# A command of the proof's shape: ssh -t to `host`, running podman exec -it in a container, and then `what`.
-shaped() { printf 'ssh -t %s %s' "$(one_word "$1")" "$(one_word "$(one_word podman) $(one_word exec) $(one_word -it) $(one_word a-container) $2")"; }
-THE_COMMAND="$(shaped "${A_HOST}" "$(one_word true)")"
+words() { local out='' w; for w in "$@"; do out="${out}${out:+ }$(one_word "${w}")"; done; printf '%s' "${out}"; }
+# The night's container, as the proof names it: its prefix, a pid and a number.
+A_CONTAINER="${CONTAINER_PREFIX}-4242-17"
+# A command of the proof's shape: ssh -t to `host`, running podman exec -it in the night's container, and then `what`.
+shaped() { printf 'ssh -t %s %s' "$(one_word "$1")" "$(one_word "$(words podman exec -it "${A_CONTAINER}") $2")"; }
+SIGN_IN="$(words sh -lc "cd 'the checkout'; claude")"
+THE_COMMAND="$(shaped "${A_HOST}" "${SIGN_IN}")"
 
 night() { # night <name> <ended 0|1> [command line in the owner-commands file]: a run folder; sets RUN and MARK
   local line="${3-${THE_COMMAND}}"
   RUN="${WORK}/$1"
   mkdir -p "${RUN}"
   export MARK="${RUN}/mark"
-  printf 'host=%s\nowner_commands=%s\n' "${A_HOST}" "${RUN}/owner_commands" > "${RUN}/run.txt"
+  printf 'host=%s\ndry_passed=%s\nowner_commands=%s\n' "${A_HOST}" "${DRY_PASSED}" "${RUN}/owner_commands" > "${RUN}/run.txt"
   if [ -n "${line}" ]; then printf '%s\n' "${line}" > "${RUN}/owner_commands"; else : > "${RUN}/owner_commands"; fi
   printf 'proof starts\n  1. run this command:\n  %s\n  2. sign in\n  3. /exit\n' "${line}" > "${RUN}/proof.log"
   if [ "$2" = 1 ]; then echo 'proof_exit=1' >> "${RUN}/run.txt"; fi
 }
-in_a_terminal() { timeout 30 script -qefc "bash '${SUT}' '${RUN}'" /dev/null > "${RUN}/out" 2>&1; }
+# The script under a terminal, its exit kept in the run folder: a case pipes its typing in, so this runs in a subshell.
+in_a_terminal() {
+  local status=0
+  timeout 30 script -qefc "bash '${SUT}' '${RUN}' '${OWNERS_HOST}'" /dev/null > "${RUN}/out" 2>&1 || status=$?
+  echo "${status}" > "${RUN}/status"
+}
+exited() { [ "$(cat "${RUN}/status")" = "$1" ]; }
 wanted() { [ -z "${ONLY}" ] || [ "${ONLY}" = "$1" ]; }
 ran() { [ -s "${MARK}" ]; }
 says() { grep -qF -- "$1" "${RUN}/out"; }
@@ -66,7 +86,7 @@ never_offered() { not ran && not says "${PROMPT}"; }
 
 if wanted no_terminal; then
   night no_terminal 0
-  printf '\n' | timeout 30 bash "${SUT}" "${RUN}" > "${RUN}/out" 2>&1
+  printf '\n' | timeout 30 bash "${SUT}" "${RUN}" "${OWNERS_HOST}" > "${RUN}/out" 2>&1
   verdict no_terminal "$(held eval 'not ran && says "${NO_TERMINAL}"')" "with no terminal (and an Enter on stdin) the command ran or the refusal was not said"
 fi
 if wanted ended_before_any_command; then
@@ -105,34 +125,116 @@ fi
 if wanted a_control_character_is_refused; then
   # A carriage return inside one of the host's quoted words, so every other check passes: printed, it would hide
   # what comes before it from the owner.
-  night a_control_character_is_refused 0 "$(shaped "${A_HOST}" "$(one_word "true"$'\r'"hidden")")"
+  night a_control_character_is_refused 0 "$(shaped "${A_HOST}" "$(words sh -lc "true"$'\r'"hidden")")"
   { sleep 2; printf '\n'; } | in_a_terminal
   verdict a_control_character_is_refused "$(held never_offered)" "a command with a control character in it was offered"
 fi
 if wanted more_than_one_word_is_refused; then
   # The host's words without the outer quoting: once unquoted they are the proof's own, but the owner's shell reads
   # the words' insides bare, so the ; in 'true; true' runs a second command on the owner's machine.
-  night more_than_one_word_is_refused 0 "ssh -t $(one_word "${A_HOST}") '$(one_word podman) $(one_word exec) $(one_word -it) $(one_word a-container) $(one_word 'true; true')'"
+  night more_than_one_word_is_refused 0 "ssh -t $(one_word "${A_HOST}") '$(words podman exec -it "${A_CONTAINER}" sh -lc) $(one_word 'true; true')'"
   { sleep 2; printf '\n'; } | in_a_terminal
   verdict more_than_one_word_is_refused "$(held never_offered)" "a command running more than the proof's one word was offered"
 fi
 if wanted not_a_podman_exec_is_refused; then
   # Quoted words, as the proof quotes them, that run something other than podman exec -it.
-  night not_a_podman_exec_is_refused 0 "ssh -t $(one_word "${A_HOST}") $(one_word "$(one_word sh) $(one_word -c) $(one_word true)")"
+  night not_a_podman_exec_is_refused 0 "ssh -t $(one_word "${A_HOST}") $(one_word "$(words sh -lc true)")"
   { sleep 2; printf '\n'; } | in_a_terminal
   verdict not_a_podman_exec_is_refused "$(held never_offered)" "a command that is not a podman exec on the host was offered"
 fi
 if wanted a_host_command_after_the_exec_is_refused; then
   # One quoted word that starts the proof's podman exec -it, and then shell text the host's shell would run outside the
   # container: ...'c1'; touch HOST_RAN; 'x' (Mercurius, #639 PR 821 r=1).
-  night a_host_command_after_the_exec_is_refused 0 "ssh -t $(one_word "${A_HOST}") $(one_word "$(one_word podman) $(one_word exec) $(one_word -it) $(one_word a-container); touch HOST_RAN; $(one_word x)")"
+  night a_host_command_after_the_exec_is_refused 0 "ssh -t $(one_word "${A_HOST}") $(one_word "$(words podman exec -it "${A_CONTAINER}"); touch HOST_RAN; $(one_word x)")"
   { sleep 2; printf '\n'; } | in_a_terminal
   verdict a_host_command_after_the_exec_is_refused "$(held never_offered)" "a command running shell text on the host after the podman exec was offered"
 fi
 if wanted another_host_is_refused; then
-  night another_host_is_refused 0 "$(shaped another-host "$(one_word true)")"
+  night another_host_is_refused 0 "$(shaped another-host "${SIGN_IN}")"
   { sleep 2; printf '\n'; } | in_a_terminal
-  verdict another_host_is_refused "$(held never_offered)" "a command to a host run.txt does not name was offered"
+  verdict another_host_is_refused "$(held never_offered)" "a command to a host the owner did not name was offered"
+fi
+if wanted options_before_the_container_are_refused; then
+  # Saturnus's probe (#639 PR 821 r=1): podman options between -it and the container, root in another container.
+  night options_before_the_container_are_refused 0 "$(shaped "${A_HOST}" "")"
+  printf '%s\n' "ssh -t $(one_word "${A_HOST}") $(one_word "$(words podman exec -it --privileged -u root prod-db sh -c id)")" > "${RUN}/owner_commands"
+  { sleep 2; printf '\n'; } | in_a_terminal
+  verdict options_before_the_container_are_refused "$(held never_offered)" "a command with podman options before another container was offered"
+fi
+if wanted another_container_is_refused; then
+  # The sign-in's own words, in a container that is not the night's.
+  night another_container_is_refused 0 "ssh -t $(one_word "${A_HOST}") $(one_word "$(words podman exec -it prod-db) ${SIGN_IN}")"
+  { sleep 2; printf '\n'; } | in_a_terminal
+  verdict another_container_is_refused "$(held never_offered)" "a command into a container that is not the night's was offered"
+fi
+if wanted not_the_sign_in_or_the_attach_is_refused; then
+  # The night's container, running a shell command that is neither of the proof's two.
+  night not_the_sign_in_or_the_attach_is_refused 0 "$(shaped "${A_HOST}" "$(words sh -c id)")"
+  { sleep 2; printf '\n'; } | in_a_terminal
+  verdict not_the_sign_in_or_the_attach_is_refused "$(held never_offered)" "a command that is neither the sign-in nor the attach was offered"
+fi
+if wanted the_attach_runs; then
+  night the_attach_runs 0 "$(shaped "${A_HOST}" "$(words tmux -L "${NIGHT_TMUX_SOCKET}" attach -t builder)")"
+  { sleep 3; printf '\n'; sleep 3; echo 'proof_exit=1' >> "${RUN}/run.txt"; } | in_a_terminal
+  verdict the_attach_runs "$(held ran)" "the proof's attach command was not run on Enter"
+fi
+if wanted the_watch_runs; then
+  # The watch (martha#843): the attach, read-only by the night's own flag.
+  night the_watch_runs 0 "$(shaped "${A_HOST}" "$(words tmux -L "${NIGHT_TMUX_SOCKET}" attach "${WATCH_FLAG}" -t builder)")"
+  { sleep 3; printf '\n'; sleep 3; echo 'proof_exit=1' >> "${RUN}/run.txt"; } | in_a_terminal
+  verdict the_watch_runs "$(held ran)" "the proof's watch command was not run on Enter"
+fi
+if wanted an_attach_option_is_refused; then
+  # The attach with another option beside the read-only flag, after it, or in its place: none is the proof's.
+  offered=''
+  for attach in "attach ${WATCH_FLAG} -d -t builder" "attach -t ${WATCH_FLAG} builder" "attach -d -t builder"; do
+    # shellcheck disable=SC2086 # the attach's words, split on purpose
+    night an_attach_option_is_refused 0 "$(shaped "${A_HOST}" "$(words tmux -L "${NIGHT_TMUX_SOCKET}" ${attach})")"
+    { sleep 2; printf '\n'; } | in_a_terminal
+    never_offered || offered="${offered}${offered:+, }${attach}"
+  done
+  verdict an_attach_option_is_refused "$([ -z "${offered}" ] && echo 1 || echo 0)" "an attach with another option was offered: ${offered}"
+fi
+if wanted run_txt_names_another_host; then
+  # run.txt, which whoever started the night writes, names a host the owner did not, and the command goes there.
+  night run_txt_names_another_host 0 "$(shaped another-host "${SIGN_IN}")"
+  sed -i 's/^host=.*/host=another-host/' "${RUN}/run.txt"
+  { sleep 2; printf '\n'; } | in_a_terminal
+  verdict run_txt_names_another_host "$(held never_offered)" "a command to the host run.txt names, not the owner's, was offered"
+fi
+if wanted a_host_starting_with_a_dash_is_refused; then
+  # A host ssh would read as an option (-F evil), named both by run.txt and by the owner.
+  OWNERS_HOST='-Fevil'
+  night a_host_starting_with_a_dash_is_refused 0 "$(shaped "${OWNERS_HOST}" "${SIGN_IN}")"
+  sed -i "s/^host=.*/host=${OWNERS_HOST}/" "${RUN}/run.txt"
+  { sleep 2; printf '\n'; } | in_a_terminal
+  OWNERS_HOST="${A_HOST}"
+  verdict a_host_starting_with_a_dash_is_refused "$(held never_offered)" "a host starting with - was taken"
+fi
+if wanted the_commands_file_not_there_yet; then
+  # run.txt names the owner-commands file before the proof makes it: nothing is said of the missing file.
+  night the_commands_file_not_there_yet 0
+  rm -f "${RUN}/owner_commands"
+  { sleep 3; printf '%s\n' "${THE_COMMAND}" > "${RUN}/owner_commands"; sleep 3; printf '\n'; sleep 3; echo 'proof_exit=1' >> "${RUN}/run.txt"; } | in_a_terminal
+  verdict the_commands_file_not_there_yet "$(held eval 'ran && not says "No such file"')" "a commands file not made yet was said as an error, or its command never ran"
+fi
+if wanted a_dry_pass_says_it_passed; then
+  night a_dry_pass_says_it_passed 0 ''
+  echo "proof_exit=${DRY_PASSED}" >> "${RUN}/run.txt"
+  printf '\n' | in_a_terminal
+  verdict a_dry_pass_says_it_passed "$(held eval 'exited 0 && says "${PASSED}" && not says "${NOT_PASSED}"')" "a dry pass did not end on the pass line with exit 0 (exit $(cat "${RUN}/status"))"
+fi
+if wanted a_failed_night_says_it_did_not_pass; then
+  night a_failed_night_says_it_did_not_pass 1 ''
+  printf '\n' | in_a_terminal
+  verdict a_failed_night_says_it_did_not_pass "$(held eval 'exited 1 && says "${NOT_PASSED}: proof_exit=1"')" "a night that failed did not end on the line that says so with exit 1 (exit $(cat "${RUN}/status"))"
+fi
+if wanted an_interrupted_night_did_not_pass; then
+  # A dry pass's code beside interrupted=: the night did not pass.
+  night an_interrupted_night_did_not_pass 0 ''
+  printf 'proof_exit=%s\ninterrupted=now\n' "${DRY_PASSED}" >> "${RUN}/run.txt"
+  printf '\n' | in_a_terminal
+  verdict an_interrupted_night_did_not_pass "$(held eval 'exited 1 && says "${NOT_PASSED}: interrupted=now"')" "an interrupted night was said to pass (exit $(cat "${RUN}/status"))"
 fi
 
 [ "${ran_cases}" -gt 0 ] || { echo "no case named ${ONLY}" >&2; exit 2; }

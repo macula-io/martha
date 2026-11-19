@@ -22,13 +22,16 @@
 //
 //   node src/land_a_package_on_a_throwaway_repository/main.ts landing <night.json>    < nothing
 //
-// `landing` reads the same four night fields, the builder's transcript and the crew's rows folder (builder_transcript,
-// rows_folder), and exits 1 naming the first of section 6's landing rows (5 to 7) they do not show.
+// `landing` reads the same four night fields, the builder's transcript, the crew's rows folder and when the owner's
+// attach command was printed (builder_transcript, rows_folder, attach_printed_at), and exits 1 naming the first of
+// section 6's landing rows (5 to 7) they do not show.
 //
-//   node src/land_a_package_on_a_throwaway_repository/main.ts asked <rows folder>       < nothing
+//   node src/land_a_package_on_a_throwaway_repository/main.ts asked <night.json>      < nothing
 //
-// `asked` exits 0 once the crew in that rows folder has queued an ask of the owner, and 1 while it has queued none: the
-// night waits on it before it prints the owner's second command.
+// `asked` reads the same four night fields, the range's tip left empty since the pull request is not read yet, the
+// builder's transcript and the crew's rows folder, and exits 0 once the builder has queued the landing's ask (a
+// verify_range answer's question, queued word for word after it, in the owner's asks), and 1 while it has not: the
+// night waits on it before it prints the owner's second command. Any other ask is not the landing's.
 //
 // Exit 0 the guard holds, 1 it refuses, naming why on standard error, 2 it could not look. `redact` writes the text,
 // redacted, to standard output either way, and exits 1 when a token had reached it. `expiry` exits 0 with a note on
@@ -44,7 +47,7 @@ import { whatTheStartWouldLoad, type TheStart } from './a_clean_start.ts'
 import { whatTheRunMadeIn, whyNotDelete } from './the_delete_guard.ts'
 import { keepAScreen, redactTheToken, THE_TOKEN_REACHED_THE_RECORD, TOKEN_NOT_PLACED, TOKEN_PLACED } from './the_kept_record.ts'
 import { whichCrewClaimFails, type TheNight } from './the_nights_claims.ts'
-import { whichLandingClaimFails } from './the_nights_landing.ts'
+import { whichLandingClaimFails, whyTheLandingIsNotAsked } from './the_nights_landing.ts'
 import { whichWatchClaimFails } from './the_owners_watch.ts'
 import { ledgerStreamOf, type LedgerRow } from '../log_ledger/log_ledger.ts'
 import { OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
@@ -122,6 +125,8 @@ const screen = (argument: string, input: string): Said => {
 
 /** The fields every night file carries, each a non-empty string. */
 const NIGHT_FIELDS = ['package', 'range', 'builder', 'reviewer'] as const
+/** The night file's field the landing verb reads the attach command's time from, ms since the epoch, as digits. */
+const ATTACH_PRINTED_AT = 'attach_printed_at'
 
 /** A night file read: the night, and each further field the verb named, or the could-not-look that says why not. */
 function theNightFile(argument: string, more: readonly string[]): { readonly night: TheNight; readonly field: (name: string) => string } | Said {
@@ -161,12 +166,14 @@ const watch = (argument: string, input: string): Said => {
  */
 export async function landing(argument: string): Promise<Said> {
   try {
-    const file = theNightFile(argument, ['builder_transcript', 'rows_folder'])
+    const file = theNightFile(argument, ['builder_transcript', 'rows_folder', ATTACH_PRINTED_AT])
     if ('code' in file) return file
+    const attachPrintedAt = Number(file.field(ATTACH_PRINTED_AT))
+    if (!/^\d+$/.test(file.field(ATTACH_PRINTED_AT))) return couldNotLook(`${argument} names ${ATTACH_PRINTED_AT} '${file.field(ATTACH_PRINTED_AT)}', not a time in ms`)
     const rows = rowStreamsDirectory(file.field('rows_folder'))
     const asks = await rows.read(OWNER_ASKS_STREAM)
     const ledger = (await rows.read(ledgerStreamOf(file.night.package))).map(({ row }) => row as unknown as LedgerRow)
-    return verdictOf(whichLandingClaimFails(file.night, { builderTranscript: readFileSync(file.field('builder_transcript'), 'utf8'), asks, ledger }))
+    return verdictOf(whichLandingClaimFails(file.night, { builderTranscript: readFileSync(file.field('builder_transcript'), 'utf8'), asks, ledger, attachPrintedAt }))
   } catch (error) {
     return couldNotLook(error instanceof Error ? error.message : String(error))
   }
@@ -177,11 +184,19 @@ const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>
 const LANDING = 'landing'
 const ASKED = 'asked'
 
-/** Whether the crew whose rows folder is `folder` has queued any ask of the owner. Nothing on standard input is read. */
-export async function asked(folder: string): Promise<Said> {
+/**
+ * Whether the builder has queued the landing's ask, read from the night file's builder transcript and rows folder; its
+ * range is the base the night started on, with the tip not known yet. Any other ask is not it. Nothing on standard
+ * input is read.
+ */
+export async function asked(argument: string): Promise<Said> {
   try {
-    const asks = await rowStreamsDirectory(folder).read(OWNER_ASKS_STREAM)
-    return asks.length > 0 ? holds : refuses(`the crew in ${folder} has queued no ask of the owner`)
+    const file = theNightFile(argument, ['builder_transcript', 'rows_folder'])
+    if ('code' in file) return file
+    const [base] = file.night.range.split('..')
+    if (base === undefined || base === '') return couldNotLook(`${argument} names no base in its range '${file.night.range}'`)
+    const asks = await rowStreamsDirectory(file.field('rows_folder')).read(OWNER_ASKS_STREAM)
+    return verdictOf(whyTheLandingIsNotAsked(base, file.night.builder, { builderTranscript: readFileSync(file.field('builder_transcript'), 'utf8'), asks }))
   } catch (error) {
     return couldNotLook(error instanceof Error ? error.message : String(error))
   }

@@ -5,13 +5,15 @@
 # pack_main_as_a_dry_layer.sh, and runs the clean-install proof on that layer as a dry run, with the night's evidence
 # kept under one folder.
 #
-# 1. The arguments are read before anything else runs. The host is a parameter and is never named here, as the proof
+# 1. Each tool the driver runs (DRIVERS_TOOLS) is on PATH, or the run is refused naming it. The arguments are then read
+#    before anything else runs. The host is a parameter and is never named here, as the proof
 #    takes it: this repository is public. The evidence root is a parameter too, so no one's home is written here.
 # 2. The proof checkout (--proof-tree, default this repository) must be clean, and its proof must define DRY_PASSED,
 #    the code of a dry pass, read from the proof itself and never spelled here. The packer must define NOT_PACKABLE
 #    the same way. A missing one refuses the run before anything is packed.
 # 3. The repository is fetched, and the sha is origin/main, or the given one, which must be a commit here.
-# 4. The packer packs main at the sha into <evidence>/<date>_<sha7>/, and the layer's sha256 is kept in run.txt.
+# 4. The packer packs main at the sha into <evidence>/<date>_<sha7>/, and the layer's sha256 is kept in run.txt, beside
+#    dry_passed=, the proof's DRY_PASSED, which the owner's follow script reads to say whether the night passed.
 # 5. The proof runs with --log in the same folder and --dry-layer <layer> <sha>. When the proof names --night in its
 #    usage, it is also given --night <that folder>/NIGHT_FOLDER_NAME, a path the driver names and never makes: the
 #    proof makes its own run folder and refuses one that is there. When it names --owner-commands, it is given
@@ -36,6 +38,9 @@
 # proof adds above its DRY_PASSED is not seen by that check: the proof's own Exit: line is where a new code is written.
 set -euo pipefail
 
+# The tools the driver runs, each checked first: a missing one inside a printf argument is not caught by set -e, and the
+# run would go on writing an empty value (Saturnus, #639 PR 821 r=1: layer_sha256= written empty).
+DRIVERS_TOOLS='git sed awk sha256sum mktemp date readlink dirname'
 PACK_FAILED=6
 NOT_PACKABLE_TONIGHT=7
 REFUSED=8
@@ -46,13 +51,14 @@ NIGHT_FOLDER_NAME=night
 # from it alone, never from proof.log, which carries the members' text (the threat model on #639).
 OWNER_COMMANDS_NAME=owner_commands
 
+refuse() { printf 'night: %s\n' "$1" >&2; exit "${REFUSED}"; }
+for tool in ${DRIVERS_TOOLS}; do command -v "${tool}" > /dev/null || refuse "${tool} is not on your PATH"; done
+
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
 PACKER="${HERE}/pack_main_as_a_dry_layer.sh"
 PROOF_REL='prove_a_clean_install_in_a_throwaway_container/prove_a_clean_install_in_a_throwaway_container.sh'
 USAGE='usage: run_the_night_on_main.sh <ssh-host> --evidence <folder> [--sha <sha40>] [--proof-tree <git checkout>] [-- <proof args>]'
-
-refuse() { printf 'night: %s\n' "$1" >&2; exit "${REFUSED}"; }
 
 # The digits of NAME in a script: exactly one line starts `NAME=`, and it is `NAME=<digits>`; otherwise nothing. The
 # same rule as read_a_scripts_constant.mjs, which the tests read the codes with.
@@ -135,6 +141,8 @@ run_child() {
   printf 'run_folder=%s\n' "${RUN}"
   printf 'sha=%s\n' "${SHA}"
   printf 'host=%s\n' "${HOST}"
+  # The proof's code of a dry pass, so the owner's follow script can say whether the night passed without knowing it.
+  printf 'dry_passed=%s\n' "${DRY_PASSED}"
   printf 'proof_tree=%s at %s\n' "${PROOF_TREE}" "$(git -C "${PROOF_TREE}" rev-parse HEAD)"
   printf 'started=%s\n' "$(date -Is)"
 } > "${RUN}/run.txt"

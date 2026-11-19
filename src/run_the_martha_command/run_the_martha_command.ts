@@ -61,6 +61,7 @@ import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cros
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { answerInAProject, answerOf } from '../serve_the_owners_answers/martha_answer.ts'
 import { keepWhereItWasTyped, linesOf, seenFromThisProcess, theCutoverTakenOnce, theRecordFilesOf, whatTheOwnerReadsOf } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
 
 /** The line `martha start` prints once the member is up: its name and its pid. */
@@ -68,7 +69,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -451,6 +452,7 @@ export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: read
   [STOP]: stopOf,
   [RESTART]: restartOf,
   start: startOf,
+  answer: answerOf,
 }
 
 /** `start <member> [-- <claude arguments>]`. */
@@ -569,6 +571,7 @@ const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Place
   'keep-shapes': (io, places, asked) => keepShapes(io, places, asked.args[0]!),
   approve: (io, places) => approve(io, places),
   release: (io, places, asked) => release(io, places, asked.args[0]!),
+  answer: (io, places, asked) => answerInAProject(io, places, asked.member, asked.args),
 }
 
 /** Whether an act is the owner's own: one of theirs, `start` (every word no act takes), or a flip of a member's bells. */

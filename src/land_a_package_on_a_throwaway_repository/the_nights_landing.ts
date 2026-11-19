@@ -55,18 +55,20 @@ function theQuestionIn(text: string): string | undefined {
   return at === -1 ? undefined : lines[at + 1]
 }
 
-/** The question verify_range handed the builder for the night's range, with when its answer was written. */
-function theVerifiedQuestion(records: readonly TheRecord[], base: string, tip: string): { readonly question: string; readonly at: number } | undefined {
+/**
+ * Each question verify_range handed the builder on a range from `base`, with when its answer was written, in the
+ * transcript's order: on the night's range only when `tip` is given, on any tip from the base when it is not.
+ */
+function theVerifiedQuestions(records: readonly TheRecord[], base: string, tip?: string): readonly { readonly question: string; readonly at: number }[] {
   const ids = new Set(theBlocks(records, 'assistant').flatMap(({ block }) => {
     const input = theCallTo(block, VERIFY_RANGE)
-    return input !== undefined && input['base'] === base && input['tip'] === tip && typeof block['id'] === 'string' ? [block['id']] : []
+    return input !== undefined && input['base'] === base && (tip === undefined || input['tip'] === tip) && typeof block['id'] === 'string' ? [block['id']] : []
   }))
-  for (const { record, block } of theBlocks(records, 'user')) {
-    if (block['type'] !== 'tool_result' || !ids.has(block['tool_use_id'] as string)) continue
+  return theBlocks(records, 'user').flatMap(({ record, block }) => {
+    if (block['type'] !== 'tool_result' || !ids.has(block['tool_use_id'] as string)) return []
     const question = theQuestionIn(resultText(block['content']) ?? '')
-    if (question !== undefined && question !== '') return { question, at: whenOf(record) }
-  }
-  return undefined
+    return question !== undefined && question !== '' ? [{ question, at: whenOf(record) }] : []
+  })
 }
 
 /** Whether the builder queued `question` word for word after `after`. */
@@ -97,12 +99,14 @@ export interface TheLandingRecord {
   readonly builderTranscript: string
   readonly asks: readonly StoredRow[]
   readonly ledger: readonly LedgerRow[]
+  /** When the night printed the owner's attach command, ms: the owner could say yes only after it (section 6). */
+  readonly attachPrintedAt: number
 }
 
 /** The ask the landing was asked under: its question and its id, or why there is none, as `<row>: <why>`. */
 function theAskedLanding(night: TheNight, base: string, tip: string, record: TheLandingRecord): { readonly id: number } | string {
   const records = theMembersRecords(record.builderTranscript)
-  const verified = theVerifiedQuestion(records, base, tip)
+  const [verified] = theVerifiedQuestions(records, base, tip)
   if (verified === undefined) return `${LANDING_ASKED}: no ${VERIFY_RANGE} answer on ${night.range} in ${night.builder}'s transcript hands the owner a question`
   if (!queuedAfter(records, verified.question, verified.at)) {
     return `${LANDING_ASKED}: ${night.builder} never queued ${JSON.stringify(verified.question)} with ${QUEUE_ASK} after ${VERIFY_RANGE} answered`
@@ -113,7 +117,8 @@ function theAskedLanding(night: TheNight, base: string, tip: string, record: The
 
 /**
  * The first of rows 5 to 7 the builder's transcript and the crew's rows do not show, as `<row>: <why>`, or undefined
- * when all three hold. The yes must be settled before the push was announced.
+ * when all three hold. The yes must be settled after the owner's attach command was printed, and before the push was
+ * announced.
  */
 export function whichLandingClaimFails(night: TheNight, record: TheLandingRecord): string | undefined {
   const [base, tip] = night.range.split('..')
@@ -125,7 +130,24 @@ export function whichLandingClaimFails(night: TheNight, record: TheLandingRecord
   const pushed = thePushOf(record.ledger, tip)
   if (pushed === undefined) return `${IT_LANDED}: ${night.package}'s ledger announces no push of ${tip}`
   if (!(yes < pushed)) return `${OWNER_SAID_YES}: the yes to ask ${String(asked.id)} was settled at ${String(yes)}, not before the push at ${String(pushed)}`
+  if (!(yes > record.attachPrintedAt)) {
+    return `${OWNER_SAID_YES}: the yes to ask ${String(asked.id)} was settled at ${String(yes)}, not after the owner's attach command was printed at ${String(record.attachPrintedAt)}`
+  }
   const note = `${base}..${tip} on ${theOwnersYesTo(asked.id)}`
   if (!record.ledger.some((row) => row.kind === 'package_landed' && row.note === note)) return `${IT_LANDED}: ${night.package}'s ledger holds no package_landed row noting '${note}'`
   return undefined
+}
+
+/**
+ * Whether the builder has queued the landing's ask (section 2 step 7), before the tip is known: a verify_range answer on
+ * a range from `base` handed a question, the builder queued it word for word after that answer, and the owner's asks
+ * hold it. Any other ask the crew queued first is not it (Saturnus, #639 PR 821 r=2). Undefined when it is queued, the
+ * reason, as `<row>: <why>`, when it is not.
+ */
+export function whyTheLandingIsNotAsked(base: string, builder: string, record: Pick<TheLandingRecord, 'builderTranscript' | 'asks'>): string | undefined {
+  const records = theMembersRecords(record.builderTranscript)
+  const verified = theVerifiedQuestions(records, base)
+  if (verified.length === 0) return `${LANDING_ASKED}: no ${VERIFY_RANGE} answer on a range from ${base} in ${builder}'s transcript hands the owner a question yet`
+  const queued = verified.some(({ question, at }) => queuedAfter(records, question, at) && theAskOf(record.asks, question) !== undefined)
+  return queued ? undefined : `${LANDING_ASKED}: the owner's asks hold no ask ${builder} queued as a ${VERIFY_RANGE} answer's question yet`
 }
