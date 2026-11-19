@@ -55,10 +55,11 @@ esac
 STANDIN
 chmod 0700 "${WORK}/martha"
 
-# The session, the checker and kitty's arguments, from Martha's own functions.
+# The session, the checker, kitty's arguments, kitty's environment and the faked request, from Martha's own functions
+# and constants: the KITTY_ prefix and kitty's version are never typed here.
 node --input-type=module -e "
 import { writeFileSync } from 'node:fs'
-import { THE_STRIPS_ACTIONS, theCheckerSource, theKittyArguments, theSessionText } from '${SRC}/the_session_kitty_reads.ts'
+import { KITTY_FLOOR, THE_STRIPS_ACTIONS, theCheckerSource, theKittyArguments, theSessionText, withoutKittysVariables } from '${SRC}/the_session_kitty_reads.ts'
 import { CHECKER_FILE, SESSION_FILE } from '${SRC}/open_the_crew_in_kitty.ts'
 const [work] = process.argv.slice(1)
 const checker = work + '/' + CHECKER_FILE
@@ -67,10 +68,14 @@ if ('refusal' in session) { console.error(session.refusal); process.exit(2) }
 writeFileSync(checker, theCheckerSource(THE_STRIPS_ACTIONS), { mode: 0o600 })
 writeFileSync(work + '/' + SESSION_FILE, session.text, { mode: 0o600 })
 writeFileSync(work + '/kitty.args', theKittyArguments(work + '/' + SESSION_FILE).join('\n'))
+writeFileSync(work + '/kitty.env', Object.entries(withoutKittysVariables(process.env)).map(([name, value]) => name + '=' + value + '\\0').join(''), { mode: 0o600 })
+const faked = { cmd: 'set-tab-title', version: KITTY_FLOOR.split('.').map(Number), payload: { title: 'FAKED' } }
+writeFileSync(work + '/faked.request', '\\x1bP@kitty-cmd' + JSON.stringify(faked) + '\\x1b\\\\')
 " "${WORK}" || { say "Martha's session text could not be made" >&2; exit 2; }
 
 mapfile -t args < "${WORK}/kitty.args"
-env $(env | sed -n 's/^\(KITTY_[A-Z_]*\)=.*/-u \1/p') kitty "${args[@]}" >"${WORK}/kitty.log" 2>&1 &
+mapfile -d '' -t kittys_env < "${WORK}/kitty.env"
+env -i "${kittys_env[@]}" kitty "${args[@]}" >"${WORK}/kitty.log" 2>&1 &
 KITTY_PID=$!
 
 waitFor() { # file seconds
@@ -90,7 +95,7 @@ for member in Alpha Beta; do
 done
 
 # 3: the owner's uid writes a set-tab-title request into Beta's strip terminal, as a member could; kitty answers it there.
-printf '\033P@kitty-cmd{"cmd":"set-tab-title","version":[0,50,0],"payload":{"title":"FAKED"}}\033\\' > "$(cat "${WORK}/Beta.tty")"
+cat "${WORK}/faked.request" > "$(cat "${WORK}/Beta.tty")"
 sleep 3
 
 for member in Alpha Beta; do

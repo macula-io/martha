@@ -147,11 +147,15 @@ export interface WhatTheMachineHas {
   readonly env: Readonly<Record<string, string | undefined>>
 }
 
+/** Why bare `martha start` opens nothing where there is no desktop session for kitty's windows. */
+export const NO_DESKTOP_SESSION =
+  'martha start opens the crew in kitty windows, and there is no desktop session here (no WAYLAND_DISPLAY or DISPLAY). Over ssh, run martha start <member> in a terminal of its own per member; tmux comes later.'
+
 /** Why the crew cannot be opened in kitty here, naming the fix; or undefined. */
 export function whyKittyCannotOpen(machine: WhatTheMachineHas): string | undefined {
   if (machine.kitty === undefined) return 'martha start opens the crew in kitty, and kitty (with its kitten) is not on your PATH. Install kitty: https://sw.kovidgoyal.net/kitty/binary/'
   const found = theKittyVersionIn(machine.kitty)
   if (found === undefined || isBelow(found, KITTY_FLOOR)) return `martha start needs kitty ${KITTY_FLOOR} or newer, and this kitty is ${found ?? `one that says ${JSON.stringify(machine.kitty.trim())}`}. Update kitty.`
-  if (!machine.env['WAYLAND_DISPLAY'] && !machine.env['DISPLAY']) return 'martha start opens the crew in kitty windows, and there is no desktop session here (no WAYLAND_DISPLAY or DISPLAY). Over ssh, run martha start <member> in a terminal of its own per member; tmux comes later.'
+  if (!machine.env['WAYLAND_DISPLAY'] && !machine.env['DISPLAY']) return NO_DESKTOP_SESSION
   return undefined
 }

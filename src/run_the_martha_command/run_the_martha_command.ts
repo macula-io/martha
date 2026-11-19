@@ -43,7 +43,7 @@ import { rowStreamsDirectory } from '../row_streams_directory/row_streams_direct
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { wakeAMember } from '../wake_a_member/wake_a_member.ts'
-import { launcherPlacesOf, startMember } from '../start_a_member/start_a_member.ts'
+import { launcherPlacesOf, NOT_A_TERMINAL as START_NEEDS_A_TERMINAL, startMember } from '../start_a_member/start_a_member.ts'
 import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
@@ -312,6 +312,8 @@ async function crew(io: CommandIo, places: Places, tabOf?: string): Promise<numb
 
 /** Bare `martha start` (#547 S6): every member that is not running opened in a kitty tab of its own. */
 async function openTheCrew(io: CommandIo, places: Places): Promise<number> {
+  // Each tab starts its member on kitty's terminal, so the owner's own terminal is asked for first, as start <member> asks.
+  if (!io.terminal.is_terminal) return refused(io, START_NEEDS_A_TERMINAL)
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
   const place = stateSubdirectory(places.state, KITTY_PLACE)
