@@ -8,6 +8,9 @@
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 
+import { engineFactsIn } from '../../src/know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
+import { anEngineCheckoutOnDisk } from '../../src/record_the_goose_engine/an_engine_checkout_on_disk.ts'
+
 /** Where one line of the trial runs: the owner's stand-in home, and the three places Goose gets. */
 export interface Place {
   readonly base: string
@@ -99,14 +102,14 @@ export const CHECKOUT_MARKERS: readonly Marker[] = [
 
 /**
  * The config root the launcher writes: the provider, the model, the mode pinned to approve, slash
- * commands off, the skills switch, the model endpoint reached through the recording proxy, and the
+ * commands off, the two skills switches, the model endpoint reached through the recording proxy, and the
  * extension switches. Written into the root and not into Goose's environment, because a config key's
  * environment variable wins over this file, and the design says the launcher owns the root.
  *
  * The extension switches are what makes the tool list the allow-list: Goose reads its platform
  * extensions in with every one at its own default, and Analyze, Apps and Extension Manager default to
- * on, so a root that names none of them offers their tools to the member's model as well. Skills are
- * the same list by a different door once the engine has no Skills extension to switch off (#614).
+ * on, so a root that names none of them offers their tools to the member's model as well. Skills are not an
+ * extension any more: the engine's own switches carry them (#614).
  */
 export function writeTheConfig(place: Place, model: string, endpoint: string, gooseSource: string): string {
   const config = [
@@ -114,7 +117,7 @@ export function writeTheConfig(place: Place, model: string, endpoint: string, go
     `GOOSE_MODEL: ${model}`,
     'GOOSE_MODE: approve',
     'GOOSE_SLASH_COMMANDS_ENABLED: false',
-    ...skillsSwitchedOffIn(gooseSource),
+    ...theSkillsLinesIn(gooseSource),
     `OLLAMA_HOST: ${endpoint}`,
     extensionsYaml(gooseSource),
     '',
@@ -184,64 +187,27 @@ function extensionsYaml(gooseSource: string): string {
   return ['extensions:', ...entries.flat()].join('\n')
 }
 
-/** Where in the engine's source it decides whether the model is offered skills (martha#614). */
-export const SKILLS_SWITCH_SOURCE = 'agents/services.rs'
+/** The two skills parts of the engine's facts the trial's config root writes (martha#614). */
+const THE_SKILLS_PARTS = { skills_advertised: 'skills switch', builtin_skills_advertised: 'built-in skills switch' } as const
+
+/** The approved checkout's skills reach the model: the engine's skills switch is written on, never left to its default. */
+export const CHECKOUT_SKILLS_ON = true
+
+/** The engine's compiled-in skills reach no model: its built-ins switch is written off (DECIDED 2026-11-18). */
+export const BUILTIN_SKILLS_OFF = false
 
 /**
- * The setting that keeps skills away from the model, with what the engine does when it is unset; or
- * undefined when the engine declares no such setting.
- *
- * Skills used to be a platform extension and the extensions mapping switched them off; the engine now
- * serves them from a setting of its own, and the model is offered them unless the setting says otherwise
- * (#614). Its name and its unset value are read from the engine's own source the way the extension keys
- * are, so a launch cannot restate either by hand, and a rename is a launch that says so rather than one
- * that silently offers the member's model every skill on the box.
+ * The config root's skills lines (martha#614, DECIDED 2026-11-18 "Approved skills on" and "Switch built-ins off"): the
+ * engine's skills switch on, so the skills of the checkout the trial launches in reach the model, and its built-ins
+ * switch off. Both names are read from the engine at hand through the reader the recording is made with, so the trial
+ * keeps no resolver of its own, and an engine that renames or drops either switch is refused by that part's name.
  */
-export function skillsSwitchIn(source: string): { setting: string; whenUnset: boolean } | undefined {
-  const path = join(source, 'crates', 'goose', 'src', SKILLS_SWITCH_SOURCE)
-  let text: string
-  try {
-    text = readFileSync(path, 'utf8')
-  } catch {
-    return undefined
-  }
-  const body = /fn skills_advertised\([^)]*\)\s*->\s*bool\s*\{([\s\S]*?)\n\}/.exec(text)?.[1]
-  if (body === undefined) return undefined
-  const read = /get_param::<bool>\(\s*(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))\s*\)/.exec(body)
-  if (read === null) throw new Error(`${path} names no setting for the skills switch`)
-  const setting = read[1] ?? constantValueIn(text, read[2] ?? '', path)
-  const whenUnset = /unwrap_or\(\s*(true|false)\s*\)/.exec(body)
-  if (whenUnset === null) throw new Error(`${path} says nothing of what a skills switch left unset does`)
-  return { setting, whenUnset: whenUnset[1] === 'true' }
-}
-
-/** What a `&str` constant in the engine's own file is set to, or a throw naming the constant it never defines. */
-function constantValueIn(text: string, name: string, path: string): string {
-  const value = new RegExp(`const ${name}: &str = "([^"]+)"`).exec(text)?.[1]
-  if (value === undefined) throw new Error(`${path} reads ${name}, which it never defines`)
-  return value
-}
-
-/** The platform extension that served skills before the engine's own setting did (martha#614). */
-export const SKILLS_EXTENSION = 'skills'
-
-/**
- * The config root's line switching skills off the model, for an engine that declares the switch and
- * leaves skills on when it is unset; an engine with no such setting is left to the extensions mapping,
- * and one whose unset value already keeps skills away needs no line at all. An engine with neither the
- * setting nor the extension offers the model every skill with nothing to switch off: that is refused by
- * name, never launched in silence (upstream removed the extension, and a sync without the port is that).
- */
-export function skillsSwitchedOffIn(source: string): string[] {
-  const skills = skillsSwitchIn(source)
-  if (skills === undefined) {
-    if (!platformExtensionKeysIn(source).includes(SKILLS_EXTENSION)) {
-      throw new Error(
-        `the engine declares no skills switch in ${SKILLS_SWITCH_SOURCE} and no ${SKILLS_EXTENSION} extension: ` +
-          'its model would be offered every skill with nothing to switch off',
-      )
-    }
-    return []
-  }
-  return skills.whenUnset ? [`${skills.setting}: false`] : []
+export function theSkillsLinesIn(gooseSource: string): string[] {
+  const { facts, unreadable } = engineFactsIn(anEngineCheckoutOnDisk(gooseSource))
+  const parts: readonly string[] = Object.values(THE_SKILLS_PARTS)
+  const missing = unreadable.filter(({ part }) => parts.includes(part))
+  if (missing.length > 0) throw new Error(`the engine's ${missing.map(({ part, why }) => `${part} cannot be read: ${why}`).join('; ')}`)
+  const { skills_advertised: skills, builtin_skills_advertised: builtins } = facts
+  if (skills === undefined || builtins === undefined) throw new Error(`the engine answered no ${parts.join(' and no ')}`)
+  return [`${skills.setting}: ${String(CHECKOUT_SKILLS_ON)}`, `${builtins.setting}: ${String(BUILTIN_SKILLS_OFF)}`]
 }
