@@ -33,6 +33,10 @@ import {
   REF_TRANSACTION_PATH,
   refTransactionBody,
   THE_GUARDS_DEADLINE_MS,
+  THE_MEMBER_HAD_IT,
+  theHadNameOf,
+  theKeptNameOf,
+  WHAT_THE_JUDGE_NEVER_TAKES,
   type ARefUpdate,
   type HeardGitVerdict,
 } from './guard_protocol.ts'
@@ -124,9 +128,27 @@ function asked(path: string, body: Readonly<Record<string, unknown>>, socket: st
 
 /** The real git, with the words unchanged, and this process ending the way it did — a signal raised, or its status. */
 function runGit(the: TheGuardsConfig, args: readonly string[]): number {
-  const ran = spawnSync(the.real_git, args, { stdio: 'inherit' })
+  const ran = spawnSync(the.real_git, args, { stdio: 'inherit', env: theMembersOwnEnvironment(process.env) })
   if (ran.signal !== null && ran.signal !== 'SIGKILL') process.kill(process.pid, ran.signal)
   return ran.status ?? REFUSED_STATUS
+}
+
+/**
+ * The environment the member's git is handed (martha#772): this judge's own, with each variable the shim kept from the
+ * member put back exactly as the member had it — set to its value, empty included, or absent — and the names it was
+ * kept under taken out, so the real git and everything it starts see the member's environment and nothing of the guard's.
+ */
+function theMembersOwnEnvironment(own: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const handed: NodeJS.ProcessEnv = { ...own }
+  for (const variable of WHAT_THE_JUDGE_NEVER_TAKES) {
+    const kept = handed[theKeptNameOf(variable)]
+    const had = handed[theHadNameOf(variable)] === THE_MEMBER_HAD_IT
+    delete handed[theKeptNameOf(variable)]
+    delete handed[theHadNameOf(variable)]
+    if (had) handed[variable] = kept ?? ''
+    else delete handed[variable]
+  }
+  return handed
 }
 
 /** Whether the run carries Martha's own settings: every pair, as the two words `git -c <name>=<value>` takes. */
