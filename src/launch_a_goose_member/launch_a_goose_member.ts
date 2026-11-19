@@ -77,6 +77,7 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theToolServersEntry } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts'
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
+import { theFoldersReadBackWhole, theRootsWatch } from './the_roots_watch.ts'
 
 /** The folder under the path root the engine keeps its config in. */
 export const THE_CONFIG_FOLDER = 'config'
@@ -318,6 +319,12 @@ export interface AGooseLaunch {
   /** The tool servers the config root named when it was read back just before the start: the crew's, and only it. */
   readonly servers: readonly string[]
   readonly engine: TheEngineStarted
+  /**
+   * The re-check the launch runs after every result (design G1 row `checkTheSettingsStillHold`): the owner's settings
+   * watch, the config root and secrets file as written, then the root's `config/` and `.agents/` against the snapshot
+   * taken before the engine started. Why the member must stop, or undefined.
+   */
+  readonly settings_still_hold: () => string | undefined
   /** Stops the engine whole and reads the permission store; says whether the engine had to be stopped and what it saved. */
   readonly end: () => Promise<TheEndOfALaunch>
 }
@@ -345,6 +352,8 @@ export interface AGooseLaunchAsked {
   readonly model: TheModelALaunchRuns
   /** The relay socket the crew's tool server posts to, and the token it carries: the launch's own, minted for it. */
   readonly tool_server: { readonly socket_path: string; readonly token: string }
+  /** The owner's Claude Code settings watch (`hookSettingsWatch(...).check`), run first in every re-check: why the owner's settings now turn hooks off, or undefined. */
+  readonly owners_settings: () => string | undefined
   /** A test's hand on the config root (and the secrets file beside it) between their write and the engine's start; a real launch gives none. */
   readonly before_the_start?: (config_at: string) => void
 }
@@ -373,12 +382,25 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
   // The root read back just before the engine reads it (martha#541 C1, guard row 3): the servers it names are a fact of
   // this launch, and a root that names any server but the crew's, or is not the text this launch wrote, starts nothing.
   asked.before_the_start?.(config_at)
-  const readBack = theRootAsItWasWritten(asked.facts, config_at, made.config, { at: theSecretsFileOf(asked.facts, places.root), written: made.secrets })
-  if ('refusal' in readBack) {
+  const secrets = { at: theSecretsFileOf(asked.facts, places.root), written: made.secrets }
+  const readBack = theRootAsItWasWritten(asked.facts, config_at, made.config, secrets)
+  const whole = theFoldersReadBackWhole(asked.facts, places.root)
+  const notStarted = (why: string): { readonly refusal: string } => {
     for (const folder of [places.root, places.home]) removeTheTree(folder)
     removeTheTree(prepared.snapshot_dir)
-    return refused(readBack.refusal)
+    return refused(why)
   }
+  if ('refusal' in readBack) return notStarted(readBack.refusal)
+  if ('refusal' in whole) return notStarted(whole.refusal)
+  // The snapshot is taken here, after the read-back and before the spawn, so nothing of the engine's is in it.
+  const settings_still_hold = theRootsWatch({
+    owners_settings: asked.owners_settings,
+    the_files_as_written: () => {
+      const again = theRootAsItWasWritten(asked.facts, config_at, made.config, secrets)
+      return 'refusal' in again ? again.refusal : undefined
+    },
+    folders: whole.folders,
+  })
 
   const started = await startTheEngine(asked.facts, asked.binary, places, theEnvironmentOfALaunch(asked.facts, places))
   if ('refusal' in started) {
@@ -395,7 +417,7 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
     removeTheTree(prepared.snapshot_dir)
     return { stopped, permissions: thePermissionStoreIsStillEmpty(places.root) }
   }
-  return { places, config_at, text_a_start_loads, servers: readBack.servers, engine: started, end }
+  return { places, config_at, text_a_start_loads, servers: readBack.servers, engine: started, settings_still_hold, end }
 }
 
 /**
@@ -407,9 +429,9 @@ function theRootAsItWasWritten(facts: RecordedEngine, config_at: string, written
     const root = theRootReadBack(facts, { at: config_at, text: readFileSync(config_at, 'utf8'), written }, THE_CREWS_TOOL_SERVER)
     if ('refusal' in root) return root
     const why = whyTheSecretsFileIsNotAsWritten(secrets)
-    return why === undefined ? root : { refusal: `the secrets file at ${secrets.at} ${why}, so the engine is not started on it.` }
+    return why === undefined ? root : { refusal: `the secrets file at ${secrets.at} ${why}.` }
   } catch (error) {
-    return { refusal: `the config root at ${config_at} could not be read back before the start (${(error as NodeJS.ErrnoException).code ?? String(error)})` }
+    return { refusal: `the config root at ${config_at} could not be read back (${(error as NodeJS.ErrnoException).code ?? String(error)})` }
   }
 }
 

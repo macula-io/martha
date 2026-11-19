@@ -226,7 +226,7 @@ export function theRootReadBack(facts: RecordedEngine, root: { readonly at: stri
   if (servers.length !== 1 || servers[0] !== server) {
     return { refusal: `the config root at ${root.at} names the tool servers [${servers.join(', ')}], and a launch starts with ${server} alone.` }
   }
-  if (root.text !== root.written) return { refusal: `the config root at ${root.at} is not the text this launch wrote, so the engine is not started on it.` }
+  if (root.text !== root.written) return { refusal: `the config root at ${root.at} is not the text this launch wrote.` }
   return { servers }
 }
 
