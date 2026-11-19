@@ -6,7 +6,8 @@
 //
 // It speaks as the recorded Goose engine does (src/know_the_goose_engines_facts/): a permission request offers the
 // recording's permission_options in the engine's order, each with its kind as its id and its name, as the engine
-// builds them (crates/goose/src/acp/server.rs, handle_tool_permission_request). It reads an answer as the engine does,
+// builds them (crates/goose/src/acp/server.rs, handle_tool_permission_request). A call the script names is named
+// the engine's way, in its `tool_call` update's `_meta` and not in the request. It reads an answer as the engine does,
 // by the id sent back; anything else is a cancel. After a call is answered, the call's update says what it heard, so a
 // test reads the answer from the agent's side of the wire and not from the client's own record. A call with no id has
 // no update the client can file, so its answer is said in the turn's text instead.
@@ -14,7 +15,7 @@
 import { argv, exit, stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline'
 
-import { STAND_IN_SESSION, THE_ENGINES_OPTIONS, whatTheEngineMakesOf, type AStep, type AnAgentScript } from './the_stand_in_agents_script.ts'
+import { STAND_IN_SESSION, THE_ENGINES_OPTIONS, theEnginesNamingOf, whatTheEngineMakesOf, type AStep, type AnAgentScript } from './the_stand_in_agents_script.ts'
 
 type Json = Record<string, unknown>
 
@@ -41,8 +42,9 @@ function answeredId(answer: Json): string {
 }
 
 async function call(sessionId: string, step: Extract<AStep, { call: unknown }>): Promise<void> {
-  const { id, title, input } = step.call
-  update(sessionId, { sessionUpdate: 'tool_call', toolCallId: id, title, kind: 'other', status: 'pending', rawInput: input })
+  const { id, title, input, name } = step.call
+  const naming = name === undefined ? {} : { _meta: theEnginesNamingOf(name) }
+  update(sessionId, { sessionUpdate: 'tool_call', toolCallId: id, title, kind: 'other', status: 'pending', rawInput: input, ...naming })
   const toolCall = { toolCallId: id, title, kind: 'other', status: 'pending', rawInput: input }
   const answer = await request('session/request_permission', { sessionId, toolCall, options: step.options ?? THE_ENGINES_OPTIONS })
   const made = whatTheEngineMakesOf(answeredId(answer))
