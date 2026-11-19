@@ -81,6 +81,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'serve_the_relay_to_a_launch',
     'serve_the_owners_answers',
     'start_a_member',
+    'start_an_engine_member',
     'start_the_member_on_its_host',
     'start_the_member_on_the_owners_terminal',
     'sweep_leftover_launch_directories',
