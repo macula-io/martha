@@ -181,6 +181,10 @@ function kittyThatAnswers(place: Place): { readonly started: string; readonly en
 test('bare martha start whose input is no terminal refuses in the words martha start <member> uses, before any crew or kitty is read (#547 S6 r=1 R1)', (t) => {
   const place = placeFor(t)
   const kitty = kittyThatAnswers(place)
+  // No crew declared yet: the terminal is asked for before the crew is read, so this is the terminal refusal too.
+  const undeclared = marthaWith(place, kitty.env, 'start')
+  assert.equal(undeclared.status, EXIT_REFUSED, undeclared.said)
+  assert.ok(undeclared.err.includes(START_NOT_ON_A_TERMINAL), undeclared.err)
   assert.equal(marthaWith(place, kitty.env, 'init').status, EXIT_DONE)
   const run = marthaWith(place, kitty.env, 'start')
   assert.equal(run.status, EXIT_REFUSED, run.said)
