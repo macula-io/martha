@@ -2,7 +2,7 @@
 // something else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never
 // run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 
 /** Why the stand-in's `stop` is not the crew's word for stopping a member: it is the chat completions API's finish reason. */

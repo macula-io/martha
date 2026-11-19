@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
-import { removeWhatAppearedIn, A_CASES_HOME } from '../../prove_the_core/every_test_file_cleans_up.ts'
+import { removeWhatAppearedIn, A_CASES_HOME } from '../../prove_the_core/a_test_run_ends/every_test_file_cleans_up.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE } from '../declare_crew/declare_crew.ts'

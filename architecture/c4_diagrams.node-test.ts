@@ -14,7 +14,7 @@ import {
   ASSETS, components, containers, DIAGRAMS, LEFT_OUT, PACKAGE_BOXES, ROOM_SLICES_WHICH_LOAD,
 } from './c4_diagrams.ts'
 import type { BoxCoverage, DrawnBox, DrawnLegendEntry, DrawnText } from './c4_diagrams.ts'
-import { declaredHostGlue } from '../prove_the_core/only_the_launcher_writes_launch_records.ts'
+import { declaredHostGlue } from '../prove_the_core/one_place_does_it/only_the_launcher_writes_launch_records.ts'
 
 const README = readFileSync(join(import.meta.dirname, 'README.md'), 'utf8')
 const REPOSITORY = join(import.meta.dirname, '..')

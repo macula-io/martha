@@ -167,6 +167,14 @@ test('a lab host is refused in lower, upper and mixed case, and never printed', 
   assert.deepEqual(hits, [{ where: 'path docs/<lab host>-notes.md', what: 'a lab hostname (value withheld)' }])
 })
 
+test('a home directory is refused and never printed: a CI log of a public repository is public (martha#846)', async () => {
+  // A user name nobody declared, drawn here so this file carries no such value.
+  const user = `u${randomBytes(4).toString('hex')}`
+  const hits = await hitsOf(`see /home/${user}/notes`)
+  assert.deepEqual(hits, ['a home directory (value withheld)'])
+  assert.ok(!hits.join('\n').includes(user), `the hit printed the user name: ${hits.join('\n')}`)
+})
+
 test('a lab machine name is not a private class: the owner dropped it (martha#773)', async () => {
   for (const text of ['it ran on synth03', 'it ran on SYNTH03', 'docs/synth04-notes.md', 'see synthetic-owner/open-thing and synth07']) {
     assert.deepEqual(await hitsOf(text), [], text)
@@ -174,7 +182,7 @@ test('a lab machine name is not a private class: the owner dropped it (martha#77
 })
 
 test('the crew\'s other private-text classes are refused', async () => {
-  assert.deepEqual(await hitsOf('see /home/synthetic/notes'), ['a home directory (/home/synthetic)'])
+  assert.deepEqual(await hitsOf('see /home/synthetic/notes'), ['a home directory (value withheld)'])
   assert.deepEqual(await hitsOf('dial 192.168.255.7'), ['a private address (192.168.255.7)'])
   assert.deepEqual(await hitsOf('mail bob@synthetic.invalid'), ['an email address (bob@synthetic.invalid)'])
   const id = 'a'.repeat(ID_HEX_DIGITS)

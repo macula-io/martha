@@ -106,7 +106,7 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
     },
     {
       what: 'a home directory',
-      shows: true,
+      shows: false,
       matches: (text) => each(PUBLIC_TEXT_PATTERNS.home_dir, text),
       accepts: (value) => whole(PUBLIC_TEXT_PATTERNS.allow_home).test(value) || synthetic(SYNTHETIC.home_dir)(value),
     },

@@ -8,7 +8,7 @@
 // case the whole package exists for, and no reading handed in can prove it.
 //
 // It lives in the machine's own directory beside the readings it drives: a launch record is written only by the
-// launcher, the contract or the host glue (prove_the_core/only_the_launcher_writes_launch_records), and this directory
+// launcher, the contract or the host glue (prove_the_core/one_place_does_it/only_the_launcher_writes_launch_records), and this directory
 // is the glue that reads a machine's kernel and a home's state root.
 
 import assert from 'node:assert/strict'
