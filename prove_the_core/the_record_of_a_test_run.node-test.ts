@@ -127,6 +127,19 @@ test('#802: a record names the run\'s leader, the identity it held, and the chec
   assert.ok(record.identity !== '', `${NAME}: the record holds no identity, so a reused pid could not be refused`)
 })
 
+test('#802: the runs root goes once its last record is removed, and stays while another is there', (t) => {
+  const runtime = aScratch(t, 'the-root-goes')
+  restoredAfter(t, ['XDG_RUNTIME_DIR'])
+  process.env.XDG_RUNTIME_DIR = runtime
+  const one = recordTheRun(process.pid, realpathSync(runtime))
+  const other = recordTheRun(process.pid, realpathSync(runtime))
+  assert.equal(existsSync(theRunsRoot()), true, `${NAME}: a root holding two records was not there`)
+  removeTheRecord(one.token)
+  assert.equal(existsSync(theRunsRoot()), true, `${NAME}: the root went while another run's record was still in it`)
+  removeTheRecord(other.token)
+  assert.equal(existsSync(theRunsRoot()), false, `${NAME}: the empty root stayed behind, which is a directory a test file is failed for leaving in its temporary place`)
+})
+
 test('#802: no record, no token, and no record under a token, each answered by name', (t) => {
   const runtime = aScratch(t, 'absent')
   restoredAfter(t, ['XDG_RUNTIME_DIR'])

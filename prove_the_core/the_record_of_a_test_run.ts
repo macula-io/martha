@@ -23,7 +23,7 @@
 // Exit 0 answered; 2 refused, with its words.
 
 import { randomBytes } from 'node:crypto'
-import { mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import process from 'node:process'
 
@@ -138,8 +138,19 @@ export const everyRecord = (): readonly TheRecordOfATestRun[] =>
     return record === undefined ? [] : [record]
   })
 
-/** Removes a token's directory and the record inside it. */
-export const removeTheRecord = (token: string): void => rmSync(join(theRunsRoot(), token), { recursive: true, force: true })
+/**
+ * Removes a token's directory and the record inside it, and the runs root itself once no record is left in it: a root
+ * that stays behind is a directory the caller's own temporary place keeps for nothing (martha#724's rule for a test
+ * file's leftovers). Another run's record keeps it, so only an empty one goes.
+ */
+export const removeTheRecord = (token: string): void => {
+  rmSync(join(theRunsRoot(), token), { recursive: true, force: true })
+  try {
+    rmdirSync(theRunsRoot())
+  } catch {
+    // Not empty — another record is there — or already gone: either way nothing else of this removal is owed.
+  }
+}
 
 /**
  * Whether any process is left in the group `group`, asked of the kernel without signalling anything. A group id is

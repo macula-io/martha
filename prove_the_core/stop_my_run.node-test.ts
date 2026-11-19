@@ -25,7 +25,7 @@ import { linuxProcessIdentities, PROC_ROOT } from '../src/linux_process_identity
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 import { withoutTheTestContext } from './every_test_run_ends.ts'
-import { aNewToken, readTheRecord, theRecordPathOf, writeTheRecord, type TheRecordOfATestRun } from './the_record_of_a_test_run.ts'
+import { aNewToken, readTheRecord, removeTheRecord, writeTheRecord, type TheRecordOfATestRun } from './the_record_of_a_test_run.ts'
 
 const NAME = 'stop_my_run'
 
@@ -100,11 +100,26 @@ function thePlantEnded(plant: APlant, detached: boolean): void {
   }
 }
 
+/**
+ * Waits until the planted file has loaded in the process that runs it — the marker the file writes as it starts. A run
+ * is the `node --test` that leads the group and the worker it starts, and a signal sent before the file loaded reaches
+ * only the leader: the group is then one process, and a case about a group that does not hear the signal proves nothing.
+ */
+async function untilThePlantedFileLoaded(plant: APlant): Promise<boolean> {
+  return untilSeen(() => {
+    try {
+      return readFileSync(plant.seen, 'utf8').length > 0
+    } catch {
+      return false
+    }
+  }, A_PLANT_APPEARS_WITHIN_MS)
+}
+
 /** A record planted for `plant`, its directory removed once the test has run. */
 function aPlantedRecord(t: TestContext, pid: number, worktree: string, identity: string): TheRecordOfATestRun {
   const record = { token: aNewToken(), pid, identity, worktree, started_at: new Date().toISOString() }
   writeTheRecord(record)
-  t.after(() => removeTheTree(theRecordsDirectoryOf(record.token)))
+  t.after(() => removeTheRecord(record.token))
   return record
 }
 
@@ -157,13 +172,12 @@ async function aProcessThatHasEnded(): Promise<number> {
   return pid
 }
 
-/** The record's own directory, which a removal takes with the record inside it. */
-const theRecordsDirectoryOf = (token: string): string => join(theRecordPathOf(token), '..')
-
 test('#802: two runs in one checkout are not confused — one stops and the other keeps running', async (t) => {
   const where = realpathSync(aScratch(t, 'two-runs'))
   const one = aPlant(t, where, {})
   const other = aPlant(t, where, {})
+  assert.equal(await untilThePlantedFileLoaded(one), true, `${NAME}: one planted run's file never loaded in its own process`)
+  assert.equal(await untilThePlantedFileLoaded(other), true, `${NAME}: the other planted run's file never loaded in its own process`)
   const first = aPlantedRecord(t, one.pid, where, linuxProcessIdentities.identityOf(one.pid) ?? '')
   const second = aPlantedRecord(t, other.pid, where, linuxProcessIdentities.identityOf(other.pid) ?? '')
   const stopped = await theStopper(['--token', first.token], where)
@@ -282,7 +296,7 @@ test('#802: the walk reads the kernel it is given, not this machine\'s (--proc)'
 test('#802: a group that does not hear SIGTERM is reported still there, and its record kept', async (t) => {
   const where = realpathSync(aScratch(t, 'still-there'))
   const deaf = aPlant(t, where, { deaf: true })
-  assert.equal(await untilSeen(() => statOf(deaf.pid) !== undefined, A_PLANT_APPEARS_WITHIN_MS), true, `${NAME}: the planted run did not start`)
+  assert.equal(await untilThePlantedFileLoaded(deaf), true, `${NAME}: the planted run's file never loaded, so the group held only its leader and this case proves nothing`)
   const record = aPlantedRecord(t, deaf.pid, where, linuxProcessIdentities.identityOf(deaf.pid) ?? '')
   const waited = await theStopper(['--token', record.token], where)
   assert.equal(waited.status, 1, `${NAME}: a group still there after the wait was not reported as such:\n${waited.output}`)
@@ -292,7 +306,7 @@ test('#802: a group that does not hear SIGTERM is reported still there, and its 
 test('#802: with --force, a group that does not hear SIGTERM is killed and its record removed', async (t) => {
   const where = realpathSync(aScratch(t, 'forced'))
   const deaf = aPlant(t, where, { deaf: true })
-  assert.equal(await untilSeen(() => statOf(deaf.pid) !== undefined, A_PLANT_APPEARS_WITHIN_MS), true, `${NAME}: the planted run did not start`)
+  assert.equal(await untilThePlantedFileLoaded(deaf), true, `${NAME}: the planted run's file never loaded, so the group held only its leader and this case proves nothing`)
   const record = aPlantedRecord(t, deaf.pid, where, linuxProcessIdentities.identityOf(deaf.pid) ?? '')
   const forced = await theStopper(['--token', record.token, '--force'], where)
   assert.equal(forced.status, 0, `${NAME}: --force did not end the group:\n${forced.output}`)
