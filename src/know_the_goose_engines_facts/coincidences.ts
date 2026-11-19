@@ -15,6 +15,11 @@ export const COINCIDENCES: readonly Exception[] = [
   // `crates/goose/src/skills/` is the engine's own skills module, where it reads its built-in skills switch. The
   // constant is the folder Claude Code loads an owner's skills from, which no part of reading the engine touches.
   { value: SKILLS_KIND, file: 'know_the_goose_engines_facts/the_engines_facts_in_its_source.ts', reason: 'the skills folder in ENGINE_PLACES is the Goose engine\'s own skills module, named as its source tree names it; the constant holds the folder Claude Code loads skills from (martha#839)' },
+  // `.agents/skills` under the home is the skill folder the engine's `skills/mod.rs` adds after the checkout's, spelled
+  // as that file spells it so the fixture tree reads like the engine's; the checkout's folders come from the recording.
+  { value: SKILLS_KIND, file: 'know_the_goose_engines_facts/an_engine_source_from_its_facts.ts', reason: 'the home skill folder in the fixture tree is the Goose engine\'s own, spelled as its skills/mod.rs spells it; the constant holds the folder Claude Code loads skills from (martha#614)' },
+  // `.another/skills` is a skill folder the test invents to show an engine that adds one is read, not recalled.
+  { value: SKILLS_KIND, file: 'know_the_goose_engines_facts/the_engines_facts_in_its_source.node-test.ts', reason: 'the added skill folder in the test is one the fixture engine invents, to show a new folder is read from the engine; the constant holds the folder Claude Code loads skills from (martha#614)' },
   // `crates/goose/src/acp/server/tool_calls/` is the engine's own module that turns a tool request into an ACP tool
   // call, where it writes the called tool's name into `_meta`. The constant is the finish reason an OpenAI model gives a
   // turn that ends in tool calls, which no part of reading the engine's source touches.

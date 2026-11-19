@@ -20,6 +20,8 @@ import { THE_LAUNCH_BOUND_KEY } from './the_cap_a_line_gets/the_cap_a_line_gets.
 import { THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS } from './drive_the_trial.ts'
 import { NOT_OBSERVED, THE_TRANSCRIPT } from './the_evidence_it_keeps/the_evidence_says_why.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { skillsSwitchFilesSaying } from '../src/know_the_goose_engines_facts/an_engine_source_from_its_facts.ts'
+import { RECORDED_GOOSE_ENGINE } from '../src/know_the_goose_engines_facts/recorded_goose_engine.ts'
 
 const theDriverRun = promisify(execFile)
 
@@ -213,8 +215,9 @@ createInterface({ input: process.stdin }).on('line', (line) => {
 })
 `
 
-/** The engine source the launch config is read from: Developer, which the launch keeps, and Skills as an extension. */
+/** The engine source the launch config is read from: Developer, which the launch keeps, Skills as an extension, and both skills switches (martha#614). */
 const AN_ENGINE_SOURCE: Readonly<Record<string, string>> = {
+  ...skillsSwitchFilesSaying(RECORDED_GOOSE_ENGINE),
   'crates/goose/src/agents/platform_extensions/mod.rs': [
     "pub fn platform_extensions() -> HashMap<&'static str, PlatformExtensionDef> {",
     '    map.insert(',

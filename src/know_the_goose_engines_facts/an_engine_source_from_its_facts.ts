@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILLS_SWITCH_READERS, SPLITS_ONCE, TELEMETRY_READERS, TOOL_CALL_META, type ASkillsSwitch, type EngineFacts, type EngineSource, type PlatformExtension, type ToolNaming } from './the_engines_facts_in_its_source.ts'
+import { CHECKOUT_ROOT_CARRIERS, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, SPLITS_ONCE, TELEMETRY_READERS, TOOL_CALL_META, type ASkillsSwitch, type CheckoutSkillRoots, type EngineFacts, type EngineSource, type PlatformExtension, type ToolNaming } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -96,6 +96,56 @@ function skillsSwitch(reader: string, switched: ASkillsSwitch): string {
   ].join('')
 }
 
+/** A path as the engine builds it: `<base>.join("a").join("b")` for "a/b". */
+const joined = (base: string, path: string): string => `${base}${path.split('/').map((part) => `.join("${part}")`).join('')}`
+
+/** The engine's skill folders as `skills/mod.rs` builds them from the working directory, then its home (martha#614). */
+function skillFolders(roots: CheckoutSkillRoots): string {
+  const listed = roots.skill_folders.map((folder) => `            ${joined('wd', folder)},\n`).join('')
+  return [
+    `fn ${SKILL_ROOT_READERS.skill_folders}(working_dir: Option<&Path>, config: &Config) -> Vec<SkillDirectory> {\n    let mut dirs = Vec::new();\n`,
+    `    let plugin_dirs = ${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}(working_dir, config);\n\n`,
+    `    if let Some(wd) = working_dir {\n        for path in [\n${listed}        ] {\n            dirs.push(SkillDirectory { path });\n        }\n    }\n`,
+    `    dirs.extend(plugin_dirs.iter().map(|(path, _)| SkillDirectory { path: path.clone() }));\n`,
+    `    if let Some(h) = dirs::home_dir().as_ref() {\n        dirs.push(SkillDirectory { path: ${joined('h', '.agents/skills')} });\n    }\n    dirs\n}\n`,
+  ].join('')
+}
+
+/** The project plugin folder and the two settings files, as `plugins/discovery.rs` builds them (martha#614). */
+function pluginDiscovery(roots: CheckoutSkillRoots): string {
+  const [shared = '', local = ''] = roots.plugin_settings
+  const folderOf = (file: string): string => file.slice(0, file.lastIndexOf('/'))
+  const nameOf = (file: string): string => file.slice(file.lastIndexOf('/') + 1)
+  if (folderOf(shared) !== folderOf(local)) throw new Error(`the two plugin settings files ${shared} and ${local} are in different folders, which the engine never builds`)
+  return [
+    `pub(crate) fn ${CHECKOUT_ROOT_CARRIERS.plugin_discovery}(\n    project_root: Option<&Path>,\n    config: &Config,\n) -> Vec<DiscoveredPlugin> {\n`,
+    `    let scoped_settings = ${CHECKOUT_ROOT_CARRIERS.plugin_settings}(project_root);\n    let mut found = Vec::new();\n`,
+    `    if let Some(root) = project_root {\n        let project_plugins_dir = ${SKILL_ROOT_READERS.plugin_folder}(root);\n`,
+    `        found.extend(list_dir_children(&project_plugins_dir).into_iter().map(\n            |(name, root)| DiscoveredPlugin {\n                name,\n                root,\n                scope: PluginScope::Project,\n            },\n        ));\n    }\n`,
+    `    found.extend(list_dir_children(&plugin_install_dir()).into_iter().map(|(name, root)| DiscoveredPlugin {\n        name,\n        root,\n        scope: PluginScope::User,\n    }));\n`,
+    `    found.sort_by(|left, right| left.root.cmp(&right.root));\n    found\n}\n\n`,
+    `fn ${CHECKOUT_ROOT_CARRIERS.plugin_settings}(project_root: Option<&Path>) -> Vec<(SettingsScope, PluginSettings)> {\n    let mut paths: Vec<(SettingsScope, PathBuf)> = Vec::new();\n`,
+    `    if let Some(root) = project_root {\n        paths.push((SettingsScope::Project, ${SKILL_ROOT_READERS.plugin_settings}(root, false)));\n        paths.push((SettingsScope::Local, ${SKILL_ROOT_READERS.plugin_settings}(root, true)));\n    }\n    paths\n}\n\n`,
+    `fn ${SKILL_ROOT_READERS.plugin_folder}(project_root: &Path) -> PathBuf {\n    ${joined('project_root', roots.plugin_folder)}\n}\n\n`,
+    `fn ${SKILL_ROOT_READERS.plugin_settings}(project_root: &Path, local: bool) -> PathBuf {\n    let file = if local {\n        "${nameOf(local)}"\n    } else {\n        "${nameOf(shared)}"\n    };\n`,
+    `    ${joined('project_root', folderOf(shared))}.join(file)\n}\n`,
+  ].join('')
+}
+
+/** The plugin skill folders as `plugins/mod.rs` gathers them, handing the checkout's root to the discovery (martha#614). */
+const pluginSkillDirs = (): string => [
+  `pub(crate) fn ${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}(\n    project_root: Option<&Path>,\n    config: &Config,\n) -> Vec<(PathBuf, PluginScope)> {\n`,
+  `    let plugins_dir = plugin_install_dir();\n    discovery::${CHECKOUT_ROOT_CARRIERS.plugin_discovery}(project_root, config)\n        .into_iter()\n`,
+  `        .flat_map(|plugin| installed_skill_dirs(&plugin.root).into_iter().map(move |dir| (dir, plugin.scope)))\n        .collect()\n}\n`,
+].join('')
+
+/** Files that share a path are one file, their texts in the order given: two parts may be decided in the same file. */
+function oneFilePerPath(files: ReadonlyArray<readonly [string, string]>): Readonly<Record<string, string>> {
+  const merged: Record<string, string> = {}
+  for (const [path, text] of files) merged[path] = `${merged[path] ?? ''}${text}`
+  return merged
+}
+
 /**
  * The engine's telemetry file as it writes it (#541 row 6): another function first, reading another setting through a
  * constant of its own, then an environment switch inside the choice function's braces, the choice read through its own
@@ -139,6 +189,12 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.tool_call_meta]: toolCallMeta(facts.tool_naming),
     [ENGINE_PLACES.tool_name_parts]: toolNameParts(facts.tool_naming),
     [ENGINE_PLACES.shell_tool]: developerTools(facts.shell_tool),
+    ...oneFilePerPath([
+      [ENGINE_PLACES.builtin_skills_advertised, skillsSwitch(SKILLS_SWITCH_READERS.builtin_skills_advertised, facts.builtin_skills_advertised)],
+      [ENGINE_PLACES.skill_folders, skillFolders(facts.checkout_skill_roots)],
+      [ENGINE_PLACES.plugin_discovery, pluginDiscovery(facts.checkout_skill_roots)],
+    ]),
+    [ENGINE_PLACES.plugin_skill_dirs]: pluginSkillDirs(),
     [ENGINE_PLACES.openai_provider]: `pub const OPEN_AI_PROVIDER_NAME: &str = "${facts.openai_provider.name}";\npub const OPEN_AI_DEFAULT_BASE_PATH: &str = "${facts.openai_provider.default_base_path}";\n            vec![\n${settings}            ],\n`,
   }
 }
@@ -184,4 +240,14 @@ export function anEngineSourceSaying(files: Readonly<Record<string, string>>): E
     read: (path) => files[path],
     list: (directory) => Object.keys(files).filter((path) => path.startsWith(`${directory}/`)).map((path) => path.slice(directory.length + 1)).filter((rest) => !rest.includes('/')),
   }
+}
+
+/**
+ * The two skills switch files of a tree that says `facts`, by their paths in the checkout (martha#614): what a stand-in
+ * fork needs so a launch can read both switch names from it, and nothing else of the engine.
+ */
+export function skillsSwitchFilesSaying(facts: EngineFacts): Readonly<Record<string, string>> {
+  const files = engineFilesSaying(facts)
+  const places = [ENGINE_PLACES.skills_advertised, ENGINE_PLACES.builtin_skills_advertised]
+  return Object.fromEntries(places.map((place) => [place, files[place] ?? '']))
 }

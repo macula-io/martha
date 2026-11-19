@@ -43,7 +43,6 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: MCP_CONFIG_SWITCH, file: 'refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.node-test.ts', reason: THE_HOSTS_SPELLING_PINNED },
   { value: HOST_ANSWER_TIMEOUT_MS, file: 'refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.node-test.ts', reason: A_WRITERS_HALF_MINUTE },
   { value: USER_SETTINGS_FILE, file: 'refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts', reason: THE_SETTINGS_FILE_IS_IN_AN_ADAPTER },
-  { value: SKILLS_KIND, file: 'refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts', reason: A_FOLDER_THE_ENGINE_READS },
   { value: SKILLS_KIND, file: 'refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.node-test.ts', reason: A_FOLDER_THE_ENGINE_READS },
   { value: USER_SETTINGS_FILE, file: 'refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.node-test.ts', reason: THE_ENGINES_SETTINGS_BASENAME },
 ]
