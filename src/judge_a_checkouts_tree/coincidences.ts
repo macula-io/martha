@@ -13,7 +13,7 @@ export const THE_TAG_OF_A_READ_TREE = 'the tag of the union a checkout read retu
  * Why the config file the launcher writes into its own git dir may be spelled by literal (martha#437). It is the same
  * file the adapter's reader names, and the launcher cannot take the constant: the adapter reads a checkout through this
  * slice (`realOrResolved` in checkout_tree, which loads the launcher), so that import closes the loop
- * check:no-import-cycle fails by name, and the adapter holds a ceiling it may not grow past.
+ * check:no-import-cycle fails by name.
  */
 export const THE_GIT_DIRS_OWN_CONFIG_FILE = 'the config file of the git dir the launcher makes, git\'s own file name and the same file ../find_what_a_later_git_run_reads reads; the constant cannot be imported here without closing the import loop the adapter would make, so the name is written where git reads it (martha#437)'
 

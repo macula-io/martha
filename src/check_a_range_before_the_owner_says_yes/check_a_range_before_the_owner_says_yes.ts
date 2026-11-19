@@ -12,11 +12,8 @@
 // read past the first page is said so too. A range that touches a workflow or an action adds "needs a by-eye read",
 // because no job in this repository runs that change.
 //
-// A landing merge that clashed is not refused for that alone (martha#339): a landing that redid a generated file makes
-// one, and the redo program's judge (`redo:generated -- --judge <merge>`) passes it only when it is what the redo makes
-// and nothing more. The judge runs as a program, through npm in the clone, because a slice may not import a program; its
-// rule is spelled once, there. An answer that does not open with the judge's own word is no judgement, so a clone whose
-// program cannot judge yet refuses the merge rather than passing it.
+// A landing merge whose parents clash is refused: a landing settles no clash, so such a merge was settled by hand, and
+// what would land is a resolution no reviewer passed.
 //
 // Every run of git carries marthasOwnGitArgs (../run_marthas_own_git) and goes through the contract's processes.run, as
 // gh does. What the clone's origin says is read in one place (../read_the_origin_a_clone_has), and which work a package's
@@ -29,19 +26,16 @@ import {
 } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
 import { theAcceptanceOf } from '../keep_the_package_contract/the_acceptance_of_a_package.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
-import { SHORT_SHA, THE_REDO_SCRIPT } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
+import { SHORT_SHA } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { OWNER_YES, aQuestionTooLong, theLandingQuestion } from '../land_passed_work_as_one_batch/the_owners_yes_to_a_landing.ts'
 import { QUEUE_ASK } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { theAsksTheOwnerSaidYesTo } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { readTheOriginACloneHas } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
-import { GIT, GITHUB_CLI, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 /** The tool this slice registers. */
 export const VERIFY_RANGE = 'verify_range'
-
-/** The word the redo program's judge opens a pass with (martha#339); anything else it answers is not a pass. */
-export const A_JUDGED_MERGE = 'judged'
 
 /** GitHub answers a page of runs or jobs at a time; more than this on one tip is said on the line rather than hidden. */
 const PER_PAGE = 100
@@ -134,6 +128,9 @@ export async function verifyRange(host: RangeCheckHost, range: TheRange): Promis
   return { told: [shape.ok.commits, shape.ok.stat, ...theOwnersQuestion(settled.ok, range.packages), '', line].join('\n') }
 }
 
+/** The line verify_range writes right before the owner's question, so a reader finds the question by it (martha#639). */
+export const OWNERS_QUESTION_LEAD_IN = `The owner's question for this landing; queue it with ${QUEUE_ASK} word for word, and name its id as ${OWNER_YES}:`
+
 /**
  * The question the owner says yes to before this range lands (martha#605), when the range lands packages: the one the
  * fast-forward checks the owner's yes against, built by the same function, so the member queues what will be checked.
@@ -143,7 +140,7 @@ function theOwnersQuestion(settled: SettledRange, packages: readonly string[] | 
   const landing = { repo: settled.repo, default_branch: settled.default_branch, tip: settled.tip, packages }
   const too_long = aQuestionTooLong(landing)
   if (too_long !== undefined) return ['', `No landing of this range can be asked about: ${too_long}`]
-  return ['', `The owner's question for this landing; queue it with ${QUEUE_ASK} word for word, and name its id as ${OWNER_YES}:`, theLandingQuestion(landing)]
+  return ['', OWNERS_QUESTION_LEAD_IN, theLandingQuestion(landing)]
 }
 
 /** What `verify_range` says it is for, as the launcher answers the mod's ask (martha#256). */
@@ -273,22 +270,10 @@ async function carriesAChangeOfItsOwn(host: RangeCheckHost, path: string, merge:
   const tree = await gitSaid(host, path, ['rev-parse', `${merge.sha}^{tree}`])
   if (tree === undefined) return no('its tree could not be read.')
   const merging = await git(host, path, ['merge-tree', '--write-tree', into, landed])
-  if (merging.exit_code === 1) return theJudgeOfARedoneMerge(host, path, merge, into, landed)
+  if (merging.exit_code === 1) return no(`merging ${short(into)} and ${short(landed)} clashes, and a landing settles no clash: this one was settled by hand.`)
   if (merging.exit_code !== 0) return no(`merging ${short(into)} and ${short(landed)} does not go cleanly (${saidBy(merging)}).`)
   const written = merging.stdout.split('\n')[0]?.trim()
   return written === tree ? { ok: true } : no('it carries a change of its own, so what would land is not what passed.')
-}
-
-/**
- * A merge whose parents clash, judged by the redo program in the clone: passed only when the judge passes it in its own
- * word, and refused with the judge's words otherwise (martha#339).
- */
-async function theJudgeOfARedoneMerge(host: RangeCheckHost, path: string, merge: ACommit, into: string, landed: string): Promise<Step<true>> {
-  const judged = await host.processes.run({ command: NPM, args: ['run', '--silent', THE_REDO_SCRIPT, '--', '--judge', merge.sha], cwd: path })
-  const clashes = `merging ${short(into)} and ${short(landed)} clashes`
-  if (judged.exit_code !== 0) return no(`${clashes}, and it is not what a landing's redo makes: ${saidBy(judged)}.`)
-  if (!judged.stdout.trim().startsWith(`${A_JUDGED_MERGE}: `)) return no(`${clashes}, and ${THE_REDO_SCRIPT} did not judge it (it answered ${JSON.stringify(judged.stdout.trim())}).`)
-  return { ok: true }
 }
 
 /** The commits and the diffstat the answer opens with, and which subjects ask the owner to read by eye. */

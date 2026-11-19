@@ -12,10 +12,9 @@
 // recorded for drift alone (martha#438).
 
 import type { MemoryOff, RecordedHost } from '../claude_code_host/recorded_claude_code_host.ts'
-import type { GuardCalls } from './what_the_hosts_guards_call.ts'
+import type { GuardCalls } from '../compare_two_host_recordings/what_a_recorded_text_calls.ts'
+import { normalized, Renaming, Unreadable } from '../compare_two_host_recordings/compare_under_renaming.ts'
 
-/** The file that holds the recording: written by the recorder, printed by the README's Install block (martha#541 package 11). */
-export const RECORDING_OF_THE_HOST = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
 /** The recording's own note on where it comes from. */
 export const NOTE = '_why'
 /** How the host keeps memory off, restated by hand for a version (martha#136). */
@@ -33,21 +32,38 @@ export interface RecordedForDriftAlone {
   readonly file_mode_guard_calls: GuardCalls
 }
 
+/** What each code field's texts call, followed through the bundle, by the field that holds it (martha#811, R6). */
+export type Callees = Readonly<Record<string, GuardCalls>>
+
 /** What the recorder derives from a host's binary: everything but the version and what is carried over. */
 export type Derived = Omit<RecordedHost, 'host_version' | typeof MEMORY_OFF> & RecordedForDriftAlone
 
 /** The committed recording, as the recorder reads it. */
 export type Committed = RecordedHost & RecordedForDriftAlone & { readonly [NOTE]: string }
 
+/** Whether two texts of code say the same once the minifier's names are taken out of each (martha#811). */
+function sameUnderRenaming(one: string, other: string): boolean {
+  try {
+    return normalized(one, 'program', new Renaming()) === normalized(other, 'program', new Renaming())
+  } catch (error) {
+    if (error instanceof Unreadable) return false
+    throw error
+  }
+}
+
 /**
- * Whether the memory guard restated by hand still holds of a host's code (martha#412): the file-mode guard and the on
- * check it quotes whole are still in it, and so is the hosted-mode variable it names. A host that changed any of them
+ * Whether the memory guard restated by hand still holds of a host's code (martha#412): the host's file-mode guard is
+ * the one it quotes, the on check it quotes is among the functions that guard reaches, and the hosted-mode variable it
+ * names is still in the code. The guard and the on check are code, so they hold under the minifier's renaming
+ * (martha#811); the variable is the host's own word and must be there as written. A host that changed any of them
  * fails --check by the field's name, rather than passing because nothing derived it.
  */
-export const memoryOffHoldsOf = (memory_off: MemoryOff, text: string): boolean =>
-  [memory_off.file_mode_guard, memory_off.on_check, memory_off.hosted_mode_variable].every((quoted) => text.includes(quoted))
+export const memoryOffHoldsOf = (memory_off: MemoryOff, text: string, guard: string, reached: GuardCalls): boolean =>
+  text.includes(memory_off.hosted_mode_variable) &&
+  sameUnderRenaming(memory_off.file_mode_guard, guard) &&
+  reached.functions.some((entry) => sameUnderRenaming(memory_off.on_check, entry.function))
 
-/** The recording to write: the carried fields from the committed one, the version given, the rest derived. */
-export function recordingFrom(committed: Committed, host_version: string, derived: Derived): Committed {
-  return { [NOTE]: committed[NOTE], host_version, [MEMORY_OFF]: committed[MEMORY_OFF], ...derived }
+/** The recording to write: the carried fields from the committed one, the version given, the rest derived, and what the code fields call. */
+export function recordingFrom(committed: Committed, host_version: string, derived: Derived, callees: Callees): Committed {
+  return { [NOTE]: committed[NOTE], host_version, [MEMORY_OFF]: committed[MEMORY_OFF], ...derived, ...callees }
 }

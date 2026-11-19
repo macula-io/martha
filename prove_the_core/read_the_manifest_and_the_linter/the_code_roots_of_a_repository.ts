@@ -1,13 +1,11 @@
 // The repository's code roots, and every source under them (martha#748).
 //
-// Two checks read the whole repository and have to read the same trees: the import-cycle check,
-// which judges every tree for a loop of value imports, and the ceiling check, which walks a
-// top-level directory's folders. The set is read from the tree at judge time and stored nowhere,
-// so a tree is judged the day it appears and no list can drift from the repository it describes.
+// The import-cycle check reads the whole repository: it judges every tree for a loop of value
+// imports. The set is read from the tree at judge time and stored nowhere, so a tree is judged the
+// day it appears and no list can drift from the repository it describes.
 //
 // A top-level directory is a code root when a script sits under it at any depth — never because a
-// list names it, and never because the linter happens to count a file there: a directory the
-// linter ignores measures no code and passes any ceiling either way. `node_modules` and
+// list names it, and never because the linter happens to count a file there. `node_modules` and
 // dot-directories are not the repository's own code, so neither is a root, and the walk inside a
 // root skips them at every depth by the same rule coreSources keeps.
 //

@@ -31,11 +31,16 @@ Each of those can enter through four paths:
    every pushed commit of a pull request reachable, so a leak that the final tree
    no longer shows is still public. The check reads every commit's added lines.
 3. **A commit message.** It is published with the commit. The check reads it.
-4. **The check's own output.** A CI log of a public repository is public. A lab
-   hostname and a home directory are therefore never printed (martha#846): a hit
-   names the file, the line and the class, and withholds the value. Nothing
-   else printed carries a lab hostname either: one in a path, a repository name
-   or a shorthand is replaced by `<lab host>`.
+4. **The check's own output.** A CI log of a public repository is public. No
+   value a hit found is therefore ever printed, whatever its class: a lab
+   hostname, a home directory, a private address, an email address, a 64-hex
+   id, and the name a repository hit or a shorthand hit read (martha#846,
+   martha#855). A hit names the file, the line and the class, and withholds the
+   value: the log keeps it after the text it came from is edited. The path a
+   hit is found at is printed, with each lab hostname in it replaced by
+   `<lab host>`. A repository lookup GitHub cannot answer (a rate limit, a
+   5xx) stops the check, and its error names the line that named the
+   repository, not the repository.
 
 Out of reach of this check, and said here so nobody assumes otherwise:
 
