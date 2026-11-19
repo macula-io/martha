@@ -166,10 +166,11 @@ test('martha start on a terminal with no declaration refuses, naming martha init
   allSaidByMartha(run.said)
 })
 
-test('martha start with no member named shows how it is used', (t) => {
+test('martha start with no member named opens the crew in kitty, and here, with no desktop session, is refused before anything opens (#547 S6)', (t) => {
   const run = martha(placeFor(t), 'start')
-  assert.equal(run.status, EXIT_USAGE)
-  assert.ok(run.said.includes(USAGE), run.said)
+  assert.equal(run.status, EXIT_REFUSED)
+  assert.ok(!run.said.includes(USAGE), run.said)
+  assert.ok(run.said.includes(`${SAID_BY} `), run.said)
 })
 
 // --- the owner's release and the gate (martha#321) -------------------------------

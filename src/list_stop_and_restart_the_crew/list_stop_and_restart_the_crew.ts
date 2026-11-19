@@ -16,7 +16,7 @@ import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { OWNER } from '../declare_crew/declare_crew.ts'
 import { readingOnly, type CrewPlace, type Refused } from '../host_contract/host_contract.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { drawTheStrip } from '../draw_the_crew_strip/draw_the_crew_strip.ts'
+import { drawTheStrip, type TheStripsSeam } from '../draw_the_crew_strip/draw_the_crew_strip.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { parkedPlace, theParkOf, type ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
@@ -80,13 +80,13 @@ export function theCrewListed(places: TheCrewsPlaces, now: number): readonly str
   return listed.map(theListLine)
 }
 
-/** `martha crew` (martha#572): the strip over the launchers' rows, drawn through `draw` until `stopped` is aborted. */
-export function drawTheCrewStrip(places: TheCrewsPlaces, draw: (frame: readonly string[]) => void, stopped: AbortSignal): Promise<void> {
+/** `martha crew` (martha#572): the strip over the launchers' rows, drawn through `draw` until `stopped` is aborted; `title` sets its kitty tab's title (#547 S6). */
+export function drawTheCrewStrip(places: TheCrewsPlaces, draw: (frame: readonly string[]) => void, stopped: AbortSignal, title?: TheStripsSeam['title']): Promise<void> {
   const rows = dashboardRowsIn(places.launcher.dashboard)
   const wait = (ms: number): Promise<void> => after(ms, undefined, { signal: stopped }).catch((error: unknown) => {
     if (!stopped.aborted) throw error
   })
-  return drawTheStrip({ crew: places.settings, beats: () => rows.all(), clock: { now: () => Date.now() }, draw, wait }, stopped)
+  return drawTheStrip({ crew: places.settings, beats: () => rows.all(), clock: { now: () => Date.now() }, draw, wait, ...(title === undefined ? {} : { title }) }, stopped)
 }
 
 
