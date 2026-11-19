@@ -25,7 +25,7 @@
 // can still swap a file between the check and the read, or open up the copy's
 // modes (the same limit relay_directory.ts states).
 
-import { chmodSync, closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import fs, { chmodSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 /** Where the relay keeps its plugin manifest, as the host reads it. */
@@ -84,18 +84,51 @@ export function copyTheRelay(installed: string, plugin_dir: string): RelayCopy {
 /**
  * How many times any removal of a tree is tried, and how long Node waits longer on each try. One bound for the whole
  * repository: production removes a relay directory a launcher may still be tearing down (#124), and a test removes a
- * home a member or a child may still be writing in (martha#216, martha#272). Node retries its own remove on ENOTEMPTY,
- * EBUSY, EMFILE, ENFILE and EPERM, which is every way a writer that is being stopped makes it fail.
+ * home a member or a child may still be writing in (martha#216, martha#272). A removal is tried again on
+ * `RETRIED_REMOVAL_CODES`, and when it returned with the tree still there.
  */
 export const REMOVAL_ATTEMPTS = 10
 
-/** How long Node waits between two attempts, longer on each try. */
+/** How long a removal waits before its next attempt, longer on each try. */
 export const REMOVAL_DELAY_MS = 100
 
-/** Removes `directory` and everything under it, opening up folders a copy made read-only, and retrying while a writer is still in it. */
+/** Every way a writer that is being stopped makes a removal fail: the codes Node itself retries a removal on. */
+const RETRIED_REMOVAL_CODES: ReadonlySet<string> = new Set(['ENOTEMPTY', 'EBUSY', 'EMFILE', 'ENFILE', 'EPERM'])
+
+/** What a removal says when its remove returned and the tree was still there. */
+const CAME_BACK = 'it came back after the remove'
+
+/**
+ * Removes `directory` and everything under it, opening up folders a copy made read-only, and retrying while a writer is
+ * still in it. Throws, naming the directory, when the tree is still there after every attempt.
+ *
+ * Node's own remove can return with the tree still on disk: a writer that is being stopped puts a name back into a
+ * folder the remove already emptied, or makes the folder again after it went (martha#724: a launcher still running in
+ * its command's session made `martha-<uid>` again inside a run's runtime, and a case's home was left whole by a remove
+ * that returned). So the tree is looked at after each remove, and only its absence ends the call. The attempts are
+ * counted here and not inside Node's remove as well, so the bound is one `REMOVAL_ATTEMPTS`, never its square.
+ */
 export function removeTheTree(directory: string): void {
-  openUpFolders(directory)
-  rmSync(directory, { recursive: true, force: true, maxRetries: REMOVAL_ATTEMPTS, retryDelay: REMOVAL_DELAY_MS })
+  let last = CAME_BACK
+  for (let attempt = 1; attempt <= REMOVAL_ATTEMPTS; attempt++) {
+    try {
+      openUpFolders(directory)
+      // Through the module object, so a test can put the tree back the way a writer does (relay_copy.node-test.ts).
+      fs.rmSync(directory, { recursive: true, force: true })
+      if (!existsSync(directory)) return
+      last = CAME_BACK
+    } catch (error) {
+      if (!RETRIED_REMOVAL_CODES.has(codeOf(error))) throw error
+      last = codeOf(error)
+    }
+    if (attempt < REMOVAL_ATTEMPTS) waitFor(attempt * REMOVAL_DELAY_MS)
+  }
+  throw new Error(`${directory} is still there after ${REMOVAL_ATTEMPTS} removals (${last}): something is still writing in it.`)
+}
+
+/** Blocks this thread for `ms`: a removal is synchronous, and its callers run it in `finally` and `t.after`. */
+function waitFor(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, ms)
 }
 
 /** Each declared file's bytes, read without following a link; or what refuses the copy. */
