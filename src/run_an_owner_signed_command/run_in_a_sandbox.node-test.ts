@@ -56,7 +56,7 @@ test('the network, the real home, /tmp, the launcher environment and anything no
   t.after(() => delete process.env['MARTHA_129_MARKER'])
   const probe = `
     const net = require('node:net'); const fs = require('node:fs')
-    for (const p of [${JSON.stringify(join(outside, 'secret'))}, ${JSON.stringify(join(in_tmp, 'secret'))}, 'node_modules/.cache/secret']) {
+    for (const p of [${JSON.stringify(join(outside, 'secret'))}, ${JSON.stringify(join(in_tmp, 'secret'))}, '${DEPENDENCIES}/.cache/secret']) {
       try { process.stdout.write(fs.readFileSync(p, 'utf8')) } catch (e) { console.log('no', e.code) }
     }
     console.log(JSON.stringify(process.env))

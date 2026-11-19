@@ -15,17 +15,16 @@ import process from 'node:process'
 import type { TestContext } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { SYSTEM_TEMPORARY_DIRECTORY } from '../host_contract/host_contract.ts'
 
-/** The temporary directory POSIX systems keep at a fixed, short path, whatever TMPDIR says. */
-const SYSTEM_TEMPORARY_DIRECTORY = '/tmp'
-
-const PREFIX = 'martha-relay-'
+/** The name a relay root is made under, before mkdtemp fills in its last six characters. */
+export const RELAY_ROOT_PREFIX = 'martha-relay-'
 
 /** A new directory, mode 0700, with room for a socket; its maker removes it. The clean-install proof makes its own here. */
 export function newShortRelayRoot(): string {
   const runtime = process.env.XDG_RUNTIME_DIR
   const base = runtime !== undefined && isAbsolute(runtime) ? runtime : SYSTEM_TEMPORARY_DIRECTORY
-  return mkdtempSync(join(base, PREFIX))
+  return mkdtempSync(join(base, RELAY_ROOT_PREFIX))
 }
 
 /** A new directory, mode 0700, removed after the test: a relay root with room for a socket. */

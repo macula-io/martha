@@ -111,18 +111,66 @@ test('a bound the model paced too slow to fit in what is left is named with the 
   assert.match(whyTheBoundCannotFit(made) ?? '', /^a 200000 ms round-trip plus its 100000 ms margin is 300000 ms, beyond the 60000 ms left of the launch$/)
 })
 
-test('a turn is renewed on every answer, and a model gone quiet is cut at the bound it set (martha#732)', async () => {
-  const pace = new TheModelPace()
-  const cap = theCapFor(pace, () => 600_000)
-  const startedAt = Date.now()
-  const turn = withinTheCap(neverSettles(), cap)
-  setTimeout(() => pace.noteAnAnswer(40), 10)
-  await assert.rejects(turn, (error: unknown) => {
+test('an answer renews a turn\'s bound and never narrows it, and a model gone quiet is still cut at the bound it set (martha#732)', async () => {
+  // A turn that starts before anything is measured runs under what is left of the launch to its end: the engine's
+  // own bookkeeping answer, the shortest chat it makes, lands while the turn's request is open, and measured into a
+  // narrower bound it cut that request a third of a second later on the fork's run (martha#732).
+  const fresh = new TheModelPace()
+  const launchesOwn = theCapFor(fresh, () => WHAT_IS_LEFT_MS)
+  const underTheLaunchesOwnBound = withinTheCap(neverSettles(), launchesOwn)
+  setTimeout(() => fresh.noteAnAnswer(A_FAST_ANSWER_MS), THE_ANSWER_LANDS_AFTER_MS)
+  await assert.rejects(underTheLaunchesOwnBound, (error: unknown) => {
     assert.ok(error instanceof NoAnswerInTime)
-    assert.equal(error.ms, theIdleBound(40), 'the bound is the model own answer plus its margin')
+    assert.equal(error.ms, WHAT_IS_LEFT_MS, `the fast answer did not narrow the bound the turn was given: ${String(error.ms)} ms`)
     return true
   })
-  assert.ok(Date.now() - startedAt < 600_000, 'cut at the model own pace, not left to what is left of the launch')
+  assert.equal(launchesOwn.made().ranUnderMs, WHAT_IS_LEFT_MS, 'the result records the bound the turn ran under, not a later one')
+  // A turn that starts after the model has been measured is cut at the model's own pace, not left to the launch.
+  const paced = new TheModelPace()
+  paced.noteAnAnswer(A_SLOW_ANSWER_MS)
+  const startedAt = Date.now()
+  await assert.rejects(withinTheCap(neverSettles(), theCapFor(paced, () => WHAT_IS_LEFT_MS)), (error: unknown) => {
+    assert.ok(error instanceof NoAnswerInTime)
+    assert.equal(error.ms, theIdleBound(A_SLOW_ANSWER_MS), 'the bound is the model own answer plus its margin')
+    return true
+  })
+  assert.ok(Date.now() - startedAt < WHAT_IS_LEFT_MS, 'cut at the model own pace, not left to what is left of the launch')
+  // What a cut leaves behind: nothing listening for the answers that land afterwards. The launch's end here is the
+  // cut, but the launch itself has minutes left, so an answer that armed a bound for this turn would leave a timer
+  // longer than the file and the runner fails a file that leaves one by name (martha#732: that timer is what held
+  // a launch open after its verdict on the fork's run).
+  const minutesAfterTheCut = new TheModelPace()
+  let left = WHAT_IS_LEFT_MS
+  const cutTurn = withinTheCap(neverSettles(), theCapFor(minutesAfterTheCut, () => left))
+  await assert.rejects(cutTurn, (error: unknown) => error instanceof NoAnswerInTime)
+  left = WHAT_IS_LEFT_MS * 1000
+  minutesAfterTheCut.noteAnAnswer(A_SLOW_ANSWER_MS * 100)
+  // And the same for a turn that ended on its own: an answer that lands afterwards arms nothing either.
+  const minutesAfterTheEnd = new TheModelPace()
+  const ended = withinTheCap(Promise.resolve('the turn ended'), theCapFor(minutesAfterTheEnd, () => left))
+  assert.equal(await ended, 'the turn ended', 'the turn ended on its own')
+  minutesAfterTheEnd.noteAnAnswer(A_SLOW_ANSWER_MS * 100)
+})
+
+test('a bound a turn keeps is still what is left of the launch once that is less (martha#732)', async () => {
+  // The turn is given a launch that has a second left; the launch's end then comes close, and an answer renews the
+  // bound. The renewal may keep the turn's own floor, never past what is left of the launch.
+  const pace = new TheModelPace()
+  let left = A_LAUNCH_WITH_A_SECOND_LEFT_MS
+  const cap = theCapFor(pace, () => left)
+  const turn = withinTheCap(neverSettles(), cap)
+  left = LITTLE_LEFT_MS
+  setTimeout(() => pace.noteAnAnswer(A_FAST_ANSWER_MS), THE_ANSWER_LANDS_AFTER_MS)
+  await assert.rejects(turn, (error: unknown) => {
+    assert.ok(error instanceof NoAnswerInTime)
+    assert.equal(error.ms, LITTLE_LEFT_MS,
+      `the renewal is what is left of the launch, not the bound the turn started with: ${String(error.ms)} ms`)
+    return true
+  })
+  // The renewal narrowed the bound to what was left, so the bound the turn was given first is the widest: that is
+  // the one the result records, not the narrower renewal that cut it.
+  assert.equal(cap.made().ranUnderMs, A_LAUNCH_WITH_A_SECOND_LEFT_MS,
+    `the result records the widest bound the turn was given: ${String(cap.made().ranUnderMs)} ms`)
 })
 
 test('a bad launch bound is refused by name rather than becoming a bound of zero or of none (PR 733 R5)', () => {
@@ -145,6 +193,12 @@ test('a bad launch bound is refused by name rather than becoming a bound of zero
 /** A model's answer, and what is left of the launch, both short enough for a unit case to wait out. */
 const A_SLOW_ANSWER_MS = 200
 const LITTLE_LEFT_MS = 100
+/** The engine's own bookkeeping answer: the shortest chat it makes, well under any turn's bound. */
+const A_FAST_ANSWER_MS = 20
+/** What a launch leaves when the floor a turn keeps is what the case observes: past every idle bound above. */
+const WHAT_IS_LEFT_MS = 400
+/** A launch with a second left, for a case that then brings its end close before an answer renews the bound. */
+const A_LAUNCH_WITH_A_SECOND_LEFT_MS = 1000
 const THE_TURN_ENDS_AFTER_MS = 50
 const THE_ANSWER_LANDS_AFTER_MS = 10
 
