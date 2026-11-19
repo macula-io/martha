@@ -18,11 +18,11 @@ const STATES = ['todo.v0', 'goal.v0', 'enabled_extensions.v0', 'context_relevanc
 const COLUMNS = ['id', 'working_dir', 'goose_mode', 'provider_name', 'model_config_json', 'recipe_json', 'system_prompt_override', 'system_prompt_extras_json', 'container_id', 'extension_data']
 const FACTS: { readonly session_store: SessionStore } = { session_store: { file: 'a.db', journal_mode: 'Wal', table: 'the_rows', columns: COLUMNS, extension_states: STATES } }
 
-const LAUNCHED: TheSessionLaunched = { session_id: 'a-session', working_dir: '/a/checkout', mode: 'asks', provider: 'a-provider', model: 'a-model', extensions: ['kept', 'crew'] }
+const LAUNCHED: TheSessionLaunched = { session_id: 'a-session', working_dir: '/a/checkout', mode: 'asks', provider: 'a-provider', model: 'a-model', extensions: ['kept', 'a-crew-server'] }
 
 /** The extension states a session starts with: the launch's two extensions enabled. */
 const statesWith = (names: readonly string[], more: Record<string, unknown> = {}): string =>
-  JSON.stringify({ 'enabled_extensions.v0': { extensions: names.map((name) => ({ type: 'stdio', name })) }, ...more })
+  JSON.stringify({ 'enabled_extensions.v0': { extensions: names.map((name) => ({ type: 'a-kind-a-test-names', name })) }, ...more })
 
 /** A store holding one row as the launch created it, and the writer the engine would hold; both closed after the test. */
 function aStore(t: TestContext) {
@@ -61,7 +61,7 @@ test('the first read refuses a session whose folder, mode, provider, model, exte
     ['goose_mode', 'auto', /the mode "auto"/],
     ['provider_name', 'another', /the provider "another"/],
     ['model_config_json', JSON.stringify({ model_name: 'another-model' }), /the model "another-model"/],
-    ['extension_data', statesWith([...LAUNCHED.extensions, 'third']), /the extensions \["crew","kept","third"\]/],
+    ['extension_data', statesWith([...LAUNCHED.extensions, 'third']), /the extensions \["a-crew-server","kept","third"\]/],
     ['recipe_json', '{}', /recipe_json "\{\}"/],
     ['system_prompt_override', 'be another', /system_prompt_override "be another"/],
     ['system_prompt_extras_json', '[]', /system_prompt_extras_json "\[\]"/],
