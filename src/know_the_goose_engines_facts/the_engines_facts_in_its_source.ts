@@ -507,8 +507,25 @@ function checkoutSkillRootsIn(source: EngineSource): CheckoutSkillRoots {
   return roots
 }
 
-/** A `.join("…")` chain of one or more strings, as the engine writes a folder under a base, spaces taken out. */
-const JOINS = '(?:\\.join\\("[^"]+"\\))+'
+/**
+ * A `.join("…")` chain of one or more strings, as the engine writes a folder under a base, spaces taken out. A string
+ * holding `..` climbs out of the base, and one starting with `/` takes the base's place in `Path::join`, so neither is
+ * a folder under it (Neptunus on PR 893 r=1, plant 09).
+ */
+const JOINS = '(?:\\.join\\("(?!/)(?:(?!\\.\\.)[^"])+"\\))+'
+
+/**
+ * How many times `name` is bound in `body` (the function's own text, spaces kept): by a `let`, inside a pattern such
+ * as `Some(…)`, by a `for`, as a closure's parameter, or by an `@`.
+ */
+function bindingsOf(body: string, name: string): number {
+  const named = new RegExp(`\\b${name}\\b`)
+  const lets = timesIn(body, `\\blet\\s+(?:mut\\s+)?${name}\\b`)
+  const patterns = timesIn(body, `\\b[A-Z]\\w*\\(\\s*(?:ref\\s+)?(?:mut\\s+)?${name}\\s*\\)`)
+  const fors = [...body.matchAll(/\bfor\s+([^{]*?)\s+in\b/g)].filter((found) => named.test(found[1] ?? '')).length
+  const closures = [...body.matchAll(/\|([^|]*)\|/g)].filter((found) => named.test(found[1] ?? '')).length
+  return lets + patterns + fors + closures + timesIn(body, `\\b${name}\\s*@`)
+}
 
 /** How often `pattern` stands in `text`. */
 const timesIn = (text: string, pattern: string): number => [...text.matchAll(new RegExp(pattern, 'g'))].length
@@ -545,7 +562,7 @@ function skillFoldersFromKnownBases(source: EngineSource): void {
   const plugins = captured(body, new RegExp(`let(\\w+)=${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}\\(`), `the plugin folders ${fn} takes`, path)
   const home = captured(body, /let(\w+)=dirs::home_dir\(\);/, `the home ${fn} reads`, path)
   if (timesIn(body, `let(?:mut)?${home}=`) !== 1) throw unknownBase(path, fn, `a ${home} that is not dirs::home_dir()`)
-  const homes = [...body.matchAll(new RegExp(`ifletSome\\((\\w+)\\)=${home}\\.as_ref\\(\\)`, 'g'))].map((found) => found[1] ?? '')
+  const homes = homesBoundOnlyFromTheHome(functionBody(text, fn, path), home, path, fn)
   const rooted = `(?:${[workingDir, ...homes].join('|')})${JOINS}`
   const pushed = `${list}\\.push\\(SkillDirectory\\{`
   const extended = `${list}\\.extend\\(${plugins}\\.(?:iter|into_iter)\\(\\)(?:\\.filter\\(\\|\\(_,\\w+\\)\\|\\*\\w+==PluginScope::\\w+\\))?\\.map\\(\\|\\(path,_\\)\\|SkillDirectory\\{`
@@ -562,6 +579,22 @@ function skillFoldersFromKnownBases(source: EngineSource): void {
   if (binder !== undefined) throw unknownBase(path, fn, binder)
   const uses = timesIn(functionBody(text, fn, path), `(?<![.\\w])${list}\\b(?!::)`)
   if (uses !== 2 + timesIn(body, pushed) + timesIn(body, extended) || !body.endsWith(list)) throw unknownBase(path, fn, `${list}, used ${String(uses)} times`)
+}
+
+/**
+ * The names `if let Some(<name>) = <home>.as_ref()` binds in `text` (the function's own text), once per binding. A name
+ * bound any other way as well, by a `let`, a pattern, a `for` or a closure, is a throw naming it (Neptunus on PR 893
+ * r=1, plants 06 to 09): a folder joined onto it may come from anywhere, so the home is known by what binds it, never
+ * by its name alone.
+ */
+function homesBoundOnlyFromTheHome(text: string, home: string, path: string, fn: string): string[] {
+  const homes = [...squeezed(text).matchAll(new RegExp(`ifletSome\\((\\w+)\\)=${home}\\.as_ref\\(\\)`, 'g'))].map((found) => found[1] ?? '')
+  for (const name of new Set(homes)) {
+    const bound = bindingsOf(text, name)
+    const fromTheHome = homes.filter((found) => found === name).length
+    if (bound !== fromTheHome) throw unknownBase(path, fn, `${name}, bound ${String(bound)} times where ${home}.as_ref() binds it ${String(fromTheHome)}`)
+  }
+  return homes
 }
 
 /** Every plugin `discover_enabled_plugins_with_config` finds is a child of the project or the user plugin folder (martha#614 Done-when 6). */
