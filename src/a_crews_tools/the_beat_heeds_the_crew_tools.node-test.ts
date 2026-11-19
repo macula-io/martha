@@ -18,7 +18,7 @@ import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_wo
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { BEAT_INTERVAL_MS, CREW_TOOLS_FIELD, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { crewToolsOver } from './a_crews_tools.ts'
+import { crewToolsOver, THE_TOOLS_ASK } from './a_crews_tools.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-658-beat-'))
 after(() => removeTheTree(home))
@@ -45,6 +45,7 @@ const documents = {
   },
 }
 const WITHDRAWN: ServedToolsHeld = { state: 'withdrawn', at: LOST_AT, cause_neutral: true, causes: ['left_the_configuration'], failed_servers: 0 }
+const HELD: ServedToolsHeld = { state: 'held', at: LOST_AT + 1_000 }
 
 /** A member's tools over its own places on disk, watching a session whose tools the host withdrew. */
 function aWatchedMember(t: TestContext) {
@@ -54,7 +55,8 @@ function aWatchedMember(t: TestContext) {
   const beats = dashboardRowsIn(place)
   // The crew's streams folder, as a launch's state already holds it before any beat.
   mkdirSync(join(place, CREW_ROWS_PLACE))
-  const served_tools: TheServedToolsWatch = { factOf: () => WITHDRAWN, predecessorOf: () => null, takeTheCalls: () => [] }
+  let fact: ServedToolsHeld = WITHDRAWN
+  const served_tools: TheServedToolsWatch = { factOf: () => fact, predecessorOf: () => null, takeTheCalls: () => [] }
   const places = {
     member: BUILDER,
     ledger: { clock: { now: () => clock.at }, stores: { rows: rowStreamsDirectory(join(place, CREW_ROWS_PLACE)) } },
@@ -69,12 +71,12 @@ function aWatchedMember(t: TestContext) {
     assert.ok(row !== null, 'the store holds the member\'s row')
     return row
   }
-  return { clock, places, tools: crewToolsOver(places), theRow }
+  return { clock, places, tools: crewToolsOver(places), theRow, setFact: (next: ServedToolsHeld): void => void (fact = next) }
 }
 
 /** Lets the look a beat started settle: its last write is the window's row on the crew's stream, then it tells. */
-async function untilTheLookSettles(places: ReturnType<typeof aWatchedMember>['places']): Promise<void> {
-  const written = async (): Promise<boolean> => (await places.ledger.stores.rows.read(CREW_TOOLS_STREAM)).length > 0
+async function untilTheLookSettles(places: ReturnType<typeof aWatchedMember>['places'], rows = 1): Promise<void> {
+  const written = async (): Promise<boolean> => (await places.ledger.stores.rows.read(CREW_TOOLS_STREAM)).length >= rows
   for (let wait = 0; wait < 200 && !(await written()); wait += 1) await new Promise((settled) => setTimeout(settled, 5))
   for (let turn = 0; turn < 10; turn += 1) await new Promise((settled) => setImmediate(settled))
 }
@@ -118,4 +120,23 @@ test('a session that starts while its member\'s window is open is handed the owe
   const handed = await member.tools.theLineToHandAtStart()
   assert.ok(handed !== null, 'a line is handed')
   assert.equal(handed.line.split('\n\n').at(-1), owed)
+})
+
+test('the owed line rides only the report: a turn\'s answer is still the act alone (martha#658)', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  const member = aWatchedMember(t)
+  await member.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 1, of: 3 }, SESSION)
+  const stop = member.tools.startBeating()
+  t.mock.timers.tick(BEAT_INTERVAL_MS)
+  await untilTheLookSettles(member.places)
+  // The same session earns its tools back: the beat closes the window SAME_SESSION.
+  member.setFact(HELD)
+  member.clock.at += 1_000
+  t.mock.timers.tick(BEAT_INTERVAL_MS)
+  await untilTheLookSettles(member.places, 2)
+  stop()
+  const said = await member.tools.answer(THE_TOOLS_ASK, {}, SESSION)
+  const text = 'answer' in said ? said.answer : said.refused
+  assert.ok(!text.includes('You owe one'), `the owed line did not ride the turn's answer: ${text}`)
+  if ('answer' in said) assert.doesNotThrow(() => JSON.parse(said.answer), `the turn's answer is still the act alone: ${said.answer}`)
 })

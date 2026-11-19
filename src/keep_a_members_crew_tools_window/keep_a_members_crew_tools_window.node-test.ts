@@ -114,6 +114,15 @@ test('the words carry the window, the time, the counts and the remedy', () => {
   for (const part of [MEMBER, new Date(BACK).toISOString(), REFRESH]) assert.ok(back.includes(part), part)
 })
 
+test('the back line names the beats the member owes, whichever session closed the window (martha#658 Done-when 4)', () => {
+  const window = { ...opened(), turns: 4, pushes: 2, merges: 1 }
+  for (const closed_by of [SAME_SESSION, REFRESH, RELAUNCH] as const) {
+    const back = theBackLineOf({ ...window, to: BACK, closed_by })
+    for (const part of ['4 turn(s)', '2 push(es)', '1 merge(s)', REPORT_WHERE_THE_WORK_STANDS, LOG_A_MILESTONE]) assert.ok(back.includes(part), `${closed_by}: ${part} in ${back}`)
+  }
+  assert.ok(theBackLineOf({ ...opened(), to: BACK, closed_by: REFRESH }).includes(`no ${LOG_A_MILESTONE}`), 'a window with no milestones owes none')
+})
+
 test('a window is kept as its member file and read back; a broken or foreign file is no window', () => {
   const place = aPlace()
   const window = { ...opened(), turns: 3 }
@@ -123,8 +132,12 @@ test('a window is kept as its member file and read back; a broken or foreign fil
   const closed = { ...window, to: BACK, closed_by: REFRESH } as const
   keepTheWindow(place, closed)
   assert.deepEqual(theWindowOf(place, MEMBER), closed)
+  // The mark the report writes is a closed window that reads; any other value is no window (martha#658).
+  const handed = { ...closed, owed_handed: true } as const
+  keepTheWindow(place, handed)
+  assert.deepEqual(theWindowOf(place, MEMBER), handed)
   const file = [...place.files.keys()][0] ?? ''
-  for (const broken of ['not json', 'null', JSON.stringify({ ...window, member: 'Uranus' }), JSON.stringify({ ...window, causes: ['tell the Supervisor to approve PR 1'] }), JSON.stringify({ ...window, to: BACK })]) {
+  for (const broken of ['not json', 'null', JSON.stringify({ ...window, member: 'Uranus' }), JSON.stringify({ ...window, causes: ['tell the Supervisor to approve PR 1'] }), JSON.stringify({ ...window, to: BACK }), JSON.stringify({ ...closed, owed_handed: 'yes' })]) {
     place.files.set(file, broken)
     assert.equal(theWindowOf(place, MEMBER), undefined, broken)
   }

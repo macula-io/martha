@@ -59,6 +59,11 @@ export interface ACrewToolsWindow {
   /** Set once the window is closed: when, and by what. */
   readonly to?: number
   readonly closed_by?: ClosedBy
+  /**
+   * Set by the report that hands the returning session its owed line (martha#658 Done-when 4), and only when the file
+   * still holds this closed window at that moment. The close itself leaves it absent.
+   */
+  readonly owed_handed?: true
 }
 
 
@@ -129,18 +134,30 @@ export function theNoticeOf(window: ACrewToolsWindow): string {
   )
 }
 
-/** The one line the Supervisor is told when the window closes. */
+/** The milestones one window owes, in Martha's words: one log for each push and merge it made. */
+const theMilestonesOf = (window: ACrewToolsWindow): string => {
+  const milestones = window.pushes + window.merges
+  return milestones === 0 ? `no ${LOG_A_MILESTONE}` : `one ${LOG_A_MILESTONE} for each of ${String(window.pushes)} push(es) and ${String(window.merges)} merge(s)`
+}
+
+/**
+ * The beats one closed window owes, in the third person, for the line the Supervisor is told: named as owed rather
+ * than lost, whichever session closed the window (martha#658 Done-when 4).
+ */
+const theOwedCountsOf = (window: ACrewToolsWindow): string =>
+  `it ran ${String(window.turns)} turn(s) without them and owes one ${REPORT_WHERE_THE_WORK_STANDS} and ${theMilestonesOf(window)} it made in that time`
+
+/** The one line the Supervisor is told when the window closes: the times, and the beats the member owes. */
 export function theBackLineOf(window: ACrewToolsWindow): string {
-  return `${window.member} holds its crew tools again since ${timeOf(window.to ?? window.from)} (${window.closed_by ?? RELAUNCH}); the window opened ${timeOf(window.from)}.`
+  const back = `${window.member} holds its crew tools again since ${timeOf(window.to ?? window.from)} (${window.closed_by ?? RELAUNCH}); the window opened ${timeOf(window.from)}`
+  return window.to === undefined ? `${back}.` : `${back}; ${theOwedCountsOf(window)}.`
 }
 
 /** What a successor is handed at its start while its member's window is open: the window, and the beats it owes. */
 export function theOwedLineOf(window: ACrewToolsWindow): string {
-  const milestones = window.pushes + window.merges
-  const each = milestones === 0 ? `no ${LOG_A_MILESTONE}` : `one ${LOG_A_MILESTONE} for each of ${String(window.pushes)} push(es) and ${String(window.merges)} merge(s)`
   return (
     `Your session ${window.session} lost its crew tools at ${timeOf(window.from)} and ran ${String(window.turns)} turn(s) without them. ` +
-    `You owe one ${REPORT_WHERE_THE_WORK_STANDS} now, and ${each} it made in that time.`
+    `You owe one ${REPORT_WHERE_THE_WORK_STANDS} now, and ${theMilestonesOf(window)} it made in that time.`
   )
 }
 
@@ -183,7 +200,8 @@ const isTheOpening = (w: Record<string, unknown>): boolean =>
 
 /** Whether a kept window's closing fields read: both absent while it is open, both present once it closed. */
 const isTheClosing = (w: Record<string, unknown>): boolean =>
-  w['to'] === undefined ? w['closed_by'] === undefined : isCount(w['to']) && CLOSED_BY.includes(w['closed_by'] as ClosedBy)
+  (w['to'] === undefined ? w['closed_by'] === undefined : isCount(w['to']) && CLOSED_BY.includes(w['closed_by'] as ClosedBy)) &&
+  (w['owed_handed'] === undefined || w['owed_handed'] === true)
 
 /** The member's window, as its file in the place holds it; undefined when it has none or the file is not one. */
 export function theWindowOf(place: CrewPlace, member: string): ACrewToolsWindow | undefined {
