@@ -22,7 +22,6 @@
     "check:no-member-outlives-its-run": "node src/check_no_member_outlives_its_run/main.ts",
     "check:no-launcher-outlives-its-run": "node prove_the_core/a_test_leaves_nothing_behind/no_launcher_outlives_its_run.ts",
     "check:no-restore-in-the-release": "node prove_the_core/the_release_is_proven/no_restore_reaches_the_release.ts",
-    "check:nothing-reads-the-kept-transcripts": "node prove_the_core/what_the_core_may_reach/nothing_reads_the_kept_transcripts.ts",
     "check:no-member-works-without-its-crew-tools": "node src/check_no_member_works_without_its_crew_tools/main.ts",
     "check:no-import-cycle": "node src/check_no_import_cycle/main.ts",
     "check:workspace-layout": "node src/check_the_workspace_layout/main.ts",

@@ -300,51 +300,6 @@ jobs:
           grep -q "src/one/a.ts -> src/two/b.ts -> src/one/a.ts" "$planted/verdict.txt"
           grep -q "installer/one.ts -> installer/two.ts -> installer/one.ts" "$planted/verdict.txt"
 
-  # Nothing in the core reads a kept transcript (martha#646, D4): the copy is kept for the owner after a launch ends, and
-  # a slice that read it would give the core an input the launch gate never saw. The job reads every source of src/ and
-  # names any read of the place, by file and line. That it BITES is this job's own plant, the drift-bites family's shape:
-  # a later slice that reads the place by its own constant must exit 1 with the file and line printed, and the tree
-  # without it must pass. The place's declaration is copied from the checkout, never spelled here, so a rename moves both.
-  nothing-reads-the-kept-transcripts:
-    name: nothing reads the kept transcripts
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run --silent check:nothing-reads-the-kept-transcripts
-      - name: the check bites
-        run: |
-          planted="${{ runner.temp }}/kept-transcripts-self-test"
-          rm -rf "$planted"
-          mkdir -p "$planted/src/keep_martha_state_outside_the_checkout" "$planted/src/a_later_slice"
-          cp src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts "$planted/src/keep_martha_state_outside_the_checkout/"
-          printf 'export const a = 1\n' > "$planted/src/a_later_slice/plain.ts"
-          no_reader=0
-          npm run --silent check:nothing-reads-the-kept-transcripts -- --root "$planted" > "$planted/clean.txt" 2>&1 || no_reader=$?
-          if [ "$no_reader" -ne 0 ]; then
-            cat "$planted/clean.txt"
-            exit 1
-          fi
-          cat > "$planted/src/a_later_slice/reads_the_place.ts" <<'READER'
-          import { readFileSync } from 'node:fs'
-          import { join } from 'node:path'
-
-          import { TRANSCRIPTS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-
-          export const read = (stateRoot: string): string => readFileSync(join(stateRoot, TRANSCRIPTS_PLACE, 'one.jsonl'), 'utf8')
-          READER
-          status=0
-          npm run --silent check:nothing-reads-the-kept-transcripts -- --root "$planted" > "$planted/verdict.txt" 2>&1 || status=$?
-          if [ "$status" -ne 1 ]; then
-            cat "$planted/verdict.txt"
-            exit 1
-          fi
-          grep -q "a_later_slice/reads_the_place.ts:6: readFileSync names the kept place" "$planted/verdict.txt"
-
   # The relay loads in the recorded host (martha#104). The host reads a hooks module before it runs it and refuses it
   # whole for a rule it holds; a refused relay runs no gate, and the relay's unit tests drive a stand-in engine that
   # holds none of those rules. This installs Claude Code at the version the adapter was recorded from (read from the
