@@ -415,3 +415,27 @@ test('a resolver that does not return an absolute path as given, or joins a rela
     assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
   }
 })
+
+/** The part that reads the engine's session store (#541 package A). */
+const STORE_PART = partReading('session_store')
+
+test("the engine's session store is read as it is written: its file, its journal mode, the sessions table's columns past another table, and every state key (#541 package A, design r=5 R1'; mutants: the first table's columns, a state left out)", () => {
+  const recorded = RECORDED_FACTS.session_store
+  const changed = { ...recorded, file: `moved_${recorded.file}`, journal_mode: `${recorded.journal_mode}Moved`, columns: [...recorded.columns.map((column) => `${column}_renamed`), 'a_new_column'], extension_states: ['a_new_state.v7', ...recorded.extension_states] }
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, session_store: changed })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.session_store, changed)
+})
+
+test('a store opened in two journal modes, or an extension state declared in a shape this reader does not know, is unreadable by name (#541 package A; mutants: either count dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const store = files[ENGINE_PLACES.session_store] ?? ''
+  const twice = `${store}        let more = options.journal_mode(sqlx::sqlite::SqliteJournalMode::Delete);\n`
+  const states = files[ENGINE_PLACES.extension_states] ?? ''
+  const odd = `${states}impl ExtensionState for AnOddState {\n    const VERSION: &'static str = "v1";\n    const EXTENSION_NAME: &'static str = "odd";\n}\n`
+  for (const [why, path, broken] of [['journal modes, not one', ENGINE_PLACES.session_store, twice], ['are in a shape this reader knows', ENGINE_PLACES.extension_states, odd]] as const) {
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: broken }))
+    assert.deepEqual(unreadable.map(({ part }) => part), [STORE_PART], why)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
+  }
+})

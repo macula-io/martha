@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, PATH_RESOLVER, RESOLUTION_BASES, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type DeveloperTool, type EngineFacts, type EngineSource, type PathResolution, type PlatformExtension, type SecretStorage, type ToolNaming } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, PATH_RESOLVER, RESOLUTION_BASES, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type DeveloperTool, type EngineFacts, type EngineSource, type PathResolution, type PlatformExtension, type SecretStorage, type SessionStore, type ToolNaming } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -149,6 +149,7 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.shell_tool]: developerTools(facts.shell_tool, facts.developer_tools),
     [`${DEVELOPER_DIR}/params.rs`]: developerParams(facts.developer_tools),
     [ENGINE_PLACES.path_resolution]: pathResolution(facts.path_resolution),
+    ...sessionStore(facts.session_store),
     [ENGINE_PLACES.openai_provider]: `pub const OPEN_AI_PROVIDER_NAME: &str = "${facts.openai_provider.name}";\npub const OPEN_AI_DEFAULT_BASE_PATH: &str = "${facts.openai_provider.default_base_path}";\n            vec![\n${settings}            ],\n`,
   }
 }
@@ -219,6 +220,31 @@ function pathResolution(resolution: PathResolution): string {
     '    let path = PathBuf::from(path);\n    if path.is_absolute() {\n        path\n    } else {\n',
     `        ${chain}\n            .join(path)\n    }\n}\n`,
   ].join('')
+}
+
+/**
+ * The engine's session store as it writes it (#541 package A): another table created first, the sessions table with
+ * one column a line, the file and the one journal mode; the extension states declared one `impl` each, beside a test
+ * that sets another key by hand; and the context relevance notes' name and version as constants. The last key of the
+ * recording is the context relevance one.
+ */
+function sessionStore(store: SessionStore): Readonly<Record<string, string>> {
+  const declared = store.extension_states.slice(0, -1).map((key) => key.split('.'))
+  const [name, version] = (store.extension_states.at(-1) ?? '').split('.')
+  const columns = store.columns.map((column) => `                ${column} TEXT`).join(',\n')
+  return {
+    [ENGINE_PLACES.session_store]: [
+      `pub const DB_NAME: &str = "${store.file}";\n\n`,
+      `        let options = options.journal_mode(sqlx::sqlite::SqliteJournalMode::${store.journal_mode});\n\n`,
+      '        sqlx::query(\n            r#"\n            CREATE TABLE IF NOT EXISTS another_table (\n                another_column TEXT\n            )\n        "#,\n        )\n\n',
+      `        sqlx::query(\n            r#"\n            CREATE TABLE IF NOT EXISTS ${store.table} (\n${columns}\n            )\n        "#,\n        )\n`,
+    ].join(''),
+    [ENGINE_PLACES.extension_states]: [
+      ...declared.map(([state, at], index) => `impl ExtensionState for AState${String(index)} {\n    const EXTENSION_NAME: &'static str = "${state ?? ''}";\n    const VERSION: &'static str = "${at ?? ''}";\n}\n\n`),
+      '    fn a_test() {\n        extension_data.set_extension_state("another_state", "v9", value);\n    }\n',
+    ].join(''),
+    [ENGINE_PLACES.context_relevance]: `pub(super) const NAME: &str = "${name ?? ''}";\npub(super) const VERSION: &str = "${version ?? ''}";\n`,
+  }
 }
 
 /** The same tree as a reader, for a test that never touches the disk. */

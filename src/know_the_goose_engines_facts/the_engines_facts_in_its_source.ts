@@ -94,6 +94,22 @@ export interface EngineFacts {
    * for the engine reaches it for the guard too.
    */
   readonly path_resolution: PathResolution
+  /**
+   * The store the engine keeps a session's row in and loads again before every step (#541 package A, design r=5 R1'):
+   * the file under its data folder, the journal mode it opens the file in, the columns of the sessions table, and the
+   * keys its extension states are stored under in `extension_data`. The launch reads the gate fields of its row back
+   * by these names, so a column the engine renames turns the drift check red rather than a read-back that reads nothing.
+   */
+  readonly session_store: SessionStore
+}
+
+/** The engine's session store: its file, its journal mode, its sessions table's columns, and its extension state keys. */
+export interface SessionStore {
+  readonly file: string
+  readonly journal_mode: string
+  readonly table: string
+  readonly columns: readonly string[]
+  readonly extension_states: readonly string[]
 }
 
 /**
@@ -176,6 +192,9 @@ export const ENGINE_PLACES = {
   tool_name_parts: 'crates/goose-provider-types/src/conversation/tool_request.rs',
   shell_tool: 'crates/goose/src/agents/platform_extensions/developer/mod.rs',
   path_resolution: 'crates/goose/src/agents/platform_extensions/developer/edit.rs',
+  session_store: 'crates/goose/src/session/session_manager.rs',
+  extension_states: 'crates/goose/src/session/extension_data.rs',
+  context_relevance: 'crates/goose/src/agents/state_machine/ops_context_relevance.rs',
 } as const
 
 /**
@@ -215,6 +234,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'shell tool', read: (source) => ({ shell_tool: shellToolIn(source) }) },
   { part: 'developer tools', read: (source) => ({ developer_tools: developerToolsIn(source) }) },
   { part: 'path resolution', read: (source) => ({ path_resolution: pathResolutionIn(source) }) },
+  { part: 'session store', read: (source) => ({ session_store: sessionStoreIn(source) }) },
   { part: 'secret storage', read: (source) => ({ secret_storage: secretStorageIn(source) }) },
 ]
 
@@ -571,6 +591,51 @@ function pathResolutionIn(source: EngineSource): PathResolution {
     trims: /\.trim/.test(body),
     expands_home: /"~|'~'|home_dir/.test(body),
   }
+}
+
+/** The table the engine keeps one row per session in (#541 package A): the name its schema creates it under. */
+export const SESSIONS_TABLE = 'sessions'
+
+/**
+ * The engine's session store (#541 package A, design r=5 R1''), read from its session manager: the file named by
+ * `DB_NAME`, the one journal mode its pool is opened in, and the columns the schema creates the sessions table with; and
+ * the keys its extension states are stored under, each `name.version`, from every `ExtensionState` the session module
+ * declares and the turn notes the context relevance step keeps. A second journal mode, no sessions table, or a state
+ * declared in another shape is unreadable, never a store the read-back half reads.
+ */
+function sessionStoreIn(source: EngineSource): SessionStore {
+  const path = ENGINE_PLACES.session_store
+  const text = fileOf(source, path)
+  const modes = [...text.matchAll(/\.journal_mode\(sqlx::sqlite::SqliteJournalMode::(\w+)\)/g)].map((found) => found[1] ?? '')
+  const [journal_mode] = modes
+  if (modes.length !== 1 || journal_mode === undefined) throw new Error(`${path} opens its store in ${String(modes.length)} journal modes, not one`)
+  const schema = captured(text, new RegExp(`CREATE TABLE IF NOT EXISTS ${SESSIONS_TABLE} \\(([^;]*?)\\n\\s*\\)\\n`), `the ${SESSIONS_TABLE} table`, path)
+  const columns = schema.split(',').map((line) => line.trim().split(/\s+/)[0] ?? '').filter((column) => column !== '')
+  return {
+    file: captured(text, /pub const DB_NAME: &str = "([^"]+)";/, 'the store file', path),
+    journal_mode,
+    table: SESSIONS_TABLE,
+    columns,
+    extension_states: [...extensionStatesIn(source), contextRelevanceIn(source)],
+  }
+}
+
+/** Every `ExtensionState` the session module declares, as the key it is stored under. */
+function extensionStatesIn(source: EngineSource): readonly string[] {
+  const path = ENGINE_PLACES.extension_states
+  const text = fileOf(source, path)
+  const declared = text.split('impl ExtensionState for ').length - 1
+  const read = [...text.matchAll(/impl ExtensionState for \w+ \{\s*const EXTENSION_NAME: &'static str = "([^"]+)";\s*const VERSION: &'static str = "([^"]+)";/g)].map((found) => `${found[1] ?? ''}.${found[2] ?? ''}`)
+  if (declared === 0 || read.length !== declared) throw new Error(`${path} declares ${String(declared)} extension states and ${String(read.length)} are in a shape this reader knows`)
+  return read
+}
+
+/** The key the context relevance step stores its turn notes under. */
+function contextRelevanceIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.context_relevance
+  const text = fileOf(source, path)
+  const name = captured(text, /pub\(super\) const NAME: &str = "([^"]+)";/, 'the context relevance state name', path)
+  return `${name}.${captured(text, /pub\(super\) const VERSION: &str = "([^"]+)";/, 'the context relevance state version', path)}`
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */
