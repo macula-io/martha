@@ -105,10 +105,10 @@ test('#860 §5: each session\'s spend in the window (mutants: the baseline, the 
   ])
 })
 
-test('#860 §5: by package, with its silent sessions named (mutants: the baseline, the billing split, the silent filter)', () => {
+test('#860 §5: by package, with its silent and its unknown-baseline sessions named apart (mutants: the baseline, the billing split, the silent filter, a session that reported a cost named silent)', () => {
   assert.deepEqual(theRecordedSpend().byPackage, [
-    { package: THE_PACKAGE, usd: dollars(0.75, 2.25), sessions: 6, silent: ['juno-silent', 'juno-unknown'] },
-    { package: ANOTHER_PACKAGE, usd: dollars(0.25, 0), sessions: 1, silent: [] },
+    { package: THE_PACKAGE, usd: dollars(0.75, 2.25), sessions: 6, silent: ['juno-silent'], unknownBaseline: ['juno-unknown'] },
+    { package: ANOTHER_PACKAGE, usd: dollars(0.25, 0), sessions: 1, silent: [], unknownBaseline: [] },
   ])
 })
 

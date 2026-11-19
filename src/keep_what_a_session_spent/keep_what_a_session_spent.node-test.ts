@@ -155,7 +155,7 @@ test('#860 ruling: the same session picking its package up at a later null readi
   assert.ok(!('refused' in spend))
   assert.deepEqual(spend.byPackage[0]?.usd, { subscription: 0, metered: 0, unknown: 0 }, 'a hold with no baseline was measured from 0')
   assert.deepEqual(spend.unknownBaseline.map((one) => [one.package, one.session, one.host]), [[THE_PACKAGE, SESSION, ENGINE]], 'the unknown hold was not named')
-  assert.deepEqual(spend.byPackage[0]?.silent, [SESSION])
+  assert.deepEqual([spend.byPackage[0]?.silent, spend.byPackage[0]?.unknownBaseline], [[], [SESSION]], 'a session that reported a cost was named as reporting none')
 })
 
 test('#860: the writer\'s memory is one file per member, written only once its rows were kept (mutant: memory written first)', async () => {

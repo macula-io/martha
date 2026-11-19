@@ -53,7 +53,8 @@ export interface ASessionsSpend {
 /** One window's spend. */
 export interface TheSpend {
   readonly sessions: readonly ASessionsSpend[]
-  readonly byPackage: readonly { readonly package: string; readonly usd: Dollars; readonly sessions: number; readonly silent: readonly string[] }[]
+  /** Each package's spend, its silent sessions and its unknown-baseline ones named apart: an unknown one reported a cost. */
+  readonly byPackage: readonly { readonly package: string; readonly usd: Dollars; readonly sessions: number; readonly silent: readonly string[]; readonly unknownBaseline: readonly string[] }[]
   readonly outsideAnyPackage: Dollars
   readonly byMember: readonly { readonly member: string; readonly usd: Dollars }[]
   /** By the model the session ran on: its background model and subagents ran inside these figures. */
@@ -187,7 +188,7 @@ export function theSpendBetween(asked: TheSpendAsked): TheSpend | { readonly ref
     sessions: windows.map((window) => window.spend),
     byPackage: [...summedBy(held, (window) => window.spend.package as string)].map(([work_package, usd]) => {
       const its = held.filter((window) => window.spend.package === work_package)
-      return { package: work_package, usd, sessions: its.length, silent: its.filter((window) => window.silent || window.unknown).map((window) => window.spend.session) }
+      return { package: work_package, usd, sessions: its.length, silent: its.filter((window) => window.silent).map((window) => window.spend.session), unknownBaseline: its.filter((window) => window.unknown).map((window) => window.spend.session) }
     }),
     outsideAnyPackage: windows.filter((window) => window.spend.package === null).reduce((sum, window) => added(sum, window.spend.usd ?? NO_DOLLARS), NO_DOLLARS),
     byMember: [...summedBy(windows, (window) => window.spend.member)].map(([member, usd]) => ({ member, usd })),

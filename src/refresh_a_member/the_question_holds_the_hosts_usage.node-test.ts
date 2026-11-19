@@ -57,8 +57,17 @@ test('#860 R3: a subscription\'s window says subscription, an empty list after a
   assert.equal(read(aUsage({ rateLimits: [{ kind: 'five_hour', percentUsed: 3 }, { kind: 'spend_limit', percentUsed: 1 }] })).billing, 'subscription')
   assert.equal(read(aUsage({ rateLimits: [] })).billing, 'metered', 'an empty list after a response was not read as off a subscription')
   assert.equal(read(aUsage({ rateLimits: [{ kind: 'spend_limit', percentUsed: 1 }] })).billing, 'metered', 'a gateway\'s own window was read as a plan')
-  assert.equal(read(aUsage({ rateLimits: undefined })).billing, 'metered', 'a usage carrying no list after a response was not read as off a subscription')
+  assert.equal(read(aUsage({ rateLimits: undefined })).billing, 'unknown', 'a usage carrying no list at all was read as off a subscription: only an empty list says that')
   assert.equal(read({ startedAt: STARTED_AT, context: {}, rateLimits: [] }).billing, 'unknown', 'an empty list before any response was read as off a subscription')
+})
+
+test('#860 R5: a cost that is neither a number nor null is refused by name, never read as a host that priced nothing (mutant: the cost check removed)', () => {
+  for (const usd of ['0.75', {}, true]) {
+    const question = askedWith(aUsage({ cost: { usd } }))
+    assert.equal(typeof question, 'string', `a cost of ${JSON.stringify(usd)} was read`)
+    assert.match(question as string, /cost/, 'the refusal does not name the cost')
+  }
+  for (const cost of [{}, { usd: null }, undefined]) assert.equal(read(aUsage({ cost })).cost_usd, null, `a cost of ${JSON.stringify(cost)} is a host that priced nothing`)
 })
 
 test('#860 R5: a question carrying no usage object is a host that said nothing, as before (mutant: no usage refused)', () => {

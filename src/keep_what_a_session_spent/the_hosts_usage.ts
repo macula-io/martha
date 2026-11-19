@@ -58,14 +58,22 @@ const USAGE_FIELDS: readonly ((usage: Fields) => string | undefined)[] = [
       : 'the host\'s usage carries rate limits that are not a list of named windows'
   },
   (usage) => {
+    const usd = anObjectAt(usage, 'cost')?.['usd']
+    return usd === undefined || usd === null || Number.isFinite(usd) ? undefined : 'the host\'s usage carries a cost that is neither a number nor null'
+  },
+  (usage) => {
     const cost = anObjectAt(usage, 'cost')
     return cost === undefined || cost['hasUnknownPrice'] === undefined || cost['hasUnknownPrice'] === true ? undefined : 'the host\'s usage marks an unknown price with something other than true'
   },
 ]
 
-/** How the session is billed: a subscription's windows say so, and an empty list says "off one" only after a response. */
+/**
+ * How the session is billed: a subscription's windows say so, and a list holding none says "off one" only after a
+ * response. A usage with no list at all says nothing of its billing, so it is unknown, never read as an empty list.
+ */
 function theBillingOf(usage: Fields, answered: boolean): Billing {
-  const kinds = Array.isArray(usage['rateLimits']) ? (usage['rateLimits'] as readonly Fields[]).map((one) => one['kind']) : []
+  if (!Array.isArray(usage['rateLimits'])) return UNKNOWN_BILLING
+  const kinds = (usage['rateLimits'] as readonly Fields[]).map((one) => one['kind'])
   if (kinds.some((kind) => SUBSCRIPTION_WINDOWS.includes(kind as string))) return SUBSCRIPTION
   return answered && kinds.every((kind) => kind === A_GATEWAYS_WINDOW) ? METERED : UNKNOWN_BILLING
 }
