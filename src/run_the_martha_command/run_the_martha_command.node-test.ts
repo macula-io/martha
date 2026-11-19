@@ -17,7 +17,8 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { CLEAR_THE_TERMINAL, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, USAGE } from './run_the_martha_command.ts'
+import { CLEAR_THE_TERMINAL } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
+import { OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, USAGE } from './run_the_martha_command.ts'
 import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, SAID_BY } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { MEMBER_SWITCH } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { A_MUTE_NEEDS_THE_OWNERS_TERMINAL, BELLS_HEARD, BELLS_MUTED, THE_BELLS_FILE, THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
@@ -37,7 +38,7 @@ import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_m
 import { CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, WORKTREES_BESIDE_CLONES } from '../declare_crew/declare_crew.ts'
 import { crewKeyOf } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { rowFileNameOf, theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { rowStreamsDirectory, streamDirectoryNameOf } from '../row_streams_directory/row_streams_directory.ts'
 import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { ASKS_SETTLED, ASK_QUEUED, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -782,6 +783,7 @@ test("martha week answers one ISO week from the crew's own rows, and a word that
   await stored.append(ledgerStreamOf(package_name), { kind: 'package_landed', package: package_name, member: 'Hygiea', at: at + 60 * 60 * 1000, note: 'landed' })
   await stored.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'Delete the merged branch?', asked_by: 'Hygiea', since: at })
   await stored.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 1, yes: [0], at: at + 30 * 60 * 1000, by: 'the owner' })
+  mkdirSync(join(rows, streamDirectoryNameOf('ledger/not-a-package')), { mode: 0o700 })
 
   const answered = martha(place, 'week', '2026-W47')
   assert.equal(answered.status, EXIT_DONE, answered.said)
@@ -789,6 +791,7 @@ test("martha week answers one ISO week from the crew's own rows, and a word that
   assert.ok(answered.out.includes(`${package_name} — cycle 1 h 0 min`), answered.out)
   assert.ok(answered.out.includes('owner wait: 1 ask, 1 answered, 0 still waiting'), answered.out)
   assert.ok(answered.out.includes('money: not in the rows'), answered.out)
+  assert.ok(answered.out.includes('skipped: ledger/not-a-package (not a package name)'), 'a ledger stream no package owns was not named as skipped')
   allSaidByMartha(answered.err)
 
   const refusedWeek = martha(place, 'week', '2026-47')

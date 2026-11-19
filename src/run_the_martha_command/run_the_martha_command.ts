@@ -15,7 +15,7 @@
 // the member ends, and ends the way the member did; a restart asked of it starts it again on the same terminal. Exit 0 is done, 1 refused, 2 not a way the command is used.
 
 import { spawnSync, type StdioOptions } from 'node:child_process'
-import { readdirSync, readFileSync, realpathSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { constants } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -36,10 +36,8 @@ import { appendStateLine, crewRowsDirectory, crewStateDirectory, openState, read
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
-import { rowStreamsDirectory, streamOfDirectoryName } from '../row_streams_directory/row_streams_directory.ts'
-import { aWeekOfTheLedger, theLinesOf, theWeekOf } from '../a_week_of_the_ledger/a_week_of_the_ledger.ts'
-import { LEDGER_STREAM_PREFIX, readLedger, thePackageOfLedgerStream, type LedgerHost } from '../log_ledger/log_ledger.ts'
-import { OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { showTheWeek, weekOf } from '../show_the_week_of_the_ledger/show_the_week_of_the_ledger.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import type { TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { wakeAMember } from '../wake_a_member/wake_a_member.ts'
@@ -48,7 +46,7 @@ import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_clau
 import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { drawTheCrewStrip, holdOnThisTerminal, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
-import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, refused, showingSafely, tellOwnerOn } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
+import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, drawingInPlace, refused, showingSafely, tellOwnerOn } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
 import { bellsOf, theBellsTold, theFlipNamed } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
@@ -291,17 +289,11 @@ async function ls(io: CommandIo, places: Places): Promise<number> {
   return EXIT_DONE
 }
 
-/** What moves the cursor home and clears the terminal, so each frame of the strip is drawn in place of the last. */
-export const CLEAR_THE_TERMINAL = '\u001b[H\u001b[2J'
-
 /** `martha crew` (martha#572): the crew strip, redrawn in place until the owner ends it. */
 async function crew(io: CommandIo, places: Places): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
-  await drawTheCrewStrip(crew, (frame) => {
-    io.outBytes(Buffer.from(CLEAR_THE_TERMINAL))
-    for (const line of frame) io.out(line)
-  }, new AbortController().signal)
+  await drawTheCrewStrip(crew, drawingInPlace(io), new AbortController().signal)
   return EXIT_DONE
 }
 
@@ -348,54 +340,6 @@ async function release(io: CommandIo, places: Places, member: string): Promise<n
  * member's, typed at the owner's terminal. The act is ../ring_the_owner's; this hands it the crew's own place and tells
  * the owner its answer.
  */
-/** The streams a crew's rows directory keeps, by the name each is a stream of. */
-function streamsUnder(directory: string): readonly string[] {
-  return readdirSync(directory).flatMap((name) => {
-    const stream = streamOfDirectoryName(name)
-    return stream === undefined ? [] : [stream]
-  })
-}
-
-/** What one stream of a crew's ledger rows came to: the package it is read as, or why it was not read as one. */
-type AReadLedger = { readonly package: string; readonly rows: Awaited<ReturnType<typeof readLedger>> }
-
-/** Every package's ledger under a crew's rows directory, and the streams that are no package's ledger, named. */
-async function theLedgersUnder(directory: string, host: LedgerHost): Promise<{ readonly ledgers: readonly AReadLedger[]; readonly skipped: readonly string[] }> {
-  const ledgers: AReadLedger[] = []
-  const skipped: string[] = []
-  for (const stream of streamsUnder(directory)) {
-    if (!stream.startsWith(LEDGER_STREAM_PREFIX)) continue
-    const package_name = thePackageOfLedgerStream(stream)
-    if (package_name === undefined) {
-      skipped.push(`${stream} (not a package name)`)
-      continue
-    }
-    try {
-      ledgers.push({ package: package_name, rows: await readLedger(host, package_name) })
-    } catch (error) {
-      skipped.push(`${stream} (could not be read: ${error instanceof Error ? error.message : String(error)})`)
-    }
-  }
-  return { ledgers, skipped }
-}
-
-/**
- * `martha week [YYYY-Www]` (martha#308): one ISO week read from the crew's ledger rows and its ask queue — what the
- * week cost in work, each package's cycle and rework, and how long it waited on the owner. It reads and writes no row;
- * the week nobody names is the one the clock says, and that is the one place this reads a clock.
- */
-async function week(io: CommandIo, places: Places, asked: Asked): Promise<number> {
-  const rows = crewRowsDirectory(places.state.state_root, places.root)
-  if ('refusal' in rows) return refused(io, rows.refusal)
-  const host: LedgerHost = { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(rows.path) } }
-  const { ledgers, skipped } = await theLedgersUnder(rows.path, host)
-  const asks = await host.stores.rows.read(OWNER_ASKS_STREAM)
-  const answer = aWeekOfTheLedger({ week: asked.args[0] ?? theWeekOf(Date.now()), ledgers, asks, skipped })
-  if ('refused' in answer) return refused(io, answer.refused)
-  for (const line of theLinesOf(answer.week)) io.out(line)
-  return EXIT_DONE
-}
-
 async function bells(io: CommandIo, places: Places, asked: Asked): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
@@ -490,13 +434,6 @@ export function actOf(argv: readonly string[]): Asked | undefined {
   if (ACTS_OF_ONE.includes(act)) return actOfOne(act, argv)
   const parse = ACTS_OF_THEIR_OWN[act]
   return parse === undefined ? undefined : parse(act, argv)
-}
-
-/** `week [YYYY-Www]`: no week, or one named, and no switch. */
-function weekOf(act: string, argv: readonly string[]): Asked | undefined {
-  const [, named] = argv
-  if (argv.length === 1) return { act, args: [] }
-  return argv.length === 2 && named !== undefined && named !== '' && !named.startsWith('-') ? { act, args: [named] } : undefined
 }
 
 /** `install [<version>] [<switches>]`: the words, passed on unchanged, when the installer is asked a way it knows. */
@@ -664,7 +601,7 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   bells: (io, places, asked) => bells(io, places, asked),
   ls: (io, places) => ls(io, places),
   crew: (io, places) => crew(io, places),
-  week: (io, places, asked) => week(io, places, asked),
+  week: showTheWeek,
   [STOP]: (io, places, asked) => stop(io, places, asked.member),
   [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),
 }

@@ -46,3 +46,14 @@ export function refused(io: LinesShownToTheOwner, why: string): number {
   tellOwnerOn(io)(why)
   return EXIT_REFUSED
 }
+
+/** What moves the cursor home and clears the terminal, so each frame of a strip is drawn in place of the last. */
+export const CLEAR_THE_TERMINAL = '\u001b[H\u001b[2J'
+
+/** How a frame is drawn where the one before it was: the terminal cleared, then the frame's own lines. */
+export const drawingInPlace = <Shown extends LinesShownToTheOwner & { outBytes(bytes: Buffer): void }>(
+  io: Shown,
+) => (frame: readonly string[]): void => {
+  io.outBytes(Buffer.from(CLEAR_THE_TERMINAL))
+  for (const line of frame) io.out(line)
+}
