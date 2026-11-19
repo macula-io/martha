@@ -28,6 +28,7 @@ import {
 import {
   A_LAUNCHS_FOLDERS_MODE,
   THE_PATH_A_LAUNCH_GIVES,
+  THE_HOME_OF_A_LAUNCH,
   THE_ROOT_OF_A_LAUNCH,
   launchTheGooseEngine,
   startTheEngine,
@@ -217,6 +218,7 @@ test('a declaration naming the setting that replaces the engine\'s hint files is
   assert.match(refused.refusal, new RegExp(FACTS.hint_files.setting))
   assert.deepEqual(readdirSync(place.snapshot_root), [], 'a refused launch left a snapshot behind')
   assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch made its root')
+  assert.equal(existsSync(join(root, THE_HOME_OF_A_LAUNCH)), false, 'a refused launch made its home')
 })
 
 test('the launch gets a root and a home of its own, made new and 0700, and neither is reused (martha#541)', (t) => {
