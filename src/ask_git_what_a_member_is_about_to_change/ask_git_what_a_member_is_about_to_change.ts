@@ -27,7 +27,7 @@
 // rules that need a fact do not fire.
 
 import type { CrewStore, TheFilesAndProcesses } from '../host_contract/host_contract.ts'
-import { refuseACallInTheWorkspace, theCloneOf, theWorktreeListedAt, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
+import { A_BRANCH_REF, refuseACallInTheWorkspace, theCloneOf, theWorktreeListedAt, type AGuardedCall, type AListedWorktree, type TheFacts, type TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { theLeftoversRefusal } from '../judge_the_commit_a_member_is_about_to_make/judge_the_commit_a_member_is_about_to_make.ts'
@@ -57,7 +57,7 @@ const A_BRANCH_LINE = 'branch '
 const A_WORKTREE_LINE = 'worktree '
 
 /** The argument git takes to list a repository's branches by their own names. */
-const LIST_BRANCHES = ['for-each-ref', '--format=%(refname:short)', 'refs/heads/']
+const LIST_BRANCHES = ['for-each-ref', '--format=%(refname:short)', A_BRANCH_REF]
 
 /** The argument git takes to name the branch the clone starts on, as its origin has it: `origin/<name>`. */
 const THE_DEFAULT_BRANCH = ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']

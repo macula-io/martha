@@ -29,6 +29,14 @@ import {
 } from '../tell_a_member_what_its_relaunch_killed/tell_a_member_what_its_relaunch_killed.ts'
 import { theLeftoverRecordOf, theReleasedPathsOf } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 
+/**
+ * The git commands whose calls this rule reads: one, a commit. The guard's shim reads this list to start a judge for
+ * exactly the commands a rule could refuse (martha#755), and the rule finds its commit through the same list, so the two
+ * cannot spell the command apart. A list rather than a named word: every test and probe in the tree runs a `git commit`
+ * as git's own subcommand, and a constant of that word would have all of them declare a coincidence.
+ */
+export const THE_COMMANDS_THE_COMMIT_RULE_READS: readonly string[] = ['commit']
+
 /** A commit about to run: where, the record it is judged on, and the paths a member has already released. */
 export interface ACommitToJudge {
   readonly processes: Pick<Processes, 'run'>
@@ -152,7 +160,7 @@ export interface TheCallsToJudge {
  * when the line stages them (`git add -A && git commit`, `git commit -am`), which the index alone does not show yet.
  */
 export async function theLeftoversRefusal(incoming: TheCallsToJudge): Promise<string | undefined> {
-  const commit = incoming.calls.find((call) => call.command === 'commit')
+  const commit = incoming.calls.find((call) => call.command !== undefined && THE_COMMANDS_THE_COMMIT_RULE_READS.includes(call.command))
   if (incoming.leftovers === undefined || commit === undefined) return undefined
   const kept = theLeftoverRecordOf(incoming.leftovers, incoming.member)
   // A record nobody can read is said and judged nothing on (rule 3), and a place that cannot be asked is not a refusal.
