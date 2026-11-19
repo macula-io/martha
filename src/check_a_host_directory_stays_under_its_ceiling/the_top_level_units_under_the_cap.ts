@@ -12,8 +12,8 @@
 //
 // The judgement is pure. Which units are there, and how many lines each holds, is read by the_top_level_units.ts.
 
-import { CORE } from '../../prove_the_core/declared_in_package_json.ts'
-import { CEILING_EXCLUSIONS_NAME, SLICE_CAP_NAME, SLICE_CEILINGS_NAME } from '../../prove_the_core/the_host_ceilings.ts'
+import { CORE } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { CEILING_EXCLUSIONS_NAME, SLICE_CAP_NAME, SLICE_CEILINGS_NAME } from '../../prove_the_core/read_the_manifest_and_the_linter/the_host_ceilings.ts'
 
 /** One thing the check has to say about the code outside src. */
 export type TopLevelFinding =

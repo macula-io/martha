@@ -22,7 +22,7 @@
 //
 // The core imports nothing but its own slices and Node's standard library, so
 // this contract is the only way it reaches a coding tool. A test fails by name
-// on any other import; the check is in prove_the_core/imports_beyond_the_core.ts. This file
+// on any other import; the check is in prove_the_core/what_the_core_may_reach/imports_beyond_the_core.ts. This file
 // imports nothing at all: every slice depends on the contract, never the reverse.
 
 /** The time, in milliseconds since the Unix epoch. */
@@ -66,6 +66,9 @@ export interface RowStore {
   /** Every row of a stream, oldest first; a stream never written to is empty. */
   read(stream: string): Promise<readonly StoredRow[]>
 }
+
+/** The temporary directory POSIX systems keep at a fixed, short path, whatever TMPDIR says: where a root for a socket falls. */
+export const SYSTEM_TEMPORARY_DIRECTORY = '/tmp'
 
 /** The code an append rejects with when the stream is not at the length it expected. */
 export const ROW_STREAM_MOVED = 'ROW_STREAM_MOVED'
@@ -255,7 +258,7 @@ export interface HandoverStampStore {
  * history however many checkouts it works in; the launcher resolves it and composes this store over it. A slice reaches
  * it here and never by a path of its own, so what a member hands to its successor and what a park marker says are
  * written by the host, in a directory the host checked (martha#255; the writer is host glue, and
- * prove_the_core/only_the_launcher_writes_launch_records keeps a slice from importing it).
+ * prove_the_core/one_place_does_it/only_the_launcher_writes_launch_records keeps a slice from importing it).
  */
 export interface CrewStore {
   /** The one place this crew keeps `name` in, made 0700 when missing; or why it may not be used. */

@@ -9,7 +9,7 @@ import { sep } from 'node:path'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { exceptionsThatApply } from './the_exceptions_that_apply.ts'
 
 /** The checkout this file runs in: `src/check_no_literal_restates_a_value` two levels below it. */

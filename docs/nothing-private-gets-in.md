@@ -32,10 +32,10 @@ Each of those can enter through four paths:
    no longer shows is still public. The check reads every commit's added lines.
 3. **A commit message.** It is published with the commit. The check reads it.
 4. **The check's own output.** A CI log of a public repository is public. A lab
-   hostname is therefore never printed: a hit names the file, the line and the
-   class, and withholds the value. Nothing else printed carries one either: a
-   lab hostname in a path, a repository name or a shorthand is replaced by
-   `<lab host>`.
+   hostname and a home directory are therefore never printed (martha#846): a hit
+   names the file, the line and the class, and withholds the value. Nothing
+   else printed carries a lab hostname either: one in a path, a repository name
+   or a shorthand is replaced by `<lab host>`.
 
 Out of reach of this check, and said here so nobody assumes otherwise:
 

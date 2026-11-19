@@ -33,7 +33,12 @@ import { HOSTS } from '../src/refuse_launch_of_unapproved_config/refuse_launch_o
 import { CLAUDE_CODE } from '../src/know_claude_codes_own_facts/claude_code_facts.ts'
 // The host draws its screen a word at a time, moving the cursor where the spaces would be, so every screen this probe
 // matches is read plainly: the one reader both probes use (#693).
-import { AT_ITS_PROMPT, says } from '../prove_the_core/a_screen_drawn_in_pieces.ts'
+import { AT_ITS_PROMPT, says } from '../prove_the_core/read_what_a_host_drew/a_screen_drawn_in_pieces.ts'
+
+// How long the host is given to draw each screen this probe types at — its banner, then the dialog it answers — is in
+// one definition, which the Bash-answers harness reads too for what a host is given to go from launch to the call it
+// needs (martha#812).
+import { DIALOG_WAIT_MS, WELCOME_WAIT_MS } from './the_wait_a_probe_gives_a_screen.mjs'
 
 /** The host, at the version the adapter was recorded from: the same variable the recorded-host tests read. */
 const HOST = process.env.MARTHA_RECORDED_HOST
@@ -42,9 +47,6 @@ const OUT = process.argv[2] ?? mkdtempSync(join(tmpdir(), 'martha-dialog-order-'
 const STAND_IN_KEY = `sk-ant-api03-${'0'.repeat(80)}`
 const COMMAND = 'touch probe-touched.txt'
 const PROMPT_SHOWN = 'Waiting for permission'
-/** How long the host is given to draw each screen this probe types at: its banner, then the dialog it answers. */
-const WELCOME_WAIT_MS = 60000
-const DIALOG_WAIT_MS = 45000
 
 /** The plugin the host runs: every event the relay can hear, each written to the log with the moment it arrived. */
 const PLUGIN = (logdir) => `// PROBE

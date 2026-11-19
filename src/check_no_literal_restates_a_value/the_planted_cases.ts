@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { GONE, lineOfAFinding, lineOfAMarkerNotHeld, lineOfAnExceptionNotHeld, THE_MARKER, type Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import { GONE, lineOfAFinding, lineOfAMarkerNotHeld, lineOfAnExceptionNotHeld, THE_MARKER, type Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { verdictOf } from './judge_a_change.ts'
 import { CORE } from './the_core_the_check_reads.ts'
@@ -391,6 +391,37 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
   {
     what: 'a GitHub API route whose owner a substitution builds, an address (martha#437, Jupiter on PR 469)',
     base: TOOL, head: { 'a_user/a_user.ts': 'call(`repos/${owner}/the-tool/issues`)\n' }, prints: [],
+  },
+  {
+    // The instance martha#776 was filed with: the word is a shell `case` pattern inside the text a function builds, and
+    // no piece of that text equals it, so only reading the quoted word finds it.
+    what: "a value a template with a substitution holds as one quoted word, in single quotes (martha#776)",
+    base: TOOL, head: { 'a_user/a_user.ts': 'const run = `case "$1" in \'the-tool\') exec ${node} "$@";; esac`\n' },
+    prints: ["a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'a value a template with a substitution holds as one quoted word, in double quotes (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': 'const run = `case "$1" in "the-tool") exec ${node} "$@";; esac`\n' },
+    prints: ["a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'a value a template with no substitution holds as one quoted word (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': "const run = `exec 'the-tool'`\n" },
+    prints: ["a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'a value a template names twice, as a bare path segment and as a quoted word, named once (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': "const run = `exec 'the-tool' /bin/the-tool`\n" },
+    prints: ["a_user/a_user.ts:1: 'the-tool' (a path segment) restates a_tool/a_tool.ts TOOL"],
+  },
+  {
+    what: 'a quoted word a substitution stands inside, never judged: the run time builds it (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': 'const run = `exec ${node} \'the-${flavour}\'`\n' }, prints: [],
+  },
+  {
+    what: 'prose between two apostrophes inside a template, never judged as one quoted word (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': "const said = `the tool's name is 'the-tool' elsewhere`\n" },
+    prints: ["a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
   },
   {
     what: 'a marker imported under a second name',

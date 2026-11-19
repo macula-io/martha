@@ -29,14 +29,14 @@ import { sessionStartSchemaIn } from '../claude_code_host/claude_code_session_ev
 import { classicHookEventsIn, notificationTypesIn } from '../claude_code_host/owner_dialogs_the_host_raises.ts'
 import { filePermissionRulesIn } from '../claude_code_host/file_permission_rules.ts'
 import { markdownTheHostLoadsIn, type MarkdownTheHostLoads } from '../load_the_hosts_markdown/markdown_the_host_loads.ts'
+import { theSkillsLoaderIn } from '../load_the_hosts_markdown/the_skills_loader.ts'
 import { protectedConfigPlacesIn } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { signInStoreVariableIn } from '../cut_the_rules_from_the_host_binary/the_sign_in_store.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { failedAgentsReportIn } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
-import { CARRIED, MEMORY_OFF, memoryOffHoldsOf, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
+import { CARRIED, MEMORY_OFF, RECORDING_OF_THE_HOST, memoryOffHoldsOf, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
 import { fileModeGuardCallsIn, managedFolderGuardCallsIn } from './what_the_hosts_guards_call.ts'
 
-const RECORDING = new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url)
 const VERSION = /^\d+\.\d+\.\d+$/
 const CHECK = '--check'
 /** Each part the recorder reads from a host's text, by the name a failed read reports. */
@@ -48,6 +48,7 @@ const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string
   { part: 'hook switches', read: hookSwitchesIn },
   { part: 'managed settings place', read: (text) => ({ managed_settings: managedSettingsPlaceIn(text) }) },
   { part: 'markdown the host loads', read: markdownIn },
+  { part: 'skills loader', read: theSkillsLoaderIn },
   { part: 'protected config places', read: protectedConfigPlacesIn },
   { part: 'sign-in store', read: signInStoreVariableIn },
   { part: 'file permission rules', read: (text) => ({ file_permission_rules: filePermissionRulesIn(text) }) },
@@ -96,7 +97,7 @@ if (binary === undefined || host_version === undefined || !VERSION.test(host_ver
   exit(2)
 }
 
-const committed = JSON.parse(readFileSync(RECORDING, 'utf8')) as Committed
+const committed = JSON.parse(readFileSync(RECORDING_OF_THE_HOST, 'utf8')) as Committed
 const text = readFileSync(binary, 'latin1')
 const { derived, unreadable } = readHost(text)
 
@@ -114,4 +115,4 @@ if (unreadable.length > 0) {
   exit(1)
 }
 const recorded = recordingFrom(committed, host_version, derived as Derived)
-writeFileSync(RECORDING, `${JSON.stringify(recorded, null, 2)}\n`)
+writeFileSync(RECORDING_OF_THE_HOST, `${JSON.stringify(recorded, null, 2)}\n`)

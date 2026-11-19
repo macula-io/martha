@@ -32,7 +32,7 @@
 //
 // Every GitHub read of package B goes through spendTheGithubBudget: the runs on a sha, the head of a package's pull
 // request, the state of a package's issue, and the rate limit itself. Nothing outside this directory names `gh` with `run list` or `run watch`, and
-// prove_the_core/one_place_asks_github fails by name when something does.
+// prove_the_core/one_place_does_it/one_place_asks_github fails by name when something does.
 //
 // A `git ls-remote` of origin, as ../read_the_tips_a_removal_covers runs one for a queued branch removal, is git's own
 // transport and not GitHub's API: it spends nothing from this allowance, and it is outside this budget on purpose.

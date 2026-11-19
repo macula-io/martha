@@ -8,18 +8,18 @@
 // declarations count for nothing either (martha#522): they say which values only
 // look restated, they make none of the slice's decisions, so a slice never gives
 // up room it needs to declare one, and no ceiling is raised to hold one. The linter decides which
-// files are code (see prove_the_core/the_linter_lints_it.ts), so a host recording
+// files are code (see prove_the_core/read_the_manifest_and_the_linter/the_linter_lints_it.ts), so a host recording
 // kept as `.json` beside the sources carries none of it, and the compiler's
 // scanner decides which lines of a file are code (see
-// prove_the_core/the_code_lines_of_a_source.ts), so commentary and blank lines
+// prove_the_core/read_a_source/the_code_lines_of_a_source.ts), so commentary and blank lines
 // carry none either.
 
 import { readFileSync, readdirSync, type Dirent } from 'node:fs'
 import { join } from 'node:path'
 
-import { codeLinesOf } from '../../prove_the_core/the_code_lines_of_a_source.ts'
-import { isACoincidenceFile } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
-import type { Lints } from '../../prove_the_core/the_linter_lints_it.ts'
+import { codeLinesOf } from '../../prove_the_core/read_a_source/the_code_lines_of_a_source.ts'
+import { isACoincidenceFile } from '../../prove_the_core/a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts'
+import type { Lints } from '../../prove_the_core/read_the_manifest_and_the_linter/the_linter_lints_it.ts'
 
 /** A test file: the checks' own, which a host directory's ceiling never counts. */
 const TEST_FILE = /\.node-test\.[^.]+$/

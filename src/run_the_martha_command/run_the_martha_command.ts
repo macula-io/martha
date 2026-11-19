@@ -54,12 +54,14 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { whyAnOwnersActIsRefusedInsideAMember, type AProcessAbove } from '../refuse_an_owner_act_from_inside_a_member/refuse_an_owner_act_from_inside_a_member.ts'
 import { ancestorsUnder, PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
+import { SYSTEM_TEMPORARY_DIRECTORY } from '../host_contract/host_contract.ts'
 import { launchRecordsUnder } from '../read_a_kernel_and_a_home/launch_records_under_a_state_root.ts'
 import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { answerInAProject, answerOf } from '../serve_the_owners_answers/martha_answer.ts'
 import { keepWhereItWasTyped, linesOf, seenFromThisProcess, theCutoverTakenOnce, theRecordFilesOf, whatTheOwnerReadsOf } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
 
 /** The line `martha start` prints once the member is up: its name and its pid. */
@@ -67,7 +69,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha approve | martha todo | martha start <member> [-- <claude arguments>] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -254,10 +256,12 @@ async function startingTheMember(
   })
 }
 
+/** The directory this user's launches keep their relay roots under: inside the runtime directory they were given when it is an absolute path, and under the system's own temporary directory when they were given none. */
+export const theCommandsRuntimeDirectory = (runtime: string | undefined): string => join(absolute(runtime) ?? SYSTEM_TEMPORARY_DIRECTORY, `martha-${process.getuid?.()}`)
+
 /** The launcher's places in Martha's state, with the relay sockets under this user's runtime directory. */
 function launcherOf(io: CommandIo, places: Places): ReturnType<typeof launcherPlacesOf> {
-  const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? '/tmp'
-  return launcherPlacesOf(places.state, join(runtime, `martha-${process.getuid?.()}`), places.root)
+  return launcherPlacesOf(places.state, theCommandsRuntimeDirectory(io.env['XDG_RUNTIME_DIR']), places.root)
 }
 
 /** What `martha ls` and `martha stop` read (martha#312); or why it cannot be read. */
@@ -448,6 +452,7 @@ export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: read
   [STOP]: stopOf,
   [RESTART]: restartOf,
   start: startOf,
+  answer: answerOf,
 }
 
 /** `start <member> [-- <claude arguments>]`. */
@@ -566,6 +571,7 @@ const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Place
   'keep-shapes': (io, places, asked) => keepShapes(io, places, asked.args[0]!),
   approve: (io, places) => approve(io, places),
   release: (io, places, asked) => release(io, places, asked.args[0]!),
+  answer: (io, places, asked) => answerInAProject(io, places, asked.member, asked.args),
 }
 
 /** Whether an act is the owner's own: one of theirs, `start` (every word no act takes), or a flip of a member's bells. */

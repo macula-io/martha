@@ -68,7 +68,7 @@ export function addresseesOf(to: unknown, roster: readonly string[]): Addressee 
 
   if (to === THE_WHOLE_CREW) return THE_WHOLE_CREW
   if (Array.isArray(to)) return named(to)
-  return { refused: `"to" is a list of members' names, or "crew" for every member. The crew is ${roster.join(', ')}. Nothing was sent.` }
+  return { refused: `"to" is a list of members' names, or "${THE_WHOLE_CREW}" for every member. The crew is ${roster.join(', ')}. Nothing was sent.` }
 }
 
 /** The line the member is told once its message is in the channel. */

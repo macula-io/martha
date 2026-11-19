@@ -12,10 +12,10 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { CORE } from '../../prove_the_core/declared_in_package_json.ts'
-import { isASkippedDirectory } from '../../prove_the_core/core_sources.ts'
-import { theCodeRootsOf } from '../../prove_the_core/the_code_roots_of_a_repository.ts'
-import type { Lints } from '../../prove_the_core/the_linter_lints_it.ts'
+import { CORE } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { isASkippedDirectory } from '../../prove_the_core/read_the_manifest_and_the_linter/core_sources.ts'
+import { theCodeRootsOf } from '../../prove_the_core/read_the_manifest_and_the_linter/the_code_roots_of_a_repository.ts'
+import type { Lints } from '../../prove_the_core/read_the_manifest_and_the_linter/the_linter_lints_it.ts'
 import { codeLinesDirectlyIn, codeLinesOfDirectory } from './a_host_directorys_code_lines.ts'
 
 /** The repository root, named as a folder the check judges. */

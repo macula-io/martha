@@ -14,7 +14,7 @@ import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
-import { test, type TestContext } from 'node:test'
+import { after, test, type TestContext } from 'node:test'
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { RELAY_COPY_NAME, removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
@@ -85,12 +85,14 @@ import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_c
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
+import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE, SKILLS_KIND } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // --- the run this file is (martha#559) --------------------------------------------
 
 /**
  * The run these tests are: a pipe this process holds open for as long as it exists, however it ends. Every launcher a
- * test starts reads the other end by path (prove_the_core/a_launcher_ends_with_its_run.ts), so a run killed by a shell
+ * test starts reads the other end by path (prove_the_core/a_test_leaves_nothing_behind/a_launcher_ends_with_its_run.ts), so a run killed by a shell
  * timeout or by --test-force-exit leaves no launcher, no shell, no terminal and no home behind — which is what let
  * enough of them pile up on one machine that this file stopped reporting there at all.
  */
@@ -104,6 +106,10 @@ process.once('exit', () => {
   RUN_THIS_FILE_IS.close()
   removeTheTree(dirname(THE_RUNS_END))
 })
+
+// And taken down when the file's tests are done, which is before the guard judges what this file left (martha#724): a
+// directory it makes is this file's to remove, whether the run ends by force-exit or another way.
+after(() => removeTheTree(dirname(THE_RUNS_END)))
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -2686,7 +2692,7 @@ function launcherProcess(
   place.aMemberStartsHere()
   const script = join(place.home, 'launcher.ts')
   const launchModule = new URL('./launch_a_claude_code_member.ts', import.meta.url).href
-  const endsWithItsRunModule = new URL('../../prove_the_core/a_launcher_ends_with_its_run.ts', import.meta.url).href
+  const endsWithItsRunModule = new URL('../../prove_the_core/a_test_leaves_nothing_behind/a_launcher_ends_with_its_run.ts', import.meta.url).href
   writeFileSync(
     script,
     [
@@ -2723,13 +2729,31 @@ function launcherProcess(
   return script
 }
 
+/**
+ * A command started with core dumps off: `sh` sets the core limit to none, then becomes the command, so the pid is the
+ * command's own. SIGQUIT's default action dumps core, and the launcher re-raises the signal it was ended by, so a
+ * launcher a test quits dumps its whole node process. Where a core handler is installed, the launcher is reaped only
+ * once that dump is written: 3.1-3.7 s from signal to exit, against under 0.1 s for the other signals, in six runs at
+ * once at a load of 30-40, and past the suite's per-test limit on a loaded full run (martha#838). Every run also left a
+ * core of node behind.
+ */
+const withoutACoreDump = (command: string, args: readonly string[]): { readonly command: string; readonly args: readonly string[] } => ({
+  command: 'sh',
+  args: ['-c', 'ulimit -c 0 && exec "$0" "$@"', command, ...args],
+})
+
+/** The soft core-size limit the kernel holds for `pid`, as /proc/<pid>/limits spells it: "0" when it dumps none. */
+const coreLimitOf = (pid: number): string | undefined =>
+  /^Max core file size\s+(\S+)/m.exec(readFileSync(`${PROC_ROOT}/${pid}/limits`, 'utf8'))?.[1]
+
 // Every signal a launcher can be ended by without its own say, including the two a terminal's hangup and its quit key
 // send (martha#472): a launcher signalled directly cleans up exactly like one spoken to by martha stop.
 for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
   test(`${signal} to the launcher kills its member's group and leaves no socket or snapshot`, async (t) => {
     const place = placeFor(t)
     const fake = fakeClaude(place)
-    const launcher = spawn(process.execPath, [launcherProcess(place, fake.command)], { stdio: ['ignore', 'pipe', 'inherit'] })
+    const started = withoutACoreDump(process.execPath, [launcherProcess(place, fake.command)])
+    const launcher = spawn(started.command, started.args, { stdio: ['ignore', 'pipe', 'inherit'] })
     const ended = new Promise<NodeJS.Signals | null>((resolve) => launcher.once('exit', (_code, by) => resolve(by)))
     // Before any assertion: a test that fails must not leave the member running.
     t.after(async () => {
@@ -2750,8 +2774,10 @@ for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
       group !== undefined && Number.isInteger(group) && group > 1 && group !== groupOf(process.pid) && group !== groupOf(launcher.pid ?? 0),
       'the member runs in a group of its own, which the group kill relies on',
     )
+    assert.equal(coreLimitOf(launcher.pid ?? 0), '0', 'the launcher this test signals dumps no core, so its end waits on no core handler (martha#838)')
 
     launcher.kill(signal)
+    await until(`the launcher to end of ${signal}`, () => launcher.exitCode !== null || launcher.signalCode !== null, t)
     assert.equal(await ended, signal, 'the signal still ends the launcher')
     await until('the member\'s group to be killed', () => !isAlive(child), t)
     assert.deepEqual(readdirSync(place.relay_root), [])
@@ -4369,16 +4395,21 @@ test('a run killed hard takes its launcher, its shell, its member and its home w
   assert.equal(isAlive(launcherPid), true, 'the launcher runs before the kill')
   assert.ok(pidsNamingTheHome(place.home).length >= 3, `the launcher, its shell and the member all name the home: ${pidsNamingTheHome(place.home).join(', ')}`)
   run.kill('SIGKILL')
-  // Nothing is signalled to anything below the run: every one of them ends because the pipe's other end closed.
+  // Nothing is signalled to anything below the run: every one of them ends because the pipe's other end closed. Each is
+  // waited on until it has ended, never looked at once: a launcher that has removed its home and let go of it is still
+  // exiting for a moment after, and a single look then saw it alive (martha#833).
+  const theEnded = [
+    { who: 'the member', pid: member },
+    { who: 'the shell that waited on its launcher', pid: shell },
+    { who: 'the launcher itself', pid: launcherPid },
+  ]
+  const stillRunning = (): string[] => theEnded.filter(({ pid }) => isAlive(pid)).map(({ who, pid }) => `${who} (${String(pid)})`)
   await until(
-    'the home the run made to go, and every process that named it',
-    () => !existsSync(place.home) && pidsNamingTheHome(place.home).length === 0,
+    'the home the run made to go, every process that named it, and the member, its shell and its launcher to end',
+    () => !existsSync(place.home) && pidsNamingTheHome(place.home).length === 0 && stillRunning().length === 0,
     t,
-    () => `still named by ${pidsNamingTheHome(place.home).join(', ')}`,
+    () => `still named by ${pidsNamingTheHome(place.home).join(', ')}; still running: ${stillRunning().join(', ')}`,
   )
-  assert.equal(isAlive(member), false, 'the member did not outlive the run that started it')
-  assert.equal(isAlive(shell), false, 'nor did the shell that waited on its launcher')
-  assert.equal(isAlive(launcherPid), false, 'nor did the launcher itself')
   assert.equal(existsSync(join(runtime, 'lifeline')), true, 'the run\'s own pipe is the launcher\'s to read, and never to remove')
 })
 
@@ -4600,4 +4631,52 @@ test('a launch given no workspace leaves no scan line, and the row keeps whateve
   assert.equal(started.started, true)
   await new Promise((resolve) => setTimeout(resolve, 120))
   assert.equal(dashboardRowsIn(place.dashboard).read(member)?.needs, '', 'a launch with no layout wrote a line anyway')
+})
+
+// --- the approved checkout's skills, with project settings still off (martha#747) ---------------------------------
+// The skill texts below are the tests' own bytes, never a constant under test: a launch that carried nothing, or
+// carried them anywhere else, cannot match them.
+
+const A_SKILL = '---\nname: x\ndescription: a skill the owner approved for this test\n---\nDo the thing the test asks.\n'
+const A_SKILLS_REFERENCE = 'a file the skill points at, its bytes the test\'s own\n'
+
+test("T1: a launch on an approved checkout writes its skills into the member's own config folder, byte-equal, with project settings still off (martha#747)", async (t) => {
+  const place = placeFor(t, SERVERS, { [`${CLAUDE_SKILLS}/x/SKILL.md`]: A_SKILL, [`${CLAUDE_SKILLS}/x/ref.md`]: A_SKILLS_REFERENCE })
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const started = await aMemberStartedIn(t, place, memberLaunch(place, fake.command, place.approved))
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write what it was started with', () => existsSync(fake.argsFile) && existsSync(fake.envFile), t)
+  const own = membersOwnConfig(place)
+  assert.equal(readFileSync(join(own, SKILLS_KIND, 'x', 'SKILL.md'), 'utf8'), A_SKILL)
+  assert.equal(readFileSync(join(own, SKILLS_KIND, 'x', 'ref.md'), 'utf8'), A_SKILLS_REFERENCE)
+  assert.equal(lstatSync(join(own, SKILLS_KIND, 'x', 'SKILL.md')).mode & 0o777, 0o600, 'a copied skill is the launcher\'s alone')
+  assert.equal(lstatSync(join(own, SKILLS_KIND, 'x', 'SKILL.md')).isFile(), true, 'a copied skill is a file, never a link')
+  const args = readFileSync(fake.argsFile, 'utf8').split('\n')
+  const at = args.indexOf('--setting-sources')
+  assert.ok(at >= 0 && args[at + 1] === 'user', `the host still starts with project settings off: ${args.join(' ')}`)
+  started.stop('the test is over')
+  await started.stopped
+})
+
+test("T4: an approved skill whose frontmatter declares hooks is refused at launch, naming the copied file (martha#747, martha#146)", async (t) => {
+  const withHooks = '---\nname: x\ndescription: a skill\nhooks:\n  PreToolUse: []\n---\nbody\n'
+  const place = placeFor(t, SERVERS, { [`${CLAUDE_SKILLS}/x/SKILL.md`]: withHooks })
+  const fake = fakeClaude(place)
+  const refusal = await refusedLeavingNothing(t, place, memberLaunch(place, fake.command, place.approved), fake.ranFile)
+  assert.ok(refusal.includes(join(SKILLS_KIND, 'x', 'SKILL.md')) && refusal.includes('the key hooks'), refusal)
+})
+
+test('T7, T9a: an inherited host skill catalog and an inherited bare mode never reach the member (martha#747)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const launch = memberLaunch(place, fake.command, place.approved)
+  const inherited = { ...launch.inherited, [CLAUDE_CODE_BARE_MODE_VARIABLE]: 'an-inherited-bare-mode', [CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE]: join(place.home, 'a-mount') }
+  const started = await aMemberStartedIn(t, place, { ...launch, inherited })
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write what it was started with', () => existsSync(fake.envFile), t)
+  const env = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
+  assert.equal(Object.hasOwn(env, CLAUDE_CODE_BARE_MODE_VARIABLE), false, 'bare mode is dropped')
+  assert.equal(Object.hasOwn(env, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE), false, 'the host skill catalog is dropped')
+  started.stop('the test is over')
+  await started.stopped
 })

@@ -6,7 +6,7 @@
 // Every tree the repository holds is judged, and the files directly in its root too (martha#748): a loop between two
 // trees is as real as one inside a single tree, and the loop line in CI used to stop at `src/` because this walk did.
 
-import { theCodeSourcesOf } from '../../prove_the_core/the_code_roots_of_a_repository.ts'
+import { theCodeSourcesOf } from '../../prove_the_core/read_the_manifest_and_the_linter/the_code_roots_of_a_repository.ts'
 import { cyclesIn, type Loop } from './the_cycles_in.ts'
 import { EXCEPTIONS, type DeclaredCycle } from './the_exceptions.ts'
 
