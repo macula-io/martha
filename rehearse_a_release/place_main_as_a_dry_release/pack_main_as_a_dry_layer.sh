@@ -23,7 +23,7 @@
 # The order is the release's own: main's installer packed by `git archive` from the sha, then the restore commit, then
 # `npm ci` on the restored installer/, then pack_a_release/pack_a_release.sh. So the installer the pin runs is the
 # published one -- its lockfile and its pin_the_installer.mjs, never main's -- and a pin change on main is proven by
-# main's own tests and never by this night's run.
+# main's own tests and never by this live run's run.
 #
 # And main's installer is packed as an artifact of its own, from the sha itself by `git archive`, BEFORE that restore,
 # so the tarball can only ever hold main's bytes: `npm pack --ignore-scripts` of it, renamed main-installer-<sha7>.tgz

@@ -183,7 +183,7 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
   },
   {
     name: 'land_a_package_on_a_throwaway_repository',
-    why: "the nightly live run's guards for its throwaway repository (martha#639); the command never loads them",
+    why: "the live run's guards for its throwaway repository (martha#639); the command never loads them",
   },
   {
     name: 'declare_a_launch_probe',

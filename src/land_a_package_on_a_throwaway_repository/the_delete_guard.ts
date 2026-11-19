@@ -1,6 +1,6 @@
-// Whether the nightly live run may delete the throwaway repository it made (martha#639, R2).
+// Whether the live run may delete the throwaway repository it made (martha#639, R2).
 //
-// The run deletes one repository a night, with a token that reaches only the throwaway owner. A name is not enough to
+// The run deletes one repository per live run, with a token that reaches only the throwaway owner. A name is not enough to
 // stand on: a repository can be renamed or moved, and an owner's login can change. So the run reads the repository by
 // the numeric id it recorded when it made it, and deletes only when every field it reads then is the one this run
 // made: the owner's numeric id recorded at setup, this run's stamp in the name, a creation after this run started, and

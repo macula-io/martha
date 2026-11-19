@@ -362,22 +362,22 @@ jobs:
         with:
           node-version: '24'
       - run: prove_a_clean_install_in_a_throwaway_container/prove_a_clean_install_in_a_throwaway_container.sh --self-test
-      # The nightly live run's throwaway repository (martha#639): stand-in gh and git answer, so no GitHub call is
+      # The live run's throwaway repository (martha#639): stand-in gh and git answer, so no GitHub call is
       # made here, and each guard that keeps the bot's token to the bot is a case that fails by name.
       - run: prove_a_clean_install_in_a_throwaway_container/keep_a_throwaway_repository.sh --self-test
 
-  # The ring reaches the owner on a live night's own tmux (martha#843): the night's tmux is the 3.3a its pinned .deb
+  # The ring reaches the owner on a live run's own tmux (martha#843): the live run's tmux is the 3.3a its pinned .deb
   # installs in the image the proof pins, and what a pane can send an attached client changed between tmux versions,
   # so the real-tmux cases run there, both read from the proof's own scripts. Green only when every case ran and passed.
-  night-ring:
-    name: the ring reaches the owner on the night's tmux
+  live-run-ring:
+    name: the ring reaches the owner on the live run's tmux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - run: prove_a_clean_install_in_a_throwaway_container/the_ring_on_the_nights_pinned_tmux.sh
+      - run: prove_a_clean_install_in_a_throwaway_container/the_ring_on_the_live_runs_pinned_tmux.sh
 
   # Every workflow is one GitHub accepts (martha#21 r=3): a workflow GitHub rejects
   # never runs, and the only sign is a failed run with no jobs, which nobody reads.
