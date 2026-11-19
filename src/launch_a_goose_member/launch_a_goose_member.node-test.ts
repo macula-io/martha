@@ -396,7 +396,7 @@ test('a launch on a checkout the owner has not approved is refused before anythi
   assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch made its root')
 })
 
-test('a place naming another host is refused, and an approved launch records its hints before the engine starts (martha#541)', async (t) => {
+test('a place naming another host is refused, and an approved launch records its hints, each naming the file and the source it is (martha#541)', async (t) => {
   const { root, place, checkout } = anApprovedLaunch(t)
   const wrongHost = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place: { ...place, host: 'opencode' }, model: A_MODEL })
   assert.ok('refusal' in wrongHost, 'a place for another host started the engine')

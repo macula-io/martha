@@ -147,14 +147,14 @@ export const ENGINE_FILES: readonly string[] = Object.values(ENGINE_FAMILIES).fl
 export const AGENTS_MD_FILE = 'AGENTS.md'
 
 /**
- * The checkout files the engine reads into its prompt before its first turn: the names its own source spells, read at
- * the pinned commit (`GOOSE_HINTS_FILENAME` and `AGENTS_MD_FILENAME` in crates/goose/src/hints/load_hints.rs). They
- * start nothing, so no gate refuses a checkout for holding one; the launch records each it finds (martha#541, and
- * ../inbound_paths' A25 and A26).
+ * The checkout files the engine reads into its prompt with no tool call: the names its own source spells, read at
+ * the pinned commit (`GOOSE_HINTS_FILENAME` and `AGENTS_MD_FILENAME` in crates/goose/src/hints/load_hints.rs). The
+ * engine reads them at the start and again on every model request. They start nothing, so no gate refuses a checkout
+ * for holding one; the launch records each it finds (martha#541, and ../inbound_paths' A25 and A26).
  */
 export const RECORDED_TEXT_FILES: readonly string[] = [ENGINE_HINTS_FILE, AGENTS_MD_FILE]
 
-/** One file the engine attaches to its prompt before the first turn: where it is, and the source it is recorded as. */
+/** One file the engine attaches to its prompt with no tool call: where it is, and the source it is recorded as. */
 export interface ATextAStartLoads {
   /** The name the engine's own source spells: one of RECORDED_TEXT_FILES. */
   readonly file: string
@@ -164,10 +164,12 @@ export interface ATextAStartLoads {
 }
 
 /**
- * The files the engine attaches to its prompt before its first turn, from the checkout it starts in, each recorded as
+ * The files the engine attaches to its prompt with no tool call, from the checkout it starts in, each recorded as
  * the checkout's own file (`checkout_file`). The engine reads them, at the pinned commit, from the working directory
  * and every directory up to the git root (`find_git_root`, then `get_local_directories`), root first; when no
- * directory above holds a `.git`, only the working directory.
+ * directory above holds a `.git`, only the working directory. It reads them again on every model request
+ * (`prompt_manager.rs`'s `with_hints` on each `build_system_prompt`), so this record is the start's reading, and a file
+ * changed after the start reaches the engine with no record naming it.
  *
  * Nothing here refuses: the launch decided on the owner's approved tree, and an approved tree's bytes are not text
  * taken in (2026-11-07, martha#127 and martha#132). This is the record the launch makes of that text, which

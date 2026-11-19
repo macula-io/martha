@@ -39,8 +39,9 @@
 // The launch is decided through `prepareLaunch` (../refuse_launch_of_unapproved_config), the same call every
 // other host's launch goes through: a checkout holding any of the engine's own config files the owner has not
 // approved starts nothing, and the gate's snapshot is removed whenever the launch ends. The checkout's own hint
-// files, which the engine attaches to its prompt before the first turn, are recorded with the source they are
-// (`theTextAStartLoads`), as ../inbound_paths' A25 and A26 say.
+// files, which the engine attaches to its prompt with no tool call, are recorded with the source they are
+// (`theTextAStartLoads`), as ../inbound_paths' A25 and A26 say. The engine reads the same files again on every model
+// request, so the record is the start's reading of them, not the last word on what the engine attaches.
 //
 // Three gaps are named here rather than closed, and none is silent:
 //   - Skills. On the pinned build `load_skill` is offered to every session and is not a platform
@@ -290,10 +291,12 @@ export interface AGooseLaunch {
   /** The config file written for this launch, under its own root. */
   readonly config_at: string
   /**
-   * The checkout's own text the engine attaches to the prompt before its first turn, each with the source it is
-   * recorded as (martha#541, the Supervisor's ruling on the `recorded-source` kind): the launch's record of where that
-   * text came from. A clean tree's approval is the control on it (2026-11-07, martha#127 and martha#132), so the
-   * record refuses nothing; it is what ../inbound_paths's A25 and A26 say the launcher makes.
+   * The checkout's own text the engine attaches to the prompt with no tool call, each with the source it is recorded as
+   * (martha#541, the Supervisor's ruling on the `recorded-source` kind): the launch's record of where that text came
+   * from, taken before the engine is started. The engine reads the same files again on every model request, so this is
+   * the start's reading and a file changed later reaches the engine with no record naming it. A clean tree's approval
+   * is the control on it (2026-11-07, martha#127 and martha#132), so the record refuses nothing; it is what
+   * ../inbound_paths's A25 and A26 say the launcher makes.
    */
   readonly text_a_start_loads: readonly ATextAStartLoads[]
   readonly engine: TheEngineStarted
@@ -368,6 +371,10 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
  * What a launch makes once the gate has decided: the checkout's text the engine will attach, read before anything of
  * the launch's is made and so before the engine starts, its places and the config root written inside them, or the
  * refusal. A read that fails is a refusal like any other: nothing of the launch's is left, and no engine starts.
+ *
+ * That order is the code's own and no test pins it: a stand-in engine's first instruction races the line after `spawn`,
+ * which promises that the engine was exec'd and not that it has run, so a record read after the start cannot be made to
+ * differ on purpose. It matters little: the engine reads the same files again on every model request (A25 and A26).
  */
 function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly places: ThePlacesOfALaunch; readonly config_at: string; readonly text_a_start_loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
   const leaveNothingBehind = (why: string, folders: readonly string[] = []): { readonly refusal: string } => {
