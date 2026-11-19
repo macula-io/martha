@@ -8,15 +8,14 @@
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { TestContext } from 'node:test'
 
 import type { MemberRelay } from '../answer_the_relay/answer_the_relay.ts'
+import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { THE_PATH_A_LAUNCH_GIVES } from '../launch_a_goose_member/launch_a_goose_member.ts'
-import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { makeRelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { serveTheRelay, type RelayServer } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { theToolServersEntry, type AnEntrysValue, type TheToolServersEntry } from './the_tool_servers_entry.ts'
@@ -52,8 +51,8 @@ export function theEntrysValue(entry: TheToolServersEntry, key: string): AnEntry
  * tool call with `answering(body)`; the other questions a relay hears are not this server's, and throw.
  */
 export async function aScriptedRelay(t: TestContext, answering: (body: AskedOfTheLauncher) => TheLaunchersAnswer): Promise<AScriptedRelay> {
-  const scratch = mkdtempSync(join(tmpdir(), 'martha-tool-server-'))
-  t.after(() => removeTheTree(scratch))
+  // A socket address holds about a hundred bytes, and CI runs the suite under a long TMPDIR on purpose (martha#79).
+  const scratch = shortRelayRoot(t)
   const made = makeRelayDirectory(join(scratch, 'a-launchs-relay'))
   if (!made.made) throw new Error(made.refusal)
   const checkout = mkdtempSync(join(scratch, 'checkout-'))
