@@ -83,6 +83,8 @@ export class GooseOverAcp {
   readonly answers: Answers = { next: 'reject_once', asked: [] }
   readonly notes: string[] = []
   readonly #stdin: Writable
+  readonly #out: Readable
+  readonly #err: Readable
   readonly #pending = new Map<number, Pending>()
   readonly #keep: KeepTheExchange
   #nextId = 1
@@ -92,6 +94,8 @@ export class GooseOverAcp {
     this.#stdin = child.stdin as Writable
     this.#keep = keep
     const out = child.stdout as Readable
+    this.#out = out
+    this.#err = child.stderr as Readable
     out.setEncoding('utf8')
     out.on('data', (chunk: string) => this.#read(chunk))
     // The pipe's end is when everything written has been read: a message the kill cut off before its newline is
@@ -109,6 +113,21 @@ export class GooseOverAcp {
     const rest = this.#buffered.trim()
     this.#buffered = ''
     if (rest !== '') this.#handleLine(rest)
+  }
+
+  /**
+   * The launch is over: the exchange's rest is kept, and the three pipes are the driver's own ends to close
+   * (martha#725). An engine's output can stay open long after its group is dead — a builtin extension can start a
+   * process in a session of its own, and that process inherits the engine's stdout and stderr — and a pipe node still
+   * holds is a handle the driver is kept alive for. On the fork's run that was six minutes past every verdict, and
+   * the runner's SIGTERM at the ten-minute bound was the only thing that ended the launch. Closing here ends nothing
+   * the engine wrote that has already been read, and the exchange has been kept as it crossed.
+   */
+  close(): void {
+    this.closeTheExchange()
+    this.#stdin.end()
+    this.#out.destroy()
+    this.#err.destroy()
   }
 
   /** One request, answered by the agent, whatever it is. */
