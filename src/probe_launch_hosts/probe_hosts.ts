@@ -48,7 +48,9 @@ import {
   SWITCH_PROBES,
   SWITCHES_WITHOUT_A_PROBE,
 } from '../probe_the_owners_hooks/probe_the_owners_hooks.ts'
-import { OWNER_SCOPE_PROBES, SYNCED_PROBES, TRASH_PROBE } from '../probe_the_owners_own_folders/probe_the_owners_own_folders.ts'
+import { APPROVED_SKILLS_PROBES, OWNER_SCOPE_PROBES, SYNCED_PROBES, TRASH_PROBE } from '../probe_the_owners_own_folders/probe_the_owners_own_folders.ts'
+import { theCarriedSkills } from '../refuse_launch_of_unapproved_config/carry_the_approved_skills.ts'
+import { SKILLS_KIND } from '../load_the_hosts_markdown/the_skills_folders.ts'
 import { reportMemoryProbe } from '../probe_the_hosts_auto_memory/probe_the_hosts_auto_memory.ts'
 
 function version(command: string): string {
@@ -89,6 +91,10 @@ function switchesFor(probe: Probe, place: Place, inherited: Record<string, strin
   if (!prepared.allow) return prepared.refusal
   const gate = gateRefusal(probe, inherited, prepared)
   if (gate !== undefined) return { gate }
+  if (probe.carries_skills === true) {
+    const skills = join(dirname(ownerSettingsPath(place)), SKILLS_KIND)
+    for (const [path, bytes] of Object.entries(theCarriedSkills(prepared.carried_files))) put(skills, path, Buffer.from(bytes).toString('utf8'))
+  }
   probe.planted(place)
   return prepared.switches
 }
@@ -238,6 +244,7 @@ export const ALL_PROBES: readonly Probe[] = [
   ...HOST_KEY_PROBES,
   TRASH_PROBE,
   ...SYNCED_PROBES,
+  ...APPROVED_SKILLS_PROBES,
   ...OWNER_SCOPE_PROBES,
 ]
 

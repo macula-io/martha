@@ -87,6 +87,12 @@ export interface Probe {
    * is asked for json output, and this reads the refusal out of it.
    */
   readonly from_output?: (place: Place, printed: string) => Readonly<Record<string, boolean>>
+  /**
+   * Copy the planned launch's carried skills into the config folder CLAUDE_CONFIG_DIR names, under `skills/`, as the
+   * launcher writes them into a member's own config folder (martha#747). A row that leaves it out is the control: the
+   * same start, the same folder, with no copies in it.
+   */
+  readonly carries_skills?: true
 }
 
 /** One file of the owner's own markdown, at `<config folder>/<folder>/<name>`. */

@@ -243,6 +243,13 @@ What the plan leaves out, stated rather than hidden:
   `.opencode` directory (its plugins) are fingerprinted but never loaded;
   `prepareLaunch` returns them as `not_carried` for the launcher to show the
   owner.
+- **Claude Code's skills are carried, with no switch** (martha#747). The start
+  folder's own `.claude/skills` is approved file by file, hashed again as it is
+  copied, and written into the member's own config folder under `skills/`, which
+  the host reads as user-scope skills while project settings stay off. A skill in a
+  folder above the start is fingerprinted and listed as not carried. A skill named
+  `synced` or `.trash` is refused, and bare mode and the host skill catalog
+  variable are dropped from the member's environment. Row A25 states what is left.
 - **The tree does not cover** a file git ignores and does not track — the
   checkout's author cannot ship one; it is written on this machine by a command
   the member ran (A13) — nor the inside of a submodule beyond the commit its

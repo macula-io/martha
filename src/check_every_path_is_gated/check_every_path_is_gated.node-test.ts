@@ -63,7 +63,7 @@ const coverageOf = (
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 24 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 25 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 10 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 9 }, (_, index) => `C${index + 1}`),
   ]
@@ -97,6 +97,25 @@ test('two rows sharing an id make the check fail, and it names both rows (martha
   const twin: InboundPath = { ...shipped, what: 'a planted twin of A1' }
   const gaps = coverageOf([...INBOUND_PATHS, twin], gateRefuses)
   assert.deepEqual(gaps, [{ path: 'A1', why: `the id is held by 2 rows: ${shipped.what}; a planted twin of A1` }])
+})
+
+// T10 (martha#747): the row for the approved checkout's skills, which hands the model text from approved bytes.
+const SKILLS_ROW = INBOUND_PATHS.find((path) => path.what.includes('(.claude/skills)') && path.what.includes('martha#747'))
+
+test("T10: the row for the approved checkout's skills is text from approved bytes, and the check passes with it (martha#747)", () => {
+  assert.ok(SKILLS_ROW !== undefined, 'the register has a row for the approved skills')
+  assert.equal(SKILLS_ROW.klass, 'delivered')
+  assert.equal(SKILLS_ROW.control.kind, 'approved-text')
+  assert.deepEqual(coverageOf(INBOUND_PATHS, gateRefuses).filter((gap) => gap.path === SKILLS_ROW.id), [])
+})
+
+test('T10: the skills row written as code the host starts, or with its control left out, fails by name (martha#747)', () => {
+  assert.ok(SKILLS_ROW !== undefined)
+  const rest = INBOUND_PATHS.filter((path) => path !== SKILLS_ROW)
+  const launched = coverageOf([...rest, { ...SKILLS_ROW, klass: 'launched' }], gateRefuses)
+  assert.deepEqual(launched, [{ path: SKILLS_ROW.id, why: 'is code the host starts by itself, and approved-text does not stand in front of that' }])
+  const uncontrolled = coverageOf([...rest, { ...SKILLS_ROW, control: { kind: 'none' } }], gateRefuses)
+  assert.deepEqual(uncontrolled.map((gap) => gap.path), [SKILLS_ROW.id])
 })
 
 test('a planted path whose control was left out altogether makes the check fail', () => {
