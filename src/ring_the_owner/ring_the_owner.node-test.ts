@@ -13,7 +13,7 @@ import { OWNER } from '../declare_crew/declare_crew.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { takeAnOwnerDialog, type RaisingADialog } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
-import { NO_BELLS, NOTIFICATION_ENDING, NOTIFICATION_ESCAPE, notificationIdOf, theBellsFor, theCloseOf, THE_BELL, type TheBellsSwitch } from './ring_the_owner.ts'
+import { isInsideTmux, NO_BELLS, NOTIFICATION_ENDING, NOTIFICATION_ESCAPE, notificationIdOf, theBellsFor, theCloseOf, THE_BELL, type TheBellsSwitch } from './ring_the_owner.ts'
 import { EDIT_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 const BOTH: TheBellsSwitch = { bell: true, notify: true }
@@ -192,3 +192,46 @@ function theKeyOfThePermission(): string {
   const held = asking(200).dialogs ?? []
   return held[0]?.key ?? ''
 }
+
+// Inside tmux (martha#843). The passthrough's bytes are spelled here as tmux's own manual spells them, not read from the
+// slice: a test that built them from the constant it pins would pass whatever the constant said.
+const PASSTHROUGH_OPENING = '\x1bPtmux;'
+const STRING_TERMINATOR = '\x1b\\'
+const AN_ESC = '\x1b'
+
+/** What tmux hands an attached client for one passthrough: the content with its doubled ESCs single again. */
+function whatTmuxHandsOn(bytes: string): string {
+  assert.ok(bytes.startsWith(PASSTHROUGH_OPENING), 'it opens tmux\'s passthrough')
+  assert.ok(bytes.endsWith(STRING_TERMINATOR), 'and ends it')
+  const inside = bytes.slice(PASSTHROUGH_OPENING.length, -STRING_TERMINATOR.length)
+  assert.equal(inside.replaceAll(`${AN_ESC}${AN_ESC}`, '').includes(AN_ESC), false, 'every ESC inside is doubled, so none ends the passthrough early')
+  return inside.replaceAll(`${AN_ESC}${AN_ESC}`, AN_ESC)
+}
+
+test('inside tmux the notification goes through tmux\'s passthrough, ESCs doubled, and the bell stays bare (martha#843)', () => {
+  const first = asking(200)
+  const bare = theBellsFor(row(), first, { bell: false, notify: true }, true, false)
+  const inside = theBellsFor(row(), first, { bell: false, notify: true }, true, false, true)
+
+  assert.equal(inside, `${PASSTHROUGH_OPENING}${bare.replaceAll(AN_ESC, `${AN_ESC}${AN_ESC}`)}${STRING_TERMINATOR}`, 'exactly the notification inside one passthrough')
+  assert.equal(whatTmuxHandsOn(inside), bare, 'and what tmux hands on is the notification a terminal outside tmux is sent')
+  assert.equal(theBellsFor(row(), first, { bell: true, notify: false }, true, false, true), THE_BELL, 'the bell alone is still the one byte: tmux rings it itself')
+  assert.equal(theBellsFor(row(), first, BOTH, true, false, true), `${THE_BELL}${inside}`, 'both: the bare bell, then the notification through the passthrough')
+})
+
+test('inside tmux the close goes through the passthrough too, and outside it nothing is wrapped (martha#843)', () => {
+  const first = asking(200)
+  const answered = takeAnOwnerDialog(first, { change: 'closed', at: 300, key: theKeyOfThePermission() })
+  const close = theBellsFor(first, answered, { bell: false, notify: true }, true, false, true)
+
+  assert.equal(whatTmuxHandsOn(close), theCloseOf('Vesta'), 'the close, handed on as it is')
+  assert.equal(theBellsFor(first, answered, { bell: false, notify: true }, true, false).includes(PASSTHROUGH_OPENING), false, 'outside tmux the close is bare')
+  assert.equal(theBellsFor(row(), first, BOTH, true, false).includes(PASSTHROUGH_OPENING), false, 'and so is the notification')
+  assert.equal(theBellsFor(row(), first, BOTH, false, false, true), '', 'with no terminal of the owner\'s, inside tmux or not, nothing is sent')
+})
+
+test('a launcher is inside tmux when tmux set its variable to something, and only then (martha#843)', () => {
+  assert.equal(isInsideTmux({ TMUX: '/tmp/tmux-1000/night,4242,0' }), true, 'a pane of the night\'s server')
+  assert.equal(isInsideTmux({}), false, 'no tmux')
+  assert.equal(isInsideTmux({ TMUX: '' }), false, 'a variable emptied is no tmux')
+})

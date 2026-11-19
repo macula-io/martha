@@ -1,7 +1,7 @@
-// git, as the redo program runs it in the clone it was pointed at (martha#381, martha#339).
+// git, as the picture check runs it in the repository it reads (martha#627).
 //
-// The program's three modes (the redo, the classifier and the judge) each ask git of one repository, with Martha's own
-// settings in front of every run (../run_marthas_own_git). This holds that once, so a mode never spells it again.
+// Every run carries Martha's own settings in front (../run_marthas_own_git). This holds that once, so the check never
+// spells it again.
 
 import { spawnSync } from 'node:child_process'
 

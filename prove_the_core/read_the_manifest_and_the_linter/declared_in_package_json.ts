@@ -13,9 +13,6 @@ export const CORE = 'src'
 /** Every package in martha whose tests npm test runs, by folder: the repository's and the installer's. */
 export const PACKAGES: readonly string[] = ['.', 'installer']
 
-/** The script package.json runs the host ceiling check by: the words a landing runs and a failure prints come from here. */
-export const HOST_CEILINGS_SCRIPT = 'check:host-ceilings'
-
 export interface Manifest {
   readonly scripts: Readonly<Record<string, string>>
   readonly martha?: {
@@ -24,15 +21,9 @@ export interface Manifest {
     readonly hostAdapters?: readonly string[]
     /** Files inside a host adapter that are decisions, not the adapter's machinery (martha#158). */
     readonly decisionFiles?: readonly string[]
-    /** How many code lines each host directory may hold, by the directory package.json declares (martha#322). */
-    readonly hostCeilings?: Readonly<Record<string, number>>
-    /** How many code lines any core slice may hold (martha#415). */
-    readonly sliceCap?: number
-    /** The core slices measured above the cap, each at its own ceiling (martha#415). */
-    readonly sliceCeilings?: Readonly<Record<string, number>>
     /** The directories only one program loads, each mapped to that program's directory, both as <core>/<directory> (martha#443). */
     readonly programParts?: Readonly<Record<string, string>>
-    readonly packageImports?: Readonly<Record<string, string>>
+    readonly packageImports?: Readonly<Record<string, string | readonly string[]>>
     readonly loaderImports?: Readonly<Record<string, string>>
   }
 }
@@ -160,9 +151,13 @@ export function codeFoldersOf(manifest: Manifest): string[] {
 export const loaderImportsOf = (manifest: Manifest): Readonly<Record<string, string>> =>
   manifest.martha?.loaderImports ?? {}
 
-/** Each package code may import, with the one folder whose files may import it. */
-export const packageImportsOf = (manifest: Manifest): Readonly<Record<string, string>> =>
-  manifest.martha?.packageImports ?? {}
+/**
+ * Each package code may import, with the folders whose files may import it: one folder, or a list of them. A folder is
+ * a path from the repository's top, `prove_the_core` or `src/record_claude_code_host`, so a package can be allowed
+ * in one core slice without the whole core (martha#811).
+ */
+export const packageImportsOf = (manifest: Manifest): Readonly<Record<string, readonly string[]>> =>
+  Object.fromEntries(Object.entries(manifest.martha?.packageImports ?? {}).map(([name, folders]) => [name, typeof folders === 'string' ? [folders] : folders]))
 
 /** Whether a path under the core is a test file the test script runs. */
 export const isTestFile = (test_suffixes: readonly string[], path: string): boolean =>

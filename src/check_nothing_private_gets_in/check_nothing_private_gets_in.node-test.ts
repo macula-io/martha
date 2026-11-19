@@ -9,6 +9,7 @@ import { test } from 'node:test'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   privateHitsIn,
+  refusedValuesIn,
   SYNTHETIC,
   type Resolve,
   type Rules,
@@ -47,9 +48,15 @@ const unreachable: Resolve = async () => {
   throw new Error('GitHub answered 503')
 }
 
-const one = (text: string): Source[] => [{ name: 'note.md', lines: [{ where: 'note.md:1', text }] }]
+// Where the one-line source's line is, as a hit or a lookup's error names it.
+const HERE = 'note.md:1'
+const one = (text: string): Source[] => [{ name: 'note.md', lines: [{ where: HERE, text }] }]
 const hitsOf = async (text: string, rules: Rules = strict, resolve: Resolve = resolveFixed) =>
   (await privateHitsIn(one(text), rules, resolve)).map((hit) => hit.what)
+// What each class refuses in a line, value and all: the printed hits withhold every value
+// (martha#855), so a test that pins which value a class refuses reads it here.
+const refusedIn = async (text: string, rules: Rules = strict) =>
+  refusedValuesIn(text, rules).map((refused) => `${refused.what} (${refused.value})`)
 
 test('a clean line passes', async () => {
   assert.deepEqual(await hitsOf('Nothing private here; see martha#14 and crew@macula.io.'), [])
@@ -63,13 +70,13 @@ test('a link to a private issue is refused, in each form it is written', async (
     `https://github.com/${PRIVATE}/issues/123`,
     `https://github.com/${PRIVATE}/pull/7#discussion_r1`,
   ]) {
-    assert.deepEqual(await hitsOf(text), [`a repository that is not public (${PRIVATE})`], text)
+    assert.deepEqual(await hitsOf(text), [`a repository that is not public (value withheld)`], text)
   }
 })
 
 test('a shorthand reference to another repository is refused, this repository\'s own passes', async () => {
   assert.deepEqual(await hitsOf('see synthetic-repo#12'), [
-    'a shorthand reference to another repository (synthetic-repo#...): write owner/repo#n so it can be checked',
+    'a shorthand reference to another repository (value withheld): write owner/repo#n so it can be checked',
   ])
   assert.deepEqual(await hitsOf('see martha#14 and #2'), [])
 })
@@ -83,16 +90,16 @@ test('a hyphen separating a word from its reference is not a repository name', a
   assert.deepEqual(await hitsOf('MC, the pre-#189 original that #137 quotes'), [])
   assert.deepEqual(await hitsOf('the post-#12 cleanup'), [])
   assert.deepEqual(await hitsOf('synthetic-repo#112'), [
-    'a shorthand reference to another repository (synthetic-repo#...): write owner/repo#n so it can be checked',
+    'a shorthand reference to another repository (value withheld): write owner/repo#n so it can be checked',
   ])
-  assert.deepEqual(await hitsOf(`${PRIVATE}#464`), [`a repository that is not public (${PRIVATE})`])
+  assert.deepEqual(await hitsOf(`${PRIVATE}#464`), [`a repository that is not public (value withheld)`])
   // Only the hyphen is refused: a repository may end in a dot or an underscore,
   // and a reference to one must still be read. The name is built from a
   // constant, as `${PRIVATE}` is above, because the tree scan reads this file
   // too and its synthetic allowance stops at `synthetic-[a-z0-9-]+`.
   const endsInAnUnderscore = 'synthetic-repo_'
   assert.deepEqual(await hitsOf(`${endsInAnUnderscore}#13`), [
-    `a shorthand reference to another repository (${endsInAnUnderscore}#...): write owner/repo#n so it can be checked`,
+    `a shorthand reference to another repository (value withheld): write owner/repo#n so it can be checked`,
   ])
   // A one-letter name is a repository too: the guard makes the rest of the name
   // optional, and a rule that required it would read this reference as nothing
@@ -100,7 +107,7 @@ test('a hyphen separating a word from its reference is not a repository name', a
   // values around it, so the tree scan does not read this line as a reference.
   const oneLetter = 'q'
   assert.deepEqual(await hitsOf(`${oneLetter}#12`), [
-    `a shorthand reference to another repository (${oneLetter}#...): write owner/repo#n so it can be checked`,
+    `a shorthand reference to another repository (value withheld): write owner/repo#n so it can be checked`,
   ])
 })
 
@@ -110,7 +117,7 @@ test('a private remote is refused, over ssh, https and as a bare slug', async ()
     `MOD_REMOTE_FALLBACK="https://github.com/${PRIVATE}.git"`,
     `const FALLBACK = '${PRIVATE}'`,
   ]) {
-    assert.deepEqual(await hitsOf(text), [`a repository that is not public (${PRIVATE})`], text)
+    assert.deepEqual(await hitsOf(text), [`a repository that is not public (value withheld)`], text)
   }
 })
 
@@ -139,7 +146,7 @@ test('a GitHub host in any case is looked up', async () => {
     `git@GitHub.Com:${PRIVATE}.git`,
     `https://Raw.GitHubUserContent.com/${PRIVATE}/main/x`,
   ]) {
-    assert.deepEqual(await hitsOf(text), [`a repository that is not public (${PRIVATE})`], text)
+    assert.deepEqual(await hitsOf(text), [`a repository that is not public (value withheld)`], text)
   }
 })
 
@@ -149,9 +156,9 @@ test('a lab name is never printed: not in a shorthand, a repository, or the path
   const printed = async (where: string, text: string) =>
     (await privateHitsIn(at(where, text), strict, resolveAny)).map((hit) => `${hit.where} ${hit.what}`)
   const shorthand = await printed('note.md:1', `see ${labHost('ci-synthetic')}#3`)
-  assert.ok(shorthand.some((line) => line.includes('a shorthand reference to another repository (<lab host>#...)')), shorthand.join('|'))
+  assert.ok(shorthand.some((line) => line.includes('a shorthand reference to another repository (value withheld)')), shorthand.join('|'))
   const repo = await printed('note.md:1', 'see synthetic-owner/ci-synthetic.lab-config#2')
-  assert.ok(repo.some((line) => line.includes('a repository that is not public (synthetic-owner/<lab host>-config)')), repo.join('|'))
+  assert.ok(repo.some((line) => line.includes('a repository that is not public (value withheld)')), repo.join('|'))
   const path = await printed('path docs/ci-synthetic.lab-notes.md', 'docs/ci-synthetic.lab-notes.md')
   assert.deepEqual(path, ['path docs/<lab host>-notes.md a lab hostname (value withheld)'])
   for (const line of [...shorthand, ...repo, ...path]) assert.ok(!line.includes('ci-synthetic'), line)
@@ -175,6 +182,40 @@ test('a home directory is refused and never printed: a CI log of a public reposi
   assert.ok(!hits.join('\n').includes(user), `the hit printed the user name: ${hits.join('\n')}`)
 })
 
+// Every other class withholds its value too (martha#855): the reason is the log's, not the class's. Each value is
+// drawn here, so this file carries none, and each is one the strict rules refuse.
+const drawnOctet = () => String(1 + (randomBytes(1)[0] ?? 0) % 254)
+const WITHHELD_CLASSES: readonly { readonly what: string; readonly drawn: () => string }[] = [
+  { what: 'a private address', drawn: () => ['10', drawnOctet(), drawnOctet(), drawnOctet()].join('.') },
+  { what: 'an email address', drawn: () => `u${randomBytes(4).toString('hex')}@d${randomBytes(4).toString('hex')}.test` },
+  { what: `a ${ID_HEX_DIGITS}-hex id`, drawn: () => randomBytes(ID_HEX_DIGITS / 2).toString('hex') },
+]
+for (const { what, drawn } of WITHHELD_CLASSES) {
+  test(`${what} is refused and never printed: a CI log of a public repository is public (martha#855)`, async () => {
+    const value = drawn()
+    const hits = await hitsOf(`see ${value} here`)
+    assert.deepEqual(hits, [`${what} (value withheld)`])
+    assert.ok(!hits.join('\n').includes(value), `the hit printed the value: ${hits.join('\n')}`)
+  })
+}
+
+// A reference hit withholds the name it found, for the same reason (martha#855): a repository that is not public
+// is not seen by the public, and a shorthand may name one. Each name is drawn here, so this file carries none.
+const drawnName = (first: string) => `${first}${randomBytes(4).toString('hex')}`
+test('a repository that is not public is refused and its name never printed (martha#855)', async () => {
+  const repo = drawnName('r')
+  const notPublic: Resolve = async () => 'not_public'
+  const hits = await hitsOf(`see ${strict.owners[0] ?? ''}/${repo}#5`, strict, notPublic)
+  assert.deepEqual(hits, ['a repository that is not public (value withheld)'])
+  assert.ok(!hits.join('\n').includes(repo), `the hit printed the name: ${hits.join('\n')}`)
+})
+test('a shorthand reference is refused and its name never printed (martha#855)', async () => {
+  const name = drawnName('s')
+  const hits = await hitsOf(`see ${name}#5`)
+  assert.deepEqual(hits, ['a shorthand reference to another repository (value withheld): write owner/repo#n so it can be checked'])
+  assert.ok(!hits.join('\n').includes(name), `the hit printed the name: ${hits.join('\n')}`)
+})
+
 test('a lab machine name is not a private class: the owner dropped it (martha#773)', async () => {
   for (const text of ['it ran on synth03', 'it ran on SYNTH03', 'docs/synth04-notes.md', 'see synthetic-owner/open-thing and synth07']) {
     assert.deepEqual(await hitsOf(text), [], text)
@@ -183,10 +224,9 @@ test('a lab machine name is not a private class: the owner dropped it (martha#77
 
 test('the crew\'s other private-text classes are refused', async () => {
   assert.deepEqual(await hitsOf('see /home/synthetic/notes'), ['a home directory (value withheld)'])
-  assert.deepEqual(await hitsOf('dial 192.168.255.7'), ['a private address (192.168.255.7)'])
-  assert.deepEqual(await hitsOf('mail bob@synthetic.invalid'), ['an email address (bob@synthetic.invalid)'])
-  const id = 'a'.repeat(ID_HEX_DIGITS)
-  assert.deepEqual(await hitsOf(`node ${id}`), [hexHit(id)])
+  assert.deepEqual(await hitsOf('dial 192.168.255.7'), ['a private address (value withheld)'])
+  assert.deepEqual(await hitsOf('mail bob@synthetic.invalid'), ['an email address (value withheld)'])
+  assert.deepEqual(await hitsOf(`node ${'a'.repeat(ID_HEX_DIGITS)}`), [`a ${ID_HEX_DIGITS}-hex id (value withheld)`])
 })
 
 test('each synthetic form passes a real scan, so the tests that state them can be public', async () => {
@@ -222,7 +262,20 @@ test('a lookup that fails on a lab-named repository stops the check without prin
     throw new Error(`GitHub answered 401 for ${owner}/${repo}`)
   }
   await assert.rejects(hitsOf('see synthetic-owner/ci-synthetic.lab-config#2', strict, failing), (error: Error) => {
-    assert.equal(error.message, 'GitHub answered 401 for synthetic-owner/<lab host>-config')
+    assert.equal(error.message, `GitHub answered 401 for (value withheld) (the repository named at ${HERE})`)
+    return true
+  })
+})
+
+test('a lookup GitHub cannot answer (a rate limit, a 5xx) stops the check without printing the repository it asked about (martha#855)', async () => {
+  const owner = `o${randomBytes(4).toString('hex')}`
+  const repo = `r${randomBytes(4).toString('hex')}`
+  const failing: Resolve = async (asked, named) => {
+    throw new Error(`GitHub answered 503 for ${asked}/${named}`)
+  }
+  await assert.rejects(hitsOf(`see ${owner}/${repo}#2`, strict, failing), (error: Error) => {
+    assert.equal(error.message, `GitHub answered 503 for (value withheld) (the repository named at ${HERE})`)
+    assert.ok(!error.message.includes(owner) && !error.message.includes(repo), error.message)
     return true
   })
 })
@@ -259,8 +312,8 @@ test('a leak in a commit that a later commit removes is still found, and so is o
     const short = commits[0]?.slice(0, 12) ?? ''
     // Text classes are reported line by line, then the repositories that are not public.
     assert.deepEqual(hits, [
-      { where: `commit ${short} README.md:2`, what: 'a private address (192.168.255.7)' },
-      { where: `commit ${short} message:1`, what: `a repository that is not public (${PRIVATE})` },
+      { where: `commit ${short} README.md:2`, what: 'a private address (value withheld)' },
+      { where: `commit ${short} message:1`, what: `a repository that is not public (value withheld)` },
     ])
     assert.deepEqual(commitsOf(root, `${'0'.repeat(40)}..${head}`), [])
   } finally {
@@ -298,8 +351,8 @@ test('a path is read as well as its text, in the tree and in every commit, empty
 
 test('a declared public address passes as that exact string, and its domain does not', async () => {
   assert.deepEqual(await hitsOf('the key type ada@synthetic.invalid'), [])
-  assert.deepEqual(await hitsOf('the key type xada@synthetic.invalid'), ['an email address (xada@synthetic.invalid)'])
-  assert.deepEqual(await hitsOf('mail bob@synthetic.invalid'), ['an email address (bob@synthetic.invalid)'])
+  assert.deepEqual(await refusedIn('the key type xada@synthetic.invalid'), ['an email address (xada@synthetic.invalid)'])
+  assert.deepEqual(await refusedIn('mail bob@synthetic.invalid'), ['an email address (bob@synthetic.invalid)'])
 })
 
 // A public digest (martha#61). Real-shaped values are drawn at run time, so the
@@ -328,12 +381,12 @@ test('a real digest passes in every declared form, with no synthetic allowance',
 const assertRefusedBeside = async (name: string, digest: string, label: string) => {
   const id = realShaped()
   for (const text of [`${digest} ${label} ${id}`, `${digest}\t${id}`]) {
-    assert.deepEqual(await hitsOf(text), [hexHit(id)], `${name}: ${text}`)
+    assert.deepEqual(await refusedIn(text), [hexHit(id)], `${name}: ${text}`)
   }
   // Before it, the id is refused; a sha256sum line then no longer opens the
   // line, so its digest may be refused too, which errs on the closed side.
   const before = `${label} ${id} ${digest}`
-  assert.ok((await hitsOf(before)).includes(hexHit(id)), `${name}: ${before}`)
+  assert.ok((await refusedIn(before)).includes(hexHit(id)), `${name}: ${before}`)
 }
 
 test('a real-shaped node id or key beside an accepted digest is still refused', async () => {
@@ -381,14 +434,14 @@ test('a 64-hex string outside a declared form is refused', async () => {
     `https://example.org/?sha256=${id}`,
     `https://example.org/?a=1&sha256=${id}`,
   ]) {
-    assert.ok((await hitsOf(text)).includes(hexHit(id)), text)
+    assert.ok((await refusedIn(text)).includes(hexHit(id)), text)
   }
 })
 
 test('a declared form vouches only for the digest it holds, never a second id on the line', async () => {
   const [first, second] = [realShaped(), realShaped()]
-  assert.deepEqual(await hitsOf(`sha256: ${first} ${second}`), [hexHit(second)])
-  assert.deepEqual(await hitsOf(`echo "${first}  release.tar.gz" | sha256sum -c ${second}`), [hexHit(second)])
+  assert.deepEqual(await refusedIn(`sha256: ${first} ${second}`), [hexHit(second)])
+  assert.deepEqual(await refusedIn(`echo "${first}  release.tar.gz" | sha256sum -c ${second}`), [hexHit(second)])
 })
 
 // An id not standing alone (martha#64): glued to a word character, or inside a
@@ -405,7 +458,7 @@ test('a real-shaped id glued to a word character is refused, by the hex run it i
     [`x${id}  release.tar.gz`, id],
   ]
   for (const [text, run] of cases) {
-    assert.deepEqual(await hitsOf(text), [hexHit(run)], text)
+    assert.deepEqual(await refusedIn(text), [hexHit(run)], text)
   }
 })
 
@@ -413,21 +466,21 @@ test('a real-shaped id inside a longer hex run is refused, the run whole', async
   const [first, second] = [realShaped(), realShaped()]
   const tail = realShaped().slice(1)
   for (const run of [`${first}${second}`, `${first}${tail}`, `${tail}${first}`, `${first}0`]) {
-    assert.deepEqual(await hitsOf(`key ${run}`), [hexHit(run)], run)
+    assert.deepEqual(await refusedIn(`key ${run}`), [hexHit(run)], run)
   }
 })
 
 test('a declared digest form never vouches for a longer hex run', async () => {
   const run = `${realShaped()}${realShaped().slice(1)}`
   for (const { name, written } of writtenDigests) {
-    assert.deepEqual(await hitsOf(filled(written, run)), [hexHit(run)], `${name}: ${written}`)
+    assert.deepEqual(await refusedIn(filled(written, run)), [hexHit(run)], `${name}: ${written}`)
   }
 })
 
 test('a synthetic id passes only as a whole run, never glued to more hex', async () => {
   const synthetic = 'a'.repeat(ID_HEX_DIGITS)
   assert.deepEqual(await hitsOf(`node-${synthetic}x`, scanning), [])
-  assert.deepEqual(await hitsOf(`${synthetic}b`, scanning), [hexHit(`${synthetic}b`)])
+  assert.deepEqual(await refusedIn(`${synthetic}b`, scanning), [hexHit(`${synthetic}b`)])
 })
 
 // A git commit sha (sha1) is shorter than an id, so it stays outside this class.

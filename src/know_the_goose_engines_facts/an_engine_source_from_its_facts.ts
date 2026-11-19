@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { CHECKOUT_ROOT_CARRIERS, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type CheckoutSkillRoots, type EngineFacts, type EngineSource, type PlatformExtension, type ToolNaming } from './the_engines_facts_in_its_source.ts'
+import { CHECKOUT_ROOT_CARRIERS, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, SPLITS_ONCE, TELEMETRY_READERS, TOOL_CALL_META, type ASkillsSwitch, type CheckoutSkillRoots, type EngineFacts, type EngineSource, type PlatformExtension, type ToolNaming } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -146,6 +146,24 @@ function oneFilePerPath(files: ReadonlyArray<readonly [string, string]>): Readon
   return merged
 }
 
+/**
+ * The engine's telemetry file as it writes it (#541 row 6): another function first, reading another setting through a
+ * constant of its own, then an environment switch inside the choice function's braces, the choice read through its own
+ * constant, and the default given where every send asks.
+ */
+function telemetry(switched: EngineFacts['telemetry']): string {
+  const { enabled, choice } = TELEMETRY_READERS
+  const constant = `SETTING_READ_BY_${choice}`
+  return [
+    'pub const ANOTHER_CONSTANT: &str = "ANOTHER_SETTING";\n\n',
+    'pub fn another_switch() -> bool {\n    Config::global().get_param::<bool>(ANOTHER_CONSTANT).unwrap_or(true)\n}\n\n',
+    `pub const ${constant}: &str = "${switched.setting}";\n\n`,
+    `pub fn ${choice}() -> Option<bool> {\n    if TURNED_OFF_BY_ENV.load(Ordering::Relaxed) {\n        return Some(false);\n    }\n\n`,
+    `    let config = Config::global();\n    config.get_param::<bool>(${constant}).ok()\n}\n\n`,
+    `pub fn ${enabled}() -> bool {\n    ${choice}().unwrap_or(${String(switched.when_unset)})\n}\n`,
+  ].join('')
+}
+
 /** Every file of a tree that says `facts`, by its path in the checkout. */
 export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, string>> {
   const modes = facts.mode.values.map((mode) => `    #[strum(message = "a mode")]\n    ${pascalCase(mode)},\n`).join('')
@@ -165,6 +183,7 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.hint_files]: hintFiles(facts.hint_files),
     [ENGINE_PLACES.stdio_extension]: extensionConfig(facts.stdio_extension),
     [ENGINE_PLACES.session_context]: `pub const SESSION_ID_HEADER: &str = "${facts.tool_call_session_key}";\n\npub const TOOL_CALL_REQUEST_ID_HEADER: &str = "another-key";\n`,
+    [ENGINE_PLACES.telemetry]: telemetry(facts.telemetry),
     [ENGINE_PLACES.skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.skills_advertised, facts.skills_advertised),
     [ENGINE_PLACES.builtin_skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.builtin_skills_advertised, facts.builtin_skills_advertised),
     [ENGINE_PLACES.tool_call_meta]: toolCallMeta(facts.tool_naming),

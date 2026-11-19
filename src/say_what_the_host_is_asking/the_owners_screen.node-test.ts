@@ -15,11 +15,11 @@ import { after, test } from 'node:test'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { notificationIdOf, theBellsFor, theCloseOf, THE_BELL } from '../ring_the_owner/ring_the_owner.ts'
+import { notificationIdOf, theBellsFor, theCloseOf, THE_BELL, TMUX_PASSTHROUGH_OPENING } from '../ring_the_owner/ring_the_owner.ts'
 import { IDLE, theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { MENU_TOOL } from './say_what_the_host_is_asking.ts'
-import { theOwnersScreen, type AnOwnersScreen } from './the_owners_screen.ts'
+import { theOwnersScreen, theOwnersScreenOfALaunch, type AnOwnersScreen } from './the_owners_screen.ts'
 
 /** A store that keeps one member's row in memory, and can be told to refuse what it is given. */
 function aStore(held: DashboardRow | null = null, refusing = false): DashboardStore & { readonly kept: DashboardRow[] } {
@@ -216,4 +216,21 @@ test('#380 P1: one answer closing two dialogs closes both, and the row holds nei
 
   screen.heard('a-session', { said: 'answered', call: THE_ONE_CALL }, 22)
   assert.equal(store.read('Vesta')?.dialogs, undefined, 'the answer closed one dialog and the row kept the other, from one answer')
+})
+
+test('a launch whose terminal is a tmux pane sends its notification through tmux\'s passthrough, and one outside tmux does not (martha#843)', () => {
+  const rung = (environment: Readonly<Record<string, string | undefined>>): string[] => {
+    const wrote: string[] = []
+    const screen = theOwnersScreenOfALaunch({ member: 'Vesta', beats: aStore(aReportedRow()), declared_bells: true, muted: () => false, on_the_owners_terminal: true, environment, write: (bytes) => void wrote.push(bytes) })
+    screen.heard('a-session', { said: 'permission', call: A_PERMISSION }, 20)
+    return wrote
+  }
+  const passthrough = TMUX_PASSTHROUGH_OPENING
+
+  const inside = rung({ TMUX: '/tmp/tmux-1000/night,4242,0' })
+  assert.equal(inside.length, 1, 'one write, on the change into needs you')
+  assert.ok(inside[0]?.startsWith(`${THE_BELL}${passthrough}`), 'the bare bell, then the notification inside the passthrough')
+  const outside = rung({ TMUX: '' })
+  assert.equal(outside.length, 1)
+  assert.equal(outside[0]?.includes(passthrough), false, 'a launch outside tmux sends the notification as it is')
 })

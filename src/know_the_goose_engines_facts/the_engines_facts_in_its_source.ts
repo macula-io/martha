@@ -59,6 +59,11 @@ export interface EngineFacts {
   readonly stdio_extension: StdioExtension
   /** The key of a tool call's `_meta` the engine names the calling session under, so a tool server answers in that session. */
   readonly tool_call_session_key: string
+  /**
+   * The setting that opts the engine into sending usage events to its makers, and what an unset one means (#541,
+   * Jupiter's row 6): read from the function the engine asks before it sends anything, so a launch writes it off by name.
+   */
+  readonly telemetry: ATelemetrySwitch
   /** The setting that offers the model skills at all (`load_skill` and the list in the prompt), and its unset default (martha#839). */
   readonly skills_advertised: ASkillsSwitch
   /** The setting that offers the model the engine's compiled-in skills on their own, and its unset default (martha#839). */
@@ -115,6 +120,12 @@ export interface ASkillsSwitch {
   readonly when_unset: boolean
 }
 
+/** The engine's telemetry opt-in: the setting its choice is read from, and what the engine does when no choice is set. */
+export interface ATelemetrySwitch {
+  readonly setting: string
+  readonly when_unset: boolean
+}
+
 /** Reads one checkout of the engine: a file's text, or undefined when there is none; a directory's entries, or []. */
 export interface EngineSource {
   readonly read: (path: string) => string | undefined
@@ -137,6 +148,7 @@ export const ENGINE_PLACES = {
   hint_files: 'crates/goose/src/hints/load_hints.rs',
   stdio_extension: 'crates/goose-agent/src/extension.rs',
   session_context: 'crates/goose/src/session_context.rs',
+  telemetry: 'crates/goose/src/posthog.rs',
   skills_advertised: 'crates/goose/src/agents/services.rs',
   builtin_skills_advertised: 'crates/goose/src/skills/mod.rs',
   tool_call_meta: 'crates/goose/src/acp/server/tool_calls/conversion.rs',
@@ -167,6 +179,12 @@ export const CHECKOUT_ROOT_CARRIERS = {
 /** The function that reads each skills switch, in the file ENGINE_PLACES names for it (martha#839). */
 export const SKILLS_SWITCH_READERS = { skills_advertised: 'skills_advertised', builtin_skills_advertised: 'builtin_skills_advertised' } as const
 
+/**
+ * The two functions the engine's telemetry is decided by, in the file ENGINE_PLACES names: the one every send asks,
+ * which falls back to a default, and the one it asks in turn, which reads the setting.
+ */
+export const TELEMETRY_READERS = { enabled: 'is_telemetry_enabled', choice: 'get_telemetry_choice' } as const
+
 /** The constants the engine declares its two hint file names as, in the file that reads them (martha#785). */
 export const HINT_FILE_CONSTANTS = { goose_hints: 'GOOSE_HINTS_FILENAME', agents_md: 'AGENTS_MD_FILENAME' } as const
 
@@ -189,6 +207,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'hint files', read: (source) => ({ hint_files: hintFilesIn(source) }) },
   { part: 'stdio extension', read: (source) => ({ stdio_extension: stdioExtensionIn(source) }) },
   { part: 'tool call session key', read: (source) => ({ tool_call_session_key: toolCallSessionKeyIn(source) }) },
+  { part: 'telemetry switch', read: (source) => ({ telemetry: telemetryIn(source) }) },
   { part: 'skills switch', read: (source) => ({ skills_advertised: skillsSwitchIn(source, 'skills_advertised') }) },
   { part: 'built-in skills switch', read: (source) => ({ builtin_skills_advertised: skillsSwitchIn(source, 'builtin_skills_advertised') }) },
   { part: 'tool naming', read: (source) => ({ tool_naming: toolNamingIn(source) }) },
@@ -391,6 +410,25 @@ function stdioExtensionIn(source: EngineSource): StdioExtension {
 function toolCallSessionKeyIn(source: EngineSource): string {
   const path = ENGINE_PLACES.session_context
   return captured(fileOf(source, path), /pub const SESSION_ID_HEADER: &str = "([^"]+)"/, "the session key of a tool call's meta", path)
+}
+
+/**
+ * The telemetry opt-in, read as the engine decides it: the default comes from the function every send asks, and only
+ * when that function falls back on the choice function; the setting comes from the constant the choice function passes,
+ * never from the first constant in the file.
+ */
+function telemetryIn(source: EngineSource): ATelemetrySwitch {
+  const path = ENGINE_PLACES.telemetry
+  const text = fileOf(source, path)
+  const { enabled, choice } = TELEMETRY_READERS
+  const enabledBody = captured(text, new RegExp(`pub fn ${enabled}\\(\\)\\s*->\\s*bool\\s*\\{([^}]*)\\}`), `the function ${enabled}`, path)
+  const when_unset = captured(enabledBody, new RegExp(`${choice}\\(\\)\\s*\\.unwrap_or\\((true|false)\\)`), `the default ${enabled} gives when ${choice} has none`, path)
+  const choiceBody = captured(text, new RegExp(`pub fn ${choice}\\(\\)\\s*->\\s*Option<bool>\\s*\\{([\\s\\S]*?)\\n\\}`), `the function ${choice}`, path)
+  const constant = captured(choiceBody, /get_param::<bool>\((\w+)\)/, `the constant ${choice} reads`, path)
+  return {
+    setting: captured(text, new RegExp(`pub const ${constant}: &str = "([^"]+)";`), `the value of ${constant}`, path),
+    when_unset: when_unset === 'true',
+  }
 }
 
 /**
