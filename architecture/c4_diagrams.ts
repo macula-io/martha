@@ -246,6 +246,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: "the config text one Goose launch writes into its own root, read from the recorded engine's facts: the provider and the model, the mode that asks the client, slash commands off, one switch per platform extension, and the crew's tool server switched on (martha#541); nothing loads it until the one start call picks a member's host, and launch_a_goose_member's tests do today",
   },
   {
+    name: 'offer_approved_skills_to_a_goose_member',
+    why: "the skills one Goose launch offers its model: the checkout's skills on, the compiled-in ones off, and never the first without the row that places what load_skill returns (martha#614 slice 3); nothing loads it until the one start call picks a member's host, and its tests do today",
+  },
+  {
     name: 'serve_the_crews_tools_to_an_engine',
     why: "the crew's tool server for a Goose member: an MCP server on stdio over the crew's tools, each call answered by the launcher on the launch's relay socket with the launch's own token (martha#541 packages 7-8, part C); a Goose launch writes its entry, the engine starts it, and nothing loads it until the one start call picks a member's host",
   },
