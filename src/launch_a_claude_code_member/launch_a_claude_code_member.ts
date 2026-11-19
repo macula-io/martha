@@ -530,7 +530,7 @@ function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch, hearing: (journal: Re
   return {
     journal,
     telling: theMembersTelling({ member: launch.member_name, dashboard: launch.places.dashboard, rows: launch.places.rows, journal }),
-    screen: theOwnersScreenOfALaunch({ member: launch.member_name, beats: dashboardRowsIn(launch.places.dashboard), declared_bells: launch.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(launch.stdio), write: (bytes) => void process.stdout.write(bytes) }),
+    screen: theOwnersScreenOfALaunch({ member: launch.member_name, beats: dashboardRowsIn(launch.places.dashboard), declared_bells: launch.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(launch.stdio), environment: process.env, write: (bytes) => void process.stdout.write(bytes) }),
   }
 }
 

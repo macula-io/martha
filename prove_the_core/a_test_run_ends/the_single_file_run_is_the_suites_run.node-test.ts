@@ -15,9 +15,9 @@
 // refuse rather than go on without what it says.
 //
 // The plant the first case runs goes in prove_the_core/, the only place the suite's globs pick, under a name of its own
-// per run. Three checks read that folder while it is there: the ceiling check, which counts a test file for nothing; the
-// dropped-test check, which reads commits rather than the working tree; and the restated-values check, which judges
-// literals against exported constants — the plant's words restate none, and it exists only while one run of it does.
+// per run. Two checks read that folder while it is there: the dropped-test check, which reads commits rather than the
+// working tree; and the restated-values check, which judges literals against exported constants — the plant's words
+// restate none, and it exists only while one run of it does.
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'

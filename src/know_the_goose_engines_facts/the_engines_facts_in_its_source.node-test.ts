@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SKILLS_SWITCH_READERS, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILLS_SWITCH_READERS, TELEMETRY_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -144,6 +144,69 @@ test('a hint file the list names in a shape the reader does not know is unreadab
   assert.deepEqual(unreadable.map(({ part }) => part), [THE_HINT_FILES_PART()])
 })
 
+/** The part that reads the stdio entry, by the name a failed read reports. */
+const STDIO_PART = ENGINE_PARTS.find(({ read }) => 'stdio_extension' in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS))))?.part
+
+test("a field the stdio entry gains is read into its keys, and the next variant's fields are not", () => {
+  const stdio = RECORDED_FACTS.stdio_extension
+  const keys = [...stdio.keys, 'a_new_field']
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, stdio_extension: { ...stdio, keys } })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.stdio_extension?.keys, keys)
+})
+
+test('a dropped environment name in a shape the reader does not know makes the entry unreadable, never a shorter list', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const [first] = RECORDED_FACTS.stdio_extension.disallowed_env
+  assert.ok(first !== undefined, 'the recording names no dropped environment name')
+  const config = files[ENGINE_PLACES.stdio_extension] ?? ''
+  const unquoted = config.replace(`"${first}",`, 'A_CONSTANT_NAME,')
+  assert.notEqual(unquoted, config, 'the built tree holds no quoted name to unquote')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.stdio_extension]: unquoted }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [STDIO_PART])
+})
+
+test('an extension config with no stdio variant is unreadable, never an entry with no keys', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const config = files[ENGINE_PLACES.stdio_extension] ?? ''
+  const renamed = config.replace(/\bStdio \{/, 'Pipe {')
+  assert.notEqual(renamed, config, 'the built tree holds no stdio variant to rename')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.stdio_extension]: renamed }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [STDIO_PART])
+})
+
+test('the telemetry switch is read through the constant the choice function passes, with the default the enabled function gives (#541 row 6)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.telemetry
+  const { setting, when_unset } = RECORDED_FACTS.telemetry
+  const decoy = `pub const A_DECOY_SETTING: &str = "${setting}_DECOY";\n`
+  const flipped = (files[path] ?? '').replace(`unwrap_or(${String(when_unset)})`, `unwrap_or(${String(!when_unset)})`)
+  assert.notEqual(flipped, files[path], 'the built tree gives no default to flip')
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: `${decoy}${flipped}` }))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.telemetry, { setting, when_unset: !when_unset })
+})
+
+test('a default the enabled function takes from anything but the choice function is unreadable, never the recorded default (#541 row 6)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.telemetry
+  const elsewhere = (files[path] ?? '').replace(`${TELEMETRY_READERS.choice}().unwrap_or(`, 'another_choice().unwrap_or(')
+  assert.notEqual(elsewhere, files[path], 'the built tree has no enabled function asking the choice to rename')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: elsewhere }))
+  assert.equal(unreadable.length, 1)
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`the default ${TELEMETRY_READERS.enabled} gives`))
+})
+
+test('a telemetry file with no choice function is unreadable by its part, never a setting taken from the first constant (#541 row 6)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.telemetry
+  const renamed = (files[path] ?? '').replace(`pub fn ${TELEMETRY_READERS.choice}(`, 'pub fn another_function(')
+  assert.notEqual(renamed, files[path], 'the built tree has no choice function to rename')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: renamed }))
+  assert.equal(unreadable.length, 1)
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`the function ${TELEMETRY_READERS.choice}`))
+})
+
 test('each skills switch is read through the constant its function passes, never the first constant in the file (martha#839)', () => {
   for (const which of ['skills_advertised', 'builtin_skills_advertised'] as const) {
     const files = engineFilesSaying(RECORDED_FACTS)
@@ -165,4 +228,86 @@ test('a skills switch whose function is gone is unreadable by its own part, neve
     assert.equal(unreadable.length, 1, which)
     assert.match(unreadable[0]?.why ?? '', new RegExp(`the ${SKILLS_SWITCH_READERS[which]} switch`), which)
   }
+})
+
+test('the tool-naming path is read map by map from the meta builder, never a key another map or function fills (#541 part C4)', () => {
+  const naming = RECORDED_FACTS.tool_naming
+  for (const at of naming.meta_path.keys()) {
+    const meta_path = naming.meta_path.map((key, index) => (index === at ? `${key}Renamed` : key))
+    const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, tool_naming: { ...naming, meta_path } })))
+    assert.deepEqual(unreadable, [], String(at))
+    assert.deepEqual(facts.tool_naming?.meta_path, meta_path, String(at))
+  }
+})
+
+test('a tool name split at the other end is read as that end, with the separator the engine splits at (#541 part C4)', () => {
+  const naming = RECORDED_FACTS.tool_naming
+  const other = { split_at: naming.split_at === 'first' ? 'last' : 'first', separator: `${naming.separator}:` } as const
+  const { facts } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, tool_naming: { ...naming, ...other } })))
+  assert.deepEqual(facts.tool_naming, { ...naming, ...other })
+})
+
+test('a meta builder that is gone makes the tool naming unreadable by name, never a path guessed (#541 part C4)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const renamed = (files[ENGINE_PLACES.tool_call_meta] ?? '').replace(`fn ${TOOL_CALL_META.builder}(`, 'fn another_builder(')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.tool_call_meta]: renamed }))
+  assert.equal(unreadable.length, 1)
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`the function ${TOOL_CALL_META.builder}`))
+})
+
+/** The part that reads the shell tool, by the name a failed read reports. */
+const SHELL_PART = ENGINE_PARTS.find(({ read }) => 'shell_tool' in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS))))?.part
+
+test('a shell tool the engine renames is read under its new name, from the list and the dispatch both (#541 part C4)', () => {
+  const shell_tool = `${RECORDED_FACTS.shell_tool}_renamed`
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, shell_tool })))
+  assert.deepEqual(unreadable, [])
+  assert.equal(facts.shell_tool, shell_tool)
+})
+
+test('a Developer extension that lists no tool on the shell parameters makes the shell tool unreadable by name, never a name guessed (#541 part C4)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tools = files[ENGINE_PLACES.shell_tool] ?? ''
+  const gone = tools.replace(`Self::schema::<${SHELL_TOOL.params}>()`, 'Self::schema::<AnotherParams>()')
+  assert.notEqual(gone, tools, 'the built tree lists no shell tool to take away')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: gone }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`lists 0 tools on ${SHELL_TOOL.params}`))
+})
+
+test('a shell tool listed under one name and run under another is unreadable, never either name (#541 part C4)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tools = files[ENGINE_PLACES.shell_tool] ?? ''
+  const shell = RECORDED_FACTS.shell_tool
+  const split = tools.replace(`"${shell}" => match`, `"${shell}_elsewhere" => match`)
+  assert.notEqual(split, tools, 'the built tree dispatches no shell tool to rename')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: split }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`lists the shell tool as ${shell} but runs`))
+})
+
+test('a Developer extension that lists two tools on the shell parameters is unreadable, never the first of them (#541 part C4)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tools = files[ENGINE_PLACES.shell_tool] ?? ''
+  const shell = RECORDED_FACTS.shell_tool
+  const listed = `Tool::new("${shell}".to_string(), description, Self::schema::<${SHELL_TOOL.params}>())`
+  const twice = tools.replace(listed, `Tool::new("${shell}_too".to_string(), description, Self::schema::<${SHELL_TOOL.params}>())\n${listed}`)
+  assert.notEqual(twice, tools, 'the built tree lists no shell tool to list twice')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: twice }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`lists 2 tools on ${SHELL_TOOL.params}`))
+})
+
+test('a Developer extension that runs the shell parameters for a second name, after the listed one, is unreadable, never the first of them (#541 part C4 r=2 review; mutant: the dispatch count dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tools = files[ENGINE_PLACES.shell_tool] ?? ''
+  const shell = RECORDED_FACTS.shell_tool
+  const another = '"another_tool" => match'
+  const second = `"${shell}_also" => match Self::parse_args::<${SHELL_TOOL.params}>(arguments) {\n                Ok(params) => run(params),\n                Err(error) => fail(error),\n            },\n            ${another}`
+  const twice = tools.replace(another, second)
+  assert.notEqual(twice, tools, 'the built tree dispatches no other tool to put a second shell arm before')
+  assert.ok(twice.indexOf(`"${shell}" => match`) < twice.indexOf(`"${shell}_also" => match`), 'the second arm is not after the listed one, so the name comparison alone would refuse it')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: twice }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`lists the shell tool as ${shell} but runs`))
 })

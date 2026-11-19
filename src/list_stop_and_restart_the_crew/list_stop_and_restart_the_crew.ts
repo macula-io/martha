@@ -4,8 +4,8 @@
 //
 // Host adapter, and no decision of its own. The places are this machine's directories, read through the stores the
 // launcher writes; what a member is, and how a stop or a restart is asked and carried out, are
-// ../stop_and_restart_a_member's. It sits here rather than in ../run_the_martha_command because that adapter has a
-// ceiling and composes slices, so this wiring has a directory of its own, declared in package.json as an adapter.
+// ../stop_and_restart_a_member's. It sits here rather than in ../run_the_martha_command because that adapter
+// composes slices, so this wiring has a directory of its own, declared in package.json as an adapter.
 
 import { randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'

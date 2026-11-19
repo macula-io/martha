@@ -10,7 +10,7 @@
 // core, and the launcher keeps the two things that touch the machine.
 
 import { theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { NO_BELLS, theBellsFor, theBellsTheOwnerDeclared, type TheBellsSwitch } from '../ring_the_owner/ring_the_owner.ts'
+import { isInsideTmux, NO_BELLS, theBellsFor, theBellsTheOwnerDeclared, type TheBellsSwitch } from '../ring_the_owner/ring_the_owner.ts'
 import { takeAnOwnerDialog, type OwnerDialogEvent } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { NOTHING_IS_ASKED, theAsksAfter, type WhatTheHostIsAsking, type WhatTheHostSaid } from './say_what_the_host_is_asking.ts'
 
@@ -29,6 +29,8 @@ export interface AnOwnersScreen {
   readonly muted: () => boolean
   /** Whether the launcher has the owner's terminal at all: a member started without one rings nothing. */
   readonly onTheOwnersTerminal: boolean
+  /** Whether that terminal is a tmux pane, so a notification goes through tmux's passthrough (martha#843). */
+  readonly insideTmux?: boolean
   /** Writes the bell's bytes where the owner is looking. */
   write(bytes: string): void
 }
@@ -56,6 +58,8 @@ export interface TheScreenOfALaunch {
   readonly muted: () => boolean
   /** Whether the launcher has the owner's terminal at all. */
   readonly on_the_owners_terminal: boolean
+  /** The launcher's environment, which says whether that terminal is a tmux pane (martha#843). */
+  readonly environment: Readonly<Record<string, string | undefined>>
   /** Writes the bell's bytes where the owner is looking. */
   write(bytes: string): void
 }
@@ -72,6 +76,7 @@ export function theOwnersScreenOfALaunch(seen: TheScreenOfALaunch): TheScreenKee
     bells: seen.declared_bells === undefined ? NO_BELLS : theBellsTheOwnerDeclared(seen.declared_bells),
     muted: seen.muted,
     onTheOwnersTerminal: seen.on_the_owners_terminal,
+    insideTmux: isInsideTmux(seen.environment),
     write: seen.write,
   })
 }
@@ -109,7 +114,7 @@ function applyTheEvent(place: AnOwnersScreen, session_id: string, event: OwnerDi
   if (!answer.kept || seen.next === null) return
   // The bell is the row's own change, read from the row that was kept: a write the store refused is a change the owner
   // does not see, and a bell for it would say something happened that did not. No bytes is no write at all.
-  const bytes = theBellsFor(seen.before, seen.next, place.bells, place.onTheOwnersTerminal, place.muted())
+  const bytes = theBellsFor(seen.before, seen.next, place.bells, place.onTheOwnersTerminal, place.muted(), place.insideTmux === true)
   if (bytes !== '') place.write(bytes)
 }
 
