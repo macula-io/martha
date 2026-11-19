@@ -215,6 +215,8 @@ test('a start hands its launch the workspace its declaration lays out, and the c
  */
 const PLANTED = {
   member: 'Hygiea',
+  /** A second member of the planted crew, so the workspace's member list is read back whole. */
+  another_member: 'Themis',
   root: '/planted/project/place',
   home: '/planted/owners/home',
   snapshots: '/planted/state/snapshots',
@@ -248,7 +250,7 @@ const thePlantedDeclaration = (): CrewSettings =>
     paths: { crew: PLANTED.crew, conventions: PLANTED.conventions },
     mode: { name: PLANTED.mode, roles: PLANTED.roles, may: {} },
     house_rules: { workspace_layout: true, clones: PLANTED.clones, worktrees: PLANTED.worktrees },
-    members: [{ name: PLANTED.member }, { name: 'Themis' }],
+    members: [{ name: PLANTED.member }, { name: PLANTED.another_member }],
   }) as unknown as CrewSettings
 
 /** A start whose every field is a planted value, so what a real start builds is read back against its inputs. */
@@ -308,7 +310,7 @@ test('#784: a real start hands its launcher the launch it built, so a literal at
   assert.equal(launch.leftovers?.crew, planted.crew_stores.crew, 'the launch was given a crew store that is not the one the start holds')
   assert.deepEqual(
     launch.leftovers?.workspace,
-    { clones: PLANTED.clones, worktrees: PLANTED.worktrees, members: [PLANTED.member, 'Themis'] },
+    { clones: PLANTED.clones, worktrees: PLANTED.worktrees, members: [PLANTED.member, PLANTED.another_member] },
     'the launch was handed no workspace, or not the one its planted declaration lays out',
   )
 
