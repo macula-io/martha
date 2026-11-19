@@ -439,3 +439,28 @@ test('a store opened in two journal modes, or an extension state declared in a s
     assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
   }
 })
+
+/** The part that reads what approve mode runs unasked (#541 package A), asked inside a test so a broken reader fails that test by name. */
+const unaskedPart = (): string | undefined => partReading('approve_mode_unasked')
+
+test("what approve mode runs unasked is read as the engine writes it: each user permission level that allows, past a level that asks and a smart-approve-only allow, and the filter before the check (#541 package A, design r=6 R1''; mutants: the smart-approve allow counted, every level read)", () => {
+  const recorded = RECORDED_FACTS.approve_mode_unasked
+  const changed = { user_permissions: [...recorded.user_permissions, 'ask_before_too'], unadvertised: `${recorded.unadvertised}_too` }
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, approve_mode_unasked: changed })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.approve_mode_unasked, changed)
+})
+
+test('an approve-mode allow this reader does not know, or an approval that no longer allows what its filter keeps out, is unreadable by name (#541 package A; mutants: either throw dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const inspector = files[ENGINE_PLACES.permission_inspector] ?? ''
+  const another = inspector.replace('                        } else {\n', '                        } else if tool_name == "a_tool" {\n                            InspectionAction::Allow\n                        } else {\n')
+  const approval = files[ENGINE_PLACES.tool_approval] ?? ''
+  const asks = approval.replace('ApprovalDecision::Allow', 'ApprovalDecision::Ask { prompt: None }')
+  for (const [why, path, broken] of [['ways this reader does not know', ENGINE_PLACES.permission_inspector, another], ['no longer allows the calls', ENGINE_PLACES.tool_approval, asks]] as const) {
+    assert.notEqual(broken, files[path], `${why}: the tree did not change`)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: broken }))
+    assert.deepEqual(unreadable.map(({ part }) => part), [unaskedPart()], why)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
+  }
+})

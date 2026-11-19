@@ -273,6 +273,12 @@
       "context_relevance.v2"
     ]
   },
+  "approve_mode_unasked": {
+    "user_permissions": [
+      "always_allow"
+    ],
+    "unadvertised": "request_was_advertised"
+  },
   "secret_storage": {
     "keyring_switch": "GOOSE_DISABLE_KEYRING",
     "file": "secrets.yaml"

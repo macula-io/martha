@@ -101,6 +101,19 @@ export interface EngineFacts {
    * by these names, so a column the engine renames turns the drift check red rather than a read-back that reads nothing.
    */
   readonly session_store: SessionStore
+  /**
+   * The calls the engine's approve mode runs without asking the client (#541 package A, design r=6 R1''): the user
+   * permission levels its approve arm turns into an allow, and the function whose `false` keeps a call out of the
+   * inspection, which the approval then allows unasked. The launch stops a member on any call it was not asked about,
+   * so these are what that stop catches; a new way to go unasked turns the drift check red.
+   */
+  readonly approve_mode_unasked: ApproveModeUnasked
+}
+
+/** What approve mode runs unasked: the user permission levels that allow, and the filter that lets an uninspected call run. */
+export interface ApproveModeUnasked {
+  readonly user_permissions: readonly string[]
+  readonly unadvertised: string
 }
 
 /** The engine's session store: its file, its journal mode, its sessions table's columns, and its extension state keys. */
@@ -195,6 +208,8 @@ export const ENGINE_PLACES = {
   session_store: 'crates/goose/src/session/session_manager.rs',
   extension_states: 'crates/goose/src/session/extension_data.rs',
   context_relevance: 'crates/goose/src/agents/state_machine/ops_context_relevance.rs',
+  permission_inspector: 'crates/goose/src/permission/permission_inspector.rs',
+  tool_approval: 'crates/goose/src/agents/state_machine/tool_approval.rs',
 } as const
 
 /**
@@ -235,6 +250,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'developer tools', read: (source) => ({ developer_tools: developerToolsIn(source) }) },
   { part: 'path resolution', read: (source) => ({ path_resolution: pathResolutionIn(source) }) },
   { part: 'session store', read: (source) => ({ session_store: sessionStoreIn(source) }) },
+  { part: 'approve mode unasked', read: (source) => ({ approve_mode_unasked: approveModeUnaskedIn(source) }) },
   { part: 'secret storage', read: (source) => ({ secret_storage: secretStorageIn(source) }) },
 ]
 
@@ -636,6 +652,27 @@ function contextRelevanceIn(source: EngineSource): string {
   const text = fileOf(source, path)
   const name = captured(text, /pub\(super\) const NAME: &str = "([^"]+)";/, 'the context relevance state name', path)
   return `${name}.${captured(text, /pub\(super\) const VERSION: &str = "([^"]+)";/, 'the context relevance state version', path)}`
+}
+
+/**
+ * What the engine's approve mode runs unasked (#541 package A, design r=6 R1''), read from the arm of the permission
+ * check that approve mode shares with smart approve, and from the approval that filters calls before the check. The arm
+ * allows a call where a user permission level says so, or where the condition names smart approve alone; any other
+ * allow there is a way to go unasked this reader does not know, so the part is unreadable. The approval must still
+ * allow every call it filtered out, or the filter is not a way to go unasked and the part is unreadable too.
+ */
+function approveModeUnaskedIn(source: EngineSource): ApproveModeUnasked {
+  const inspector = ENGINE_PLACES.permission_inspector
+  const arm = captured(fileOf(source, inspector), /GooseMode::Approve \| GooseMode::SmartApprove => \{([\s\S]*?)\n\s*let reason/, 'the arm approve mode runs', inspector)
+  const user_permissions = [...arm.matchAll(/PermissionLevel::(\w+) => InspectionAction::Allow\b/g)].map((found) => snakeCase(found[1] ?? ''))
+  const smartOnly = [...arm.matchAll(/else if goose_mode == GooseMode::SmartApprove\b[^{]*\{\s*InspectionAction::Allow\b/g)].length
+  const unknown = [...arm.matchAll(/InspectionAction::Allow\b/g)].length - user_permissions.length - smartOnly
+  if (unknown !== 0) throw new Error(`${inspector} allows calls in approve mode ${String(unknown)} ways this reader does not know`)
+  const approval = ENGINE_PLACES.tool_approval
+  const text = fileOf(source, approval)
+  const unadvertised = captured(text, /\.filter\(\|request\| (\w+)\(messages, request\)\)/, 'the filter before the check', approval)
+  if (!/if to_inspect\.is_empty\(\) \{\s*return Ok\(requests\.iter\(\)\.map\(\|_\| ApprovalDecision::Allow\)/.test(text)) throw new Error(`${approval} no longer allows the calls ${unadvertised} keeps out of the check`)
+  return { user_permissions, unadvertised }
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */
