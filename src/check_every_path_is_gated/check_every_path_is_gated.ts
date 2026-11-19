@@ -29,7 +29,7 @@
 
 import { join } from 'node:path'
 
-import { ARGUMENT_GATES, ASK_GATES, COMMAND_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, type CommandGate, type Control, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { ARGUMENT_GATES, ASK_GATES, COMMAND_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, SOURCE_GATES, sourceRowGap, type CommandGate, type Control, type InboundPath, type SourceGate } from '../inbound_paths/inbound_paths.ts'
 import { MAX_ASK, type AnAsk } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import type { Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
@@ -154,8 +154,9 @@ export function gapsInGateCoverage(
   config_stand_in?: (probe: ConfigPathProbe) => PathProbe,
   ask_gates: Readonly<Record<string, AskGate>> = ASK_GATES,
   command_gates: Readonly<Record<string, CommandGate>> = COMMAND_GATES,
+  source_gates: Readonly<Record<string, SourceGate>> = SOURCE_GATES,
 ): readonly Gap[] {
-  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates, ask: ask_gates, command: command_gates }
+  const gates: Gates = { delivery: delivery_gates, launch: launch_gates, argument: argument_gates, path: path_gates, ask: ask_gates, command: command_gates, source: source_gates }
 
   // Both halves are kept: the rows two packages gave one id (martha#758) and every row's own gap. A resolution
   // that keeps only the second makes the shared-id check silent while it still type-checks.
@@ -188,6 +189,7 @@ interface Gates {
   readonly path: Readonly<Record<string, PathGate>>
   readonly ask: Readonly<Record<string, AskGate>>
   readonly command: Readonly<Record<string, CommandGate>>
+  readonly source: Readonly<Record<string, SourceGate>>
 }
 
 /**
@@ -222,6 +224,8 @@ function gapOfAClaimedControl(
   if (control.kind === 'refused-before-launch') return argumentRowGap(path, control.gate, gates.argument)
 
   if (control.kind === 'refused-as-a-command') return commandRowGap(path, control.gate, gates.command)
+
+  if (control.kind === 'recorded-source') return sourceRowGap(path, control.gate, gates.source)
 
   if (control.kind === 'ask-gate') return askRowGap(path, control.gate, gates.ask)
 

@@ -10,7 +10,7 @@
 // member that mistypes a path learns the difference at once.
 
 import type { CrewStore } from '../host_contract/host_contract.ts'
-import { namedThenTheRest, releaseKeyOf, THE_RELEASE_ACT, type IReleasedPath } from '../tell_a_member_what_its_relaunch_killed/tell_a_member_what_its_relaunch_killed.ts'
+import { namedThenTheRest, releaseKeyOf, theNameOf, THE_RELEASE_ACT, type IReleasedPath } from '../tell_a_member_what_its_relaunch_killed/tell_a_member_what_its_relaunch_killed.ts'
 import { keepTheReleaseOf, theLeftoverRecordOf, theReleasedPathsOf } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 
 /** What the act takes, as the mod registers it: under the name the refusals' own text tells the member to take. */
@@ -46,12 +46,18 @@ export interface AReleaseAsked {
   readonly trees?: readonly string[]
 }
 
+/**
+ * Whether a name is this leftover: its bare path, or the name both refusals print, `<worktree>: <path>` (martha#719 A1).
+ * The spelling comes from `theNameOf`, the one place that writes it, so what a refusal prints is what the act accepts.
+ */
+const theOneNamedBy = (one: { readonly path: string; readonly worktree?: string }, named: string): boolean => named === one.path || named === theNameOf(one)
+
 /** The paths that really stand as this member's leftovers, from those the member named: the act's own judgement. */
 const theStandingOnes = (crew: CrewStore, member: string, named: readonly string[]): readonly IReleasedPath[] => {
   const kept = theLeftoverRecordOf(crew, member)
   if (kept === undefined || 'refusal' in kept || 'unreadable' in kept) return []
   const standing = kept.record.leftovers
-  return named.flatMap((path) => standing.filter((one) => one.path === path).map((one) => ({ path: one.path, digest: one.digest, ...(one.worktree === undefined ? {} : { worktree: one.worktree }) })))
+  return named.flatMap((path) => standing.filter((one) => theOneNamedBy(one, path)).map((one) => ({ path: one.path, digest: one.digest, ...(one.worktree === undefined ? {} : { worktree: one.worktree }) })))
 }
 
 /** Why nothing was released, when none of the names is a path the member's record holds. */
@@ -66,7 +72,7 @@ const nothingStandsSaid = (crew: CrewStore, member: string, named: readonly stri
 const theReleasedSaid = (standing: readonly IReleasedPath[], before: ReadonlySet<string>, named: readonly string[]): string => {
   const keptNow = standing.filter((one) => !before.has(releaseKeyOf(one))).map((one) => one.path)
   const wasAlready = standing.filter((one) => before.has(releaseKeyOf(one))).map((one) => one.path)
-  const namedNotKept = named.filter((path) => !standing.some((one) => one.path === path))
+  const namedNotKept = named.filter((path) => !standing.some((one) => theOneNamedBy(one, path)))
   const said = keptNow.length === 0 ? `Already released: ${namedThenTheRest(wasAlready)}` : `Released: ${namedThenTheRest(keptNow)}`
   const rest = [
     ...(wasAlready.length === 0 || keptNow.length === 0 ? [] : [`Already released: ${namedThenTheRest(wasAlready)}.`]),

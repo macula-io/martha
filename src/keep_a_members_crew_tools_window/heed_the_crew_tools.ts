@@ -22,6 +22,7 @@ import {
   CREW_TOOLS_STREAM,
   crewToolsOnTheRow,
   keepTheWindow,
+  SAME_SESSION,
   theBackLineOf,
   theNoticeOf,
   theOwedLineOf,
@@ -132,4 +133,26 @@ export function theBeatOverTheCrewTools(places: TheWindowPlaces, sessionOf: () =
 export function withTheOwedLine(places: TheWindowPlaces, line: TheStartLine | null): TheStartLine | null {
   const owed = places.served_tools === undefined ? null : theOwedLineAtStart(places)
   return owed === null ? line : { line: line === null ? owed : `${line.line}\n\n${owed}`, taken_in: line?.taken_in ?? [] }
+}
+
+/** An answer to one of the crew's tool calls: Martha's words, or a refusal. */
+type AnAnswerToTheSession = { readonly answer: string } | { readonly refused: string }
+
+/** Whether a closed window owes its returning session a line it has not been handed yet: its own session earned it back. */
+const owesItsSessionALine = (window: ACrewToolsWindow | undefined): window is ACrewToolsWindow =>
+  window !== undefined && window.to !== undefined && window.closed_by === SAME_SESSION && window.owed_handed !== true
+
+/**
+ * The report's answer with the beats a returning session owes after it, handed once (martha#658 Done-when 4): a session
+ * that lost its own crew tools and earned them back is told what it owes, not only the times. The close leaves the mark
+ * absent; this report writes it, so the line is handed once. The read, the decision and the write are synchronous with
+ * no await between them, so the beat cannot open a new loss between them.
+ */
+export function withTheOwedLineOnAReturn(places: TheWindowPlaces, answer: AnAnswerToTheSession): AnAnswerToTheSession {
+  const place = placeOf(places)
+  if ('refused' in answer || place === undefined) return answer
+  const window = theWindowOf(place, places.member)
+  if (!owesItsSessionALine(window)) return answer
+  keepTheWindow(place, { ...window, owed_handed: true })
+  return { answer: `${answer.answer}\n\n${theOwedLineOf(window)}` }
 }
