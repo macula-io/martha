@@ -7,32 +7,35 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { HOST_PROJECTS_PLACE, THE_MARK_FILE, TRANSCRIPTS_LAUNCHES_KEPT } from '../choose_the_transcripts_to_keep/choose_the_transcripts_to_keep.ts'
+import { THE_MARK_FILE, TRANSCRIPTS_LAUNCHES_KEPT } from '../choose_the_transcripts_to_keep/choose_the_transcripts_to_keep.ts'
 import { openState, STATE_FILE_MODE, TRANSCRIPTS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { keepTheTranscriptsOf, pruneTheLaunchesPastTheNewest } from './keep_the_transcripts_of_a_launch.ts'
+
+// The host's own word for a project's transcripts, spelled here as a fixture rather than read from the slice.
+const THE_HOSTS_PROJECTS_PLACE = 'projects'
 
 /** A home of this test's own, its project, and a member's config folder with one transcript under it. */
 const aLaunchEnding = (t: { after: (fn: () => void) => void }) => {
   const home = realpathSync(mkdtempSync(join(tmpdir(), 'martha-646-')))
   t.after(() => rmSync(home, { recursive: true, force: true }))
   const project = join(home, 'project')
-  const config = join(home, 'config')
+  const config = join(home, 'host-config')
   mkdirSync(project)
-  mkdirSync(join(config, HOST_PROJECTS_PLACE, 'the-project'), { recursive: true })
+  mkdirSync(join(config, THE_HOSTS_PROJECTS_PLACE, 'the-project'), { recursive: true })
   const opened = openState(join(home, 'state'), project)
   if ('refusal' in opened) assert.fail(opened.refusal)
   const place = join(opened.directory, TRANSCRIPTS_PLACE)
-  const kept = (name: string): string => join(place, encodeURIComponent('launch-1'), HOST_PROJECTS_PLACE, 'the-project', name)
+  const kept = (name: string): string => join(place, encodeURIComponent('launch-1'), THE_HOSTS_PROJECTS_PLACE, 'the-project', name)
   return { home, project, config, state_root: join(home, 'state'), place, kept }
 }
 
 const aTranscriptIn = (config: string, name: string, text: string): void =>
-  writeFileSync(join(config, HOST_PROJECTS_PLACE, 'the-project', name), text)
+  writeFileSync(join(config, THE_HOSTS_PROJECTS_PLACE, 'the-project', name), text)
 
 test('a transcript is kept with its token redacted, 0600, and the mark says which file held one (martha#646)', (t) => {
   const ending = aLaunchEnding(t)
   aTranscriptIn(ending.config, 's-1.jsonl', '{"text":"git push with ghp_abcdefghijklmnop here"}\n')
-  writeFileSync(join(ending.config, 'settings.json'), '{"model":"sonnet"}')
+  writeFileSync(join(ending.config, 'notes.txt'), '{"model":"sonnet"}')
   const trouble = keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKey: 'sk-ant-the-key' })
   assert.deepEqual(trouble, [], 'the keep said it could not keep what it should have')
   const keptText = readFileSync(ending.kept('s-1.jsonl'), 'utf8')
@@ -44,7 +47,7 @@ test('a transcript is kept with its token redacted, 0600, and the mark says whic
 
 test('a folder with no transcript keeps nothing, and a launch with no token gets no mark (martha#646)', (t) => {
   const ending = aLaunchEnding(t)
-  writeFileSync(join(ending.config, 'settings.json'), '{"model":"sonnet"}')
+  writeFileSync(join(ending.config, 'notes.txt'), '{"model":"sonnet"}')
   aTranscriptIn(ending.config, 's-1.jsonl', '{"text":"nothing secret here"}\n')
   keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKey: 'sk-ant-the-key' })
   assert.equal(readFileSync(ending.kept('s-1.jsonl'), 'utf8'), '{"text":"nothing secret here"}\n', 'a clean transcript was not kept as written')

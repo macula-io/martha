@@ -8,7 +8,6 @@ import { test } from 'node:test'
 import { TOKEN_PREFIXES } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import {
   chooseTheTranscripts,
-  HOST_PROJECTS_PLACE,
   TRANSCRIPTS_FILE_BYTES_KEPT,
   TRANSCRIPTS_LAUNCHES_KEPT,
   TRANSCRIPTS_LAUNCH_BYTES_KEPT,
@@ -19,22 +18,25 @@ import {
 
 // Deliberately no token shape at all: a key that looked like one would be caught by the shape redaction and would say
 // nothing about the exact-value redaction the launch's own key gets.
+// The host's own word for a project's transcripts, spelled here as a fixture rather than read from the slice.
+const THE_HOSTS_PROJECTS_PLACE = 'projects'
+
 const THE_LAUNCH_KEY = 'launch-key-9f3c2b7e1a'
 
 /** One fixture file: its path under the member's config folder, its size, and its text. */
 const aFile = (path: string, text: string) => ({ path, bytes: Buffer.byteLength(text), text })
 
-const aTranscriptPath = (name: string) => `${HOST_PROJECTS_PLACE}/the-project/${name}${TRANSCRIPTS_SUFFIX}`
+const aTranscriptPath = (name: string) => `${THE_HOSTS_PROJECTS_PLACE}/the-project/${name}${TRANSCRIPTS_SUFFIX}`
 
 const choosing = (files: WhatTheConfigFolderHolds['files'], theLaunchKey = THE_LAUNCH_KEY) =>
   chooseTheTranscripts({ files, theLaunchKey })
 
 test('only the host\'s own transcripts are kept, never the rest of the member\'s config folder (martha#646)', () => {
   const chosen = choosing([
-    aFile('settings.json', '{"model":"sonnet"}'),
+    aFile('notes.txt', 'not a transcript'),
     aFile(aTranscriptPath('s-1'), '{"type":"user"}'),
-    aFile(`${HOST_PROJECTS_PLACE}/the-project/notes.txt`, 'not a transcript'),
-    aFile(`${HOST_PROJECTS_PLACE}/s-2${TRANSCRIPTS_SUFFIX}`, 'one level too high'),
+    aFile(`${THE_HOSTS_PROJECTS_PLACE}/the-project/notes.txt`, 'not a transcript'),
+    aFile(`${THE_HOSTS_PROJECTS_PLACE}/s-2${TRANSCRIPTS_SUFFIX}`, 'one level too high'),
     aFile(`s-3${TRANSCRIPTS_SUFFIX}`, 'not under projects'),
     aFile(`another-place/the-project/s-4${TRANSCRIPTS_SUFFIX}`, 'the same shape under another root'),
   ])

@@ -78,8 +78,8 @@ test('#693: the group id is read after a command name that holds spaces and brac
 test('a launcher that exits first keeps the member\'s transcripts after the relay and before the snapshot (martha#646, D1)', () => {
   const order: string[] = []
   const made = {
-    relayDirectory: { remove: (): void => void order.push('relay') },
-    keepTranscripts: (): void => void order.push('keep'),
+    relayDirectory: { remove: (): void => void order.push('relay-directory') },
+    keepTranscripts: (): void => void order.push('keep-transcripts'),
     removeSnapshot: (): void => void order.push('snapshot'),
   } as unknown as LaunchMade
   // A group no kernel holds: the group's own kill runs first and finds nothing, so nothing but the three removals shows.
@@ -90,7 +90,7 @@ test('a launcher that exits first keeps the member\'s transcripts after the rela
   try {
     assert.equal(added.length, 1, 'the launcher\'s end registered no exit handler, or more than one')
     added[0]!(0)
-    assert.deepEqual(order, ['relay', 'keep', 'snapshot'],
+    assert.deepEqual(order, ['relay-directory', 'keep-transcripts', 'snapshot'],
       'the keep does not sit between the relay and the snapshot, so the snapshot goes with what the host wrote still in it')
   } finally {
     off()

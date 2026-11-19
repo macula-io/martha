@@ -13,10 +13,22 @@
 // TRANSCRIPTS_LAUNCH_BYTES_KEPT, are replaced by a line saying so. A truncated JSONL presented as a transcript is
 // never what a reader should get.
 
+import { join } from 'node:path'
+
 import { TOKEN_PREFIXES } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 
-/** The host's own directory for a project's transcripts, inside the member's config folder. */
-export const HOST_PROJECTS_PLACE = 'projects'
+/**
+ * The host's own directory for a project's transcripts, inside the member's config folder. Private on purpose, as the
+ * host's other readers keep it: the word is the host's own and is spelled all over the host's tests, so exporting it
+ * would turn every one of them into a restatement (martha#289). What the adapter needs is the path below.
+ */
+const HOST_PROJECTS_PLACE = 'projects'
+
+/** The host's own place for every project's transcripts, inside the member's config folder. */
+export const theHostsProjectsPlace = (configFolder: string): string => join(configFolder, HOST_PROJECTS_PLACE)
+
+/** One transcript's path under the member's config folder: what the adapter reads and what is kept. */
+export const theHostsTranscriptPath = (key: string, name: string): string => [HOST_PROJECTS_PLACE, key, name].join('/')
 
 /** What ends one transcript's name. */
 export const TRANSCRIPTS_SUFFIX = '.jsonl'

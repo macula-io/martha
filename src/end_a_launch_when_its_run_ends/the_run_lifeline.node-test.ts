@@ -138,12 +138,12 @@ test('a run\'s lifeline is a named pipe: a socket could not be reopened, and a d
 test('a run\'s end keeps the member\'s transcripts after the relay and before the snapshot, and the record last (#472, martha#646)', () => {
   const order: string[] = []
   const made = {
-    relayDirectory: { remove: (): void => void order.push('relay') },
-    keepTranscripts: (): void => void order.push('keep'),
+    relayDirectory: { remove: (): void => void order.push('relay-directory') },
+    keepTranscripts: (): void => void order.push('keep-transcripts'),
     removeSnapshot: (): void => void order.push('snapshot'),
   }
-  takeTheLaunchOffTheDisk(made, () => order.push('record'))
-  assert.deepEqual(order, ['relay', 'keep', 'snapshot', 'record'],
+  takeTheLaunchOffTheDisk(made, () => order.push('launch-record'))
+  assert.deepEqual(order, ['relay-directory', 'keep-transcripts', 'snapshot', 'launch-record'],
     'the keep does not sit between the relay and the snapshot with the record last, so it can lose what the snapshot holds')
 })
 

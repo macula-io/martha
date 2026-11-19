@@ -18,8 +18,9 @@ import { dirname, join } from 'node:path'
 
 import {
   chooseTheTranscripts,
-  HOST_PROJECTS_PLACE,
   THE_MARK_FILE,
+  theHostsProjectsPlace,
+  theHostsTranscriptPath,
   TRANSCRIPTS_FILE_BYTES_KEPT,
   TRANSCRIPTS_LAUNCHES_KEPT,
   theMarkOf,
@@ -46,7 +47,7 @@ const directoryOf = (place: string, theLaunch: string): string => join(place, en
 
 /** Every file the member's config folder holds, as the host wrote them, with a file past its bound never read whole. */
 const whatTheFolderHolds = (configFolder: string, fileBytesKept: number): readonly AConfigFile[] => {
-  const projects = join(configFolder, HOST_PROJECTS_PLACE)
+  const projects = theHostsProjectsPlace(configFolder)
   let keys: string[]
   try {
     keys = fs.readdirSync(projects, { withFileTypes: true }).filter((one) => one.isDirectory()).map((one) => one.name)
@@ -65,7 +66,7 @@ const theFilesOfOneKey = (projects: string, key: string, fileBytesKept: number):
     return []
   }
   return names.flatMap((name) => {
-    const path = [HOST_PROJECTS_PLACE, key, name].join('/')
+    const path = theHostsTranscriptPath(key, name)
     let bytes = 0
     try {
       bytes = fs.statSync(join(projects, key, name)).size
