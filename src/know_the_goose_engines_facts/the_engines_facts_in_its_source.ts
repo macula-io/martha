@@ -153,12 +153,27 @@ export interface PathResolution {
   readonly expands_home: boolean
 }
 
-/** One tool of the Developer extension: its name, its parameters, and the argument that names its file, command or source. */
+/** One tool of the Developer extension: its name, its parameters, the argument that names its file, command or source, and the hints it is annotated with. */
 export interface DeveloperTool {
   readonly name: string
   readonly params: string
   readonly argument: string
+  readonly hints: DeveloperToolHints
 }
+
+/**
+ * What the engine annotates one of its tools with (#541 package A, design G1): whether it only reads, whether it may
+ * change what it touches, and whether it reaches past the machine. The launch places a tool's result by these, the
+ * engine's own words, so no tool's name is typed in the code.
+ */
+export interface DeveloperToolHints {
+  readonly read_only: boolean
+  readonly destructive: boolean
+  readonly open_world: boolean
+}
+
+/** The hints `ToolAnnotations::from_raw` takes after the title, in its order; the idempotent one is not read. */
+export const ANNOTATION_HINTS = ['read_only', 'destructive', 'idempotent', 'open_world'] as const
 
 /** The engine's naming of a called tool: where a client reads it, and how it splits into an extension's and a tool's own name. */
 export interface ToolNaming {
@@ -580,14 +595,28 @@ function developerToolsIn(source: EngineSource): readonly DeveloperTool[] {
   const path = ENGINE_PLACES.shell_tool
   const text = fileOf(source, path)
   const listing = captured(text, new RegExp(`fn ${SHELL_TOOL.lister}\\(\\)[^{]*\\{([\\s\\S]*?)\\n {4}\\}`), `the function ${SHELL_TOOL.lister}`, path)
-  const listed = [...listing.matchAll(/Tool::new\(\s*"([^"]+)"\.to_string\(\),[\s\S]*?schema::<(\w+)>/g)].map((found) => ({ name: found[1] ?? '', params: found[2] ?? '' }))
+  const segments = listing.split('Tool::new(').slice(1)
+  const listed = segments.map((segment) => {
+    const found = /^\s*"([^"]+)"\.to_string\(\),[\s\S]*?schema::<(\w+)>/.exec(segment)
+    if (found === null) throw new Error(`${path} lists a tool in ${SHELL_TOOL.lister} in a shape this reader does not know`)
+    return { name: found[1] ?? '', params: found[2] ?? '', hints: hintsOf(segment, found[1] ?? '', path) }
+  })
   if (listed.length === 0) throw new Error(`${path} lists no tool in ${SHELL_TOOL.lister}`)
   const files = source.list(DEVELOPER_DIR).filter((name) => name.endsWith('.rs')).map((name) => `${DEVELOPER_DIR}/${name}`)
-  return listed.map(({ name, params }) => {
+  return listed.map(({ name, params, hints }) => {
     const dispatched = [...text.matchAll(new RegExp(`"${name}"\\s*=>\\s*match\\s+Self::parse_args::<(\\w+)>`, 'g'))].map((found) => found[1] ?? '')
     if (dispatched.length !== 1 || dispatched[0] !== params) throw new Error(`${path} lists the tool ${name} on ${params} but runs it on ${JSON.stringify(dispatched)}`)
-    return { name, params, argument: firstTextFieldOf(source, files, params) }
+    return { name, params, argument: firstTextFieldOf(source, files, params), hints }
   })
+}
+
+/** The hints one listed tool is annotated with: each one `Some(true)` or `Some(false)`, or the tool is unreadable by name. */
+function hintsOf(segment: string, name: string, path: string): DeveloperToolHints {
+  const raw = /\.annotate\(ToolAnnotations::from_raw\(\s*Some\("[^"]*"\.to_string\(\)\),((?:\s*Some\((?:true|false)\),){4})\s*\)\)/.exec(segment)?.[1]
+  if (raw === undefined) throw new Error(`${path} lists the tool ${name} without the hints this reader knows`)
+  const said = [...raw.matchAll(/Some\((true|false)\)/g)].map((found) => found[1] === 'true')
+  const hint = (which: (typeof ANNOTATION_HINTS)[number]): boolean => said[ANNOTATION_HINTS.indexOf(which)] === true
+  return { read_only: hint('read_only'), destructive: hint('destructive'), open_world: hint('open_world') }
 }
 
 /** The first `pub <field>: String` of the struct `params`, in the one file of `files` that declares it. */

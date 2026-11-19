@@ -502,3 +502,24 @@ test('a folder kind only one arm names, or a folder picked in a shape this reade
     assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
   }
 })
+
+test("each Developer tool's hints are read in from_raw's order, so a hint the engine turns is read turned (#541 package A, design G1; mutants: two hints read in each other's place, a hint read as always false)", () => {
+  const turned = RECORDED_FACTS.developer_tools.map((tool, at) => ({ ...tool, hints: at % 2 === 0 ? { read_only: !tool.hints.read_only, destructive: tool.hints.destructive, open_world: !tool.hints.open_world } : { ...tool.hints, destructive: !tool.hints.destructive } }))
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, developer_tools: turned })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.developer_tools, turned)
+})
+
+test('a Developer tool listed without its hints, or with a hint that is not Some(true) or Some(false), makes the tools unreadable by name (#541 package A; mutant: the throw dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const text = files[ENGINE_PLACES.shell_tool] ?? ''
+  const [first] = RECORDED_FACTS.developer_tools
+  assert.ok(first !== undefined)
+  const annotation = /\n {12}\.annotate\(ToolAnnotations::from_raw\([\s\S]*?\n {12}\)\),/.exec(text)?.[0] ?? ''
+  assert.notEqual(annotation, '', 'the tree annotates its tools')
+  for (const broken of [text.replace(annotation, ','), text.replace(annotation, annotation.replace(/Some\((true|false)\)/, 'None'))]) {
+    assert.notEqual(broken, text)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: broken }))
+    assert.ok(unreadable.some(({ part, why }) => part === partReading('developer_tools') && why.includes(`lists the tool ${first.name} without the hints`)), JSON.stringify(unreadable))
+  }
+})

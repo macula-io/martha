@@ -182,10 +182,16 @@ const toolNameParts = (naming: ToolNaming): string =>
  */
 function developerTools(shell: string, tools: readonly DeveloperTool[]): string {
   const named = tools.map((tool) => (tool.params === SHELL_TOOL.params ? { ...tool, name: shell } : tool))
-  const listed = named.map(({ name, params }) =>
+  // from_raw's own order, spelled here and not taken from the reader's constant, so a reader that reads them in
+  // another order fails against this tree.
+  const annotated = (hints: DeveloperTool['hints']): string => {
+    const said = [hints.read_only, hints.destructive, false, hints.open_world].map((value) => `                Some(${String(value)}),\n`).join('')
+    return `            .annotate(ToolAnnotations::from_raw(\n                Some("A Title".to_string()),\n${said}            )),\n`
+  }
+  const listed = named.map(({ name, params, hints }) =>
     params === SHELL_TOOL.params
-      ? `            {\n                let description = format!("Execute a command.");\n                Tool::new("${name}".to_string(), description, Self::schema::<${params}>())\n            }\n            .with_output_schema::<ShellOutput>(),\n`
-      : `            Tool::new(\n                "${name}".to_string(),\n                "What ${name} does.".to_string(),\n                Self::schema::<${params}>(),\n            ),\n`,
+      ? `            {\n                let description = format!("Execute a command.");\n                Tool::new("${name}".to_string(), description, Self::schema::<${params}>())\n            }\n            .with_output_schema::<ShellOutput>()\n${annotated(hints)}`
+      : `            Tool::new(\n                "${name}".to_string(),\n                "What ${name} does.".to_string(),\n                Self::schema::<${params}>(),\n            )\n${annotated(hints)}`,
   )
   const dispatched = named.map(({ name, params }) => `            "${name}" => match Self::parse_args::<${params}>(arguments) {\n                Ok(params) => run(params),\n                Err(error) => fail(error),\n            },\n`)
   return [

@@ -195,27 +195,52 @@
     {
       "name": "write",
       "params": "FileWriteParams",
-      "argument": "path"
+      "argument": "path",
+      "hints": {
+        "read_only": false,
+        "destructive": true,
+        "open_world": false
+      }
     },
     {
       "name": "edit",
       "params": "FileEditParams",
-      "argument": "path"
+      "argument": "path",
+      "hints": {
+        "read_only": false,
+        "destructive": true,
+        "open_world": false
+      }
     },
     {
       "name": "shell",
       "params": "ShellParams",
-      "argument": "command"
+      "argument": "command",
+      "hints": {
+        "read_only": false,
+        "destructive": true,
+        "open_world": true
+      }
     },
     {
       "name": "tree",
       "params": "TreeParams",
-      "argument": "path"
+      "argument": "path",
+      "hints": {
+        "read_only": true,
+        "destructive": false,
+        "open_world": false
+      }
     },
     {
       "name": "read_image",
       "params": "ImageReadParams",
-      "argument": "source"
+      "argument": "source",
+      "hints": {
+        "read_only": false,
+        "destructive": false,
+        "open_world": true
+      }
     }
   ],
   "path_resolution": {
