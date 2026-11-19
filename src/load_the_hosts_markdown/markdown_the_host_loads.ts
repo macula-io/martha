@@ -98,7 +98,7 @@ function patternNamed(text: string, name: string): string {
 const LOADER_MARK = '"tengu_dir_search"'
 
 /** The async function in the host text that holds `at`, whole. */
-function enclosingAsyncFunction(text: string, at: number): { readonly name: string; readonly source: string } {
+export function enclosingAsyncFunction(text: string, at: number): { readonly name: string; readonly source: string } {
   for (let start = text.lastIndexOf('async function ', at); start >= 0; start = text.lastIndexOf('async function ', start - 1)) {
     const source = functionAt(text, start)
     if (start + source.length > at) return { name: /^async function ([\w$]+)\(/.exec(source)?.[1] ?? '', source }

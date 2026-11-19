@@ -17,6 +17,7 @@ import { ruleMatchersIn, theToolItsChecksMatch, type FilePermissionRules } from 
 import type { OwnersMarkdown } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import type { ProtectedConfigPlaces } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { outputStylesFieldIn, outputStylesFolderIn, type MarkdownTheHostLoads } from '../load_the_hosts_markdown/markdown_the_host_loads.ts'
+import { bareModeVariableOf, hostSkillCatalogVariableOf, theSkillsLoaderHolds, type TheSkillsLoader } from '../load_the_hosts_markdown/the_skills_loader.ts'
 import { hookSwitchesOf, type HookSwitches, type ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { THE_FAILED_TASK_STATUS, type ARecordedFailedAgentsReport } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 
@@ -39,7 +40,7 @@ export interface MemoryOff {
 }
 
 /** What the host binary says, as recorded; the markdown it loads since martha#146, the config-dir places it runs as code since martha#187. */
-export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlaces {
+export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlaces, TheSkillsLoader {
   readonly host_version: string
   /**
    * The variable that, set and empty, points the host at the owner's default sign-in store, cut from the binary
@@ -125,6 +126,7 @@ export function recordedHostFrom(text: string): RecordedHost {
     throw new Error("The recording does not hold the global config file the host prefers over .claude.json, so the file the owner's user MCP servers are read from cannot be told (martha#187).")
   }
   signInStoreVariableOf(recording)
+  theSkillsLoaderHolds(recording)
   ruleMatchersIn(filePermissionRulesOf(recording).matcher)
   failedAgentsReportOf(recording)
   return recording
@@ -145,6 +147,15 @@ function failedAgentsReportOf(recording: RecordedHost): ARecordedFailedAgentsRep
   }
   return report
 }
+
+/**
+ * The variable that puts the recorded host in bare mode, read from its bare-mode test (martha#747): a member in bare mode
+ * would load none of the skills its launch copies, and none of its gate's hooks, so a launch drops it.
+ */
+export const CLAUDE_CODE_BARE_MODE_VARIABLE: string = bareModeVariableOf(RECORDED_HOST.bare_mode_test)
+
+/** The variable that names the recorded host's skill catalog mount, read from its own warning (martha#747): no approval reads that mount. */
+export const CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE: string = hostSkillCatalogVariableOf(RECORDED_HOST.host_skill_catalog)
 
 /** The envelope the recorded host writes when an agent fails: its notification, its elements and its task statuses. */
 export const CLAUDE_CODE_FAILED_AGENTS_REPORT: ARecordedFailedAgentsReport = failedAgentsReportOf(RECORDED_HOST)
