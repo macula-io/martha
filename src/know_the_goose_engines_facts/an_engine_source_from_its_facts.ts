@@ -71,6 +71,22 @@ function hintFiles(hints: EngineFacts['hint_files']): string {
   ].join('')
 }
 
+/**
+ * The extension config as the engine writes it: the tagged enum, its stdio variant with a serde attribute over each
+ * field after the first and a doc comment over one, then a second variant the reader must not read, and the `Envs`
+ * list with a comment after each name, as the engine comments every one.
+ */
+function extensionConfig(stdio: EngineFacts['stdio_extension']): string {
+  const fields = stdio.keys.map((key, index) => `${index === 0 ? '' : '        #[serde(default)]\n'}${index === 1 ? '        /// What the server is for.\n' : ''}        ${key}: String,\n`).join('')
+  const names = stdio.disallowed_env.map((name) => `        "${name}", // a name the engine drops\n`).join('')
+  return [
+    `impl Envs {\n    const DISALLOWED_KEYS: [&'static str; ${String(stdio.disallowed_env.length)}] = [\n        // what each group is\n${names}    ];\n}\n\n`,
+    `#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]\n#[serde(tag = "${stdio.tag}")]\npub enum ExtensionConfig {\n`,
+    `    #[serde(rename = "${stdio.type}")]\n    Stdio {\n${fields}    },\n`,
+    '    #[serde(rename = "streamable_http")]\n    StreamableHttp {\n        uri: String,\n    },\n}\n',
+  ].join('')
+}
+
 /** A skills switch as the engine writes it (martha#839): a constant naming the setting, and the function reading it. */
 function skillsSwitch(reader: string, switched: ASkillsSwitch): string {
   const constant = `SETTING_READ_BY_${reader}`
@@ -97,6 +113,8 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.acp_server]: `        let options = vec![\n${options}        ];\n`,
     [ENGINE_PLACES.delegate_tool]: delegateTool(facts.subagent_models),
     [ENGINE_PLACES.hint_files]: hintFiles(facts.hint_files),
+    [ENGINE_PLACES.stdio_extension]: extensionConfig(facts.stdio_extension),
+    [ENGINE_PLACES.session_context]: `pub const SESSION_ID_HEADER: &str = "${facts.tool_call_session_key}";\n\npub const TOOL_CALL_REQUEST_ID_HEADER: &str = "another-key";\n`,
     [ENGINE_PLACES.skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.skills_advertised, facts.skills_advertised),
     [ENGINE_PLACES.builtin_skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.builtin_skills_advertised, facts.builtin_skills_advertised),
     [ENGINE_PLACES.openai_provider]: `pub const OPEN_AI_PROVIDER_NAME: &str = "${facts.openai_provider.name}";\npub const OPEN_AI_DEFAULT_BASE_PATH: &str = "${facts.openai_provider.default_base_path}";\n            vec![\n${settings}            ],\n`,

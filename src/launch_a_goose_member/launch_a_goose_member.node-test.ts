@@ -17,6 +17,8 @@ import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_
 import { AGENTS_MD_FILE, ENGINE_FAMILIES, ENGINE_HINTS_FILE, fingerprintOf, readLaunchState, theTextAStartLoads, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { theToolServersEntry } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts'
+import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import {
   THE_EXTENSION_A_MEMBER_KEEPS,
   THE_EXTENSIONS_SETTING,
@@ -57,6 +59,15 @@ function aRecordedSetting(): string {
  * setting no recording names, so a made-up one would refuse every launch this file builds.
  */
 const A_MODEL = { provider: FACTS.openai_provider.name, model: 'a-model-a-test-names', settings: { [aRecordedSetting()]: 'a-value-a-test-names' } }
+
+/** A relay socket and a token a test names: the launch's own would be minted, and nothing here reads either. */
+const A_TOOL_SERVER = { socket_path: join(tmpdir(), 'a-relay-a-test-names.sock'), token: 'a-token-a-test-names' }
+
+/** The tool server's entry for a launch whose checkout is the temporary folder: the config tests write it, never read it. */
+const A_SERVER = { key: THE_CREWS_TOOL_SERVER, entry: theToolServersEntry(FACTS.stdio_extension, { ...A_TOOL_SERVER, checkout: tmpdir() }) }
+
+/** The extension the delegate tool lives in: the one whose being off closes package 6's scope items 2 and 3. */
+const SUMMON = 'summon'
 
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-goose-launch-'))
@@ -133,8 +144,8 @@ test('the extension a member keeps and the mode that asks are both ones the reco
   )
 })
 
-test('the config root names the model, the asking mode and the slash switch, and switches every extension off but the one kept (martha#541)', () => {
-  const config = theConfigOfALaunch(FACTS, A_MODEL)
+test('the config root names the model, the asking mode and the slash switch: Summon off, and every built-in but the kept one off, and the crew server on (martha#541)', () => {
+  const config = theConfigOfALaunch(FACTS, A_MODEL, A_SERVER)
 
   assert.equal(theValueOf(config, THE_PROVIDER_SETTING), A_MODEL.provider)
   assert.equal(theValueOf(config, THE_MODEL_SETTING), A_MODEL.model)
@@ -143,25 +154,30 @@ test('the config root names the model, the asking mode and the slash switch, and
   // is, so both defaults a recording can carry write the same word.
   for (const when_unset of [true, false]) {
     const facts = { ...FACTS, slash_commands: { ...FACTS.slash_commands, when_unset } }
-    assert.equal(theValueOf(theConfigOfALaunch(facts, A_MODEL), FACTS.slash_commands.setting), 'false', `with the engine's default ${String(when_unset)}`)
+    assert.equal(theValueOf(theConfigOfALaunch(facts, A_MODEL, A_SERVER), FACTS.slash_commands.setting), 'false', `with the engine's default ${String(when_unset)}`)
   }
   for (const [key, value] of Object.entries(A_MODEL.settings)) assert.equal(theValueOf(config, key), value)
 
-  // One `enabled` line for every extension the pinned build declares, and true for the kept one alone.
+  // One `enabled` line for every extension the pinned build declares, true for the kept one alone, and then
+  // the crew's tool server, switched on: the one entry under extensions that is not a platform extension.
   const lines = config.split('\n')
   assert.deepEqual(
-    lines.filter((line) => line.startsWith('  ') && line.trimEnd().endsWith(':')).map((line) => line.trim().slice(0, -1)),
-    FACTS.platform_extensions.map((extension) => extension.key),
+    lines.filter((line) => /^ {2}\S/.test(line)).map((line) => line.trim().slice(0, -1)),
+    [...FACTS.platform_extensions.map((extension) => extension.key), THE_CREWS_TOOL_SERVER],
   )
   for (const extension of FACTS.platform_extensions) {
     const at = lines.indexOf(`  ${extension.key}:`)
     assert.notEqual(at, -1, `the config switches nothing for ${extension.key}`)
     assert.equal(lines[at + 1], `    enabled: ${String(extension.key === THE_EXTENSION_A_MEMBER_KEEPS)}`, `the switch for ${extension.key}`)
   }
+  // Summon by name: the recording must name it, and it is off (package 6, scope items 2 and 3).
+  assert.ok(FACTS.platform_extensions.some((extension) => extension.key === SUMMON), `the recording names no ${SUMMON}, so its switch cannot be shown off`)
+  assert.equal(lines[lines.indexOf(`  ${SUMMON}:`) + 1], '    enabled: false', `${SUMMON} is on`)
+  assert.equal(lines[lines.indexOf(`  ${THE_CREWS_TOOL_SERVER}:`) + 1], '    enabled: true', "the crew's tool server is not switched on")
 })
 
 test('the config root holds no key but the ones the launcher derives: a subagent model cannot be written into it (martha#541)', () => {
-  const config = theConfigOfALaunch(FACTS, A_MODEL)
+  const config = theConfigOfALaunch(FACTS, A_MODEL, A_SERVER)
   const derived = [
     THE_PROVIDER_SETTING,
     THE_MODEL_SETTING,
@@ -177,9 +193,15 @@ test('the config root holds no key but the ones the launcher derives: a subagent
 
 test('a recording that names neither the mode nor the kept extension refuses instead of writing a switch the engine ignores (martha#541)', () => {
   const noMode = { ...FACTS, mode: { ...FACTS.mode, values: FACTS.mode.values.filter((mode) => mode !== THE_MODE_THAT_ASKS_THE_CLIENT) } }
-  assert.throws(() => theConfigOfALaunch(noMode, A_MODEL), new RegExp(THE_MODE_THAT_ASKS_THE_CLIENT))
+  assert.throws(() => theConfigOfALaunch(noMode, A_MODEL, A_SERVER), new RegExp(THE_MODE_THAT_ASKS_THE_CLIENT))
   const noExtension = { ...FACTS, platform_extensions: FACTS.platform_extensions.filter((extension) => extension.key !== THE_EXTENSION_A_MEMBER_KEEPS) }
-  assert.throws(() => theConfigOfALaunch(noExtension, A_MODEL), new RegExp(THE_EXTENSION_A_MEMBER_KEEPS))
+  assert.throws(() => theConfigOfALaunch(noExtension, A_MODEL, A_SERVER), new RegExp(THE_EXTENSION_A_MEMBER_KEEPS))
+})
+
+test('a tool server keyed as a platform extension is refused by name, never written as a second switch for that extension (martha#541 C1)', () => {
+  const taken = FACTS.platform_extensions.find((extension) => extension.key !== THE_EXTENSION_A_MEMBER_KEEPS)?.key
+  assert.ok(taken !== undefined, 'the recording names no platform extension but the kept one')
+  assert.throws(() => theConfigOfALaunch(FACTS, A_MODEL, { ...A_SERVER, key: taken }), new RegExp(`keyed ${taken}, which is a platform extension`))
 })
 
 test('a key that is not a word cannot start a line of the config of its own, and a value cannot carry a line break (martha#541)', () => {
@@ -188,10 +210,10 @@ test('a key that is not a word cannot start a line of the config of its own, and
   // the allow-list; the config's word check stays for the keys the launch writes itself, which a model setting
   // can no longer reach.
   assert.throws(
-    () => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { 'a key: a value of its own': 'a-value-a-test-names' } }),
+    () => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { 'a key: a value of its own': 'a-value-a-test-names' } }, A_SERVER),
     (error: unknown) => error instanceof Error && error.message.includes('a key: a value of its own'),
   )
-  assert.throws(() => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { [aRecordedSetting()]: 'a value\nwith a line of its own' } }), /line break/)
+  assert.throws(() => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { [aRecordedSetting()]: 'a value\nwith a line of its own' } }, A_SERVER), /line break/)
 })
 
 test('a provider setting under the engine\'s own prefix is refused, so the subagent model cannot be written into the config root (martha#541)', () => {
@@ -202,7 +224,7 @@ test('a provider setting under the engine\'s own prefix is refused, so the subag
   const enginesOwn = FACTS.path_root_variable.split('_')[0] ?? ''
   const borrowed = `${enginesOwn}_A_SETTING_A_TEST_NAMES`
   assert.throws(
-    () => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { [borrowed]: 'a-value-a-test-names' } }),
+    () => theConfigOfALaunch(FACTS, { ...A_MODEL, settings: { [borrowed]: 'a-value-a-test-names' } }, A_SERVER),
     (error: unknown) => error instanceof Error && error.message.includes(borrowed) && error.message.includes("carries the engine's own prefix"),
   )
 })
@@ -215,6 +237,7 @@ test('a declaration naming the setting that replaces the engine\'s hint files is
     launch_root: root,
     place,
     model: { ...A_MODEL, settings: { [FACTS.hint_files.setting]: `["${FACTS.hint_files.goose_hints}"]` } },
+    tool_server: A_TOOL_SERVER,
   })
   assert.ok('refusal' in refused, 'a declaration naming the hint-files setting started an engine')
   assert.match(refused.refusal, new RegExp(FACTS.hint_files.setting))
@@ -387,13 +410,13 @@ test('an environment that hands the engine no PATH, or an empty one, is refused 
 
 test('one launch writes its root, starts the engine and ends with the permission store still empty; a binary that is not there refuses (martha#541)', async (t) => {
   const { root, place } = anApprovedLaunch(t)
-  const refused = await launchTheGooseEngine({ facts: FACTS, binary: join(root, 'not-there'), launch_root: root, place, model: A_MODEL })
+  const refused = await launchTheGooseEngine({ facts: FACTS, binary: join(root, 'not-there'), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
   assert.ok('refusal' in refused, 'a missing engine binary started a launch')
 
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
   assert.ok('engine' in launch, 'the launch was refused')
   t.after(() => launch.engine.stop())
-  assert.equal(readFileSync(launch.config_at, 'utf8'), theConfigOfALaunch(FACTS, A_MODEL))
+  assert.equal(readFileSync(launch.config_at, 'utf8'), theConfigOfALaunch(FACTS, A_MODEL, { key: THE_CREWS_TOOL_SERVER, entry: theToolServersEntry(FACTS.stdio_extension, { ...A_TOOL_SERVER, checkout: launch.places.checkout }) }))
   assert.equal(realpathSync(launch.config_at).startsWith(realpathSync(launch.places.root)), true)
 
   const ended = await launch.end()
@@ -405,7 +428,7 @@ test('a launch whose engine had already ended says it was not stopped, and still
   const { root, place } = anApprovedLaunch(t)
   const briefly = join(root, 'an-engine-that-has-finished')
   writeFileSync(briefly, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: briefly, launch_root: root, place, model: A_MODEL })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: briefly, launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
   assert.ok('engine' in launch, 'the launch was refused')
   t.after(() => launch.engine.stop())
   await launch.engine.exited
@@ -456,7 +479,7 @@ test('a launch on a checkout the owner has not approved is refused before anythi
   const [family] = ENGINE_FAMILIES.plugins
   mkdirSync(dirname(join(checkout, family ?? '')), { recursive: true })
   writeFileSync(join(checkout, family ?? ''), 'a plugin the gate reads\n')
-  const refused = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL })
+  const refused = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
   assert.ok('refusal' in refused, 'an unapproved checkout started an engine')
   assert.match(refused.refusal, /approv/i)
   assert.deepEqual(readdirSync(place.snapshot_root), [], 'a refused launch left a snapshot behind')
@@ -465,16 +488,64 @@ test('a launch on a checkout the owner has not approved is refused before anythi
 
 test('a place naming another host is refused, and an approved launch records its hints, each naming the file and the source it is (martha#541)', async (t) => {
   const { root, place, checkout } = anApprovedLaunch(t)
-  const wrongHost = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place: { ...place, host: 'opencode' }, model: A_MODEL })
+  const wrongHost = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place: { ...place, host: 'opencode' }, model: A_MODEL, tool_server: A_TOOL_SERVER })
   assert.ok('refusal' in wrongHost, 'a place for another host started the engine')
 
   writeFileSync(join(checkout, ENGINE_HINTS_FILE), 'a hint\n')
   writeFileSync(join(checkout, AGENTS_MD_FILE), 'an agents file\n')
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
   assert.ok('engine' in launch, 'the launch was refused')
   t.after(() => launch.engine.stop())
   assert.deepEqual(launch.text_a_start_loads.map((one) => one.file), [ENGINE_HINTS_FILE, AGENTS_MD_FILE])
   const ended = await launch.end()
   assert.equal(ended.stopped, true)
   assert.deepEqual(readdirSync(place.snapshot_root), [], "the gate's snapshot was left behind")
+})
+
+/** The engine's mode as the config writes it, and as an edit that keeps every server would change it. */
+const THE_MODE_LINE = `${FACTS.mode.setting}: "${THE_MODE_THAT_ASKS_THE_CLIENT}"`
+
+/** A launch whose config root `edit` changes between its write and the engine's start: refused, leaving nothing, starting nothing. */
+async function aLaunchOfAnEditedRoot(t: TestContext, edit: (config: string) => string): Promise<string> {
+  const { root, place } = anApprovedLaunch(t)
+  const refused = await launchTheGooseEngine({
+    facts: FACTS,
+    binary: aStandInEngineIn(root),
+    launch_root: root,
+    place,
+    model: A_MODEL,
+    tool_server: A_TOOL_SERVER,
+    before_the_start: (config_at) => writeFileSync(config_at, edit(readFileSync(config_at, 'utf8'))),
+  })
+  if ('engine' in refused) t.after(() => refused.engine.stop())
+  assert.ok('refusal' in refused, 'a launch whose config root was edited before the start started the engine')
+  assert.deepEqual(readdirSync(place.snapshot_root), [], 'a refused launch left a snapshot behind')
+  assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch left its root, and the edited config in it')
+  assert.equal(existsSync(join(root, THE_HOME_OF_A_LAUNCH)), false, 'a refused launch left its home')
+  assert.equal(existsSync(join(root, 'the-cwd')), false, 'the stand-in engine ran')
+  return refused.refusal
+}
+
+test('a launch reads its config root back before the engine starts, and the servers it names, the crew\'s alone, are a fact of the launch (martha#541 C1 R1)', async (t) => {
+  const { root, place } = anApprovedLaunch(t)
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
+  assert.ok('engine' in launch, 'the launch was refused')
+  t.after(() => launch.engine.stop())
+  assert.deepEqual(launch.servers, [THE_CREWS_TOOL_SERVER])
+  await launch.end()
+})
+
+test('a config root edited between its write and the start to name a second server is refused by that server\'s name (martha#541 C1 R1; mutant: the server check dropped)', async (t) => {
+  const aSecond = 'a-second-server-a-test-names'
+  const refusal = await aLaunchOfAnEditedRoot(t, (config) => config.replace(`${THE_EXTENSIONS_SETTING}:\n`, `${THE_EXTENSIONS_SETTING}:\n  ${aSecond}:\n    enabled: true\n    cmd: "/bin/sh"\n`))
+  assert.ok(refusal.includes(aSecond), `the refusal does not name the second server: ${refusal}`)
+  assert.ok(refusal.includes(`${THE_CREWS_TOOL_SERVER} alone`), `the refusal does not say which server a launch starts with: ${refusal}`)
+})
+
+test('a config root edited between its write and the start, its servers untouched, is refused as not the text the launch wrote (martha#541 C1 R1; mutant: the bytes check dropped)', async (t) => {
+  const refusal = await aLaunchOfAnEditedRoot(t, (config) => {
+    assert.ok(config.includes(THE_MODE_LINE), `the config does not write ${THE_MODE_LINE}, so this edit would change nothing`)
+    return config.replace(THE_MODE_LINE, `${FACTS.mode.setting}: "${FACTS.mode.when_unset}"`)
+  })
+  assert.match(refusal, /is not the text this launch wrote/)
 })

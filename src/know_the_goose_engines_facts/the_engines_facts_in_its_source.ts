@@ -3,7 +3,8 @@
 // This exists so a member can work in Goose with nothing about the engine typed by hand: the launcher writes the
 // engine's config root from these facts (which extension keys to switch off, which mode to pin, which variable moves
 // the config root), the adapter answers permission requests from the kinds the engine offers, and the model stand-in
-// listens on the path the engine's OpenAI provider posts to. Each fact is read from the place in the engine's source
+// listens on the path the engine's OpenAI provider posts to. The crew's tool server is written into the config root
+// as the engine's own stdio entry, and answers each call in the session the engine names in the call's meta. Each fact is read from the place in the engine's source
 // that decides it, so a change there is a difference the drift check names, never a launch that quietly trusts an
 // old list.
 //
@@ -54,10 +55,26 @@ export interface EngineFacts {
    * its order. A launch records exactly these, so none is typed by hand.
    */
   readonly hint_files: { readonly setting: string; readonly goose_hints: string; readonly agents_md: string; readonly when_unset: readonly string[] }
+  /** The entry a config's `extensions` holds to start a tool server on stdio (#541 part C, C1). */
+  readonly stdio_extension: StdioExtension
+  /** The key of a tool call's `_meta` the engine names the calling session under, so a tool server answers in that session. */
+  readonly tool_call_session_key: string
   /** The setting that offers the model skills at all (`load_skill` and the list in the prompt), and its unset default (martha#839). */
   readonly skills_advertised: ASkillsSwitch
   /** The setting that offers the model the engine's compiled-in skills on their own, and its unset default (martha#839). */
   readonly builtin_skills_advertised: ASkillsSwitch
+}
+
+/**
+ * How the engine reads an entry that starts a tool server on stdio: the key its variant is tagged by and the value that
+ * picks this variant, every key the variant reads, and the environment names the engine drops from the entry's `envs`
+ * with only a warning, so a variable the launcher needs the server to see is never one the engine silently removes.
+ */
+export interface StdioExtension {
+  readonly tag: string
+  readonly type: string
+  readonly keys: readonly string[]
+  readonly disallowed_env: readonly string[]
 }
 
 /** A switch the engine reads with `get_param::<bool>` through a constant: the setting it names, and what an unset one means. */
@@ -86,6 +103,8 @@ export const ENGINE_PLACES = {
   openai_provider: 'crates/goose-providers/src/openai.rs',
   delegate_tool: 'crates/goose/src/agents/platform_extensions/summon.rs',
   hint_files: 'crates/goose/src/hints/load_hints.rs',
+  stdio_extension: 'crates/goose-agent/src/extension.rs',
+  session_context: 'crates/goose/src/session_context.rs',
   skills_advertised: 'crates/goose/src/agents/services.rs',
   builtin_skills_advertised: 'crates/goose/src/skills/mod.rs',
 } as const
@@ -113,6 +132,8 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'openai provider', read: (source) => ({ openai_provider: openaiProviderIn(source) }) },
   { part: 'subagent models', read: (source) => ({ subagent_models: subagentModelsIn(source) }) },
   { part: 'hint files', read: (source) => ({ hint_files: hintFilesIn(source) }) },
+  { part: 'stdio extension', read: (source) => ({ stdio_extension: stdioExtensionIn(source) }) },
+  { part: 'tool call session key', read: (source) => ({ tool_call_session_key: toolCallSessionKeyIn(source) }) },
   { part: 'skills switch', read: (source) => ({ skills_advertised: skillsSwitchIn(source, 'skills_advertised') }) },
   { part: 'built-in skills switch', read: (source) => ({ builtin_skills_advertised: skillsSwitchIn(source, 'builtin_skills_advertised') }) },
 ]
@@ -273,6 +294,36 @@ function hintFilesIn(source: EngineSource): EngineFacts['hint_files'] {
     agents_md: valueOf(HINT_FILE_CONSTANTS.agents_md),
     when_unset: constants.map(valueOf),
   }
+}
+
+/** Rust text with its attributes and line comments taken out: what is left of a field is its name and its type. */
+const withoutAttributesOrComments = (text: string): string => text.replace(/#\[[^\]]*\]/g, '').replace(/\/\/[^\n]*/g, '')
+
+/**
+ * The stdio variant of the engine's extension config: the serde tag of the enum, the name the variant is renamed to on
+ * the wire, the field names it reads, and the list of environment names `Envs` drops. The list's declared length is
+ * held against the names read, so a name in a shape this reader misses is unreadable, never a shorter list.
+ */
+function stdioExtensionIn(source: EngineSource): StdioExtension {
+  const path = ENGINE_PLACES.stdio_extension
+  const text = fileOf(source, path)
+  const tag = captured(text, /#\[serde\(tag = "([^"]+)"\)\]\s*pub enum ExtensionConfig\b/, 'the tag of the extension config', path)
+  const variant = /#\[serde\(rename = "([^"]+)"\)\]\s*Stdio\s*\{([\s\S]*?)\n {4}\},/.exec(text)
+  if (variant?.[1] === undefined || variant[2] === undefined) throw new Error(`${path} says nothing of the stdio variant`)
+  const keys = [...withoutAttributesOrComments(variant[2]).matchAll(/^\s*(\w+)\s*:/gm)].map((found) => found[1] ?? '')
+  if (keys.length === 0) throw new Error(`${path} gives the stdio variant no field`)
+  const listed = /const DISALLOWED_KEYS: \[&'static str; (\d+)\] = \[([\s\S]*?)\];/.exec(text)
+  if (listed?.[1] === undefined || listed[2] === undefined) throw new Error(`${path} says nothing of the disallowed environment names`)
+  const disallowed_env = [...withoutAttributesOrComments(listed[2]).matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? '')
+  if (disallowed_env.length !== Number(listed[1])) {
+    throw new Error(`${path} declares ${listed[1]} disallowed environment names and ${String(disallowed_env.length)} are in a shape this reader knows`)
+  }
+  return { tag, type: variant[1], keys, disallowed_env }
+}
+
+function toolCallSessionKeyIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.session_context
+  return captured(fileOf(source, path), /pub const SESSION_ID_HEADER: &str = "([^"]+)"/, "the session key of a tool call's meta", path)
 }
 
 /**
