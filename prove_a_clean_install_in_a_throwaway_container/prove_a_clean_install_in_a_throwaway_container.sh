@@ -680,9 +680,11 @@ member_script() {
     "${TERMINAL_ROWS}" "${TERMINAL_COLUMNS}" "${CONTAINER_HOME}" "${CHECKOUT}" "${name}" "${name}" "$(remote_word "${ENDED_WORDS}")"
 }
 
-# A terminal's bytes on standard input, its escapes taken out.
+# A terminal's bytes on standard input, its escapes taken out. Run under C so every range below is a byte range: in a
+# UTF-8 locale GNU sed reads [@-~] as a collation range and takes no CSI sequence out, and the intermediate bytes are
+# [ -/] (space to slash), so the final byte is not swallowed with them (martha#777).
 without_escapes() {
-  sed 's/\x1b\[[0-9;?]*[ -\/]*[@-~]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[()][A-Z0-9]//g; s/\x1b[=>]//g' | tr -d '\r'
+  LC_ALL=C sed 's/\x1b\[[0-9;?]*[ -/]*[@-~]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[()][A-Z0-9]//g; s/\x1b[=>]//g' | tr -d '\r'
 }
 
 # What the terminal of the member at `index` has drawn so far, its escapes taken out.
@@ -1651,6 +1653,26 @@ self_test() {
   [ "$(node_major '>=25.0.0')" = 25 ] || { echo 'the self-test: node_major does not read >=25.0.0 as 25' >&2; case_failed=1; }
   if node_major 'the latest one' > /dev/null; then echo 'the self-test: node_major accepted a range with no number' >&2; case_failed=1; fi
   if image_digest_for 99 > /dev/null; then echo 'the self-test: a major with no pin was not refused' >&2; case_failed=1; fi
+
+  # A screen's escapes come out the same whatever the host's locale (martha#777). Under C the old intermediate range
+  # ate the byte after a sequence; under a UTF-8 locale that collates, [@-~] is a collation range and a stripper
+  # without LC_ALL=C takes nothing out. The bytes are built here, not copied from the function, so the case holds
+  # without_escapes itself. The collating locale is generated for the case, so it is the same on every host: without
+  # LC_ALL=C the UTF-8 half fails, and with the old range the C half loses the 'b'.
+  local planted drawn locale_dir
+  planted="$(printf 'a\033[1Cb\033[?1049hc')"
+  drawn="$(unset LC_ALL LC_CTYPE; export LC_ALL=C; printf '%s' "${planted}" | without_escapes)"
+  [ "${drawn}" = 'abc' ] || { echo "the self-test: without_escapes under C left an escape in or ate a character after one: '${drawn}'" >&2; case_failed=1; }
+  locale_dir="${root}/locale"
+  mkdir -p "${locale_dir}"
+  if localedef -i en_US -f UTF-8 "${locale_dir}/en_US.UTF-8" 2> /dev/null; then
+    drawn="$(unset LC_ALL LC_CTYPE; export LOCPATH="${locale_dir}" LC_ALL=en_US.UTF-8; printf '%s' "${planted}" | without_escapes)"
+    [ "${drawn}" = 'abc' ] || { echo "the self-test: without_escapes under en_US.UTF-8 left an escape in or ate a character after one: '${drawn}'" >&2; case_failed=1; }
+  else
+    echo 'the self-test: localedef could not build en_US.UTF-8, so the UTF-8 half of without_escapes was not shown' >&2
+    case_failed=1
+  fi
+  rm -rf "${locale_dir}"
 
   # The run's own line that a member ended: the member's real terminal script, run with a `martha` that ends with a
   # status of its own, must print it with that status. The stand-in members print this line themselves, so without
