@@ -82,6 +82,9 @@ export const OWN_WRITES_SUFFIX = '.jsonl'
 /** How many launches' own writes are kept: the newest by the last record each kept, so a reader of the history has one. */
 export const OWN_WRITES_LAUNCHES_KEPT = 64
 
+/** The directory inside Martha's state that holds what each ended launch's transcript was of it, one directory per launch (martha#646). */
+export const TRANSCRIPTS_PLACE = 'transcripts'
+
 /** How many random bytes a node id holds: 64 hex digits, the shape NODE_ID accepts. */
 const NODE_ID_BYTES = 32
 

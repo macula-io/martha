@@ -183,6 +183,9 @@ export function cleanUpIfTheLauncherEnds(pid: number, made: LaunchMade): () => v
   const onLauncherExit = (): void => {
     killGroup(pid)
     made.relayDirectory.remove()
+    // Before the snapshot goes, what the member's host wrote of its session is kept (martha#646): this handler runs in
+    // `exit`, so the keep is synchronous and bounded, and a failure in it never stops the two removals below.
+    made.keepTranscripts()
     made.removeSnapshot()
   }
   process.once('exit', onLauncherExit)

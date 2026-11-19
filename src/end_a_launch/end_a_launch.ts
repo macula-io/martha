@@ -87,10 +87,12 @@ type RecordedStart =
   | { readonly pid: number; readonly recorded: LaunchRecorded; readonly inTheLaunchRecord: boolean }
   | { readonly refusal: string }
 
-/** Closes the relay's server and removes the socket directory and the snapshot, in that order. */
+/** Closes the relay's server and removes the socket directory and the snapshot, in that order, keeping the member's
+ * transcripts before the snapshot that holds them goes (martha#646). */
 async function removeWhatTheLaunchMade(made: LaunchMade): Promise<void> {
   await made.server.close()
   made.relayDirectory.remove()
+  made.keepTranscripts()
   made.removeSnapshot()
 }
 
