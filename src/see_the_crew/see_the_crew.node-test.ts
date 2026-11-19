@@ -7,8 +7,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS, seeTheCrew, theCrewToolsFlag, thePaneAnsweredBy, thePaneHeader, thePaneLine, theRowsThePaneAsksFor } from './see_the_crew.ts'
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS, PANE_GOAL_ROWS, seeTheCrew, theCrewToolsFlag, thePaneAnsweredBy, thePaneHeader, thePaneLine, theRowsThePaneAsksFor } from './see_the_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 const CREW = { members: [{ name: 'Vesta' }, { name: 'Uranus' }, { name: 'Terra' }] }
 const NOW = 1_762_900_000_000
@@ -78,8 +78,8 @@ test('a member waiting on somebody keeps that wait, and a member that needs the 
 test('the rows the pane asks for are one per member, one more for each member that needs the owner, and the chrome (test 8)', () => {
   const seen = seeTheCrew(CREW, { Uranus: beat('Uranus', NOW - 1_000), Terra: beat('Terra', NOW - 2_000, { state: 'needs-you' }) }, NOW)
 
-  assert.equal(theRowsThePaneAsksFor([]), PANE_CHROME_ROWS, 'a crew with no member still draws its box')
-  assert.equal(theRowsThePaneAsksFor(seen.rows), 3 + 1 + PANE_CHROME_ROWS, 'one row per member, one more for the member that needs the owner, and the chrome')
+  assert.equal(theRowsThePaneAsksFor([]), PANE_CHROME_ROWS + PANE_GOAL_ROWS, 'a crew with no member still draws its goal line and its box')
+  assert.equal(theRowsThePaneAsksFor(seen.rows), 3 + 1 + PANE_CHROME_ROWS + PANE_GOAL_ROWS, 'one row per member, one more for the member that needs the owner, the goal line, and the chrome')
 })
 
 test('the pane is answered as words: its header, and one line per member, so the mod formats nothing (martha#255)', () => {
@@ -141,4 +141,22 @@ test('a lost window is carried and flagged beside the state; a row that says not
   assert.equal(theCrewToolsFlag(seen.rows[1]!), null)
   assert.equal(theCrewToolsFlag({ served_tools: { state: 'held' } }), null)
   assert.ok(!thePaneLine(seen.rows[1]!).includes('crew tools'))
+})
+
+test("the crew's goal is read off the declaration and drawn above the pane's header, one row of its own (martha#309)", () => {
+  const goal = { says: 'A stranger can find a widget in the catalogue', packages: ['synthetic-owner/repo#7', 'synthetic-owner/repo#8'] }
+  const seen = seeTheCrew({ members: [{ name: 'Vesta' }], goal }, {}, NOW)
+  assert.deepEqual(seen.goal, goal, 'the goal is the declaration\'s own, read through the same reader as the rows, and no row carries it')
+  const answered = thePaneAnsweredBy(seen, false, 1_000)
+  assert.equal(answered.goal, 'Goal: A stranger can find a widget in the catalogue (synthetic-owner/repo#7, synthetic-owner/repo#8)')
+  assert.equal(answered.rows, theRowsThePaneAsksFor(seen.rows), 'the goal line is one of the rows the pane asks for')
+  assert.equal(theRowsThePaneAsksFor(seen.rows), seen.rows.length + PANE_CHROME_ROWS + PANE_GOAL_ROWS, 'one line above the header, besides the chrome')
+  assert.ok(!answered.lines.some((line) => line.startsWith('Goal: ')), 'the goal is drawn above the header, not among the members')
+})
+
+test('a crew that declared no goal says so and where one is written, never an empty line (martha#309)', () => {
+  const answered = thePaneAnsweredBy(seeTheCrew({ members: [] }, {}, NOW), false, 1_000)
+  assert.match(answered.goal, /^No crew goal declared: /)
+  assert.ok(answered.goal.includes(`${DECLARATION_DIRECTORY}/${DECLARATION_FILE}`), 'the line names the file a goal is written in')
+  assert.equal(theRowsThePaneAsksFor([]), PANE_CHROME_ROWS + PANE_GOAL_ROWS, 'the goal line is counted even when it says none is declared')
 })

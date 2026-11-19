@@ -6,7 +6,11 @@
 // never beat reads idle rather than working. `offline` is the reader's word about a row that has gone quiet — no
 // writer records it — so a session that dies leaves a row that says so within one interval instead of a row
 // claiming work it is not doing.
+//
+// The crew's goal (martha#309) is read the same way and drawn above the pane's header: it is the declaration's own
+// field, so no row carries it and no member writes it.
 
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, type CrewGoal } from '../declare_crew/declare_crew.ts'
 import { BEAT_INTERVAL_MS, IDLE, OFFLINE, OFFLINE_AFTER_MS, STATES, type CrewToolsOnARow, type DashboardRow, type HostFacts, type Progress, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 
@@ -55,12 +59,21 @@ export interface CrewCounts {
 /** The declaration, as this slice needs it: the crew's members, in the order the declaration names them. */
 export interface TheDeclaredCrew {
   readonly members: readonly { readonly name: string }[]
+  /**
+   * The crew's goal (martha#309), as the declaration states it; absent when the caller knows none, which reads as a
+   * crew that declared none. It is read here and drawn, never written: the goal is the declaration's.
+   */
+  readonly goal?: CrewGoal | null
 }
 
-/** Every member's row, in the declaration's order, and the counts a header shows. */
-export function seeTheCrew(crew: TheDeclaredCrew, beats: Readonly<Record<string, DashboardRow>>, now: number): { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts } {
+/** Every member's row, in the declaration's order, the counts a header shows, and the goal the pane draws above it. */
+export function seeTheCrew(
+  crew: TheDeclaredCrew,
+  beats: Readonly<Record<string, DashboardRow>>,
+  now: number,
+): { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts; readonly goal: CrewGoal | null } {
   const rows = crew.members.map((member) => rowOf(member.name, beats[member.name], now))
-  return { rows, counts: countsOf(rows) }
+  return { rows, counts: countsOf(rows), goal: crew.goal ?? null }
 }
 
 /** One member's row: its beat, or the row a member that never beat reads as. */
@@ -128,6 +141,16 @@ export const READER_BEAT_MS = BEAT_INTERVAL_MS
 export const PANE_CHROME_ROWS = 3
 
 /**
+ * The pane's goal line (martha#309), drawn above its header: the crew's goal as the declaration states it, or the one
+ * sentence that says none is declared and where one is written. It never draws an empty line.
+ */
+export function thePaneGoal(goal: CrewGoal | null): string {
+  if (goal === null) return `No crew goal declared: "goal": { "says": "<one sentence>" } in ${DECLARATION_DIRECTORY}/${DECLARATION_FILE} sets one.`
+  const named = goal.packages.length === 0 ? '' : ` (${goal.packages.join(', ')})`
+  return `Goal: ${goal.says}${named}`
+}
+
+/**
  * The pane's header line (martha#254): how many members are online, how many wait, and how many need the owner.
  * It is answered here rather than drawn by the mod, so a count the owner reads is the one this slice counted.
  */
@@ -145,12 +168,15 @@ export function thePaneLine(row: CrewRow): string {
   return `${row.member}: ${row.state}${tools === null ? '' : `, ${tools}`} · ${row.task} ${bar}${holds}${waits}${needs}`
 }
 
+/** How many lines the goal above the pane's header takes: one, whether a goal is declared or the line says none is. */
+export const PANE_GOAL_ROWS = 1
+
 /**
  * How many rows the pane asks the host for (martha#254): one per member, one more for each member that needs the
- * owner (its own block), and the chrome.
+ * owner (its own block), the goal line above the header, and the chrome.
  */
 export function theRowsThePaneAsksFor(rows: readonly CrewRow[]): number {
-  return rows.length + rows.filter((row) => row.state === 'needs-you').length + PANE_CHROME_ROWS
+  return rows.length + rows.filter((row) => row.state === 'needs-you').length + PANE_CHROME_ROWS + PANE_GOAL_ROWS
 }
 
 /** What the pane draws when no member of the crew has a row at all (martha#254). */
@@ -158,6 +184,8 @@ export const NO_MEMBER_HAS_REPORTED = 'No member of this crew has reported yet.'
 
 /** What the pane is answered (martha#254): the words it draws, whether it opens by itself, and how it is refreshed. */
 export interface ThePaneAnswered {
+  /** The goal line, drawn above the header (martha#309). */
+  readonly goal: string
   readonly header: string
   readonly lines: readonly string[]
   readonly open_at_start: boolean
@@ -173,7 +201,7 @@ export interface ThePaneAnswered {
  * composes no part of its own, so a crew with no nudges draws exactly the pane it drew before.
  */
 export function thePaneAnsweredBy(
-  seen: { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts },
+  seen: { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts; readonly goal?: CrewGoal | null },
   opens_at_start: boolean,
   redraw_ms: number,
   block: readonly string[] = [],
@@ -181,6 +209,7 @@ export function thePaneAnsweredBy(
   const members = seen.rows.map(thePaneLine)
   const lines = [...(members.length === 0 ? [NO_MEMBER_HAS_REPORTED] : members), ...block]
   return {
+    goal: thePaneGoal(seen.goal ?? null),
     header: thePaneHeader(seen.counts),
     lines,
     open_at_start: opens_at_start,

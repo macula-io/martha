@@ -772,3 +772,26 @@ test('a host that takes any model name reads any review model, and one that name
   assert.equal(settings.house_rules.review_model, declaration.house_rules.review_model)
   await refusedWith(declaration, 'house_rules.review_model')
 })
+
+// --- the crew's goal (martha#309) ---------------------------------------------
+
+test("a declared goal reads back as its sentence and the packages it names, and one whose key names no packages reads as none", async () => {
+  const said = await declare({ ...solo, goal: { says: 'A stranger can find a widget in the catalogue' } }).settings
+  assert.deepEqual(said.goal, { says: 'A stranger can find a widget in the catalogue', packages: [] })
+
+  const named = await declare({ ...solo, goal: { says: 'The catalogue and its search', packages: ['synthetic-owner/repo#7', 'synthetic-owner/repo#8'] } }).settings
+  assert.deepEqual(named.goal, { says: 'The catalogue and its search', packages: ['synthetic-owner/repo#7', 'synthetic-owner/repo#8'] })
+})
+
+test('a declaration that names no goal reads as none, never as a sentence of the reader\'s', async () => {
+  assert.equal((await declare(solo).settings).goal, null)
+})
+
+test('a goal that is not one is refused by name, never read as no goal', async () => {
+  await refusedWith({ ...solo, goal: 'A stranger can find a widget' }, 'goal')
+  await refusedWith({ ...solo, goal: { says: '' } }, 'goal.says')
+  await refusedWith({ ...solo, goal: { says: 'The catalogue', packages: 'synthetic-owner/repo#7' } }, 'goal.packages')
+  await refusedWith({ ...solo, goal: { says: 'The catalogue', packages: ['not a package'] } }, 'goal.packages[0]')
+  await refusedWith({ ...solo, goal: { says: 'The catalogue', packages: ['synthetic-owner/repo#7', 'synthetic-owner/repo#7'] } }, 'goal.packages[1]')
+  await refusedWith({ ...solo, goal: { says: 'The catalogue', sentence: 'a second one' } }, 'goal.sentence')
+})

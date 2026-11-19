@@ -30,6 +30,7 @@ import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 import { GATE_AUDITS, GATE_ENFORCES, gateSettingOf, type GateSetting } from '../read_the_gate_mode/read_the_gate_mode.ts'
 
 /** Where a crew's declaration lives, relative to the project root (martha#468: the folder is Martha's own). */
@@ -198,6 +199,22 @@ export interface Backlog {
   readonly places: readonly string[]
   readonly idle_minutes: number
 }
+
+/**
+ * The key a crew's goal is declared under (martha#309): the one sentence the owner reads above the dashboard, and the
+ * packages it names. A goal is declaration data — the owner writes it in the file, and no member sets it at run time,
+ * the way a member sets no other setting of the crew's.
+ */
+const GOAL = 'goal'
+
+/** The crew's goal: one sentence, and the packages it names, in the declaration's own words. */
+export interface CrewGoal {
+  readonly says: string
+  /** The packages the goal names, `owner/repo#n`, in the order they were declared; empty when it names none. */
+  readonly packages: readonly string[]
+}
+
+const GOAL_KEYS = ['says', 'packages'] as const
 
 /** The house rule that turns a crew's workspace layout on (martha#256), which brings the two places below with it. */
 export const WORKSPACE_LAYOUT = 'workspace_layout'
@@ -381,6 +398,11 @@ export interface CrewSettings {
   /** Where to look for work nobody holds, and the idle window (martha#319); null when the declaration names none. */
   readonly backlog: Backlog | null
   /**
+   * The crew's goal (martha#309): the sentence the dashboard reads above its members, and the packages it names; null
+   * when the declaration names none, and the dashboard then says no goal is declared rather than drawing an empty line.
+   */
+  readonly goal: CrewGoal | null
+  /**
    * The roots a reboot deletes (martha#314), as the declaration names them; empty when it names none, and the launch's
    * own machine roots apply there. Read by ../tell_a_citer_of_a_volatile_path, which never writes a root of its own.
    */
@@ -400,7 +422,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, GOAL] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 const OPTIONAL_MEMBER_KEYS = ['model', HOST] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
@@ -538,6 +560,7 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
     backlog: backlogOf(refuse, value[BACKLOG]),
+    goal: goalOf(refuse, value[GOAL]),
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
   }
 }
@@ -558,6 +581,29 @@ function volatilePathsOf(refuse: Refuse, value: unknown): string[] {
     roots.push(trimmed)
   })
   return roots
+}
+
+/**
+ * The crew's goal (martha#309): one sentence, and the packages it names, each of them a package by the ledger's own
+ * rule. A declaration that names no goal reads as none, since a goal is the owner's to write and no release can invent
+ * one; a value someone wrote that is not one is refused by name, never read as "no goal".
+ */
+function goalOf(refuse: Refuse, value: unknown): CrewGoal | null {
+  if (value === undefined) return null
+  if (!isObject(value)) return refuse.at(GOAL, `is not ${shapeOf(GOAL_KEYS)}`)
+  refuse.unknownKeys(value, GOAL_KEYS, `${GOAL}.`)
+  if (!isText(value['says'])) return refuse.at(`${GOAL}.says`, 'is not a sentence')
+  const says = value['says'].trim()
+  const packages = value['packages']
+  if (packages === undefined) return { says, packages: [] }
+  if (!Array.isArray(packages)) return refuse.at(`${GOAL}.packages`, 'is not a list of packages, owner/repo#n')
+  const named: string[] = []
+  packages.forEach((one: unknown, i: number) => {
+    if (typeof one !== 'string' || !WORK_PACKAGE.test(one)) refuse.at(`${GOAL}.packages[${i}]`, 'is not a package, owner/repo#n')
+    if (named.includes(one)) refuse.at(`${GOAL}.packages[${i}]`, 'is named twice')
+    named.push(one)
+  })
+  return { says, packages: named }
 }
 
 /** The declared backlog, or null when there is none: every place a name GitHub could hold, and the window named. */
