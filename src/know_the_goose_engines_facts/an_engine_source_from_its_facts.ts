@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { A_TRUE_SWITCH_COUNTS, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type EngineFacts, type EngineSource, type PlatformExtension, type SecretStorage, type ToolNaming } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type DeveloperTool, type EngineFacts, type EngineSource, type PlatformExtension, type SecretStorage, type ToolNaming } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -146,7 +146,8 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.builtin_skills_advertised]: skillsSwitch(SKILLS_SWITCH_READERS.builtin_skills_advertised, facts.builtin_skills_advertised),
     [ENGINE_PLACES.tool_call_meta]: toolCallMeta(facts.tool_naming),
     [ENGINE_PLACES.tool_name_parts]: toolNameParts(facts.tool_naming),
-    [ENGINE_PLACES.shell_tool]: developerTools(facts.shell_tool),
+    [ENGINE_PLACES.shell_tool]: developerTools(facts.shell_tool, facts.developer_tools),
+    [`${DEVELOPER_DIR}/params.rs`]: developerParams(facts.developer_tools),
     [ENGINE_PLACES.openai_provider]: `pub const OPEN_AI_PROVIDER_NAME: &str = "${facts.openai_provider.name}";\npub const OPEN_AI_DEFAULT_BASE_PATH: &str = "${facts.openai_provider.default_base_path}";\n            vec![\n${settings}            ],\n`,
   }
 }
@@ -172,19 +173,34 @@ const toolNameParts = (naming: ToolNaming): string =>
   `impl<'a> From<&'a str> for ToolNameParts<'a> {\n    fn from(name: &'a str) -> Self {\n        match name.${SPLITS_ONCE[naming.split_at]}("${naming.separator}") {\n            Some((extension_name, tool_name)) => Self { extension_name: Some(extension_name), tool_name },\n            None => Self { extension_name: None, tool_name: name },\n        }\n    }\n}\n`
 
 /**
- * The Developer extension's tools as the engine writes them: another tool before the shell, the shell built in a block
- * of its own on its parameters, and the call dispatch parsing those parameters for the shell's name.
+ * The Developer extension's tools as the engine writes them: each listed tool on its parameters, the shell built in a
+ * block of its own and named as the recording names the shell, and the call dispatch parsing each tool's parameters for
+ * its name. The tool on the shell's parameters takes the shell's name, so a recording that renames the shell renames it here.
  */
-const developerTools = (shell: string): string =>
-  [
+function developerTools(shell: string, tools: readonly DeveloperTool[]): string {
+  const named = tools.map((tool) => (tool.params === SHELL_TOOL.params ? { ...tool, name: shell } : tool))
+  const listed = named.map(({ name, params }) =>
+    params === SHELL_TOOL.params
+      ? `            {\n                let description = format!("Execute a command.");\n                Tool::new("${name}".to_string(), description, Self::schema::<${params}>())\n            }\n            .with_output_schema::<ShellOutput>(),\n`
+      : `            Tool::new(\n                "${name}".to_string(),\n                "What ${name} does.".to_string(),\n                Self::schema::<${params}>(),\n            ),\n`,
+  )
+  const dispatched = named.map(({ name, params }) => `            "${name}" => match Self::parse_args::<${params}>(arguments) {\n                Ok(params) => run(params),\n                Err(error) => fail(error),\n            },\n`)
+  return [
     `impl DeveloperClient {\n    pub(crate) fn ${SHELL_TOOL.lister}() -> Vec<Tool> {\n        vec![\n`,
-    `            Tool::new(\n                "another_tool".to_string(),\n                "What another tool does.".to_string(),\n                Self::schema::<AnotherParams>(),\n            ),\n`,
-    `            {\n                let description = format!("Execute a command.");\n                Tool::new("${shell}".to_string(), description, Self::schema::<${SHELL_TOOL.params}>())\n            }\n            .with_output_schema::<ShellOutput>(),\n`,
+    ...listed,
     `        ]\n    }\n}\n\n`,
     `impl PlatformExtension for DeveloperClient {\n    async fn call_tool(&self, name: &str) -> Result<CallToolResult, Error> {\n        match name {\n`,
-    `            "${shell}" => match Self::parse_args::<${SHELL_TOOL.params}>(arguments) {\n                Ok(params) => run(params),\n                Err(error) => fail(error),\n            },\n`,
-    `            "another_tool" => match Self::parse_args::<AnotherParams>(arguments) {\n                Ok(params) => other(params),\n                Err(error) => fail(error),\n            },\n        }\n    }\n}\n`,
+    ...dispatched,
+    `        }\n    }\n}\n`,
   ].join('')
+}
+
+/**
+ * The Developer extension's parameters, each declared once: a number before the argument and a second text field after
+ * it, so only the first text field is the argument.
+ */
+const developerParams = (tools: readonly DeveloperTool[]): string =>
+  tools.map(({ params, argument }) => `pub struct ${params} {\n    #[serde(default)]\n    pub a_count: u32,\n    pub ${argument}: String,\n    pub another_text: String,\n}\n\n`).join('')
 
 /** The same tree as a reader, for a test that never touches the disk. */
 export function anEngineSourceSaying(files: Readonly<Record<string, string>>): EngineSource {

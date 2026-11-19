@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { A_TRUE_SWITCH_COUNTS, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, SKILLS_SWITCH_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, SKILLS_SWITCH_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -226,6 +226,15 @@ test('a meta builder that is gone makes the tool naming unreadable by name, neve
 /** The part that reads the shell tool, by the name a failed read reports. */
 const SHELL_PART = ENGINE_PARTS.find(({ read }) => 'shell_tool' in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS))))?.part
 
+/**
+ * The part that reads the Developer extension's tools (#541 package A): a shell listed or run wrongly is one of those
+ * tools listed or run wrongly, so both parts are unreadable, each by its own name.
+ */
+const DEVELOPER_PART = ENGINE_PARTS.find(({ read }) => 'developer_tools' in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS))))?.part
+
+/** The tool the engine lists right after the shell, whose dispatch arm a second shell arm is put before. */
+const AFTER_THE_SHELL = RECORDED_FACTS.developer_tools[RECORDED_FACTS.developer_tools.findIndex(({ params }) => params === SHELL_TOOL.params) + 1]?.name
+
 test('a shell tool the engine renames is read under its new name, from the list and the dispatch both (#541 part C4)', () => {
   const shell_tool = `${RECORDED_FACTS.shell_tool}_renamed`
   const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, shell_tool })))
@@ -239,7 +248,7 @@ test('a Developer extension that lists no tool on the shell parameters makes the
   const gone = tools.replace(`Self::schema::<${SHELL_TOOL.params}>()`, 'Self::schema::<AnotherParams>()')
   assert.notEqual(gone, tools, 'the built tree lists no shell tool to take away')
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: gone }))
-  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART, DEVELOPER_PART])
   assert.match(unreadable[0]?.why ?? '', new RegExp(`lists 0 tools on ${SHELL_TOOL.params}`))
 })
 
@@ -250,7 +259,7 @@ test('a shell tool listed under one name and run under another is unreadable, ne
   const split = tools.replace(`"${shell}" => match`, `"${shell}_elsewhere" => match`)
   assert.notEqual(split, tools, 'the built tree dispatches no shell tool to rename')
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: split }))
-  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART, DEVELOPER_PART])
   assert.match(unreadable[0]?.why ?? '', new RegExp(`lists the shell tool as ${shell} but runs`))
 })
 
@@ -262,7 +271,7 @@ test('a Developer extension that lists two tools on the shell parameters is unre
   const twice = tools.replace(listed, `Tool::new("${shell}_too".to_string(), description, Self::schema::<${SHELL_TOOL.params}>())\n${listed}`)
   assert.notEqual(twice, tools, 'the built tree lists no shell tool to list twice')
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: twice }))
-  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART, DEVELOPER_PART])
   assert.match(unreadable[0]?.why ?? '', new RegExp(`lists 2 tools on ${SHELL_TOOL.params}`))
 })
 
@@ -270,7 +279,8 @@ test('a Developer extension that runs the shell parameters for a second name, af
   const files = engineFilesSaying(RECORDED_FACTS)
   const tools = files[ENGINE_PLACES.shell_tool] ?? ''
   const shell = RECORDED_FACTS.shell_tool
-  const another = '"another_tool" => match'
+  assert.ok(AFTER_THE_SHELL !== undefined, 'the recording lists no tool after the shell to put a second arm before')
+  const another = `"${AFTER_THE_SHELL}" => match`
   const second = `"${shell}_also" => match Self::parse_args::<${SHELL_TOOL.params}>(arguments) {\n                Ok(params) => run(params),\n                Err(error) => fail(error),\n            },\n            ${another}`
   const twice = tools.replace(another, second)
   assert.notEqual(twice, tools, 'the built tree dispatches no other tool to put a second shell arm before')
@@ -339,4 +349,43 @@ test('the secret storage and the mode default are both read from the one config 
   assert.equal(ENGINE_PLACES.secret_storage, ENGINE_PLACES.mode_when_unset, 'the two facts moved apart: the tree no longer needs to write them into one file')
   const text = engineFilesSaying(RECORDED_FACTS)[ENGINE_PLACES.secret_storage] ?? ''
   assert.ok(text.includes('fn resolve_goose_mode(') && text.includes(`fn ${SECRET_STORAGE.file}(`))
+})
+
+/** The tools the recording lists that are not the shell, the ones a test may rename or break without touching the shell part. */
+const NOT_THE_SHELL = RECORDED_FACTS.developer_tools.filter(({ params }) => params !== SHELL_TOOL.params)
+
+test('every Developer tool is read with its name, its parameters and the first text field of those, as the engine lists them (#541 package A; mutants: a field read past the first text one, a name taken from the dispatch alone)', () => {
+  assert.ok(NOT_THE_SHELL.length > 0, 'the recording lists no tool beside the shell, so this case reads only one')
+  const developer_tools = RECORDED_FACTS.developer_tools.map((tool) => (tool.params === SHELL_TOOL.params ? tool : { ...tool, name: `${tool.name}_renamed`, argument: `${tool.argument}_renamed` }))
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, developer_tools })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.developer_tools, developer_tools)
+})
+
+test('a Developer tool listed on one set of parameters and run on another is unreadable by name, never a tool with either (#541 package A)', () => {
+  const [tool] = NOT_THE_SHELL
+  assert.ok(tool !== undefined, 'the recording lists no tool beside the shell')
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tools = files[ENGINE_PLACES.shell_tool] ?? ''
+  const other = tools.replace(`"${tool.name}" => match Self::parse_args::<${tool.params}>`, `"${tool.name}" => match Self::parse_args::<AnotherParams>`)
+  assert.notEqual(other, tools, 'the built tree dispatches no such tool to change')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: other }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [DEVELOPER_PART])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`lists the tool ${tool.name} on ${tool.params} but runs it on \\["AnotherParams"\\]`))
+})
+
+test('Developer parameters declared in two files, or with no text field, are unreadable by name, never an argument guessed (#541 package A)', () => {
+  const [tool] = NOT_THE_SHELL
+  assert.ok(tool !== undefined, 'the recording lists no tool beside the shell')
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const params = `${DEVELOPER_DIR}/params.rs`
+  const declared = files[params] ?? ''
+  const twice = engineFactsIn(anEngineSourceSaying({ ...files, [`${DEVELOPER_DIR}/again.rs`]: declared }))
+  assert.deepEqual(twice.unreadable.map(({ part }) => part), [DEVELOPER_PART])
+  assert.match(twice.unreadable[0]?.why ?? '', new RegExp(`declares ${RECORDED_FACTS.developer_tools[0]?.params ?? ''} in 2 files`))
+  const textless = declared.replace(`pub ${tool.argument}: String,\n    pub another_text: String,`, `pub ${tool.argument}: u32,\n    pub another_text: u64,`)
+  assert.notEqual(textless, declared, 'the built tree declares no such parameters to change')
+  const none = engineFactsIn(anEngineSourceSaying({ ...files, [params]: textless }))
+  assert.deepEqual(none.unreadable.map(({ part }) => part), [DEVELOPER_PART])
+  assert.match(none.unreadable[0]?.why ?? '', new RegExp(`the first text field of ${tool.params}`))
 })

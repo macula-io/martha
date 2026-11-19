@@ -82,6 +82,19 @@ export interface EngineFacts {
    * lists on its shell parameters and runs a command for, the name the shell hold reads while an agent runs (martha#562).
    */
   readonly shell_tool: string
+  /**
+   * Every tool the Developer extension lists, in its order (#541 package A, design G1): the tool's name, the parameters
+   * it is parsed into, and the argument that names what it reads, writes or runs, which is the first text field of those
+   * parameters. The launch's decisions over a member's calls take their names from here, never from a list in the code.
+   */
+  readonly developer_tools: readonly DeveloperTool[]
+}
+
+/** One tool of the Developer extension: its name, its parameters, and the argument that names its file, command or source. */
+export interface DeveloperTool {
+  readonly name: string
+  readonly params: string
+  readonly argument: string
 }
 
 /** The engine's naming of a called tool: where a client reads it, and how it splits into an extension's and a tool's own name. */
@@ -146,6 +159,12 @@ export const ENGINE_PLACES = {
   shell_tool: 'crates/goose/src/agents/platform_extensions/developer/mod.rs',
 } as const
 
+/**
+ * The folder the Developer extension's files sit in (#541 package A): its tools' parameters are declared across them,
+ * one struct per file or several, so the reader looks in every file there rather than a file of its own.
+ */
+export const DEVELOPER_DIR = 'crates/goose/src/agents/platform_extensions/developer'
+
 /** The function that reads each skills switch, in the file ENGINE_PLACES names for it (martha#839). */
 export const SKILLS_SWITCH_READERS = { skills_advertised: 'skills_advertised', builtin_skills_advertised: 'builtin_skills_advertised' } as const
 
@@ -175,6 +194,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'built-in skills switch', read: (source) => ({ builtin_skills_advertised: skillsSwitchIn(source, 'builtin_skills_advertised') }) },
   { part: 'tool naming', read: (source) => ({ tool_naming: toolNamingIn(source) }) },
   { part: 'shell tool', read: (source) => ({ shell_tool: shellToolIn(source) }) },
+  { part: 'developer tools', read: (source) => ({ developer_tools: developerToolsIn(source) }) },
   { part: 'secret storage', read: (source) => ({ secret_storage: secretStorageIn(source) }) },
 ]
 
@@ -474,6 +494,36 @@ function shellToolIn(source: EngineSource): string {
   if (listed.length !== 1 || name === undefined) throw new Error(`${path} lists ${String(listed.length)} tools on ${SHELL_TOOL.params} in ${SHELL_TOOL.lister}, not one shell tool`)
   if (dispatched.length !== 1 || dispatched[0] !== name) throw new Error(`${path} lists the shell tool as ${name} but runs ${SHELL_TOOL.params} for ${JSON.stringify(dispatched)}`)
   return name
+}
+
+/**
+ * Every tool the Developer extension lists (#541 package A, design G1), in the order its lister gives them: each one's
+ * name and the parameters its schema is built on, which the call dispatch must parse for that same name, and the first
+ * text field of those parameters, found in the one file of the extension's folder that declares them. A tool the
+ * dispatch runs on other parameters, parameters declared in no file or in two, or parameters with no text field are
+ * unreadable, never a tool with a guessed argument: a wrong argument would let a write pass the owner's guards unread.
+ */
+function developerToolsIn(source: EngineSource): readonly DeveloperTool[] {
+  const path = ENGINE_PLACES.shell_tool
+  const text = fileOf(source, path)
+  const listing = captured(text, new RegExp(`fn ${SHELL_TOOL.lister}\\(\\)[^{]*\\{([\\s\\S]*?)\\n {4}\\}`), `the function ${SHELL_TOOL.lister}`, path)
+  const listed = [...listing.matchAll(/Tool::new\(\s*"([^"]+)"\.to_string\(\),[\s\S]*?schema::<(\w+)>/g)].map((found) => ({ name: found[1] ?? '', params: found[2] ?? '' }))
+  if (listed.length === 0) throw new Error(`${path} lists no tool in ${SHELL_TOOL.lister}`)
+  const files = source.list(DEVELOPER_DIR).filter((name) => name.endsWith('.rs')).map((name) => `${DEVELOPER_DIR}/${name}`)
+  return listed.map(({ name, params }) => {
+    const dispatched = [...text.matchAll(new RegExp(`"${name}"\\s*=>\\s*match\\s+Self::parse_args::<(\\w+)>`, 'g'))].map((found) => found[1] ?? '')
+    if (dispatched.length !== 1 || dispatched[0] !== params) throw new Error(`${path} lists the tool ${name} on ${params} but runs it on ${JSON.stringify(dispatched)}`)
+    return { name, params, argument: firstTextFieldOf(source, files, params) }
+  })
+}
+
+/** The first `pub <field>: String` of the struct `params`, in the one file of `files` that declares it. */
+function firstTextFieldOf(source: EngineSource, files: readonly string[], params: string): string {
+  const declaring = files.filter((file) => new RegExp(`pub struct ${params}\\s*\\{`).test(source.read(file) ?? ''))
+  const [file] = declaring
+  if (declaring.length !== 1 || file === undefined) throw new Error(`${DEVELOPER_DIR} declares ${params} in ${String(declaring.length)} files, not one`)
+  const body = captured(fileOf(source, file), new RegExp(`pub struct ${params}\\s*\\{([^}]*)\\}`), `the struct ${params}`, file)
+  return captured(body, /pub (\w+): String,/, `the first text field of ${params}`, file)
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */

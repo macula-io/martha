@@ -191,6 +191,33 @@
     "split_at": "first"
   },
   "shell_tool": "shell",
+  "developer_tools": [
+    {
+      "name": "write",
+      "params": "FileWriteParams",
+      "argument": "path"
+    },
+    {
+      "name": "edit",
+      "params": "FileEditParams",
+      "argument": "path"
+    },
+    {
+      "name": "shell",
+      "params": "ShellParams",
+      "argument": "command"
+    },
+    {
+      "name": "tree",
+      "params": "TreeParams",
+      "argument": "path"
+    },
+    {
+      "name": "read_image",
+      "params": "ImageReadParams",
+      "argument": "source"
+    }
+  ],
   "secret_storage": {
     "keyring_switch": "GOOSE_DISABLE_KEYRING",
     "file": "secrets.yaml"
