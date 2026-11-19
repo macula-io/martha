@@ -622,10 +622,11 @@ test('#312: martha stop with nothing running says so and ends done; a name the c
 /** How long `martha crew` may take to draw its first frame before the test gives up on it. */
 const FIRST_FRAME_MS = 20_000
 
-test('#572: martha crew takes no argument but one of its verbs (martha#307)', (t) => {
+test('#572: martha crew takes no argument', (t) => {
   const place = placeFor(t)
   assert.equal(marthaWith(place, runtimeOf(place), 'crew', 'Terra').status, EXIT_USAGE)
-  // The strip is still `martha crew` alone; the bracket holds the verbs #307 added, each optional.
+  // No argument but one of the verbs martha#307 added: the strip is still `martha crew` alone, and the bracket holds the
+  // verbs, each optional.
   assert.ok(USAGE.includes('| martha crew [add <member> <role>'), USAGE)
 })
 
