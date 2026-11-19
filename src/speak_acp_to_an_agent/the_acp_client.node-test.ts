@@ -91,10 +91,11 @@ test('a refused call is answered reject_once, and the call does not run', async 
   assert.equal(turn.toolCalls[0]?.status, 'failed')
 })
 
-test('the gate is asked with the session, the call and its input', async () => {
+test('the gate is asked with the session, the call, its input and what the updates said of it first', async () => {
   const seen: unknown[] = []
   await oneTurn({ turns: [[{ call: A_CALL }]] }, (request) => { seen.push(request); return 'allow' })
-  assert.deepEqual(seen, [{ sessionId: STAND_IN_SESSION, toolCallId: A_CALL.id, title: A_CALL.title, rawInput: A_CALL.input }])
+  const heard = { toolCallId: A_CALL.id, title: A_CALL.title, kind: 'other', status: 'pending', rawInput: A_CALL.input }
+  assert.deepEqual(seen, [{ sessionId: STAND_IN_SESSION, toolCallId: A_CALL.id, title: A_CALL.title, rawInput: A_CALL.input, heard }])
 })
 
 test('a decision that throws, or that rejects, refuses the call and says why', async () => {

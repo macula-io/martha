@@ -8,8 +8,12 @@
 // (`$HOME`): skills, recipes, user plugin settings and agent sources. So a launch writes both, per
 // launch, and the owner's home is never read. Inside the root it writes the config the engine loads: the
 // provider and the model the member's model declaration names, the mode that brings every tool call to
-// Martha, slash commands off, and one switch per platform extension the pinned build declares, every one
-// of them off but the one a member keeps.
+// Martha, slash commands off, one switch per platform extension the pinned build declares, every one
+// of them off but the one a member keeps, and the crew's own tool server, the one server the root names
+// (../serve_the_crews_tools_to_an_engine, martha#541 part C, C1). Summon stays off with the rest, so no
+// delegate runs: a delegate call naming its own source or provider, and the model a delegated run reports,
+// have nothing to reach (package 6, Neptunus's scope items 2 and 3). Turning Summon on reopens both, as a
+// package of their own, before any member runs a delegate.
 //
 // The config root's text is §derive_the_config_of_a_goose_launch's decision, not this launch's: it reads the
 // recording and holds Martha's own two values (the extension a member keeps, and the mode that asks). This
@@ -47,10 +51,7 @@
 // (martha#839), so `load_skill` and the compiled-in skills are offered to no session. Turning approved skills
 // on is #614's (DECIDED 2026-11-18 "Approved skills on (Recommended)").
 //
-// Two gaps are named here rather than closed, and neither is silent:
-//   - The member's own tool servers. The design puts them in this config root too, but the shape of an
-//     entry is the engine's own and is not in the recording yet, so the launcher writes the built-in
-//     switches only and writes no server until the package that installs one for Goose records it.
+// One gap is named here rather than closed, and it is not silent:
 //   - The mode a session reports back. The launcher pins the mode that asks in the config root, but the
 //     engine also reports the mode a session actually runs in, over ACP, and there is no client here to
 //     ask it: a session that reports any other mode must be refused when the client that opens it (part
@@ -64,11 +65,13 @@ import { getuid } from 'node:process'
 
 import { killGroup } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import type { RecordedEngine } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { theConfigOfALaunch, type TheModelALaunchRuns } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
+import { theConfigOfALaunch, theRootReadBack, type TheModelALaunchRuns } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { prepareLaunch, theRecordOfTheTextAStartLoads, type ATextAStartLoads, type PreparedLaunch, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { realOrResolved } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { theToolServersEntry } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts'
+import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 
 /** The folder under the path root the engine keeps its config in. */
 export const THE_CONFIG_FOLDER = 'config'
@@ -302,6 +305,8 @@ export interface AGooseLaunch {
    * ../inbound_paths's A25 and A26 say the launcher makes.
    */
   readonly text_a_start_loads: readonly ATextAStartLoads[]
+  /** The tool servers the config root named when it was read back just before the start: the crew's, and only it. */
+  readonly servers: readonly string[]
   readonly engine: TheEngineStarted
   /** Stops the engine whole and reads the permission store; says whether the engine had to be stopped and what it saved. */
   readonly end: () => Promise<TheEndOfALaunch>
@@ -328,6 +333,10 @@ export interface AGooseLaunchAsked {
   /** The folder a launch's root and home are made in, outside the owner's home. */
   readonly launch_root: string
   readonly model: TheModelALaunchRuns
+  /** The relay socket the crew's tool server posts to, and the token it carries: the launch's own, minted for it. */
+  readonly tool_server: { readonly socket_path: string; readonly token: string }
+  /** A test's hand on the config root between its write and the engine's start; a real launch gives none. */
+  readonly before_the_start?: (config_at: string) => void
 }
 
 /**
@@ -351,6 +360,15 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
   const made = theLaunchMadeBy(asked, prepared)
   if ('refusal' in made) return made
   const { places, config_at, text_a_start_loads } = made
+  // The root read back just before the engine reads it (martha#541 C1, guard row 3): the servers it names are a fact of
+  // this launch, and a root that names any server but the crew's, or is not the text this launch wrote, starts nothing.
+  asked.before_the_start?.(config_at)
+  const readBack = theRootAsItWasWritten(asked.facts, config_at, made.config)
+  if ('refusal' in readBack) {
+    for (const folder of [places.root, places.home]) removeTheTree(folder)
+    removeTheTree(prepared.snapshot_dir)
+    return refused(readBack.refusal)
+  }
 
   const started = await startTheEngine(asked.facts, asked.binary, places, theEnvironmentOfALaunch(asked.facts, places))
   if ('refusal' in started) {
@@ -367,7 +385,16 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
     removeTheTree(prepared.snapshot_dir)
     return { stopped, permissions: thePermissionStoreIsStillEmpty(places.root) }
   }
-  return { places, config_at, text_a_start_loads, engine: started, end }
+  return { places, config_at, text_a_start_loads, servers: readBack.servers, engine: started, end }
+}
+
+/** The config root as the engine is about to read it, judged by ../derive_the_config_of_a_goose_launch; or why it cannot be read. */
+function theRootAsItWasWritten(facts: RecordedEngine, config_at: string, written: string): { readonly servers: readonly string[] } | { readonly refusal: string } {
+  try {
+    return theRootReadBack(facts, { at: config_at, text: readFileSync(config_at, 'utf8'), written }, THE_CREWS_TOOL_SERVER)
+  } catch (error) {
+    return { refusal: `the config root at ${config_at} could not be read back before the start (${(error as NodeJS.ErrnoException).code ?? String(error)})` }
+  }
 }
 
 /**
@@ -379,7 +406,7 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
  * which promises that the engine was exec'd and not that it has run, so a record read after the start cannot be made to
  * differ on purpose. It matters little: the engine reads the same files again on every model request (A25 and A26).
  */
-function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly places: ThePlacesOfALaunch; readonly config_at: string; readonly text_a_start_loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
+function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLaunch, { readonly allow: true }>): { readonly places: ThePlacesOfALaunch; readonly config_at: string; readonly config: string; readonly text_a_start_loads: readonly ATextAStartLoads[] } | { readonly refusal: string } {
   const leaveNothingBehind = (why: string, folders: readonly string[] = []): { readonly refusal: string } => {
     for (const folder of folders) removeTheTree(folder)
     removeTheTree(prepared.snapshot_dir)
@@ -398,7 +425,8 @@ function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLau
 
   let config: string
   try {
-    config = theConfigOfALaunch(asked.facts, asked.model)
+    const entry = theToolServersEntry(asked.facts.stdio_extension, { ...asked.tool_server, checkout: places.checkout })
+    config = theConfigOfALaunch(asked.facts, asked.model, { key: THE_CREWS_TOOL_SERVER, entry })
   } catch (error) {
     return leaveNothingBehind(error instanceof Error ? error.message : String(error), [places.root, places.home])
   }
@@ -409,7 +437,7 @@ function theLaunchMadeBy(asked: AGooseLaunchAsked, prepared: Extract<PreparedLau
   } catch (error) {
     return leaveNothingBehind(`the config root could not be written at ${config_at} (${error instanceof Error ? error.message : String(error)})`, [places.root, places.home])
   }
-  return { places, config_at, text_a_start_loads: recorded.loads }
+  return { places, config_at, config, text_a_start_loads: recorded.loads }
 }
 
 /** Whether `at` is a real directory: a link is not one, and neither is a path that is not there. */

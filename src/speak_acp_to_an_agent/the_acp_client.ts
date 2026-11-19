@@ -41,18 +41,26 @@ export const ACP = {
 /** The session updates a turn reads; every other kind is left for a later reader. */
 export const UPDATE = { toolCall: 'tool_call', toolCallUpdate: 'tool_call_update', messageChunk: 'agent_message_chunk' } as const
 
+/** The field of any ACP object that carries an agent's own extensions. */
+export const ACP_META = '_meta'
+
 /** JSON-RPC's code for a method the receiver does not have. */
 export const METHOD_NOT_FOUND = -32601
 
 /** The characters that, first in a turn, make the engine run a command instead of handing the text to the model. */
 export const THE_COMMAND_STARTS: readonly string[] = ['!', '/']
 
-/** A permission request as the gate is asked it. */
+/**
+ * A permission request as the gate is asked it. `heard` is what the turn's updates said of the same call before it was
+ * asked, when they said anything: an engine may name the call there and nowhere in the request (Goose puts its own
+ * tool name only in the `tool_call` update's `_meta`, martha#541 part C4).
+ */
 export interface APermissionRequest {
   readonly sessionId: string
   readonly toolCallId: string
   readonly title: string
   readonly rawInput: unknown
+  readonly heard?: AToolCall
 }
 
 /** A permission request, and the outcome the client sent back. */
@@ -70,6 +78,8 @@ export interface AToolCall {
   readonly rawInput?: unknown
   readonly rawOutput?: unknown
   readonly content?: unknown
+  /** The update's `_meta`, passed as the agent sent it: only an engine's own adapter reads inside it. */
+  readonly meta?: unknown
 }
 
 /** A turn as it ended: why the agent stopped, the text the model streamed, its tool calls and what was asked. */
@@ -131,6 +141,7 @@ function toolCallFields(update: Json): Partial<AToolCall> {
   const fields: Record<string, unknown> = {}
   for (const key of ['title', 'kind', 'status'] as const) if (typeof update[key] === 'string') fields[key] = update[key]
   for (const key of ['rawInput', 'rawOutput', 'content'] as const) if (key in update) fields[key] = update[key]
+  if (ACP_META in update) fields['meta'] = update[ACP_META]
   return fields as Partial<AToolCall>
 }
 
@@ -307,13 +318,15 @@ export class AcpClient {
 
   /** One permission request answered once: the gate's decision as a once-answer, a cancel for anything unread. */
   async #answerPermission(id: unknown, params: Json): Promise<void> {
-    const request = requestOf(params)
-    const turn = request === undefined ? undefined : this.#turns.get(request.sessionId)
-    if (request === undefined || turn === undefined) {
+    const named = requestOf(params)
+    const turn = named === undefined ? undefined : this.#turns.get(named.sessionId)
+    if (named === undefined || turn === undefined) {
       this.notes.push(`a permission request outside a turn, or naming no call, was cancelled: ${JSON.stringify(params).slice(0, 200)}`)
       this.#send({ jsonrpc: '2.0', id, result: { outcome: { outcome: 'cancelled' } } })
       return
     }
+    const heard = turn.toolCalls.get(named.toolCallId)
+    const request: APermissionRequest = heard === undefined ? named : { ...named, heard }
     const offeredOptions = optionsOf(params)
     const waiting: AWaitingRequest = { id, request, offered: offeredOptions.map((option) => textOf(option.optionId)), withdrawn: new AbortController(), answered: false }
     if (turn.cancelled) {
