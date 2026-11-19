@@ -13,7 +13,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { GIT_CALL_PATH, PREPARED, REF_TRANSACTION_PATH } from './guard_protocol.ts'
+import { GIT_CALL_PATH, REF_TRANSACTION_PATH } from './guard_protocol.ts'
+import { PREPARED, THE_HOOK_NAME } from '../write_the_shell_a_git_guard_places/the_words_the_guard_programs_share.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { switchesThatRunNothingFromACheckout } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
@@ -321,7 +322,7 @@ test('the guard git is pointed at is the only hook folder, and its shim and fold
   // The folder git is pointed at holds the launch's one hook and nothing else, which is what makes every event staying
   // off safe: no file a checkout wrote can be in it (martha#562 r=1, martha#24).
   assert.equal(placed.guard.hooks.directory, join(placed.guard.directory, THE_HOOKS_DIRECTORY_NAME))
-  assert.deepEqual(readdirSync(placed.guard.hooks.directory), ['reference-transaction'])
+  assert.deepEqual(readdirSync(placed.guard.hooks.directory), [THE_HOOK_NAME])
 })
 
 /** A clone with a branch of another member's, and the launch's hooks pointed at the guard's. */
@@ -348,7 +349,7 @@ function aCloneUnderTheGuard(directory: string, socket: string, programs?: TheGu
   const named = join(directory, 'a-hook-the-checkout-names')
   writeFileSync(named, `#!/bin/sh\ntouch ${touched}\n`)
   chmodSync(named, 0o755)
-  gitIn(clone, 'config', 'hook.a-checkout-named.event', 'reference-transaction')
+  gitIn(clone, 'config', 'hook.a-checkout-named.event', THE_HOOK_NAME)
   gitIn(clone, 'config', 'hook.a-checkout-named.command', named)
   const empty = join(directory, 'an-empty-place')
   mkdirSync(empty)
@@ -601,8 +602,8 @@ const theCodeOf = (source: string): readonly { readonly line: string; readonly n
 // writer to one spelling of the state (#755 design A1): PREPARED's value is read through the import, never typed here.
 test("the hook's state word is written from PREPARED, and never typed in the guard's writer (martha#755 A1)", () => {
   const word = new RegExp(`(?<![\\w$])${PREPARED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`)
-  const typed = theCodeOf(readFileSync(new URL('./the_guard_of_a_launch.ts', import.meta.url), 'utf8'))
+  const typed = theCodeOf(readFileSync(new URL('../write_the_shell_a_git_guard_places/the_shells_of_a_git_guard.ts', import.meta.url), 'utf8'))
     .filter(({ line }) => word.test(line))
-    .map(({ line, number }) => `the_guard_of_a_launch.ts:${number}: ${line.trim()}`)
+    .map(({ line, number }) => `the_shells_of_a_git_guard.ts:${number}: ${line.trim()}`)
   assert.deepEqual(typed, [], `the guard's writer types PREPARED's value rather than importing it:\n${typed.join('\n')}`)
 })

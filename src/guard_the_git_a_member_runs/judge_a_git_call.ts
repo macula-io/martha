@@ -30,17 +30,20 @@ import {
   GIT_CALL_PATH,
   gitCallBody,
   heardGitVerdict,
-  PREPARED,
   REF_TRANSACTION_PATH,
   refTransactionBody,
   THE_GUARDS_DEADLINE_MS,
+  type ARefUpdate,
+  type HeardGitVerdict,
+} from './guard_protocol.ts'
+import {
+  PREPARED,
+  THE_HOOK_NAME,
   THE_MEMBER_HAD_IT,
   theHadNameOf,
   theKeptNameOf,
   WHAT_THE_JUDGE_NEVER_TAKES,
-  type ARefUpdate,
-  type HeardGitVerdict,
-} from './guard_protocol.ts'
+} from '../write_the_shell_a_git_guard_places/the_words_the_guard_programs_share.ts'
 
 /** The status a refusal exits with, which no git command returns for itself: the crew-code shape (martha#562). */
 export const REFUSED_STATUS = 3
@@ -52,9 +55,8 @@ interface TheGuardsConfig {
   readonly settings: readonly (readonly [string, string])[]
 }
 
-/** The two modes this file judges, which are also the two names the launch gives its shims. */
+/** The mode the shim is told, which is also the name the launch gives it; the hook's mode is in the shared words. */
 const THE_GIT_MODE = 'git'
-const THE_HOOK_MODE = 'reference-transaction'
 
 /** The word git gives an option that sets a config value for one run, which is what Martha's own runs carry. */
 const A_SETTING_OPTION = '-c'
@@ -211,7 +213,7 @@ async function main(): Promise<number> {
     process.stderr.write(`Martha's git guard cannot read what its launch wrote beside it (${(error as Error).message}), so it runs no git.\n`)
     return 1
   }
-  if (mode === THE_HOOK_MODE) return aRefTransaction(the, words[0])
+  if (mode === THE_HOOK_NAME) return aRefTransaction(the, words[0])
   try {
     return mode === THE_GIT_MODE ? await aGitCall(the, words) : runGit(the, words)
   } catch {
