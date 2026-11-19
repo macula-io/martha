@@ -393,6 +393,10 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
     { col: 0, kind: 'b-cmp', name: 'read_the_body_a_request_carries', names: ['read_the_body_a_request_carries'], type: '[a request to the launcher]', code: true,
       desc: ['The body a request to the', 'launcher\'s socket carries: read', 'whole, up to the largest the', 'launcher reads, as JSON, and no', 'body at all when it is larger', 'or not JSON. Every endpoint of', 'the socket reads one this way', '(martha#41)'] },
   ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'keep_the_transcripts_of_a_launch, choose_the_transcripts_to_keep', names: ['keep_the_transcripts_of_a_launch', 'choose_the_transcripts_to_keep'], type: '[a session, after it ends]', code: true,
+      desc: ['choose_the_transcripts_to_keep reads', 'no file and writes none: from what', 'the member\'s config folder holds', 'it takes the host\'s own transcripts', 'alone, redacts every token shape', 'and the key the launch handed it,', 'withholds whole a text a line break', 'split a token across, and replaces', 'a file the bounds leave no room for', 'with the line that says so;', 'keep_the_transcripts_of_a_launch is', 'the folder work the launch does', 'before it removes the snapshot at', 'every end: 0700 and 0600, written', 'whole and renamed, the mark of a', 'token found beside them, and the', 'launches past the newest 64 pruned', '(martha#646)'] },
+  ],
 ]
 
 /**
