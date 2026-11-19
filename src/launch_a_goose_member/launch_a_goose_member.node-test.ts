@@ -254,13 +254,21 @@ test('the permission store sits in the engine\'s config folder beside its config
   assert.match(aDirectory.empty ? '' : aDirectory.refusal, /EISDIR/)
 })
 
-/** A stand-in engine: it says what it was run with, in files a test reads, and sleeps until it is killed. */
+/**
+ * A stand-in engine: it says what it was run with, in files a test reads, and sleeps until it is killed.
+ * Each file is written beside its name and moved into place whole, since the reader takes the first text it
+ * finds: uutils' `env` (Ubuntu 26.04's) makes one write per line and dash hands it HOME before PATH, so a
+ * file read while `env` was still writing it held HOME and no PATH (martha#781).
+ */
 function aStandInEngineIn(dir: string): string {
   const binary = join(dir, 'a-stand-in-engine')
-  const wrote = (name: string): string => join(dir, name)
+  const whole = (command: string, name: string): string => {
+    const at = join(dir, name)
+    return `${command} > '${at}.being-written' && mv '${at}.being-written' '${at}'`
+  }
   writeFileSync(
     binary,
-    ['#!/bin/sh', `pwd > '${wrote('the-cwd')}'`, `printf '%s\\n' "$@" > '${wrote('the-arguments')}'`, `env > '${wrote('the-environment')}'`, 'sleep 30 &', 'sleep 31', ''].join('\n'),
+    ['#!/bin/sh', whole('pwd', 'the-cwd'), whole(`printf '%s\\n' "$@"`, 'the-arguments'), whole('env', 'the-environment'), 'sleep 30 &', 'sleep 31', ''].join('\n'),
     { mode: 0o700 },
   )
   return binary
@@ -300,12 +308,18 @@ test('the engine runs in its own process group, with the launch\'s own root, hom
   assert.deepEqual((await theFileItWrote(join(root, 'the-arguments'))).trim().split('\n'), [FACTS.acp_command])
   assert.equal(realpathSync((await theFileItWrote(join(root, 'the-cwd'))).trim()), realpathSync(checkout))
 
+  const written = await theFileItWrote(join(root, 'the-environment'))
   const environment = Object.fromEntries(
-    (await theFileItWrote(join(root, 'the-environment'))).split('\n').filter((line) => line.includes('=')).map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
+    written.split('\n').filter((line) => line.includes('=')).map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
   )
-  assert.equal(environment['HOME'], made.places.home)
-  assert.equal(environment['PATH'], THE_PATH_A_LAUNCH_GIVES)
-  assert.equal(environment[FACTS.path_root_variable], made.places.root)
+  // A red run says what the file held: its size and its names in the order written, which tells a file read
+  // half-written from an engine handed less. Never its values: were the environment inherited, they would be
+  // the owner's, and no test output carries those (martha#92). So each is compared to a boolean: assert.equal
+  // would print both sides, in its diff and as the error's `actual`, whatever message it is given.
+  const held = `the engine's environment file held ${Buffer.byteLength(written)} bytes, naming ${JSON.stringify(Object.keys(environment))}`
+  assert.ok(environment['HOME'] === made.places.home, `HOME is not the launch's home; ${held}`)
+  assert.ok(environment['PATH'] === THE_PATH_A_LAUNCH_GIVES, `PATH is not the one a launch gives; ${held}`)
+  assert.ok(environment[FACTS.path_root_variable] === made.places.root, `${FACTS.path_root_variable} is not the launch's root; ${held}`)
   // Whatever prefix the engine's own settings carry, no other variable of the owner's with it reaches the engine.
   const prefix = FACTS.path_root_variable.slice(0, FACTS.path_root_variable.indexOf('_') + 1)
   assert.deepEqual(Object.keys(environment).filter((key) => key.startsWith(prefix)), [FACTS.path_root_variable])
@@ -316,6 +330,20 @@ test('the engine runs in its own process group, with the launch\'s own root, hom
   await ended
   for (let waited = 0; waited < THE_WAIT_A_TEST_GIVES_MS && theGroupIsThere(started.pid); waited += 25) await new Promise((resolve) => setTimeout(resolve, 25))
   assert.equal(theGroupIsThere(started.pid), false, 'the engine and the process under it outlived the group kill')
+})
+
+test('an environment that hands the engine no PATH, or an empty one, is refused by name (martha#781; mutant: the check removed)', async (t) => {
+  const { root, checkout } = aLaunchRoot(t)
+  const made = thePlacesOfALaunch(root, checkout)
+  assert.ok('places' in made)
+  const given = theEnvironmentOfALaunch(FACTS, made.places)
+  const withoutPath = Object.fromEntries(Object.entries(given).filter(([key]) => key !== 'PATH'))
+  for (const environment of [withoutPath, { ...given, PATH: '' }]) {
+    const started = await startTheEngine(FACTS, aStandInEngineIn(root), made.places, environment)
+    if ('pid' in started) t.after(() => started.stop())
+    assert.ok('refusal' in started, `an environment naming ${JSON.stringify(Object.keys(environment))} started the engine`)
+    assert.match(started.refusal, /holds no PATH/)
+  }
 })
 
 test('one launch writes its root, starts the engine and ends with the permission store still empty; a binary that is not there refuses (martha#541)', async (t) => {

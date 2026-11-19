@@ -1,14 +1,10 @@
 // Run the check: node src/check_posted_text_carries_nothing_private/main.ts [--text <file>] [--self-test]
 //
 // Environment: GITHUB_REPOSITORY (owner/repo: whose posted text is read, set by
-// Actions), GITHUB_TOKEN (read-only, for the repository lookups), MARTHA_LAB_HOSTS
-// (the lab's machine families; a secret in CI), MARTHA_FORK_PR=1 on a pull
-// request from a fork. Without MARTHA_LAB_HOSTS, the families' digests the owner
-// kept on this machine (../check_nothing_private_gets_in/read_lab_family_digests.ts).
+// Actions), GITHUB_TOKEN (read-only, for the repository lookups).
 //
 // Exit 0 clean, 1 hits (one line each, `where: what`), 2 the check could not be
-// made. It never passes because it could not look: with no families at all, every
-// other rule runs and prints its hits, and the exit is 2.
+// made. It never passes because it could not look.
 
 import { readFileSync } from 'node:fs'
 
@@ -19,7 +15,7 @@ import {
   type Rules,
   type Source,
 } from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
-import { declaredOrNone, familiesOf, resolveOnGitHub, rulesOf } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
+import { resolveOnGitHub, rulesOf } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
 import { selfTest } from './plant_every_surface.ts'
 import { postedTextSources } from './posted_text.ts'
 import { readPostedText, API, type Call } from './read_posted_text.ts'
@@ -73,20 +69,11 @@ const selfTested = async (rules: Rules): Promise<number> => {
 }
 
 const main = async (): Promise<number> => {
-  const families = familiesOf(process.env)
-  if (families.kind === 'skipped') console.log(`lab machine families not checked: ${families.why}`)
-  const rules = rulesOf(families, true)
-  if (process.argv.includes('--self-test')) {
-    if (families.kind === 'unchecked') throw new Error(families.why)
-    return selfTested(rules)
-  }
+  const rules = rulesOf(true)
+  if (process.argv.includes('--self-test')) return selfTested(rules)
   const token = process.env['GITHUB_TOKEN']
   const hits = await privateHitsIn(await sourcesOf(callGitHub(token)), rules, resolveOnGitHub(token))
   report(hits)
-  if (families.kind === 'unchecked') {
-    console.error(`${NAME}: ${hits.length} hit(s) from the other rules; ${families.why}`)
-    return 2
-  }
   if (hits.length > 0) {
     console.error(`${NAME}: ${hits.length} hit(s). Keep the reasoning, drop the link: docs/nothing-private-gets-in.md`)
     return 1
@@ -98,8 +85,7 @@ const main = async (): Promise<number> => {
 main().then(
   (code) => process.exit(code),
   (error: unknown) => {
-    const lab = declaredOrNone(process.env)
-    const said = withoutLabNames(error instanceof Error ? error.message : String(error), lab.labHosts, lab.labDigests)
+    const said = withoutLabNames(error instanceof Error ? error.message : String(error))
     console.error(`${NAME}: the check could not be made: ${said}`)
     process.exit(2)
   },

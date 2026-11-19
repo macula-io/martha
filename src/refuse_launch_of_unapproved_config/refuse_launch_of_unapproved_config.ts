@@ -594,8 +594,10 @@ export interface LaunchPlace {
  * starts in and each directory above it: up to the checkout's top when the start
  * is in a checkout whose top is not the stop or above it, and otherwise up to but
  * not including `stop_dir`, or as far as the filesystem root when the stop is no
- * ancestor of the start. Both the start and the stop are resolved through symlinks
- * first. A host with no entry reads nothing.
+ * ancestor of the start. The stop itself is not read — the walk stops before it —
+ * except when the host starts in the stop, where the stop's own listed files are
+ * the ones read. Both the start and the stop are resolved through symlinks first.
+ * A host with no entry reads nothing.
  *
  * The top is the bound because the checkout's own config is the only config its
  * author ships, and the launch carries none above it (martha#766).

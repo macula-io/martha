@@ -12,7 +12,6 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import {
-  familiesFrom,
   privateHitsIn,
   SYNTHETIC,
   type Hit,
@@ -30,7 +29,6 @@ import { API, readPostedText, ROUTES, type Call, type Request } from './read_pos
 // public tree the check reads. The class tests switch the synthetic allowance
 // off, so each class is shown to refuse that very value on its own.
 const strict: Rules = {
-  labHosts: ['synth'],
   publicEmails: ['macula.io'],
   publicAddresses: ['ada@synthetic.invalid'],
   owners: ['synthetic-owner'],
@@ -151,9 +149,8 @@ test('the forms a public tree may write pass beside a real-shaped value that is 
 })
 
 test('a real scan\'s rules allow the synthetic forms, and the same rules with the allowance off refuse them', async () => {
-  const none = familiesFrom('[]', false, () => undefined)
-  assert.deepEqual(await wheresOf(answersWith('issue comment', FORMS), rulesOf(none, true)), [])
-  assert.deepEqual((await hitsOf(answersWith('issue comment', FORMS), rulesOf(none, false))).length, 3)
+  assert.deepEqual(await wheresOf(answersWith('issue comment', FORMS), rulesOf(true)), [])
+  assert.deepEqual((await hitsOf(answersWith('issue comment', FORMS), rulesOf(false))).length, 3)
 })
 
 test('a home path inside a fenced code block is refused like any other', async () => {
@@ -162,11 +159,8 @@ test('a home path inside a fenced code block is refused like any other', async (
   assert.deepEqual(hits.map((hit) => hit.where), ['issue #170 comment 6765201999:3'])
 })
 
-test('a lab machine family from the secret is refused and never printed', async () => {
-  const rules = rulesOf(familiesFrom('["synth"]', false, () => undefined), true)
-  const hits = await hitsOf(answersWith('review', 'confirmed, I ran this on synth07'), rules)
-  assert.deepEqual(hits, [{ where: 'pull 263 review 4810:1', what: 'a lab machine name (value withheld)' }])
-  assert.ok(!JSON.stringify(hits).includes('synth07'), 'the family was printed')
+test('a lab machine name in posted text passes: the owner dropped the class (martha#773)', async () => {
+  assert.deepEqual(await hitsOf(answersWith('review', 'confirmed, I ran this on synth07'), rulesOf(true)), [])
 })
 
 test('a surface that cannot be read stops the check, and names the surface', async () => {
@@ -178,7 +172,7 @@ test('a surface that cannot be read stops the check, and names the surface', asy
 test('the command cannot look, and says so: a missing draft is exit 2, never a pass', () => {
   const ran = spawnSync(process.execPath, [join(import.meta.dirname, 'main.ts'), '--text', join(import.meta.dirname, 'not-a-draft.md')], {
     encoding: 'utf8',
-    env: { ...process.env, MARTHA_LAB_HOSTS: '[]' },
+    env: process.env,
   })
   assert.equal(ran.status, 2, ran.stderr)
   assert.match(ran.stderr, /could not be made/)
@@ -192,7 +186,7 @@ test('the command refuses a draft that carries a cited path, and passes a clean 
     writeFileSync(draft, body)
     return spawnSync(process.execPath, [join(import.meta.dirname, 'main.ts'), '--text', draft], {
       encoding: 'utf8',
-      env: { ...process.env, MARTHA_LAB_HOSTS: '[]' },
+      env: process.env,
     })
   }
   assert.equal(ran('clean.md', 'nothing private here\n').status, 0)

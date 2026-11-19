@@ -155,4 +155,4 @@ HOME="$TRIAL/owner-home" node trial_the_goose_host/drive_the_trial.ts \
 message across the pipe with the engine, timestamped and by direction, appended as it crosses) and
 `<evidence>/line-N/engine-logs/` (the launch's own `goose-root/state/logs`, copied in before the launch
 ends). A line whose verdict is `not-observed` fails by name if no exchange was kept beside it
-(`./the_evidence_says_why.ts`, martha#694).
+(`./the_evidence_it_keeps/the_evidence_says_why.ts`, martha#694).
