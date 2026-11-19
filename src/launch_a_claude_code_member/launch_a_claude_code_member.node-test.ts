@@ -76,7 +76,7 @@ import { CONTACT_POLICY_FILE_UNDER_HOME, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES
 import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_FILE_TOOLS, EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
@@ -2197,7 +2197,7 @@ for (const [shape, carried, kept] of [
       const glob = /^(?:Write|Edit)\(\/(.*)\)$/.exec(rule)?.[1]
       assert.ok(glob !== undefined, rule)
       const inside = glob.replace('/*/', '/some-project/').replace(/\/\*\*$/, '/note.md')
-      assert.ok(writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: inside }, places, place.checkout, place.home, thisMachine) !== undefined, `${rule}: ${inside}`)
+      assert.ok(writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: inside }, places, place.checkout, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS) !== undefined, `${rule}: ${inside}`)
     }
   })
 }
