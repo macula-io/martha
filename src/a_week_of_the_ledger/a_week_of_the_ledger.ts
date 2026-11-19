@@ -382,7 +382,8 @@ export function theLinesOf(week: TheWeek): readonly string[] {
     theMembersLine(crew.members),
     'model: not in the rows (a row names its member, never the model)',
     'money: not in the rows (martha#860 carries the row that would hold it)',
-    ...(week.packages.length === 0 ? ['nothing in this week'] : []),
+    // Nothing only when no package and no ask is in the week: an answered ask is something the week holds (r=2 review).
+    ...(week.packages.length === 0 && (crew.ownersWait?.asked ?? 0) === 0 ? ['nothing in this week'] : []),
     ...week.skipped.map((one) => `skipped: ${one}`),
     ...week.packages.map((one) => theLineOfAPackage(one)),
   ]

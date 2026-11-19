@@ -307,6 +307,15 @@ test('a week with no row answers nothing in this week, and a stream the command 
   assert.ok(theLinesOf(empty).includes('first pass: no verdict in this week'), 'a week with no verdict did not say so')
   assert.ok(theLinesOf(empty).includes('members: no act in this week'), 'a week with no act did not say so')
   assert.ok(theLinesOf(empty).includes('nothing in this week'), 'a week with no row did not say nothing is in it')
+  const onlyAnAsk = answered(aWeekOfTheLedger({
+    week: THE_WEEK,
+    ledgers: [],
+    asks: [
+      { position: 0, row: { kind: ASK_QUEUED, question: 'Land it?', asked_by: 'Hygiea', since: at(18) } },
+      { position: 1, row: { kind: ASKS_SETTLED, batch: 1, yes: [0], at: at(18, 2), by: 'the owner' } },
+    ],
+  }))
+  assert.ok(!theLinesOf(onlyAnAsk).includes('nothing in this week'), 'a week whose one row is an answered ask said nothing is in it')
 
   const withSkipped = answered(aWeekOfTheLedger({ week: THE_WEEK, ledgers: [], asks: [], skipped: ['ledger/not-a-package (not a package name)'] }))
   assert.ok(theLinesOf(withSkipped).some((line) => line === 'skipped: ledger/not-a-package (not a package name)'))
