@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { CHECKOUT_ROOT_CARRIERS, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, TELEMETRY_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { CHECKOUT_ROOT_CARRIERS, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, FOLDERS_WITHOUT_THE_ROOT, FUNCTIONS_THAT_BUILD_SKILL_ROOTS, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, TELEMETRY_READERS, TOOL_CALL_META, WORKING_DIRECTORY_AS_THE_ROOT, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -411,4 +411,62 @@ test('each function that carries the checkout\'s root to the plugin skills, rena
     assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'], carrier)
     assert.match(unreadable[0]?.why ?? '', new RegExp(carrier), carrier)
   }
+})
+
+/** The shape each kind of folder built without the root's name is reported as. */
+const [WORKING_DIRECTORY, MADE_OUT_OF_SOMETHING_ELSE, A_STRING] = FOLDERS_WITHOUT_THE_ROOT.map(({ shape }) => shape)
+
+/**
+ * A folder built without naming the checkout's root, planted after `at` in each function a skill root is built in
+ * (martha#614 Done-when 6). The first is Neptunus's R2 on PR 882, `PathBuf::from(".cursor/skills")`; the rest give each
+ * shape a function of its own. None of them uses the root, so the accounting of its uses passes every one.
+ */
+const FOLDERS_PLANTED_WITHOUT_THE_ROOT = [
+  { what: 'Neptunus\'s R2: a folder pushed from a relative path', place: 'skill_folders', fn: SKILL_ROOT_READERS.skill_folders, at: '    let mut dirs = Vec::new();\n', planted: '    dirs.push(SkillDirectory { path: PathBuf::from(".cursor/skills") });\n', shape: undefined },
+  { what: 'a folder pushed from the working directory', place: 'skill_folders', fn: SKILL_ROOT_READERS.skill_folders, at: '    let mut dirs = Vec::new();\n', planted: '    dirs.push(SkillDirectory { path: std::env::current_dir().unwrap_or_default().join(".cursor").join("skills") });\n', shape: WORKING_DIRECTORY },
+  { what: 'a folder pushed from a constant', place: 'skill_folders', fn: SKILL_ROOT_READERS.skill_folders, at: '    let mut dirs = Vec::new();\n', planted: '    dirs.push(SkillDirectory { path: CURSOR_SKILLS.into() });\n', shape: MADE_OUT_OF_SOMETHING_ELSE },
+  { what: 'a folder pushed from a string', place: 'skill_folders', fn: SKILL_ROOT_READERS.skill_folders, at: '    let mut dirs = Vec::new();\n', planted: '    dirs.push(SkillDirectory { path: ".cursor/skills".parse().unwrap() });\n', shape: A_STRING },
+  { what: 'plugin skill folders read from a relative path', place: 'plugin_skill_dirs', fn: CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs, at: '    let plugins_dir = plugin_install_dir();\n', planted: '    let cursor = installed_skill_dirs(Path::new(CURSOR_PLUGINS));\n', shape: MADE_OUT_OF_SOMETHING_ELSE },
+  { what: 'plugins found in the working directory', place: 'plugin_discovery', fn: CHECKOUT_ROOT_CARRIERS.plugin_discovery, at: '    let mut found = Vec::new();\n', planted: '    found.extend(list_dir_children(&std::env::current_dir().unwrap_or_default()).into_iter().map(|(name, root)| DiscoveredPlugin { name, root, scope: PluginScope::Project }));\n', shape: WORKING_DIRECTORY },
+  { what: 'a settings file read from a relative path', place: 'plugin_discovery', fn: CHECKOUT_ROOT_CARRIERS.plugin_settings, at: '    let mut paths: Vec<(SettingsScope, PathBuf)> = Vec::new();\n', planted: '    paths.push((SettingsScope::Local, PathBuf::from(CURSOR_SETTINGS)));\n', shape: MADE_OUT_OF_SOMETHING_ELSE },
+  { what: 'a plugin folder given as a string', place: 'plugin_discovery', fn: SKILL_ROOT_READERS.plugin_folder, at: `fn ${SKILL_ROOT_READERS.plugin_folder}(project_root: &Path) -> PathBuf {\n`, planted: '    if !project_root.exists() {\n        return ".cursor/plugins".parse().unwrap();\n    }\n', shape: A_STRING },
+  { what: 'a settings file in the working directory', place: 'plugin_discovery', fn: SKILL_ROOT_READERS.plugin_settings, at: `fn ${SKILL_ROOT_READERS.plugin_settings}(project_root: &Path, local: bool) -> PathBuf {\n`, planted: '    if local {\n        return std::env::current_dir().unwrap_or_default();\n    }\n', shape: WORKING_DIRECTORY },
+] as const
+
+test('a skill folder built without naming the checkout\'s root makes the skill roots unreadable by name, in every function a root is built in (martha#614 Done-when 6, mutants: a shape or a function left out)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  for (const { what, place, fn, at, planted, shape } of FOLDERS_PLANTED_WITHOUT_THE_ROOT) {
+    const path = ENGINE_PLACES[place]
+    const text = files[path] ?? ''
+    assert.equal(text.split(at).length, 2, `${what}: the tree has no one place to plant it at, so this case would prove nothing`)
+    const { facts, unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: text.replace(at, `${at}${planted}`) }))
+    assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'], what)
+    assert.ok((unreadable[0]?.why ?? '').startsWith(`${path} builds a folder in ${fn} from ${shape ?? ''}`), `${what}: ${unreadable[0]?.why ?? ''}`)
+    assert.equal(facts.checkout_skill_roots, undefined, what)
+  }
+  const planted = (field: 'fn' | 'shape'): string[] => FOLDERS_PLANTED_WITHOUT_THE_ROOT.map((plant) => String(plant[field]))
+  assert.deepEqual(FUNCTIONS_THAT_BUILD_SKILL_ROOTS.map(([, fn]) => fn).filter((fn) => !planted('fn').includes(fn)), [], 'a function a root is built in has no plant')
+  assert.deepEqual(FOLDERS_WITHOUT_THE_ROOT.map(({ shape }) => shape).filter((shape) => !planted('shape').includes(shape)), [], 'a shape has no plant of its own')
+})
+
+test('the working directory taken anywhere in the skills file but as the root itself makes the skill roots unreadable by name (martha#614 Done-when 6, mutant: the file not read)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.skill_folders
+  const text = files[path] ?? ''
+  const at = '    dirs\n}\n'
+  assert.equal(text.split(at).length, 2, 'the tree has no one end of the skill folders function to plant after')
+  const planted = text.replace(at, `${at}\nfn another_root() -> Option<PathBuf> {\n    std::env::current_dir().ok()\n}\n`)
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: planted }))
+  assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'])
+  assert.ok((unreadable[0]?.why ?? '').startsWith(`${path} takes the working directory 1 times outside ${WORKING_DIRECTORY_AS_THE_ROOT}'s fallback`), unreadable[0]?.why ?? '')
+})
+
+test('what names no folder is read as none: the working directory as the root itself, a log line, the settings file choice (martha#614 Done-when 6, mutant: an allowance dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  assert.match(files[ENGINE_PLACES.skill_folders] ?? '', new RegExp(`fn ${WORKING_DIRECTORY_AS_THE_ROOT}\\([\\s\\S]*current_dir\\(\\)`), 'the tree has no fallback to the working directory, so this test would prove nothing')
+  assert.match(files[ENGINE_PLACES.plugin_skill_dirs] ?? '', /warn!\(\s*"/, 'the tree logs nothing, so this test would prove nothing')
+  assert.match(files[ENGINE_PLACES.plugin_discovery] ?? '', /let file = if local \{\s*"/, 'the tree chooses no settings file, so this test would prove nothing')
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(files))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.checkout_skill_roots, RECORDED_FACTS.checkout_skill_roots)
 })

@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { CHECKOUT_ROOT_CARRIERS, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, SPLITS_ONCE, TELEMETRY_READERS, TOOL_CALL_META, type ASkillsSwitch, type CheckoutSkillRoots, type EngineFacts, type EngineSource, type PlatformExtension, type ToolNaming } from './the_engines_facts_in_its_source.ts'
+import { CHECKOUT_ROOT_CARRIERS, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, SPLITS_ONCE, TELEMETRY_READERS, TOOL_CALL_META, WORKING_DIRECTORY_AS_THE_ROOT, type ASkillsSwitch, type CheckoutSkillRoots, type EngineFacts, type EngineSource, type PlatformExtension, type ToolNaming } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -108,6 +108,7 @@ function skillFolders(roots: CheckoutSkillRoots): string {
     `    if let Some(wd) = working_dir {\n        for path in [\n${listed}        ] {\n            dirs.push(SkillDirectory { path });\n        }\n    }\n`,
     `    dirs.extend(plugin_dirs.iter().map(|(path, _)| SkillDirectory { path: path.clone() }));\n`,
     `    if let Some(h) = dirs::home_dir().as_ref() {\n        dirs.push(SkillDirectory { path: ${joined('h', '.agents/skills')} });\n    }\n    dirs\n}\n`,
+    `\npub fn ${WORKING_DIRECTORY_AS_THE_ROOT}(working_dir: Option<&Path>) -> Vec<SourceEntry> {\n    let fallback;\n    let wd = match working_dir {\n        Some(p) => Some(p),\n        None => {\n            fallback = std::env::current_dir().ok();\n            fallback.as_deref()\n        }\n    };\n    discover_skills(wd)\n}\n`,
   ].join('')
 }
 
@@ -135,7 +136,9 @@ function pluginDiscovery(roots: CheckoutSkillRoots): string {
 /** The plugin skill folders as `plugins/mod.rs` gathers them, handing the checkout's root to the discovery (martha#614). */
 const pluginSkillDirs = (): string => [
   `pub(crate) fn ${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}(\n    project_root: Option<&Path>,\n    config: &Config,\n) -> Vec<(PathBuf, PluginScope)> {\n`,
-  `    let plugins_dir = plugin_install_dir();\n    discovery::${CHECKOUT_ROOT_CARRIERS.plugin_discovery}(project_root, config)\n        .into_iter()\n`,
+  `    let plugins_dir = plugin_install_dir();\n`,
+  `    for update in auto_update_plugins_at_root(&plugins_dir) {\n        if let Err(err) = update.result {\n            warn!(\n                "Failed to auto-update plugin '{}': {}.",\n                update.name, err\n            );\n        }\n    }\n`,
+  `    discovery::${CHECKOUT_ROOT_CARRIERS.plugin_discovery}(project_root, config)\n        .into_iter()\n`,
   `        .flat_map(|plugin| installed_skill_dirs(&plugin.root).into_iter().map(move |dir| (dir, plugin.scope)))\n        .collect()\n}\n`,
 ].join('')
 

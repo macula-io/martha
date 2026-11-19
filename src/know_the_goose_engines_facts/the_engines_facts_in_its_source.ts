@@ -501,7 +501,63 @@ function joinedFrom(text: string, base: string): string | undefined {
  */
 function checkoutSkillRootsIn(source: EngineSource): CheckoutSkillRoots {
   pluginRootsCarriedIn(source)
-  return { skill_folders: skillFoldersIn(source), ...pluginRootsIn(source) }
+  const roots = { skill_folders: skillFoldersIn(source), ...pluginRootsIn(source) }
+  for (const [place, fn] of FUNCTIONS_THAT_BUILD_SKILL_ROOTS) noFolderWithoutTheRoot(source, place, fn)
+  workingDirectoryOnlyAsTheRoot(source)
+  return roots
+}
+
+/** Every function a checkout's skill roots are built in, with the place ENGINE_PLACES names its file by (martha#614 Done-when 6). */
+export const FUNCTIONS_THAT_BUILD_SKILL_ROOTS = [
+  ['skill_folders', SKILL_ROOT_READERS.skill_folders],
+  ['plugin_skill_dirs', CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs],
+  ['plugin_discovery', CHECKOUT_ROOT_CARRIERS.plugin_discovery],
+  ['plugin_discovery', CHECKOUT_ROOT_CARRIERS.plugin_settings],
+  ['plugin_discovery', SKILL_ROOT_READERS.plugin_folder],
+  ['plugin_discovery', SKILL_ROOT_READERS.plugin_settings],
+] as const
+
+/**
+ * The shapes a folder takes when the engine builds it without naming the checkout's root (martha#614 Done-when 6): the
+ * working directory itself, a path made out of something else, and a string anywhere but in a `.join` onto a path. The
+ * engine resolves a relative path against its working directory, so each is a skill root the gate would never ask for.
+ */
+export const FOLDERS_WITHOUT_THE_ROOT = [
+  { shape: 'the working directory', pattern: /\bcurrent_dir\b/ },
+  { shape: 'a path made out of something else', pattern: /\b(?:PathBuf|Path|OsString|OsStr)::(?:from|new)\b|\.into\(\)/ },
+  { shape: 'a string', pattern: /"/ },
+] as const
+
+/** What a function may hold that names no folder: a `.join("…")` onto a path, a log line, the settings file choice. */
+const TEXT_THAT_BUILDS_NO_FOLDER = [
+  /\.join\("[^"]*"\)/g,
+  /\b(?:warn|debug|info|error|trace)!\((?:[^()"]|"(?:[^"\\]|\\.)*"|\([^()]*\))*\)/g,
+  /let file = if local \{\s*"[^"]+"\s*\} else \{\s*"[^"]+"\s*\};/g,
+] as const
+
+/** A throw naming the function and the shape when `fn` builds a folder without naming the checkout's root. */
+function noFolderWithoutTheRoot(source: EngineSource, place: keyof typeof ENGINE_PLACES, fn: string): void {
+  const path = ENGINE_PLACES[place]
+  const body = TEXT_THAT_BUILDS_NO_FOLDER.reduce((rest, known) => rest.replace(known, ''), functionBody(fileOf(source, path), fn, path))
+  const found = FOLDERS_WITHOUT_THE_ROOT.find(({ pattern }) => pattern.test(body))
+  if (found !== undefined) throw new Error(`${path} builds a folder in ${fn} from ${found.shape}, never naming the checkout's root, so a skill root there would never be listed`)
+}
+
+/**
+ * The function that takes the working directory as the checkout's root itself when it is given none: the engine then
+ * reads the same folders from it, and the launch starts the engine in the checkout (martha#614 Done-when 6).
+ */
+export const WORKING_DIRECTORY_AS_THE_ROOT = 'list_installed_skills'
+
+/** The working directory taken anywhere in the skills file but as the root in WORKING_DIRECTORY_AS_THE_ROOT is a throw. */
+function workingDirectoryOnlyAsTheRoot(source: EngineSource): void {
+  const path = ENGINE_PLACES.skill_folders
+  const fn = WORKING_DIRECTORY_AS_THE_ROOT
+  const text = fileOf(source, path)
+  const body = new RegExp(`fn ${fn}\\(`).test(text) ? functionBody(text, fn, path) : ''
+  const asTheRoot = /None => \{\s*(\w+) = std::env::current_dir\(\)\.ok\(\);\s*\1\.as_deref\(\)\s*\}/
+  const left = [...text.replace(body, body.replace(asTheRoot, '')).matchAll(/\bcurrent_dir\b/g)].length
+  if (left > 0) throw new Error(`${path} takes the working directory ${String(left)} times outside ${fn}'s fallback to it as the root, so a skill root built from it would never be listed`)
 }
 
 /** A use of a name that a reader accounts for: its shape, and whether it stands exactly once or any number of times. */
