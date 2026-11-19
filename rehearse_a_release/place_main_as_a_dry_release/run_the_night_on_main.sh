@@ -113,8 +113,11 @@ trap 'rm -rf "${RUN_TMP}"' EXIT
 stop() {
   if [[ -n "${CHILD}" ]]; then
     kill -TERM "${CHILD}" 2> /dev/null || true
-    local tenths=0
-    while kill -0 "${CHILD}" 2> /dev/null && ((tenths < STOP_GRACE_SECONDS * 10)); do sleep 0.1; tenths=$((tenths + 1)); done
+    # The grace is counted on the clock, not in polls: on a busy machine each poll runs long, and a count of them
+    # would stretch the grace to whatever the polls took. SECONDS steps in whole seconds, so the child gets at least
+    # STOP_GRACE_SECONDS and at most one more.
+    local asked="${SECONDS}"
+    while kill -0 "${CHILD}" 2> /dev/null && ((SECONDS - asked <= STOP_GRACE_SECONDS)); do sleep 0.1; done
     kill -KILL "${CHILD}" 2> /dev/null || true
     wait "${CHILD}" 2> /dev/null || true
   fi

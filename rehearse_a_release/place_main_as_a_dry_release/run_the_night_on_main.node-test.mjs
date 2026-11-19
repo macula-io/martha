@@ -58,9 +58,17 @@ const A_HOST = 'a-host-of-the-test'
 const READY_WITHIN_MS = 20_000
 const READY_POLL_MS = 50
 const STOPPED_WITHIN_MS = 10_000
-/** What a driver whose child ignores TERM may take beyond its grace: the KILL, the wait and its own trap. */
-const PAST_THE_GRACE_MS = 10_000
 const MS_PER_SECOND = 1000
+/** The driver's grace, in the case's own unit. */
+const GRACE_MS = STOP_GRACE_SECONDS * MS_PER_SECOND
+/**
+ * How long a driver whose child ignores TERM may take to end: its grace, and one grace more for what follows it, the
+ * KILL, the wait and its own trap, none of which waits on anything. The bound is the driver's own constant, so a busy
+ * machine that slows each step is not read as a kill that never came.
+ */
+const ENDED_AFTER_THE_GRACE_MS = 2 * GRACE_MS
+/** How much longer than asked each `sleep` takes on the slowed machine of case 8d: a whole second per call. */
+const SLOWER_BY_SECONDS = 1
 const STILL_RUNNING = Symbol("the driver still runs")
 
 /** git in `dir`, failing the test on a non-zero exit. @param {string} dir @param {...string} args */
@@ -402,10 +410,10 @@ const killWhatIsLeft = (target) => {
 /**
  * The driver started on a held proof, in a process group of its own as a terminal would start it, with the proof's
  * pid once it says it runs. Whatever is left of either is killed when the case ends.
- * @param {import('node:test').TestContext} t @param {Night} night @param {string} hold
+ * @param {import('node:test').TestContext} t @param {Night} night @param {string} hold @param {Settings} [settings]
  */
-async function aHeldDriver (t, night, hold) {
-  const driver = spawn('bash', [driverIn(night), ...withEvidence(night)], { env: envFor(night, { STAND_IN_HOLD: hold }), stdio: 'ignore', detached: true })
+async function aHeldDriver (t, night, hold, settings = {}) {
+  const driver = spawn('bash', [driverIn(night), ...withEvidence(night)], { env: envFor(night, { STAND_IN_HOLD: hold, ...settings }), stdio: 'ignore', detached: true })
   const group = driver.pid ?? assert.fail('the driver did not start')
   /** @type {Promise<number | null>} */
   const ended = new Promise((resolve) => driver.on('close', (code) => resolve(code)))
@@ -450,16 +458,48 @@ test('8b. a Ctrl-C to the run\'s process group reaches the proof, whose own INT 
   assert.equal(code, FAILED)
 })
 
-test('8c. a proof that ignores a TERM has its grace, is then killed, and the run ends FAILED (mutants: the KILL dropped, the grace dropped)', async (t) => {
-  const night = aNight(t)
-  const { driver, ended, proofPid } = await aHeldDriver(t, night, 'ignore-term')
-  const grace = STOP_GRACE_SECONDS * MS_PER_SECOND
+/**
+ * What a driver that has not ended was still waiting for: the proof it was told to stop while that proof is there,
+ * otherwise its own trap after the proof was gone. @param {Night} night @param {number} proofPid
+ */
+const whatTheDriverWaitedFor = (night, proofPid) => {
+  const run = runFolderOf(night)
+  const lines = run === undefined ? 'no run folder' : `run.txt has ${[...runTxt(run).keys()].join(', ')}`
+  return alive(proofPid)
+    ? `it was still waiting for the proof ${proofPid}, which ignored TERM and was not killed; ${lines}`
+    : `the proof ${proofPid} was gone, so it was still in its own trap after the kill; ${lines}`
+}
+
+/**
+ * A proof that ignores TERM, stopped: the driver's exit and how long after the TERM it came, failing the case with
+ * what the driver still waited for when it has not ended within ENDED_AFTER_THE_GRACE_MS.
+ * @param {import('node:test').TestContext} t @param {Night} night @param {Settings} [settings]
+ */
+async function stopAProofThatIgnoresTerm (t, night, settings = {}) {
+  const { driver, ended, proofPid } = await aHeldDriver(t, night, 'ignore-term', settings)
   const sent = Date.now()
   driver.kill('SIGTERM')
-  const code = await endedWithin(ended, grace + PAST_THE_GRACE_MS)
+  const code = await endedWithin(ended, ENDED_AFTER_THE_GRACE_MS)
   const took = Date.now() - sent
-  assert.notEqual(code, STILL_RUNNING, `the driver ended within its grace and ${PAST_THE_GRACE_MS} ms, so it killed a proof that ignored TERM`)
-  assert.ok(took >= grace - MS_PER_SECOND, `the proof had its grace: the driver ended ${took} ms after the TERM`)
+  if (code === STILL_RUNNING) assert.fail(`the driver had not ended ${ENDED_AFTER_THE_GRACE_MS} ms after the TERM: ${whatTheDriverWaitedFor(night, proofPid)}`)
+  return { code, took, proofPid }
+}
+
+test('8c. a proof that ignores a TERM has its grace, is then killed, and the run ends FAILED (mutants: the KILL dropped, the grace dropped)', async (t) => {
+  const night = aNight(t)
+  const { code, took, proofPid } = await stopAProofThatIgnoresTerm(t, night)
+  assert.ok(took >= GRACE_MS - MS_PER_SECOND, `the proof had its grace: the driver ended ${took} ms after the TERM`)
+  assert.equal(code, FAILED)
+  assert.equal(alive(proofPid), false, 'the proof that ignored TERM is gone')
+})
+
+test('8d. the grace is counted in time gone by, not in polls, so a machine where each sleep runs long still kills on time (mutant: the polls counted)', async (t) => {
+  const night = aNight(t)
+  const slowBin = join(night.root, 'slow-bin')
+  const realSleep = spawnSync('bash', ['-c', 'type -P sleep'], { encoding: 'utf8' }).stdout.trim()
+  assert.ok(realSleep !== '', 'a sleep to slow down')
+  placeAScript(slowBin, 'sleep', `#!/usr/bin/env bash\n'${realSleep}' ${SLOWER_BY_SECONDS}\nexec '${realSleep}' "$@"\n`)
+  const { code, proofPid } = await stopAProofThatIgnoresTerm(t, night, { PATH: `${slowBin}:${process.env.PATH ?? ''}` })
   assert.equal(code, FAILED)
   assert.equal(alive(proofPid), false, 'the proof that ignored TERM is gone')
 })
