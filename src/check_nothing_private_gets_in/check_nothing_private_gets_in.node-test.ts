@@ -17,7 +17,7 @@ import {
   withoutLabNames,
 } from './check_nothing_private_gets_in.ts'
 import { HEX_SLOT, PUBLIC_DIGEST_FORMS } from './public_digest.ts'
-import { ID_HEX_DIGITS } from './public_text.ts'
+import { GITHUB_TOKEN_PREFIXES, ID_HEX_DIGITS, TOKEN_BODY_CHARACTERS } from './public_text.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
 
 // Every value planted here is a synthetic form, because this file is in the
@@ -199,6 +199,31 @@ for (const { what, drawn } of WITHHELD_CLASSES) {
   })
 }
 
+// A GitHub token, classic or fine-grained, is refused by the scan a post goes through, and never printed (martha#904).
+// Each token is drawn here, so this file carries none: its body is hex, which every prefix's body may hold, and twice
+// the length a token needs, so the class cannot pass it for being short.
+const TOKEN_CLASS = 'a GitHub token'
+const drawnToken = (prefix: string) => `${prefix}${randomBytes(TOKEN_BODY_CHARACTERS).toString('hex')}`
+for (const prefix of GITHUB_TOKEN_PREFIXES) {
+  test(`a GitHub token with the prefix ${prefix} is refused and never printed (martha#904)`, async () => {
+    const token = drawnToken(prefix)
+    for (const text of [`token: ${token}`, `https://x-access-token:${token}@example.invalid/acme/widget.git`, `"oauth_token":"${token}"`]) {
+      const hits = await hitsOf(text)
+      assert.deepEqual(hits, [`${TOKEN_CLASS} (value withheld)`], text)
+      assert.ok(!hits.join('\n').includes(token), `the hit printed the token: ${hits.join('\n')}`)
+    }
+    assert.deepEqual(await refusedIn(`see ${token} here`), [`${TOKEN_CLASS} (${token})`])
+  })
+}
+
+test('a word that only starts like a GitHub token is not one: its body is shorter than a token\'s (martha#904)', async () => {
+  for (const prefix of GITHUB_TOKEN_PREFIXES) {
+    const body = randomBytes(TOKEN_BODY_CHARACTERS).toString('hex').slice(0, TOKEN_BODY_CHARACTERS - 1)
+    assert.deepEqual(await hitsOf(`a variable named ${prefix}${body} is no token`), [], prefix)
+    assert.deepEqual(await hitsOf(`the next character makes it one: ${prefix}${body}0`), [`${TOKEN_CLASS} (value withheld)`], prefix)
+  }
+})
+
 // A reference hit withholds the name it found, for the same reason (martha#855): a repository that is not public
 // is not seen by the public, and a shorthand may name one. Each name is drawn here, so this file carries none.
 const drawnName = (first: string) => `${first}${randomBytes(4).toString('hex')}`
@@ -236,6 +261,7 @@ test('each synthetic form passes a real scan, so the tests that state them can b
     'dial 192.168.255.7',
     'mail ada@synthetic.invalid',
     `node ${'a'.repeat(ID_HEX_DIGITS)}`,
+    ...GITHUB_TOKEN_PREFIXES.map((prefix) => `token: ${prefix}synthetic${'a'.repeat(TOKEN_BODY_CHARACTERS)}`),
     'see synthetic-repo#12',
     `as decided in ${PRIVATE}#123`,
   ]) {
@@ -249,6 +275,13 @@ test('the synthetic allowance is the whole value, never a part of it', async () 
   }
   // A real lab hostname beside the synthetic one is still refused.
   assert.deepEqual(await hitsOf(`ci-synthetic.lab then ${labHost('ci-other')}`, scanning), ['a lab hostname (value withheld)'])
+  // A GitHub token is synthetic only when its body starts with the word, and a real one beside it is still refused.
+  for (const prefix of GITHUB_TOKEN_PREFIXES) {
+    const synthetic = `${prefix}synthetic${'a'.repeat(TOKEN_BODY_CHARACTERS)}`
+    assert.deepEqual(await hitsOf(synthetic, strict), [`${TOKEN_CLASS} (value withheld)`], `${prefix}: refused with no allowance`)
+    assert.deepEqual(await hitsOf(`${synthetic} then ${drawnToken(prefix)}`, scanning), [`${TOKEN_CLASS} (value withheld)`], prefix)
+    assert.deepEqual(await hitsOf(`${prefix}${'a'.repeat(TOKEN_BODY_CHARACTERS)}synthetic`, scanning), [`${TOKEN_CLASS} (value withheld)`], prefix)
+  }
   // A 64-hex id is synthetic only when it is one digit repeated.
   assert.deepEqual((await hitsOf(`${'a'.repeat(ID_HEX_DIGITS - 1)}b`, scanning)).length, 1)
 })
