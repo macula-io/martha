@@ -48,7 +48,7 @@ PASSED='the night passed (a dry pass)'
 NOT_PASSED='the night did not pass'
 # Said before the writable attach, where the owner gives the landing yes (martha#847): the night's tmux server runs as
 # the members' own user, so this yes and the night's bounds are speed bumps, said plainly (DECIDED 2026-11-18).
-SPEED_BUMP='Said plainly: on a night, any process a member runs can reach the tmux server of the night itself. It can type this yes, or undo the read-only watch and the other bounds the night sets, so this yes is a speed bump, not a wall (martha#847).'
+SPEED_BUMP='Said plainly: on a night, any process a member runs can reach the tmux server of the night, type this yes and undo the read-only watch and the other bounds the night sets, so this yes is a speed bump, not a wall (martha#847).'
 # What the shape check says of the one command the yes is given in: the attach, writable.
 FOR_THE_YES='the attach for the yes'
 # What every owner command runs on the host, before it is quoted as one word: a terminal in the night's container.
