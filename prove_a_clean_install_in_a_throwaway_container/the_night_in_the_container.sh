@@ -26,11 +26,16 @@
 # - then the token: read from its 0600 file on the crew host and passed on standard input at every hop (ssh, then
 #   `podman exec -i`) into a 0600 file in the node user's home, read by `gh auth login --with-token`, and removed. It
 #   is never an argument at any hop. gh in the container must then answer as the bot recorded at setup;
+# - then the package (section 1) typed into the builder's session as the owner's turn; the night waits, within its work
+#   window, for the builder to queue the landing's ask in the clone's crew rows, then reads the pull request's head from
+#   GitHub (the throwaway script's read-back), prints the owner's second command (attach to the builder's session, say
+#   yes to the landing's menu, detach), and waits, within its yes window, for the landing to show in the crew's rows;
+# - in the finish, before the container goes and whatever happened after the night got ready: the clone's transcripts,
+#   rows and screens kept in the run folder, every byte through the token's redactor, and section 6's claims read from
+#   that kept record and from GitHub's read-back. On a night every line the run says goes through the redactor too; a
+#   token found anywhere fails the night by name (section 5, R4);
 # - at the end, whatever happened, after the container is gone: the repository deleted by keep_a_throwaway_repository.sh,
 #   which only takes GitHub's 404 as gone.
-#
-# The night after that (the package typed, the HANDOFF and VERDICT read, the owner's yes, the landing) is the next
-# part of #639 and not here: this part ends with the members up in the clone with the bot's login.
 
 # The script that makes and deletes the night's repository: this folder's own, or the stand-in a self-test names.
 NIGHT_THROWAWAY="${MARTHA_CLEAN_INSTALL_THROWAWAY:-${HERE}/keep_a_throwaway_repository.sh}"
@@ -65,6 +70,9 @@ NIGHT_TOKEN_DROP="${CONTAINER_HOME}/.night-token"
 # session runs after its command ends, so its last screen stays readable.
 NIGHT_TMUX_SOCKET='night'
 NIGHT_PANE_HOLD='exec sleep infinity'
+# Where each member's session keeps every byte it draws (tmux pipe-pane), and the gate its member waits on until that
+# keeping has begun. Made after the clean start has been judged, so it is not a stranger to it.
+NIGHT_SCREENS="${CONTAINER_HOME}/.night-screens"
 # The container's own process list after the stop: pid, state, command line. Only the container's idle process (its
 # pid 1) and this listing itself may be there; any other process, a member's or a host's it started, is left over. A
 # zombie (state Z) has ended and holds nothing open: the idle process does not reap, so it is not counted.
@@ -185,9 +193,14 @@ approve_command() {
   fi
 }
 
-# The owner's step that approves, in the words of the list: once, or on a night once for each crew place.
+# The owner's step that approves, in the words of the list: once, or on a night once for each crew place. The words
+# follow approve's own output and promise no yes: a crew place with no config that starts code asks nothing, as both
+# places did on night 1 (martha#639), and as a fresh checkout does too; approve asks only on a terminal, so the run
+# cannot learn which ahead of time.
 approve_step_words() {
-  if a_night; then printf '  2. type yes to approve, twice: the checkout, then the throwaway clone'; else printf '  2. type yes to approve'; fi
+  local places='the checkout'
+  if a_night; then places='the checkout, then the throwaway clone'; fi
+  printf '  2. approve %s: type yes where martha approve asks, nothing where it asks nothing' "${places}"
 }
 
 # What still runs in the container, one command line a line: every process but the idle one, this listing and the
@@ -235,44 +248,71 @@ night_clean_start_step() {
 # One tmux command in the container, on the night's own server.
 night_tmux() { on_the_host podman exec "${CONTAINER}" tmux -L "${NIGHT_TMUX_SOCKET}" "$@"; }
 
-# What the member named `name`'s session shows now, all of it.
+# What the member named `name`'s session shows now: only what is on its pane. A host that draws full-screen replaces
+# what was there before it, so a line printed before the host started is gone from here (#639 night 1). Used only to
+# say what the member was showing when a step fails.
 night_screen() { night_tmux capture-pane -p -J -S - -t "$1" 2> /dev/null || true; }
 
-# Whether the session of `name` shows `pattern` within `seconds`.
-night_screen_shows() {
-  local waited=0
-  while [ "${waited}" -lt "$3" ]; do
-    if night_screen "$1" | grep -qE -- "$2"; then return 0; fi
+# Every byte the session of `name` drew since it started, as tmux's pipe-pane kept it in the container.
+night_kept() { on_the_host podman exec "${CONTAINER}" cat "${NIGHT_SCREENS}/$1.log" 2> /dev/null || true; }
+
+# Drawn text matched plain: terminal sequences, control characters and every whitespace removed, so a line the host
+# drew in pieces, moved the cursor through, or wrapped still reads as its words.
+night_plain() {
+  LC_ALL=C sed -E $'s/\x1b\\[[0-9;?<>=!]*[ -/]*[@-~]//g; s/\x1b\\][^\x07\x1b]*(\x07|\x1b\\\\)//g; s/\x1b.//g' | LC_ALL=C tr -d '[:space:][:cntrl:]'
+}
+
+# Whether the session of `name` drew `pattern` (an extended pattern, matched against the plain bytes it drew since it
+# started, with the pattern's own whitespace removed) within `seconds`; read at least once, so 0 asks once.
+night_drew() {
+  local waited=0 plain_pattern
+  plain_pattern="$(printf '%s' "$2" | tr -d '[:space:]')"
+  while :; do
+    if night_kept "$1" | night_plain | grep -qE -- "${plain_pattern}"; then return 0; fi
+    if [ "${waited}" -ge "$3" ]; then return 1; fi
     sleep 1
     waited=$((waited + 1))
   done
-  return 1
 }
 
-# The script a member's session runs: its own command in the clone, then the run's line saying it ended, then held.
+# The script a member's session runs: it waits until the run keeps its bytes, then its own command in the clone, then
+# the run's line saying it ended, then held. Without the wait, what the member prints first could go before the run
+# starts keeping it.
 night_member_script() {
-  printf 'export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; cd %s; martha start %s; echo %s %s "$?"; %s' \
-    "${CONTAINER_HOME}" "${NIGHT_CLONE}" "$(remote_word "$1")" "$(remote_word "$1")" "$(remote_word "${ENDED_WORDS}")" "${NIGHT_PANE_HOLD}"
+  printf 'while [ ! -e %s ]; do sleep 0.1; done; export HOME=%s; export PATH="$HOME/.local/bin:$PATH"; cd %s; martha start %s; echo %s %s "$?"; %s' \
+    "$(night_gate "$1")" "${CONTAINER_HOME}" "${NIGHT_CLONE}" "$(remote_word "$1")" "$(remote_word "$1")" "$(remote_word "${ENDED_WORDS}")" "${NIGHT_PANE_HOLD}"
+}
+
+# The file whose presence lets the session of `name` start its member.
+night_gate() { printf '%s/%s.go' "${NIGHT_SCREENS}" "$1"; }
+
+# The session of `name` started, held at its gate; its bytes kept from then on; then its gate opened.
+night_start_session() {
+  local name="$1"
+  on_the_host podman exec "${CONTAINER}" mkdir -p "${NIGHT_SCREENS}" > /dev/null 2>&1 \
+    && night_tmux new-session -d -s "${name}" -x "${TERMINAL_COLUMNS}" -y "${TERMINAL_ROWS}" "$(night_member_script "${name}")" > /dev/null 2>&1 \
+    && night_tmux pipe-pane -o -t "${name}" "cat >> ${NIGHT_SCREENS}/${name}.log" > /dev/null 2>&1 \
+    && on_the_host podman exec "${CONTAINER}" touch "$(night_gate "${name}")" > /dev/null 2>&1
 }
 
 # The restart step: each member started again by its own command, in the clone, in a tmux session of its own name, in
-# the release's order; its first-run folder question answered; and each earlier one still up once a later one starts.
+# the release's order, every byte it draws kept; its first-run folder question answered; and each earlier one still up
+# once a later one starts.
 night_restart_step() {
   local name earlier
   for name in "${MEMBERS[@]}"; do
-    night_tmux new-session -d -s "${name}" -x "${TERMINAL_COLUMNS}" -y "${TERMINAL_ROWS}" "$(night_member_script "${name}")" > /dev/null 2>&1 \
-      || { failed 'night restart' "tmux would not start ${name}'s session"; return 1; }
-    if ! night_screen_shows "${name}" "${name} ${STARTED_WORDS}" "${STARTED_WINDOW_S}"; then
+    night_start_session "${name}" || { failed 'night restart' "tmux would not start ${name}'s session and keep what it draws"; return 1; }
+    if ! night_drew "${name}" "${name} ${STARTED_WORDS}" "${STARTED_WINDOW_S}"; then
       failed 'night restart' "${name} never said '${name} ${STARTED_WORDS}' in the clone: $(night_screen "${name}" | tail -c 300 | tr '\n' ' ')"
       return 1
     fi
-    if night_screen_shows "${name}" "${TRUST_WORDS}" "${TURN_WINDOW_S}"; then
+    if night_drew "${name}" "${TRUST_WORDS}" "${TURN_WINDOW_S}"; then
       night_tmux send-keys -t "${name}" Down > /dev/null 2>&1 && sleep "${KEY_PAUSE_S}" && night_tmux send-keys -t "${name}" Enter > /dev/null 2>&1 \
         || { failed 'night restart' "${name}'s folder question could not be answered"; return 1; }
     fi
     for earlier in "${MEMBERS[@]}"; do
       if [ "${earlier}" = "${name}" ]; then break; fi
-      if night_screen "${earlier}" | grep -qF -- "${earlier} ${ENDED_WORDS}"; then
+      if night_drew "${earlier}" "${earlier} ${ENDED_WORDS}" 0; then
         failed 'night restart' "${earlier} ended in the clone while ${name} started"
         return 1
       fi
@@ -301,6 +341,341 @@ night_token_step() {
     return 1
   fi
   ok 'night token' "gh in the container answers as the bot (${owner}); the token came on standard input at every hop, and its file is removed"
+}
+
+# --- The night's package, its landing and its kept record (martha#639 sections 1, 2 steps 4 to 9, 3 and 6) ---------
+
+# The guards' program, which the record's every write and every claim goes through.
+NIGHT_GUARDS="${REPO}/src/land_a_package_on_a_throwaway_repository/main.ts"
+# The name the guards' program opens each line it says with, which a failure here leaves off: the line names its step.
+NIGHT_GUARDS_SAY="$(basename "$(dirname "${NIGHT_GUARDS}")"): "
+# How long the crew has from the package typed to the landing's ask queued (a build, a review, a landing's checks),
+# and how long the owner has from their second command printed to the landing. Each is the environment's when it names
+# one, so the self-test runs in moments. A night's container idles for these on top of the proof's own idle.
+NIGHT_WORK_WINDOW_S="${MARTHA_CLEAN_INSTALL_NIGHT_WORK_WINDOW_S:-3600}"
+NIGHT_YES_WINDOW_S="${MARTHA_CLEAN_INSTALL_NIGHT_YES_WINDOW_S:-1200}"
+# How often the crew's rows are read while the night waits: a copy out of the container each time, so slower than the
+# proof's own poll.
+NIGHT_ROWS_POLL_S="${MARTHA_CLEAN_INSTALL_NIGHT_ROWS_POLL_S:-15}"
+# Martha's state in the container (src/find_a_homes_state_root): a checkout's launches under the sha256 of its real
+# path, and a crew's rows under crews/<the sha256 of its git common directory>/rows
+# (src/keep_martha_state_outside_the_checkout). The host's transcripts sit in each launch's snapshot as the proof's
+# own TRANSCRIPTS glob reads them.
+NIGHT_STATE="${CONTAINER_HOME}/.local/state/martha"
+NIGHT_LAUNCH_TRANSCRIPTS='the-members-own-config/projects/*/*.jsonl'
+# Where the run folder keeps the night's record, and the night file the claims read.
+NIGHT_KEPT_PART='kept'
+NIGHT_FILE_PART='night.json'
+# The mark a line the token had reached leaves in the run folder.
+NIGHT_TOKEN_IN_LOG_PART='token-in-log'
+# What the throwaway script's read-back writes in the run folder: GitHub's record of the pull request and of main.
+NIGHT_LANDED_PART='landed.json'
+# The package's issue, the one the throwaway script opens; the round and CI words the night's lines carry come from
+# the crew's own shapes in the claims reader, never from here.
+NIGHT_PACKAGE=''
+NIGHT_BASE=''
+NIGHT_TIP=''
+NIGHT_RECORD_KEPT=''
+NIGHT_LANDED=''
+NIGHT_CLAIMED=''
+
+# How long a night's container stays up by itself: the proof's own idle, with the night's two windows on top, so a
+# night is never cut off at the hour a plain run idles for (martha#639, Mars on PR 717).
+container_idles() {
+  if a_night; then printf 'sleep %s' "$((CONTAINER_IDLE_S + NIGHT_WORK_WINDOW_S + NIGHT_YES_WINDOW_S))"; else printf '%s' "${CONTAINER_IDLES}"; fi
+}
+
+# The member that builds: the role whose proof runs the README's command. The one that reviews: every other member.
+night_builder() { local name; for name in "${MEMBERS[@]}"; do if [ -n "${ROLE_RUNS_THE_COMMAND[${name}]+given}" ]; then printf '%s' "${name}"; return 0; fi; done; return 1; }
+night_reviewer() { local name; for name in "${MEMBERS[@]}"; do if [ -z "${ROLE_RUNS_THE_COMMAND[${name}]+given}" ]; then printf '%s' "${name}"; return 0; fi; done; return 1; }
+
+# The owner's turn that gives the builder the package (section 1): typed as the owner, the way the checkout's turns
+# were. Its opening words are the builder's alone, so the builder's transcript is the one that holds them.
+night_package_opening() { printf 'Take the package %s.' "${NIGHT_PACKAGE}"; }
+night_package_turn() {
+  printf '%s Issue #%s of %s says what to build. Build it in a worktree of your own, run npm test, push the branch and open a pull request, then hand it off to %s. On its PASS, land it: land_batch with check 1, then for real, then verify_range, then ask me the question verify_range gives you.' \
+    "$(night_package_opening)" "${NIGHT_PACKAGE##*#}" "${NIGHT_FULL_NAME}" "$(night_reviewer)"
+}
+
+# The package step: the package typed into the builder's session as the owner's turn, and its Enter.
+night_package_step() {
+  local builder
+  NIGHT_PACKAGE="$(sed -n 's/^PACKAGE=//p' "${NIGHT_DIR}/${NIGHT_REPOSITORY_PART}")"
+  NIGHT_BASE="$(sed -n 's/^BASE=//p' "${NIGHT_DIR}/${NIGHT_REPOSITORY_PART}")"
+  [ -n "${NIGHT_PACKAGE}" ] && [ -n "${NIGHT_BASE}" ] || { failed 'night package' "${NIGHT_DIR}/${NIGHT_REPOSITORY_PART} names no package and base"; return 1; }
+  builder="$(night_builder)" && night_reviewer > /dev/null || { failed 'night package' "the crew ${MEMBERS[*]} has no builder and reviewer"; return 1; }
+  night_tmux send-keys -t "${builder}" -l "$(night_package_turn)" > /dev/null 2>&1 && sleep "${KEY_PAUSE_S}" \
+    && night_tmux send-keys -t "${builder}" Enter > /dev/null 2>&1 \
+    || { failed 'night package' "the package could not be typed into ${builder}'s session"; return 1; }
+  ok 'night package' "${NIGHT_PACKAGE} typed into ${builder}'s session as the owner's turn"
+}
+
+# One script the container's shell runs on the night's record, its first line marking it as the record's.
+night_record_script() { on_the_host podman exec "${CONTAINER}" sh -c ": night-record; $1"; }
+
+# The two places of the clone's crew, by Martha's own keys: the state root of its launches, then its rows folder.
+night_places() {
+  night_record_script "set -eu; cd $(remote_word "${NIGHT_CLONE}"); c=\$(realpath .); g=\$(realpath \"\$(git rev-parse --path-format=absolute --git-common-dir)\"); \
+printf '%s/%s\n' $(remote_word "${NIGHT_STATE}") \"\$(printf %s \"\$c\" | sha256sum | cut -c1-64)\"; \
+printf '%s/crews/%s/rows\n' $(remote_word "${NIGHT_STATE}") \"\$(printf %s \"\$g\" | sha256sum | cut -c1-64)\""
+}
+
+# What the command after `to` prints, kept at `to` on the crew host through the token's redactor, mode 0600: the run
+# never writes what it has not looked through. Exit 1 when the token had reached it, 2 when the command failed.
+night_redacted_into() {
+  local to="$1" old statuses
+  shift
+  old="$(umask)"
+  umask 077
+  "$@" | node --no-warnings "${NIGHT_GUARDS}" redact "${NIGHT_TOKEN_FILE}" > "${to}" 2> /dev/null
+  statuses=("${PIPESTATUS[@]}")
+  umask "${old}"
+  [ "${statuses[0]}" = 0 ] || return 2
+  return "${statuses[1]}"
+}
+
+# One file of the container's, kept at `to` through the redactor.
+night_keep_a_file() { night_redacted_into "$2" on_the_host podman exec "${CONTAINER}" cat "$1"; }
+
+# The crew's rows kept: every row file of the clone's crew, each through the redactor, in folders of mode 0700 as the
+# store reads them. Echoes `reached` when the token was in one.
+night_keep_rows() {
+  local rows="$1" kept="$2" file reached='' status
+  mkdir -m 700 -p "${kept}"
+  while IFS= read -r file; do
+    [ -n "${file}" ] || continue
+    mkdir -m 700 -p "${kept}/$(dirname "${file}")"
+    status=0
+    night_keep_a_file "${rows}/${file}" "${kept}/${file}" || status=$?
+    case "${status}" in 0) : ;; 1) reached=1 ;; *) return 2 ;; esac
+  done < <(night_record_script "cd $(remote_word "${rows}") 2> /dev/null && find . -type f ! -name '.staging-*' | sed 's#^\./##' || true")
+  [ -z "${reached}" ] || printf 'reached'
+}
+
+# Each launch of the clone's crew kept as one transcript, its request blobs left out as the proof's own reads leave
+# them, each through the redactor; then named by whose it is: the one holding the package's opening is the builder's,
+# the other the reviewer's. Echoes `reached` when the token was in one.
+night_keep_transcripts() {
+  local root="$1" kept="$2" launch file reached='' status
+  mkdir -m 700 -p "${kept}/launches"
+  while IFS= read -r launch; do
+    [ -n "${launch}" ] || continue
+    status=0
+    night_redacted_into "${kept}/launches/${launch}.jsonl" night_record_script \
+      "cat ${root}/snapshots/$(remote_word "${launch}")/${NIGHT_LAUNCH_TRANSCRIPTS} 2> /dev/null | grep -vF -- $(remote_word "${REQUEST_BLOB}") || true" || status=$?
+    case "${status}" in 0) : ;; 1) reached=1 ;; *) return 2 ;; esac
+  done < <(night_record_script "ls $(remote_word "${root}/snapshots") 2> /dev/null || true")
+  for file in "${kept}/launches/"*.jsonl; do
+    [ -s "${file}" ] || continue
+    if grep -qF -- "$(night_package_opening)" "${file}"; then cp "${file}" "${kept}/$(night_builder).jsonl"; else cp "${file}" "${kept}/$(night_reviewer).jsonl"; fi
+  done
+  [ -z "${reached}" ] || printf 'reached'
+}
+
+# Each member's screen kept, as `screen placed` keeps one: the token was placed before these sessions drew.
+night_keep_screens() {
+  local kept="$1" name
+  for name in "${MEMBERS[@]}"; do
+    ( umask 077; set -o pipefail; night_kept "${name}" | node --no-warnings "${NIGHT_GUARDS}" screen placed > "${kept}/${name}.screen" 2> /dev/null ) || return 2
+  done
+}
+
+# Whether the run's lines go through the redactor: on a night, whose token file is on this host from the start.
+night_redacts() { a_night && [ -r "${NIGHT_TOKEN_FILE}" ]; }
+
+# One line, through the redactor. A line the token had reached is said redacted, and the run notes it in the run
+# folder, since a line can be said from inside a command substitution, whose variables the run never sees.
+night_redacted_line() {
+  local said status=0
+  said="$(printf '%s' "$1" | node --no-warnings "${NIGHT_GUARDS}" redact "${NIGHT_TOKEN_FILE}" 2> /dev/null)" || status=$?
+  case "${status}" in
+    0) printf '%s' "${said}" ;;
+    1) : > "${NIGHT_DIR}/${NIGHT_TOKEN_IN_LOG_PART}"; printf '%s' "${said}" ;;
+    *) printf '%s' '(a line the redactor could not read was left out)' ;;
+  esac
+}
+
+# The run's lines checked once more at its end: a line the token had reached fails the night by name.
+night_log_held_no_token() {
+  if ! a_night || [ ! -e "${NIGHT_DIR}/${NIGHT_TOKEN_IN_LOG_PART}" ]; then return 0; fi
+  rm -f "${NIGHT_DIR}/${NIGHT_TOKEN_IN_LOG_PART}"
+  failed 'night log' "$(night_token_reached_words)"
+  return 1
+}
+
+# The kept record's own words for a token found in it.
+night_token_reached_words() {
+  node --no-warnings -e 'import(process.argv[1]).then((m) => process.stdout.write(m.THE_TOKEN_REACHED_THE_RECORD))' "${REPO}/src/land_a_package_on_a_throwaway_repository/the_kept_record.ts"
+}
+
+# The record step: the clone's transcripts, rows and screens copied out of the container while the members still run
+# (a launch's snapshot goes with it), every byte through the redactor first. A token found in any of it is redacted
+# there and fails the night by name.
+night_record_step() {
+  local places root rows kept="${NIGHT_DIR}/${NIGHT_KEPT_PART}" reached=''
+  NIGHT_RECORD_KEPT=1
+  places="$(night_places 2> /dev/null)" || { failed 'night record' "the clone's state could not be found in the container"; return 1; }
+  root="$(sed -n 1p <<< "${places}")"
+  rows="$(sed -n 2p <<< "${places}")"
+  mkdir -m 700 -p "${kept}"
+  reached="$(night_keep_transcripts "${root}" "${kept}")" || { failed 'night record' "the transcripts under ${root} could not be kept"; return 1; }
+  reached="${reached}$(night_keep_rows "${rows}" "${kept}/rows")" || { failed 'night record' "the crew's rows at ${rows} could not be kept"; return 1; }
+  night_keep_screens "${kept}" || { failed 'night record' 'a member'"'"'s screen could not be kept'; return 1; }
+  if [ -n "${reached}" ]; then
+    failed 'night record' "$(night_token_reached_words)"
+    return 1
+  fi
+  ok 'night record' "every launch's transcript, the crew's rows and each member's screen kept in ${kept}, through the redactor"
+}
+
+# The crew's rows as they stand, copied out to a fresh folder of the run's, for the night to read while it waits.
+night_rows_now() {
+  local places rows now="${NIGHT_DIR}/rows-now"
+  places="$(night_places 2> /dev/null)" || return 2
+  rows="$(sed -n 2p <<< "${places}")"
+  rm -rf "${now}"
+  night_keep_rows "${rows}" "${now}" > /dev/null || return 2
+  printf '%s' "${now}"
+}
+
+# Whether the clone's crew has queued an ask of the owner, read from its rows copied out now.
+night_asked() {
+  local now
+  now="$(night_rows_now)" || return 2
+  node --no-warnings "${NIGHT_GUARDS}" asked "${now}" < /dev/null > /dev/null 2>&1
+}
+
+# The window's end, HH:MM, `seconds` from now.
+night_closing_at() { date -d "+$1 seconds" '+%H:%M'; }
+
+# The ask step: the night waits, within its work window, for the builder to have queued the landing's ask.
+night_ask_step() {
+  local waited=0
+  while ! night_asked; do
+    if [ "${waited}" -ge "${NIGHT_WORK_WINDOW_S}" ]; then
+      failed 'night ask' "the crew queued no ask of the owner within ${NIGHT_WORK_WINDOW_S}s of the package"
+      return 1
+    fi
+    sleep "${NIGHT_ROWS_POLL_S}"
+    waited=$((waited + NIGHT_ROWS_POLL_S))
+  done
+  ok 'night ask' "$(night_builder) queued the landing's ask"
+}
+
+# The owner's second command: their terminal attached to the builder's session in the container, where the landing's
+# menu is.
+night_attach_command() {
+  printf 'ssh -t %s %s' "$(remote_word "${HOST}")" "$(remote_word "$(remote_words podman exec -it "${CONTAINER}" tmux -L "${NIGHT_TMUX_SOCKET}" attach -t "$(night_builder)")")"
+}
+
+# The owner's second act, printed as the first one is: a numbered list, the command on its own line under step 1, and
+# the window's end on the step the run waits for (section 3).
+night_the_owners_second_steps() {
+  log "the owner's second act, in a terminal of your own, in this order:"
+  log "  1. run this command, which attaches to $(night_builder)'s terminal in the container:"
+  log "  $(night_attach_command)"
+  log "  2. answer the landing's menu yes"
+  log "  3. detach: Ctrl-b, then d — the run waits for the landing; the window closes $(night_closing_at "${NIGHT_YES_WINDOW_S}")"
+}
+
+# The night file the claims read: the package, its range (the base the night started on, the tip the pull request's
+# head as GitHub reads it), both members, their kept transcripts and the crew's kept rows.
+night_write_the_night() {
+  local kept="$1" rows="$2"
+  node -e 'const [file, p, range, b, r, bt, rt, rows] = process.argv.slice(1); require("node:fs").writeFileSync(file, JSON.stringify({ package: p, range, builder: b, reviewer: r, builder_transcript: bt, reviewer_transcript: rt, rows_folder: rows }) + "\n")' \
+    "${NIGHT_DIR}/${NIGHT_FILE_PART}" "${NIGHT_PACKAGE}" "${NIGHT_BASE}..${NIGHT_TIP}" "$(night_builder)" "$(night_reviewer)" \
+    "${kept}/$(night_builder).jsonl" "${kept}/$(night_reviewer).jsonl" "${rows}"
+}
+
+# The landing as the crew's rows and the builder's transcript show it, read from a fresh copy: exit 0 when all three
+# landing rows hold, the first that does not on standard error otherwise.
+night_landing_now() {
+  local now kept="${NIGHT_DIR}/${NIGHT_KEPT_PART}-now"
+  now="$(night_rows_now)" || return 2
+  rm -rf "${kept}"
+  night_keep_transcripts "$(sed -n 1p <<< "$(night_places)")" "${kept}" > /dev/null || return 2
+  night_write_the_night "${kept}" "${now}"
+  node --no-warnings "${NIGHT_GUARDS}" landing "${NIGHT_DIR}/${NIGHT_FILE_PART}" < /dev/null
+}
+
+# GitHub's own record of the landing, read with the bot's login by the throwaway script: the pull request's head is
+# the night's tip.
+night_read_back() {
+  local said status=0
+  said="$("${NIGHT_THROWAWAY}" read-back "${NIGHT_DIR}" 2>&1)" || status=$?
+  if [ "${status}" -ne 0 ]; then failed 'night read back' "GitHub's record of the landing could not be read: $(one_line "${said}")"; return 1; fi
+  NIGHT_TIP="$(json_field "${NIGHT_DIR}/${NIGHT_LANDED_PART}" 'pull.head')" || { failed 'night read back' 'the pull request names no head'; return 1; }
+}
+
+# The yes step: the owner's second command printed, and the night waiting, within its window, for the landing to show
+# in the crew's own rows. The tip is the pull request's head, read from GitHub first. A window that ends without it
+# fails by the landing row that is still short, as `FAIL owner: no yes` when the yes never came.
+night_yes_step() {
+  local waited=0 why
+  night_read_back || return 1
+  night_the_owners_second_steps
+  while :; do
+    why="$(night_landing_now 2>&1)" && break
+    why="${why#"${NIGHT_GUARDS_SAY}"}"
+    if [ "${waited}" -ge "${NIGHT_YES_WINDOW_S}" ]; then
+      case "${why}" in
+        *"$(night_landing_row OWNER_SAID_YES)"*) failed owner "no yes within ${NIGHT_YES_WINDOW_S}s: $(one_line "${why}")" ;;
+        *) failed 'night landing' "$(one_line "${why}")" ;;
+      esac
+      return 1
+    fi
+    sleep "${NIGHT_ROWS_POLL_S}"
+    waited=$((waited + NIGHT_ROWS_POLL_S))
+  done
+  ok 'night landing' "the owner's yes landed ${NIGHT_PACKAGE}: the ask, its yes and the landing are in the crew's rows"
+}
+
+# A landing row's name, as the landing reader reports it.
+night_landing_row() {
+  node --no-warnings -e 'import(process.argv[1]).then((m) => process.stdout.write(m[process.argv[2]]))' "${REPO}/src/land_a_package_on_a_throwaway_repository/the_nights_landing.ts" "$1"
+}
+
+# The night's landing steps, after it is ready, in order; the first failure ends them. The record is kept in the
+# finish, whatever happened, before the container goes.
+night_landing_steps() {
+  night_package_step || return 1
+  night_ask_step || return 1
+  night_yes_step || return 1
+  NIGHT_LANDED=1
+}
+
+# The claims step, on the kept record: the night file written from the kept transcripts and rows, section 6's four crew
+# rows and three landing rows read from them, and GitHub's half of row 7 read from the read-back.
+night_claims_step() {
+  local kept="${NIGHT_DIR}/${NIGHT_KEPT_PART}" said
+  if [ -z "${NIGHT_TIP}" ]; then night_read_back || return 1; fi
+  night_write_the_night "${kept}" "${kept}/rows"
+  said="$(node --no-warnings "${NIGHT_GUARDS}" claims "${NIGHT_DIR}/${NIGHT_FILE_PART}" < /dev/null 2>&1)" || { failed 'night claims' "$(one_line "${said#"${NIGHT_GUARDS_SAY}"}")"; return 1; }
+  said="$(node --no-warnings "${NIGHT_GUARDS}" landing "${NIGHT_DIR}/${NIGHT_FILE_PART}" < /dev/null 2>&1)" || { failed 'night claims' "$(one_line "${said#"${NIGHT_GUARDS_SAY}"}")"; return 1; }
+  night_github_landed || return 1
+  NIGHT_CLAIMED=1
+  ok 'night claims' "section 6 holds for ${NIGHT_PACKAGE} ${NIGHT_BASE}..${NIGHT_TIP}: handed off, reviewed, asked, said yes to, landed"
+}
+
+# GitHub's half of row 7: main holds the tip, the merge's message names the package, and the pull request is merged,
+# or closed with its head on main.
+night_github_landed() {
+  local landed="${NIGHT_DIR}/${NIGHT_LANDED_PART}" on_main message merged state
+  on_main="$(json_field "${landed}" 'tip_on_main')" || on_main=''
+  message="$(json_field "${landed}" 'main.message')" || message=''
+  merged="$(json_field "${landed}" 'pull.merged')" || merged=''
+  state="$(json_field "${landed}" 'pull.state')" || state=''
+  [ "${on_main}" = true ] || { failed 'night claims' "it landed: GitHub's main does not hold ${NIGHT_TIP}"; return 1; }
+  grep -qF -- "${NIGHT_PACKAGE}" <<< "${message}" || { failed 'night claims' "it landed: main's commit message does not name ${NIGHT_PACKAGE}"; return 1; }
+  [ "${merged}" = true ] || [ "${state}" = closed ] || { failed 'night claims' "it landed: the pull request reads ${state}, neither merged nor closed"; return 1; }
+}
+
+# The record kept, in the finish, before the container goes, on a night that got ready whatever happened after; then
+# the claims read from it, on a night whose landing showed.
+night_keep_and_claim() {
+  if ! a_night || [ -z "${NIGHT_READY}" ]; then return 0; fi
+  night_record_step || return 1
+  if [ -n "${NIGHT_LANDED}" ]; then night_claims_step; fi
 }
 
 # The night's steps after every member is proven in the checkout, in order; the first failure ends them.
@@ -338,6 +713,8 @@ printf 'throwaway %s\n' "$1" >> "${standin}/calls"
 case "$1" in
   open)
     if [ -f "${standin}/night.open-fails" ]; then echo 'FAIL who: the calls answer as another account' >&2; exit 1; fi
+    # A case whose night.open-says-token exists stands for a line of the open's that carries the token.
+    if [ -f "${standin}/night.open-says-token" ]; then echo "a line with $(cat "${standin}/live/token") in it"; fi
     mkdir -p "$2/first"
     git -C "$2/first" init -q -b main
     printf '# A throwaway repository\n' > "$2/first/README.md"
@@ -346,6 +723,15 @@ case "$1" in
     printf 'FULL_NAME=synthetic-bot/martha-live-x\nID=77\nBASE=%s\nBRANCH=main\nPACKAGE=synthetic-bot/martha-live-x#1\n' \
       "$(git -C "$2/first" rev-parse HEAD)" > "$2/repository.env"
     echo 'ok make: synthetic-bot/martha-live-x (id 77), private'
+    ;;
+  read-back)
+    # GitHub's record of the landing: the pull request's head is the tip the crew's stand-in worked on; a case's
+    # night.not-on-main stands for a main that does not hold it.
+    held=true
+    if [ -f "${standin}/night.not-on-main" ]; then held=false; fi
+    printf '{"pull":{"number":2,"head":"%s","merged":true,"state":"closed"},"main":{"sha":"%s","message":"synthetic-bot/martha-live-x#1 landed"},"tip_on_main":%s}\n' \
+      "$(cat "$(dirname "$0")/night.tip")" "$(cat "$(dirname "$0")/night.tip")" "${held}" > "$2/landed.json"
+    echo 'ok read back: the pull request and main read'
     ;;
   close) echo 'ok close: synthetic-bot/martha-live-x deleted, and its id answers 404' ;;
 esac
@@ -426,24 +812,73 @@ case "${words}" in
     find "${standin}/home" -xdev | sed "s#^${standin}/home#${home}#"
     ;;
   *'tmux -L night new-session'*)
+    # The session's command waits on its gate, as the run's does: the stand-in member starts only once the gate the
+    # command names is there. Then it draws as the host does: its started line, and then a full-screen draw (the
+    # alternate screen) that leaves that line off the pane, where the folder question's words are placed by moving the
+    # cursor rather than by spaces.
     name=''
-    while [ $# -gt 0 ]; do if [ "$1" = -s ]; then name="$2"; fi; shift; done
+    while [ $# -gt 0 ]; do if [ "$1" = -s ]; then name="$2"; fi; command="$1"; shift; done
+    gate="$(printf '%s' "${command}" | sed -n 's/^while \[ ! -e \([^ ]*\) \].*/\1/p' | in_home)"
     mkfifo "${standin}/tmux.${name}.keys"
     sleep 600 > "${standin}/tmux.${name}.keys" &
     printf '%s\n' "$!" >> "${standin}/night.pids"
-    "${here}/member" "martha start ${name}" < "${standin}/tmux.${name}.keys" > "${standin}/tmux.${name}.screen" 2>&1 &
+    : > "${standin}/tmux.${name}.screen"
+    (
+      if [ -n "${gate}" ]; then until [ -e "${gate}" ]; do sleep 0.1; done; fi
+      "${here}/member" "martha start ${name}" < "${standin}/tmux.${name}.keys" 2>&1 \
+        | sed -u -e "s/\(${started} [0-9]*\)/\1"$'\033[?1049h\033[2J'"/" -e "/Quick safety check/s/ /"$'\033[1C'"/g"
+    ) >> "${standin}/tmux.${name}.screen" &
     printf '%s\n' "$!" >> "${standin}/night.pids"
     ;;
-  *'tmux -L night capture-pane'*) tr -d '\r' < "${standin}/tmux.${@: -1}.screen" ;;
+  *'tmux -L night pipe-pane'*)
+    # Kept from now on, as tmux keeps it: what the pane drew before the pipe began is not in it.
+    name=''
+    while [ $# -gt 0 ]; do if [ "$1" = -t ]; then name="$2"; fi; command="$1"; shift; done
+    kept="$(printf '%s' "${command#cat >> }" | in_home)"
+    tail -c 0 -F "${standin}/tmux.${name}.screen" >> "${kept}" 2> /dev/null &
+    printf '%s\n' "$!" >> "${standin}/night.pids"
+    ;;
+  *'tmux -L night capture-pane'*)
+    # Only what is on the pane: what the full-screen draw left there, never what it replaced.
+    drawn="$(tr -d '\r' < "${standin}/tmux.${@: -1}.screen")"
+    printf '%s\n' "${drawn##*$'\033[?1049h'}"
+    ;;
+  *'.night-screens'*)
+    # The run's own execs on the folder that keeps the sessions' bytes: made, a gate touched, a kept file read.
+    mapped=()
+    for word in "$@"; do mapped+=("$(printf '%s' "${word}" | in_home)"); done
+    "${mapped[@]}"
+    ;;
   *'tmux -L night send-keys'*)
     name=''
     keys=()
     while [ $# -gt 0 ]; do
-      case "$1" in -t) name="$2"; shift 2 ;; send-keys | -L | night | tmux) shift ;; *) keys+=("$1"); shift ;; esac
+      case "$1" in -t) name="$2"; shift 2 ;; send-keys | -L | night | tmux | -l) shift ;; *) keys+=("$1"); shift ;; esac
     done
     for key in "${keys[@]}"; do
       case "${key}" in Down) printf '\033[B' ;; Enter) printf '\r' ;; *) printf '%s' "${key}" ;; esac
     done > "${standin}/tmux.${name}.keys"
+    # The package typed into the builder: the crew's stand-in leaves what a worked night leaves.
+    for key in "${keys[@]}"; do
+      case "${key}" in
+        'Take the package '*)
+          printf '%s' "${key}" > "${standin}/night.package-typed"
+          node --no-warnings "${here}/night-crew.mjs" "$(cat "${here}/repo.path")" "${standin}" "${standin}/home" \
+            "${standin}/home/${clones}/synthetic-bot/martha-live-x" synthetic-bot/martha-live-x#1 \
+            "$(sed -n 's/^BASE=//p' "${standin}/run/repository.env")" "$(cat "${here}/night.tip")" "${name}" \
+            "$(printf '%s' "${key}" | sed 's/.*hand it off to \([^.]*\)\..*/\1/')" || exit 1
+          ;;
+      esac
+    done
+    ;;
+  *': night-record;'*)
+    # The run's own scripts on the night's record, in the case's home, their paths said back as the container's.
+    sh -c "$(printf '%s' "${@: -1}" | in_home)" | sed "s#${standin}/home#${home}#g"
+    ;;
+  *"${home}/.local/state/martha/"*)
+    # One file of Martha's state read out: a row of the crew's. Anything else is the stand-in podman's own to answer.
+    [ "${1:-}" = cat ] || exit 99
+    cat "$(printf '%s' "$2" | in_home)"
     ;;
   *'.night-token'*)
     # The token script itself, in the case's home, with the stand-in gh first on its PATH.
@@ -453,6 +888,67 @@ case "${words}" in
   *) exit 99 ;;
 esac
 NIGHTPODMAN
+  cat > "${dir}/night-crew.mjs" << 'NIGHTCREW'
+// The crew's night, as far as the run can tell: what a builder and a reviewer leave in the container once the package
+// is typed. Each member's transcript in its own launch's snapshot, in the host's own record shapes (a string prompt for a
+// handed turn, a tool_use block for a call, the tool names as the host spells them), and the crew's rows through the
+// rows store itself. The lines are written out here, never built with the readers' functions. The case's flags take
+// one thing away: night.no-handoff the builder's handoff call, night.no-ask every row, night.no-yes the owner's yes and
+// the landing, night.token-in-transcript puts the token the builder could read into its transcript.
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const [repo, standin, home, clone, pkg, base, tip, builder, reviewer] = process.argv.slice(2)
+const flag = (name) => existsSync(join(standin, name))
+const { OWNERS_QUESTION_LEAD_IN } = await import(join(repo, 'src/check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'))
+const { rowStreamsDirectory } = await import(join(repo, 'src/row_streams_directory/row_streams_directory.ts'))
+const sha = (text) => createHash('sha256').update(text).digest('hex')
+const state = join(home, '.local/state/martha')
+const range = `${base}..${tip}`
+const handoff = `HANDOFF ${pkg} ${range} r=1 ci=none:paths`
+const verdict = `VERDICT ${pkg} PASS ${range} r=1 ci=none:paths req=0`
+const question = `Land ${pkg} on ${pkg.split('#')[0]} main at ${tip}?`
+const at = (minute) => `2026-11-19T01:${String(minute).padStart(2, '0')}:00.000Z`
+const call = (minute, name, input) => JSON.stringify({ parentUuid: 'p', isSidechain: false, type: 'assistant', uuid: 'u', timestamp: at(minute), message: { id: 'm', type: 'message', role: 'assistant', model: 'x', content: [{ type: 'tool_use', id: `toolu_${minute}`, name, input }] } })
+const turn = (minute, content) => JSON.stringify({ parentUuid: 'p', isSidechain: false, type: 'user', uuid: 'u', timestamp: at(minute), message: { role: 'user', content } })
+const result = (minute, text) => turn(minute, [{ type: 'tool_result', tool_use_id: `toolu_${minute - 1}`, content: [{ type: 'text', text }] }])
+const typed = readFileSync(join(standin, 'night.package-typed'), 'utf8')
+const token = readFileSync(join(standin, 'live/token'), 'utf8').trim()
+
+const builderLines = [turn(1, typed)]
+if (flag('night.token-in-transcript')) builderLines.push(result(2, `Logged in to github.com account synthetic-bot\nToken: ${token}`))
+if (!flag('night.no-handoff')) builderLines.push(call(3, 'mcp__martha__say_to_the_crew', { to: [reviewer], text: `${handoff}\nthe package is ready` }))
+builderLines.push(
+  turn(6, `[crew #2] ${reviewer}: ${verdict}\nall good`),
+  call(7, 'mcp__martha__verify_range', { path: clone, base, tip, packages: [pkg] }),
+  result(8, ['one commit', ' greet.js | 3 +', '', OWNERS_QUESTION_LEAD_IN, question, '', 'the range'].join('\n')),
+  call(9, 'mcp__martha__ask_the_owner', { ask: question }),
+)
+const reviewerLines = [turn(4, `[crew #1] ${builder}: ${handoff}\nthe package is ready`), call(5, 'mcp__martha__say_to_the_crew', { to: [builder], text: `${verdict}\nall good` })]
+const launches = join(state, sha(realpathSync(clone)), 'snapshots')
+for (const [launch, lines] of [['launch-b', builderLines], ['launch-r', reviewerLines]]) {
+  const folder = join(launches, launch, 'the-members-own-config/projects/-clone')
+  mkdirSync(folder, { recursive: true })
+  writeFileSync(join(folder, 'session.jsonl'), lines.join('\n') + '\n')
+}
+
+if (!flag('night.no-ask')) {
+  const rows = join(state, 'crews', sha(realpathSync(join(clone, '.git'))), 'rows')
+  mkdirSync(rows, { recursive: true, mode: 0o700 })
+  const store = rowStreamsDirectory(rows)
+  const settled = Date.parse(at(10))
+  await store.append('owner_asks', { kind: 'ask_queued', question, asked_by: builder, since: settled - 60_000 })
+  if (!flag('night.no-yes')) {
+    await store.append('owner_asks', { kind: 'asks_taken', asks: [0], at: settled - 1_000, by: 'owner', session: 's' })
+    await store.append('owner_asks', { kind: 'asks_settled', batch: 1, yes: [0], at: settled, by: 'owner' })
+    await store.append(`ledger/${pkg}`, { kind: 'act_announced', package: pkg, member: builder, at: settled + 5_000, act: { kind: 'push', what: `the default branch of ${clone} fast-forwarded to ${tip}` } })
+    await store.append(`ledger/${pkg}`, { kind: 'package_landed', package: pkg, member: builder, at: settled + 5_001, note: `${range} on the owner's yes to ask 0` })
+  }
+}
+NIGHTCREW
+  printf '%s\n' "${REPO}" > "${dir}/repo.path"
+  printf 'd%.0s' {1..40} > "${dir}/night.tip"
   mkdir -p "${dir}/night-bin"
   cat > "${dir}/night-bin/gh" << 'GH'
 #!/usr/bin/env bash
@@ -492,6 +988,30 @@ night_expect() {
     MARTHA_CLEAN_INSTALL_NIGHT_PINS="${standin}/pins" expect_status "${expected}" "${standin}" 'a-host' --night "${standin}/run"
 }
 
+# Whether the owner's second act was printed as the list they follow: the heading, step 1 with the command attaching to
+# the builder's session on its own line under it, the yes, and the marker with the time its window closes. Read line
+# by line and compared whole, as the first act's list is.
+night_second_steps_printed() {
+  local out="$1" at line expected
+  at="$(grep -nxF -- "the owner's second act, in a terminal of your own, in this order:" "${out}" | head -1 | cut -d: -f1)"
+  [ -n "${at}" ] || { echo "the self-test: the owner's second act was not printed as a list (no heading)" >&2; return 1; }
+  expected="  1. run this command, which attaches to builder's terminal in the container:"
+  line="$(sed -n "$((at + 1))p" "${out}")"
+  [ "${line}" = "${expected}" ] || { echo "the self-test: the owner's second act's first step is not the numbered one: ${line}" >&2; return 1; }
+  line="$(sed -n "$((at + 2))p" "${out}")"
+  case "${line}" in
+    "  ssh -t 'a-host' "*"tmux"*"'-L'"*"'night'"*"'attach'"*"'-t'"*"'builder'"*) : ;;
+    *) echo "the self-test: the owner's second command does not attach to the builder's session: ${line}" >&2; return 1 ;;
+  esac
+  line="$(sed -n "$((at + 3))p" "${out}")"
+  [ "${line}" = "  2. answer the landing's menu yes" ] || { echo "the self-test: the owner's second act's step 2 is not the yes: ${line}" >&2; return 1; }
+  line="$(sed -n "$((at + 4))p" "${out}")"
+  case "${line}" in
+    '  3. detach: Ctrl-b, then d — the run waits for the landing; the window closes '[0-2][0-9]:[0-5][0-9]) : ;;
+    *) echo "the self-test: the owner's second act does not end on the marker with its window: ${line}" >&2; return 1 ;;
+  esac
+}
+
 # Whether the night's repository was closed after the container went: the run's close line after its tear-down.
 night_closed_after_tear_down() {
   local out="$1/out" torn closed
@@ -524,7 +1044,8 @@ night_self_test() {
   [ "$(git -C "${standin}/home/${NIGHT_CLONES}/synthetic-bot/martha-live-x" remote get-url origin 2> /dev/null)" = 'https://github.com/synthetic-bot/martha-live-x.git' ] \
     || nfail "the clone's origin is not the repository's plain address"
   asked_for 'martha approve && cd .*martha-live-x && martha approve && cd ' "${standin}/out" || nfail 'the owner'"'"'s command does not approve both places'
-  asked_for '^  2. type yes to approve, twice: the checkout, then the throwaway clone$' "${standin}/out" || nfail 'the owner'"'"'s steps do not say yes twice'
+  asked_for '^  2. approve the checkout, then the throwaway clone: type yes where martha approve asks, nothing where it asks nothing$' "${standin}/out" \
+    || nfail 'the owner'"'"'s steps do not follow approve in both places'
   for name in "${SELF_TEST_MEMBERS[@]}"; do
     asked_for "tmux -L night new-session -d -s ${name} .*cd ${CONTAINER_HOME}/${NIGHT_CLONES}/synthetic-bot/martha-live-x; martha start " "${standin}/calls" \
       || nfail "${name} was not started again by its own command, in the clone, in tmux"
@@ -535,6 +1056,59 @@ night_self_test() {
   [ "$(cat "${standin}/container.token" 2> /dev/null)" = "${NIGHT_SELF_TEST_TOKEN}" ] || nfail 'the token did not reach the container on standard input'
   [ ! -e "${standin}/home/${NIGHT_TOKEN_DROP#"${CONTAINER_HOME}/"}" ] || nfail "the token's file was left in the home"
   if grep -qF -- "${NIGHT_SELF_TEST_TOKEN}" "${standin}/calls" "${standin}/out" "${standin}/err"; then nfail 'the token was an argument, or reached the log'; fi
+  # The package typed into the builder, the owner's second act printed as a list, the record kept through the redactor,
+  # and section 6 read from it on the real readers: the night lands.
+  grep -qx 'Take the package synthetic-bot/martha-live-x#1\. Issue #1 of synthetic-bot/martha-live-x says what to build\..*hand it off to reviewer\..*' "${standin}/night.package-typed" 2> /dev/null \
+    || nfail 'the package was not typed into the builder as the owner'"'"'s turn'
+  asked_for 'tmux -L night send-keys -t builder -l Take the package ' "${standin}/calls" || nfail 'the package was not typed into the builder'"'"'s own session'
+  night_second_steps_printed "${standin}/out" || failures=$((failures + 1))
+  asked_for "^ok night claims: section 6 holds for synthetic-bot/martha-live-x#1 [0-9a-f]\{40\}\.\.d\{40\}: " "${standin}/out" || nfail 'a night that landed did not say section 6 holds'
+  for kept in builder.jsonl reviewer.jsonl builder.screen reviewer.screen; do
+    [ -f "${standin}/run/${NIGHT_KEPT_PART}/${kept}" ] || nfail "the kept record has no ${kept}"
+  done
+  [ "$(stat -c '%a' "${standin}/run/${NIGHT_KEPT_PART}/builder.jsonl" 2> /dev/null)" = 600 ] || nfail 'a kept transcript is not mode 0600'
+  grep -q '"name":"mcp__martha__say_to_the_crew"' "${standin}/run/${NIGHT_KEPT_PART}/builder.jsonl" 2> /dev/null || nfail "the builder's kept transcript is not the builder's"
+  if grep -q 'Take the package' "${standin}/run/${NIGHT_KEPT_PART}/reviewer.jsonl" 2> /dev/null; then nfail "the reviewer's kept transcript holds the builder's turn"; fi
+  [ "$(json_field "${standin}/run/${NIGHT_FILE_PART}" rows_folder)" = "${standin}/run/${NIGHT_KEPT_PART}/rows" ] || nfail 'the night file does not read the kept rows'
+  asked_for "^create .* sleep $((CONTAINER_IDLE_S + MARTHA_CLEAN_INSTALL_NIGHT_WORK_WINDOW_S + MARTHA_CLEAN_INSTALL_NIGHT_YES_WINDOW_S))$" "${standin}/calls" \
+    || nfail "a night's container does not idle for the night's windows on top of the proof's"
+
+  # The owner never says yes: the landing's row named as the owner's, the record still kept, the repository still goes.
+  standin="${root}/night-no-yes"; night_case "${standin}" night.no-yes
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for "^FAIL owner: no yes within ${MARTHA_CLEAN_INSTALL_NIGHT_YES_WINDOW_S}s: the owner said yes: " "${standin}/out" || nfail 'a night with no yes was not named as the owner'"'"'s'
+  [ -f "${standin}/run/${NIGHT_KEPT_PART}/builder.jsonl" ] || nfail 'a night with no yes kept no record'
+  night_closed_after_tear_down "${standin}" || failures=$((failures + 1))
+
+  # The crew queues no ask: named, and the owner's second command never printed.
+  standin="${root}/night-no-ask"; night_case "${standin}" night.no-ask
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for '^FAIL night ask: the crew queued no ask of the owner within ' "${standin}/out" || nfail 'a night with no ask was not named'
+  if grep -q "^the owner's second act" "${standin}/out"; then nfail 'the owner'"'"'s second command was printed with no ask queued'; fi
+
+  # R4: the token reaches a transcript: the kept record holds it redacted, and the night fails by name.
+  standin="${root}/night-token-kept"; night_case "${standin}" night.token-in-transcript
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for '^FAIL night record: the token reached the kept record$' "${standin}/out" || nfail 'a token in a transcript was not named'
+  if grep -rqF -- "${NIGHT_SELF_TEST_TOKEN}" "${standin}/run" "${standin}/out" "${standin}/err"; then nfail 'the token reached the kept record or the log'; fi
+  [ -f "${standin}/run/${NIGHT_KEPT_PART}/builder.jsonl" ] || nfail 'a transcript with the token in it was not kept redacted'
+
+  # R4 in the log: a line the run says carries the token: said redacted, and the night fails by name.
+  standin="${root}/night-token-in-log"; night_case "${standin}" night.open-says-token
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for '^FAIL night log: the token reached the kept record$' "${standin}/out" || nfail 'a token in a line of the run was not named'
+  if grep -qF -- "${NIGHT_SELF_TEST_TOKEN}" "${standin}/out" "${standin}/err"; then nfail 'the token reached the run'"'"'s lines'; fi
+  asked_for '^  a line with .* in it$' "${standin}/out" || nfail 'the line that carried the token was not said, redacted'
+
+  # Row 1: the builder never hands off: the claims fail by the row's name.
+  standin="${root}/night-no-handoff"; night_case "${standin}" night.no-handoff
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for '^FAIL night claims: the builder handed off: ' "${standin}/out" || nfail 'a night with no handoff was not named by its row'
+
+  # Row 7, GitHub's half: main does not hold the pull request's head.
+  standin="${root}/night-not-on-main"; night_case "${standin}" night.not-on-main
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for "^FAIL night claims: it landed: GitHub's main does not hold d\{40\}$" "${standin}/out" || nfail 'a tip main does not hold was not named'
 
   # gh in the container will not log in: named, and the token's file still goes from the home.
   standin="${root}/night-login-fails"; night_case "${standin}" night.gh-login-fails
@@ -597,7 +1171,7 @@ night_self_test() {
   # --night with no run folder is refused with the arguments.
   expect_status 2 "${root}" 'a-host' --night || failures=$((failures + 1))
 
-  for standin in night-ready night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
+  for standin in night-ready night-no-yes night-no-ask night-token-kept night-token-in-log night-no-handoff night-not-on-main night-login-fails night-bad-bytes night-unclean-start night-member-left night-host-left night-other-account night-no-sign-in; do
     if [ -e "${root}/${standin}/container.present" ]; then nfail "the ${standin} run left its container behind"; fi
   done
   return $((failures > 0))

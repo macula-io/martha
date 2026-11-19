@@ -134,6 +134,9 @@ export async function verifyRange(host: RangeCheckHost, range: TheRange): Promis
   return { told: [shape.ok.commits, shape.ok.stat, ...theOwnersQuestion(settled.ok, range.packages), '', line].join('\n') }
 }
 
+/** The line verify_range writes right before the owner's question, so a reader finds the question by it (martha#639). */
+export const OWNERS_QUESTION_LEAD_IN = `The owner's question for this landing; queue it with ${QUEUE_ASK} word for word, and name its id as ${OWNER_YES}:`
+
 /**
  * The question the owner says yes to before this range lands (martha#605), when the range lands packages: the one the
  * fast-forward checks the owner's yes against, built by the same function, so the member queues what will be checked.
@@ -143,7 +146,7 @@ function theOwnersQuestion(settled: SettledRange, packages: readonly string[] | 
   const landing = { repo: settled.repo, default_branch: settled.default_branch, tip: settled.tip, packages }
   const too_long = aQuestionTooLong(landing)
   if (too_long !== undefined) return ['', `No landing of this range can be asked about: ${too_long}`]
-  return ['', `The owner's question for this landing; queue it with ${QUEUE_ASK} word for word, and name its id as ${OWNER_YES}:`, theLandingQuestion(landing)]
+  return ['', OWNERS_QUESTION_LEAD_IN, theLandingQuestion(landing)]
 }
 
 /** What `verify_range` says it is for, as the launcher answers the mod's ask (martha#256). */
