@@ -11,11 +11,11 @@ import { test } from 'node:test'
 
 import { ENGINE_PLACES } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { SKILLS_OFF, theConfigOfALaunch, type AToolServerTheConfigNames, type TheModelALaunchRuns } from './derive_the_config_of_a_goose_launch.ts'
+import { SKILLS_OFF, theConfigOfALaunch, theServersAConfigNames, THE_EXTENSIONS_SETTING, type AToolServerTheConfigNames, type TheModelALaunchRuns } from './derive_the_config_of_a_goose_launch.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 
-/** A tool server a test names: the config writes it after every setting these cases read, and none reads it back. */
+/** A tool server a test names: the config writes it after every setting these cases read. */
 const A_SERVER: AToolServerTheConfigNames = { key: 'a-server-a-test-names', entry: [['cmd', 'a-command-a-test-names']] }
 
 /** A setting the provider's recording names, which is the only kind a declaration may carry. */
@@ -100,4 +100,18 @@ test('both skills switches are written off by the names the recording gives them
     }
   }
   assert.equal(SKILLS_OFF, false, 'the switches offer skills when true, so off is false')
+})
+
+test('the servers a config root names are read back from its text: the one it was written with, and every key under extensions that is no platform extension (martha#541 C1 R1; mutant: the reader skips a key)', () => {
+  const written = theConfigOfALaunch(FACTS, aDeclaration({}), A_SERVER)
+  assert.deepEqual(theServersAConfigNames(FACTS, written), [A_SERVER.key])
+
+  const aSecond = 'a-second-server-a-test-names'
+  const edited = written.replace(`${THE_EXTENSIONS_SETTING}:\n`, `${THE_EXTENSIONS_SETTING}:\n  ${aSecond}:\n    enabled: true\n    cmd: "a-command-a-test-names"\n`)
+  assert.notEqual(edited, written, 'the edit found no extensions line to put the second server under')
+  assert.deepEqual(theServersAConfigNames(FACTS, edited), [aSecond, A_SERVER.key])
+
+  const theKept = FACTS.platform_extensions.map((extension) => extension.key)
+  assert.ok(theKept.length > 0, 'the recording names no platform extension, so this case reads nothing')
+  for (const key of theKept) assert.ok(written.includes(`\n  ${key}:\n`), `the config does not write the platform extension ${key}, so its exclusion is unpinned`)
 })
