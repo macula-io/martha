@@ -520,47 +520,78 @@ function heldHandlesIn(reportPath: string): string[] {
     .map((handle) => (handle.fd === undefined ? handle.type : `${handle.type} fd ${String(handle.fd)}${handle.stdio === undefined ? '' : ` (${handle.stdio})`}`))
 }
 
+/** The longest a case waits for the line's result before it treats the launch as one that never wrote it. */
+const THE_RESULT_WAIT_MS = 90_000
+/** How long node gets to write the diagnostic report the signal asks for. */
+const THE_REPORT_WAIT_MS = 3_000
+/** How often a wait looks again. */
+const THE_POLL_MS = 50
+/** Where in the driver's own working directory node writes the report, named in the arguments that start it. */
+const THE_REPORT = 'the-report.json'
+
+/** True once `done` answers yes, or false when `ms` runs out first. */
+async function waitedFor(done: () => boolean, ms: number): Promise<boolean> {
+  const began = Date.now()
+  while (!done() && Date.now() - began < ms) await new Promise((settle) => setTimeout(settle, THE_POLL_MS))
+  return done()
+}
+
+/** The driver started against the stand-ins, its own working directory made, with node asked for a report. */
+function theDriverStarted(line: number, about: {
+  readonly fork: string
+  readonly modelUrl: string
+  readonly engineSource: string
+}): { readonly work: string; readonly evidence: string; readonly child: ChildProcess } {
+  const work = aFreshDirectory()
+  const engine = join(work, 'a-stand-in-engine.mjs')
+  writeFileSync(engine, about.engineSource)
+  chmodSync(engine, 0o755)
+  const evidence = join(work, 'evidence')
+  const home = join(work, 'home')
+  mkdirSync(home, { recursive: true })
+  const child: ChildProcess = spawn('node', [
+    '--report-on-signal', '--report-signal=SIGUSR2', `--report-directory=${work}`, `--report-filename=${THE_REPORT}`,
+    DRIVER, '--goose', engine, '--goose-source', about.fork, '--model', 'a-model',
+    '--evidence', evidence, '--launch', join(work, 'launches'), '--line', String(line), '--ollama', about.modelUrl,
+  ], { cwd: ROOT, env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] })
+  child.stdout?.resume()
+  child.stderr?.resume()
+  return { work, evidence, child }
+}
+
+/** A driver still running is asked for node's report and killed, so the case can name every handle it still held. */
+async function theHandlesThatHeldIt(child: ChildProcess, work: string): Promise<string[]> {
+  child.kill('SIGUSR2')
+  const reportPath = join(work, THE_REPORT)
+  await waitedFor(() => existsSync(reportPath), THE_REPORT_WAIT_MS)
+  const held = heldHandlesIn(reportPath)
+  child.kill('SIGKILL')
+  return held
+}
+
+/** The survivor is the case's own doing: it keeps writing nothing, but it holds the engine's output until it is gone. */
+function theSurvivorGone(work: string, line: number): void {
+  const survivorPid = join(work, 'launches', `line-${String(line)}`, 'goose-root', 'survivor.pid')
+  if (!existsSync(survivorPid)) return
+  try { process.kill(Number(readFileSync(survivorPid, 'utf8').trim()), 'SIGKILL') } catch { /* it had already gone */ }
+}
+
 /**
  * The driver run and watched (martha#725): the test waits for the line's result and then for the process to end by
  * itself. A driver still running then is asked for a diagnostic report and killed, so the case can name what held it
  * — the process id, how many milliseconds past its result, and every handle node still held.
  */
 async function theDriverWatched(line: number, fork: string, modelUrl: string, engineSource: string): Promise<Watched> {
-  const work = aFreshDirectory()
-  const engine = join(work, 'a-stand-in-engine.mjs')
-  writeFileSync(engine, engineSource)
-  chmodSync(engine, 0o755)
-  const evidence = join(work, 'evidence')
-  const home = join(work, 'home')
-  mkdirSync(home, { recursive: true })
-  const child: ChildProcess = spawn('node', [
-    '--report-on-signal', '--report-signal=SIGUSR2', `--report-directory=${work}`, '--report-filename=the-report.json',
-    DRIVER, '--goose', engine, '--goose-source', fork, '--model', 'a-model',
-    '--evidence', evidence, '--launch', join(work, 'launches'), '--line', String(line), '--ollama', modelUrl,
-  ], { cwd: ROOT, env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] })
-  child.stdout?.resume()
-  child.stderr?.resume()
+  const { work, evidence, child } = theDriverStarted(line, { fork, modelUrl, engineSource })
   let ended = false
   child.once('exit', () => { ended = true })
   const resultPath = join(evidence, `line-${String(line)}`, 'result.json')
-  const began = Date.now()
-  while (!existsSync(resultPath) && !ended && Date.now() - began < 90_000) await new Promise((settle) => setTimeout(settle, 50))
+  await waitedFor(() => existsSync(resultPath) || ended, THE_RESULT_WAIT_MS)
   const wroteAt = Date.now()
-  while (!ended && Date.now() - wroteAt < ENDS_WITHIN_MS) await new Promise((settle) => setTimeout(settle, 50))
+  await waitedFor(() => ended, ENDS_WITHIN_MS)
   const outlivedMs = Date.now() - wroteAt
-  const whatHeldIt: string[] = []
-  if (!ended) {
-    child.kill('SIGUSR2')
-    const reportPath = join(work, 'the-report.json')
-    for (let waited = 0; waited < 60 && !existsSync(reportPath); waited += 1) await new Promise((settle) => setTimeout(settle, 50))
-    whatHeldIt.push(...heldHandlesIn(reportPath))
-    child.kill('SIGKILL')
-  }
-  // The survivor is the case's own doing: it keeps writing nothing, but it holds the engine's output until it is gone.
-  const survivorPid = join(work, 'launches', `line-${String(line)}`, 'goose-root', 'survivor.pid')
-  if (existsSync(survivorPid)) {
-    try { process.kill(Number(readFileSync(survivorPid, 'utf8').trim()), 'SIGKILL') } catch { /* it had already gone */ }
-  }
+  const whatHeldIt = ended ? [] : await theHandlesThatHeldIt(child, work)
+  theSurvivorGone(work, line)
   return { evidence, pid: child.pid ?? 0, endedByItself: ended, outlivedMs, whatHeldIt }
 }
 
