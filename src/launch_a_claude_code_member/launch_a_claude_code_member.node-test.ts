@@ -2731,8 +2731,9 @@ function launcherProcess(
  * A command started with core dumps off: `sh` sets the core limit to none, then becomes the command, so the pid is the
  * command's own. SIGQUIT's default action dumps core, and the launcher re-raises the signal it was ended by, so a
  * launcher a test quits dumps its whole node process. Where a core handler is installed, the launcher is reaped only
- * once that dump is written: about 2 s against 0.1 s for the other signals at a load of 37, and past the suite's
- * per-test limit on a loaded full run (martha#838). Every run also left a core of node behind.
+ * once that dump is written: 3.1-3.7 s from signal to exit, against under 0.1 s for the other signals, in six runs at
+ * once at a load of 30-40, and past the suite's per-test limit on a loaded full run (martha#838). Every run also left a
+ * core of node behind.
  */
 const withoutACoreDump = (command: string, args: readonly string[]): { readonly command: string; readonly args: readonly string[] } => ({
   command: 'sh',
