@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -33,7 +33,7 @@ test('a path reads as absent, a file, a directory, a link (never followed) or ot
   symlinkSync('a-file', join(dir, 'a-link'))
 
   assert.deepEqual(files.kindOf(join(dir, 'not-there')), { kind: 'absent' })
-  assert.deepEqual(files.kindOf(join(dir, 'a-file')), { kind: 'file', ownerExecutes: false })
+  assert.deepEqual(files.kindOf(join(dir, 'a-file')), { kind: 'file', ownerExecutes: false, hardLinks: 1 })
   assert.deepEqual(files.kindOf(join(dir, 'a-dir')), { kind: 'directory' })
   assert.deepEqual(files.kindOf(join(dir, 'a-link')), { kind: 'symlink', target: 'a-file' })
   assert.deepEqual(files.kindOf('/dev/null'), { kind: 'other' })
@@ -46,9 +46,20 @@ test('a file says whether its owner may execute it: the bit git reads for mode 1
   // Executable by the group alone: git writes 100644, because the owner's own bit is what it reads.
   writeFileSync(join(dir, 'group-only'), 'bytes', { mode: 0o654 })
 
-  assert.deepEqual(files.kindOf(join(dir, 'plain')), { kind: 'file', ownerExecutes: false })
-  assert.deepEqual(files.kindOf(join(dir, 'runnable')), { kind: 'file', ownerExecutes: true })
-  assert.deepEqual(files.kindOf(join(dir, 'group-only')), { kind: 'file', ownerExecutes: false })
+  assert.deepEqual(files.kindOf(join(dir, 'plain')), { kind: 'file', ownerExecutes: false, hardLinks: 1 })
+  assert.deepEqual(files.kindOf(join(dir, 'runnable')), { kind: 'file', ownerExecutes: true, hardLinks: 1 })
+  assert.deepEqual(files.kindOf(join(dir, 'group-only')), { kind: 'file', ownerExecutes: false, hardLinks: 1 })
+})
+
+test('a file says how many hard links it has, so a reader can tell bytes that may be a file anywhere else (martha#614 slice 3)', (t) => {
+  const dir = place(t)
+  writeFileSync(join(dir, 'one'), 'bytes')
+  writeFileSync(join(dir, 'shared'), 'bytes')
+  linkSync(join(dir, 'shared'), join(dir, 'shared-again'))
+
+  assert.deepEqual(files.kindOf(join(dir, 'one')), { kind: 'file', ownerExecutes: false, hardLinks: 1 })
+  assert.deepEqual(files.kindOf(join(dir, 'shared')), { kind: 'file', ownerExecutes: false, hardLinks: 2 })
+  assert.deepEqual(files.kindOf(join(dir, 'shared-again')), { kind: 'file', ownerExecutes: false, hardLinks: 2 })
 })
 
 test('a failure other than absence throws with its own code', (t) => {

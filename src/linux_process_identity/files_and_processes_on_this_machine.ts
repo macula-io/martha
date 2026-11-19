@@ -25,7 +25,7 @@ export const filesOnThisMachine: FileTree = {
       const stat = lstatSync(path)
       if (stat.isSymbolicLink()) return { kind: 'symlink', target: readlinkSync(path) }
       if (stat.isDirectory()) return { kind: 'directory' }
-      return stat.isFile() ? { kind: 'file', ownerExecutes: (stat.mode & OWNER_EXECUTES) !== 0 } : { kind: 'other' }
+      return stat.isFile() ? { kind: 'file', ownerExecutes: (stat.mode & OWNER_EXECUTES) !== 0, hardLinks: stat.nlink } : { kind: 'other' }
     } catch (error) {
       if (codeOf(error) === 'ENOENT') return { kind: 'absent' }
       throw error

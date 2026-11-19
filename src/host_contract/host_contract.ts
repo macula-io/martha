@@ -149,7 +149,15 @@ export const readingOnly = (store: KeyedRows): KeyedRows => Object.freeze({ all:
  */
 export type FileKind =
   | { readonly kind: 'absent' }
-  | { readonly kind: 'file'; readonly ownerExecutes: boolean }
+  | {
+      readonly kind: 'file'
+      readonly ownerExecutes: boolean
+      /**
+       * How many hard links the file has (martha#614 slice 3): above 1, its bytes may be a file anywhere else. A stand-in
+       * may leave it out; a reader that needs it takes a missing count as one it cannot tell, never as 1.
+       */
+      readonly hardLinks?: number
+    }
   | { readonly kind: 'directory' }
   | { readonly kind: 'symlink'; readonly target: string }
   | { readonly kind: 'other' }
