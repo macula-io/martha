@@ -99,7 +99,7 @@ import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
-import { theBeatOverTheCrewTools, withTheOwedLine, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
+import { theBeatOverTheCrewTools, withTheOwedLine, withTheOwedLineOnAReturn, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
@@ -237,6 +237,12 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * another member's branch that reached git past the shell and past the shim. A place given none refuses nothing.
    */
   readonly refusesTheRefUpdate?: (updates: readonly { readonly ref: string; readonly deletes: boolean }[]) => string | undefined
+  /**
+   * What the killed-run record refuses of a hand-off (martha#719): a `say_to_crew` whose first line is a HANDOFF line,
+   * while a leftover the record kept still stands where the record says it stands. A place given none refuses nothing,
+   * and a crew that declared no workspace layout hands none.
+   */
+  readonly refusesTheHandOff?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
 }
 
 /** The tools a crew's member can call. */
@@ -312,6 +318,12 @@ export interface CrewTools extends TheReviewRule {
    * whether each is a delete. Undefined when nothing refuses it, or when the crew declared no layout.
    */
   refusesTheRefUpdate?(updates: readonly { readonly ref: string; readonly deletes: boolean }[]): string | undefined
+  /**
+   * What the killed-run record refuses of a hand-off (martha#719): a `say_to_crew` whose first line is a HANDOFF line,
+   * while a leftover it kept still stands where the record says it stands. Undefined when nothing refuses it, when the
+   * crew declared no layout, or when a launch handed no guard of this place at all.
+   */
+  refusesTheHandOff?(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined>
 }
 
 /** The tools, in the order the mod registers them, each as the slice that owns it defines it. */
@@ -469,6 +481,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     refusesTheGitIn: async (call) => (held.refusesTheGitCall === undefined ? undefined : held.refusesTheGitCall(call)),
     refusesTheGitOnThePath: async (call) => held.refusesTheGitOnThePath?.(call),
     refusesTheRefUpdate: (updates) => held.refusesTheRefUpdate?.(updates),
+    refusesTheHandOff: async (call) => held.refusesTheHandOff?.(call),
   }
 }
 
@@ -744,7 +757,8 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     return act({ ...places, processes: places.processes }, asked.ok)
   }
   return {
-    [REPORT_PROGRESS_TOOL.name]: declaring(places, async (declared, args) => reportProgressOver(theProgressAsked(places, state, declared), args)),
+    [REPORT_PROGRESS_TOOL.name]: declaring(places, async (declared, args) =>
+      withTheOwedLineOnAReturn(places, await reportProgressOver(theProgressAsked(places, state, declared), args))),
     [RELEASE_THE_FILES_TOOL.name]: async (args) => releaseTheFilesAKilledRunLeft({ crew: places.stores.crew, member: places.member, paths: thePathsOf(args['paths']) }),
     [LOG_A_MILESTONE_TOOL.name]: async (args) => logTheMilestone(ledger, { package: textOf(args['package']), event: args['event'], note: args['note'] }, async () => whoMayResume(places)),
     [WHAT_WAS_SENT_TOOL.name]: async (args) => whatTheMemberSent(ledger, textOf(args['package'])),
