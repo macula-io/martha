@@ -41,7 +41,7 @@ import type { TheHooksALaunchRuns } from '../refuse_code_a_checkout_runs_itself/
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theRowWithTheLine, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theMissesLine } from '../guard_workspace/guard_workspace.ts'
-import { THE_MEMBER_HAD_IT, theHadNameOf, theKeptNameOf, WHAT_THE_JUDGE_NEVER_TAKES } from './guard_protocol.ts'
+import { PREPARED, THE_MEMBER_HAD_IT, theHadNameOf, theKeptNameOf, WHAT_THE_JUDGE_NEVER_TAKES } from './guard_protocol.ts'
 
 /** The folder inside a launch's relay directory that holds the shim, the judge and what the judge is given. */
 export const THE_GUARD_DIRECTORY_NAME = 'git-guard'
@@ -206,14 +206,20 @@ function foldersBetween(stop: string, folder: string): readonly string[] {
  * The shell script the member's git and the clone's hook are: the launch's own node, the judge, and the mode, then the
  * words the caller handed it unchanged. A shell script rather than a shebang on the judge, because the node a launch
  * runs on can stand anywhere, and a script's first line is the one place a path with no length limit is safe.
+ *
+ * The hook starts node only for the state the judge judges (martha#755): git calls it for every state of every
+ * transaction, seven times for one commit, and node for a state the judge answers 0 to at once is a whole start for
+ * nothing. Any other state ends in the shell with 0, which is what the judge answers it, and git does not need the
+ * hook to read its input.
  */
 export function theShimFor(mode: string, node: string, judge: string): string {
+  const exec = `exec ${singleQuoted(node)} ${singleQuoted(judge)} ${singleQuoted(mode)} "$@"`
   return [
     '#!/bin/sh',
     `# Martha's git guard (martha#562): the judge decides, and the real git runs what it allows.`,
     `# The judge's node takes none of these from the member; each is kept for the real git (martha#772).`,
     ...WHAT_THE_JUDGE_NEVER_TAKES.flatMap(keptAndCleared),
-    `exec ${singleQuoted(node)} ${singleQuoted(judge)} ${singleQuoted(mode)} "$@"`,
+    ...(mode === THE_HOOK_NAME ? [`case "$1" in ${singleQuoted(PREPARED)}) ${exec} ;; esac`, 'exit 0'] : [exec]),
     '',
   ].join('\n')
 }

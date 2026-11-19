@@ -20,6 +20,13 @@ export const GIT_CALL_PATH = '/judge-a-git-call'
  */
 export const REF_TRANSACTION_PATH = '/judge-a-ref-transaction'
 
+/**
+ * The state git calls a `reference-transaction` hook with when only that hook stands between the transaction and its
+ * refs: the one state whose refusal stops it, so the one the judge judges (martha#562). The hook script reads it from
+ * here too, so the state the shell lets through to node and the state the judge judges are one word (martha#755).
+ */
+export const PREPARED = 'prepared'
+
 /** A git call as the shim posts it: where the shell runs it, and git's own words unchanged. */
 export function gitCallBody(cwd: string, args: readonly string[]): Readonly<Record<string, unknown>> {
   return { cwd, args }
