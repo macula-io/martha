@@ -34,6 +34,7 @@ import {
 const A_PACKAGE = 'synthetic-owner/repo#7'
 const ANOTHER_PACKAGE = 'synthetic-owner/repo#8'
 const A_PACKAGE_OF_ANOTHER_WEEK = 'synthetic-owner/repo#9'
+const A_PACKAGE_LANDED_BEFORE_THE_WEEK = 'synthetic-owner/repo#10'
 const THE_WEEK = '2026-W47'
 
 /** The UTC instant of a day in November 2026, at an hour and minute: the fixture's clock, in one place. */
@@ -53,7 +54,8 @@ async function keep(stored: ReturnType<typeof rowStreamsDirectory>, package_name
 
 /**
  * The recorded ledger the figures are pinned on: `#7` carried in from the week before and landed inside the week,
- * `#8` touched twice and still open, and `#9` whose rows are all outside the week, so it is not in it at all.
+ * `#8` touched twice, still open, with one recovery sent again and one replanned, `#9` whose rows are all outside the
+ * week, so it is not in it at all, and `#10` carried in and landed before the week with one row inside it.
  */
 async function theRecordedLedger(stored: ReturnType<typeof rowStreamsDirectory>): Promise<void> {
   await keep(stored, A_PACKAGE, { kind: 'checkpoint_reached', at: at(10), note: 'carried in from the week before' })
@@ -70,6 +72,11 @@ async function theRecordedLedger(stored: ReturnType<typeof rowStreamsDirectory>)
 
   await keep(stored, ANOTHER_PACKAGE, { kind: 'review_round_closed', at: at(17, 9), note: 'r=1 still open' })
   await keep(stored, ANOTHER_PACKAGE, { kind: 'act_announced', at: at(17, 10), act: { kind: 'refresh_forced', what: 'a hung turn' } })
+  await keep(stored, ANOTHER_PACKAGE, { kind: 'recovery_decided', at: at(17, 11), act: { kind: 'tag', what: 'the release' }, failure: { class: 'a moved tag', evidence: 'the log' }, inspection: { read: 'the log', found: 'the tag had moved' }, decision: 'replanned' })
+
+  await keep(stored, A_PACKAGE_LANDED_BEFORE_THE_WEEK, { kind: 'checkpoint_reached', at: at(9), note: 'the week before' })
+  await keep(stored, A_PACKAGE_LANDED_BEFORE_THE_WEEK, { kind: 'package_landed', at: at(15), note: 'the week before' })
+  await keep(stored, A_PACKAGE_LANDED_BEFORE_THE_WEEK, { kind: 'fix_shipped_after_release', at: at(18, 12), note: 'a fix in this week' })
 
   await keep(stored, A_PACKAGE_OF_ANOTHER_WEEK, { kind: 'checkpoint_reached', at: at(9), note: 'before the week' })
   await keep(stored, A_PACKAGE_OF_ANOTHER_WEEK, { kind: 'checkpoint_reached', at: at(25), note: 'after the week' })
@@ -101,7 +108,12 @@ async function theWeekOnDisk(t: TestContext): Promise<AnAskedWeek> {
   const ledger = async (package_name: string) => ({ package: package_name, rows: await readLedger(host, package_name) })
   return {
     week: THE_WEEK,
-    ledgers: [await ledger(A_PACKAGE), await ledger(ANOTHER_PACKAGE), await ledger(A_PACKAGE_OF_ANOTHER_WEEK)],
+    ledgers: [
+      await ledger(A_PACKAGE),
+      await ledger(ANOTHER_PACKAGE),
+      await ledger(A_PACKAGE_OF_ANOTHER_WEEK),
+      await ledger(A_PACKAGE_LANDED_BEFORE_THE_WEEK),
+    ],
     asks: await host.stores.rows.read(OWNER_ASKS_STREAM),
   }
 }
@@ -135,9 +147,17 @@ test('a word that is not a week is refused by name, and a week a year does not h
 
 test('each package of the week answers its cycle, its rework, its acts and its rows, and the week leaves out the package it did not touch', async (t) => {
   const week = answered(aWeekOfTheLedger(await theWeekOnDisk(t)))
-  assert.deepEqual(week.packages.map((one) => one.package), [A_PACKAGE, ANOTHER_PACKAGE], 'the package of another week was read into this one')
+  assert.deepEqual(
+    week.packages.map((one) => one.package),
+    [A_PACKAGE_LANDED_BEFORE_THE_WEEK, A_PACKAGE, ANOTHER_PACKAGE],
+    'the week did not hold exactly its own packages, sorted by name',
+  )
 
-  const [carried, fresh] = week.packages
+  const carried = week.packages.find((one) => one.package === A_PACKAGE)
+  const fresh = week.packages.find((one) => one.package === ANOTHER_PACKAGE)
+  const landedBefore = week.packages.find((one) => one.package === A_PACKAGE_LANDED_BEFORE_THE_WEEK)
+  assert.ok(carried !== undefined && fresh !== undefined && landedBefore !== undefined)
+
   assert.equal(carried!.carriedIn, true, 'the package carried in from the week before was not marked so')
   assert.equal(carried!.landedInTheWeek, true, 'the landing inside the week was not counted')
   assert.equal(carried!.cycleMs, at(20, 10) - at(10), 'the cycle is not the first row to the landing row')
@@ -149,10 +169,19 @@ test('each package of the week answers its cycle, its rework, its acts and its r
   assert.equal(carried!.acts.concluded, 2)
   assert.equal(carried!.rowsWritten, 9, 'the rows inside the week are not nine')
 
+  assert.equal(fresh!.carriedIn, false, 'a package first touched inside the week was read as carried in')
   assert.equal(fresh!.landedAt, undefined, 'a package with no landing row was read as landed')
   assert.equal(fresh!.cycleMs, undefined)
   assert.equal(fresh!.reviewRounds, 1)
+  assert.equal(fresh!.recoveries, 1)
+  assert.equal(fresh!.retriedOnce, 0, 'a recovery that was replanned was counted as an attempt')
   assert.equal(fresh!.acts.by.refresh_forced, 1, 'the forced refresh was not read as one')
+
+  assert.equal(landedBefore!.carriedIn, true)
+  assert.equal(landedBefore!.landedAt, at(15), 'a landing before the week was not read as the landing')
+  assert.equal(landedBefore!.landedInTheWeek, false, 'a landing before the week was counted in it')
+  assert.equal(landedBefore!.cycleMs, at(15) - at(9), 'the cycle of a package landed before the week is not its own')
+  assert.equal(landedBefore!.rowsWritten, 1, 'only the row inside the week is a row it wrote in it')
 })
 
 test("the crew's week counts each figure once, with a recovery counted under rework and not added again", async (t) => {
@@ -173,8 +202,8 @@ test("the crew's week counts each figure once, with a recovery counted under rew
       attempts: week.crew.acts.attempts,
     },
     {
-      touched: 2, landed: 1, carriedIn: 1, stillOpen: 1, reviewRounds: 3, fixesAfterRelease: 1,
-      recoveries: 1, retriedOnce: 1, forcedRefreshes: 1, announced: 3, concluded: 2, attempts: 1,
+      touched: 3, landed: 1, carriedIn: 2, stillOpen: 1, reviewRounds: 3, fixesAfterRelease: 2,
+      recoveries: 2, retriedOnce: 1, forcedRefreshes: 1, announced: 3, concluded: 2, attempts: 1,
     },
   )
   assert.deepEqual(week.crew.acts.by, { push: 1, handoff: 1, room_message: 0, tag: 0, refresh_forced: 1 })
@@ -194,7 +223,7 @@ test('the view prints the week it read, says money is not in the rows, and quote
   const week = answered(aWeekOfTheLedger(await theWeekOnDisk(t)))
   const lines = theLinesOf(week)
   assert.equal(lines[0], '2026-W47 (Mon 16 Nov 00:00 UTC – Mon 23 Nov 00:00 UTC)')
-  assert.equal(lines[1], 'packages: 2 touched, 1 landed, 1 carried in, 1 still open')
+  assert.equal(lines[1], 'packages: 3 touched, 1 landed, 2 carried in, 1 still open')
   assert.ok(lines.some((line) => /^money: not in the rows/.test(line)), 'the view did not say money is not in the rows')
   assert.ok(lines.some((line) => line.startsWith(`${A_PACKAGE} — cycle 10 d 10 h`)), 'a package line did not carry its cycle')
   const quoted = lines.find((line) => line.startsWith('owner wait: '))
