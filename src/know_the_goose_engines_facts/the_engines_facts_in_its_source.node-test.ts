@@ -234,3 +234,17 @@ test('a Developer extension that lists two tools on the shell parameters is unre
   assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
   assert.match(unreadable[0]?.why ?? '', new RegExp(`lists 2 tools on ${SHELL_TOOL.params}`))
 })
+
+test('a Developer extension that runs the shell parameters for a second name, after the listed one, is unreadable, never the first of them (#541 part C4 r=2 review; mutant: the dispatch count dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tools = files[ENGINE_PLACES.shell_tool] ?? ''
+  const shell = RECORDED_FACTS.shell_tool
+  const another = '"another_tool" => match'
+  const second = `"${shell}_also" => match Self::parse_args::<${SHELL_TOOL.params}>(arguments) {\n                Ok(params) => run(params),\n                Err(error) => fail(error),\n            },\n            ${another}`
+  const twice = tools.replace(another, second)
+  assert.notEqual(twice, tools, 'the built tree dispatches no other tool to put a second shell arm before')
+  assert.ok(twice.indexOf(`"${shell}" => match`) < twice.indexOf(`"${shell}_also" => match`), 'the second arm is not after the listed one, so the name comparison alone would refuse it')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: twice }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`lists the shell tool as ${shell} but runs`))
+})
