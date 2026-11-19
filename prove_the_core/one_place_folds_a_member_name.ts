@@ -32,7 +32,6 @@ export const FOLDS_THAT_ARE_NOT_NAMES: readonly AFoldThatIsNotAName[] = [
   { path: 'admit_a_room_message/admit_a_room_message.ts', folds: 4, reason: A_NODE_ID },
   { path: 'attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts', folds: 2, reason: A_NODE_ID },
   { path: 'check_nothing_private_gets_in/check_nothing_private_gets_in.ts', folds: 6, reason: 'a GitHub owner/repo, which GitHub compares ignoring case' },
-  { path: 'check_nothing_private_gets_in/lab_family_digests.ts', folds: 1, reason: 'a lab machine family, which the private scan matches ignoring case, as its rule does' },
   { path: 'find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts', folds: 4, reason: 'a git config section, key or boolean word, which git reads ignoring case' },
   { path: 'know_the_goose_engines_facts/an_engine_source_from_its_facts.ts', folds: 1, reason: "a wire id written back as the Rust variant the engine's source names it by" },
   { path: 'know_the_goose_engines_facts/the_engines_facts_in_its_source.ts', folds: 1, reason: "a Rust variant name, spelled as the engine's serde snake_case puts it on the wire" },

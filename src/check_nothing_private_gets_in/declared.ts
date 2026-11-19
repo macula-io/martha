@@ -1,6 +1,4 @@
-// What this repository declares about its own text. All of it is public: the
-// lab's machine families are not here, because they are private (CI reads them
-// from the MARTHA_LAB_HOSTS secret).
+// What this repository declares about its own text. All of it is public.
 export const DECLARED = {
   // The email domain this repository's text may name.
   publicEmails: ['macula.io'],

@@ -1,5 +1,5 @@
 # Posted text (martha#265): the text members post on GitHub is read for the classes nothing private may
-# carry — a home path, a lab host name, a private repository or address — in issue titles and bodies,
+# carry — a home path, a lab hostname, a private repository or address — in issue titles and bodies,
 # issue comments (a pull request's conversation too), pull-request titles and bodies, review bodies,
 # inline review comments and commit comments, closed and merged objects included.
 #
@@ -32,9 +32,6 @@ jobs:
       issues: read
       pull-requests: read
     env:
-      # The lab's machine families are a secret and are never printed. Missing, the run stops rather
-      # than passing: it never passes because it could not look.
-      MARTHA_LAB_HOSTS: ${{ secrets.MARTHA_LAB_HOSTS }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7

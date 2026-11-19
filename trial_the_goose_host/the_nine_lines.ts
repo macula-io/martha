@@ -4,10 +4,10 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { chatsIn, promptOver, tokensFound, toolsIn } from './a_turn_with_goose.ts'
-import { CHECKOUT_MARKERS, HOME_MARKERS, tokensOf, type Place } from './a_launch_the_trial_writes.ts'
-import type { RecordingProxy } from './record_what_goose_sends.ts'
-import type { GooseOverAcp } from './speak_acp_to_goose.ts'
+import { chatsIn, promptOver, tokensFound, toolsIn } from './the_engine_over_acp/a_turn_with_goose.ts'
+import { CHECKOUT_MARKERS, HOME_MARKERS, tokensOf, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
+import type { RecordingProxy } from './the_engine_over_acp/record_what_goose_sends.ts'
+import type { GooseOverAcp } from './the_engine_over_acp/speak_acp_to_goose.ts'
 
 /** What a line is handed: the running Goose, the proxy that recorded it, and where it runs. */
 export interface Trial {
