@@ -42,6 +42,9 @@ export const DECLARATION_FILE = 'martha.json'
  */
 export const HOST = 'host'
 
+/** The key a member's own model is declared under (martha#307 names it once, for the verb that writes it). */
+export const MODEL = 'model'
+
 /**
  * The host every release before this one started a member on (martha#541): what a declaration that names no host at
  * all reads as, under this reader's upgrade rule, so a crew an earlier release's init wrote still starts.
@@ -402,7 +405,7 @@ export class DeclarationRefused extends Error {
 
 const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
-const OPTIONAL_MEMBER_KEYS = ['model', HOST] as const
+const OPTIONAL_MEMBER_KEYS = [MODEL, HOST] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
 const MODE_KEYS = ['name', 'roles', 'may'] as const
 
