@@ -172,8 +172,9 @@ function aStandInNpm (root) {
 function theReleasesInstallStep () {
   const runs = readFileSync(INSTALLER_WORKFLOW, 'utf8').split('\n').map((line) => line.trim()).filter((line) => line.startsWith('- run: '))
   const publish = runs.findIndex((line) => line.startsWith('- run: npm publish'))
-  assert.ok(publish > 0, 'the release workflow has a step before its npm publish')
-  return runs[publish - 1].slice('- run: npm '.length)
+  const step = runs[publish - 1]
+  assert.ok(publish > 0 && step !== undefined, 'the release workflow has a step before its npm publish')
+  return step.slice('- run: npm '.length)
 }
 
 /** What an entry of the packed tarball holds. @param {string} tarball @param {string} entry */
