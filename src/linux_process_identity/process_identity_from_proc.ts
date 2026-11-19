@@ -29,7 +29,7 @@
 // namespace is read here too (`readlink /proc/self/ns/pid`), and a caller that
 // acts across processes compares it before it trusts any pid (martha#124).
 
-import { readFileSync, readlinkSync } from 'node:fs'
+import { readdirSync, readFileSync, readlinkSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { Processes } from '../host_contract/host_contract.ts'
@@ -214,4 +214,33 @@ export function whereItIsTypedUnder(proc_root: string, pid: number): { readonly 
   }
   const stat = textOrWhy(join(proc_root, String(pid), 'stat'))
   return { tty, session: 'text' in stat ? sessionIn(stat.text) : null }
+}
+
+/** A process that has ended and waits for its parent to read it: in its session still, but running nothing. */
+const ENDED_STATE = 'Z'
+
+/** The sessions of the children of `pid` under a /proc root, as they are now (martha#724); none once `pid` is gone. */
+export function sessionsOfTheChildrenOf(proc_root: string, pid: number): readonly number[] {
+  const children = textOrWhy(join(proc_root, String(pid), 'task', String(pid), 'children'))
+  const sessions: number[] = []
+  for (const child of 'text' in children ? children.text.trim().split(/\s+/).filter((word) => word !== '') : []) {
+    const stat = textOrWhy(join(proc_root, child, 'stat'))
+    const session = 'text' in stat ? sessionIn(stat.text) : null
+    if (session !== null) sessions.push(session)
+  }
+  return sessions
+}
+
+/** Every process under a /proc root that is in one of `sessions` and has not ended (martha#724). */
+export function processesInSessionsUnder(proc_root: string, sessions: readonly number[]): readonly number[] {
+  const found: number[] = []
+  for (const entry of readdirSync(proc_root)) {
+    if (!/^\d+$/.test(entry)) continue
+    const stat = textOrWhy(join(proc_root, entry, 'stat'))
+    if (!('text' in stat)) continue
+    const session = sessionIn(stat.text)
+    const state = stat.text.slice(stat.text.lastIndexOf(')') + 1).trim().split(/\s+/)[0]
+    if (session !== null && sessions.includes(session) && state !== ENDED_STATE) found.push(Number(entry))
+  }
+  return found
 }

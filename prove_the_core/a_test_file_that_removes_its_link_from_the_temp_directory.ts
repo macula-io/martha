@@ -1,5 +1,5 @@
 // A test file that makes the same link as a_test_file_that_leaves_a_link_in_the_temp_directory.ts and removes it: the
-// guard must leave this file alone (martha#724). Run only by every_test_run_ends.node-test.ts.
+// guard must leave this file alone (martha#724), which is what a file that removes what it made looks like.
 
 import { rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
