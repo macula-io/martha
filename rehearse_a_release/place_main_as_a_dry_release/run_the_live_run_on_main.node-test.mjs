@@ -1,4 +1,4 @@
-// The nightly driver, run for real (martha#696): each case copies run_the_live_run_on_main.sh into a throwaway repository
+// The live run's driver, run for real (martha#696): each case copies run_the_live_run_on_main.sh into a throwaway repository
 // of its own, at its real path, beside a stand-in packer and a stand-in proof, with an `origin` to fetch from. The
 // stand-ins record what they were given and exit as the case asks, so what is proved is the driver's own order: what
 // it refuses before anything is packed, which exit each outcome gets, what it hands the proof, and that one temp

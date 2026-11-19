@@ -33,7 +33,7 @@
 # Nothing is signed and nothing is pushed: this layer is placed by the dry harness, never installed as a release, and
 # the clone this script makes is of the local repository, so nothing it commits can be pushed anywhere.
 # Exit: 0 packed, 1 the packer refused, 2 it could not run, NOT_PACKABLE (below) not packable: installer/ names differ
-# from its tag's. NOT_PACKABLE is one line of its own, read by the nightly driver beside this script and by this
+# from its tag's. NOT_PACKABLE is one line of its own, read by the live run's driver beside this script and by this
 # script's tests, so no reader spells the number (martha#696).
 set -euo pipefail
 
