@@ -383,8 +383,12 @@ export interface Processes {
   signalGroup(pid: number, identity: string, signal: GroupSignal): Signalled
 }
 
-/** The two signals a member's group is ended with: asked to end, then made to. */
-export type GroupSignal = 'SIGTERM' | 'SIGKILL'
+/**
+ * The signals a group is signalled with: the two a member's group is ended with (asked to end, then made to), and the
+ * ones a terminal, a tool or a session ending sends a run, which `npm run test:mine` forwards to the run's own group
+ * (martha#802).
+ */
+export type GroupSignal = 'SIGTERM' | 'SIGKILL' | 'SIGINT' | 'SIGHUP'
 
 /** Whether a group was signalled, or why it was not. */
 export type Signalled = { readonly signalled: true } | { readonly signalled: false; readonly refusal: string }

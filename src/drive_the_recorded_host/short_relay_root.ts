@@ -1,5 +1,6 @@
-// A relay root short enough for a socket address whatever TMPDIR is (martha#79).
-// For tests, and the clean-install proof (installer/prove_a_clean_install), only.
+// A relay root short enough for a socket address whatever TMPDIR is (martha#79), and the one place the system's own
+// temporary directory is named (martha#802). The relay root is for tests, and the clean-install proof
+// (installer/prove_a_clean_install), only.
 //
 // A launch's socket is `<relay root>/<launch>/relay.sock`, and an address holds
 // about a hundred bytes. macOS's default TMPDIR is about 49 bytes behind a
@@ -16,8 +17,8 @@ import type { TestContext } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 
-/** The temporary directory POSIX systems keep at a fixed, short path, whatever TMPDIR says. */
-const SYSTEM_TEMPORARY_DIRECTORY = '/tmp'
+/** The temporary directory POSIX systems keep at a fixed, short path, whatever TMPDIR says (martha#802 reads it too). */
+export const SYSTEM_TEMPORARY_DIRECTORY = '/tmp'
 
 const PREFIX = 'martha-relay-'
 

@@ -24,7 +24,7 @@ import { manifestOf, testCommandsOf, testGlobsOf } from './declared_in_package_j
 const NAME = 'the_words_one_run_gets'
 
 /** The runner's own word: the command the test script starts its tests with carries it. */
-const THE_RUNNER_WORD = '--test'
+export const THE_RUNNER_WORD = '--test'
 
 /** The repository this module sits in, whose package.json is what is read. */
 const THE_REPOSITORY = resolve(import.meta.dirname, '..')
