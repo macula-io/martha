@@ -272,6 +272,31 @@ test('the door groups hold every door, each in exactly one group (martha#700 r=1
   assert.deepEqual([...grouped].sort(), (Object.keys(DOORS) as Door[]).sort())
 })
 
+/** The code lines of a source file with their numbers, its comment lines left out: what runs, not what explains it. */
+const theCodeOf = (source: string): readonly { readonly line: string; readonly number: number }[] =>
+  source.split('\n').map((line, index) => ({ line, number: index + 1 })).filter(({ line }) => !/^\s*(\/\/|\/\*\*|\*)/.test(line))
+
+/** The declaration each test of a launched member is spelled with, in this file. */
+const THE_LAUNCH_DECLARATION = ['test(`a member', ' the launcher started runs none of them'].join('')
+const THE_CONTROL_DECLARATION = ['test(`every planted door', ' runs with the owner\'s own environment'].join('')
+
+/** The word a declaration of a launched member carries to give the test its own clock rather than the suite's limit. */
+const THE_CLOCKS_ARE_ASKED_FOR = ['theOptionsOf(', 'group, direnv)'].join('')
+
+test('each test of a launched member declares its own clock, so the suite\'s limit does not cancel it on a loaded machine (martha#700)', () => {
+  const typed = theCodeOf(readFileSync(new URL('./run_nothing_a_checkout_planted.node-test.ts', import.meta.url), 'utf8'))
+  for (const needle of [THE_LAUNCH_DECLARATION, THE_CONTROL_DECLARATION]) {
+    const declared = typed.filter(({ line }) => line.includes(needle))
+    assert.equal(declared.length, 1, `this file declares ${JSON.stringify(needle)} once`)
+    const without = declared.filter(({ line }) => !line.includes(THE_CLOCKS_ARE_ASKED_FOR))
+    assert.deepEqual(
+      without.map(({ line, number }) => `run_nothing_a_checkout_planted.node-test.ts:${number}: ${line.trim()}`),
+      [],
+      `${needle} does not declare its own clock, so the suite's per-test limit cancels it on a loaded machine`,
+    )
+  }
+})
+
 const { direnvs } = direnvsUnderTest(process.env)
 
 for (const direnv of direnvs.length === 0 ? [undefined] : direnvs) {
