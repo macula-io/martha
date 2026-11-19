@@ -238,6 +238,10 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
     why: "one Goose member's launch: its own root and home, the config root it writes, the engine in a process group of its own, and the permission store checked empty when the launch ends (martha#541 packages 7-8); nothing loads it until the one start call picks a member's host, and its tests do today",
   },
   {
+    name: 'start_an_engine_member',
+    why: "an engine member's start (martha#541 package A): its model from the declaration and the crew's engine_endpoint, read back from the written root; nothing loads it until the start table gains the engine's entry, and its tests do today",
+  },
+  {
     name: 'derive_the_config_of_a_goose_launch',
     why: "the config text one Goose launch writes into its own root, read from the recorded engine's facts: the provider and the model, the mode that asks the client, slash commands off, one switch per platform extension, and the crew's tool server switched on (martha#541); nothing loads it until the one start call picks a member's host, and launch_a_goose_member's tests do today",
   },
