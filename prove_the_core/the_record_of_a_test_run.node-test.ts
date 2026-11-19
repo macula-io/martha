@@ -11,13 +11,12 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { SYSTEM_TEMPORARY_DIRECTORY } from '../src/drive_the_recorded_host/short_relay_root.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 import {
@@ -25,6 +24,7 @@ import {
   A_TOKEN_DIRECTORYS_MODE,
   RECORDS_DIRECTORY,
   RECORD_FILE,
+  SYSTEM_TEMPORARY_DIRECTORY,
   aNewToken,
   everyRecord,
   readTheRecord,
@@ -143,7 +143,7 @@ test('#802: two commands that saw different TMPDIRs find the same record (mutant
   const written = theCli(['record', String(process.pid), worktree], { TMPDIR: first })
   assert.equal(written.status, 0, `${NAME}: the record command failed:\n${written.output}`)
   const token = written.output.trim()
-  t.after(() => rmSync(join(theRunsRoot(), token), { recursive: true, force: true }))
+  t.after(() => removeTheTree(join(theRunsRoot(), token)))
   const asked = theCli(['path'], { TMPDIR: second })
   assert.equal(asked.status, 0, `${NAME}: the path command failed:\n${asked.output}`)
   const root = asked.output.trim()

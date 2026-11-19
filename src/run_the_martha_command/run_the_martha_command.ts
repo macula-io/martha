@@ -58,7 +58,6 @@ import { launchRecordsUnder } from '../read_a_kernel_and_a_home/launch_records_u
 import { THE_PLACES_A_STATE_ROOT_KEEPS } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { launchesIn } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
-import { SYSTEM_TEMPORARY_DIRECTORY } from '../drive_the_recorded_host/short_relay_root.ts'
 import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { keepWhereItWasTyped, linesOf, seenFromThisProcess, theCutoverTakenOnce, theRecordFilesOf, whatTheOwnerReadsOf } from '../keep_where_owners_acts_were_typed/keep_where_owners_acts_were_typed.ts'
@@ -257,7 +256,7 @@ async function startingTheMember(
 
 /** The launcher's places in Martha's state, with the relay sockets under this user's runtime directory. */
 function launcherOf(io: CommandIo, places: Places): ReturnType<typeof launcherPlacesOf> {
-  const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? SYSTEM_TEMPORARY_DIRECTORY
+  const runtime = absolute(io.env['XDG_RUNTIME_DIR']) ?? '/tmp'
   return launcherPlacesOf(places.state, join(runtime, `martha-${process.getuid?.()}`), places.root)
 }
 

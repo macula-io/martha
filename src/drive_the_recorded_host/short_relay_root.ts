@@ -1,6 +1,5 @@
-// A relay root short enough for a socket address whatever TMPDIR is (martha#79), and the one place the system's own
-// temporary directory is named (martha#802). The relay root is for tests, and the clean-install proof
-// (installer/prove_a_clean_install), only.
+// A relay root short enough for a socket address whatever TMPDIR is (martha#79).
+// For tests, and the clean-install proof (installer/prove_a_clean_install), only.
 //
 // A launch's socket is `<relay root>/<launch>/relay.sock`, and an address holds
 // about a hundred bytes. macOS's default TMPDIR is about 49 bytes behind a
@@ -9,16 +8,17 @@
 // the launch by name. Tests that serve the relay make their root here instead:
 // under XDG_RUNTIME_DIR when it is set (a per-user directory, short on Linux),
 // else under the system's own temporary directory, which TMPDIR does not move.
+//
+// The base is stated once, in prove_the_core/the_record_of_a_test_run.ts, and taken from there: a run's record falls
+// back to the same directory (martha#802), and two statements of it could drift.
 
 import { mkdtempSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import process from 'node:process'
 import type { TestContext } from 'node:test'
 
+import { SYSTEM_TEMPORARY_DIRECTORY } from '../../prove_the_core/the_record_of_a_test_run.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-
-/** The temporary directory POSIX systems keep at a fixed, short path, whatever TMPDIR says (martha#802 reads it too). */
-export const SYSTEM_TEMPORARY_DIRECTORY = '/tmp'
 
 const PREFIX = 'martha-relay-'
 
