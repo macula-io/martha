@@ -247,6 +247,16 @@ test('a refused answer is left alone and hands nothing, so the line goes on the 
   assert.ok('answer' in said && said.answer.endsWith(theTimesLineOf(closed)), 'the times did not go on the next report')
 })
 
+test('the times are told only to the session that lost the tools: another session reporting first is told nothing and marks nothing (martha#658 Done-when 4)', async () => {
+  const launch = aLaunch()
+  const closed = await aLossToldAndClosed(launch)
+  const said = { answer: 'Progress noted: 1/1, working.' }
+  assert.deepEqual(withTheTimesLineOnAReturn(launch.places, SUCCESSOR, said), said, 'another session was told the times of a loss that was not its own')
+  assert.equal(theWindowOf(launch.place, MEMBER)?.times_told, undefined, "another session's report marked the times told")
+  const own = withTheTimesLineOnAReturn(launch.places, LOST_IN, said)
+  assert.ok('answer' in own && own.answer.endsWith(theTimesLineOf(closed)), 'the session that lost the tools was not told its times after another session reported')
+})
+
 test('a new loss that opened before the start was answered is left unmarked by the hand the old window gave (martha#658 Done-when 4)', async () => {
   const launch = aLaunch()
   launch.facts.set(LOST_IN, WITHDRAWN)
