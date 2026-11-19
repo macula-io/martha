@@ -72,4 +72,7 @@ test('the wait for the host\'s save ends within its bound, however slow a look a
   // the file's own constants here, so no number is typed that the module does not define.
   const theBound = THE_SAVE_WAIT_MS + THE_LATENESS_ALLOWANCE_MS
   assert.ok(took <= theBound, `the wait took ${String(took)} ms past its own bound of ${String(theBound)} ms: it counted looks, so a slow look stretched it`)
+  // And no shorter: the row tells the owner the file "showed no save ... within" the bound, so a wait that gave up
+  // early would say that of a stretch it never watched (martha#836 review: a wait ended at a tenth of the bound passed).
+  assert.ok(took >= THE_SAVE_WAIT_MS, `the wait gave up after ${String(took)} ms, before its own bound of ${String(THE_SAVE_WAIT_MS)} ms`)
 })
