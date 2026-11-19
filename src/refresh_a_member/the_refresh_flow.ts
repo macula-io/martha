@@ -51,6 +51,9 @@ import {
   type RefreshTrigger,
 } from './refresh_a_member.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { keepWhatTheSessionSpent, USAGE_PLACE } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
+import { theHostsReadingIn, type Billing } from '../keep_what_a_session_spent/the_hosts_usage.ts'
 import {
   CARRY_THE_END,
   concludeTheEnd,
@@ -87,6 +90,12 @@ export interface TheSessionsQuestion {
   /** The member's context as the host reports it, as a share of its limit. */
   readonly percent: number
   readonly cost_usd: number | null
+  /** When the session the host's figures count from began, or null when it says none (martha#860). */
+  readonly started_at: number | null
+  /** 1 once the host's cost includes a model with no known price (martha#860). */
+  readonly unknown_price: 0 | 1
+  /** How the session is billed, as far as the host says (martha#860 R3). */
+  readonly billing: Billing
   /** The turn that just ended, and the answer it ended with: '' at a session's start. */
   readonly turn_id: string
   readonly answer: string
@@ -97,33 +106,6 @@ export interface TheSessionsQuestion {
    * or a session's start. `turn_id` is then the running turn's, kept by the mod from that turn's start.
    */
   readonly turn_running: boolean
-}
-
-/** The host's own reading of a session (martha#255), as the mod hands it over untouched. */
-interface AHostsUsage {
-  readonly context?: { readonly percent?: number | null }
-  readonly cost?: { readonly usd?: number | null }
-}
-
-/** The host's usage, read as the object it is, or undefined when what arrived is not one. */
-function usageIn(args: Readonly<Record<string, unknown>>): AHostsUsage | undefined {
-  const usage = args['usage']
-  return typeof usage === 'object' && usage !== null ? (usage as AHostsUsage) : undefined
-}
-
-/**
- * A share of the context limit as the host reports it, or 0 when it reports none this launcher can trust (martha#255).
- * The host's own number is taken as it comes: a session that says nothing about its context has not reached a limit.
- */
-function aPercentOf(usage: AHostsUsage | undefined): number {
-  const percent = usage?.context?.percent
-  return typeof percent === 'number' && Number.isFinite(percent) ? percent : 0
-}
-
-/** What the session has cost as the host reports it, or null when it reports nothing this launcher can trust. */
-function aCostOf(usage: AHostsUsage | undefined): number | null {
-  const cost = usage?.cost?.usd
-  return typeof cost === 'number' ? cost : null
 }
 
 /** What each field of the question must be, and what is said when it is not: read in order, the first miss refused. */
@@ -138,11 +120,15 @@ const QUESTION_FIELDS: readonly ((args: Readonly<Record<string, unknown>>) => st
 export function theQuestionIn(args: Readonly<Record<string, unknown>>, session_id: string): TheSessionsQuestion | string {
   const refused = QUESTION_FIELDS.map((holds) => holds(args)).find((said) => said !== undefined)
   if (refused !== undefined) return refused
-  const usage = usageIn(args)
+  // The host's usage, held to every field it is read by (../keep_what_a_session_spent/the_hosts_usage.ts): a malformed
+  // one is refused by name, never read as a host that said nothing (martha#860 R5). A share of the context limit the
+  // host does not report is 0: a session that says nothing about its context has not reached a limit (martha#255).
+  const usage = theHostsReadingIn(args['usage'])
+  if (typeof usage === 'string') return usage
   const turn_id = args['turn_id'] as string
   // At a session's start the host stamps no turn, which is the one reading of "first question" there is (martha#255):
   // the mod reported the empty turn before, and now says nothing about it that could disagree with its own turn id.
-  return { session_id, percent: aPercentOf(usage), cost_usd: aCostOf(usage), turn_id, answer: args['answer'] as string, at_start: turn_id === '', turn_running: args['turn_running'] === 1 }
+  return { session_id, ...usage, turn_id, answer: args['answer'] as string, at_start: turn_id === '', turn_running: args['turn_running'] === 1 }
 }
 
 /** Everything this flow is decided over: the crew's store, the member's row, and the declaration. */
@@ -156,6 +142,8 @@ export interface TheRefreshPlaces {
   /** The models the host runs (martha#315), which the declaration is read back against. */
   readonly models: ModelVocabulary
   readonly ledger: LedgerHost
+  /** The model that ran the turn just ended (martha#315): what the reading of its cost is kept under (martha#860 R1). */
+  readonly row_model: string
   /** The share this member's session began at, by session id: the reference every threshold is measured from. */
   readonly began_at: Map<string, number>
   /** The end of a running turn as the launcher holds it at a tool boundary (martha#311, ruling D). */
@@ -180,6 +168,9 @@ const A_STORM_PARK = 'two refreshes inside the window: parked so it cannot loop'
  * be read is never refreshed, and the owner is told why instead of watching a member that never hands over.
  */
 export async function theRefreshAct(places: TheRefreshPlaces, question: TheSessionsQuestion): Promise<TheAct> {
+  // What the session spent, kept before anything is ordered, so its model is the one that ran the turn (martha#860 R1).
+  // A reading the store could not keep is taken again at the next question: it never holds the flow up.
+  await keepWhatTheSessionSpent({ ...places, host: CLAUDE_CODE, kept: places.stores.crew.place(USAGE_PLACE) }, question)
   if (!question.turn_running) places.ends.aTurnEnded(question.session_id, question.turn_id)
   const opened = await theOpenFlow(places)
   if ('act' in opened) return opened.act
