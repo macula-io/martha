@@ -1141,3 +1141,24 @@ test("T6: a skill in a folder above the start is fingerprinted and listed as not
   assert.deepEqual(theCarriedSkills(prepared.carried_files), {})
   assert.ok(prepared.not_carried.some((path) => `../${CLAUDE_SKILLS}/y/SKILL.md`.startsWith(path)), `the skill above is not reported: ${prepared.not_carried.join(', ')}`)
 })
+
+// A link anywhere in the skills folder: the folder itself, a skill's own folder, or a file in one. Each points out of
+// the checkout at bytes of the test's own, so a gate that followed it would carry what no approval read.
+const SKILL_LINKS: ReadonlyArray<{ readonly at: string; readonly target: (home: string) => string }> = [
+  { at: CLAUDE_SKILLS, target: (home) => join(home, 'skills-elsewhere') },
+  { at: `${CLAUDE_SKILLS}/x`, target: (home) => join(home, 'skills-elsewhere', 'x') },
+  { at: `${CLAUDE_SKILLS}/x/SKILL.md`, target: (home) => join(home, 'skills-elsewhere', 'x', 'SKILL.md') },
+]
+
+for (const link of SKILL_LINKS) {
+  test(`a link at ${link.at} is refused, naming it, even when the owner approved its fingerprint (martha#747)`, (t) => {
+    const place = scratch(t)
+    put(place.home, join('skills-elsewhere', 'x', 'SKILL.md'), '---\nname: x\ndescription: bytes outside the checkout\n---\nbody\n')
+    mkdirSync(dirname(join(place.checkout, link.at)), { recursive: true })
+    symlinkSync(link.target(place.home), join(place.checkout, link.at))
+    const { decision } = decide(CLAUDE_CODE, place, approve(CLAUDE_CODE, place))
+    assert.equal(decision.allow, false)
+    if (decision.allow) return
+    assert.ok(decision.refusal.includes(`${link.at} is a symlink`), decision.refusal)
+  })
+}
