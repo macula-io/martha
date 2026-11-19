@@ -70,6 +70,19 @@ NIGHT_TOKEN_DROP="${CONTAINER_HOME}/.night-token"
 # session runs after its command ends, so its last screen stays readable.
 NIGHT_TMUX_SOCKET='night'
 NIGHT_PANE_HOLD='exec sleep infinity'
+# The night server's bounds on what a member's pane can send to the owner's terminal (martha#843), set once as the
+# server starts, before any member's pane exists: a member's notification may pass through to a client attached to
+# its pane (allow-passthrough, a pane option, set for every pane to come), and no pane may set the owner's clipboard
+# (set-clipboard off, which its default `external` already refuses, said here so no tmux.conf can open it). Before the
+# owner attaches writable for the yes, the builder's pane is shut again (NIGHT_PASSTHROUGH_OFF), and until then the
+# owner watches read-only (NIGHT_WATCH_ATTACH), so nothing a client types reaches a pane.
+# These are speed bumps, not walls, until #847: the server runs as the members' own user, so a member's code can run
+# `tmux -L night` itself and undo each of them, or type into its own pane. They stop a stray escape, not a member set
+# on undoing them.
+NIGHT_TMUX_BOUNDS=(set-option -g allow-passthrough on ';' set-option -s set-clipboard off)
+# The option and its value only: tmux reads a target before them, so it is set as `set-option -p -t <pane> ...`.
+NIGHT_PASSTHROUGH_OFF=(allow-passthrough off)
+NIGHT_WATCH_ATTACH=(attach -r)
 # Where each member's session keeps every byte it draws (tmux pipe-pane), and the gate its member waits on until that
 # keeping has begun. Made after the clean start has been judged, so it is not a stranger to it.
 NIGHT_SCREENS="${CONTAINER_HOME}/.night-screens"
