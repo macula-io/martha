@@ -81,6 +81,12 @@ test('a delegate tool whose models change kind fails by subagent_models, so a cr
   assert.match(ran.stdout, /\ndiffers: subagent_models\n$/)
 })
 
+test('a shell tool the engine renames fails by shell_tool, so the shell hold never silently matches nothing (#541 part C4)', (t) => {
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, shell_tool: `${RECORDED_FACTS.shell_tool}_renamed` }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: shell_tool\n$/)
+})
+
 test('an environment name the engine starts dropping from a tool server entry fails by stdio_extension, so no variable the server needs is silently removed', (t) => {
   const stdio = RECORDED_FACTS.stdio_extension
   const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, stdio_extension: { ...stdio, disallowed_env: [...stdio.disallowed_env, 'A_NAME_NOW_DROPPED'] } }))
