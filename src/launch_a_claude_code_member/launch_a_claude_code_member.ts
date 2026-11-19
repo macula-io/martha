@@ -322,8 +322,8 @@ export interface ReadyLaunch {
   /** Removes the approved copies. */
   removeSnapshot(): void
   /**
-   * Keeps what the member's host wrote of its session, before the snapshot that holds it goes (martha#646). Called at
-   * every end of a launch; a failure is said in one line and never stops the removals.
+   * Keeps what the member's host wrote of its session, before the snapshot that holds it goes (martha#646). A failure
+   * is said in one line and never stops the removals.
    */
   keepTranscripts(): void
   readonly hostEnv: Readonly<Record<string, string | undefined>>
@@ -421,19 +421,13 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
-  // The member's host writes its session under the folder this snapshot holds, and the snapshot goes at the end: the
-  // keep is taken here, beside it, so each of the three ends finds it (martha#646). Its own name is the launch's, and a
-  // launch started on an approval keeps the id its own writes are kept under.
+  // The host writes the member's session under the folder this snapshot holds, so the keep is taken here, beside the
+  // snapshot's removal, and each of the three ends calls it (martha#646). A launch on an approval keeps the id its own
+  // writes are kept under; any other launch is named by its snapshot, which is made afresh for each launch.
   const keepTranscripts = (): void => {
     try {
-      const trouble = keepTheTranscriptsOf({
-        state_root: launch.places.state_root,
-        project_root: launch.place.launch_dir,
-        config_folder: membersConfigFolderOf(prepared),
-        theLaunch: launch.place.since_approval?.launch_id ?? basename(prepared.snapshot_dir),
-        theLaunchKey: hostEnv[API_KEY_VARIABLE] ?? '',
-      })
-      for (const line of trouble) launch.tellOwner(`Not kept for ${launch.member_name}: ${line}`)
+      const kept = { state_root: launch.places.state_root, project_root: launch.place.launch_dir, config_folder: membersConfigFolderOf(prepared), theLaunch: launch.place.since_approval?.launch_id ?? basename(prepared.snapshot_dir), theLaunchKey: hostEnv[API_KEY_VARIABLE] ?? '' }
+      for (const line of keepTheTranscriptsOf(kept)) launch.tellOwner(`Not kept for ${launch.member_name}: ${line}`)
     } catch (error) {
       try {
         launch.tellOwner(`Not kept for ${launch.member_name}: ${(error as Error).message}`)
