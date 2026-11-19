@@ -1,12 +1,6 @@
 {
   "version": "24.22.3",
   "archives": {
-    "darwin-arm64": {
-      "sha256": "1d64136c8a43d648d1b3bad10797a4c995b1ca032d2bde8799de43b37f058fe5"
-    },
-    "darwin-x64": {
-      "sha256": "4daeec962855c1a6e66cda398a25037319dc1bbd4a0939188b3547afbbfb6490"
-    },
     "linux-arm64": {
       "sha256": "6e51a2ada00f0011cc266f65d98922b403d7ad88f809ca2aa615a5fe1ce6e86c"
     },
