@@ -80,8 +80,6 @@ jobs:
         # The check itself. A green here means every internal link was seen to
         # resolve; a red names the links.
         run: npm run --silent check:links -- '**/*.md'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # The publish gate (issue #2): no outsider's text reaches a shell-holding
   # member without a control, and a path added without one fails here by name.
