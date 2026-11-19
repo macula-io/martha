@@ -11,7 +11,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
-import { RECORDING_OF_THE_HOST } from '../../src/record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
+import { RECORDING_OF_THE_HOST } from '../../src/record_claude_code_host/the_file_that_holds_the_recording.ts'
 import { RECORDING_OF_THE_ENGINE } from '../../src/know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { readSigners } from '../verify_the_release_signature/verify_the_release_signature.mjs'
 import { NAMES } from './names.mjs'
