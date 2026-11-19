@@ -3,8 +3,8 @@
 
 import type { Received } from './record_what_goose_sends.ts'
 import type { GooseOverAcp } from './speak_acp_to_goose.ts'
-import type { TheCapALineGets } from './the_cap_a_line_gets.ts'
-import { TheBoundCannotFitTheLaunch, whyTheBoundCannotFit } from './the_cap_a_line_gets.ts'
+import type { TheCapALineGets } from '../the_cap_a_line_gets/the_cap_a_line_gets.ts'
+import { TheBoundCannotFitTheLaunch, whyTheBoundCannotFit } from '../the_cap_a_line_gets/the_cap_a_line_gets.ts'
 
 /** A turn as it ended: why it stopped, and the text the member's model streamed. */
 export interface Turn {
