@@ -1459,3 +1459,15 @@ test("a write of the owner's memory is judged by the host's own writing tools an
   assert.ok(writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: spelled }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), 'Claude Code resolves ~/ to the memory')
   assert.equal(writesTheOwnersMemory(tool, { [argument]: spelled }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS), undefined, 'this host resolves ~/ inside the checkout')
 })
+
+test("a refused write names whose sessions load the place: the place's own word when it carries one, else the owner's Claude Code sessions (#541 package A; mutant: the place's word dropped)", (t) => {
+  const place = placeFor(t)
+  const theirs = join(place.root, 'another-hosts-folder')
+  const loaded_by = 'the sessions of a host this test names'
+  const base = placesFor(place)
+  const places: OwnerMemoryPlaces = { ...base, folders: [...base.folders, { what: theirs, issue: 'martha#541', loaded_by }] }
+  const named = writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(theirs, 'notes.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
+  assert.ok(named?.includes(`which ${loaded_by} load as their own`), `the place's own word is said: ${named}`)
+  const claude = writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.config, 'rules', 'a.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
+  assert.ok(claude?.includes("which the owner's own Claude Code sessions load as their own"), `a place with no word names Claude Code's: ${claude}`)
+})

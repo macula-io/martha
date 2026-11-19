@@ -120,7 +120,12 @@ const OWNER_RULES = 'rules'
 export interface DeniedPlace {
   readonly what: string
   readonly issue: string
+  /** Whose sessions load the place as their own, when not the owner's own Claude Code sessions (#541 package A: the owner's own engine). */
+  readonly loaded_by?: string
 }
+
+/** Whose sessions load a denied place when the place names no one else. */
+const THE_OWNERS_CLAUDE_CODE = "the owner's own Claude Code sessions"
 
 /**
  * A family of names denied in one folder, by shape rather than by name: every
@@ -966,7 +971,7 @@ function whyTheArgumentIsRefused(argument: unknown, places: OwnerMemoryPlaces, g
   if (gitDenial !== undefined) return gitDenial
   const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
   if (place === undefined) return undefined
-  return `${argument} is in ${place.what}, which the owner's own Claude Code sessions load as their own: a member does not write there, so neither its text nor its code reaches a later session unrecorded (${place.issue})`
+  return `${argument} is in ${place.what}, which ${place.loaded_by ?? THE_OWNERS_CLAUDE_CODE} load as their own: a member does not write there, so neither its text nor its code reaches a later session unrecorded (${place.issue})`
 }
 
 /**
