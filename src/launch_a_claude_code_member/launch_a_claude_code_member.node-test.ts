@@ -2727,13 +2727,30 @@ function launcherProcess(
   return script
 }
 
+/**
+ * A command started with core dumps off: `sh` sets the core limit to none, then becomes the command, so the pid is the
+ * command's own. SIGQUIT's default action dumps core, and the launcher re-raises the signal it was ended by, so a
+ * launcher a test quits dumps its whole node process. Where a core handler is installed, the launcher is reaped only
+ * once that dump is written: about 2 s against 0.1 s for the other signals at a load of 37, and past the suite's
+ * per-test limit on a loaded full run (martha#838). Every run also left a core of node behind.
+ */
+const withoutACoreDump = (command: string, args: readonly string[]): { readonly command: string; readonly args: readonly string[] } => ({
+  command: 'sh',
+  args: ['-c', 'ulimit -c 0 && exec "$0" "$@"', command, ...args],
+})
+
+/** The soft core-size limit the kernel holds for `pid`, as /proc/<pid>/limits spells it: "0" when it dumps none. */
+const coreLimitOf = (pid: number): string | undefined =>
+  /^Max core file size\s+(\S+)/m.exec(readFileSync(`${PROC_ROOT}/${pid}/limits`, 'utf8'))?.[1]
+
 // Every signal a launcher can be ended by without its own say, including the two a terminal's hangup and its quit key
 // send (martha#472): a launcher signalled directly cleans up exactly like one spoken to by martha stop.
 for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
   test(`${signal} to the launcher kills its member's group and leaves no socket or snapshot`, async (t) => {
     const place = placeFor(t)
     const fake = fakeClaude(place)
-    const launcher = spawn(process.execPath, [launcherProcess(place, fake.command)], { stdio: ['ignore', 'pipe', 'inherit'] })
+    const started = withoutACoreDump(process.execPath, [launcherProcess(place, fake.command)])
+    const launcher = spawn(started.command, started.args, { stdio: ['ignore', 'pipe', 'inherit'] })
     const ended = new Promise<NodeJS.Signals | null>((resolve) => launcher.once('exit', (_code, by) => resolve(by)))
     // Before any assertion: a test that fails must not leave the member running.
     t.after(async () => {
@@ -2754,8 +2771,10 @@ for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
       group !== undefined && Number.isInteger(group) && group > 1 && group !== groupOf(process.pid) && group !== groupOf(launcher.pid ?? 0),
       'the member runs in a group of its own, which the group kill relies on',
     )
+    assert.equal(coreLimitOf(launcher.pid ?? 0), '0', 'the launcher this test signals dumps no core, so its end waits on no core handler (martha#838)')
 
     launcher.kill(signal)
+    await until(`the launcher to end of ${signal}`, () => launcher.exitCode !== null || launcher.signalCode !== null, t)
     assert.equal(await ended, signal, 'the signal still ends the launcher')
     await until('the member\'s group to be killed', () => !isAlive(child), t)
     assert.deepEqual(readdirSync(place.relay_root), [])
