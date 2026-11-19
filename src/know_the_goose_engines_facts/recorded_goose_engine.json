@@ -126,5 +126,14 @@
   "builtin_skills_advertised": {
     "setting": "GOOSE_BUILTIN_SKILLS_ADVERTISED",
     "when_unset": true
+  },
+  "tool_naming": {
+    "meta_path": [
+      "goose",
+      "toolCall",
+      "toolName"
+    ],
+    "separator": "__",
+    "split_at": "first"
   }
 }

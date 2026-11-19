@@ -58,6 +58,19 @@ export interface EngineFacts {
   readonly skills_advertised: ASkillsSwitch
   /** The setting that offers the model the engine's compiled-in skills on their own, and its unset default (martha#839). */
   readonly builtin_skills_advertised: ASkillsSwitch
+  /**
+   * How the engine names a called tool to its client (#541 part C4): the path under a `tool_call` update's `_meta` that
+   * holds the tool's name (its permission request carries only a title made for people), the separator between an
+   * extension's name and its tool's own name, and the end of the name the engine splits at.
+   */
+  readonly tool_naming: ToolNaming
+}
+
+/** The engine's naming of a called tool: where a client reads it, and how it splits into an extension's and a tool's own name. */
+export interface ToolNaming {
+  readonly meta_path: readonly string[]
+  readonly separator: string
+  readonly split_at: 'first' | 'last'
 }
 
 /** A switch the engine reads with `get_param::<bool>` through a constant: the setting it names, and what an unset one means. */
@@ -88,6 +101,8 @@ export const ENGINE_PLACES = {
   hint_files: 'crates/goose/src/hints/load_hints.rs',
   skills_advertised: 'crates/goose/src/agents/services.rs',
   builtin_skills_advertised: 'crates/goose/src/skills/mod.rs',
+  tool_call_meta: 'crates/goose/src/acp/server/tool_calls/conversion.rs',
+  tool_name_parts: 'crates/goose-provider-types/src/conversation/tool_request.rs',
 } as const
 
 /** The function that reads each skills switch, in the file ENGINE_PLACES names for it (martha#839). */
@@ -115,7 +130,14 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'hint files', read: (source) => ({ hint_files: hintFilesIn(source) }) },
   { part: 'skills switch', read: (source) => ({ skills_advertised: skillsSwitchIn(source, 'skills_advertised') }) },
   { part: 'built-in skills switch', read: (source) => ({ builtin_skills_advertised: skillsSwitchIn(source, 'builtin_skills_advertised') }) },
+  { part: 'tool naming', read: (source) => ({ tool_naming: toolNamingIn(source) }) },
 ]
+
+/** The function that builds a tool call's `_meta`, and the maps it fills from the outside in, in the file that builds it. */
+export const TOOL_CALL_META = { builder: 'goose_tool_call_meta', maps: ['meta', 'goose_meta', 'tool_call_meta'] } as const
+
+/** The two ways Rust's `str` splits once, by the end it splits at. */
+export const SPLITS_ONCE = { first: 'split_once', last: 'rsplit_once' } as const
 
 /** A file the part needs, or a throw that names it. */
 function fileOf(source: EngineSource, path: string): string {
@@ -289,6 +311,22 @@ function skillsSwitchIn(source: EngineSource, which: keyof typeof SKILLS_SWITCH_
     setting: captured(text, new RegExp(`pub const ${constant}: &str = "([^"]+)";`), `the value of ${constant}`, path),
     when_unset: captured(body, /unwrap_or\((true|false)\)/, `the default of ${reader}`, path) === 'true',
   }
+}
+
+/**
+ * The engine's naming of a called tool (#541 part C4). The path is read from the function that builds a tool call's
+ * `_meta`: the first key each of its maps is filled under, from the outside in. The split is read from how the engine
+ * parts a name, `split_once` (at the first separator) or `rsplit_once` (at the last).
+ */
+function toolNamingIn(source: EngineSource): ToolNaming {
+  const metaPath = ENGINE_PLACES.tool_call_meta
+  const builder = captured(fileOf(source, metaPath), new RegExp(`fn ${TOOL_CALL_META.builder}\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`), `the function ${TOOL_CALL_META.builder}`, metaPath)
+  const meta_path = TOOL_CALL_META.maps.map((map) => captured(builder, new RegExp(`\\b${map}\\.insert\\(\\s*"([^"]+)"`), `the key ${map} is filled under`, metaPath))
+  const partsPath = ENGINE_PLACES.tool_name_parts
+  const parting = captured(fileOf(source, partsPath), /for ToolNameParts<'a> \{([\s\S]*?)\n\}/, 'how a tool name is parted', partsPath)
+  const split = /\bname\.(r?split_once)\("([^"]+)"\)/.exec(parting)
+  if (split?.[1] === undefined || split[2] === undefined) throw new Error(`${partsPath} says nothing of where a tool name is split`)
+  return { meta_path, separator: split[2], split_at: split[1] === SPLITS_ONCE.last ? 'last' : 'first' }
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */
