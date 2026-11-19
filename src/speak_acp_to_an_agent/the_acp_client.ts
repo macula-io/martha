@@ -15,7 +15,10 @@
 // - when the agent's output ends, every request still waiting fails by name, so no turn waits forever;
 // - a cancelled turn runs no further call: every permission request still waiting on the gate is answered cancelled at
 //   once (ACP: the client MUST), the gate's late decision is dropped so each request has one answer, and a request
-//   that arrives after the cancel, while the turn still runs, is cancelled without asking the gate.
+//   that arrives after the cancel, while the turn still runs, is cancelled without asking the gate;
+// - a request the gate has not decided when its turn ends, or when the agent's output ends, has its one answer then
+//   (cancelled), and the decision still running is told so through its `withdrawn` signal: a decision that waits on the
+//   owner (../hear_an_acp_agents_asks) puts its ask away instead of keeping a row that no answer can reach.
 
 import type { ChildProcess } from 'node:child_process'
 import type { Readable, Writable } from 'node:stream'
@@ -83,8 +86,12 @@ export interface ASession {
   readonly currentModeId: string | undefined
 }
 
-/** The gate's decision for one call. It may be slow; a throw or a rejection is a refusal. */
-export type Decide = (request: APermissionRequest) => ADecision | Promise<ADecision>
+/**
+ * The gate's decision for one call. It may be slow; a throw or a rejection is a refusal. `withdrawn` is aborted when the
+ * request has had its one answer without this decision (a cancel, the turn's end, the end of the agent's output), so a
+ * decision still waiting knows its answer will be dropped.
+ */
+export type Decide = (request: APermissionRequest, withdrawn: AbortSignal) => ADecision | Promise<ADecision>
 
 interface Pending {
   readonly method: string
@@ -97,6 +104,8 @@ interface AWaitingRequest {
   readonly id: unknown
   readonly request: APermissionRequest
   readonly offered: readonly string[]
+  /** Aborted when the request is answered without its decision. */
+  readonly withdrawn: AbortController
   answered: boolean
 }
 
@@ -197,6 +206,10 @@ export class AcpClient {
       return { stopReason: textOf(answer['stopReason']), text: turn.text, toolCalls: [...turn.toolCalls.values()], asked: turn.asked }
     } finally {
       this.#turns.delete(sessionId)
+      // A turn that ended with a request still undecided: the agent has stopped waiting for it, so it is answered
+      // cancelled now and its decision is withdrawn. The end of the agent's output comes here too: #end fails the
+      // prompt, which ends the turn.
+      for (const waiting of turn.waiting) this.#withdraw(turn, waiting)
     }
   }
 
@@ -210,7 +223,7 @@ export class AcpClient {
     const turn = this.#turns.get(sessionId)
     if (turn === undefined) return
     turn.cancelled = true
-    for (const waiting of turn.waiting) this.#answer(turn, waiting, { outcome: 'cancelled' })
+    for (const waiting of turn.waiting) this.#withdraw(turn, waiting)
   }
 
   /** Ends the agent's input: the launcher's way of saying the connection is over. */
@@ -302,18 +315,24 @@ export class AcpClient {
       return
     }
     const offeredOptions = optionsOf(params)
-    const waiting: AWaitingRequest = { id, request, offered: offeredOptions.map((option) => textOf(option.optionId)), answered: false }
+    const waiting: AWaitingRequest = { id, request, offered: offeredOptions.map((option) => textOf(option.optionId)), withdrawn: new AbortController(), answered: false }
     if (turn.cancelled) {
       this.#answer(turn, waiting, { outcome: 'cancelled' })
       return
     }
     turn.waiting.add(waiting)
-    const decision = await this.#decided(request)
+    const decision = await this.#decided(request, waiting.withdrawn.signal)
     if (waiting.answered) {
       this.notes.push(`the decision for ${request.toolCallId} came after its turn was cancelled, and was dropped`)
       return
     }
     this.#answer(turn, waiting, answerOnce(offeredOptions, decision))
+  }
+
+  /** A waiting request answered cancelled, and its decision told it is withdrawn. */
+  #withdraw(turn: ATurnBeingHeard, waiting: AWaitingRequest): void {
+    this.#answer(turn, waiting, { outcome: 'cancelled' })
+    waiting.withdrawn.abort()
   }
 
   /** Sends a permission request its one answer, and keeps it in the turn's record. */
@@ -324,9 +343,9 @@ export class AcpClient {
     this.#send({ jsonrpc: '2.0', id: waiting.id, result: { outcome: answered } })
   }
 
-  async #decided(request: APermissionRequest): Promise<ADecision> {
+  async #decided(request: APermissionRequest, withdrawn: AbortSignal): Promise<ADecision> {
     try {
-      return (await this.#decide(request)) === 'allow' ? 'allow' : 'reject'
+      return (await this.#decide(request, withdrawn)) === 'allow' ? 'allow' : 'reject'
     } catch (error) {
       this.notes.push(`the decision for ${request.toolCallId} failed, so the call is refused: ${(error as Error).message}`)
       return 'reject'

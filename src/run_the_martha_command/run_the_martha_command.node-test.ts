@@ -720,7 +720,7 @@ test('#619: each owner-only act refuses inside a member, and an act that only re
   aMemberLaunchedAs(place, 'builder', process.pid)
   // A stand-in claude that ends at once, so an act this lets through starts nothing real and ends the case quickly.
   const claude = claudeThatEnds(place, t)
-  for (const words of [['approve'], ['release', 'builder'], ['pin-key', 'a-key'], ['keep-shapes', 'a-list'], ['bells', 'builder', BELLS_MUTED], ['start', 'builder']]) {
+  for (const words of [['approve'], ['release', 'builder'], ['pin-key', 'a-key'], ['keep-shapes', 'a-list'], ['bells', 'builder', BELLS_MUTED], ['start', 'builder'], ['answer'], ['answer', 'builder', 'permission:call-1', 'allow']]) {
     const run = marthaOnATerminal(place, claude.env, ...words)
     assert.ok(run.said.includes("this runs inside builder's session"), `martha ${words.join(' ')}: ${run.said}`)
   }
