@@ -238,15 +238,24 @@ function theAgentItWaitsOn(agents_running: readonly string[], tool: string): ARe
  *
  * The crew's reviewer-model rule stands beside the gate and never inside it (martha#315): a call a reviewer's role may
  * not make is refused after the gate has allowed it, and never in place of the gate's own answer. The workspace guard's
- * first seam is asked in the same place (martha#562), over the shell line the call carries, and a held end of the turn
- * (martha#311 ruling D) is asked last of all, so it only turns a yes into a no.
+ * first seam is asked in the same place (martha#562), over the shell line the call carries; the killed-run record asks
+ * of a hand-off beside it (martha#719); and a held end of the turn (martha#311 ruling D) is asked last of all, so it
+ * only turns a yes into a no.
  */
 export async function whatTheCrewRefusesOfACall(
   crew: CrewTools | undefined,
   call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> },
   session_id: string,
 ): Promise<string | undefined> {
-  return (await crew?.refusesTheSubagent({ tool: call.tool, input: call.input }))
-    ?? (await crew?.refusesTheGitIn?.({ tool: call.tool, input: call.input }))
+  return (await whatTheCrewRefusesOfTheCrewItself(crew, call))
+    ?? (await crew?.refusesTheHandOff?.({ tool: call.tool, input: call.input }))
     ?? crew?.ends.deniesACall(session_id)
 }
+
+/** What the crew's own rules refuse of this call, before the killed-run record is asked: its reviewer, and its git guard. */
+const whatTheCrewRefusesOfTheCrewItself = async (
+  crew: CrewTools | undefined,
+  call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> },
+): Promise<string | undefined> =>
+  (await crew?.refusesTheSubagent({ tool: call.tool, input: call.input }))
+    ?? (await crew?.refusesTheGitIn?.({ tool: call.tool, input: call.input }))

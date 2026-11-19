@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { ENGINE_PLACES, GOOSE_CRATE, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, type EngineFacts, type EngineSource, type PlatformExtension } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -55,6 +55,22 @@ function delegateTool(models: EngineFacts['subagent_models']): string {
   ].join('')
 }
 
+/** The engine's hint files as `load_hints.rs` writes them: two constants, and the list built from them (martha#785). */
+function hintFiles(hints: EngineFacts['hint_files']): string {
+  const constantOf = (name: string): string => {
+    if (name === hints.goose_hints) return HINT_FILE_CONSTANTS.goose_hints
+    if (name === hints.agents_md) return HINT_FILE_CONSTANTS.agents_md
+    throw new Error(`a hint file ${name} is neither of the two the engine declares, so no tree can list it`)
+  }
+  const listed = hints.when_unset.map((name) => `                ${constantOf(name)}.to_string(),\n`).join('')
+  return [
+    `pub const ${HINT_FILE_CONSTANTS.goose_hints}: &str = "${hints.goose_hints}";\n`,
+    `pub const ${HINT_FILE_CONSTANTS.agents_md}: &str = "${hints.agents_md}";\n\n`,
+    `pub fn get_context_filenames() -> Vec<String> {\n    use crate::config::Config;\n\n    Config::global()\n`,
+    `        .get_param::<Vec<String>>("${hints.setting}")\n        .unwrap_or_else(|_| {\n            vec![\n${listed}            ]\n        })\n}\n`,
+  ].join('')
+}
+
 /** Every file of a tree that says `facts`, by its path in the checkout. */
 export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, string>> {
   const modes = facts.mode.values.map((mode) => `    #[strum(message = "a mode")]\n    ${pascalCase(mode)},\n`).join('')
@@ -71,6 +87,7 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     ...platformExtensionMap(facts.platform_extensions),
     [ENGINE_PLACES.acp_server]: `        let options = vec![\n${options}        ];\n`,
     [ENGINE_PLACES.delegate_tool]: delegateTool(facts.subagent_models),
+    [ENGINE_PLACES.hint_files]: hintFiles(facts.hint_files),
     [ENGINE_PLACES.openai_provider]: `pub const OPEN_AI_PROVIDER_NAME: &str = "${facts.openai_provider.name}";\npub const OPEN_AI_DEFAULT_BASE_PATH: &str = "${facts.openai_provider.default_base_path}";\n            vec![\n${settings}            ],\n`,
   }
 }
