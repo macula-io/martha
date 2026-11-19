@@ -71,11 +71,11 @@ test('the transcripts of one launch stop at their own bound, and the ones past i
   const second = aTranscriptPath('s-2')
   const half = TRANSCRIPTS_LAUNCH_BYTES_KEPT / 2
   const chosen = choosing([
-    { path: first, bytes: half + 1, text: 'a'.repeat(16) },
-    { path: second, bytes: half, text: 'b'.repeat(16) },
+    { path: first, bytes: half, text: 'a'.repeat(16) },
+    { path: second, bytes: half + 1, text: 'b'.repeat(16) },
   ])
-  assert.match(chosen.kept.find((one) => one.path === first)?.text ?? '', /too large to keep/, 'the file that passed the launch bound was kept')
-  assert.equal(chosen.kept.find((one) => one.path === second)?.text.includes('b'.repeat(16)), true, 'a file inside the launch bound was dropped')
+  assert.equal(chosen.kept.find((one) => one.path === first)?.text.includes('a'.repeat(16)), true, 'a file inside the launch bound was dropped')
+  assert.match(chosen.kept.find((one) => one.path === second)?.text ?? '', /too large to keep/, 'the file that passed the launch bound was kept')
 })
 
 test('the worst case the product states is the two constants\' own product, read from them (martha#646, Mars item 3)', () => {
