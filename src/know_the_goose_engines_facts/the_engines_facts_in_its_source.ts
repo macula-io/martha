@@ -88,6 +88,24 @@ export interface EngineFacts {
    * parameters. The launch's decisions over a member's calls take their names from here, never from a list in the code.
    */
   readonly developer_tools: readonly DeveloperTool[]
+  /**
+   * How the Developer extension's file tools turn the path they are given into the file they touch (#541 package A,
+   * design r=4 R3): the launch's guards resolve a member's path the same way, so a path that reaches the owner's file
+   * for the engine reaches it for the guard too.
+   */
+  readonly path_resolution: PathResolution
+}
+
+/**
+ * The engine's `resolve_path`: an absolute path used as given; a relative one joined to the first of `bases` there is
+ * (the session's working directory, the process's, then `.`); whether the text is trimmed first, and whether a `~` is
+ * read as the home folder.
+ */
+export interface PathResolution {
+  readonly absolute: 'as_given'
+  readonly bases: readonly string[]
+  readonly trims: boolean
+  readonly expands_home: boolean
 }
 
 /** One tool of the Developer extension: its name, its parameters, and the argument that names its file, command or source. */
@@ -157,6 +175,7 @@ export const ENGINE_PLACES = {
   tool_call_meta: 'crates/goose/src/acp/server/tool_calls/conversion.rs',
   tool_name_parts: 'crates/goose-provider-types/src/conversation/tool_request.rs',
   shell_tool: 'crates/goose/src/agents/platform_extensions/developer/mod.rs',
+  path_resolution: 'crates/goose/src/agents/platform_extensions/developer/edit.rs',
 } as const
 
 /**
@@ -195,6 +214,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'tool naming', read: (source) => ({ tool_naming: toolNamingIn(source) }) },
   { part: 'shell tool', read: (source) => ({ shell_tool: shellToolIn(source) }) },
   { part: 'developer tools', read: (source) => ({ developer_tools: developerToolsIn(source) }) },
+  { part: 'path resolution', read: (source) => ({ path_resolution: pathResolutionIn(source) }) },
   { part: 'secret storage', read: (source) => ({ secret_storage: secretStorageIn(source) }) },
 ]
 
@@ -524,6 +544,33 @@ function firstTextFieldOf(source: EngineSource, files: readonly string[], params
   if (declaring.length !== 1 || file === undefined) throw new Error(`${DEVELOPER_DIR} declares ${params} in ${String(declaring.length)} files, not one`)
   const body = captured(fileOf(source, file), new RegExp(`pub struct ${params}\\s*\\{([^}]*)\\}`), `the struct ${params}`, file)
   return captured(body, /pub (\w+): String,/, `the first text field of ${params}`, file)
+}
+
+/** The function the Developer extension's file tools resolve a path with (#541 package A). */
+export const PATH_RESOLVER = 'resolve_path'
+
+/** The places a relative path may be joined to, by the words the engine's resolver names them with, in no order. */
+export const RESOLUTION_BASES = { 'working_dir': 'working_dir', 'std::env::current_dir()': 'current_dir', 'PathBuf::from(".")': '.' } as const
+
+/**
+ * The engine's path resolution (#541 package A, design r=4 R3), from the body of `resolve_path`: an absolute path must be
+ * returned as given, the relative one is joined to the places the chain after `else` names, in its order, and the
+ * body is searched for a trim and a `~`. A body in any other shape is unreadable, never a resolution the guard assumes.
+ */
+function pathResolutionIn(source: EngineSource): PathResolution {
+  const path = ENGINE_PLACES.path_resolution
+  const body = bodyOf(fileOf(source, path), PATH_RESOLVER, path)
+  const flat = body.replace(/\s+/g, ' ').trim()
+  if (!/if path\.is_absolute\(\) \{ path \} else \{/.test(flat)) throw new Error(`${path} ${PATH_RESOLVER} does not return an absolute path as given`)
+  const chain = captured(flat, /\} else \{ (.*)\.join\(path\) \}$/, `the places ${PATH_RESOLVER} joins a relative path to`, path)
+  const named = Object.keys(RESOLUTION_BASES).map((words) => ({ words, at: chain.indexOf(words) })).filter(({ at }) => at >= 0).sort((a, b) => a.at - b.at)
+  if (named.length === 0 || !chain.startsWith(named[0]?.words ?? '')) throw new Error(`${path} ${PATH_RESOLVER} joins a relative path to ${chain}, which names no place this reader knows first`)
+  return {
+    absolute: 'as_given',
+    bases: named.map(({ words }) => RESOLUTION_BASES[words as keyof typeof RESOLUTION_BASES]),
+    trims: /\.trim/.test(body),
+    expands_home: /"~|'~'|home_dir/.test(body),
+  }
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */

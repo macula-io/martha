@@ -10,7 +10,7 @@
 import { dirname, join } from 'node:path'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type DeveloperTool, type EngineFacts, type EngineSource, type PlatformExtension, type SecretStorage, type ToolNaming } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PLACES, GOOSE_CRATE, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, PATH_RESOLVER, RESOLUTION_BASES, SKILLS_SWITCH_READERS, SPLITS_ONCE, TOOL_CALL_META, type ASkillsSwitch, type DeveloperTool, type EngineFacts, type EngineSource, type PathResolution, type PlatformExtension, type SecretStorage, type ToolNaming } from './the_engines_facts_in_its_source.ts'
 
 const pascalCase = (snake: string): string => snake.split('_').map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('')
 
@@ -148,6 +148,7 @@ export function engineFilesSaying(facts: EngineFacts): Readonly<Record<string, s
     [ENGINE_PLACES.tool_name_parts]: toolNameParts(facts.tool_naming),
     [ENGINE_PLACES.shell_tool]: developerTools(facts.shell_tool, facts.developer_tools),
     [`${DEVELOPER_DIR}/params.rs`]: developerParams(facts.developer_tools),
+    [ENGINE_PLACES.path_resolution]: pathResolution(facts.path_resolution),
     [ENGINE_PLACES.openai_provider]: `pub const OPEN_AI_PROVIDER_NAME: &str = "${facts.openai_provider.name}";\npub const OPEN_AI_DEFAULT_BASE_PATH: &str = "${facts.openai_provider.default_base_path}";\n            vec![\n${settings}            ],\n`,
   }
 }
@@ -201,6 +202,24 @@ function developerTools(shell: string, tools: readonly DeveloperTool[]): string 
  */
 const developerParams = (tools: readonly DeveloperTool[]): string =>
   tools.map(({ params, argument }) => `pub struct ${params} {\n    #[serde(default)]\n    pub a_count: u32,\n    pub ${argument}: String,\n    pub another_text: String,\n}\n\n`).join('')
+
+/**
+ * The engine's `resolve_path` as it writes it (#541 package A): another function first that joins to another place, then
+ * the resolver, with a trim or a `~` only when the recording says the engine has one, and its bases chained in order.
+ */
+function pathResolution(resolution: PathResolution): string {
+  const words = (base: string): string => Object.entries(RESOLUTION_BASES).find(([, named]) => named === base)?.[0] ?? base
+  const [first, ...rest] = resolution.bases.map(words)
+  const chain = [`${first ?? ''}\n            .map(Path::to_path_buf)`, ...rest.map((base) => `\n            .or_else(|| ${base}.ok())`)].join('')
+  return [
+    'fn another_resolver(path: &str) -> PathBuf {\n    another_place().join(path)\n}\n\n',
+    `pub(super) fn ${PATH_RESOLVER}(path: &str, working_dir: Option<&Path>) -> PathBuf {\n`,
+    resolution.trims ? '    let path = path.trim();\n' : '',
+    resolution.expands_home ? '    if path.starts_with("~") {\n        return home_dir();\n    }\n' : '',
+    '    let path = PathBuf::from(path);\n    if path.is_absolute() {\n        path\n    } else {\n',
+    `        ${chain}\n            .join(path)\n    }\n}\n`,
+  ].join('')
+}
 
 /** The same tree as a reader, for a test that never touches the disk. */
 export function anEngineSourceSaying(files: Readonly<Record<string, string>>): EngineSource {

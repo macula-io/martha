@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SECRET_STORAGE, SHELL_TOOL, SKILLS_SWITCH_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, DEVELOPER_DIR, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, PATH_RESOLVER, SECRET_STORAGE, SHELL_TOOL, SKILLS_SWITCH_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -388,4 +388,30 @@ test('Developer parameters declared in two files, or with no text field, are unr
   const none = engineFactsIn(anEngineSourceSaying({ ...files, [params]: textless }))
   assert.deepEqual(none.unreadable.map(({ part }) => part), [DEVELOPER_PART])
   assert.match(none.unreadable[0]?.why ?? '', new RegExp(`the first text field of ${tool.params}`))
+})
+
+/** The part that reads the engine's path resolution (#541 package A). */
+const RESOLUTION_PART = partReading('path_resolution')
+
+test("the engine's path resolution is read as it is written: a trim, a `~` and the order of its places each read back, never assumed (#541 package A, design r=4 R3; mutants: the trim never seen, the places read in the reader's order)", () => {
+  const recorded = RECORDED_FACTS.path_resolution
+  const changed = { ...recorded, bases: [...recorded.bases].reverse(), trims: !recorded.trims, expands_home: !recorded.expands_home }
+  assert.notDeepEqual(changed.bases, recorded.bases, 'the recording names one place only, so its order reads nothing')
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, path_resolution: changed })))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.path_resolution, changed)
+})
+
+test('a resolver that does not return an absolute path as given, or joins a relative one to a place this reader does not know, is unreadable by name (#541 package A)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.path_resolution
+  const written = files[path] ?? ''
+  const rooted = written.replace('if path.is_absolute() {\n        path\n    }', 'if path.is_absolute() {\n        root.join(path)\n    }')
+  const elsewhere = written.replace(`fn ${PATH_RESOLVER}(path: &str, working_dir: Option<&Path>) -> PathBuf {`, `fn ${PATH_RESOLVER}(path: &str, working_dir: Option<&Path>) -> PathBuf {\n    let working_dir = another_place();`).replace('        working_dir\n', '        another_place()\n')
+  for (const [why, broken] of [['does not return an absolute path as given', rooted], ['names no place this reader knows first', elsewhere]] as const) {
+    assert.notEqual(broken, written, `the built resolver has nothing to change for: ${why}`)
+    const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: broken }))
+    assert.deepEqual(unreadable.map(({ part }) => part), [RESOLUTION_PART], why)
+    assert.match(unreadable[0]?.why ?? '', new RegExp(why), why)
+  }
 })

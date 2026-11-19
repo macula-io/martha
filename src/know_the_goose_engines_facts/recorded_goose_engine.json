@@ -218,6 +218,16 @@
       "argument": "source"
     }
   ],
+  "path_resolution": {
+    "absolute": "as_given",
+    "bases": [
+      "working_dir",
+      "current_dir",
+      "."
+    ],
+    "trims": false,
+    "expands_home": false
+  },
   "secret_storage": {
     "keyring_switch": "GOOSE_DISABLE_KEYRING",
     "file": "secrets.yaml"
