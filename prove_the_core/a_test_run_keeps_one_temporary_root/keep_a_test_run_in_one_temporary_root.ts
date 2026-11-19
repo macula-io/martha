@@ -47,7 +47,7 @@ import {
 const NAME = 'keep_a_test_run_in_one_temporary_root'
 
 /** The module npm test runs every stage of the suite through, as the test script names it. */
-export const THE_WRAPPER = `./prove_the_core/${NAME}.ts`
+export const THE_WRAPPER = `./prove_the_core/a_test_run_keeps_one_temporary_root/${NAME}.ts`
 
 /** The name a run's roots are made under: five characters and mkdtemp's six, which is what the socket budget counts. */
 export const RUN_ROOT_PREFIX = 'm724-'
