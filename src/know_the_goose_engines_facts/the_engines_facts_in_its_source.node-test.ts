@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SKILLS_SWITCH_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILLS_SWITCH_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -190,4 +190,47 @@ test('a meta builder that is gone makes the tool naming unreadable by name, neve
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.tool_call_meta]: renamed }))
   assert.equal(unreadable.length, 1)
   assert.match(unreadable[0]?.why ?? '', new RegExp(`the function ${TOOL_CALL_META.builder}`))
+})
+
+/** The part that reads the shell tool, by the name a failed read reports. */
+const SHELL_PART = ENGINE_PARTS.find(({ read }) => 'shell_tool' in read(anEngineSourceSaying(engineFilesSaying(RECORDED_FACTS))))?.part
+
+test('a shell tool the engine renames is read under its new name, from the list and the dispatch both (#541 part C4)', () => {
+  const shell_tool = `${RECORDED_FACTS.shell_tool}_renamed`
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(engineFilesSaying({ ...RECORDED_FACTS, shell_tool })))
+  assert.deepEqual(unreadable, [])
+  assert.equal(facts.shell_tool, shell_tool)
+})
+
+test('a Developer extension that lists no tool on the shell parameters makes the shell tool unreadable by name, never a name guessed (#541 part C4)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tools = files[ENGINE_PLACES.shell_tool] ?? ''
+  const gone = tools.replace(`Self::schema::<${SHELL_TOOL.params}>()`, 'Self::schema::<AnotherParams>()')
+  assert.notEqual(gone, tools, 'the built tree lists no shell tool to take away')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: gone }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`lists 0 tools on ${SHELL_TOOL.params}`))
+})
+
+test('a shell tool listed under one name and run under another is unreadable, never either name (#541 part C4)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tools = files[ENGINE_PLACES.shell_tool] ?? ''
+  const shell = RECORDED_FACTS.shell_tool
+  const split = tools.replace(`"${shell}" => match`, `"${shell}_elsewhere" => match`)
+  assert.notEqual(split, tools, 'the built tree dispatches no shell tool to rename')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: split }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`lists the shell tool as ${shell} but runs`))
+})
+
+test('a Developer extension that lists two tools on the shell parameters is unreadable, never the first of them (#541 part C4)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const tools = files[ENGINE_PLACES.shell_tool] ?? ''
+  const shell = RECORDED_FACTS.shell_tool
+  const listed = `Tool::new("${shell}".to_string(), description, Self::schema::<${SHELL_TOOL.params}>())`
+  const twice = tools.replace(listed, `Tool::new("${shell}_too".to_string(), description, Self::schema::<${SHELL_TOOL.params}>())\n${listed}`)
+  assert.notEqual(twice, tools, 'the built tree lists no shell tool to list twice')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.shell_tool]: twice }))
+  assert.deepEqual(unreadable.map(({ part }) => part), [SHELL_PART])
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`lists 2 tools on ${SHELL_TOOL.params}`))
 })

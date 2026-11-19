@@ -64,6 +64,11 @@ export interface EngineFacts {
    * extension's name and its tool's own name, and the end of the name the engine splits at.
    */
   readonly tool_naming: ToolNaming
+  /**
+   * The own name of the shell tool of the extension a member keeps (#541 part C4): the tool the Developer extension
+   * lists on its shell parameters and runs a command for, the name the shell hold reads while an agent runs (martha#562).
+   */
+  readonly shell_tool: string
 }
 
 /** The engine's naming of a called tool: where a client reads it, and how it splits into an extension's and a tool's own name. */
@@ -103,6 +108,7 @@ export const ENGINE_PLACES = {
   builtin_skills_advertised: 'crates/goose/src/skills/mod.rs',
   tool_call_meta: 'crates/goose/src/acp/server/tool_calls/conversion.rs',
   tool_name_parts: 'crates/goose-provider-types/src/conversation/tool_request.rs',
+  shell_tool: 'crates/goose/src/agents/platform_extensions/developer/mod.rs',
 } as const
 
 /** The function that reads each skills switch, in the file ENGINE_PLACES names for it (martha#839). */
@@ -131,10 +137,14 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'skills switch', read: (source) => ({ skills_advertised: skillsSwitchIn(source, 'skills_advertised') }) },
   { part: 'built-in skills switch', read: (source) => ({ builtin_skills_advertised: skillsSwitchIn(source, 'builtin_skills_advertised') }) },
   { part: 'tool naming', read: (source) => ({ tool_naming: toolNamingIn(source) }) },
+  { part: 'shell tool', read: (source) => ({ shell_tool: shellToolIn(source) }) },
 ]
 
 /** The function that builds a tool call's `_meta`, and the maps it fills from the outside in, in the file that builds it. */
 export const TOOL_CALL_META = { builder: 'goose_tool_call_meta', maps: ['meta', 'goose_meta', 'tool_call_meta'] } as const
+
+/** Where the Developer extension names its shell tool: the function that lists its tools, and the parameters the shell's are. */
+export const SHELL_TOOL = { lister: 'get_tools', params: 'ShellParams' } as const
 
 /** The two ways Rust's `str` splits once, by the end it splits at. */
 export const SPLITS_ONCE = { first: 'split_once', last: 'rsplit_once' } as const
@@ -327,6 +337,25 @@ function toolNamingIn(source: EngineSource): ToolNaming {
   const split = /\bname\.(r?split_once)\("([^"]+)"\)/.exec(parting)
   if (split?.[1] === undefined || split[2] === undefined) throw new Error(`${partsPath} says nothing of where a tool name is split`)
   return { meta_path, separator: split[2], split_at: split[1] === SPLITS_ONCE.last ? 'last' : 'first' }
+}
+
+/**
+ * The own name of the Developer extension's shell tool (#541 part C4): the one tool its lister builds on the shell's
+ * parameters, which must be the one name its call dispatch parses those parameters for. No such tool, two, or a list
+ * and a dispatch that disagree, is unreadable by name, never a name guessed.
+ */
+function shellToolIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.shell_tool
+  const text = fileOf(source, path)
+  const listing = captured(text, new RegExp(`fn ${SHELL_TOOL.lister}\\(\\)[^{]*\\{([\\s\\S]*?)\\n {4}\\}`), `the function ${SHELL_TOOL.lister}`, path)
+  const listed = [...listing.matchAll(/Tool::new\(\s*"([^"]+)"\.to_string\(\),([\s\S]*?)(?=Tool::new\(|$)/g)]
+    .filter((found) => (found[2] ?? '').includes(`schema::<${SHELL_TOOL.params}>`))
+    .map((found) => found[1] ?? '')
+  const dispatched = [...text.matchAll(new RegExp(`"([^"]+)"\\s*=>\\s*match\\s+Self::parse_args::<${SHELL_TOOL.params}>`, 'g'))].map((found) => found[1] ?? '')
+  const [name] = listed
+  if (listed.length !== 1 || name === undefined) throw new Error(`${path} lists ${String(listed.length)} tools on ${SHELL_TOOL.params} in ${SHELL_TOOL.lister}, not one shell tool`)
+  if (dispatched.length !== 1 || dispatched[0] !== name) throw new Error(`${path} lists the shell tool as ${name} but runs ${SHELL_TOOL.params} for ${JSON.stringify(dispatched)}`)
+  return name
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */

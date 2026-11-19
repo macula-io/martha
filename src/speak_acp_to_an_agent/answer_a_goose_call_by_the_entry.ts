@@ -18,14 +18,16 @@
 import type { ACalledTool, TheAnswerToACall, ToolNames } from '../host_contract/host_contract.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import type { TheGate, WhatTheGateSaid } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
-import type { ToolNaming } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
+import type { EngineFacts, ToolNaming } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import type { APermissionRequest } from './the_acp_client.ts'
 
-/** The own name of the shell tool of the one extension a member keeps. */
-const THE_SHELLS_OWN_NAME = 'shell'
-
-/** The Goose shell tool, by the engine's own name for it: the call the shell hold reads while an agent runs (martha#562). */
-export const theGooseShellTool = (naming: ToolNaming): string => `${THE_EXTENSION_A_MEMBER_KEEPS}${naming.separator}${THE_SHELLS_OWN_NAME}`
+/**
+ * The Goose shell tool, by the engine's own name for it: the call the shell hold reads while an agent runs (martha#562).
+ * Its own name is the recording's (`shell_tool`, read from the Developer extension's source and held by the drift
+ * check), so an engine that renames its shell tool is a drift, never a hold that silently matches nothing.
+ */
+export const theGooseShellTool = (facts: Pick<EngineFacts, 'tool_naming' | 'shell_tool'>): string =>
+  `${THE_EXTENSION_A_MEMBER_KEEPS}${facts.tool_naming.separator}${facts.shell_tool}`
 
 /**
  * The Goose host's tool names. The engine names every extension's tool `<extension><separator><tool>` and splits a name

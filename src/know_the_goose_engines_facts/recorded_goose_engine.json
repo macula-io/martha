@@ -135,5 +135,6 @@
     ],
     "separator": "__",
     "split_at": "first"
-  }
+  },
+  "shell_tool": "shell"
 }

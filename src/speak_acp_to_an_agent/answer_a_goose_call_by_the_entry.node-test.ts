@@ -101,8 +101,11 @@ test('a server-prefixed name is split at the end the recording says, and a name 
   assert.equal(gooseToolNames(NAMING).ownNameOf(`${A_SERVERS_TOOL.server}${NAMING.separator}`), `${A_SERVERS_TOOL.server}${NAMING.separator}`)
 })
 
-test('the Goose shell tool is the kept extension\'s, joined by the recorded separator', () => {
-  const another = { ...NAMING, separator: `${NAMING.separator}+` }
-  assert.equal(gooseToolNames(another).ownNameOf(theGooseShellTool(another)), gooseToolNames(NAMING).ownNameOf(theGooseShellTool(NAMING)))
-  assert.ok(theGooseShellTool(another).includes(another.separator))
+test('the Goose shell tool is the kept extension\'s, joined by the recorded separator, under the name the recording gives it (mutant: the name typed back by hand)', () => {
+  const recorded = { tool_naming: NAMING, shell_tool: RECORDED_GOOSE_ENGINE.shell_tool }
+  assert.equal(gooseToolNames(NAMING).ownNameOf(theGooseShellTool(recorded)), RECORDED_GOOSE_ENGINE.shell_tool)
+  // An engine that renames its shell tool: the name is the recording's, never one this slice holds.
+  const renamed = { tool_naming: { ...NAMING, separator: `${NAMING.separator}+` }, shell_tool: `${RECORDED_GOOSE_ENGINE.shell_tool}_renamed_by_a_test` }
+  assert.equal(gooseToolNames(renamed.tool_naming).ownNameOf(theGooseShellTool(renamed)), renamed.shell_tool)
+  assert.ok(theGooseShellTool(renamed).includes(renamed.tool_naming.separator))
 })
