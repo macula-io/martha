@@ -18,11 +18,13 @@ import { dirname, join } from 'node:path'
 
 import {
   chooseTheTranscripts,
+  isTheHostsTranscript,
   THE_MARK_FILE,
   theHostsProjectsPlace,
   theHostsTranscriptPath,
   TRANSCRIPTS_FILE_BYTES_KEPT,
   TRANSCRIPTS_LAUNCHES_KEPT,
+  TRANSCRIPTS_LAUNCH_BYTES_KEPT,
   theMarkOf,
   type AConfigFile,
 } from '../choose_the_transcripts_to_keep/choose_the_transcripts_to_keep.ts'
@@ -45,37 +47,66 @@ export interface WhatIsKept {
 /** The directory one launch's transcripts are kept under: never a path, and never a dot a person or git could steer with. */
 const directoryOf = (place: string, theLaunch: string): string => join(place, encodeURIComponent(theLaunch).replaceAll('.', '%2E'))
 
-/** Every file the member's config folder holds, as the host wrote them, with a file past its bound never read whole. */
-const whatTheFolderHolds = (configFolder: string, fileBytesKept: number): readonly AConfigFile[] => {
+/** One file the member's config folder holds that the host wrote as a transcript: its path and where it is on disk. */
+interface ATranscriptHere {
+  readonly path: string
+  readonly full: string
+}
+
+/**
+ * Every file of the member's config folder that is the host's own transcript, by path, read in that order against the
+ * launch's budget. The folder is not walked blind: a name that is not the host's transcript shape is never read, so a
+ * stray or planted file costs the exit handler nothing (martha#646 r=1 R4).
+ */
+const whatTheFolderHolds = (configFolder: string, fileBytesKept: number, launchBytesKept: number): readonly AConfigFile[] => {
   const projects = theHostsProjectsPlace(configFolder)
+  const read = { bytes: 0 }
+  return theTranscriptsUnder(projects).map((one) => theTranscriptAt(one, fileBytesKept, launchBytesKept, read))
+}
+
+/** The host's transcripts under `projects`, in path order, so the same folder is always read the same way. */
+const theTranscriptsUnder = (projects: string): readonly ATranscriptHere[] => {
   let keys: string[]
   try {
     keys = fs.readdirSync(projects, { withFileTypes: true }).filter((one) => one.isDirectory()).map((one) => one.name)
   } catch {
     return []
   }
-  return keys.flatMap((key) => theFilesOfOneKey(projects, key, fileBytesKept))
+  return keys
+    .flatMap((key) => theFilesOfOneKey(projects, key))
+    .filter((one) => isTheHostsTranscript(one.path))
+    .sort((one, other) => one.path.localeCompare(other.path))
 }
 
-/** One key's files under `projects`: each file it holds, with its text when the bound had room to read it. */
-const theFilesOfOneKey = (projects: string, key: string, fileBytesKept: number): readonly AConfigFile[] => {
+/** Each file directly under `projects/<key>`, with the path it has under the member's config folder. */
+const theFilesOfOneKey = (projects: string, key: string): readonly ATranscriptHere[] => {
   let names: string[]
   try {
     names = fs.readdirSync(join(projects, key)).filter((name) => fs.lstatSync(join(projects, key, name), { throwIfNoEntry: false })?.isFile() === true)
   } catch {
     return []
   }
-  return names.flatMap((name) => {
-    const path = theHostsTranscriptPath(key, name)
-    let bytes = 0
-    try {
-      bytes = fs.statSync(join(projects, key, name)).size
-    } catch {
-      return []
-    }
-    const text = bytes > fileBytesKept ? undefined : readWhole(join(projects, key, name))
-    return [{ path, bytes, ...(text === undefined ? {} : { text }) }]
-  })
+  return names.map((name) => ({ path: theHostsTranscriptPath(key, name), full: join(projects, key, name) }))
+}
+
+/**
+ * One transcript, read when both bounds have room for it: `read` keeps the launch's bytes actually read, counted by
+ * `Buffer.byteLength` and never by what `stat` said, and a file past either bound carries why it was not read rather
+ * than being read and thrown away.
+ */
+const theTranscriptAt = (at: ATranscriptHere, fileBytesKept: number, launchBytesKept: number, read: { bytes: number }): AConfigFile => {
+  let size = 0
+  try {
+    size = fs.statSync(at.full).size
+  } catch {
+    return { path: at.path, bytes: 0, unread: 'could-not-read' }
+  }
+  if (size > fileBytesKept) return { path: at.path, bytes: size, unread: 'file' }
+  if (read.bytes + size > launchBytesKept) return { path: at.path, bytes: size, unread: 'launch' }
+  const text = readWhole(at.full)
+  if (text === undefined) return { path: at.path, bytes: size, unread: 'could-not-read' }
+  read.bytes += Buffer.byteLength(text)
+  return { path: at.path, bytes: size, text }
 }
 
 /** A file's text, or undefined when it cannot be read: an unreadable transcript is not kept. */
@@ -96,8 +127,14 @@ const aDirectoryOfOurs = (directory: string): void => {
 const writtenWhole = (path: string, text: string): void => {
   aDirectoryOfOurs(dirname(path))
   const staging = join(dirname(path), `${STAGING_PREFIX}${process.pid}-${Date.now()}`)
-  fs.writeFileSync(staging, text, { mode: STATE_FILE_MODE })
-  fs.renameSync(staging, path)
+  try {
+    fs.writeFileSync(staging, text, { mode: STATE_FILE_MODE })
+    fs.renameSync(staging, path)
+  } catch (error) {
+    // A write that threw leaves its half under the staging name, where nothing reads it and nothing would ever remove it.
+    fs.rmSync(staging, { force: true })
+    throw error
+  }
 }
 
 /**
@@ -109,7 +146,10 @@ export function keepTheTranscriptsOf(what: WhatIsKept): readonly string[] {
   if ('refusal' in state) return [state.refusal]
   const place = join(state.directory, TRANSCRIPTS_PLACE)
   const here = directoryOf(place, what.theLaunch)
-  const chosen = chooseTheTranscripts({ files: whatTheFolderHolds(what.config_folder, TRANSCRIPTS_FILE_BYTES_KEPT), theLaunchKey: what.theLaunchKey })
+  const chosen = chooseTheTranscripts({
+    files: whatTheFolderHolds(what.config_folder, TRANSCRIPTS_FILE_BYTES_KEPT, TRANSCRIPTS_LAUNCH_BYTES_KEPT),
+    theLaunchKey: what.theLaunchKey,
+  })
   const trouble: string[] = []
   for (const kept of chosen.kept) {
     try {

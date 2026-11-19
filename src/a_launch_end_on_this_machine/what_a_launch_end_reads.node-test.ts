@@ -3,7 +3,6 @@
 // group can be told what it ends, and that a list the kernel will not give is unreadable rather than empty.
 
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -82,15 +81,15 @@ test('a launcher that exits first keeps the member\'s transcripts after the rela
     keepTranscripts: (): void => void order.push('keep-transcripts'),
     removeSnapshot: (): void => void order.push('snapshot'),
   } as unknown as LaunchMade
-  // A group no kernel holds: the group's own kill runs first and finds nothing, so nothing but the three removals shows.
-  const dead = spawnSync(process.execPath, ['-e', '']).pid
+  // The group kill is handed in: a reaped pid's group can belong to another process by the time this runs, and killing
+  // it would signal a group that is nobody's here (martha#646 r=1, nit 2).
   const before = new Set(process.listeners('exit'))
-  const off = cleanUpIfTheLauncherEnds(dead, made)
+  const off = cleanUpIfTheLauncherEnds(4242, made, (killed) => void order.push(`killed ${String(killed)}`))
   const added = process.listeners('exit').filter((one) => !before.has(one))
   try {
     assert.equal(added.length, 1, 'the launcher\'s end registered no exit handler, or more than one')
     added[0]!(0)
-    assert.deepEqual(order, ['relay-directory', 'keep-transcripts', 'snapshot'],
+    assert.deepEqual(order, ['killed 4242', 'relay-directory', 'keep-transcripts', 'snapshot'],
       'the keep does not sit between the relay and the snapshot, so the snapshot goes with what the host wrote still in it')
   } finally {
     off()

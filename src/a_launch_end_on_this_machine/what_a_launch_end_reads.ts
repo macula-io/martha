@@ -178,10 +178,13 @@ const SHELL_STATUS_OF_A_SIGNAL = 128
 /**
  * Kills the member's group and removes both directories if the launcher exits
  * first, or is ended by SIGTERM or SIGINT; returns what takes those handlers off.
+ *
+ * `kills` is the group kill, handed in so a test can hold the order without signalling a group: a reaped pid's group
+ * may belong to another process by the time a test calls it (martha#646 r=1, nit 2).
  */
-export function cleanUpIfTheLauncherEnds(pid: number, made: LaunchMade): () => void {
+export function cleanUpIfTheLauncherEnds(pid: number, made: LaunchMade, kills: (pid: number) => void = killGroup): () => void {
   const onLauncherExit = (): void => {
-    killGroup(pid)
+    kills(pid)
     made.relayDirectory.remove()
     // Before the snapshot goes, what the member's host wrote of its session is kept (martha#646): this handler runs in
     // `exit`, so the keep is synchronous and bounded, and a failure in it never stops the two removals below.
