@@ -151,7 +151,7 @@ test('a planted sentence in every field of a forged withdrawal reaches no word M
     ...(await readTheChannel(host)).map(({ message }) => message.text),
     ...(await host.stores.rows.read(CREW_TOOLS_STREAM)).map(({ row: one }) => JSON.stringify(one)),
     ...files.values(),
-    theOwedLineAtStart(places) ?? '',
+    theOwedLineAtStart(places, 'a-successor')?.line ?? '',
   ]
   assert.equal(written.length > 4, true)
   for (const words of written) for (const part of PLANTED.split(' ').filter((word) => word.length > 3)) assert.equal(words.includes(part), false, `${part} in ${words}`)
