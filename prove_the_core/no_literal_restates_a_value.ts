@@ -52,7 +52,8 @@
 //     `case` pattern, an argument, a JSON or SQL fragment written inside the text
 //     a function builds names the constant as the bare word beside it would
 //     (martha#776). `case "$1" in 'prepared') exec …` names `prepared`, and a
-//     word that is a path is judged by its segments too. A quoted run holding a
+//     word that is a path is named by its segments, which the separator splits out
+//     of the text whether the path stands quoted or bare. A quoted run holding a
 //     substitution is the run time's rather than the tree's, so it is never
 //     judged (martha#437's rule for a piece), and neither is a run holding a
 //     space, which is prose between two apostrophes rather than one quoted word;
@@ -611,18 +612,16 @@ const findingsForTheSegments = (path: string, line: number, segments: readonly s
     .flatMap((segment) => findingsForAUse(path, line, segment, declared, definitions).map((finding) => ({ ...finding, segment: true })))
 
 /**
- * A value a template's text holds as one quoted word: a use of it, judged as the bare word would be, and by its path
- * segments when the word is a path rather than an address (martha#776).
+ * A value a template's text holds as one quoted word: a use of it, judged as the bare word beside it would be
+ * (martha#776). A word that is a path is named by its segments through the text's own split, which the separator
+ * makes whether the path stands quoted or bare, so judging them again here would name one value twice.
  */
-const findingsForAQuotedWord = (path: string, line: number, word: string, files: ReadonlySet<string>, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] => {
-  const whole = findingsForAUse(path, line, word, declared, definitions)
-  return files.has(word) || holdsAnAddress(word) ? whole : [...whole, ...findingsForTheSegments(path, line, pathSegmentsOf(word), files, declared, definitions)]
-}
+const findingsForAQuotedWord = (path: string, line: number, word: string, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] =>
+  findingsForAUse(path, line, word, declared, definitions)
 
 /**
- * The findings a template's text names, each value once: a word the text quotes is judged twice when a path separator
- * already splits it out of the same text — `'refs/the-tool/base'` in a template names `the-tool` as a piece and as a
- * quoted word's segment — and one copy of a value is one finding, never two (martha#776).
+ * The findings a template's text names, each value once: a value the text names both as a bare path segment and as a
+ * quoted word — `exec 'the-tool' /bin/the-tool` — is one value on one line, never two findings (martha#776).
  */
 const onceEach = (findings: readonly Finding[]): Finding[] => {
   const seen = new Set<string>()
@@ -638,7 +637,7 @@ const onceEach = (findings: readonly Finding[]): Finding[] => {
 const findingsForTheTemplatesText = (path: string, line: number, text: string, files: ReadonlySet<string>, declared: readonly DefinedByTheChange[], definitions: readonly Definition[]): Finding[] =>
   onceEach([
     ...findingsForTheSegments(path, line, piecesOfALiteral(text), files, declared, definitions),
-    ...quotedWordsIn(text).flatMap((word) => findingsForAQuotedWord(path, line, word, files, declared, definitions)),
+    ...quotedWordsIn(text).flatMap((word) => findingsForAQuotedWord(path, line, word, declared, definitions)),
   ])
 
 /** The literals of a source that can carry a value: not a module's path, not a property's name, not a type (rule 1 of part b). */
@@ -657,7 +656,7 @@ function findingsAt(node: ts.Node, line: number, path: string, declared: readonl
   const whole = definition === undefined
     ? findingsForAUse(path, line, literal, declared, definitions)
     : findingsForADefinition(definition, line, declared, definitions, everyDefinition)
-  const quoted = ts.isNoSubstitutionTemplateLiteral(node) ? quotedWordsIn(literal).flatMap((word) => findingsForAQuotedWord(path, line, word, files, declared, definitions)) : []
+  const quoted = ts.isNoSubstitutionTemplateLiteral(node) ? quotedWordsIn(literal).flatMap((word) => findingsForAQuotedWord(path, line, word, declared, definitions)) : []
   const asALiteral = files.has(literal) || holdsAnAddress(literal) ? whole : [...whole, ...findingsForTheSegments(path, line, pathSegmentsOf(literal), files, declared, definitions)]
   return onceEach([...asALiteral, ...quoted])
 }

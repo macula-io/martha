@@ -410,8 +410,8 @@ export const PLANTED_CASES: readonly PlantedCase[] = [
     prints: ["a_user/a_user.ts:1: 'the-tool' restates a_tool/a_tool.ts TOOL"],
   },
   {
-    what: 'a quoted word whose own path names a value, judged by its segment (martha#776)',
-    base: TOOL, head: { 'a_user/a_user.ts': "const run = `cat 'refs/the-tool/base'`\n" },
+    what: 'a value a template names twice, as a bare path segment and as a quoted word, named once (martha#776)',
+    base: TOOL, head: { 'a_user/a_user.ts': "const run = `exec 'the-tool' /bin/the-tool`\n" },
     prints: ["a_user/a_user.ts:1: 'the-tool' (a path segment) restates a_tool/a_tool.ts TOOL"],
   },
   {
