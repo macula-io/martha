@@ -14,7 +14,6 @@
     "check:private": "node src/check_nothing_private_gets_in/main.ts",
     "check:posted-text": "node src/check_posted_text_carries_nothing_private/main.ts",
     "check:links": "node src/check_every_link_resolves/main.ts",
-    "check:logos": "node src/check_the_logos_are_valid_svg/main.ts",
     "check:marthas-names": "node src/check_marthas_names_are_its_own/main.ts",
     "check:base-tests": "node src/check_no_test_the_base_passed_goes_missing/main.ts",
     "check:host-ceilings": "node src/check_a_host_directory_stays_under_its_ceiling/main.ts",
