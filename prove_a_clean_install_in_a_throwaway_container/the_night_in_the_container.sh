@@ -573,7 +573,7 @@ night_attach_command() {
 night_the_owners_second_steps() {
   log "the owner's second act, in a terminal of your own, in this order:"
   log "  1. run this command, which attaches to $(night_builder)'s terminal in the container:"
-  log "  $(night_attach_command)"
+  owner_command "$(night_attach_command)"
   log "  2. answer the landing's menu yes"
   log "  3. detach: Ctrl-b, then d — the run waits for the landing; the window closes $(night_closing_at "${NIGHT_YES_WINDOW_S}")"
 }
@@ -985,7 +985,18 @@ night_case() {
 night_expect() {
   local expected="$1" standin="$2"
   MARTHA_LIVE_DIR="${standin}/live" MARTHA_CLEAN_INSTALL_THROWAWAY="${STAND_INS}/throwaway" \
-    MARTHA_CLEAN_INSTALL_NIGHT_PINS="${standin}/pins" expect_status "${expected}" "${standin}" 'a-host' --night "${standin}/run"
+    MARTHA_CLEAN_INSTALL_NIGHT_PINS="${standin}/pins" expect_status "${expected}" "${standin}" 'a-host' --night "${standin}/run" \
+    --owner-commands "${standin}/owner_commands"
+}
+
+# Whether the owner's commands file holds the night's two commands and nothing else, each byte for byte the line
+# printed under its step: the follow script runs only what is in that file (the threat model on #639).
+night_owner_commands_kept() {
+  local out="$1" commands="$2" printed
+  printed="$(grep -A1 -xF -e '  1. run this command, which approves the crew and opens Claude Code in the checkout:' \
+    -e "  1. run this command, which attaches to builder's terminal in the container:" "${out}" | grep '^  ssh -t ' | sed 's/^  //')"
+  [ "$(wc -l < "${commands}")" -eq 2 ] || { echo "the self-test: the owner's commands file does not hold the night's two commands: $(wc -l < "${commands}") line(s)" >&2; return 1; }
+  [ "$(cat "${commands}")" = "${printed}" ] || { echo "the self-test: the owner's commands file is not the commands printed under their steps" >&2; return 1; }
 }
 
 # Whether the owner's second act was printed as the list they follow: the heading, step 1 with the command attaching to
@@ -1062,6 +1073,7 @@ night_self_test() {
     || nfail 'the package was not typed into the builder as the owner'"'"'s turn'
   asked_for 'tmux -L night send-keys -t builder -l Take the package ' "${standin}/calls" || nfail 'the package was not typed into the builder'"'"'s own session'
   night_second_steps_printed "${standin}/out" || failures=$((failures + 1))
+  night_owner_commands_kept "${standin}/out" "${standin}/owner_commands" || failures=$((failures + 1))
   asked_for "^ok night claims: section 6 holds for synthetic-bot/martha-live-x#1 [0-9a-f]\{40\}\.\.d\{40\}: " "${standin}/out" || nfail 'a night that landed did not say section 6 holds'
   for kept in builder.jsonl reviewer.jsonl builder.screen reviewer.screen; do
     [ -f "${standin}/run/${NIGHT_KEPT_PART}/${kept}" ] || nfail "the kept record has no ${kept}"

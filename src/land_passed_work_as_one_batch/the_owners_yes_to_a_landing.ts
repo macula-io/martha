@@ -135,9 +135,7 @@ async function theOwnersYes(host: LedgerHost, asked: TheYesAsked): Promise<TheYe
     return { refused: `the owner's asks could not be read, so no yes can be found: ${error instanceof Error ? error.message : String(error)}. Nothing was pushed.` }
   }
   const answered = said_yes.find((ask) => ask.id === asked.owner_yes)
-  if (answered === undefined) {
-    return { refused: `the owner has not said yes to ask ${String(asked.owner_yes)}, and only the owner's yes lands on this crew. Nothing was pushed.` }
-  }
+  if (answered === undefined) return { refused: `the owner has not said yes to ask ${String(asked.owner_yes)}, and only the owner's yes lands on this crew. Nothing was pushed.` }
   if (answered.question !== question) {
     return { refused: `the owner said yes to ask ${String(asked.owner_yes)}, which asked ${JSON.stringify(answered.question)}; this landing asks ${JSON.stringify(question)}, and a yes counts only for the landing it was asked about. Nothing was pushed.` }
   }

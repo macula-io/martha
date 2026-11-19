@@ -14,7 +14,9 @@
 # 4. The packer packs main at the sha into <evidence>/<date>_<sha7>/, and the layer's sha256 is kept in run.txt.
 # 5. The proof runs with --log in the same folder and --dry-layer <layer> <sha>. When the proof names --night in its
 #    usage, it is also given --night <that folder>/NIGHT_FOLDER_NAME, a path the driver names and never makes: the
-#    proof makes its own run folder and refuses one that is there. Anything after `--` goes to the proof unchanged.
+#    proof makes its own run folder and refuses one that is there. When it names --owner-commands, it is given
+#    --owner-commands <that folder>/OWNER_COMMANDS_NAME, named in run.txt as owner_commands= beside host=, which is
+#    where the owner's follow script reads its commands from. Anything after `--` goes to the proof unchanged.
 #    The driver never reads, copies or passes the live token; the proof reads its own.
 #
 # The run has one temp folder, given to the packer and the proof as TMPDIR, and the EXIT trap removes it, so a temp
@@ -40,6 +42,9 @@ REFUSED=8
 FAILED=9
 STOP_GRACE_SECONDS=20
 NIGHT_FOLDER_NAME=night
+# The file the proof writes the owner's commands to, and nothing else: the owner's follow script reads its commands
+# from it alone, never from proof.log, which carries the members' text (the threat model on #639).
+OWNER_COMMANDS_NAME=owner_commands
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
@@ -129,6 +134,7 @@ run_child() {
 {
   printf 'run_folder=%s\n' "${RUN}"
   printf 'sha=%s\n' "${SHA}"
+  printf 'host=%s\n' "${HOST}"
   printf 'proof_tree=%s at %s\n' "${PROOF_TREE}" "$(git -C "${PROOF_TREE}" rev-parse HEAD)"
   printf 'started=%s\n' "$(date -Is)"
 } > "${RUN}/run.txt"
@@ -172,7 +178,13 @@ if sed -n 's/^USAGE=//p' "${PROOF}" | sed -n '/\[--night </p' | read -r _; then
   printf 'night_folder=%s\n' "${RUN}/${NIGHT_FOLDER_NAME}" >> "${RUN}/run.txt"
 fi
 
-run_child "${PROOF}" "${HOST}" --log "${RUN}/proof.log" "${NIGHT_ARGS[@]}" --dry-layer "${LAYER}" "${SHA}" "${DRY_INSTALLER_ARGS[@]}" "${PROOF_EXTRA[@]}"
+OWNER_ARGS=()
+if sed -n 's/^USAGE=//p' "${PROOF}" | sed -n '/\[--owner-commands </p' | read -r _; then
+  OWNER_ARGS=(--owner-commands "${RUN}/${OWNER_COMMANDS_NAME}")
+  printf 'owner_commands=%s\n' "${RUN}/${OWNER_COMMANDS_NAME}" >> "${RUN}/run.txt"
+fi
+
+run_child "${PROOF}" "${HOST}" --log "${RUN}/proof.log" "${OWNER_ARGS[@]}" "${NIGHT_ARGS[@]}" --dry-layer "${LAYER}" "${SHA}" "${DRY_INSTALLER_ARGS[@]}" "${PROOF_EXTRA[@]}"
 PROOF_EXIT="${CHILD_EXIT}"
 printf 'proof_exit=%s\nended=%s\n' "${PROOF_EXIT}" "$(date -Is)" >> "${RUN}/run.txt"
 if [[ "${PROOF_EXIT}" -eq 0 ]]; then

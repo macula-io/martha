@@ -38,6 +38,7 @@ const aDriversWord = (name) => {
 
 const PROOF_REL = aDriversWord('PROOF_REL')
 const NIGHT_FOLDER_NAME = aDriversWord('NIGHT_FOLDER_NAME')
+const OWNER_COMMANDS_NAME = aDriversWord('OWNER_COMMANDS_NAME')
 const FAILED = aScriptsConstant(DRIVER, 'FAILED')
 const REFUSED = aScriptsConstant(DRIVER, 'REFUSED')
 const PACK_FAILED = aScriptsConstant(DRIVER, 'PACK_FAILED')
@@ -85,10 +86,10 @@ exit "\${code}"
  * Held, it leaves a file in its TMPDIR and waits to be stopped: `catch-int` traps a Ctrl-C and says so, and ignores the
  * TERM the driver sends on the same Ctrl-C, since a TERM trap running first can leave the INT trap never run;
  * `ignore-term` ignores a TERM, and anything else is ended by one.
- * @param {{ constant: string, night: boolean, dryPassed: number }} options
+ * @param {{ constant: string, night: boolean, owners: boolean, dryPassed: number }} options
  */
-const standInProof = ({ constant, night, dryPassed }) => `#!/usr/bin/env bash
-USAGE='usage: proof <ssh-host> [--log <file>]${night ? ' [--night <run folder>]' : ''} [--dry-layer <layer> <sha>]'
+const standInProof = ({ constant, night, owners, dryPassed }) => `#!/usr/bin/env bash
+USAGE='usage: proof <ssh-host> [--log <file>]${owners ? ' [--owner-commands <file>]' : ''}${night ? ' [--night <run folder>]' : ''} [--dry-layer <layer> <sha>]'
 ${constant}=${dryPassed}
 printf '%s\\n' "$@" > "\${STAND_IN_RECORD}/proof.args"
 printf '%s\\n' "\${TMPDIR}" > "\${STAND_IN_RECORD}/proof.tmpdir"
@@ -128,9 +129,9 @@ const placeAScript = (dir, file, text) => {
  * pushed to an `origin` beside it, an evidence root, a folder the stand-ins record into, and the TMPDIR the driver is
  * given. Removed when the test ends.
  * @param {import('node:test').TestContext} t
- * @param {{ packerConstant?: string, packerMore?: string, proofConstant?: string, night?: boolean, dryPassed?: number }} [options]
+ * @param {{ packerConstant?: string, packerMore?: string, proofConstant?: string, night?: boolean, owners?: boolean, dryPassed?: number }} [options]
  */
-function aNight (t, { packerConstant = 'NOT_PACKABLE', packerMore = '', proofConstant = 'DRY_PASSED', night = false, dryPassed = PLANTED_DRY_PASSED } = {}) {
+function aNight (t, { packerConstant = 'NOT_PACKABLE', packerMore = '', proofConstant = 'DRY_PASSED', night = false, owners = false, dryPassed = PLANTED_DRY_PASSED } = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'martha-night-')))
   t.after(() => removeTheTree(root))
   const dir = join(root, 'repo')
@@ -144,7 +145,7 @@ function aNight (t, { packerConstant = 'NOT_PACKABLE', packerMore = '', proofCon
   mkdirSync(dirname(join(dir, relative(REPO, DRIVER))), { recursive: true })
   copyFileSync(DRIVER, join(dir, relative(REPO, DRIVER)))
   placeAScript(dir, relative(REPO, PACKER), standInPacker(packerConstant, packerMore))
-  placeAScript(dir, PROOF_REL, standInProof({ constant: proofConstant, night, dryPassed }))
+  placeAScript(dir, PROOF_REL, standInProof({ constant: proofConstant, night, owners, dryPassed }))
   git(dir, 'add', '-A')
   git(dir, 'commit', '--quiet', '-m', 'the night')
   git(dir, 'remote', 'add', 'origin', origin)
@@ -462,4 +463,18 @@ test('9. a proof that takes --night is given <run folder>/NIGHT_FOLDER_NAME, not
 test('10. the driver names no home and no token, nor a path to one', () => {
   for (const home of [/\$\{?HOME\b/, /~\//, /\/home\//, /\/Users\//, /\/root\//]) assert.doesNotMatch(DRIVER_TEXT, home)
   for (const token of [/github_pat_/, /\bghp_/, /\btoken[._-]?(file|path)\b/i, /\.token\b/, /\/tokens?\//, /\bGH_TOKEN\b|\bGITHUB_TOKEN\b/]) assert.doesNotMatch(DRIVER_TEXT, token)
+})
+
+test('10. a proof that takes --owner-commands is given <run folder>/OWNER_COMMANDS_NAME, named in run.txt with the host the follow script checks commands against; one that does not is given none (mutants: never passed, not named, no host)', (t) => {
+  const withOwners = aNight(t, { owners: true })
+  const outcome = drive(withOwners, withEvidence(withOwners), { STAND_IN_PROOF_EXIT: String(PLANTED_DRY_PASSED) })
+  const commands = join(outcome.run ?? '', OWNER_COMMANDS_NAME)
+  const args = recorded(withOwners.record, 'proof.args') ?? []
+  assert.equal(args[args.indexOf('--owner-commands') + 1], commands, args.join(' '))
+  assert.equal(runTxt(outcome.run).get('owner_commands'), commands)
+  assert.equal(runTxt(outcome.run).get('host'), A_HOST)
+  const without = aNight(t)
+  const plain = drive(without, withEvidence(without), { STAND_IN_PROOF_EXIT: String(PLANTED_DRY_PASSED) })
+  assert.equal(recorded(without.record, 'proof.args')?.includes('--owner-commands'), false)
+  assert.equal(runTxt(plain.run).has('owner_commands'), false)
 })

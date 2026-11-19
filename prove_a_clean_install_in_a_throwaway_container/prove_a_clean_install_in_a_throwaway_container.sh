@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--dry-layer <layer .tar.gz> <sha>] [--night <run folder>]
+# prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--owner-commands <file>] [--dry-layer <layer .tar.gz> <sha>] [--night <run folder>]
 #                                                    --self-test
 #
 # The clean-install proof (martha#69). A stranger's machine carries nothing of ours, so this starts a container that
@@ -222,13 +222,17 @@ KEY_PAUSE_S="${MARTHA_CLEAN_INSTALL_KEY_PAUSE_S:-2}"
 # fails by name: 250 polls is 50 s, the window the interrupt cases used before the helper (martha#718).
 INTERRUPT_STEP_POLLS=250
 
-USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--dry-layer <layer .tar.gz> <sha> [--dry-installer <tarball> <sha256:…>]] [--night <run folder>] | --self-test'
+USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--owner-commands <file>] [--dry-layer <layer .tar.gz> <sha> [--dry-installer <tarball> <sha256:…>]] [--night <run folder>] | --self-test'
 
 # The nightly live run's container side (martha#639), taken with --night: its steps, its stand-ins and its cases.
 # shellcheck source=prove_a_clean_install_in_a_throwaway_container/the_night_in_the_container.sh
 . "${HERE}/the_night_in_the_container.sh"
 
 LOG_FILE=''
+# The file the owner's commands go to, one per line, with --owner-commands: the proof alone writes it, and the owner's
+# follow script reads its commands from it alone, never from the log, which carries the members' text (the threat
+# model on #639).
+OWNER_COMMANDS_FILE=''
 # The dry run's layer and the sha it was packed from, when one is asked for; main's own installer beside it when main's
 # installer/ has moved past its tag (martha#695, option A), with the digest it was packed at; and the harness's own
 # result line.
@@ -260,6 +264,13 @@ log() {
   if night_redacts; then line="$(night_redacted_line "${line}")"; fi
   printf '%s\n' "${line}" >&3
   if [ -n "${LOG_FILE}" ]; then printf '%s\n' "${line}" >> "${LOG_FILE}"; fi
+}
+
+# An owner's command: printed on its own line under its step, and, with --owner-commands, added whole to the file the
+# owner's follow script reads, in one write so the script never reads half of it.
+owner_command() {
+  log "  $1"
+  if [ -n "${OWNER_COMMANDS_FILE}" ]; then printf '%s\n' "$1" >> "${OWNER_COMMANDS_FILE}"; fi
 }
 
 # A step that passed, and one that did not: both name the step, and the failure says in one line what went wrong.
@@ -603,7 +614,7 @@ the_window_closing_at() { date -d "+${SIGN_IN_WINDOW_S} seconds" '+%H:%M'; }
 the_owners_steps() {
   log "the owner's one act, in a terminal of your own, in this order:"
   log "  1. run this command, which approves the crew and opens Claude Code in the checkout:"
-  log "  $1"
+  owner_command "$1"
   log "$(approve_step_words)"
   log '  3. sign in'
   log "  4. answer the folder question yes"
@@ -2194,6 +2205,16 @@ main() {
       --log)
         if [ -z "${2:-}" ]; then printf '%s\n' "${USAGE}" >&2; exit 2; fi
         LOG_FILE="$2"
+        shift 2
+        ;;
+      --owner-commands)
+        # A new file, made empty here so the follow script sees it from the start; one that is there is refused.
+        if [ -z "${2:-}" ]; then printf '%s\n' "${USAGE}" >&2; exit 2; fi
+        if ! (set -C; : > "$2") 2> /dev/null; then
+          printf 'prove_a_clean_install_in_a_throwaway_container: --owner-commands takes a file that is not there yet (%s)\n' "$2" >&2
+          exit 2
+        fi
+        OWNER_COMMANDS_FILE="$2"
         shift 2
         ;;
       --night)
