@@ -181,3 +181,23 @@ test('#860: a usage row that is not a reading of its stream is refused by name (
   assert.ok('refusal' in torn, 'a reading whose cost is no number was read')
   assert.throws(() => usageStreamOf('not a package'), /is not a work package/)
 })
+
+test('#860 r=2: a hand-over whose opening the store refused opens the new hold at that reading next time, never closing the old one twice (mutants: the memory kept only after every row, the late opening at the next reading)', async () => {
+  const writer = aWriter()
+  writer.hold(THE_PACKAGE)
+  await kept(writer, asked(0.25, true))
+  writer.hold(ANOTHER_PACKAGE)
+  writer.later()
+  const theRows = writer.places.ledger.stores.rows
+  const refusingTheNewHold: TheUsagePlaces = {
+    ...writer.places,
+    ledger: { ...writer.places.ledger, stores: { rows: { ...theRows, append: (stream, row) => (stream === usageStreamOf(ANOTHER_PACKAGE) ? Promise.reject(new Error('the disk is full')) : theRows.append(stream, row)) } } },
+  }
+  assert.match(await keepWhatTheSessionSpent(refusingTheNewHold, asked(0.75)) ?? '', /the disk is full/, 'the refused opening was not said')
+  await kept(writer, asked(1))
+  assert.deepEqual(theCostsIn(await writer.stream(THE_PACKAGE)), [[0.25, 1], [0.75, 0]], 'the old hold was closed again, at a reading of a turn the new package ran')
+  assert.deepEqual(theCostsIn(await writer.stream(ANOTHER_PACKAGE)), [[0.75, 1], [1, 0]], 'the new hold did not open at the reading that named it')
+  const spend = theSpendBetween({ from: 0, to: Number.MAX_SAFE_INTEGER, usage: new Map([[THE_PACKAGE, await writer.stream(THE_PACKAGE)], [ANOTHER_PACKAGE, await writer.stream(ANOTHER_PACKAGE)]]), crew: [] })
+  assert.ok(!('refused' in spend))
+  assert.deepEqual(spend.byPackage.map((one) => [one.package, one.usd.metered, one.sessions]), [[THE_PACKAGE, 0.5, 1], [ANOTHER_PACKAGE, 0.25, 1]], 'the turn after a refused opening went to the package it was not run under')
+})

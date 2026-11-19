@@ -103,8 +103,11 @@ export function theReadingsIn(stream: string, rows: readonly StoredRow[]): reado
   return read
 }
 
-/** What the writer last kept for a member: the reading itself, so the next one can be told apart from it. */
-type TheLastKept = Pick<AUsageRead, 'package' | 'session' | 'started_at' | 'usd' | 'model' | 'billing' | 'unknown_price'>
+/**
+ * What the writer last kept for a member: the reading itself, so the next one can be told apart from it. `opens_at` is
+ * set when a hand-over's closing row was kept and its opening was not: the new hold is still to open, at that reading.
+ */
+type TheLastKept = Pick<AUsageRead, 'package' | 'session' | 'started_at' | 'usd' | 'model' | 'billing' | 'unknown_price'> & { readonly opens_at?: number }
 
 /** The question a reading is taken from: the host's reading, and where in the session it was asked. */
 export interface AReadingAsked extends Pick<AHostsReading, 'cost_usd' | 'started_at' | 'unknown_price' | 'billing'> {
@@ -145,19 +148,37 @@ const theSameSession = (last: TheLastKept, now: TheLastKept): boolean => last.se
 const sayingSomethingNew = (last: TheLastKept, now: TheLastKept): boolean =>
   last.usd !== now.usd || last.model !== now.model || last.billing !== now.billing || last.unknown_price !== now.unknown_price
 
-/** The rows this reading is kept as: none, one, or the closing and opening pair of a hold that changed. */
-function theRowsFor(last: TheLastKept | undefined, now: TheLastKept, asked: AReadingAsked, at: number, places: TheUsagePlaces): readonly AUsageRead[] {
-  const row = (held: string | null, opens: 0 | 1): AUsageRead => ({
-    kind: USAGE_READ, ...now, package: held, member: places.member, host: places.host, opens, at_start: asked.at_start ? 1 : 0, at,
-  })
-  if (last === undefined || !theSameSession(last, now)) return [row(now.package, 1)]
-  if (last.package !== now.package) return [row(last.package, 0), row(now.package, 1)]
-  return sayingSomethingNew(last, now) ? [row(now.package, 0)] : []
+/** One row to append, and what the writer has kept once it is: so a refusal between two rows loses neither. */
+interface ARowToKeep {
+  readonly row: AUsageRead
+  readonly after: TheLastKept
 }
 
 /**
- * Keeps the reading this question carries, or says why it could not. A beat writes nothing. The last reading is kept in
- * the crew's store only after every row of it was appended, so a reading the store refused is taken again next time.
+ * The rows this reading is kept as: none, one, or the closing and opening pair of a hold that changed. A hand-over
+ * whose opening was refused opens first, at the reading that named the package, so the old hold is never closed twice.
+ */
+function theRowsFor(last: TheLastKept | undefined, now: TheLastKept, asked: AReadingAsked, at: number, places: TheUsagePlaces): readonly ARowToKeep[] {
+  const row = (reading: TheLastKept, held: string | null, opens: 0 | 1, at_start: 0 | 1, when: number): AUsageRead => ({
+    kind: USAGE_READ, package: held, session: reading.session, started_at: reading.started_at, usd: reading.usd, model: reading.model,
+    billing: reading.billing, unknown_price: reading.unknown_price, member: places.member, host: places.host, opens, at_start, at: when,
+  })
+  const at_start = asked.at_start ? 1 : 0
+  if (last === undefined || !theSameSession(last, now)) return [{ row: row(now, now.package, 1, at_start, at), after: now }]
+  if (last.opens_at !== undefined) {
+    const { opens_at, ...opened } = last
+    return [{ row: row(opened, opened.package, 1, 0, opens_at), after: opened }, ...theRowsFor(opened, now, asked, at, places)]
+  }
+  if (last.package !== now.package) {
+    return [{ row: row(now, last.package, 0, at_start, at), after: { ...now, opens_at: at } }, { row: row(now, now.package, 1, at_start, at), after: now }]
+  }
+  return sayingSomethingNew(last, now) ? [{ row: row(now, now.package, 0, at_start, at), after: now }] : []
+}
+
+/**
+ * Keeps the reading this question carries, or says why it could not. A beat writes nothing. What the writer last kept
+ * follows each row appended and never runs ahead of one, so a reading the store refused is taken again next time, and
+ * a hand-over's closing row already kept is not appended twice.
  */
 export async function keepWhatTheSessionSpent(places: TheUsagePlaces, asked: AReadingAsked): Promise<string | undefined> {
   if (asked.turn_running) return undefined
@@ -172,12 +193,11 @@ export async function keepWhatTheSessionSpent(places: TheUsagePlaces, asked: ARe
     billing: asked.billing,
     unknown_price: asked.unknown_price,
   }
-  const rows = theRowsFor(theLastKeptOf(places.kept, places.member), now, asked, places.ledger.clock.now(), places)
-  for (const one of rows) {
-    const refused = await appendTheReading(places.ledger, one)
+  for (const one of theRowsFor(theLastKeptOf(places.kept, places.member), now, asked, places.ledger.clock.now(), places)) {
+    const refused = (await appendTheReading(places.ledger, one.row)) ?? places.kept.keep(theUsageFile(places.member), `${JSON.stringify(one.after)}\n`)?.refusal
     if (refused !== undefined) return refused
   }
-  return rows.length === 0 ? undefined : places.kept.keep(theUsageFile(places.member), `${JSON.stringify(now)}\n`)?.refusal
+  return undefined
 }
 
 /** One reading appended to its stream; a row kept but not made durable is kept, and is never appended twice. */
