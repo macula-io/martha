@@ -995,7 +995,7 @@ case "${words}" in
     ;;
   *'git clone'*)
     [ -n "${input}" ] || exit 1
-    PATH="${here}:${PATH}" sh -c "$(printf '%s' "${@: -1}" | in_home)"
+    PATH="${here}:${here}/night-node:${PATH}" sh -c "$(printf '%s' "${@: -1}" | in_home)"
     ;;
   *'find . -mindepth 1'*) sh -c "$(printf '%s' "${@: -1}" | in_home)" ;;
   *' find '*' -xdev'*)
@@ -1193,7 +1193,11 @@ case "${1:-} ${2:-}" in
   *) exit 1 ;;
 esac
 GH
-  chmod +x "${dir}/throwaway" "${dir}/curl" "${dir}/martha" "${dir}/night-podman" "${dir}/night-bin/gh"
+  # node in the clone, as the container's own: the binary itself, found under the self-test's own HOME, since a node
+  # that is a version manager's shim reads HOME and answers nothing under the case's home (exit 126 on an asdf host).
+  mkdir -p "${dir}/night-node"
+  printf '#!/bin/sh\nexec %s "$@"\n' "$(remote_word "$(node -p process.execPath)")" > "${dir}/night-node/node"
+  chmod +x "${dir}/throwaway" "${dir}/curl" "${dir}/martha" "${dir}/night-podman" "${dir}/night-bin/gh" "${dir}/night-node/node"
 }
 
 # A night case: the proof's own case, its setup files (a bot with id 4242, a token nobody else holds) and its pins
