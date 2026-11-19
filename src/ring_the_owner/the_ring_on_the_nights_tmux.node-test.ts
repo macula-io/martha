@@ -76,8 +76,26 @@ function aNightServer(t: TestContext, place: string, pane: string): string[] {
   const tmux = ['-S', join(place, 's'), '-f', '/dev/null']
   const started = spawnSync('tmux', [...tmux, 'start-server', ';', ...theNights('NIGHT_TMUX_BOUNDS'), ';', 'new-session', '-d', '-s', MEMBER, ...SIZE, pane], { encoding: 'utf8' })
   assert.equal(started.status, 0, `tmux would not start with the night's bounds: ${started.stderr}`)
-  t.after(() => spawnSync('tmux', [...tmux, 'kill-server'], { stdio: 'ignore' }))
+  const pid = Number(spawnSync('tmux', [...tmux, 'display-message', '-p', '#{pid}'], { encoding: 'utf8' }).stdout.trim())
+  assert.ok(Number.isInteger(pid) && pid > 0, 'the night server names its pid')
+  // Stopped by its pid, not its socket: the case's place, socket and all, may already be removed by the time this
+  // runs, and a server that daemonized is in no process group a test runner reaps.
+  t.after(async () => {
+    spawnSync('tmux', [...tmux, 'kill-server'], { stdio: 'ignore' })
+    if (isAlive(pid)) process.kill(pid, 'SIGTERM')
+    await until(() => !isAlive(pid), `the night server ${pid} outlived its case`)
+  })
   return tmux
+}
+
+/** Whether `pid` is still a process. */
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** A client attached with `attach`, recorded by `script` into `record`; its keyboard is its standard input. */
