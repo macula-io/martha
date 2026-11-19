@@ -9,14 +9,28 @@
 // binding that is not a function (a member alias like `Wn.join`, a `require(...)` or an interop call), every free name
 // in its initializer. A definition is whatever the bundle binds the name with: a function or class declaration, one
 // variable declarator, or one import, a platform module's kept whole and a bundle module's followed to the module that
-// exports it. The chase stops at a global (compare_under_renaming.ts's list).
+// exports it. The chase stops at a global (compare_under_renaming.ts's list), but only where no scope of the bundle
+// binds that name: a module that declares its own `require` has it followed like any other name.
 //
 // Two depths, as Raf ruled on martha#811 (DECIDED 2026-11-19 "A: full on guards, 1 level on loaders (Recommended)"):
 // the full chase follows each recorded definition's own callees in turn until none is left; one level records the
 // text's direct callees and follows nothing further, so their own callees stay inside their text, renamed. A name
 // already recorded is never recorded twice: its entry is reused, which ends cycles.
 //
-// A name the bundle binds nowhere, or in two ways in one scope, cannot be told, and the field is unreadable.
+// A name the bundle binds nowhere, or in two ways in one scope, cannot be told, and the field is unreadable. So is a
+// recorded binding written after it is declared in any way but the one lazy init a bundle uses (`var X;` then plain
+// `X=...`): a later `X=b` over a value, a compound or logical assignment, an increment, a destructuring target or a
+// loop's own target would change what the name holds while its recorded text read the same.
+//
+// One shape of later write is read: a setter slot, a binding declared with a value whose every later write is a plain
+// `X=p` that is the whole body of a function of one parameter `p` (the host's `var b=()=>{return};function tLl(e){b=e}`,
+// exported as setSessionOverridesGetter). The default and each setter's text are recorded, so a changed default or a
+// changed setter differs. Every call of a setter the bundle itself makes, by its own name or by a name another module
+// imports it under, is the host's own code: the call is recorded and its one value followed, as a lazy init's value is
+// (the host's `Nml({isDiskless:()=>J(),...})` sets `var r={isDiskless:()=>!1,...};function Nml(o){r=o}`). A setter the
+// bundle refers to in any other way, passed as a value or called with other than one value, is unreadable. What an
+// embedder passes through a setter the host exports publicly is outside the bundle and is not followed: an accepted
+// residual of #139, as Supervisor ruled on martha#811 r=1 by Raf's r=3 words, beside callbacks passed as values.
 
 import ts from 'typescript'
 
@@ -34,8 +48,18 @@ interface Module {
   readonly start: number
   readonly text: string
   file?: ts.SourceFile
-  /** Every plain assignment to a name in the module, by the name, read once. */
-  assignments?: ReadonlyMap<string, readonly ts.BinaryExpression[]>
+  /** Every write to a name in the module, by the name, read once. */
+  writes?: ReadonlyMap<string, readonly AWrite[]>
+}
+
+/**
+ * One write to a name: the name as written, and the expression that writes it. Only `plain`, `X=...`, can be the
+ * lazy init of a binding declared bare; every other kind is a write the follower does not read.
+ */
+interface AWrite {
+  readonly name: ts.Identifier
+  readonly kind: 'plain' | 'compound' | 'update' | 'destructuring' | 'loop target'
+  readonly node: ts.Node
 }
 
 /** One definition the chase reached: where it is, what it binds, its text as recorded, and what is assigned to it later. */
@@ -44,6 +68,16 @@ interface Definition {
   readonly node: ts.Node
   readonly text: string
   readonly assigned: readonly ts.BinaryExpression[]
+  /** Each value the bundle passes to a setter of the binding, where it is: followed as an assigned value is. */
+  readonly passed: readonly Passed[]
+}
+
+/** One value the bundle passes to a setter: its module, the value, where it starts there, and the call's text. */
+interface Passed {
+  readonly module: Module
+  readonly value: ts.Expression
+  readonly start: number
+  readonly call: string
 }
 
 /** The host's bundle, split at its chunk marks, each module parsed the first time a name is looked up in it. */
@@ -85,6 +119,25 @@ export class Bundle {
     const [only] = from
     if (from.length !== 1 || only === undefined) throw new Unreadable(`${String(from.length)} modules of the host export ${name}, not one`)
     return only
+  }
+
+  /** Each module that imports `name` from the bundle's own modules, and its local name there; read the first time it is asked. */
+  importersOf(name: string): ReadonlyArray<{ readonly module: Module; readonly local: string }> {
+    this.#importers ??= this.#noteTheImports()
+    return this.#importers.get(name) ?? []
+  }
+
+  #importers: Map<string, Array<{ readonly module: Module; readonly local: string }>> | undefined
+
+  /** Each name an `import{}` from the bundle lists, by the name it imports, with the module and its local name there. */
+  #noteTheImports(): Map<string, Array<{ readonly module: Module; readonly local: string }>> {
+    const found = new Map<string, Array<{ readonly module: Module; readonly local: string }>>()
+    const IMPORT_LIST = new RegExp(`import\\{([^}]*)\\}from"${BUNDLE_PATH.replace(/[$/]/g, '\\$&')}`, 'g')
+    const listed = this.#modules.flatMap((module) =>
+      [...module.text.matchAll(IMPORT_LIST)].flatMap((match) => pairsOf(match[1] ?? '').map(([imported, local]) => ({ imported, module, local }))),
+    )
+    for (const { imported, module, local } of listed) found.set(imported, [...(found.get(imported) ?? []), { module, local }])
+    return found
   }
 }
 
@@ -128,16 +181,60 @@ function definitionText(found: ts.Node | { readonly import: ts.ImportDeclaration
   return found.getText(file)
 }
 
-/** Every plain assignment `name = ...` in a module, by the name. */
-function assignmentsIn(module: Module, file: ts.SourceFile): ReadonlyMap<string, readonly ts.BinaryExpression[]> {
-  if (module.assignments !== undefined) return module.assignments
-  const found = new Map<string, ts.BinaryExpression[]>()
+/** Whether an operator assigns: `=`, or one of the compound and logical forms (`+=`, `??=`, `||=` and the rest). */
+const isAnAssignment = (kind: ts.SyntaxKind): boolean => kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment
+
+/** The names a destructuring target writes: `[X]`, `{X}`, `{a:X}`, `[X=1]`, `[...X]`, nested at any depth. */
+function targetsOf(target: ts.Expression): ts.Identifier[] {
+  if (ts.isIdentifier(target)) return [target]
+  if (ts.isParenthesizedExpression(target)) return targetsOf(target.expression)
+  if (ts.isBinaryExpression(target) && target.operatorToken.kind === ts.SyntaxKind.EqualsToken) return targetsOf(target.left)
+  if (ts.isSpreadElement(target) || ts.isSpreadAssignment(target)) return targetsOf(target.expression)
+  if (ts.isArrayLiteralExpression(target)) return target.elements.flatMap(targetsOf)
+  if (ts.isObjectLiteralExpression(target)) {
+    return target.properties.flatMap((property) => {
+      if (ts.isShorthandPropertyAssignment(property)) return [property.name]
+      if (ts.isPropertyAssignment(property)) return targetsOf(property.initializer)
+      if (ts.isSpreadAssignment(property)) return targetsOf(property.expression)
+      return []
+    })
+  }
+  return []
+}
+
+/** The writes an assignment makes: a plain or compound one to a name, or a destructuring's names. */
+function writesOfAnAssignment(node: ts.BinaryExpression): AWrite[] {
+  const plain = node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+  if (ts.isIdentifier(node.left)) return [{ name: node.left, kind: plain ? 'plain' : 'compound', node }]
+  return plain ? targetsOf(node.left).map((name) => ({ name, kind: 'destructuring' as const, node })) : []
+}
+
+/** Whether a node is `++` or `--`, before or after its operand. */
+const isAnUpdate = (node: ts.Node): node is ts.PrefixUnaryExpression | ts.PostfixUnaryExpression =>
+  (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken)
+
+/** Whether a node is a for-in or for-of loop whose target is a name already bound, not one it declares. */
+const isALoopOverABinding = (node: ts.Node): node is ts.ForOfStatement | ts.ForInStatement =>
+  (ts.isForOfStatement(node) || ts.isForInStatement(node)) && !ts.isVariableDeclarationList(node.initializer)
+
+/** The writes one node makes to a name, of each kind: an assignment, an increment, a destructuring, a loop's own target. */
+function writesBy(node: ts.Node): AWrite[] {
+  if (ts.isBinaryExpression(node) && isAnAssignment(node.operatorToken.kind)) return writesOfAnAssignment(node)
+  if (isAnUpdate(node)) return targetsOf(node.operand).map((name) => ({ name, kind: 'update' as const, node }))
+  if (isALoopOverABinding(node)) return targetsOf(node.initializer as ts.Expression).map((name) => ({ name, kind: 'loop target' as const, node }))
+  return []
+}
+
+/** Every write to a name in a module, by the name, in source order. */
+function writesIn(module: Module, file: ts.SourceFile): ReadonlyMap<string, readonly AWrite[]> {
+  if (module.writes !== undefined) return module.writes
+  const found = new Map<string, AWrite[]>()
   const visit = (node: ts.Node): void => {
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(node.left)) found.set(node.left.text, [...(found.get(node.left.text) ?? []), node])
+    for (const write of writesBy(node)) found.set(write.name.text, [...(found.get(write.name.text) ?? []), write])
     ts.forEachChild(node, visit)
   }
   visit(file)
-  module.assignments = found
+  module.writes = found
   return found
 }
 
@@ -150,14 +247,57 @@ function bindsTheSame(at: ts.Identifier, scope: ts.Node): boolean {
   return false
 }
 
+/** The node a function's whole body would be if it were `assignment` alone: its block when it is the block's one statement. */
+function theBodyAround(assignment: ts.BinaryExpression): ts.Node {
+  const statement = assignment.parent
+  return ts.isExpressionStatement(statement) && ts.isBlock(statement.parent) && statement.parent.statements.length === 1 ? statement.parent : assignment
+}
+
+/** Whether a function takes one plain parameter named `name`: no other, no default, no rest. */
+function takesOnly(setter: ts.SignatureDeclaration, name: string): boolean {
+  const [only, ...more] = setter.parameters
+  if (only === undefined || more.length > 0) return false
+  return only.dotDotDotToken === undefined && only.initializer === undefined && ts.isIdentifier(only.name) && only.name.text === name
+}
+
+/** A function whose whole body is `write`, a plain `X=p` with `p` its one parameter: a setter; otherwise undefined. */
+function setterOf(write: AWrite): ts.SignatureDeclaration | undefined {
+  if (write.kind !== 'plain' || !ts.isBinaryExpression(write.node) || !ts.isIdentifier(write.node.right)) return undefined
+  const body = theBodyAround(write.node)
+  const setter = body.parent
+  const isAFunction = ts.isFunctionDeclaration(setter) || ts.isFunctionExpression(setter) || ts.isArrowFunction(setter)
+  return isAFunction && setter.body === body && takesOnly(setter, write.node.right.text) ? setter : undefined
+}
+
+/** What is written to a recorded variable after its declaration: lazy assignments, or the setters of a setter slot. */
+interface LaterWrites {
+  readonly assigned: readonly ts.BinaryExpression[]
+  readonly setters: readonly ts.SignatureDeclaration[]
+}
+
 /**
  * The assignments to a variable declared with no value, such as a bundle's lazily set module binding (`var X;` and,
- * in the module's init function, `X=...`): those in its module whose name is that same binding, in source order.
+ * in the module's init function, `X=...`): those in its module whose name is that same binding, in source order. Any
+ * other write to the binding (to one declared with a value, or of any kind but a plain `=`) is unreadable, naming it.
  */
-function assignedTo(declaration: ts.VariableDeclaration, scope: ts.Node, module: Module, file: ts.SourceFile): ts.BinaryExpression[] {
-  if (declaration.initializer !== undefined || !ts.isIdentifier(declaration.name)) return []
-  const name = declaration.name
-  return [...(assignmentsIn(module, file).get(name.text) ?? [])].filter((assignment) => bindsTheSame(assignment.left as ts.Identifier, scope))
+function assignedTo(declaration: ts.VariableDeclaration, scope: ts.Node, module: Module, file: ts.SourceFile): LaterWrites {
+  const writes = namesBoundBy(declaration.name).flatMap((name) => (writesIn(module, file).get(name) ?? []).filter((write) => bindsTheSame(write.name, scope)))
+  const lazy = declaration.initializer === undefined && ts.isIdentifier(declaration.name)
+  const setters = lazy ? [] : writes.map(setterOf)
+  if (writes.length > 0 && setters.length === writes.length && setters.every((setter) => setter !== undefined)) return { assigned: [], setters }
+  const unread = writes.find((write) => !lazy || write.kind !== 'plain')
+  if (unread !== undefined) {
+    throw new Unreadable(`a binding the host's code reaches, ${unread.name.text}, is written after it is declared (${unread.kind}: ${unread.node.getText(file).slice(0, 80)})`)
+  }
+  return { assigned: writes.map((write) => write.node as ts.BinaryExpression), setters: [] }
+}
+
+/** That a function or class declaration's name is never written later, the same rule as a variable declared with a value. */
+function neverWritten(name: string, scope: ts.Node, module: Module, file: ts.SourceFile): void {
+  const unread = (writesIn(module, file).get(name) ?? []).find((write) => bindsTheSame(write.name, scope))
+  if (unread !== undefined) {
+    throw new Unreadable(`a binding the host's code reaches, ${name}, is written after it is declared (${unread.kind}: ${unread.node.getText(file).slice(0, 80)})`)
+  }
 }
 
 /**
@@ -177,10 +317,88 @@ function definitionOf(bundle: Bundle, module: Module, from: ts.Node, name: strin
     const only = theBindingIn(scope, name)
     if (only === undefined) continue
     if ('import' in only && importsFromTheBundle(only.import)) return definitionOf(bundle, ...whereTheBundleExports(bundle, only.binding, name))
-    const assigned = 'import' in only || !ts.isVariableDeclaration(only) ? [] : assignedTo(only, scope, module, file)
-    return { module, node: 'import' in only ? only.binding : only, text: valuedText(definitionText(only, file), assigned, file), assigned }
+    return theDefinitionIn(only, { bundle, module, file, scope, name })
   }
   throw new Unreadable(`a recorded text calls ${name}, which the host's bundle binds nowhere (at ${String(module.start + from.getStart(file))})`)
+}
+
+/** A binding the chase reached in its own module, with every later write to it read, or unreadable as assignedTo says. */
+function theDefinitionIn(
+  only: ts.Node | { readonly import: ts.ImportDeclaration; readonly binding: ts.Node },
+  where: { readonly bundle: Bundle; readonly module: Module; readonly file: ts.SourceFile; readonly scope: ts.Node; readonly name: string },
+): Definition {
+  const { bundle, module, file, scope, name } = where
+  if ('import' in only) return { module, node: only.binding, text: definitionText(only, file), assigned: [], passed: [] }
+  if (!ts.isVariableDeclaration(only)) neverWritten(name, scope, module, file)
+  const { assigned, setters } = ts.isVariableDeclaration(only) ? assignedTo(only, scope, module, file) : { assigned: [], setters: [] }
+  const passed = setters.flatMap((setter) => valuesPassedTo(bundle, module, setter))
+  const text = valuedText(definitionText(only, file), assigned, file) + [...setters.map((setter) => setter.getText(file)), ...passed.map(({ call }) => call)].map((each) => `;${each}`).join('')
+  return { module, node: only, text, assigned, passed }
+}
+
+/** The name a setter is bound by: a function declaration's, or the variable its value is; a setter with none cannot be followed. */
+function setterNameOf(setter: ts.SignatureDeclaration): ts.Identifier {
+  if (ts.isFunctionDeclaration(setter) && setter.name !== undefined) return setter.name
+  const { parent } = setter
+  if (ts.isVariableDeclaration(parent) && parent.initializer === setter && ts.isIdentifier(parent.name)) return parent.name
+  throw new Unreadable(`a setter of a binding the host's code reaches is bound by no name its calls can be found by`)
+}
+
+/** The scope that binds a name, from where it is declared outward. */
+function scopeBinding(declared: ts.Identifier): ts.Node {
+  for (let scope: ts.Node | undefined = declared.parent; scope !== undefined; scope = scope.parent) if (bindsHere(scope, declared.text)) return scope
+  throw new Unreadable(`no scope of the host binds ${declared.text}`)
+}
+
+/** Every value the bundle passes to `setter`, in its own module and in each module that imports it. */
+function valuesPassedTo(bundle: Bundle, module: Module, setter: ts.SignatureDeclaration): Passed[] {
+  const name = setterNameOf(setter)
+  return passedThrough(bundle, { module, file: bundle.fileOf(module), scope: scopeBinding(name), name: name.text }, new Set())
+}
+
+/** Each identifier of a module's tree spelled `name`. */
+function identifiersNamed(file: ts.SourceFile, name: string): ts.Identifier[] {
+  const found: ts.Identifier[] = []
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && node.text === name) found.push(node)
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return found
+}
+
+/**
+ * The values passed to a setter bound by `name` in `scope`: each one-value call of it, and through each name it is
+ * exported under, each module importing it. Any other reference is unreadable, naming it. `seen` ends export cycles.
+ */
+function passedThrough(bundle: Bundle, where: { readonly module: Module; readonly file: ts.SourceFile; readonly scope: ts.Node; readonly name: string }, seen: Set<string>): Passed[] {
+  const passed: Passed[] = []
+  for (const at of identifiersNamed(where.file, where.name).filter((each) => bindsTheSame(each, where.scope))) {
+    const { parent } = at
+    if (ts.isExportSpecifier(parent)) passed.push(...passedThroughImporters(bundle, parent, at, seen))
+    else if (readsAValue(at)) passed.push(passedBy(parent, at, where))
+  }
+  return passed
+}
+
+/** The values passed through each module importing a setter under the name `specifier` exports it by. */
+function passedThroughImporters(bundle: Bundle, specifier: ts.ExportSpecifier, at: ts.Identifier, seen: Set<string>): Passed[] {
+  const exported = specifier.name.text
+  if ((specifier.propertyName ?? specifier.name) !== at || seen.has(exported)) return []
+  seen.add(exported)
+  return bundle.importersOf(exported).flatMap(({ module, local }) => {
+    const file = bundle.fileOf(module)
+    return passedThrough(bundle, { module, file, scope: file, name: local }, seen)
+  })
+}
+
+/** The value one reference to a setter passes: it must be the callee of a call with one value, never spread. */
+function passedBy(parent: ts.Node, at: ts.Identifier, where: { readonly module: Module; readonly file: ts.SourceFile; readonly name: string }): Passed {
+  const [value, ...more] = ts.isCallExpression(parent) && parent.expression === at ? parent.arguments : []
+  if (value === undefined || more.length > 0 || ts.isSpreadElement(value)) {
+    throw new Unreadable(`a setter of a binding the host's code reaches, ${where.name}, is used other than called with one value (${parent.getText(where.file).slice(0, 80)})`)
+  }
+  return { module: where.module, value, start: value.getStart(where.file), call: parent.getText(where.file) }
 }
 
 /** The one binding `scope` makes of `name`, or undefined when it makes none; a parameter or two bindings are unreadable. */
@@ -206,6 +424,20 @@ function whereTheBundleExports(bundle: Bundle, binding: ts.Node, name: string): 
   return [exporter.module, home, exporter.local]
 }
 
+/**
+ * Whether `name`, read at `from`, is a global the chase stops at: one on the list that no scope from there out to its
+ * module binds. A module of the bundle that declares the name (`var require=...`) is followed instead, like any name.
+ */
+function isAnUnboundGlobal(from: ts.Node, name: string): boolean {
+  if (!GLOBALS.has(name)) return false
+  for (let scope: ts.Node | undefined = from; scope !== undefined; scope = scope.parent) {
+    const { statements, parameters } = scopeOf(scope)
+    if (parameters.some((parameter) => namesBoundBy(parameter.name).includes(name))) return false
+    if (statements.some((statement) => (ts.isVariableDeclaration(statement) ? namesBoundBy(statement.name).includes(name) : bindingsInStatement(statement, name).length > 0))) return false
+  }
+  return true
+}
+
 /** Whether a definition is a function or class, whose callees are its calls; any other binding is an alias, and every free name of it is followed. */
 function isCode(node: ts.Node): boolean {
   if (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) return true
@@ -222,7 +454,7 @@ function calledRoot(callee: ts.Expression): ts.Identifier | undefined {
   return ts.isIdentifier(at) ? at : undefined
 }
 
-/** The free names `node` calls, or reads at all when `every`, in the order first met; never one it declares or a global. */
+/** The free names `node` calls, or reads at all when `every`, in the order first met; never one it declares. A global is kept: whether the bundle binds it is the chase's to tell. */
 function freeNamesIn(node: ts.Node, file: ts.SourceFile, every: boolean, textStart: number): ts.Identifier[] {
   const found: ts.Identifier[] = []
   const visit = (at: ts.Node): void => {
@@ -238,7 +470,7 @@ function freeNamesIn(node: ts.Node, file: ts.SourceFile, every: boolean, textSta
   visit(node)
   const seen = new Set<string>()
   return found.filter((name) => {
-    if (GLOBALS.has(name.text) || seen.has(name.text) || declaresWithin(textStart, name, file)) return false
+    if (seen.has(name.text) || declaresWithin(textStart, name, file)) return false
     seen.add(name.text)
     return true
   })
@@ -265,6 +497,9 @@ function calledByEntry(entry: Definition, file: ts.SourceFile, bound: Bound): Re
   const calls = bound(entry.module, [entry.node], entry.node.getStart(file), !isCode(entry.node))
   for (const { right } of entry.assigned) {
     addCalls(calls, bound(entry.module, [right], right.getStart(file), !isCodeValue(right)), (name) => `a value assigned to a binding of the host calls ${name}, bound two ways`)
+  }
+  for (const { module, value, start } of entry.passed) {
+    addCalls(calls, bound(module, [value], start, !isCodeValue(value)), (name) => `a value passed to a setter of the host calls ${name}, bound two ways`)
   }
   return calls
 }
@@ -294,7 +529,7 @@ function reach(bundle: Bundle, depth: Depth, seed: (entryOf: (definition: Defini
   const bound: Bound = (module, nodes, textStart, every) => {
     const file = bundle.fileOf(module)
     const names = nodes.flatMap((node) => freeNamesIn(node, file, every, textStart)).filter((name, index, all) => all.findIndex((other) => other.text === name.text) === index)
-    return Object.fromEntries(names.map((name) => [name.text, entryOf(definitionOf(bundle, module, name, name.text))]))
+    return Object.fromEntries(names.filter((name) => !isAnUnboundGlobal(name, name.text)).map((name) => [name.text, entryOf(definitionOf(bundle, module, name, name.text))]))
   }
   const guard_calls = seed(entryOf, bound)
   if (depth === 'full') for (const entry of reached) entry.calls = calledByEntry(entry, bundle.fileOf(entry.module), bound)
@@ -328,7 +563,7 @@ export function calleesOf(bundle: Bundle, sources: ReadonlyArray<{ readonly at: 
 export function calleesOfNames(bundle: Bundle, at: number, names: readonly string[], depth: Depth): GuardCalls {
   const module = bundle.moduleAt(at)
   const from = innermostAt(bundle.fileOf(module), at - module.start)
-  return reach(bundle, depth, (entryOf) => Object.fromEntries(names.filter((name) => !GLOBALS.has(name)).map((name) => [name, entryOf(definitionOf(bundle, module, from, name))])))
+  return reach(bundle, depth, (entryOf) => Object.fromEntries(names.filter((name) => !isAnUnboundGlobal(from, name)).map((name) => [name, entryOf(definitionOf(bundle, module, from, name))])))
 }
 
 /** The outermost nodes that lie wholly inside `[start, end)`: the recorded text's own code, never the code around it. */

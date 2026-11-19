@@ -273,7 +273,8 @@ function npmAnswerOf(released: ReadonlyArray<{ readonly version: string; readonl
 /** What --check reads beside the binary, planted next to it: the declaration, and npm's answer. */
 interface Beside {
   readonly models?: readonly string[]
-  readonly declaration?: string
+  /** The declaration's text; null plants none, as a release that ships no `sdk-tools.d.ts`. */
+  readonly declaration?: string | null
   readonly npm?: unknown
 }
 
@@ -281,7 +282,7 @@ interface Beside {
 function check(host: string, version: string, beside: Beside = {}): { status: number | null; stdout: string } {
   const declaration = join(dirname(host), 'sdk-tools.d.ts')
   const npm = join(dirname(host), 'npm-answer.json')
-  writeFileSync(declaration, beside.declaration ?? declarationOf(beside.models ?? RECORDED_MODELS))
+  if (beside.declaration !== null) writeFileSync(declaration, beside.declaration ?? declarationOf(beside.models ?? RECORDED_MODELS))
   writeFileSync(npm, typeof beside.npm === 'string' ? beside.npm : JSON.stringify(beside.npm ?? npmAnswerOf([{ version, ago: DAY_MS }])))
   const run = spawnSync(process.execPath, [RECORDER, CHECK, host, version, declaration, npm], { encoding: 'utf8' })
   return { status: run.status, stdout: run.stdout }
@@ -379,6 +380,11 @@ test('a release whose declaration accepts other models fails naming models, and 
   const host = hostHolding(t, RECORDED_PARTS)
   assertDiffers(check(host, RECORDED_HOST.host_version, { models: [...RECORDED_MODELS, 'a-model-no-recording-names'] }), 'models')
   assertUnreadable(check(host, RECORDED_HOST.host_version, { declaration: 'export interface SomethingElse {}\n' }), 'models the host accepts')
+})
+
+test('a release that ships no declaration is unreadable naming the file it lacks, never a raw error (martha#811 r=1; mutant: the file is read unchecked)', (t) => {
+  const host = hostHolding(t, RECORDED_PARTS)
+  assertUnreadable(check(host, RECORDED_HOST.host_version, { declaration: null }), `models the host accepts: no declaration at ${join(dirname(host), 'sdk-tools.d.ts')}`)
 })
 
 // R6 (martha#811): what a code field calls is part of its fact. A call the follower cannot bind is unreadable, never

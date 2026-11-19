@@ -25,7 +25,7 @@
 // drift job's public log shows as the reason a run is red; a reader's own
 // error, which can quote the host's code, goes to standard error.
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { argv, exit, stderr, stdout } from 'node:process'
 
 import { promptOriginsIn } from '../claude_code_host/claude_code_prompt_origins.ts'
@@ -115,6 +115,20 @@ function modelsHold(declaration: string): boolean {
   return JSON.stringify(modelsTheHostAccepts(readFileSync(declaration, 'utf8'))) === JSON.stringify(recorded)
 }
 
+/**
+ * The models fact of a release: whether its declaration accepts other models than the recorded ones, or the part that
+ * cannot be read. A release that ships no declaration is unreadable by the file it lacks, never a raw error (martha#811).
+ */
+function modelsFact(declaration: string): { readonly unreadable?: string; readonly differs?: true } {
+  if (!existsSync(declaration)) return { unreadable: `${MODELS_PART}: no declaration at ${declaration}` }
+  try {
+    return modelsHold(declaration) ? {} : { differs: true }
+  } catch (error) {
+    if (!(error instanceof Unreadable)) throw error
+    return { unreadable: MODELS_PART }
+  }
+}
+
 /** Each part of a check that cannot be read, and each fact that differs: the version aside. */
 function facts(committed: Committed, text: string, derived: Partial<Derived>, unreadableParts: readonly string[], declaration: string): { readonly unreadable: string[]; readonly differ: Difference[] } {
   const unreadable = [...unreadableParts]
@@ -126,12 +140,9 @@ function facts(committed: Committed, text: string, derived: Partial<Derived>, un
     differ.push(...compared.differ)
     if (!memoryOffHolds(committed, text, derived)) differ.push({ field: MEMORY_OFF, at: 'a text it quotes' })
   }
-  try {
-    if (!modelsHold(declaration)) differ.push({ field: MODELS_FACT, at: 'the names AgentInput.model accepts' })
-  } catch (error) {
-    if (!(error instanceof Unreadable)) throw error
-    unreadable.push(MODELS_PART)
-  }
+  const models = modelsFact(declaration)
+  if (models.unreadable !== undefined) unreadable.push(models.unreadable)
+  if (models.differs === true) differ.push({ field: MODELS_FACT, at: 'the names AgentInput.model accepts' })
   return { unreadable, differ: differ.sort((one, other) => one.field.localeCompare(other.field)) }
 }
 
