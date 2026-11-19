@@ -157,7 +157,8 @@ test('a bound a turn keeps is still what is left of the launch once that is less
   // bound. The renewal may keep the turn's own floor, never past what is left of the launch.
   const pace = new TheModelPace()
   let left = A_LAUNCH_WITH_A_SECOND_LEFT_MS
-  const turn = withinTheCap(neverSettles(), theCapFor(pace, () => left))
+  const cap = theCapFor(pace, () => left)
+  const turn = withinTheCap(neverSettles(), cap)
   left = LITTLE_LEFT_MS
   setTimeout(() => pace.noteAnAnswer(A_FAST_ANSWER_MS), THE_ANSWER_LANDS_AFTER_MS)
   await assert.rejects(turn, (error: unknown) => {
@@ -166,6 +167,10 @@ test('a bound a turn keeps is still what is left of the launch once that is less
       `the renewal is what is left of the launch, not the bound the turn started with: ${String(error.ms)} ms`)
     return true
   })
+  // The renewal narrowed the bound to what was left, so the bound the turn was given first is the widest: that is
+  // the one the result records, not the narrower renewal that cut it.
+  assert.equal(cap.made().ranUnderMs, A_LAUNCH_WITH_A_SECOND_LEFT_MS,
+    `the result records the widest bound the turn was given: ${String(cap.made().ranUnderMs)} ms`)
 })
 
 test('a bad launch bound is refused by name rather than becoming a bound of zero or of none (PR 733 R5)', () => {
