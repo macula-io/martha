@@ -2,7 +2,7 @@
 //
 // A host adapter, not glue and not a slice: it reads /proc and the clock, which a slice may not, and it composes the
 // slices that decide — ../end_a_launch asks for the machine here, and ../tell_a_member_what_its_relaunch_killed decides
-// what an end's findings mean. One adapter per concern keeps each host directory under its ceiling (martha#322), which
+// what an end's findings mean. One adapter per concern keeps each adapter small, which
 // is why the group and boot readers live here rather than in ../linux_process_identity.
 //
 // The group is read before the kill and never after: a killed process has nothing left to read, and the host's

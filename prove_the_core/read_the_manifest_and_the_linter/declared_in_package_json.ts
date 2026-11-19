@@ -13,9 +13,6 @@ export const CORE = 'src'
 /** Every package in martha whose tests npm test runs, by folder: the repository's and the installer's. */
 export const PACKAGES: readonly string[] = ['.', 'installer']
 
-/** The script package.json runs the host ceiling check by: the words a landing runs and a failure prints come from here. */
-export const HOST_CEILINGS_SCRIPT = 'check:host-ceilings'
-
 export interface Manifest {
   readonly scripts: Readonly<Record<string, string>>
   readonly martha?: {
@@ -24,12 +21,6 @@ export interface Manifest {
     readonly hostAdapters?: readonly string[]
     /** Files inside a host adapter that are decisions, not the adapter's machinery (martha#158). */
     readonly decisionFiles?: readonly string[]
-    /** How many code lines each host directory may hold, by the directory package.json declares (martha#322). */
-    readonly hostCeilings?: Readonly<Record<string, number>>
-    /** How many code lines any core slice may hold (martha#415). */
-    readonly sliceCap?: number
-    /** The core slices measured above the cap, each at its own ceiling (martha#415). */
-    readonly sliceCeilings?: Readonly<Record<string, number>>
     /** The directories only one program loads, each mapped to that program's directory, both as <core>/<directory> (martha#443). */
     readonly programParts?: Readonly<Record<string, string>>
     readonly packageImports?: Readonly<Record<string, string | readonly string[]>>

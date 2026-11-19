@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILLS_SWITCH_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, SHELL_TOOL, SKILLS_SWITCH_READERS, TELEMETRY_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -173,6 +173,38 @@ test('an extension config with no stdio variant is unreadable, never an entry wi
   assert.notEqual(renamed, config, 'the built tree holds no stdio variant to rename')
   const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [ENGINE_PLACES.stdio_extension]: renamed }))
   assert.deepEqual(unreadable.map(({ part }) => part), [STDIO_PART])
+})
+
+test('the telemetry switch is read through the constant the choice function passes, with the default the enabled function gives (#541 row 6)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.telemetry
+  const { setting, when_unset } = RECORDED_FACTS.telemetry
+  const decoy = `pub const A_DECOY_SETTING: &str = "${setting}_DECOY";\n`
+  const flipped = (files[path] ?? '').replace(`unwrap_or(${String(when_unset)})`, `unwrap_or(${String(!when_unset)})`)
+  assert.notEqual(flipped, files[path], 'the built tree gives no default to flip')
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: `${decoy}${flipped}` }))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.telemetry, { setting, when_unset: !when_unset })
+})
+
+test('a default the enabled function takes from anything but the choice function is unreadable, never the recorded default (#541 row 6)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.telemetry
+  const elsewhere = (files[path] ?? '').replace(`${TELEMETRY_READERS.choice}().unwrap_or(`, 'another_choice().unwrap_or(')
+  assert.notEqual(elsewhere, files[path], 'the built tree has no enabled function asking the choice to rename')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: elsewhere }))
+  assert.equal(unreadable.length, 1)
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`the default ${TELEMETRY_READERS.enabled} gives`))
+})
+
+test('a telemetry file with no choice function is unreadable by its part, never a setting taken from the first constant (#541 row 6)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.telemetry
+  const renamed = (files[path] ?? '').replace(`pub fn ${TELEMETRY_READERS.choice}(`, 'pub fn another_function(')
+  assert.notEqual(renamed, files[path], 'the built tree has no choice function to rename')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: renamed }))
+  assert.equal(unreadable.length, 1)
+  assert.match(unreadable[0]?.why ?? '', new RegExp(`the function ${TELEMETRY_READERS.choice}`))
 })
 
 test('each skills switch is read through the constant its function passes, never the first constant in the file (martha#839)', () => {

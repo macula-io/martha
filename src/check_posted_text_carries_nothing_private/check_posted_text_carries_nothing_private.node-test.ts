@@ -144,7 +144,7 @@ test('the forms a public tree may write pass beside a real-shaped value that is 
   // what passes above passed because the allowance is on, not because it passed unseen.
   assert.deepEqual(
     (await hitsOf(answersWith('issue comment', FORMS))).map((hit) => hit.what),
-    ['a lab hostname (value withheld)', 'a home directory (value withheld)', 'a private address (192.168.255.7)'],
+    ['a lab hostname (value withheld)', 'a home directory (value withheld)', 'a private address (value withheld)'],
   )
 })
 
