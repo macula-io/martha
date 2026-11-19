@@ -52,10 +52,10 @@ export const SHORT_SHA = 7
 
 /** What a refusal says was not done: the batch merged nothing, the fast-forward pushed nothing. */
 const NOTHING_LANDED = 'nothing was landed'
+const NOTHING_PUSHED = 'nothing was pushed'
 
 /** Why a head that clashes is left out: a landing settles no clash, so its builder settles it on its own branch. */
 export const A_CLASH = "the merge clashes, and a clash is its builder's to settle on its own branch"
-const NOTHING_PUSHED = 'nothing was pushed'
 
 
 /** The batch the Supervisor lands: the clone it is landed in, and the work packages it holds. */
@@ -387,14 +387,15 @@ async function mergeEveryHead(host: LandingHost, cut: TheCutBatch, work: readonl
   return { ok: merges }
 }
 
-/** One head merged, or left out with why; refused only when the branch could not be put back after a head left out. */
+/** One head merged, or left out with why; refused when git cannot name a commit or cannot abort a clash. */
 async function mergeOneHeadOrLeaveItOut(host: LandingHost, path: string, merges: TheMerges, one: LandedWork): Promise<Step<TheMerges>> {
   const inside = await theLeftOutHeadItHolds(host, path, merges.left_out.map((out) => out.one), one)
   if (inside !== undefined) return { ok: leftOut(merges, one, `its head holds the head of PR ${String(inside.pr)}, which was left out, so landing it would land that one's clash too`) }
   const before = await gitSaid(host, path, ['rev-parse', 'HEAD'])
   if (before === undefined) return no('the integration branch holds no commit git will name.')
   const merged = await mergeOneHead(host, path, one)
-  if ('refused' in merged) return { ok: leftOut(merges, one, `${merged.refused}${await theClashTraced(host, path, before, merges, one)}`) }
+  if ('refused' in merged) return merged
+  if (merged.ok === 'clashed') return { ok: leftOut(merges, one, `${A_CLASH}${await theClashTraced(host, path, before, merges, one)}`) }
   const tip = await gitSaid(host, path, ['rev-parse', 'HEAD'])
   if (tip === undefined) return no(`the merge of ${one.package} holds no commit git will name.`)
   return { ok: { ...merges, landed: [...merges.landed, one], steps: [...merges.steps, { commit: tip, label: `PR ${String(one.pr)}` }] } }
@@ -442,12 +443,16 @@ function theLeftOutSaid(left_out: readonly LeftOut[]): string {
   return left_out.map((out) => ` Left out: PR ${String(out.one.pr)} (${out.one.package}), ${out.why}.`).join('')
 }
 
-/** One head merged `--no-ff`, or why not: a clash is aborted and left to the head's builder. */
-async function mergeOneHead(host: LandingHost, path: string, one: LandedWork): Promise<Step<true>> {
+/**
+ * One head merged `--no-ff`, or clashed: a clash is aborted and left to the head's builder. A clash git cannot abort
+ * stops the landing, because the tree stays mid-merge and every head after it would fail there, not on its own.
+ */
+async function mergeOneHead(host: LandingHost, path: string, one: LandedWork): Promise<Step<'merged' | 'clashed'>> {
   const merged = await git(host, path, ['merge', '--no-ff', '--no-edit', '-m', theMergeMessage(one), one.head])
-  if (merged.exit_code === 0) return { ok: true }
-  await git(host, path, ['merge', '--abort'])
-  return no(A_CLASH)
+  if (merged.exit_code === 0) return { ok: 'merged' }
+  const aborted = await git(host, path, ['merge', '--abort'])
+  if (aborted.exit_code !== 0) return no(`${NOTHING_LANDED}: the merge of ${one.package} clashed and git could not abort it (${saidBy(aborted)}).`)
+  return { ok: 'clashed' }
 }
 
 /** What a landing merge's subject opens with, before the pull request's number. */

@@ -397,6 +397,35 @@ test('#339: a head left out aborts its merge and leaves the clone where it stood
   assert.equal(gitIn(fixture.clone, 'rev-parse', 'HEAD'), base, 'the clone moved its HEAD, although a landing commits on its own branch')
 })
 
+test('#874: a clash git cannot abort stops the landing by name, and no later head is read as a clash', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const packages = [1, 2, 3].map((entry) => `${fixture.repo}#${String(250 + entry)}`)
+  // The first two change the same line of one file, so the second clashes; the third would land on a clean tree.
+  const heads = [
+    aBranchWithOneCommit(fixture, 'passed0', base, 'shared.txt', 'two\n'),
+    aBranchWithOneCommit(fixture, 'passed1', base, 'shared.txt', 'three\n'),
+    aBranchWithOneCommit(fixture, 'passed2', base, 'later.txt', 'later\n'),
+  ]
+  const pulls = new Map<string, unknown>()
+  heads.forEach((head, entry) => pulls.set(`repos/${fixture.repo}/commits/${head}/pulls`, anOpenPullRequest(281 + entry, head)))
+  const github = aGithub(theAnswersFor(fixture.repo, pulls))
+  const refusal = 'fatal: the abort this test refuses'
+  // git refuses the abort, so the clone stays mid-merge: every merge after it would fail on that tree, not on its own.
+  const abortRefused = async (request: ProcessRequest): Promise<ProcessOutcome> =>
+    request.command === GIT && request.args.includes('merge') && request.args.includes('--abort') ? { exit_code: 128, stdout: '', stderr: `${refusal}\n` } : github(request)
+  const tests = aHostOver(abortRefused)
+  for (const [entry, work_package] of packages.entries()) await aPassedVerdict(tests, work_package, base, at(heads, entry))
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages })
+  assert.ok('refused' in landed, `a landing went on past a merge git could not abort: ${wordsOf(landed)}`)
+  assert.ok(landed.refused.includes(at(packages, 1)), `the stop did not name the package whose merge could not be aborted: ${landed.refused}`)
+  assert.ok(landed.refused.includes(refusal), `the stop did not carry what git said: ${landed.refused}`)
+  assert.ok(!landed.refused.includes(at(packages, 2)), `a later head was named, as if it had clashed too: ${landed.refused}`)
+  assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'a batch was pushed past a merge git could not abort')
+  assert.equal(theOriginMain(fixture), base, 'the default branch moved')
+})
+
 test('#256: a clone on no branch is refused before a branch is cut, because a landing would have none to go back to', async (t) => {
   const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
