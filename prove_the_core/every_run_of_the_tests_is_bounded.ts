@@ -23,8 +23,9 @@
 // nothing and is not counted.
 
 import { FORCE_EXIT_FLAG, TIMEOUT_FLAG } from './every_test_run_ends.ts'
-import { AnUnclosedPart, commandsOf, tokensOf, type ACommand, type AToken, type AWord } from './read_a_shell_script.ts'
+import { AnUnclosedPart, commandsOf, tokensOf, type ACommand, type ABody, type AToken, type AWord } from './read_a_shell_script.ts'
 import {
+  aShellReadsOnItsInput,
   DECLARATIONS,
   theForwarders,
   theProgramsPlace,
@@ -106,14 +107,14 @@ function whatTheArgumentsLack(words: readonly string[]): string[] {
 
 /**
  * A file's lines as the shell reads them: a line ended with a backslash continues onto the next, so a run split over
- * several lines is one line here, named by the line it starts on.
+ * several lines is one line here, named by the line it starts on. `from` is the line the text starts on, less one.
  */
-function theLinesAsTheShellReadsThem(text: string): Array<{ readonly line: number; readonly text: string }> {
+function theLinesAsTheShellReadsThem(text: string, from = 0): Array<{ readonly line: number; readonly text: string }> {
   const lines: Array<{ line: number; text: string }> = []
   let gathered = ''
   let started_at = 0
   text.split('\n').forEach((text_of_line, at) => {
-    if (gathered === '') started_at = at + 1
+    if (gathered === '') started_at = at + 1 + from
     const trimmed = text_of_line.trimEnd()
     const continues = trimmed.endsWith('\\')
     gathered += (gathered === '' ? '' : ' ') + (continues ? trimmed.slice(0, -1) : text_of_line)
@@ -157,9 +158,9 @@ function onlyItsCodeBlocks(text: string, keep: (block: ACodeBlock) => boolean): 
   return lines.join('\n')
 }
 
-/** The runs a text read line by line starts that are not bounded. */
-function theUnboundedLines(path: string, text: string): AnUnboundedRun[] {
-  return theLinesAsTheShellReadsThem(text).flatMap(({ line, text: run }) => {
+/** The runs a text read line by line starts that are not bounded, numbered from the line `from` it starts on. */
+function theUnboundedLines(path: string, text: string, from = 0): AnUnboundedRun[] {
+  return theLinesAsTheShellReadsThem(text, from).flatMap(({ line, text: run }) => {
     const problems = startsARun(run) ? problemsOf(run) : []
     return problems.length === 0 ? [] : [{ path, line, text: run.trim(), problems }]
   })
@@ -207,6 +208,8 @@ interface AReading {
   readonly held: ReadonlyMap<string, AHeldRun>
   readonly forwarders: ReadonlySet<string>
   readonly fed: ReadonlyMap<ACommand, readonly AString[]>
+  /** The script's commands, so a here-document body can ask whether one of its pipeline reads a script on its input. */
+  readonly commands: readonly ACommand[]
 }
 
 /** The runner: a word `node`, or a path to one. */
@@ -232,7 +235,7 @@ function theUnboundedRunsOfAScript(path: string, text: string, line: number, hel
 function theUnboundedRunsOfTokens(path: string, tokens: readonly AToken[], inherited: ReadonlyMap<string, AHeldRun>): AnUnboundedRun[] {
   const commands = commandsOf(tokens)
   const fed = whatThePipesFeed(commands)
-  const reading: AReading = { path, held: new Map([...inherited, ...theHeldRuns(commands)]), forwarders: theForwarders(commands, fed), fed }
+  const reading: AReading = { path, held: new Map([...inherited, ...theHeldRuns(commands)]), forwarders: theForwarders(commands, fed), fed, commands }
   return commands.flatMap((command) => theUnboundedRunsOfACommand(reading, command))
 }
 
@@ -245,10 +248,26 @@ function theUnboundedRunsOfACommand(r: AReading, command: ACommand): AnUnbounded
     ...[...words, ...words.flatMap((word) => word.array ?? [])].flatMap((word) =>
       word.inner.flatMap((tokens) => theUnboundedRunsOfTokens(r.path, tokens, r.held)),
     ),
-    ...command.bodies.flatMap((body) => theUnboundedRunsOfAScript(r.path, body.text, body.line, new Map())),
+    ...command.bodies.flatMap((body) => aBodysRuns(r, command, body)),
     ...strings.flatMap((string) => theUnboundedRunsOfAScript(r.path, string.text, string.line, r.held)),
     ...theHeldRunsItRuns(r, command),
   ]
+}
+
+/**
+ * The runs a here-document's body holds (martha#759). A body a shell reads is a script, and stays UNREADABLE when its
+ * quoting does not close, as the shell would fail on it. Any other body is text a program writes: read as a script, and
+ * when that does not close — an apostrophe in prose, a plain character there — read line by line, so prose no longer
+ * refuses a file and each line is still judged.
+ */
+function aBodysRuns(r: AReading, command: ACommand, body: ABody): AnUnboundedRun[] {
+  if (aShellReadsOnItsInput(r.commands, command)) return theUnboundedRunsOfAScript(r.path, body.text, body.line, new Map())
+  try {
+    return theUnboundedRunsOfTokens(r.path, tokensOf(body.text, body.line), new Map())
+  } catch (error) {
+    if (!(error instanceof AnUnclosedPart)) throw error
+    return theUnboundedLines(r.path, body.text, body.line - 1)
+  }
 }
 
 /** The command's own run, when its words hold one that is not bounded. */
