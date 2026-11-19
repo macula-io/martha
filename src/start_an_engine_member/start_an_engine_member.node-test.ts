@@ -6,24 +6,30 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
+import { DatabaseSync } from 'node:sqlite'
 import { test, type TestContext } from 'node:test'
 
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, ENGINE_ENDPOINT, HOST, SOLO_MEMBERS, soloDeclaration, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS, THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { crewSubdirectory, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { THE_ROOT_OF_A_LAUNCH, THE_STORES_PERMISSIONS_KEY, thePermissionStoreOf } from '../launch_a_goose_member/launch_a_goose_member.ts'
+import { ALREADY_ANSWERED, type AnOpenAsk } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
+import { answerInAProject } from '../serve_the_owners_answers/martha_answer.ts'
+import { askTheRoute, THE_ANSWER_ROUTES_PLACE, theRouteOf } from '../serve_the_owners_answers/the_owners_answer_route.ts'
+import { ALLOW_ONCE } from '../speak_acp_to_an_agent/answer_a_permission_once.ts'
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { launcherPlacesOf, startMember, type MemberStartRequest } from '../start_a_member/start_a_member.ts'
-import type { AnAgentScript } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
+import type { AnAgentScript, AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
@@ -196,4 +202,127 @@ test('#541 package A: a member with no model is refused by name before anything 
   assert.equal(start.started, false)
   assert.match(start.started ? '' : start.refusal, /names no model/)
   assert.equal(existsSync(engine.heard), false, 'an engine was started for a member that names no model')
+})
+
+/** The shell call the stand-in makes, named the engine's way in its `tool_call` update's `_meta`, never in the request. */
+const SHELL = `${THE_EXTENSION_A_MEMBER_KEEPS}${FACTS.tool_naming.separator}shell`
+const A_SHELL_CALL: AStep = { call: { id: 'call-1', title: 'a title made for people', input: { command: 'ls' }, name: SHELL } }
+
+/** The one launch of this place: its engine's root under the relay root, as the launch made it. */
+function theEnginesRoot(place: Place): string {
+  const launches = readdirSync(place.relay_root).filter((name) => existsSync(join(place.relay_root, name, THE_ROOT_OF_A_LAUNCH)))
+  assert.equal(launches.length, 1, `the relay root holds ${launches.length} engine launches`)
+  return join(place.relay_root, launches[0] ?? '', THE_ROOT_OF_A_LAUNCH)
+}
+
+/** The asks the member's launch holds open, read the way `martha answer` reads them: through the member's route. */
+async function theOpenAsks(place: Place): Promise<readonly AnOpenAsk[]> {
+  const routes = crewSubdirectory(place.state.state_root, place.root, THE_ANSWER_ROUTES_PLACE)
+  assert.ok('path' in routes, 'refusal' in routes ? routes.refusal : '')
+  const route = theRouteOf(routes.path, MEMBER)
+  if ('why' in route) return []
+  const reply = await askTheRoute(route.socket_path, { open: 1 })
+  return 'open' in reply ? reply.open : []
+}
+
+/** Waits, bounded, until the member's launch holds one open ask, and gives it. */
+async function untilAnAskIsOpen(place: Place): Promise<AnOpenAsk> {
+  const deadline = Date.now() + THE_WAIT_MS
+  for (;;) {
+    const [ask, ...more] = await theOpenAsks(place)
+    if (ask !== undefined) {
+      assert.deepEqual(more, [], 'the launch holds more than the one ask the engine made')
+      return ask
+    }
+    assert.ok(Date.now() < deadline, `no ask was open within ${THE_WAIT_MS} ms`)
+    await new Promise((settle) => setTimeout(settle, POLL_MS))
+  }
+}
+
+/** The owner's `martha answer <member> <key> <verb>`, typed at a terminal; its exit code and its lines. */
+async function theOwnerAnswers(place: Place, key: string, verb: string): Promise<{ readonly code: number; readonly lines: readonly string[] }> {
+  const lines: string[] = []
+  const io = { out: (line: string) => void lines.push(line), err: (line: string) => void lines.push(line), terminal: { is_terminal: true } }
+  const code = await answerInAProject(io, { root: place.root, state: place.state }, MEMBER, [key, verb])
+  return { code, lines }
+}
+
+/** The member's end, waited on for at most the test's wait: a member that never ends fails by name, not by the runner's timeout. */
+async function theEndOf(start: Extract<MemberStarted, { readonly started: true }>): Promise<Awaited<typeof start.stopped>> {
+  let timer: NodeJS.Timeout | undefined
+  const late = new Promise<never>((_, refuse) => {
+    timer = setTimeout(() => refuse(new Error(`the member did not end within ${THE_WAIT_MS} ms`)), THE_WAIT_MS)
+  })
+  try {
+    return await Promise.race([start.stopped, late])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** The launch's answers to the engine's permission requests, as the engine heard them: one per answer sent. */
+function theAnswersTheEngineHeard(heard: string): readonly unknown[] {
+  if (!existsSync(heard)) return []
+  return readFileSync(heard, 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => JSON.parse(line) as { method?: string; result?: { outcome?: unknown } })
+    .filter((message) => message.method === undefined && message.result?.outcome !== undefined)
+    .map((message) => message.result?.outcome)
+}
+
+test("#541 package A: the engine's permission request reaches the owner under the tool name its update's _meta gives, and `martha answer` answers it once", async (t) => {
+  const place = aPlace(t)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[A_SHELL_CALL]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  const ask = await untilAnAskIsOpen(place)
+  assert.equal(ask.tool, SHELL, 'the ask names another tool than the one the engine named')
+  assert.deepEqual(ask.input, { command: 'ls' })
+  assert.deepEqual(theAnswersTheEngineHeard(engine.heard), [], 'the engine was answered before the owner was')
+  const answered = await theOwnerAnswers(place, ask.key, 'allow')
+  assert.equal(answered.code, 0, answered.lines.join('\n'))
+  const deadline = Date.now() + THE_WAIT_MS
+  while (theAnswersTheEngineHeard(engine.heard).length === 0) {
+    assert.ok(Date.now() < deadline, `the engine heard no answer within ${THE_WAIT_MS} ms`)
+    await new Promise((settle) => setTimeout(settle, POLL_MS))
+  }
+  const again = await theOwnerAnswers(place, ask.key, 'allow')
+  assert.notEqual(again.code, 0, 'a second answer to the same ask was taken')
+  assert.ok(again.lines.join('\n').includes(ALREADY_ANSWERED), again.lines.join('\n'))
+  assert.deepEqual(theAnswersTheEngineHeard(engine.heard), [{ outcome: 'selected', optionId: ALLOW_ONCE }])
+})
+
+test("#541 package A: a write to the session's row while the ask waits stops the member at the call's result, with the entry's words (design r=5 proof; a shell write to the store)", async (t) => {
+  const place = aPlace(t)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[A_SHELL_CALL]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  const ask = await untilAnAskIsOpen(place)
+  const store = new DatabaseSync(join(theEnginesRoot(place), ...THE_SESSIONS_ROW.path))
+  try {
+    store.prepare(`UPDATE ${THE_SESSIONS_ROW.table} SET goose_mode = ?`).run('auto')
+  } finally {
+    store.close()
+  }
+  assert.equal((await theOwnerAnswers(place, ask.key, 'allow')).code, 0)
+  const stopped = await theEndOf(start)
+  assert.ok(stopped.stopped_because?.includes('goose_mode was changed after it started'), `${stopped.stopped_because}\n${lines.join('\n')}`)
+})
+
+test('#541 package A: a permission store the launch ends with a saved rule in is told to the owner by name at the end', async (t) => {
+  const place = aPlace(t)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  await untilTheEngineHeard(engine.heard, 'session/prompt')
+  const store = thePermissionStoreOf(theEnginesRoot(place))
+  mkdirSync(dirname(store), { recursive: true })
+  writeFileSync(store, JSON.stringify({ [THE_STORES_PERMISSIONS_KEY]: { always_allow: [SHELL] } }))
+  start.stop('the test is over')
+  await theEndOf(start)
+  assert.ok(lines.some((line) => line.includes(`permission store that holds a saved permission at ${store}`)), lines.join('\n'))
 })
