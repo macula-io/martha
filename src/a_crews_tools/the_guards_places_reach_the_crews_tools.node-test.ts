@@ -15,13 +15,14 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { crewToolsOver, type CrewToolPlaces, type CrewTools } from './a_crews_tools.ts'
 
-type TheGuardsPlaces = Pick<CrewToolPlaces, 'refusesTheGitCall' | 'refusesTheGitOnThePath' | 'refusesTheRefUpdate'>
+type TheGuardsPlaces = Pick<CrewToolPlaces, 'refusesTheGitCall' | 'refusesTheGitOnThePath' | 'refusesTheRefUpdate' | 'refusesTheHandOff'>
 
 /** The crew's tools over a place of the test's own, which it removes, handed `guard`'s places. */
 function crewHanded(t: TestContext, guard: TheGuardsPlaces): CrewTools {
@@ -41,6 +42,7 @@ function crewHanded(t: TestContext, guard: TheGuardsPlaces): CrewTools {
 const A_SHELL_CALL = { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'git push origin --delete uranus/9' } }
 const A_SHIM_CALL = { directory: '/work/clone', args: ['push', 'origin', '--delete', 'uranus/9'] }
 const A_REF_UPDATE = [{ ref: 'refs/heads/uranus/9', deletes: true }]
+const A_HAND_OFF_CALL = { tool: SAY_TO_THE_CREW, input: { to: ['Supervisor'], text: 'HANDOFF macula-io/martha#719 doc=https://example.invalid/d r=1' } }
 
 test("seam a: the shell's git call reaches the place the launch handed, and its refusal comes back", async (t) => {
   const asked: unknown[] = []
@@ -78,6 +80,18 @@ test("seam c: the clone's ref transaction reaches the place the launch handed, a
   assert.deepEqual(asked, [A_REF_UPDATE])
 })
 
+test("seam d: a hand-off reaches the place the launch handed, and its refusal comes back (martha#719)", async (t) => {
+  const asked: unknown[] = []
+  const crew = crewHanded(t, {
+    refusesTheHandOff: async (call) => {
+      asked.push(call)
+      return 'seam d refuses the hand-off'
+    },
+  })
+  assert.equal(await crew.refusesTheHandOff?.(A_HAND_OFF_CALL), 'seam d refuses the hand-off')
+  assert.deepEqual(asked, [A_HAND_OFF_CALL])
+})
+
 // "Refuses nothing" is measured on the answer the crew's own seam gives, so each seam must be there to answer: a
 // crew whose tools dropped a seam would also read as undefined through `?.`, and pass for the wrong reason.
 test('a launch that handed no guard still answers at every seam, and refuses nothing', async (t) => {
@@ -85,7 +99,9 @@ test('a launch that handed no guard still answers at every seam, and refuses not
   assert.equal(typeof crew.refusesTheGitIn, 'function', 'seam a is answered by the crew itself')
   assert.equal(typeof crew.refusesTheGitOnThePath, 'function', 'seam b is answered by the crew itself')
   assert.equal(typeof crew.refusesTheRefUpdate, 'function', 'seam c is answered by the crew itself')
+  assert.equal(typeof crew.refusesTheHandOff, 'function', 'seam d is answered by the crew itself')
   assert.equal(await crew.refusesTheGitIn?.(A_SHELL_CALL), undefined)
   assert.equal(await crew.refusesTheGitOnThePath?.(A_SHIM_CALL), undefined)
   assert.equal(crew.refusesTheRefUpdate?.(A_REF_UPDATE), undefined)
+  assert.equal(await crew.refusesTheHandOff?.(A_HAND_OFF_CALL), undefined)
 })

@@ -49,6 +49,12 @@ export interface EngineFacts {
   readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string }
   /** The model names the delegate tool takes: closed when its schema lists them, open when it takes any text (#541 package 6). */
   readonly subagent_models: ModelVocabulary
+  /**
+   * The files the engine reads into every prompt from the folder it starts in (martha#785): its own hints file, the
+   * instruction file, the setting whose value replaces the list, and the list it loads when that setting is unset, in
+   * its order. A launch records exactly these, so none is typed by hand.
+   */
+  readonly hint_files: { readonly setting: string; readonly goose_hints: string; readonly agents_md: string; readonly when_unset: readonly string[] }
   /** The entry a config's `extensions` holds to start a tool server on stdio (#541 part C, C1). */
   readonly stdio_extension: StdioExtension
   /** The key of a tool call's `_meta` the engine names the calling session under, so a tool server answers in that session. */
@@ -86,9 +92,13 @@ export const ENGINE_PLACES = {
   acp_server: 'crates/goose/src/acp/server.rs',
   openai_provider: 'crates/goose-providers/src/openai.rs',
   delegate_tool: 'crates/goose/src/agents/platform_extensions/summon.rs',
+  hint_files: 'crates/goose/src/hints/load_hints.rs',
   stdio_extension: 'crates/goose-agent/src/extension.rs',
   session_context: 'crates/goose/src/session_context.rs',
 } as const
+
+/** The constants the engine declares its two hint file names as, in the file that reads them (martha#785). */
+export const HINT_FILE_CONSTANTS = { goose_hints: 'GOOSE_HINTS_FILENAME', agents_md: 'AGENTS_MD_FILENAME' } as const
 
 /** The crate root the platform extension map's `crate::` paths start from. */
 export const GOOSE_CRATE = 'crates/goose/src'
@@ -106,6 +116,7 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'permission options', read: (source) => ({ permission_options: permissionOptionsIn(source) }) },
   { part: 'openai provider', read: (source) => ({ openai_provider: openaiProviderIn(source) }) },
   { part: 'subagent models', read: (source) => ({ subagent_models: subagentModelsIn(source) }) },
+  { part: 'hint files', read: (source) => ({ hint_files: hintFilesIn(source) }) },
   { part: 'stdio extension', read: (source) => ({ stdio_extension: stdioExtensionIn(source) }) },
   { part: 'tool call session key', read: (source) => ({ tool_call_session_key: toolCallSessionKeyIn(source) }) },
 ]
@@ -239,6 +250,33 @@ function subagentModelsIn(source: EngineSource): ModelVocabulary {
   if (listed !== undefined) return vocabularyOf(CLOSED_VOCABULARY, [...listed.matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? ''))
   if (/"type":\s*"string"/.test(model)) return vocabularyOf(OPEN_VOCABULARY, [])
   throw new Error(`${path} gives the delegate tool's model neither a list nor a string`)
+}
+
+/**
+ * The files the engine reads into every prompt (martha#785), from `get_context_filenames`: the setting whose value
+ * replaces the list, and the list built from the two constants when it is unset. Every entry of that list is one of the
+ * file's declared constants, or the list is unreadable: a name in another shape would be dropped from it unseen.
+ */
+function hintFilesIn(source: EngineSource): EngineFacts['hint_files'] {
+  const path = ENGINE_PLACES.hint_files
+  const text = fileOf(source, path)
+  const declared = new Map([...text.matchAll(/pub const (\w+): &str = "([^"]+)";/g)].map((found) => [found[1] ?? '', found[2] ?? '']))
+  const valueOf = (constant: string): string => {
+    const value = declared.get(constant)
+    if (value === undefined) throw new Error(`${path} declares no ${constant}`)
+    return value
+  }
+  const chosen = captured(text, /fn get_context_filenames\(\)[^{]*\{([\s\S]*?)\n\}/, 'how the hint files are chosen', path)
+  const listed = captured(chosen, /vec!\[([^\]]*)\]/, 'the hint files loaded when the setting is unset', path)
+  const constants = [...listed.matchAll(/(\w+)\.to_string\(\)/g)].map((found) => found[1] ?? '')
+  const written = listed.split(',').filter((entry) => entry.trim() !== '').length
+  if (written !== constants.length) throw new Error(`${path} lists ${String(written)} hint files and ${String(constants.length)} are in a shape this reader knows`)
+  return {
+    setting: captured(chosen, /get_param::<Vec<String>>\("([^"]+)"\)/, 'the hint files setting', path),
+    goose_hints: valueOf(HINT_FILE_CONSTANTS.goose_hints),
+    agents_md: valueOf(HINT_FILE_CONSTANTS.agents_md),
+    when_unset: constants.map(valueOf),
+  }
 }
 
 /** Rust text with its attributes and line comments taken out: what is left of a field is its name and its type. */

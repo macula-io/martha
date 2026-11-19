@@ -26,6 +26,7 @@ import { execPath } from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
+import type { AServersValue } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { TREE_PARAMETER, treeUrlOf } from '../install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts'
 import type { StdioExtension } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { THE_CREWS_TOOL_SERVER, THE_TOKEN_VARIABLE } from './the_tool_servers_words.ts'
@@ -46,8 +47,8 @@ const THE_CONFINING_HOOK = new URL('../install_the_recorded_mesh_server/confine_
 /** Martha's own tree: the folder that holds `src/`, where the server and every module it loads must be. */
 export const MARTHAS_TREE = fileURLToPath(new URL('../../', import.meta.url))
 
-/** One value of the entry: text, a number, a list of text, or a mapping of text to text. */
-export type AnEntrysValue = string | number | readonly string[] | Readonly<Record<string, string>>
+/** One value of the entry: text, a number, a list of text, or a mapping of text to text; the shapes the config can write. */
+export type AnEntrysValue = AServersValue
 
 /** The entry, its keys in the order they are written; the engine's `enabled` switch is the config's, not the entry's. */
 export type TheToolServersEntry = ReadonlyArray<readonly [string, AnEntrysValue]>

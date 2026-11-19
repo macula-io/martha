@@ -7,27 +7,33 @@
 // test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { AGENTS_MD_FILE, ENGINE_FAMILIES, ENGINE_HINTS_FILE, fingerprintOf, readLaunchState, theTextAStartLoads, type SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theToolServersEntry } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts'
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import {
-  A_LAUNCHS_FOLDERS_MODE,
   THE_EXTENSION_A_MEMBER_KEEPS,
   THE_EXTENSIONS_SETTING,
   THE_MODE_THAT_ASKS_THE_CLIENT,
   THE_MODEL_SETTING,
-  THE_PATH_A_LAUNCH_GIVES,
   THE_PROVIDER_SETTING,
+  theConfigOfALaunch,
+} from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
+import {
+  A_LAUNCHS_FOLDERS_MODE,
+  THE_PATH_A_LAUNCH_GIVES,
+  THE_ROOT_OF_A_LAUNCH,
   launchTheGooseEngine,
   startTheEngine,
   theConfigFileOf,
-  theConfigOfALaunch,
   theEnvironmentOfALaunch,
   thePermissionStoreIsStillEmpty,
   thePermissionStoreOf,
@@ -46,7 +52,7 @@ const A_MODEL = { provider: 'a-provider-a-test-names', model: 'a-model-a-test-na
 const A_TOOL_SERVER = { socket_path: join(tmpdir(), 'a-relay-a-test-names.sock'), token: 'a-token-a-test-names' }
 
 /** The tool server's entry for a launch whose checkout is the temporary folder: the config tests write it, never read it. */
-const A_SERVER = theToolServersEntry(FACTS.stdio_extension, { ...A_TOOL_SERVER, checkout: tmpdir() })
+const A_SERVER = { key: THE_CREWS_TOOL_SERVER, entry: theToolServersEntry(FACTS.stdio_extension, { ...A_TOOL_SERVER, checkout: tmpdir() }) }
 
 /** The extension the delegate tool lives in: the one whose being off closes package 6's scope items 2 and 3. */
 const SUMMON = 'summon'
@@ -63,6 +69,40 @@ function aLaunchRoot(t: TestContext): { readonly root: string; readonly checkout
   const checkout = join(dir, 'checkout')
   mkdirSync(checkout)
   return { root: dir, checkout }
+}
+
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync(
+    'git',
+    ['-c', 'user.name=martha-test', '-c', 'user.email=martha-test@example.invalid', '-c', 'commit.gpgsign=false', ...args],
+    { cwd, encoding: 'utf8' },
+  ).trim()
+}
+
+/**
+ * A checkout two levels under a home, a git repository with one commit, the folder a launch is made in, and the place
+ * the gate decides on. `approved` false hands the gate no approval of that tree.
+ */
+function anApprovedLaunch(t: TestContext, { approved = true } = {}): { readonly root: string; readonly home: string; readonly checkout: string; readonly place: SnapshotPlace } {
+  const home = mkdtempSync(join(tmpdir(), 'martha-goose-c3-'))
+  t.after(() => removeTheTree(home))
+  const checkout = join(home, 'work', 'checkout')
+  mkdirSync(checkout, { recursive: true })
+  git(checkout, 'init', '-q', '.')
+  writeFileSync(join(checkout, 'README.md'), 'a checkout\n')
+  git(checkout, 'add', '--all')
+  git(checkout, 'commit', '-q', '-m', 'start')
+  const root = join(home, 'launch')
+  mkdirSync(join(root, 'snapshots'), { recursive: true })
+  const state = readLaunchState({ host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: checkout, stop_dir: home }, thisMachine)
+  const place: SnapshotPlace = {
+    host: RECORDED_GOOSE_ENGINE.engine_name,
+    launch_dir: checkout,
+    stop_dir: home,
+    snapshot_root: join(root, 'snapshots'),
+    approved_fingerprints: approved ? [fingerprintOf(state)] : [],
+  }
+  return { root, home, checkout, place }
 }
 
 /** The top-level keys of the config text, in the order written: an unindented `key:` starts one. */
@@ -142,6 +182,12 @@ test('a recording that names neither the mode nor the kept extension refuses ins
   assert.throws(() => theConfigOfALaunch(noMode, A_MODEL, A_SERVER), new RegExp(THE_MODE_THAT_ASKS_THE_CLIENT))
   const noExtension = { ...FACTS, platform_extensions: FACTS.platform_extensions.filter((extension) => extension.key !== THE_EXTENSION_A_MEMBER_KEEPS) }
   assert.throws(() => theConfigOfALaunch(noExtension, A_MODEL, A_SERVER), new RegExp(THE_EXTENSION_A_MEMBER_KEEPS))
+})
+
+test('a tool server keyed as a platform extension is refused by name, never written as a second switch for that extension (martha#541 C1)', () => {
+  const taken = FACTS.platform_extensions.find((extension) => extension.key !== THE_EXTENSION_A_MEMBER_KEEPS)?.key
+  assert.ok(taken !== undefined, 'the recording names no platform extension but the kept one')
+  assert.throws(() => theConfigOfALaunch(FACTS, A_MODEL, { ...A_SERVER, key: taken }), new RegExp(`keyed ${taken}, which is a platform extension`))
 })
 
 test('a key that is not a word cannot start a line of the config of its own, and a value cannot carry a line break (martha#541)', () => {
@@ -323,14 +369,14 @@ test('an environment that hands the engine no PATH, or an empty one, is refused 
 })
 
 test('one launch writes its root, starts the engine and ends with the permission store still empty; a binary that is not there refuses (martha#541)', async (t) => {
-  const { root, checkout } = aLaunchRoot(t)
-  const refused = await launchTheGooseEngine({ facts: FACTS, binary: join(root, 'not-there'), launch_root: root, checkout, model: A_MODEL, tool_server: A_TOOL_SERVER })
+  const { root, place } = anApprovedLaunch(t)
+  const refused = await launchTheGooseEngine({ facts: FACTS, binary: join(root, 'not-there'), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
   assert.ok('refusal' in refused, 'a missing engine binary started a launch')
 
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, checkout, model: A_MODEL, tool_server: A_TOOL_SERVER })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
   assert.ok('engine' in launch, 'the launch was refused')
   t.after(() => launch.engine.stop())
-  assert.equal(readFileSync(launch.config_at, 'utf8'), theConfigOfALaunch(FACTS, A_MODEL, theToolServersEntry(FACTS.stdio_extension, { ...A_TOOL_SERVER, checkout })))
+  assert.equal(readFileSync(launch.config_at, 'utf8'), theConfigOfALaunch(FACTS, A_MODEL, { key: THE_CREWS_TOOL_SERVER, entry: theToolServersEntry(FACTS.stdio_extension, { ...A_TOOL_SERVER, checkout: launch.places.checkout }) }))
   assert.equal(realpathSync(launch.config_at).startsWith(realpathSync(launch.places.root)), true)
 
   const ended = await launch.end()
@@ -339,10 +385,10 @@ test('one launch writes its root, starts the engine and ends with the permission
 })
 
 test('a launch whose engine had already ended says it was not stopped, and still reads the store (martha#541)', async (t) => {
-  const { root, checkout } = aLaunchRoot(t)
+  const { root, place } = anApprovedLaunch(t)
   const briefly = join(root, 'an-engine-that-has-finished')
   writeFileSync(briefly, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
-  const launch = await launchTheGooseEngine({ facts: FACTS, binary: briefly, launch_root: root, checkout, model: A_MODEL, tool_server: A_TOOL_SERVER })
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: briefly, launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
   assert.ok('engine' in launch, 'the launch was refused')
   t.after(() => launch.engine.stop())
   await launch.engine.exited
@@ -350,4 +396,68 @@ test('a launch whose engine had already ended says it was not stopped, and still
   const ended = await launch.end()
   assert.equal(ended.stopped, false, 'an engine that had already ended was reported as one the launch stopped')
   assert.deepEqual(ended.permissions, { empty: true })
+})
+
+test("the launch records a checkout's own hint files, each with the source it is, and no other file (martha#541)", (t) => {
+  const dir = scratch(t)
+  const checkout = join(dir, 'checkout')
+  mkdirSync(checkout)
+  const place = { host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: checkout, stop_dir: dir }
+  assert.deepEqual(theTextAStartLoads(place, thisMachine), [], 'a checkout holding no hint file recorded one')
+
+  writeFileSync(join(checkout, ENGINE_HINTS_FILE), 'a hint\n')
+  writeFileSync(join(checkout, AGENTS_MD_FILE), 'an agents file\n')
+  writeFileSync(join(checkout, 'README.md'), 'not a hint\n')
+  const found = theTextAStartLoads(place, thisMachine)
+  // The names are the gate's own constants, read from it and never spelled again here; what this pins is the
+  // record: both files found at the checkout, in that order, each with the source it is, and no other file.
+  assert.deepEqual(found.map((one) => ({ file: one.file, source: one.source })), [
+    { file: ENGINE_HINTS_FILE, source: 'checkout_file' },
+    { file: AGENTS_MD_FILE, source: 'checkout_file' },
+  ])
+  // The record resolves the checkout before it walks it, so the fixture is compared as the record resolves it: CI runs
+  // this suite under a TMPDIR reached through a link, where the two spellings differ (martha#743).
+  for (const one of found) assert.equal(one.at, join(realpathSync(checkout), one.file), 'the record names a file at a path nobody can point at')
+})
+
+test('a hint file above the checkout, up to the git root, is recorded, and one above the git root is not (martha#541)', (t) => {
+  const home = scratch(t)
+  const repository = join(home, 'a-repository')
+  mkdirSync(repository)
+  git(repository, 'init', '-q', '.')
+  const checkout = join(repository, 'work', 'checkout')
+  mkdirSync(checkout, { recursive: true })
+  writeFileSync(join(repository, ENGINE_HINTS_FILE), 'a hint above the checkout\n')
+  writeFileSync(join(home, ENGINE_HINTS_FILE), 'a hint above the git root\n')
+  // The record resolves the checkout before it walks it, so the repository is compared as the record resolves it.
+  assert.deepEqual(theTextAStartLoads({ host: RECORDED_GOOSE_ENGINE.engine_name, launch_dir: checkout, stop_dir: home }, thisMachine).map((one) => one.at), [join(realpathSync(repository), ENGINE_HINTS_FILE)])
+})
+
+test('a launch on a checkout the owner has not approved is refused before anything is made (martha#541)', async (t) => {
+  const { root, place, checkout } = anApprovedLaunch(t, { approved: false })
+  // A file the engine starts something from, with no approval of the tree holding it: the gate's own case.
+  const [family] = ENGINE_FAMILIES.plugins
+  mkdirSync(dirname(join(checkout, family ?? '')), { recursive: true })
+  writeFileSync(join(checkout, family ?? ''), 'a plugin the gate reads\n')
+  const refused = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
+  assert.ok('refusal' in refused, 'an unapproved checkout started an engine')
+  assert.match(refused.refusal, /approv/i)
+  assert.deepEqual(readdirSync(place.snapshot_root), [], 'a refused launch left a snapshot behind')
+  assert.equal(existsSync(join(root, THE_ROOT_OF_A_LAUNCH)), false, 'a refused launch made its root')
+})
+
+test('a place naming another host is refused, and an approved launch records its hints, each naming the file and the source it is (martha#541)', async (t) => {
+  const { root, place, checkout } = anApprovedLaunch(t)
+  const wrongHost = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place: { ...place, host: 'opencode' }, model: A_MODEL, tool_server: A_TOOL_SERVER })
+  assert.ok('refusal' in wrongHost, 'a place for another host started the engine')
+
+  writeFileSync(join(checkout, ENGINE_HINTS_FILE), 'a hint\n')
+  writeFileSync(join(checkout, AGENTS_MD_FILE), 'an agents file\n')
+  const launch = await launchTheGooseEngine({ facts: FACTS, binary: aStandInEngineIn(root), launch_root: root, place, model: A_MODEL, tool_server: A_TOOL_SERVER })
+  assert.ok('engine' in launch, 'the launch was refused')
+  t.after(() => launch.engine.stop())
+  assert.deepEqual(launch.text_a_start_loads.map((one) => one.file), [ENGINE_HINTS_FILE, AGENTS_MD_FILE])
+  const ended = await launch.end()
+  assert.equal(ended.stopped, true)
+  assert.deepEqual(readdirSync(place.snapshot_root), [], "the gate's snapshot was left behind")
 })

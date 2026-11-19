@@ -26,14 +26,28 @@ import { findingsIn, pathsIn, type TraceFindings } from './the_evidence_it_keeps
 import { RecordingProxy } from './the_engine_over_acp/record_what_goose_sends.ts'
 import { GooseOverAcp, type Exchange } from './the_engine_over_acp/speak_acp_to_goose.ts'
 import { TheModelPace, theCapFor, theLaunchesBoundMs, whyTheBoundCannotFit, type TheCapALineGets, type TheCapMadeOf } from './the_cap_a_line_gets/the_cap_a_line_gets.ts'
-import { THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_it_keeps/the_evidence_says_why.ts'
+import { refusalsIn, THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_it_keeps/the_evidence_says_why.ts'
 import {
   lineEight, lineFive, lineFour, lineNine, lineOne, lineSix, lineThree, lineTwo, sevenAfterTheKill,
   type Line, type Observation, type Trial,
 } from './the_nine_lines.ts'
 
-/** How long the launch waits for its own process group to die once it asks it to (martha#732's room below). */
+/**
+ * How long the launch waits for its own process group to die once it asks it to. On the signal path this wait is
+ * spent inside what the runner allows after its own TERM, so the whole of that path — the close, this wait, the copy
+ * and the re-raise — has to fit inside THE_RUNNERS_KILL_AFTER_MS (martha#737, whose test holds the room it needs).
+ */
 export const THE_KILL_WAIT_MS = 20_000
+
+/**
+ * What the fork's runner allows between its own TERM and its KILL (martha#737): `timeout --kill-after=30s` in the
+ * fork's `martha/sync/run_the_trial_lines.sh:21`. This repository cannot read that script, so the value is cited and
+ * not imported, and the script's own comment names this constant back (that is the fork's change, not this one).
+ *
+ * Only the signal path runs inside it: close the exchange, kill the group, copy the engine's logs, re-raise. It is not
+ * the room below, which is what a turn leaves before that TERM is even sent.
+ */
+export const THE_RUNNERS_KILL_AFTER_MS = 30_000
 
 /**
  * What the end of a launch does after the kill's wait: stop the proxy, read the trace, copy the engine's logs and
@@ -45,7 +59,7 @@ export const THE_ALLOWANCE_FOR_WHAT_FOLLOWS_THE_KILL_MS = THE_KILL_WAIT_MS / 2
 /**
  * The room a turn leaves for the end of its launch (PR 733 R2, A2): the kill's wait, at its longest, and the
  * allowance for what follows it. It must cover the whole end: the runner's `timeout` sends TERM at the launch's
- * bound, and `keepTheEndsOnSignal` keeps the engine's logs and then lets that TERM end node, so an end still
+ * bound, and `endTheLaunchOnSignal` keeps the engine's logs and then lets that TERM end node, so an end still
  * running then writes no result at all. A turn bounded by the whole launch would only ever fire after that.
  */
 export const THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS = THE_KILL_WAIT_MS + THE_ALLOWANCE_FOR_WHAT_FOLLOWS_THE_KILL_MS
@@ -205,17 +219,22 @@ async function startARun(line: number, options: Options, launchedAt: number): Pr
   theLaunchInHand = { root: place.root, into: evidenceForLine }
   const child = startGoose(place, options, line, tracePath)
   const acp = new GooseOverAcp(child, keep)
-  theLaunchInHand = { ...theLaunchInHand, close: () => acp.closeTheExchange() }
+  theLaunchInHand = { root: place.root, into: evidenceForLine, child, close: () => acp.closeTheExchange() }
   try {
     const { sessionId, currentMode } = await handOver(acp, place, remaining)
     return { line, options, place, proxy, acp, child, tracePath, sessionId, currentMode, pace, cap }
   } catch (error) {
-    // A launch with no handshake leaves nothing of its own behind: not its group, not the proxy's port. What crossed
-    // before the kill is kept as endARun keeps it: the explicit close is the fallback for the pipe's `end` (martha#694).
-    await killTheGroup(child).catch(() => undefined)
-    acp.closeTheExchange()
+    // A launch with no handshake leaves nothing of its own behind: not its group, not the proxy's port, and its
+    // engine's logs go into this line's evidence rather than being lost with the root (martha#737). The order is the
+    // signal path's — close, kill, copy — and the explicit close is the fallback for the pipe's `end` (martha#694).
+    // A launch a signal is already ending has had all three done for it, and a second kill would be the same end twice.
+    if (!anEndIsUnderwayOnSignal) {
+      acp.closeTheExchange()
+      await killTheGroup(child).catch(() => undefined)
+      keepTheEngineLogs(place.root, evidenceForLine)
+      theLaunchInHand = undefined
+    }
     await proxy.stop().catch(() => undefined)
-    theLaunchInHand = undefined
     throw error
   }
 }
@@ -300,26 +319,60 @@ export function keepTheEngineLogs(root: string, into: string): number {
   return readdirSync(to, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).length
 }
 
-/** Where the launch in hand keeps its evidence, and the root its engine writes its own logs under. */
-let theLaunchInHand: { readonly root: string; readonly into: string; readonly close?: () => void } | undefined
+/** Where the launch in hand keeps its evidence, the root its engine writes its own logs under, and its group. */
+let theLaunchInHand: TheLaunchInHand | undefined
 
 /**
- * The one case the copy has to happen outside the run's own code: the runner's ten-minute `timeout` sends
- * SIGTERM while a line is still running — during the handshake as readily as during a turn — and the engine's
- * logs have to be kept before the process dies. The signal is raised again with the handler gone, so the
- * launch still ends the way it did before: killed, with the status the runner prints.
- *
- * The exchange is closed first, for the same reason (martha#694): a message that crossed without its newline is
- * still in the client's buffer, and it is the last thing the reader of the run needs. A launch killed before the
- * exchange exists has nothing to close.
+ * Set at the handler's entry, before it awaits anything (martha#737). The event loop keeps running while an end on a
+ * signal waits for its group to die, so the line in progress can reach its own end in that window: this flag is what
+ * keeps that end from killing the group a second time and from writing a verdict over the launch a signal is ending.
  */
-function keepTheEndsOnSignal(): void {
-  if (theLaunchInHand !== undefined) {
-    theLaunchInHand.close?.()
-    keepTheEngineLogs(theLaunchInHand.root, theLaunchInHand.into)
+let anEndIsUnderwayOnSignal = false
+
+/**
+ * The one end that happens outside the run's own code: the runner's TERM arrives while a line is still running —
+ * during the handshake as readily as during a turn — and the group and the logs have to be dealt with before the
+ * process dies. The order is `keepTheEngineLogs`'s own (martha#737): close the exchange, kill the group, copy the
+ * logs, then raise the TERM again with the handler gone, so the launch still ends the way the runner prints it. All
+ * of it fits inside what the runner allows after that TERM, THE_RUNNERS_KILL_AFTER_MS.
+ *
+ * The exchange is closed first for the reason #694 gives: a message that crossed without its newline is still in the
+ * client's buffer, and it is the last thing the reader of the run needs. A launch whose engine never started has
+ * nothing to close and no group to kill.
+ *
+ * The handler goes at the entry, not at the re-raise: a second TERM while this one is still working must not start a
+ * second end. Node keeps the process alive while the end runs, and ends it at the TERM raised here.
+ */
+export async function endTheLaunchOnSignal(): Promise<void> {
+  anEndIsUnderwayOnSignal = true
+  process.removeListener('SIGTERM', onTheRunnersTerm)
+  const launch = theLaunchInHand
+  theLaunchInHand = undefined
+  try {
+    if (launch !== undefined) await endTheLaunch(launch)
+  } finally {
+    process.kill(process.pid, 'SIGTERM')
   }
-  process.removeListener('SIGTERM', keepTheEndsOnSignal)
-  process.kill(process.pid, 'SIGTERM')
+}
+
+/** The launch the driver holds while one line runs: where its evidence goes, the group its engine leads, its exchange. */
+interface TheLaunchInHand {
+  readonly root: string
+  readonly into: string
+  readonly child?: ChildProcess
+  readonly close?: () => void
+}
+
+/** Close, kill, copy: the order the signal path and the throw path both take, on the launch the signal took away. */
+async function endTheLaunch(launch: TheLaunchInHand): Promise<void> {
+  launch.close?.()
+  if (launch.child !== undefined) await killTheGroup(launch.child)
+  keepTheEngineLogs(launch.root, launch.into)
+}
+
+/** What `main` registers: the exported end, driven from the signal that raised it. */
+function onTheRunnersTerm(): void {
+  void endTheLaunchOnSignal()
 }
 
 async function endARun(running: Running): Promise<{ trace: TraceFindings; groupLeft: string[]; engineLogs: number }> {
@@ -367,6 +420,9 @@ async function runLine(line: number, options: Options, launchedAt: number): Prom
   try {
     running = await startARun(line, options, launchedAt)
   } catch (error) {
+    // A line a signal is ending writes no verdict (martha#737): that end has already killed the group and kept the
+    // logs, and a result here would say the launch ended in a way it did not.
+    if (anEndIsUnderwayOnSignal) return
     // A launch that never got as far as its line still leaves a verdict behind (PR 733 R2): a launch with no
     // result reads as a failure the fork never relaunches, and a kind of failure nobody can read.
     const observation = theObservationOfALineThatThrew(error)
@@ -375,6 +431,9 @@ async function runLine(line: number, options: Options, launchedAt: number): Prom
     return
   }
   const observation = await conduct(running)
+  // The same for a line that reached its own end while the signal's end was still running (martha#737): ending it
+  // here would kill its group a second time and write the result the signal's end leaves out on purpose.
+  if (anEndIsUnderwayOnSignal) return
   const { trace, groupLeft, engineLogs } = await endARun(running)
   const verdict = theVerdictKeptWithItsExchange(line, verdictOf(line, running.currentMode, observation, trace, groupLeft), evidenceForLine)
   const result = { line, ...verdict, trace, groupLeft, engineLogs, cap: theCapTheLineHad(running) }
@@ -393,11 +452,36 @@ function theCapTheLineHad(running: Running): TheCapMadeOf & { readonly whyNot: s
   return { ...made, whyNot: whyTheBoundCannotFit(made) }
 }
 
+/**
+ * The whole evidence directory judged by the rule the run kept line by line (martha#694): every not-observed line that
+ * cannot say why is printed by name, and the run's exit is 1 when there is one. The same rule `--check-evidence`
+ * applies to a directory already on disk, so a finished run and a reviewer reach the same verdict.
+ */
+function judgeTheWholeRun(evidence: string): number {
+  const refusals = refusalsIn(evidence)
+  for (const refusal of refusals) console.error(`drive_the_trial: ${refusal}`)
+  return refusals.length === 0 ? 0 : 1
+}
+
+/** The value given after `name` in `argv`, or undefined when it is not given. */
+function optionOf(argv: readonly string[], name: string): string | undefined {
+  const found = argv.indexOf(name)
+  return found === -1 ? undefined : argv[found + 1]
+}
+
 async function main(): Promise<void> {
+  const checkEvidence = optionOf(process.argv.slice(2), '--check-evidence')
+  if (checkEvidence !== undefined) {
+    process.exitCode = judgeTheWholeRun(checkEvidence)
+    return
+  }
   const options = optionsFrom(process.argv.slice(2))
-  process.on('SIGTERM', keepTheEndsOnSignal)
+  process.on('SIGTERM', onTheRunnersTerm)
   mkdirSync(options.evidence, { recursive: true })
   for (const [inTheProcess, line] of options.lines.entries()) await runLine(line, options, whenTheLaunchStarted(inTheProcess))
+  // The run is over, so the directory can be judged whole: a verdict that ended not-observed with nothing kept
+  // beside it is a line that cannot say why it observed nothing, and the run says so rather than exiting green.
+  process.exitCode = judgeTheWholeRun(options.evidence)
 }
 
 if (import.meta.main) await main()
