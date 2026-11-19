@@ -2,7 +2,7 @@
 //
 // So a file may import three kinds of thing: other code of this repository, by a
 // relative path; Node's standard library, by a `node:` specifier; and a package
-// package.json allows (martha.packageImports), from inside the one folder it names.
+// package.json allows (martha.packageImports), from inside a folder it names for that package.
 // Anything else is a package, and a package in the core is how a coding tool's API
 // would creep in past the contract. Rather than keep a list of tool packages to
 // refuse, which goes stale the day a tool renames its SDK, this check allows those
@@ -74,12 +74,16 @@ const loadsByName = (specifier: string): boolean =>
     specifier.startsWith(NODE_MODULE) ? specifier.slice(NODE_MODULE.length) : specifier,
   )
 
-const folderOf = (path: string): string => path.split(sep)[0] ?? ''
+/** Whether `path` is inside `folder`, both from the repository's top: every segment of the folder starts the path. */
+const isInside = (path: string, folder: string): boolean => {
+  const [segments, within] = [path.split(sep), folder.split('/')]
+  return within.length < segments.length && within.every((segment, at) => segments[at] === segment)
+}
 
 /** What a scan allows beyond the repository's own code and Node's. */
 export interface AllowedImports {
-  /** Each package, with the one folder whose files may import it. */
-  readonly packages: Readonly<Record<string, string>>
+  /** Each package, with the folders whose files may import it. */
+  readonly packages: Readonly<Record<string, readonly string[]>>
   /** Each file that may import a module that loads others by name, with that module. */
   readonly loaders?: Readonly<Record<string, string>>
 }
@@ -89,7 +93,7 @@ function referenceFinding(path: string, allowed: AllowedImports, reference: Modu
   const { packages, loaders = {} } = allowed
   if (specifier === null) return [{ path, line, specifier, why: COMPUTED }]
   if (loadsByName(specifier)) return loaders[path] === specifier ? [] : [{ path, line, specifier, why: `imports ${specifier}, ${LOADS_BY_NAME}` }]
-  if (isOwnOrNode(specifier) || packages[specifier] === folderOf(path)) return []
+  if (isOwnOrNode(specifier) || (packages[specifier] ?? []).some((folder) => isInside(path, folder))) return []
   return [{ path, line, specifier, why: `imports ${specifier}` }]
 }
 
@@ -148,7 +152,7 @@ function findingsIn(source: CoreSource, allowed: AllowedImports): ImportBeyondTh
  */
 export function importsBeyondTheCore(
   sources: readonly CoreSource[],
-  packages: Readonly<Record<string, string>>,
+  packages: Readonly<Record<string, readonly string[]>>,
   loaders: Readonly<Record<string, string>> = {},
 ): ImportBeyondTheCore[] {
   return sources.flatMap(source => findingsIn(source, { packages, loaders }))

@@ -213,6 +213,7 @@ test('the config root holds no key but the ones the launcher derives: a subagent
     THE_MODEL_SETTING,
     FACTS.mode.setting,
     FACTS.slash_commands.setting,
+    FACTS.telemetry.setting,
     FACTS.skills_advertised.setting,
     FACTS.builtin_skills_advertised.setting,
     FACTS.secret_storage.keyring_switch,

@@ -65,6 +65,8 @@ function theOne(text: string, pattern: RegExp, what: string): RegExpMatchArray {
 
 /** The function named `name` that starts at `at`, whole. */
 const functionAt = (text: string, at: number): string => text.slice(at, closingBrace(text, text.indexOf('{', at)))
+/** The function that starts at `at`, whole, or nothing when the scan cannot close its braces (a regex literal holding a quote). */
+const closedFunctionAt = (text: string, at: number): string => { try { return functionAt(text, at) } catch { return '' } }
 
 // The frontmatter parser opens by keeping the text, stripping a byte-order
 // mark, and matching one pattern, unless no second `---` follows the first.
@@ -88,9 +90,7 @@ function frontmatterIn(text: string): Pick<MarkdownTheHostLoads, 'frontmatter_pa
 function patternNamed(text: string, name: string): string {
   const literal = theOne(text, new RegExp(`[,\\s]${escaped(name)}=\\/((?:\\\\.|[^/\\\\\\n])+)\\/([a-z]*)[,;]`, 'g'), 'the frontmatter pattern')
   const [, source, flags] = literal
-  if (source === undefined || flags !== '' || !source.startsWith(OPENS_AT_THE_START)) {
-    throw new Error(`The frontmatter pattern is /${source ?? ''}/${flags ?? ''}, not one that opens at the start with no flags.`)
-  }
+  if (source === undefined || flags !== '' || !source.startsWith(OPENS_AT_THE_START)) throw new Error(`The frontmatter pattern is /${source ?? ''}/${flags ?? ''}, not one that opens at the start with no flags.`)
   return source
 }
 
@@ -120,8 +120,10 @@ export function loaderIn(text: string, managed: string): { readonly name: string
 /** Each folder name passed by name to the function that calls the loader, and the skills folder joined to the managed folder. */
 function kindsIn(text: string, loader: string, managed: string): string[] {
   // Every function that holds the call holds it, the outer ones too; the caller is the innermost.
+  // A function whose braces the scan cannot close (a regex literal holding a quote or a brace, which the scan does not
+  // read as one) is not taken as the caller: if it were the caller, none is found and the host is refused (martha#811).
   const holding = [...text.matchAll(/function ([\w$]+)\([^)]*\)\{/g)]
-    .map((match) => ({ name: match[1] ?? '', source: functionAt(text, match.index) }))
+    .map((match) => ({ name: match[1] ?? '', source: closedFunctionAt(text, match.index) }))
     .filter(({ source }) => source.includes(`=>${loader}(`))
   const shortest = Math.min(...holding.map(({ source }) => source.length))
   const callers = holding.filter(({ source }) => source.length === shortest)

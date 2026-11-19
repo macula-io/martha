@@ -1,6 +1,6 @@
 // The config one Goose launch writes into its own root (martha#541, packages 7-8 C3): the provider and the model the
 // member's declaration names, the provider's own settings, the mode that brings every tool call to Martha, slash
-// commands off, one switch for every platform extension the pinned build declares, every one off but the one a
+// commands off, telemetry off (#541 row 6), one switch for every platform extension the pinned build declares, every one off but the one a
 // member keeps, and the crew's own tool server, the one server the root names (../serve_the_crews_tools_to_an_engine,
 // martha#541 part C, C1).
 //
@@ -52,6 +52,13 @@ export const SKILLS_OFF = false
 
 /** What the keyring switch is set to: the engine reads a YAML true as off, so the secrets come from the file beside the config (#541 package A). */
 export const KEYRING_OFF = true
+
+/**
+ * What the engine's telemetry opt-in is set to (#541 row 6): the setting sends usage events to the engine's makers when
+ * true, so a launch writes `false` and the engine opens no connection of its own beside the model's, whatever it would do
+ * with a config that does not name it.
+ */
+export const TELEMETRY_OFF = false
 
 /** The config key the engine reads the provider from. */
 export const THE_PROVIDER_SETTING = 'GOOSE_PROVIDER'
@@ -152,6 +159,7 @@ export function theConfigOfALaunch(facts: RecordedEngine, model: TheModelALaunch
     // Not the opposite of the engine's default: the setting turns slash commands ON, so off is `false`
     // whether the engine would have them on or off in a config that does not name it.
     aLine(facts.slash_commands.setting, SLASH_COMMANDS_OFF),
+    aLine(facts.telemetry.setting, TELEMETRY_OFF),
     aLine(facts.skills_advertised.setting, SKILLS_OFF),
     aLine(facts.builtin_skills_advertised.setting, SKILLS_OFF),
     aLine(facts.secret_storage.keyring_switch, KEYRING_OFF),

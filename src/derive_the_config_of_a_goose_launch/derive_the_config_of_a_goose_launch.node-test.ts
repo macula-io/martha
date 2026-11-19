@@ -11,7 +11,7 @@ import { test } from 'node:test'
 
 import { ENGINE_PLACES } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { KEYRING_OFF, SKILLS_OFF, theConfigOfALaunch, theSecretsOfALaunch, theServersAConfigNames, THE_EXTENSIONS_SETTING, type AToolServerTheConfigNames, type TheModelALaunchRuns } from './derive_the_config_of_a_goose_launch.ts'
+import { KEYRING_OFF, SKILLS_OFF, TELEMETRY_OFF, THE_EXTENSIONS_SETTING, theConfigOfALaunch, theSecretsOfALaunch, theServersAConfigNames, type AToolServerTheConfigNames, type TheModelALaunchRuns } from './derive_the_config_of_a_goose_launch.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 
@@ -97,6 +97,15 @@ test('the same name in another case is another key, and refused (martha#797; mut
 
 test('a recorded setting whose value carries a line break is refused (martha#797; mutant: the value check dropped)', () => {
   refusedSaying(() => theConfigOfALaunch(FACTS, aDeclaration({ [aRecordedSetting()]: 'a value\nwith a line of its own' }), A_SERVER), ['line break'])
+})
+
+test('the telemetry switch is written off by the name the recording gives it, whatever the engine does when it is unset (#541 row 6; mutant: the line dropped)', () => {
+  const { setting } = FACTS.telemetry
+  for (const when_unset of [true, false]) {
+    const lines = theConfigOfALaunch({ ...FACTS, telemetry: { setting, when_unset } }, aDeclaration({}), A_SERVER).split('\n')
+    assert.deepEqual(lines.filter((line) => line.startsWith(`${setting}:`)), [`${setting}: ${String(TELEMETRY_OFF)}`], `with the engine's default ${String(when_unset)}`)
+  }
+  assert.equal(TELEMETRY_OFF, false, 'the setting opts the engine in when true, so off is false')
 })
 
 test('both skills switches are written off by the names the recording gives them, whatever the engine does when they are unset (martha#839; mutants: either line dropped)', () => {

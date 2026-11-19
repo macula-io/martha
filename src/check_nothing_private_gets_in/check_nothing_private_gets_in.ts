@@ -79,8 +79,6 @@ const anyCase = 'gi'
 // One class: its matches in a line, minus what the class accepts.
 interface TextClass {
   readonly what: string
-  // The value is printed only where printing it leaks nothing new.
-  readonly shows: boolean
   readonly matches: (text: string) => readonly Found[]
   // The value, where it starts, and its line, for a class that reads its context.
   readonly accepts: (value: string, at: number, text: string) => boolean
@@ -100,32 +98,27 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
   return [
     {
       what: 'a lab hostname',
-      shows: false,
       matches: (text) => each(PUBLIC_TEXT_PATTERNS.lab_fqdn, text, anyCase),
       accepts: synthetic(SYNTHETIC.lab_fqdn, 'i'),
     },
     {
       what: 'a home directory',
-      shows: false,
       matches: (text) => each(PUBLIC_TEXT_PATTERNS.home_dir, text),
       accepts: (value) => whole(PUBLIC_TEXT_PATTERNS.allow_home).test(value) || synthetic(SYNTHETIC.home_dir)(value),
     },
     {
       what: 'a private address',
-      shows: true,
       matches: (text) => each(PUBLIC_TEXT_PATTERNS.private_address, text),
       accepts: synthetic(SYNTHETIC.private_address),
     },
     {
       what: 'an email address',
-      shows: true,
       matches: (text) => each(PUBLIC_TEXT_PATTERNS.email, text),
       accepts: (value) =>
         allowEmail.test(value) || synthetic(SYNTHETIC.email)(value) || synthetic(SYNTHETIC.lab_fqdn)(value.slice(value.indexOf('@') + 1)),
     },
     {
       what: `a ${ID_HEX_DIGITS}-hex id`,
-      shows: true,
       matches: (text) => each(hexRun, text),
       // A public digest is accepted only where a declared form holds it
       // (public_digest.ts), and only as a run of exactly one id's length: a longer
@@ -140,30 +133,42 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
 const LAB_HOST = '<lab host>'
 
 // Any text this check prints, with each lab hostname in it replaced, in any case: a
-// hit's location, a repository name, an error a lookup or git threw.
+// hit's location, an error a lookup or git threw.
 export const withoutLabNames = (text: string) => text.replace(new RegExp(PUBLIC_TEXT_PATTERNS.lab_fqdn, anyCase), LAB_HOST)
 
-// Whether a text names a lab hostname.
-const namesALabHost = (text: string) => new RegExp(PUBLIC_TEXT_PATTERNS.lab_fqdn, 'i').test(text)
+// A value one class refuses in a line, as the scan found it. It is never printed: a hit
+// carries only the class (martha#855).
+export interface Refused {
+  readonly what: string
+  readonly value: string
+}
 
-// Nothing printed names a lab hostname: not a class's value (an email at a lab
-// host), not a repository or shorthand name, not the path a hit is found at. A
-// value of a class is withheld whole; anything else has each lab hostname in it
-// replaced.
+const refusedOf = (text: string, classes: readonly TextClass[]): Refused[] =>
+  classes.flatMap((one) =>
+    one.matches(text)
+      .filter((found) => !one.accepts(found.value, found.at, text))
+      .map((found) => ({ what: one.what, value: found.value })),
+  )
+
+// What each class refuses in one line of text, value and all, for the tests that pin
+// which value a class refuses. The check's own output goes through privateHitsIn,
+// which withholds every value.
+export const refusedValuesIn = (text: string, rules: Rules): Refused[] => refusedOf(text, textClasses(rules))
+
+// Nothing printed carries a private value. A class's value is withheld whole, whatever
+// its class, and so is the name a repository hit or a shorthand hit found: a CI log of
+// a public repository is public (martha#846, martha#855). The path a hit is found at,
+// which is printed, has each lab hostname in it replaced.
+const WITHHELD = '(value withheld)'
 const printing = () => {
   const clean = withoutLabNames
-  const shown = (one: TextClass, value: string) =>
-    one.shows && !namesALabHost(value) ? `${one.what} (${value})` : `${one.what} (value withheld)`
+  const shown = (refused: Refused) => `${refused.what} ${WITHHELD}`
   return { clean, shown }
 }
 type Printing = ReturnType<typeof printing>
 
 const textHitsOf = (line: Line, classes: readonly TextClass[], print: Printing): Hit[] =>
-  classes.flatMap((one) =>
-    one.matches(line.text)
-      .filter((found) => !one.accepts(found.value, found.at, line.text))
-      .map((found) => ({ where: print.clean(line.where), what: print.shown(one, found.value) })),
-  )
+  refusedOf(line.text, classes).map((refused) => ({ where: print.clean(line.where), what: print.shown(refused) }))
 
 export interface RepoReference {
   readonly where: string
@@ -221,18 +226,22 @@ const shorthandHitsOf = (line: Line, rules: Rules, print: Printing): Hit[] =>
     .map((found) => found[1] ?? '')
     .filter((name) => name.toLowerCase() !== rules.ownRepo.toLowerCase())
     .filter((name) => !(rules.allowSynthetic && whole(SYNTHETIC.repo_owner).test(name)))
-    .map((name) => ({
+    .map(() => ({
       where: print.clean(line.where),
-      what: `a shorthand reference to another repository (${print.clean(name)}#...): write owner/repo#n so it can be checked`,
+      what: `a shorthand reference to another repository ${WITHHELD}: write owner/repo#n so it can be checked`,
     }))
 
-// A lookup that throws stops the check, and its message is printed: whatever it
-// says about the repository it was asked has its lab names replaced first.
+// A lookup that throws stops the check, and its message is printed. The repository it
+// was asked about is withheld there as in a hit (a rate limit or a 5xx says nothing
+// about whether that name is public, martha#855), and the line that named it is said
+// instead; any lab name left is replaced.
 const resolvedOrCleanError = async (resolve: Resolve, reference: RepoReference) => {
   try {
     return await resolve(reference.owner, reference.repo)
   } catch (error) {
-    throw new Error(withoutLabNames(error instanceof Error ? error.message : String(error)))
+    const said = error instanceof Error ? error.message : String(error)
+    const withheld = said.replaceAll(`${reference.owner}/${reference.repo}`, WITHHELD)
+    throw new Error(withoutLabNames(`${withheld} (the repository named at ${reference.where})`))
   }
 }
 
@@ -251,7 +260,7 @@ export const privateHitsIn = async (sources: readonly Source[], rules: Rules, re
     .filter((reference) => visibility.get(`${reference.owner}/${reference.repo}`.toLowerCase()) !== 'public')
     .map((reference) => ({
       where: print.clean(reference.where),
-      what: `a repository that is not public (${print.clean(`${reference.owner}/${reference.repo}`)})`,
+      what: `a repository that is not public ${WITHHELD}`,
     }))
   return [
     ...lines.flatMap((line) => [...textHitsOf(line, classes, print), ...shorthandHitsOf(line, rules, print)]),

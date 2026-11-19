@@ -198,7 +198,7 @@ async function theAsksServed(start: AStartOnItsHost, launch: AGooseLaunch): Prom
   const mute = (): TheMute => (start.places.bells === undefined ? NOTHING_IS_MUTED : theMuteOf({ directory: start.places.bells, lines: { append: appendStateLine, read: readStateFile } }, start.member))
   if (mute().muted) start.tellOwner(theMutedStartLine(start.member))
   const asks = theOwnersAsks({
-    screen: theOwnersScreenOfALaunch({ member: start.member, beats: dashboardRowsIn(start.places.dashboard), declared_bells: start.settings.house_rules.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(start.stdio), write: (bytes) => void process.stdout.write(bytes) }),
+    screen: theOwnersScreenOfALaunch({ member: start.member, beats: dashboardRowsIn(start.places.dashboard), declared_bells: start.settings.house_rules.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(start.stdio), environment: process.env, write: (bytes) => void process.stdout.write(bytes) }),
     now: Date.now,
     anOwnerActStandsBehind: (heard) => {
       const read = readStateFile(answers_typed)
