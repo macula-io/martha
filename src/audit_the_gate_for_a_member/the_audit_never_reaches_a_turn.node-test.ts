@@ -21,8 +21,8 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
-import { COINCIDENCE_FILE } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
+import { moduleReferencesOf } from '../../prove_the_core/read_a_source/parse_a_source.ts'
+import { COINCIDENCE_FILE } from '../../prove_the_core/a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts'
 
 /** The repository, from this file: src/audit_the_gate_for_a_member/<this file>. */
 const REPOSITORY = join(import.meta.dirname, '..', '..')

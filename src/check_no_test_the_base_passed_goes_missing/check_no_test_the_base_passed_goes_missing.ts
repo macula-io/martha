@@ -9,7 +9,7 @@
 // The two trailer names live here and nowhere else: the workflow and the tests read them from this module, so a
 // second spelling cannot drift.
 
-import { testTitlesIn } from '../../prove_the_core/test_titles_in.ts'
+import { testTitlesIn } from '../../prove_the_core/read_a_source/test_titles_in.ts'
 
 /** A commit says it drops one test with this trailer, naming `<path> :: <title>`, the path as it is at the tip. */
 export const DROPS_TEST_TRAILER = 'Drops-test'

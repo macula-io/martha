@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
+import { moduleReferencesOf } from '../../prove_the_core/read_a_source/parse_a_source.ts'
 import {
   processGroupOf,
   relay,

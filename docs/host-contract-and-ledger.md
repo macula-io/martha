@@ -91,7 +91,7 @@ not a slice either, and it may be cut into several directories to stay under the
 slice cap. `martha.programParts` names each such directory and the program it
 belongs to. The core's rules treat a part like its program, and the part is still
 held to the slice cap. In exchange, only its program and that program's other
-parts may import it. `prove_the_core/a_program_part_is_loaded_by_its_program_alone.ts`
+parts may import it. `prove_the_core/what_the_core_may_reach/a_program_part_is_loaded_by_its_program_alone.ts`
 names any other file that does (martha#443).
 
 - **Rows** live one directory per stream, the name encoded so it is never a

@@ -38,7 +38,7 @@ import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_wor
 import { GIT, GITHUB_CLI, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { A_HOLD_REFUSES } from '../hold_a_package_back_from_a_batch/hold_a_package_back_from_a_batch.ts'
 import { STANDING_CLOSE, closeAStandingItem, recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
-import { HOST_CEILINGS_SCRIPT, manifestPathOf, type Manifest } from '../../prove_the_core/declared_in_package_json.ts'
+import { HOST_CEILINGS_SCRIPT, manifestPathOf, type Manifest } from '../../prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import {
   A_DRY_RUN,
   FAST_FORWARD_DESCRIPTION,

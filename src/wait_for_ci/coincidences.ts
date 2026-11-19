@@ -1,7 +1,7 @@
 // The coincidences of wait_for_ci: words its own files spell like a constant held elsewhere, meaning something else
 // by them, each with its reason (martha#289, #437). Read by the restated-values check as a syntax tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { RUNS_DIRECTORY } from '../run_an_owner_signed_command/run_a_signed_shape.ts'
 
 export const COINCIDENCES: readonly Exception[] = [

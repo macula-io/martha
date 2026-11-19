@@ -248,7 +248,7 @@ export const ADMITS: Readonly<
   'ring.serving': (value) => value === 0 || value === 1,
   // The member's own serving procedure, built from the id the server holds: whatever one leading character the server
   // puts in front of it, then that id, then `/ring`. The leading character is never written here: a string literal
-  // that starts at the home directory is refused in a slice (../prove_the_core/no_setting_outside_the_declaration),
+  // that starts at the home directory is refused in a slice (../prove_the_core/what_the_core_may_reach/no_setting_outside_the_declaration),
   // and that check cannot tell a mesh procedure from a path. So the id is read at its offset instead.
   'ring.procedure': (value, _whole, _defaults, _labels, launch) => {
     const id = launch.node_id.toLowerCase()
