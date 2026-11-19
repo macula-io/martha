@@ -2767,6 +2767,7 @@ for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const) {
     )
 
     launcher.kill(signal)
+    await until(`the launcher to end of ${signal}`, () => launcher.exitCode !== null || launcher.signalCode !== null, t)
     assert.deepEqual(await ended, howTheLauncherEnds(signal), 'the signal still ends the launcher, SIGQUIT with its status and no core')
     await until('the member\'s group to be killed', () => !isAlive(child), t)
     assert.deepEqual(readdirSync(place.relay_root), [])
@@ -4384,16 +4385,21 @@ test('a run killed hard takes its launcher, its shell, its member and its home w
   assert.equal(isAlive(launcherPid), true, 'the launcher runs before the kill')
   assert.ok(pidsNamingTheHome(place.home).length >= 3, `the launcher, its shell and the member all name the home: ${pidsNamingTheHome(place.home).join(', ')}`)
   run.kill('SIGKILL')
-  // Nothing is signalled to anything below the run: every one of them ends because the pipe's other end closed.
+  // Nothing is signalled to anything below the run: every one of them ends because the pipe's other end closed. Each is
+  // waited on until it has ended, never looked at once: a launcher that has removed its home and let go of it is still
+  // exiting for a moment after, and a single look then saw it alive (martha#833).
+  const theEnded = [
+    { who: 'the member', pid: member },
+    { who: 'the shell that waited on its launcher', pid: shell },
+    { who: 'the launcher itself', pid: launcherPid },
+  ]
+  const stillRunning = (): string[] => theEnded.filter(({ pid }) => isAlive(pid)).map(({ who, pid }) => `${who} (${String(pid)})`)
   await until(
-    'the home the run made to go, and every process that named it',
-    () => !existsSync(place.home) && pidsNamingTheHome(place.home).length === 0,
+    'the home the run made to go, every process that named it, and the member, its shell and its launcher to end',
+    () => !existsSync(place.home) && pidsNamingTheHome(place.home).length === 0 && stillRunning().length === 0,
     t,
-    () => `still named by ${pidsNamingTheHome(place.home).join(', ')}`,
+    () => `still named by ${pidsNamingTheHome(place.home).join(', ')}; still running: ${stillRunning().join(', ')}`,
   )
-  assert.equal(isAlive(member), false, 'the member did not outlive the run that started it')
-  assert.equal(isAlive(shell), false, 'nor did the shell that waited on its launcher')
-  assert.equal(isAlive(launcherPid), false, 'nor did the launcher itself')
   assert.equal(existsSync(join(runtime, 'lifeline')), true, 'the run\'s own pipe is the launcher\'s to read, and never to remove')
 })
 
