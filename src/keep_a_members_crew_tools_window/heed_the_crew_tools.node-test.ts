@@ -247,6 +247,22 @@ test('a refused answer is left alone and hands nothing, so the line goes on the 
   assert.ok('answer' in said && said.answer.endsWith(theTimesLineOf(closed)), 'the times did not go on the next report')
 })
 
+test('a new loss that opened before the start was answered is left unmarked by the hand the old window gave (martha#658 Done-when 4)', async () => {
+  const launch = aLaunch()
+  launch.facts.set(LOST_IN, WITHDRAWN)
+  await heedTheCrewTools(launch.places, LOST_IN)
+  const handed = withTheOwedLine(launch.places, 'a-successor', null)
+  assert.ok(handed.beats_read !== undefined, 'the start was handed no beats to carry')
+  // The window that hand read is gone by the time the start is answered: it closed, and a new loss opened.
+  launch.facts.set(LOST_IN, HELD)
+  await heedTheCrewTools(launch.places, LOST_IN)
+  launch.facts.set('later', { ...WITHDRAWN, at: BACK + 1 } as ServedToolsHeld)
+  await heedTheCrewTools(launch.places, 'later')
+  theBeatsMarkedOn(launch.places, handed.beats_read!)
+  assert.equal(theWindowOf(launch.place, MEMBER)?.session, 'later', 'the test did not leave a newer loss open')
+  assert.equal(theWindowOf(launch.place, MEMBER)?.beats_handed, undefined, 'the hand the old window gave marked the new loss')
+})
+
 test('the beats were handed twice across a close: a start while the window is open marks it, and the start after the close carries nothing (martha#658 Done-when 4)', async () => {
   const launch = aLaunch()
   launch.facts.set(LOST_IN, WITHDRAWN)
