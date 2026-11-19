@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { bareModeVariableOf, hostSkillCatalogVariableOf, theSkillsLoaderHolds, theSkillsLoaderIn, type TheSkillsLoader } from './the_skills_loader.ts'
+import { bareModeVariableOf, hostSkillCatalogVariableOf, theDroppedVariablesHold, theSkillsLoaderHolds, theSkillsLoaderIn, type TheSkillsLoader } from './the_skills_loader.ts'
 
 // T8 (martha#747): the recorded skills loader is held to what a launch relies on, and a host whose loader stops doing
 // any of it fails by name. Every changed loader here is the committed one with one statement altered, so each case
@@ -73,4 +73,12 @@ test("T8: the cutter passes over a function of another shape that shares the bar
   const text = [decoy, RECORDED.bare_mode_test, RECORDED.host_skill_catalog, RECORDED.skills_loader].join(';')
   assert.equal(theSkillsLoaderIn(text).bare_mode_test, RECORDED.bare_mode_test)
   assert.throws(() => theSkillsLoaderIn([decoy, RECORDED.host_skill_catalog, RECORDED.skills_loader].join(';')), /holds 0 of the bare-mode test, not one/)
+})
+
+test('T7, T9a: the committed recording reads the two variables a launch drops, and a host that renames either fails by name', () => {
+  assert.doesNotThrow(() => theDroppedVariablesHold(RECORDED))
+  const bareRenamed = { ...RECORDED, bare_mode_test: RECORDED.bare_mode_test.replace(/process\.env\.[A-Z0-9_]+/, 'process.env.A_RENAMED_SWITCH') }
+  assert.throws(() => theDroppedVariablesHold(bareRenamed), /bare-mode test reads A_RENAMED_SWITCH, not /)
+  const catalogRenamed = { ...RECORDED, host_skill_catalog: RECORDED.host_skill_catalog.replace(/Ignoring [A-Z0-9_]+:/, 'Ignoring A_RENAMED_CATALOG:') }
+  assert.throws(() => theDroppedVariablesHold(catalogRenamed), /catalog reader reads A_RENAMED_CATALOG, not /)
 })

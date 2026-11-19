@@ -86,8 +86,7 @@ import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { CLAUDE_SKILLS } from '../refuse_launch_of_unapproved_config/carry_the_approved_skills.ts'
-import { CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE } from '../load_the_hosts_markdown/the_skills_loader.ts'
-import { SKILLS_KIND } from '../load_the_hosts_markdown/the_skills_folders.ts'
+import { CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE, SKILLS_KIND } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 // --- the run this file is (martha#559) --------------------------------------------
 

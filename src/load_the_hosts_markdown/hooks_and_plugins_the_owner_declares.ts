@@ -34,7 +34,7 @@
 
 import { CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 
-export { SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from './the_skills_folders.ts'
+export { SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The variable from which Claude Code loads plugin folders, when it is set and not blank. */
 export const PLUGIN_DIRS_VARIABLE = 'CLAUDE_CODE_PLUGIN_DIRS'

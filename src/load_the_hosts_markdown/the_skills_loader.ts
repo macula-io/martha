@@ -8,10 +8,10 @@
 //   - in bare mode it returns before either read, reading added folders' skills with no guard. Bare mode is the one
 //     test `bare_mode_test` holds whole, so the variable the launch drops is the one that test reads.
 // The host skill catalog, a mount named by an inherited variable, is the fourth source of user-scope skills; the
-// function that reads it is recorded whole, and the variable is read from its own warning, never typed.
+// function that reads it is recorded whole. The two variables a launch drops are Claude Code facts
+// (../know_claude_codes_own_facts/claude_code_facts.ts), and the recorded text is checked to read exactly those.
 
-import { readFileSync } from 'node:fs'
-
+import { CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { closingBrace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { enclosingAsyncFunction } from './markdown_the_host_loads.ts'
 
@@ -87,14 +87,15 @@ export function theSkillsLoaderIn(text: string): TheSkillsLoader {
 
 /**
  * Refuses, by what no longer holds, a recorded skills loader a launch cannot rely on: the copies in the member's
- * config folder would not load, the checkout's own folder would, or bare mode reads a variable the launch does not
- * drop. The recorder runs it on what it cuts, and the recording runs it on what is committed.
+ * config folder would not load, the checkout's own folder would, or its bare-mode test or catalog reader reads another
+ * variable than the one Claude Code's facts name, which is the one a launch drops. The recorder runs it on what it
+ * cuts, and the recording runs it on what is committed.
  */
 export function theSkillsLoaderHolds(recorded: TheSkillsLoader): void {
   const { skills_loader, host_skill_catalog } = recorded
   theProjectGuardHolds(skills_loader, theUserReadHolds(recorded))
   if (!skills_loader.includes(`${nameOf(host_skill_catalog)}()`)) throw new Error('The skills loader does not call the recorded host skill catalog reader (martha#747).')
-  hostSkillCatalogVariableOf(host_skill_catalog)
+  theDroppedVariablesHold(recorded)
 }
 
 /** Refuses a loader whose user-scope read is gone or comes before its bare-mode return; answers where its bare branch starts. */
@@ -135,22 +136,16 @@ export function hostSkillCatalogVariableOf(host_skill_catalog: string): string {
 }
 
 /**
- * The committed recording's skills loader, held to what a launch relies on. It is read here, beside its own checks,
- * rather than through the recording's module, because the launch gate needs the two variables below and the
- * recording's module reaches the gate through the crew's taint carry: one import from there would close a loop.
+ * Refuses a recorded loader whose bare-mode test or catalog reader reads another variable than the one Claude Code's
+ * facts name, which is the one a launch drops: a host that renames either fails here by name (martha#747).
  */
-const RECORDED_SKILLS_LOADER: TheSkillsLoader = ((): TheSkillsLoader => {
-  const recording = JSON.parse(readFileSync(new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url), 'utf8')) as TheSkillsLoader
-  const loader = { skills_loader: recording.skills_loader, bare_mode_test: recording.bare_mode_test, host_skill_catalog: recording.host_skill_catalog }
-  theSkillsLoaderHolds(loader)
-  return loader
-})()
-
-/**
- * The variable that puts the recorded host in bare mode (martha#747): a member in bare mode would load none of the
- * skills its launch copies, and none of its gate's hooks, so a launch drops it.
- */
-export const CLAUDE_CODE_BARE_MODE_VARIABLE: string = bareModeVariableOf(RECORDED_SKILLS_LOADER.bare_mode_test)
-
-/** The variable that names the recorded host's skill catalog mount (martha#747): no approval reads that mount, so a launch drops it. */
-export const CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE: string = hostSkillCatalogVariableOf(RECORDED_SKILLS_LOADER.host_skill_catalog)
+export function theDroppedVariablesHold(recorded: TheSkillsLoader): void {
+  const bare = bareModeVariableOf(recorded.bare_mode_test)
+  if (bare !== CLAUDE_CODE_BARE_MODE_VARIABLE) {
+    throw new Error(`The recorded bare-mode test reads ${bare}, not ${CLAUDE_CODE_BARE_MODE_VARIABLE}, which a launch drops (martha#747).`)
+  }
+  const catalog = hostSkillCatalogVariableOf(recorded.host_skill_catalog)
+  if (catalog !== CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE) {
+    throw new Error(`The recorded host skill catalog reader reads ${catalog}, not ${CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE}, which a launch drops (martha#747).`)
+  }
+}

@@ -44,3 +44,25 @@ export const MCP_CONFIG_SWITCH = '--mcp-config'
  * and the tarball's stub is what stays.
  */
 export const CLAUDE_AUTO_UPDATER_OFF: Readonly<Record<string, string>> = { DISABLE_AUTOUPDATER: '1' }
+
+/** The folder under the owner's skills folder that Claude Code fills from their Claude account (martha#243). */
+export const SYNCED_SKILLS_FOLDER = 'synced'
+
+/** The kind of the owner's markdown the host syncs into: the recording names it, and a test fails if it stops. */
+export const SKILLS_KIND = 'skills'
+
+/** The folder the host moves skills it no longer runs into. It loads a SKILL.md directly in it, and nothing below an entry (martha#243). */
+export const TRASH_FOLDER = '.trash'
+
+/**
+ * The variable that puts the host in bare mode (martha#747): a member in bare mode would load none of the skills its
+ * launch copies, and none of its gate's hooks, so a launch drops it. The recorded bare-mode test is checked to read
+ * this one (../load_the_hosts_markdown/the_skills_loader.ts), so a host that renames it fails by name.
+ */
+export const CLAUDE_CODE_BARE_MODE_VARIABLE = 'CLAUDE_CODE_SIMPLE'
+
+/**
+ * The variable that names the host's skill catalog mount (martha#747): no approval reads that mount, so a launch drops
+ * it. The recorded catalog reader's own warning is checked to name this one, as above.
+ */
+export const CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE = 'CLAUDE_CODE_HOST_SKILL_CATALOG'

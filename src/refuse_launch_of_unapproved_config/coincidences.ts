@@ -6,7 +6,7 @@ import { TREE_PARAMETER } from '../install_the_recorded_mesh_server/confine_to_t
 import { THE_TAG_OF_A_READ_TREE } from '../judge_a_checkouts_tree/coincidences.ts'
 import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { SKILLS_KIND } from '../load_the_hosts_markdown/the_skills_folders.ts'
+import { SKILLS_KIND } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 
 /** Why one test spells the switch out: the host's spelling is a fact outside this tree, and an import would agree with a typo. */

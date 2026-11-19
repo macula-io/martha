@@ -55,9 +55,17 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { checkoutTheGateReads, readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
-import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import {
+  CLAUDE_AUTO_UPDATER_OFF,
+  CLAUDE_CODE,
+  CLAUDE_CODE_BARE_MODE_VARIABLE,
+  CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE,
+  CLAUDE_FOLDER,
+  MCP_CONFIG_SWITCH,
+  MEMORY_FOLDER_OVERRIDE,
+  REMOTE_MEMORY_ROOT,
+} from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE } from '../load_the_hosts_markdown/the_skills_loader.ts'
 import { aSkillWithAReservedName, CLAUDE_SKILLS, isBelowACarriedFolder } from './carry_the_approved_skills.ts'
 
 
@@ -205,7 +213,7 @@ const OPENCODE_AUTO_UPDATER_OFF: Readonly<Record<string, string>> = { OPENCODE_D
 /**
  * Each brings skills in that no approval read (martha#747): bare mode, in which the host loads none of the skills a
  * launch copies and reads added folders' skills unguarded, and the host skill catalog, a mount of skills named by an
- * inherited variable. Both names are read from the recorded host, never typed.
+ * inherited variable. Both are Claude Code facts the recorded host is checked against (martha#747).
  */
 const CLAUDE_SKILLS_ELSEWHERE = [CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE] as const
 

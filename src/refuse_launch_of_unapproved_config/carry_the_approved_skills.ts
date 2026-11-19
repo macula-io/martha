@@ -13,8 +13,7 @@
 //     loader's rules. A copied skill under either would be read differently from the way the owner approved it;
 //   - the carried bytes, keyed below the skills folder, as the member's config folder takes them.
 
-import { SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../load_the_hosts_markdown/the_skills_folders.ts'
-import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE_FOLDER, SKILLS_KIND, SYNCED_SKILLS_FOLDER, TRASH_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 /** The skills folder of a Claude Code checkout, as the gate lists it and the approval names its files. */
 export const CLAUDE_SKILLS = `${CLAUDE_FOLDER}/${SKILLS_KIND}`

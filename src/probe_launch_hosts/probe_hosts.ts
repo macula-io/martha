@@ -50,7 +50,7 @@ import {
 } from '../probe_the_owners_hooks/probe_the_owners_hooks.ts'
 import { APPROVED_SKILLS_PROBES, OWNER_SCOPE_PROBES, SYNCED_PROBES, TRASH_PROBE } from '../probe_the_owners_own_folders/probe_the_owners_own_folders.ts'
 import { theCarriedSkills } from '../refuse_launch_of_unapproved_config/carry_the_approved_skills.ts'
-import { SKILLS_KIND } from '../load_the_hosts_markdown/the_skills_folders.ts'
+import { SKILLS_KIND } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { reportMemoryProbe } from '../probe_the_hosts_auto_memory/probe_the_hosts_auto_memory.ts'
 
 function version(command: string): string {
