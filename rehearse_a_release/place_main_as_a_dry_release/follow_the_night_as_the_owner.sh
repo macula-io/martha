@@ -11,6 +11,7 @@
 #     in the terminal. The first: approve each crew place where martha approve asks (nothing where it says Nothing to
 #     approve), sign in to Claude, answer the folder question yes, then /exit. The second, once the builder has queued
 #     the landing: it attaches to the builder's terminal; answer the landing's menu yes, then detach with Ctrl-b, then d.
+#     Before that one it says, in one plain sentence, that the yes is a speed bump on a night (martha#847).
 #     Between them, before the package is typed, the watch (martha#843): it shows the builder's terminal read-only, so
 #     the builder's ring reaches the owner's terminal; keep it open until the night ends.
 #   - when the driver writes proof_exit=, result= or interrupted= to run.txt, the night has ended: this prints
@@ -45,6 +46,11 @@ PROMPT='Press Enter to run it here: '
 ENDED='--- the night ended'
 PASSED='the night passed (a dry pass)'
 NOT_PASSED='the night did not pass'
+# Said before the writable attach, where the owner gives the landing yes (martha#847): the night's tmux server runs as
+# the members' own user, so this yes and the night's bounds are speed bumps, said plainly (DECIDED 2026-11-18).
+SPEED_BUMP='Said plainly: on a night, any process a member runs can reach the tmux server of the night itself. It can type this yes, or undo the read-only watch and the other bounds the night sets, so this yes is a speed bump, not a wall (martha#847).'
+# What the shape check says of the one command the yes is given in: the attach, writable.
+FOR_THE_YES='the attach for the yes'
 # What every owner command runs on the host, before it is quoted as one word: a terminal in the night's container.
 REMOTE_LEAD="'podman' 'exec' '-it' '"
 # A quote inside a quoted word, as the proof writes it: close the quote, an escaped quote, open it again.
@@ -60,7 +66,7 @@ RUN="${1:-}"
 HOST="${2:-}"
 [ -n "${RUN}" ] && [ -n "${HOST}" ] || { echo "usage: follow_the_night_as_the_owner.sh <the night's run folder> <ssh-host>" >&2; exit "${REFUSED}"; }
 [[ "${HOST}" =~ ${HOST_NAME} ]] || { echo "not a host this script can check a command against: '${HOST}'" >&2; exit "${REFUSED}"; }
-for tool in ssh awk grep sed date sleep cat wc head dirname; do
+for tool in bash ssh awk grep sed date sleep cat wc head dirname; do
   command -v "${tool}" > /dev/null || { echo "${tool} is not on your PATH" >&2; exit "${REFUSED}"; }
 done
 
@@ -125,7 +131,7 @@ the_proofs_shape() {
   [[ "${rest}" =~ ^\'sh\'\ \'-lc\'\ \'([^\']|\'\\\'\')*\'$ ]] && return 0
   # The attach, and the watch (martha#843): the attach with the night's read-only flag before -t and no other option.
   # Both name the night's builder and no other member: the builder's is the only terminal the night offers the owner.
-  [ "${rest}" = "'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '-t' '${BUILDER}'" ] && return 0
+  [ "${rest}" = "'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '-t' '${BUILDER}'" ] && { echo "${FOR_THE_YES}"; return 0; }
   [ "${rest}" = "'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '${WATCH_FLAG}' '-t' '${BUILDER}'" ] && return 0
   echo 'what it runs in the container is not the sign-in or the attach'; return 1
 }
@@ -149,8 +155,8 @@ while :; do
     mapfile -t -n "${complete}" cmds < "${COMMANDS}"
     line="${cmds[${done_cmds}]}"
     done_cmds=$((done_cmds + 1))
-    if ! why="$(the_proofs_shape "${line}")"; then
-      printf '\n%s (owner command %d: %s)\n' "${NOT_THE_PROOFS}" "${done_cmds}" "${why}" >&2
+    if ! shape="$(the_proofs_shape "${line}")"; then
+      printf '\n%s (owner command %d: %s)\n' "${NOT_THE_PROOFS}" "${done_cmds}" "${shape}" >&2
       exit "${REFUSED}"
     fi
     printf '\n== owner command %d (%s)\n' "${done_cmds}" "$(date '+%T')"
@@ -159,6 +165,7 @@ while :; do
     awk -v command="  ${line}" -v most="${STEPS_SHOWN}" '
       $0 == command { left = most; next }
       left > 0 { gsub(/[[:cntrl:]]/, ""); print " " $0; left--; if ($0 ~ /\/exit|detach:/) left = 0 }' "${LOG}" 2> /dev/null
+    if [ "${shape}" = "${FOR_THE_YES}" ]; then printf '   %s\n' "${SPEED_BUMP}"; fi
     if ! read -r -p "${PROMPT}" _; then
       printf '\n%s (%d)\n' "${NO_ANSWER}" "${done_cmds}" >&2
       exit "${REFUSED}"
