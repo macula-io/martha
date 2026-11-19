@@ -5,6 +5,7 @@
 // the member's process group goes with it (martha#272).
 
 import assert from 'node:assert/strict'
+import { THE_ENGINES_INSTALL } from '../start_an_engine_member/start_an_engine_member.ts'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, watch, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -301,7 +302,7 @@ test('#710: martha start builds crew tools that hold the window of the tools its
       : `the crew tools a Claude Code launch builds carry no served window, or its look failed: ${member}'s beat wrote no ${CREW_TOOLS_FIELD} in ${BEATS_A_ROW_WAITS} beats (martha#710)`)
 })
 
-test('#541: a member the declaration names the engine for is refused by name, and no other host is started (mutant: the table keyed by the crew\'s host)', async (t) => {
+test('#541: a member the declaration names the engine for is started on the engine\'s launcher, never on another host: with no engine on the path it is refused naming the engine\'s install (mutant: the table keyed by the crew\'s host)', async (t) => {
   const declaration = { ...soloDeclaration('Ada Owner'), members: [{ name: 'builder', role: 'builder' }, { name: 'reviewer', role: 'reviewer', host: THE_ENGINES_HOST }] }
   const place = placeFor(t, { [join(DECLARATION_DIRECTORY, DECLARATION_FILE)]: JSON.stringify(declaration) })
   const fake = fakeClaude(place)
@@ -310,7 +311,7 @@ test('#541: a member the declaration names the engine for is refused by name, an
   assert.equal(started.started, false)
   const refusal = started.started ? '' : started.refusal
   assert.ok(refusal.includes(THE_ENGINES_HOST), refusal)
-  assert.ok(refusal.includes(CLAUDE_CODE), refusal)
+  assert.ok(refusal.includes(THE_ENGINES_INSTALL), refusal)
   assert.equal(existsSync(fake.ran), false, 'a member naming the engine was started on Claude Code')
 })
 

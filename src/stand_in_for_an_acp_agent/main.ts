@@ -12,10 +12,13 @@
 // test reads the answer from the agent's side of the wire and not from the client's own record. A call with no id has
 // no update the client can file, so its answer is said in the turn's text instead.
 
-import { argv, exit, stdin, stdout } from 'node:process'
+import { mkdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { argv, env, exit, stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline'
+import { DatabaseSync } from 'node:sqlite'
 
-import { STAND_IN_SESSION, THE_ENGINES_OPTIONS, theEnginesNamingOf, whatTheEngineMakesOf, type AStep, type AnAgentScript } from './the_stand_in_agents_script.ts'
+import { STAND_IN_SESSION, THE_ENGINES_OPTIONS, theEnginesNamingOf, whatTheEngineMakesOf, type AStandInsSessionRow, type AStep, type AnAgentScript } from './the_stand_in_agents_script.ts'
 
 type Json = Record<string, unknown>
 
@@ -85,7 +88,23 @@ function greet(id: unknown, message: Json): void {
   send({ jsonrpc: '2.0', id, result: { protocolVersion: script.protocolVersion ?? 1, agentCapabilities: {} } })
 }
 
-function openASession(id: unknown): void {
+/** The store's writer, held open while the stand-in runs, as the engine holds its own. */
+let writer: DatabaseSync | undefined
+
+/** Writes the session's row the way the engine does when it opens a session: one row, in a WAL store. */
+function writeTheSessionRow(row: AStandInsSessionRow, working_dir: string): void {
+  const store = join(env[row.root_variable] ?? '', ...row.path)
+  mkdirSync(dirname(store), { recursive: true })
+  writer = new DatabaseSync(store)
+  writer.exec('PRAGMA journal_mode = WAL')
+  writer.exec(`CREATE TABLE "${row.table}" (${row.columns.map((column) => `"${column}" TEXT`).join(', ')})`)
+  const fields: Record<string, string> = { ...row.fields, id: STAND_IN_SESSION, working_dir }
+  const names = Object.keys(fields)
+  writer.prepare(`INSERT INTO "${row.table}" (${names.map((name) => `"${name}"`).join(', ')}) VALUES (${names.map(() => '?').join(', ')})`).run(...names.map((name) => fields[name] ?? null))
+}
+
+function openASession(id: unknown, params: Json): void {
+  if (script.session_row !== undefined) writeTheSessionRow(script.session_row, String(params['cwd']))
   const modes = script.currentModeId === undefined ? undefined : { currentModeId: script.currentModeId, availableModes: [] }
   send({ jsonrpc: '2.0', id, result: { sessionId: STAND_IN_SESSION, modes } })
 }
@@ -94,7 +113,7 @@ function handle(message: Json): void {
   const { id, method } = message
   if (method === undefined && typeof id === 'number') waiting.get(id)?.(message)
   else if (method === 'initialize') greet(id, message)
-  else if (method === 'session/new') openASession(id)
+  else if (method === 'session/new') openASession(id, (message['params'] ?? {}) as Json)
   else if (method === 'session/prompt') void prompt(id, (message['params'] ?? {}) as Json)
 }
 

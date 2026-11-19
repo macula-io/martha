@@ -42,6 +42,7 @@ import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_t
 import { CLAUDE, CLAUDE_CODE, CLAUDE_INSTALL } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { startOnTheEngine, THE_ENGINES_INSTALL, type TheSharedOfAStart } from '../start_an_engine_member/start_an_engine_member.ts'
 import { aReviewerMembersModelRefusal, theOwnersModelSwitchRefusal } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { launchClaudeCodeMember, type ClaudeCodeMemberLaunch, type LauncherPlaces, type MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -122,10 +123,11 @@ export const THE_VOCABULARIES_OF_HOST: TheVocabulariesOfHost = new Map([
 
 /**
  * The launchers this release has, by host. `claude-code` is today's launch, moved behind the table so that the start
- * call itself names no host; the engine's entry is packages 7-8's launch.
+ * call itself names no host; the engine's entry is martha#541 package A's start.
  */
 export const THE_LAUNCHERS_OF_HOST: TheLaunchersOfHost = {
   [CLAUDE_CODE]: { command: CLAUDE, install: CLAUDE_INSTALL, start: startOnClaudeCode },
+  [THE_ENGINES_HOST]: { command: RECORDED_GOOSE_ENGINE.engine_name, install: THE_ENGINES_INSTALL, start: async (start) => startOnTheEngine(start, theSharedOfAStart(start)) },
 }
 
 /** What a start on a host runs on, or why it cannot run. */
@@ -307,6 +309,17 @@ export function theCrewToolsOfAStart(start: AStartOnItsHost, sessions: NonNullab
     launched_on: start.model ?? '',
     ...host,
     ...start.restart,
+  }
+}
+
+/**
+ * What every host's start builds alike from the start (martha#541 package A): the place the owner approved and the crew
+ * tools' shared places, handed to the engine's start so its slice imports none of this file's values.
+ */
+export function theSharedOfAStart(start: AStartOnItsHost): TheSharedOfAStart {
+  return {
+    place: { host: THE_ENGINES_HOST, launch_dir: start.root, stop_dir: start.home, snapshot_root: start.snapshot_root, crew_text_files: crewTextFilesOf(start.settings), ...approvedPlace(start.member, start.approval, start.state) },
+    crewTools: (sessions, served_tools, host) => theCrewToolsOfAStart(start, sessions, served_tools, host),
   }
 }
 

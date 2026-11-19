@@ -325,6 +325,11 @@ export interface AGooseLaunch {
   readonly text_a_start_loads: readonly ATextAStartLoads[]
   /** The tool servers the config root named when it was read back just before the start: the crew's, and only it. */
   readonly servers: readonly string[]
+  /**
+   * The files the gate carried and hashed against the owner's approval, as `prepareLaunch` returned them: the crew's own
+   * texts are composed from these bytes alone, never read live, as a Claude Code launch composes them (martha#306).
+   */
+  readonly carried_files: Extract<PreparedLaunch, { readonly allow: true }>['carried_files']
   readonly engine: TheEngineStarted
   /**
    * The re-check the launch runs after every result (design G1 row `checkTheSettingsStillHold`): the owner's settings
@@ -459,7 +464,7 @@ export async function launchTheGooseEngine(asked: AGooseLaunchAsked): Promise<AG
     directory.remove()
     return { stopped, permissions }
   }
-  return { directory: directory.directory, socket_path: directory.socket_path, places, config_at, text_a_start_loads, servers: readBack.servers, engine: started, settings_still_hold, end }
+  return { directory: directory.directory, socket_path: directory.socket_path, places, config_at, text_a_start_loads, servers: readBack.servers, carried_files: prepared.carried_files, engine: started, settings_still_hold, end }
 }
 
 /**
