@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { aPlaceFor, skillsSwitchIn, skillsSwitchedOffIn, writeTheConfig } from './a_launch_the_trial_writes.ts'
-import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const made: string[] = []
 

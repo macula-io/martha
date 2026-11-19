@@ -10,7 +10,7 @@ import { PassThrough } from 'node:stream'
 import { test } from 'node:test'
 
 import { GooseOverAcp, type Exchange } from './speak_acp_to_goose.ts'
-import { ALLOW_ONCE, REJECT_ONCE } from '../src/speak_acp_to_an_agent/answer_a_permission_once.ts'
+import { ALLOW_ONCE, REJECT_ONCE } from '../../src/speak_acp_to_an_agent/answer_a_permission_once.ts'
 
 /** A child-shaped pair of pipes: what the trial writes lands on `written`, what the test pushes is read. */
 function aPipe(): { child: { stdin: PassThrough; stdout: PassThrough }; written: () => string[] } {
