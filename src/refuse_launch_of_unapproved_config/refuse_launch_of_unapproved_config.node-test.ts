@@ -178,6 +178,41 @@ test("each of the engine's own families is refused until the owner approves it, 
 })
 
 /**
+ * The gate's skill, plugin and settings families are the places the engine's own source reads a checkout's skills
+ * from, as recorded at the pin (martha#614), so an engine that renames or adds one is a recording that changes, and the
+ * design's list above then fails by name, rather than a skill reaching the model past a gate still listing the old name.
+ */
+test("the gate's skill, plugin and settings families are the checkout skill roots the engine's source reads (martha#614)", () => {
+  const roots = RECORDED_GOOSE_ENGINE.checkout_skill_roots
+  assert.deepEqual([...ENGINE_FAMILIES.skills], [...roots.skill_folders])
+  assert.deepEqual([...ENGINE_FAMILIES.plugins], [roots.plugin_folder])
+  assert.deepEqual([...ENGINE_FAMILIES.settings], [...roots.plugin_settings])
+})
+
+/**
+ * A skill is approved before it reaches the model (martha#614, DECIDED 2026-11-18 "Approved skills on"): a checkout
+ * holding one skill and nothing else is refused, naming its folder, until the owner approves the checkout. So is a
+ * plugin that carries a skill, since the engine takes every child of the plugin folder as a plugin.
+ */
+test("a checkout holding only one skill, or only a plugin with a skill, is refused by name until approved (martha#614)", (t) => {
+  const roots = RECORDED_GOOSE_ENGINE.checkout_skill_roots
+  const goose = roots.skill_folders.find((folder) => folder.startsWith(".goose/"))
+  assert.ok(goose !== undefined, "the engine reads no .goose skill folder, so the first case has nothing to plant")
+  for (const [family, skill] of [
+    [goose, join(goose, "a-skill", "SKILL.md")],
+    [roots.plugin_folder, join(roots.plugin_folder, "a-plugin", "skills", "a-skill", "SKILL.md")],
+  ] as const) {
+    const place = scratch(t)
+    put(place.checkout, skill, "---\nname: a-skill\ndescription: a planted skill\n---\nDo the planted thing.\n")
+    const refused = decide(ENGINE, place)
+    assert.equal(refused.decision.allow, false, `${skill} started with no approval`)
+    const refusal = refused.decision.allow ? "" : refused.decision.refusal
+    assert.ok(refusal.includes(family), `${family} is not named in: ${refusal}`)
+    assert.equal(decide(ENGINE, place, approve(ENGINE, place)).decision.allow, true, `${skill} stays refused after the owner approved it`)
+  }
+})
+
+/**
  * `.goosehints` and `AGENTS.md` start nothing: the engine reads them into a prompt, so they are text taken in and not a
  * refusal. A row that puts them in the gate's list would refuse every checkout that carries one, and this case fails by
  * name there (their own row belongs to the wiring that records that read, martha#541 C3).
