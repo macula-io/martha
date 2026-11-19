@@ -10,6 +10,8 @@
 // The host skill catalog, a mount named by an inherited variable, is the fourth source of user-scope skills; the
 // function that reads it is recorded whole, and the variable is read from its own warning, never typed.
 
+import { readFileSync } from 'node:fs'
+
 import { closingBrace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { enclosingAsyncFunction } from './markdown_the_host_loads.ts'
 
@@ -120,3 +122,24 @@ export function hostSkillCatalogVariableOf(host_skill_catalog: string): string {
   if (name === undefined) throw new Error('The recorded host skill catalog reader names no variable in its warning (martha#747).')
   return name
 }
+
+/**
+ * The committed recording's skills loader, held to what a launch relies on. It is read here, beside its own checks,
+ * rather than through the recording's module, because the launch gate needs the two variables below and the
+ * recording's module reaches the gate through the crew's taint carry: one import from there would close a loop.
+ */
+const RECORDED_SKILLS_LOADER: TheSkillsLoader = ((): TheSkillsLoader => {
+  const recording = JSON.parse(readFileSync(new URL('../claude_code_host/recorded_claude_code_host.json', import.meta.url), 'utf8')) as TheSkillsLoader
+  const loader = { skills_loader: recording.skills_loader, bare_mode_test: recording.bare_mode_test, host_skill_catalog: recording.host_skill_catalog }
+  theSkillsLoaderHolds(loader)
+  return loader
+})()
+
+/**
+ * The variable that puts the recorded host in bare mode (martha#747): a member in bare mode would load none of the
+ * skills its launch copies, and none of its gate's hooks, so a launch drops it.
+ */
+export const CLAUDE_CODE_BARE_MODE_VARIABLE: string = bareModeVariableOf(RECORDED_SKILLS_LOADER.bare_mode_test)
+
+/** The variable that names the recorded host's skill catalog mount (martha#747): no approval reads that mount, so a launch drops it. */
+export const CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE: string = hostSkillCatalogVariableOf(RECORDED_SKILLS_LOADER.host_skill_catalog)

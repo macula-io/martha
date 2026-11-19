@@ -15,6 +15,9 @@ import { USER_SETTINGS_FILE, userSettingsPath } from '../load_the_hosts_markdown
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CONNECTORS_OFF_SETTING, makeTheMembersConfig, MEMBER_CONFIG_MODE, theMembersConfigEnvironment } from './give_a_member_its_own_config.ts'
 
+/** A launch that carries no skill. */
+const NO_SKILLS: Readonly<Record<string, Uint8Array>> = {}
+
 function scratch(t: TestContext): string {
   const dir = mkdtempSync(join(tmpdir(), 'martha-member-config-'))
   t.after(() => removeTheTree(dir))
@@ -26,7 +29,7 @@ test("the folder is made new and 0700, with the member's settings and a trust re
   const checkout = join(dir, 'checkout')
   mkdirSync(checkout)
   const folder = join(dir, 'the-members-folder')
-  assert.deepEqual(makeTheMembersConfig(folder, checkout, undefined), { made: true })
+  assert.deepEqual(makeTheMembersConfig(folder, checkout, undefined, NO_SKILLS), { made: true })
   assert.equal(lstatSync(folder).mode & 0o777, MEMBER_CONFIG_MODE)
   assert.deepEqual(readdirSync(folder).sort(), [HOST_TRUST_RECORD_FILE, USER_SETTINGS_FILE].sort())
   // The owner's choice (martha#602): the account's connectors off and its skills not synced, each the value the host reads as that.
@@ -50,7 +53,7 @@ test('a checkout reached through a link is trusted by its path and its real path
   mkdirSync(join(dir, 'real'))
   symlinkSync(join(dir, 'real'), join(dir, 'linked'))
   const folder = join(dir, 'the-members-folder')
-  assert.deepEqual(makeTheMembersConfig(folder, join(dir, 'linked'), undefined), { made: true })
+  assert.deepEqual(makeTheMembersConfig(folder, join(dir, 'linked'), undefined, NO_SKILLS), { made: true })
   const record = JSON.parse(readFileSync(join(folder, HOST_TRUST_RECORD_FILE), 'utf8')) as { projects: Record<string, unknown> }
   assert.deepEqual(Object.keys(record.projects).sort(), [join(dir, 'linked'), realpathSync(join(dir, 'real'))].sort())
 })
@@ -60,10 +63,10 @@ test('a folder that exists, or a link where it would go, is never reused', (t) =
   const checkout = join(dir, 'checkout')
   mkdirSync(checkout)
   mkdirSync(join(dir, 'there'))
-  assert.equal(makeTheMembersConfig(join(dir, 'there'), checkout, undefined).made, false)
+  assert.equal(makeTheMembersConfig(join(dir, 'there'), checkout, undefined, NO_SKILLS).made, false)
   assert.deepEqual(readdirSync(join(dir, 'there')), [], 'nothing was written into a folder that was already there')
   symlinkSync(join(dir, 'there'), join(dir, 'link'))
-  assert.equal(makeTheMembersConfig(join(dir, 'link'), checkout, undefined).made, false)
+  assert.equal(makeTheMembersConfig(join(dir, 'link'), checkout, undefined, NO_SKILLS).made, false)
   assert.deepEqual(readdirSync(join(dir, 'there')), [], 'nothing was written through a link')
 })
 
@@ -78,12 +81,12 @@ test('a key handed to the member is answered yes by its tail alone, and an empty
   // A key whose tail differs from every other slice of it, so a wrong length or end cannot pass.
   const key = Array.from({ length: KEY_TAIL_LENGTH * 3 }, (_, i) => String.fromCharCode(65 + (i % 26)) + String(i)).join('')
   const folder = join(dir, 'with-a-key')
-  assert.deepEqual(makeTheMembersConfig(folder, checkout, key), { made: true })
+  assert.deepEqual(makeTheMembersConfig(folder, checkout, key, NO_SKILLS), { made: true })
   const record = JSON.parse(readFileSync(join(folder, HOST_TRUST_RECORD_FILE), 'utf8')) as Record<string, unknown>
   assert.deepEqual(Object.keys(record).sort(), [API_KEY_ANSWERS_KEY, FIRST_RUN_DONE_KEY, 'projects'].sort())
   assert.deepEqual(record[API_KEY_ANSWERS_KEY], { approved: [key.slice(-KEY_TAIL_LENGTH)], rejected: [] })
   assert.ok(!readFileSync(join(folder, HOST_TRUST_RECORD_FILE), 'utf8').includes(key), 'the whole key is never written')
   const empty = join(dir, 'with-an-empty-key')
-  assert.deepEqual(makeTheMembersConfig(empty, checkout, ''), { made: true })
+  assert.deepEqual(makeTheMembersConfig(empty, checkout, '', NO_SKILLS), { made: true })
   assert.ok(!(API_KEY_ANSWERS_KEY in (JSON.parse(readFileSync(join(empty, HOST_TRUST_RECORD_FILE), 'utf8')) as Record<string, unknown>)))
 })

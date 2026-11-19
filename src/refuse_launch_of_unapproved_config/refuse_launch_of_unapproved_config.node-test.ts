@@ -41,6 +41,7 @@ import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE_SKILLS, RESERVED_SKILL_NAMES, theCarriedSkills } from './carry_the_approved_skills.ts'
 
 // Every test reads real directories and real git checkouts through the real
 // reader, and removes them when it ends.
@@ -1039,4 +1040,78 @@ test('#306 r=4: the crew text is carried under the name the crew wrote, and no o
 // host, should not be the only thing that notices a misspelt one.
 test('the switch that names the approved servers is spelled as Claude Code reads it', () => {
   assert.equal(MCP_CONFIG_SWITCH, '--mcp-config')
+})
+
+// --- the approved checkout's skills (martha#747) ------------------------------------------------------------------
+
+const A_SKILL = '---\nname: x\ndescription: the test\'s own skill\n---\nbody\n'
+
+test('T2: an unapproved checkout holding only a skill folder is refused, naming the skill file (martha#747)', (t) => {
+  const place = scratch(t)
+  put(place.checkout, `${CLAUDE_SKILLS}/x/SKILL.md`, A_SKILL)
+  const { decision } = decide(CLAUDE_CODE, place)
+  assert.equal(decision.allow, false)
+  if (decision.allow) return
+  assert.ok(decision.refusal.includes(`${CLAUDE_SKILLS}/x/SKILL.md`) && decision.refusal.includes('martha approve'), decision.refusal)
+})
+
+test('the skills row is the last of Claude Code\'s rows, so readers that take the rows by position read the same names (martha#747)', () => {
+  assert.deepEqual(CLAUDE_CODE_FILES.slice(0, 3), ['.mcp.json', `${CLAUDE_FOLDER}/settings.json`, `${CLAUDE_FOLDER}/settings.local.json`])
+  assert.equal(CLAUDE_CODE_FILES.at(-1), CLAUDE_SKILLS)
+  assert.equal(CLAUDE_CODE_FILES.length, 4)
+})
+
+test("T1: an approved checkout's skills are carried with no switch of their own, and never reported as not loaded (martha#747)", (t) => {
+  const place = scratch(t)
+  put(place.checkout, `${CLAUDE_SKILLS}/x/SKILL.md`, A_SKILL)
+  put(place.checkout, `${CLAUDE_SKILLS}/x/sub/ref.md`, 'the test\'s reference\n')
+  const { prepared } = prepare(CLAUDE_CODE, place, approve(CLAUDE_CODE, place))
+  assert.equal(prepared.allow, true)
+  if (!prepared.allow) return
+  const carried = theCarriedSkills(prepared.carried_files)
+  assert.deepEqual(Object.keys(carried).sort(), ['x/SKILL.md', 'x/sub/ref.md'])
+  assert.equal(Buffer.from(carried['x/SKILL.md'] ?? new Uint8Array()).toString('utf8'), A_SKILL)
+  assert.deepEqual(prepared.not_carried, [])
+  assert.deepEqual(prepared.switches.args, theRowOfHost(CLAUDE_CODE).project_config_off.args, 'a skill adds no switch')
+})
+
+test('T3: a skill rewritten after the state is read is refused, and no snapshot is left behind (martha#747)', (t) => {
+  const place = scratch(t)
+  put(place.checkout, `${CLAUDE_SKILLS}/x/SKILL.md`, A_SKILL)
+  const where = { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home }
+  const state = readLaunchState(where, thisMachine)
+  const snapshot_root = join(place.home, 'snapshots')
+  put(place.checkout, `${CLAUDE_SKILLS}/x/SKILL.md`, '---\nname: x\ndescription: rewritten\n---\nsomething else\n')
+  const prepared = snapshotApproved({ ...where, snapshot_root, approved_fingerprints: [fingerprintOf(state)] }, state, thisMachine)
+  assert.equal(prepared.allow, false)
+  if (prepared.allow) return
+  assert.match(prepared.refusal, /\.claude\/skills\/x\/SKILL\.md changed while it was being approved/)
+  assert.deepEqual(readdirSync(snapshot_root), [], 'no snapshot is left behind')
+})
+
+for (const name of RESERVED_SKILL_NAMES) {
+  test(`T5: a skill folder named ${name} is refused by name, even approved (martha#747)`, (t) => {
+    const place = scratch(t)
+    put(place.checkout, `${CLAUDE_SKILLS}/${name}/SKILL.md`, A_SKILL)
+    const { decision } = decide(CLAUDE_CODE, place, approve(CLAUDE_CODE, place))
+    assert.equal(decision.allow, false)
+    if (decision.allow) return
+    assert.ok(decision.refusal.includes(`${CLAUDE_SKILLS}/${name} uses a folder name`), decision.refusal)
+  })
+}
+
+test("T6: a skill in a folder above the start is fingerprinted and listed as not carried, never copied (martha#747)", (t) => {
+  const place = scratch(t)
+  const tools = join(place.checkout, 'tools')
+  put(place.checkout, `${CLAUDE_SKILLS}/y/SKILL.md`, A_SKILL)
+  put(tools, 'README.md', 'a folder\n')
+  commitAll(place.checkout, 'a skill above the start')
+  const at = { host: CLAUDE_CODE, launch_dir: tools, stop_dir: place.home }
+  const state = readLaunchState(at, thisMachine)
+  assert.ok(state.entries.some((entry) => entry.path === `../${CLAUDE_SKILLS}/y/SKILL.md` && entry.kind === 'file'), 'the skill above the start is not fingerprinted')
+  const prepared = snapshotApproved({ ...at, snapshot_root: join(place.home, 'snapshots'), approved_fingerprints: [fingerprintOf(state)] }, state, thisMachine)
+  assert.equal(prepared.allow, true)
+  if (!prepared.allow) return
+  assert.deepEqual(theCarriedSkills(prepared.carried_files), {})
+  assert.ok(prepared.not_carried.some((path) => `../${CLAUDE_SKILLS}/y/SKILL.md`.startsWith(path)), `the skill above is not reported: ${prepared.not_carried.join(', ')}`)
 })

@@ -57,6 +57,8 @@ import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_AUTO_UPDATER_OFF, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE } from '../load_the_hosts_markdown/the_skills_loader.ts'
+import { aSkillWithAReservedName, CLAUDE_SKILLS, isBelowACarriedFolder } from './carry_the_approved_skills.ts'
 
 
 export type { LaunchHost }
@@ -88,8 +90,9 @@ export function launchEnvironment(
 }
 
 /**
- * The files each host reads from a project directory to start something by itself. Each is one the host was seen to
- * start something from (issue #16), never a guess. The table is keyed by the name a declaration writes, which is a
+ * The files and folders each host reads from a project directory, either to start something by itself (issue #16), or,
+ * for Claude Code's skills folder, to hand the model as instructions (martha#747), which Martha carries into the
+ * member's own config folder. Each is one the host was seen to read, never a guess. The table is keyed by the name a declaration writes, which is a
  * string the recording holds, so it is a string-keyed table with a guard at each read rather than a union the compiler
  * checks (martha#541's ruling on G1); this slice's own test holds the two tables to the same hosts.
  */
@@ -98,6 +101,9 @@ export const CLAUDE_CODE_FILES = [
   `${CLAUDE_FOLDER}/settings.json`,
   // The last one Claude Code writes itself: a member's own permission answers.
   `${CLAUDE_FOLDER}/settings.local.json`,
+  // Last, so a reader that takes the rows by position reads the same names (martha#747): the skills the host would
+  // read with project settings on, which a launch carries into the member's own config folder instead.
+  CLAUDE_SKILLS,
 ] as const
 
 /** OpenCode's: the last one holds a checkout's plugins and their installed packages. */
@@ -167,6 +173,12 @@ export interface HostLaunch {
    * names its reason in NO_AUTO_UPDATER instead, and the same test holds both halves.
    */
   readonly env_last: Readonly<Record<string, string>>
+  /**
+   * The listed folders whose files are carried with no switch of their own, into a place the launcher writes
+   * (martha#747): their bytes are the approved ones, they are never reported as not loaded, and a skill in them may not
+   * take a name the host keeps for itself.
+   */
+  readonly carried_folders: readonly string[]
 }
 
 const NO_ENV: Readonly<Record<string, string>> = {}
@@ -189,6 +201,13 @@ const OPENCODE_CONFIG_ELSEWHERE = ['OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_D
  * lands on the owner's own copy as Claude Code's did (martha#460).
  */
 const OPENCODE_AUTO_UPDATER_OFF: Readonly<Record<string, string>> = { OPENCODE_DISABLE_AUTOUPDATE: '1' }
+
+/**
+ * Each brings skills in that no approval read (martha#747): bare mode, in which the host loads none of the skills a
+ * launch copies and reads added folders' skills unguarded, and the host skill catalog, a mount of skills named by an
+ * inherited variable. Both names are read from the recorded host, never typed.
+ */
+const CLAUDE_SKILLS_ELSEWHERE = [CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE] as const
 
 /**
  * Claude Code 2.1 reads this from its own environment and starts every tool
@@ -249,7 +268,7 @@ export const NO_AUTO_UPDATER: Readonly<Record<string, string>> = {
 export const CLAUDE_PROJECT_CONFIG_OFF: HostSwitches = {
   args: ['--setting-sources', 'user', '--strict-mcp-config'],
   env: CLAUDE_MEMORY_OFF,
-  env_dropped: [...CLAUDE_COMMAND_ELSEWHERE, ...CLAUDE_MEMORY_ELSEWHERE],
+  env_dropped: [...CLAUDE_COMMAND_ELSEWHERE, ...CLAUDE_MEMORY_ELSEWHERE, ...CLAUDE_SKILLS_ELSEWHERE],
 }
 
 export const HOSTS: Readonly<Record<string, HostLaunch>> = {
@@ -260,6 +279,7 @@ export const HOSTS: Readonly<Record<string, HostLaunch>> = {
       [CLAUDE_SETTINGS]: claudeSettingsSwitches,
     },
     env_last: CLAUDE_AUTO_UPDATER_OFF,
+    carried_folders: [CLAUDE_SKILLS],
   },
   opencode: {
     // The background service ignores a client's environment, so the host runs
@@ -274,6 +294,7 @@ export const HOSTS: Readonly<Record<string, HostLaunch>> = {
       [OPENCODE_CONFIG_WITH_COMMENTS]: (path) => ({ args: NO_ARGS, env: { OPENCODE_CONFIG: path }, env_dropped: NOTHING_DROPPED }),
     },
     env_last: OPENCODE_AUTO_UPDATER_OFF,
+    carried_folders: [],
   },
   [RECORDED_GOOSE_ENGINE.engine_name]: {
     // The engine reaches its own folders through the one variable the recording names, and everything else through the
@@ -289,6 +310,7 @@ export const HOSTS: Readonly<Record<string, HostLaunch>> = {
     },
     carried: {},
     env_last: NO_ENV,
+    carried_folders: [],
   },
 }
 
@@ -444,6 +466,9 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints, refus
   if (unread !== undefined) {
     return { allow: false, refusal: `${REFUSED}: ${unread} was not read, so the config cannot be checked.` }
   }
+
+  const reserved = aSkillWithAReservedName(entries.map((entry) => entry.path), theRowOfHost(host).carried_folders)
+  if (reserved !== undefined) return { allow: false, refusal: `${REFUSED}: ${reserved}` }
 
   // No config needs no approval (rule 5), and a checkout it does not ask about cannot refuse it: nothing approved is
   // at risk there. Every other launch must have read the tree it would run.
@@ -744,10 +769,10 @@ interface CopyPlace {
 function carryApproved(entries: readonly ConfigEntry[], place: CopyPlace, carrying: Carrying): string | undefined {
   const { launch, start, snapshot, machine, crewText } = place
   for (const entry of entries) {
-    if (entry.kind === 'absent') continue
+    if (entry.kind === 'absent' || aFolderCarriedWhole(entry, launch.carried_folders)) continue
     const switchesFor = Object.hasOwn(launch.carried, entry.path) ? launch.carried[entry.path] : undefined
-    const ownText = crewText.has(entry.path)
-    if (entry.kind !== 'file' || (switchesFor === undefined && !ownText)) {
+    const noSwitch = crewText.has(entry.path) || isBelowACarriedFolder(entry.path, launch.carried_folders)
+    if (entry.kind !== 'file' || (switchesFor === undefined && !noSwitch)) {
       noteNotCarried(carrying.not_carried, entry.path)
       continue
     }
@@ -759,6 +784,15 @@ function carryApproved(entries: readonly ConfigEntry[], place: CopyPlace, carryi
     carrying.carried_files[entry.path] = content
   }
   return undefined
+}
+
+/**
+ * Whether `entry` is a carried folder itself, or a directory inside one, whose files are carried one by one: it is not
+ * left behind. Installed packages inside one are, like anywhere else, never walked, so they are left behind.
+ */
+function aFolderCarriedWhole(entry: ConfigEntry, folders: readonly string[]): boolean {
+  if (entry.kind !== 'directory' || entry.path.split('/').at(-1) === DEPENDENCIES) return false
+  return folders.includes(entry.path) || isBelowACarriedFolder(entry.path, folders)
 }
 
 /** Note a path left behind, unless a directory above it is already noted. */

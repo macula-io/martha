@@ -168,6 +168,7 @@ import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journa
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { theCarriedSkills } from '../refuse_launch_of_unapproved_config/carry_the_approved_skills.ts'
 import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
@@ -363,7 +364,7 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
     host: CLAUDE_CODE,
   })
   // The key answered yes is the one the member is handed, read from the environment it starts with.
-  const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir, env[API_KEY_VARIABLE])
+  const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir, env[API_KEY_VARIABLE], theCarriedSkills(prepared.carried_files))
   if (!made.made) return made.refusal
   return env
 }
