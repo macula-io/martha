@@ -76,7 +76,7 @@ const A_TOKEN = { token: A_TOOL_SERVER.token }
 
 /** The relay root a test's launches make their directories in: this user's, 0700, made once. */
 function aRelayRootIn(root: string): string {
-  const relay = join(root, 'relay')
+  const relay = join(root, 'a-relay-root')
   mkdirSync(relay, { recursive: true, mode: 0o700 })
   return relay
 }
