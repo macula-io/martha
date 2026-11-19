@@ -272,6 +272,7 @@ const DATA: ReadonlyArray<{ readonly name: string; readonly script: string }> = 
   { name: "parallel :::: names files, and a file name that holds the runner is a file name", script: "parallel :::: 'node --test x'" },
   { name: 'a pipe into parallel that is given a template is not run line by line', script: "printf '%s\\n' 'node --test x' | parallel echo" },
   { name: "watch -x '…' runs a command line of its own, not a shell string", script: "watch -x 'node --test x'" },
+  { name: "npm's other commands do not run -c: only npm exec and npm x do", script: "npm view -c 'node --test x'" },
 ]
 
 for (const { name, script } of DATA) {
