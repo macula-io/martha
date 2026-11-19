@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { COINCIDENCE_FILE, COMPUTED, NOT_A_DECLARATION } from '../../prove_the_core/the_coincidences_a_slice_declares.ts'
+import { COINCIDENCE_FILE, COMPUTED, NOT_A_DECLARATION } from '../../prove_the_core/a_slice_declares_its_coincidences/the_coincidences_a_slice_declares.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { lineOfAnEntryOutsideItsSlice } from './a_slice_excuses_only_its_own_files.ts'
 
