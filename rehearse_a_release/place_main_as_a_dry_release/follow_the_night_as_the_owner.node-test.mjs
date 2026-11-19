@@ -12,11 +12,12 @@
 
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SCRIPT = join(HERE, 'follow_the_night_as_the_owner.sh')
@@ -84,7 +85,7 @@ for (const mutant of MUTANTS) {
       assert.equal(run.status, 1, `${run.stdout}${run.stderr}`)
       assert.match(run.stdout, new RegExp(`^FAIL ${mutant.killedBy}: `, 'm'))
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      removeTheTree(dir)
     }
   })
 }
