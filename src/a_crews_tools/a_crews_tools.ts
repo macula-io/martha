@@ -83,6 +83,7 @@ import { WHO_IS_FREE_TOOL, whoIsFreeOver } from '../see_who_is_free/who_is_free_
 import { UNHELD_WORK_TOOL, unheldWorkOver } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { theBacklogReaderIn } from '../find_the_unheld_work/the_backlog_reader_of_a_launch.ts'
 import { SAY_TO_THE_CREW_TOOL, sayToTheCrewOver } from '../send_a_crew_message/say_to_the_crew_tool.ts'
+import { GH_MS } from '../send_a_crew_message/the_runs_a_handoff_names.ts'
 import {
   BEAT_INTERVAL_MS,
   SPEND_FIELD,
@@ -878,6 +879,10 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   volatile_roots: theRootsInForce(settings.volatile_paths, places.volatile_roots ?? []),
   // A HANDOFF's range is read in the crew's clone when the launch handed the host's processes (martha#980 package 3).
   ...(places.processes === undefined ? {} : { commits: { processes: places.processes, clones: settings.house_rules.clones } }),
+  // A HANDOFF's ci= runs are read through the crew's GitHub budget, each gh bounded (martha#980 package 4).
+  ...(places.processes === undefined
+    ? {}
+    : { runs: theGithubSpenderOf({ stores: places.stores, root: places.root, processes: places.processes, clock: places.ledger.clock, github: settings.github, clock_zone: settings.clock_zone }, GH_MS) }),
 })
 
 /** What the receipts are read over: the channel's ledger, the member that sent, and the crew it sent to. */

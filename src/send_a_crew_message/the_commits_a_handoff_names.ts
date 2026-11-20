@@ -61,7 +61,7 @@ const whyOf = (outcome: ProcessOutcome, step: string): string => {
 const answered = (outcome: ProcessOutcome): boolean => outcome.timed_out !== true && outcome.exit_code !== null
 
 /** A HANDOFF line's range, and the repository its package names; undefined for any other line, or one on a design. */
-interface TheRange {
+export interface TheRange {
   readonly package_name: string
   readonly repo: string
   readonly org: string
@@ -70,7 +70,7 @@ interface TheRange {
   readonly tip: string
 }
 
-function theRangeOf(line: CrewLineRead): TheRange | undefined {
+export function theRangeOf(line: CrewLineRead): TheRange | undefined {
   if (line.verb !== 'HANDOFF' || !WORK_PACKAGE.test(line.package)) return undefined
   // The range is taken only in the line's own shape, as crew-code's rangeNamedBy takes it (T1): never a word that is not one.
   const range = line.words[1]
