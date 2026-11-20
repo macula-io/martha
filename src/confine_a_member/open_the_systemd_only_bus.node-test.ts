@@ -9,7 +9,8 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { openTheSystemdOnlyBus } from './open_the_systemd_only_bus.ts'
-import { SYSTEMD_TALK, type ASystemdOnlyBus } from './the_systemd_only_bus.ts'
+import { PROXY, SYSTEMD_TALK, type ASystemdOnlyBus } from './the_systemd_only_bus.ts'
+import { SYSTEMD_RUN as PLACER } from './the_slice_and_the_scope.ts'
 
 /** The pid the stand-in systemctl says the unit runs as, and the stand-in /proc holds. */
 const MAIN_PID = '4242'
@@ -62,8 +63,8 @@ function aPlace(t: { after(fn: () => void): void }): APlace {
   const runtime = join(root, 'run')
   for (const dir of [bin, state, proc, runtime]) mkdirSync(dir)
   aProgram(join(bin, 'systemctl'), SYSTEMCTL)
-  aProgram(join(bin, 'systemd-run'), SYSTEMD_RUN)
-  const proxy = aProgram(join(bin, 'xdg-dbus-proxy'), '#!/bin/sh\nexit 0\n')
+  aProgram(join(bin, PLACER), SYSTEMD_RUN)
+  const proxy = aProgram(join(bin, PROXY), '#!/bin/sh\nexit 0\n')
   const socket = join(runtime, 'tests-only-bus-socket')
   const bus: ASystemdOnlyBus = {
     address: `unix:path=${socket}`,
@@ -133,7 +134,7 @@ test('#989 C6: with a unit of the name installed, Martha starts that unit and le
   assert.equal(await opened(place), undefined)
   const calls = place.calls()
   assert.ok(calls.includes('systemctl --user start tests-only-bus.service'), `the installed unit was not started: ${calls.join(' | ')}`)
-  assert.ok(!calls.some((call) => call.startsWith('systemd-run')), 'a transient unit was started beside the installed one')
+  assert.ok(!calls.some((call) => call.startsWith(PLACER)), 'a transient unit was started beside the installed one')
   assert.equal(statSync(place.bus.socket).ino, before, 'the installed unit\'s socket was removed')
   assert.equal(calls.at(-1), 'systemctl --user show -p MainPID --value tests-only-bus.service')
 })
@@ -177,7 +178,7 @@ test('#989 C6: two launches at once open one proxy', async (t) => {
   const both = await Promise.all([opened(place), opened(place)])
 
   assert.deepEqual(both, [undefined, undefined])
-  assert.equal(place.calls().filter((call) => call.startsWith('systemd-run')).length, 1, `more than one proxy was started: ${place.calls().join(' | ')}`)
+  assert.equal(place.calls().filter((call) => call.startsWith(PLACER)).length, 1, `more than one proxy was started: ${place.calls().join(' | ')}`)
 })
 
 test('#989 C6: a lock another launch holds past the wait refuses the launch by name', async (t) => {

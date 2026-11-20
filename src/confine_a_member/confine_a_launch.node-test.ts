@@ -13,7 +13,7 @@ import { test } from 'node:test'
 import type { AConfinement } from '../declare_crew/the_crews_confinement.ts'
 import { NO_CONFINEMENT_DECLARED, theConfinedStart, type AConfinedStart, type AConfinedStartAsked } from './confine_a_launch.ts'
 import { THE_SHIM_DIRECTORY_NAME } from './the_podman_shim.ts'
-import { theSliceUnitOf } from './the_slice_and_the_scope.ts'
+import { SYSTEMD_RUN, theSliceUnitOf } from './the_slice_and_the_scope.ts'
 import { BUS_KEY, NO_DESKTOP_BUS, PROXY, RUNTIME_DIR_KEY } from './the_systemd_only_bus.ts'
 
 /** A confinement none of whose values is the one `martha init` writes, so a default read would show. */
@@ -69,7 +69,7 @@ async function aPlace(t: { after(fn: () => void): void }, { session = true } = {
     servers.push(server)
   }
   aProgram(join(bin, 'systemctl'), SYSTEMCTL)
-  aProgram(join(bin, 'systemd-run'), '#!/bin/sh\nexit 0\n')
+  aProgram(join(bin, SYSTEMD_RUN), '#!/bin/sh\nexit 0\n')
   {
     const program = aProgram(join(bin, PROXY), '#!/bin/sh\nexit 0\n')
     const argv = [program, `unix:path=${join(runtime, 'bus')}`, join(runtime, DECLARED.systemd_only_bus.socket), '--filter', '--talk=org.freedesktop.systemd1']
@@ -120,7 +120,7 @@ test('#989 C1, C2, C8: a declared confinement wraps the member in its scope, wit
   const place = await aPlace(t)
   const start = started(await theConfinedStart(place.asked()))
 
-  assert.equal(start.command, join(place.root, 'bin', 'systemd-run'))
+  assert.equal(start.command, join(place.root, 'bin', SYSTEMD_RUN))
   const end = start.args.indexOf('--')
   assert.deepEqual(start.args.slice(0, end), ['--user', '--scope', '--quiet', '--collect', '--expand-environment=no', '--slice=tests.slice', '--unit=martha-Vesta-4321', '-p', 'CPUQuota=321%', '-p', 'CPUWeight=77'])
   assert.deepEqual(start.args.slice(end + 1), ['/opt/the/member', '--a-switch', '$NOT_EXPANDED'])

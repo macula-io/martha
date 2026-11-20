@@ -22,6 +22,10 @@ import { readFileSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { busUnitUnlike, isSocket, type ARunningProcess, type ASystemdOnlyBus } from './the_systemd_only_bus.ts'
+import { SYSTEMD_RUN } from './the_slice_and_the_scope.ts'
+import { A_SERVICE_SUFFIX } from '../declare_crew/the_crews_confinement.ts'
+// Where processes are read; a test points it at a stand-in /proc beside its stand-in systemctl, as crew-code's do.
+import { PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 
 /** How long a launch waits for another to finish opening the bus, in seconds (crew-code's LOCK_WAIT). */
 export const LOCK_WAIT_S = 10
@@ -30,14 +34,9 @@ export const LOCK_WAIT_S = 10
 export const SOCKET_TRIES = 50
 export const SOCKET_PAUSE_MS = 100
 
-/** Where processes are read; a test points it at a stand-in /proc beside its stand-in systemctl, as crew-code's do. */
-export const PROC_ROOT = '/proc'
-
 /** The suffix of the lock file beside the socket. */
 const LOCK_SUFFIX = '.lock'
 
-/** The type systemd gives the bus's unit: the declaration names the unit alone. */
-const SERVICE = '.service'
 
 /** What the opener reads its programs and processes from: the environment that finds systemctl, and the /proc to read. */
 export interface TheOpenersPlaces {
@@ -50,7 +49,7 @@ export interface TheOpenersPlaces {
 
 /** Why the bus could not be opened for the members, or undefined when it is open and runs the one command. */
 export async function openTheSystemdOnlyBus(bus: ASystemdOnlyBus, places: TheOpenersPlaces): Promise<string | undefined> {
-  const unit = `${bus.unit}${SERVICE}`
+  const unit = `${bus.unit}${A_SERVICE_SUFFIX}`
   const lock = await theLockHeld(`${bus.socket}${LOCK_SUFFIX}`, places)
   if (typeof lock === 'string') return `${unit}: ${lock}`
   try {
@@ -68,7 +67,7 @@ async function openedUnderTheLock(bus: ASystemdOnlyBus, unit: string, places: Th
     if (systemctl('start', unit).status !== 0) return `${unit}: the installed systemd-only bus did not start for the members`
   } else {
     rmSync(bus.socket, { force: true })
-    const started = run(places, 'systemd-run', ['--user', '--quiet', '--collect', `--unit=${unit}`, '--', ...bus.argv])
+    const started = run(places, SYSTEMD_RUN, ['--user', '--quiet', '--collect', `--unit=${unit}`, '--', ...bus.argv])
     if (started.status !== 0) return `${unit}: systemd-run could not start the systemd-only bus for the members`
   }
   const pause = places.socket_pause_ms ?? SOCKET_PAUSE_MS
