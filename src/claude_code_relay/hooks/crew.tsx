@@ -13,6 +13,7 @@ import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, PANE, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
 import { theCrewCommandAnswers, theCrewCommandResult, type Heard } from './crew_command.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
+import { THE_WAKE_ASK, wakingAnIdleMemberWith, type WakingAnIdleMember } from './crew_waking_an_idle_member.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
 import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
 
@@ -129,15 +130,40 @@ function agentIdIn(event: unknown): unknown {
   return typeof event === 'object' && event !== null ? (event as { agentId?: unknown }).agentId : undefined
 }
 
-/** Starts reading the channel: once now, and every interval the declaration names, for this session's whole life. */
+/**
+ * Starts reading the channel: once now, and every interval the declaration names, for this session's whole life. The
+ * wake is asked on the same clock and after the same read (martha#959): a session that has just been handed a crew
+ * message is not handed a wake, and the launcher answers none while one is waiting for it.
+ */
 async function startReadingTheChannel($: CrewEngine): Promise<void> {
   if (readingTheChannel !== null) return
   const heard = await hearTheLauncher($, THE_CHANNEL_READ, {})
   const seconds = 'said' in heard ? Number.parseInt(heard.said, 10) : Number.NaN
   if (!Number.isInteger(seconds) || seconds < 1) return
   const reading = theChannelReading($)
-  readingTheChannel = $.clock.every(seconds * 1000, () => void reading.readWhileIdle())
-  await reading.readWhileIdle()
+  const waking = theWakeOfAnIdleMember($, reading)
+  const look = async (): Promise<void> => {
+    await reading.readWhileIdle()
+    await waking.wakeWhileIdle()
+  }
+  readingTheChannel = $.clock.every(seconds * 1000, () => void look())
+  await look()
+}
+
+/**
+ * The wake this session is given when it is idle (martha#959): the launcher decides whether one is due, and
+ * ./crew_waking_an_idle_member holds the rule that it lands only in an idle session. The session's usage goes with the
+ * question, so a session at the crew's refresh limit is not woken into a handover the refresh flow makes at a turn end.
+ */
+function theWakeOfAnIdleMember($: CrewEngine, reading: ReturnType<typeof readingTheChannelWith>): WakingAnIdleMember {
+  return wakingAnIdleMemberWith(
+    () => reading.isIdle(),
+    async () => {
+      const heard = await hearTheLauncher($, THE_WAKE_ASK, { usage: await $.session.usage().catch(() => undefined) })
+      return 'said' in heard ? heard.said : ''
+    },
+    (text) => $.prompt.submit({ text }),
+  )
 }
 
 /**

@@ -81,7 +81,7 @@ links check fails on it, so the table is changed on the landing that moves it.
 | 7. keep_operator_todo | built | [`keep_the_owners_todo_list`](../src/keep_the_owners_todo_list) |
 | 7. keep_standing_items | built | [`keep_the_supervisors_standing_items`](../src/keep_the_supervisors_standing_items) |
 | 7. file_friction | planned | [#318](https://github.com/macula-io/martha/issues/318) |
-| 7. track_backlog | built | [`find_the_unheld_work`](../src/find_the_unheld_work), [`see_who_is_free`](../src/see_who_is_free), [`nudge_an_idle_crew`](../src/nudge_an_idle_crew) |
+| 7. track_backlog | built | [`find_the_unheld_work`](../src/find_the_unheld_work), [`see_who_is_free`](../src/see_who_is_free), [`nudge_an_idle_crew`](../src/nudge_an_idle_crew), [`wake_an_idle_member`](../src/wake_an_idle_member) |
 | 7. nudge_review_waits | built | [`nudge_the_supervisor`](../src/nudge_the_supervisor) |
 | 7. watch_waits | built | [`watch_waits`](../src/watch_waits) |
 | 8. read_shared_room, announce_node_events | built in part: the room's gate and the node id load on every launch; reading the shared room and announcing node events are planned | [`read_a_room_through_its_gate`](../src/read_a_room_through_its_gate), [`admit_a_room_message`](../src/admit_a_room_message); the rest: [#310](https://github.com/macula-io/martha/issues/310) |

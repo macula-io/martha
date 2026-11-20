@@ -23,6 +23,9 @@ import {
   REVIEW_MINUTES,
   REVIEW_MODEL,
   STALLED_MINUTES,
+  WAKE,
+  WAKE_AFTER_MINUTES,
+  WAKE_CAP_MINUTES,
   DECLARATION_FILE,
   DECLARATION_VERSION,
   DeclarationRefused,
@@ -383,7 +386,8 @@ test('every declared switch is read from the one list, so a new rule is neither 
   // refused, as the tests below say, so each is named here with them.
   const places = { clones: `/crew-place/${CLONES}`, worktrees: `/crew-place/${WORKTREES}` }
   const windows = { [STALLED_MINUTES]: 60, [REVIEW_MINUTES]: 45, [PERSON_MINUTES]: 30 }
-  const withIt = (name: string) => (name === WORKSPACE_LAYOUT ? places : name === NUDGES ? windows : {})
+  const wakeWindows = { [WAKE_AFTER_MINUTES]: 2, [WAKE_CAP_MINUTES]: 30 }
+  const withIt = (name: string) => (name === WORKSPACE_LAYOUT ? places : name === NUDGES ? windows : name === WAKE ? wakeWindows : {})
   for (const name of HOUSE_RULE_SWITCHES) {
     const named = await declare({ ...solo, house_rules: { ...withIt(name), [name]: true } }).settings
     assert.equal(named.house_rules[name], true, name)
@@ -871,4 +875,25 @@ test('a host that takes any model name reads any review model, and one that name
   const named = await declareCrew(store, root, HOST_MODELS, (line) => namedSaid.push(line))
   assert.equal(named.house_rules.review_model, declaration.house_rules.review_model, 'the crew is still read')
   assert.ok(namedSaid.some((line) => line.includes('is not a model this host runs')), namedSaid.join('\n'))
+})
+
+
+// --- 7b. the windows a crew that wakes an idle member names (martha#959) ------
+
+const waking = { ...solo, house_rules: { [WAKE]: true, [WAKE_AFTER_MINUTES]: 2, [WAKE_CAP_MINUTES]: 30 } }
+
+test('#959: a crew that wakes an idle member and names neither window is refused, naming the field that is missing', async () => {
+  for (const missing of [WAKE_AFTER_MINUTES, WAKE_CAP_MINUTES]) {
+    await refusedWith({ ...waking, house_rules: without(missing, waking.house_rules) }, `house_rules.${missing}`)
+  }
+  const named = await declare(waking).settings
+  assert.equal(named.house_rules.wake_after_minutes, 2)
+  assert.equal(named.house_rules.wake_cap_minutes, 30)
+})
+
+test('#959: a crew that names no wake reads none, and carries no window it never named', async () => {
+  const quiet = await declare(solo).settings
+  assert.equal(quiet.house_rules.wake, false, 'a crew that names no wake reads none')
+  assert.equal(quiet.house_rules.wake_after_minutes, null, 'and carries no first window it never named')
+  assert.equal(quiet.house_rules.wake_cap_minutes, null, 'and no cap it never named')
 })
