@@ -15,7 +15,7 @@
 //
 // A pull request that clashes by hand is left out of the chain, as the real landing leaves it out. The rule that leaves a
 // head out with another, the words that name a clash and the length of a sha are the landing's own, imported, never
-// spelled again here (martha#423). Told when every one lands; refused, naming each that does not, otherwise.
+// spelled again here (martha#423). Told with one line per pull request, whatever each one lands as.
 
 import { findTheWorkTheseVerdictsPassed, type LandedWork } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
@@ -77,7 +77,7 @@ export async function forecastWhatABatchLands(host: LandingHost, batch: TheBatch
   if (base === undefined) return { refused: `${batch.path} cannot read ${origin.origin.default_branch}: fetch there, then try again.` }
   const clone: TheClone = { path: batch.path, default_branch: origin.origin.default_branch }
   const forecasts = await everyForecast(host, clone, base, work.work)
-  if ('refused' in forecasts) return forecasts
+  if ('refused' in forecasts) return { told: forecasts.refused }
   return theAnswer(clone, base, forecasts.ok)
 }
 
@@ -114,12 +114,11 @@ async function theChainGrown(host: LandingHost, path: string, chain: TheChain, o
   return { ok: { forecast: { lands: one }, chain: { ...chain, tip, steps: [...chain.steps, { commit: tip, label: `PR ${String(one.pr)}` }] } } }
 }
 
-/** The dry run's answer: one line per pull request, told when every one lands and refused when one does not. */
+/** The dry run's answer: one line per pull request, an ordinary result even when one of them does not land. */
 function theAnswer(clone: TheClone, base: string, forecasts: readonly AForecast[]): Landing {
   const head = `The dry run of ${String(forecasts.length)} package(s) onto ${clone.default_branch} at ${short(base)} (${NOTHING_WRITTEN}):`
   const lines = [head, ...forecasts.map((forecast) => aLine(forecast))].join('\n')
-  const not_landing = forecasts.filter((forecast) => !('lands' in forecast))
-  return not_landing.length === 0 ? { told: lines } : { refused: lines }
+  return { told: lines }
 }
 
 /** One pull request's line. */

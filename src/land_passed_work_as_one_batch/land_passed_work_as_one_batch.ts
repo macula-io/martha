@@ -29,10 +29,11 @@
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import {
   findTheWorkTheseVerdictsPassed,
+  NO_OPEN_PULL_REQUEST,
   type LandedWork,
 } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
 import { A_HOLD_REFUSES, noneOfTheseIsHeld } from '../hold_a_package_back_from_a_batch/hold_a_package_back_from_a_batch.ts'
-import { PackagePaused, RecoveryDecided, noneOfTheseIsPaused, sendAnActOnEveryPackageAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
+import { PackagePaused, RecoveryDecided, sendAnActOnEveryPackageAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
 import { noteMilestone, readLedger, type LedgerHost, type LedgerRow } from '../log_ledger/log_ledger.ts'
 import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
@@ -212,8 +213,6 @@ export async function theBatchMayStart(host: LandingHost, batch: TheBatch): Prom
   if (batch.packages.length === 0) return no('a batch names no package to land.')
   const held = await noneOfTheseIsHeld(host, batch.packages, NOTHING_LANDED)
   if ('refused' in held) return held
-  const paused = await noneOfTheseIsPaused(host, batch.packages, NOTHING_LANDED)
-  if ('refused' in paused) return paused
   const fetched = await git(host, batch.path, ['fetch', '--quiet', '--prune', 'origin'])
   if (fetched.exit_code !== 0) return no(`git fetch did not work in ${batch.path}: ${saidBy(fetched)}.`)
   return { ok: true }
@@ -398,7 +397,7 @@ async function mergeOneHeadOrLeaveItOut(host: LandingHost, path: string, merges:
   if (merged.ok === 'clashed') return { ok: leftOut(merges, one, `${A_CLASH}${await theClashTraced(host, path, before, merges, one)}`) }
   const tip = await gitSaid(host, path, ['rev-parse', 'HEAD'])
   if (tip === undefined) return no(`the merge of ${one.package} holds no commit git will name.`)
-  return { ok: { ...merges, landed: [...merges.landed, one], steps: [...merges.steps, { commit: tip, label: `PR ${String(one.pr)}` }] } }
+  return { ok: { ...merges, landed: [...merges.landed, one], steps: [...merges.steps, { commit: tip, label: thePullRequestOf(one) === undefined ? one.package : `PR ${String(one.pr)}` }] } }
 }
 
 /** The merges with one more head left out. */
@@ -458,8 +457,15 @@ async function mergeOneHead(host: LandingHost, path: string, one: LandedWork): P
 /** What a landing merge's subject opens with, before the pull request's number. */
 const A_LANDING = 'Land #'
 
+/**
+ * The pull request a landing names, or undefined when GitHub named none and the passed head is what lands either way
+ * (martha#601): a notice's `0` is never said as a pull request's number.
+ */
+const thePullRequestOf = (one: LandedWork): number | undefined => (one.pr === NO_OPEN_PULL_REQUEST ? undefined : one.pr)
+
 /** The message the merge carries: which pull request landed, which package it is, and that its verdict passed. */
-const theMergeMessage = (one: LandedWork): string => `${A_LANDING}${String(one.pr)} (${one.package}, PASS)`
+const theMergeMessage = (one: LandedWork): string =>
+  thePullRequestOf(one) === undefined ? `Land ${one.package} (PASS)` : `${A_LANDING}${String(one.pr)} (${one.package}, PASS)`
 
 /** The pull request a landing merge's subject names, or undefined when the subject is not a landing's (martha#339). */
 export function thePullRequestALandingNames(subject: string): number | undefined {
@@ -497,7 +503,7 @@ function withTheCloneBack(landing: Landing, back: Step<true>): Landing {
 async function pushTheBatch(host: LandingHost, member: string, cut: TheCutBatch, merged: TheMerges): Promise<Landing> {
   const tip = await gitSaid(host, cut.batch.path, ['rev-parse', 'HEAD'])
   if (tip === undefined) return no(`${cut.branch} holds no commit git will name.`)
-  const landed = merged.landed.map((one) => `${one.package} (PR ${String(one.pr)})`).join(', ')
+  const landed = merged.landed.map((one) => thePullRequestOf(one) === undefined ? one.package : `${one.package} (PR ${String(one.pr)})`).join(', ')
   const what = `the batch ${cut.branch} of ${landed}`
   const packages = merged.landed.map((one) => one.package)
   const sent = await pushForEveryPackage(host, member, packages, {
