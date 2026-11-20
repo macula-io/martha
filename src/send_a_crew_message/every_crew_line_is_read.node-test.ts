@@ -131,3 +131,24 @@ test('#983: two checkpoints logged by hand in different rounds are two rows; the
   const kept = (await readLedger(channel, PACKAGE)).filter((row) => row.kind === 'checkpoint_reached')
   assert.deepEqual(kept.map((row) => (row.kind === 'checkpoint_reached' ? row.note : '')), [`${BASE}..${TIP} r=1`, `${BASE}..${'c'.repeat(40)} r=2`, 'r=3'])
 })
+
+test('#983 r=2: two checkpoints naming different range tips, with no r=, inside the window, are two rows', async () => {
+  const channel = channelHost()
+  const checkpoint = (note: string) => keepTheMilestone(channel, { package: PACKAGE, member: 'Builder', event: 'checkpoint', note })
+  const OTHER_TIP = 'c'.repeat(40)
+  await checkpoint(`${BASE}..${TIP}`)
+  await checkpoint(`${BASE}..${OTHER_TIP}`)
+  const kept = (await readLedger(channel, PACKAGE)).flatMap((row) => (row.kind === 'checkpoint_reached' ? [row.note] : []))
+  assert.deepEqual(kept, [`${BASE}..${TIP}`, `${BASE}..${OTHER_TIP}`])
+})
+
+test('#983 r=2: a FAIL VERDICT said twice keeps one row; a PASS is kept beside a FAIL at the same tip, in either order', async () => {
+  const channel = channelHost()
+  const verdict = (judged: 'PASS' | 'FAIL') => `VERDICT ${PACKAGE} ${judged} ${BASE}..${TIP} r=2 ci=41700170944 req=${judged === 'FAIL' ? 1 : 0}`
+  const verdicts = async (): Promise<readonly string[]> => (await readLedger(channel, PACKAGE)).flatMap((row) => (row.kind === 'verdict_given' ? [row.note] : []))
+  await sendACrewMessage(channel, saying(verdict('PASS')))
+  await sendACrewMessage(channel, saying(verdict('FAIL')))
+  await sendACrewMessage(channel, saying(verdict('FAIL')))
+  await sendACrewMessage(channel, saying(verdict('PASS')))
+  assert.deepEqual(await verdicts(), [verdict('PASS'), verdict('FAIL'), verdict('PASS')])
+})

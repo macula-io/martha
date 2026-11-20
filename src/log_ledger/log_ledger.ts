@@ -350,9 +350,15 @@ const sameRound = (a: Round, b: Round): boolean => {
   return true
 }
 
-/** The row already kept for this milestone of the package, in this round and inside the window, if there is one. */
-const theEntryAlreadyKept = (rows: readonly PlacedRow[], milestone: Milestone, now: number, round: Round): MilestoneRow | undefined =>
-  rows.flatMap(({ row }) => (row.kind === milestone && now - row.at < ONE_ENTRY_MS && sameRound(roundOf(row.note), round) ? [row] : []))[0]
+/** Every row of a milestone counts as the same entry, unless a caller narrows it. */
+const EVERY_ROW = (): boolean => true
+
+/**
+ * The row already kept for this milestone of the package, in this round and inside the window, if there is one. `alike`
+ * narrows which rows of the milestone are the same entry: a FAIL verdict is one entry with a FAIL, never with a PASS.
+ */
+const theEntryAlreadyKept = (rows: readonly PlacedRow[], milestone: Milestone, now: number, round: Round, alike: (row: MilestoneRow) => boolean): MilestoneRow | undefined =>
+  rows.flatMap(({ row }) => (row.kind === milestone && alike(row) && now - row.at < ONE_ENTRY_MS && sameRound(roundOf(row.note), round) ? [row] : []))[0]
 
 // --- writing --------------------------------------------------------------------
 
@@ -379,16 +385,18 @@ export async function noteMilestone(
  * Keeps a milestone of a package once (martha#983, a port of crew-code's one-entry rule): the same milestone said by a
  * crew line and logged by hand, or said twice, inside ONE_ENTRY_MS and in the same round, is one row. Resolves to the
  * row already kept when there is one, and to undefined once this one is kept. The row is kept only if nothing landed
- * since the read; if something did, the read runs again, at most CONCLUDE_ATTEMPTS times.
+ * since the read; if something did, the read runs again, at most CONCLUDE_ATTEMPTS times. `alike` narrows which earlier
+ * rows of the milestone are this entry (every one, unless a caller says otherwise).
  */
 export async function noteMilestoneOnce(
   host: LedgerHost,
   input: Work & { readonly milestone: Milestone; readonly note: string },
+  alike: (row: MilestoneRow) => boolean = EVERY_ROW,
 ): Promise<MilestoneRow | undefined> {
   for (let attempt = 1; attempt <= CONCLUDE_ATTEMPTS; attempt += 1) {
     const rows = await placedRows(host, input.package)
     const at = host.clock.now()
-    const held = theEntryAlreadyKept(rows, input.milestone, at, roundOf(input.note))
+    const held = theEntryAlreadyKept(rows, input.milestone, at, roundOf(input.note), alike)
     if (held !== undefined) return held
     const row: MilestoneRow = { kind: input.milestone, package: input.package, member: input.member, at, note: input.note }
     if (await keptUnlessMoved(host, row, rows.length)) return undefined
