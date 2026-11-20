@@ -10,14 +10,22 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { OPEN_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, DeclarationRefused, declareCrew, soloDeclaration } from './declare_crew.ts'
 import {
+  A_PERCENT,
   A_TRIM_SWITCH_WHEN_UNNAMED,
+  ABANDONED_PR_PERCENT_MOST,
   CREW_LINE_LINES_MOST,
   CREW_LINE_LINES_MOST_WHEN_UNNAMED,
   FAIL_ONLY_ON_HARM,
+  HOUSE_RULE_MOSTS,
+  HOUSE_RULE_REPO_MOSTS,
   HOUSE_RULE_TRIMS,
+  ISSUE_UNTOUCHED_DAYS,
+  ISSUE_UNTOUCHED_DAYS_WHEN_UNNAMED,
   MUTANTS_ON_GUARDS_ONLY,
+  OPEN_ISSUES_MOST,
   REVIEW_ROUNDS_MOST,
   REVIEW_ROUNDS_MOST_WHEN_UNNAMED,
+  UNTOUCHED_ISSUES_MOST,
   aMostIsSet,
 } from './the_crews_trims.ts'
 
@@ -90,7 +98,38 @@ test('#1010: a trim switch that is not true or false is refused by its own name'
 
 test('#1010: every house rule the trims name is one the declaration accepts', async () => {
   for (const name of HOUSE_RULE_TRIMS) {
-    const { house_rules } = await declare({ [name]: name === REVIEW_ROUNDS_MOST || name === CREW_LINE_LINES_MOST ? 0 : false })
+    // Each field takes the value its own kind allows: a number, a switch, or the window's days.
+    const value = name === ISSUE_UNTOUCHED_DAYS ? ISSUE_UNTOUCHED_DAYS_WHEN_UNNAMED : (HOUSE_RULE_MOSTS as readonly string[]).includes(name) || (HOUSE_RULE_REPO_MOSTS as readonly string[]).includes(name) ? 0 : false
+    const { house_rules } = await declare({ [name]: value })
     assert.notEqual(house_rules[name], undefined, `${name} is a field the declaration takes`)
   }
+})
+
+test('#1010 B: a declaration that names none of the three repo numbers reads no fixed line, and three days untouched', async () => {
+  const { house_rules } = await declare({})
+  assert.equal(house_rules[OPEN_ISSUES_MOST], 0, 'no fixed line for the open issues')
+  assert.equal(house_rules[UNTOUCHED_ISSUES_MOST], 0, 'no fixed line for the untouched issues')
+  assert.equal(house_rules[ABANDONED_PR_PERCENT_MOST], 0, 'no fixed line for the abandoned pull requests')
+  assert.equal(house_rules[ISSUE_UNTOUCHED_DAYS], ISSUE_UNTOUCHED_DAYS_WHEN_UNNAMED, 'an issue is untouched after the crew\'s own days')
+})
+
+test('#1010 B: a crew names its own repo numbers and its window, and reads them back', async () => {
+  const { house_rules } = await declare({ [OPEN_ISSUES_MOST]: 5, [UNTOUCHED_ISSUES_MOST]: 6, [ABANDONED_PR_PERCENT_MOST]: A_PERCENT, [ISSUE_UNTOUCHED_DAYS]: ISSUE_UNTOUCHED_DAYS_WHEN_UNNAMED + 4 })
+  assert.equal(house_rules[OPEN_ISSUES_MOST], 5)
+  assert.equal(house_rules[UNTOUCHED_ISSUES_MOST], 6)
+  assert.equal(house_rules[ABANDONED_PR_PERCENT_MOST], A_PERCENT, 'a percentage may be a hundred')
+  assert.equal(house_rules[ISSUE_UNTOUCHED_DAYS], ISSUE_UNTOUCHED_DAYS_WHEN_UNNAMED + 4)
+})
+
+test('#1010 B: a percentage past a hundred, a window of no days, and a value that is neither, are refused by name', async () => {
+  await refusedWith({ [ABANDONED_PR_PERCENT_MOST]: A_PERCENT + 1 }, `house_rules.${ABANDONED_PR_PERCENT_MOST}`)
+  await refusedWith({ [ISSUE_UNTOUCHED_DAYS]: 0 }, `house_rules.${ISSUE_UNTOUCHED_DAYS}`)
+  await refusedWith({ [OPEN_ISSUES_MOST]: -1 }, `house_rules.${OPEN_ISSUES_MOST}`)
+  await refusedWith({ [ISSUE_UNTOUCHED_DAYS]: 'three' }, `house_rules.${ISSUE_UNTOUCHED_DAYS}`)
+})
+
+test('#1010 B: a repo number set to false raises no notice at all, and one set to 0 is the trend alone', async () => {
+  const { house_rules } = await declare({ [OPEN_ISSUES_MOST]: false, [UNTOUCHED_ISSUES_MOST]: 0 })
+  assert.equal(house_rules[OPEN_ISSUES_MOST], false, 'false is kept as the word that turns notices off')
+  assert.equal(house_rules[UNTOUCHED_ISSUES_MOST], 0, '0 is kept as no fixed line')
 })

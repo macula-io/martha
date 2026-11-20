@@ -21,13 +21,14 @@
 // the same rule and the tests hold it.
 
 import { memberNameKey, sameMemberName, MEMBER_NAME, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
-import { aMostIsSet, CREW_LINE_LINES_MOST, REVIEW_ROUNDS_MOST, type AMost, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { aMostIsSet, ABANDONED_PR_PERCENT_MOST, CREW_LINE_LINES_MOST, OPEN_ISSUES_MOST, REVIEW_ROUNDS_MOST, UNTOUCHED_ISSUES_MOST, type AMost, type HouseRuleRepoMost, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { LandedPackage } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import type { CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
-import type { APackagesDrift, DriftNumber } from '../read_a_crew_line/the_drift_on_a_package.ts'
+import type { APackagesDrift, DriftNumber, PackageNumber } from '../read_a_crew_line/the_drift_on_a_package.ts'
 import { DRIFT_NUMBERS, LINES, ROUNDS } from '../read_a_crew_line/the_drift_on_a_package.ts'
+import { A_DAY_MS, A_REPO, A_WEEK_DAYS, ABANDONED_PRS, aRepoNumberIn, dayOf, OPEN_ISSUES, REPO_NUMBERS, UNTOUCHED_ISSUES, type RepoNumber, type TheDriftRecord } from '../spend_the_github_budget/the_repos_numbers.ts'
 import type { AHead } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 import { offlineAfterMsOf, type CrewThresholds } from '../declare_crew/the_crews_thresholds.ts'
@@ -62,6 +63,9 @@ export interface Nudge {
   readonly number?: DriftNumber
   readonly value?: number
   readonly most?: number
+  /** For a repo's drift (martha#1010's addendum): the repo it is about, and the same number a week earlier. */
+  readonly repo?: string
+  readonly was?: number
 }
 
 /** The windows a crew declared, in milliseconds. Zero turns that kind of nudge off. */
@@ -323,9 +327,42 @@ export function driftNudges(drifts: readonly APackagesDrift[], trims: TheCrewsTr
 }
 
 /** The nudge one number raises when it is past the crew's most, or none when the most is no fixed line. */
-function aCrossing(drift: APackagesDrift, number: DriftNumber, value: number, member: string, since: number, most: AMost): Nudge[] {
+function aCrossing(drift: APackagesDrift, number: PackageNumber, value: number, member: string, since: number, most: AMost): Nudge[] {
   if (!aMostIsSet(most) || value <= most) return []
   return [{ kind: 'drift', member, package: drift.package, since, number, value, most }]
+}
+
+/**
+ * A repo's drift, as its own daily row shows it (martha#1010's addendum): a number that rose above its value of a week
+ * earlier, and a number past a fixed line the owner set. A number turned off with false raises neither; one set to 0 has
+ * no fixed line, so only its trend is read. DECIDED 2026-11-20 "Trend only (Recommended)".
+ */
+export function repoDriftNudges(record: TheDriftRecord, now: number, trims: TheCrewsTrims): Nudge[] {
+  const day = dayOf(now)
+  const week_ago = dayOf(now - A_WEEK_DAYS * A_DAY_MS)
+  const since = Date.parse(`${day}T00:00:00Z`)
+  const nudges: Nudge[] = []
+  for (const [repo, rows] of Object.entries(record)) {
+    const today = rows[day]
+    if (today === undefined || !A_REPO.test(repo)) continue
+    for (const number of REPO_NUMBERS) {
+      const most = trims[THE_MOST_OF[number]]
+      if (most === false) continue
+      const value = aRepoNumberIn(today, number)
+      const earlier = rows[week_ago]
+      const was = earlier === undefined ? undefined : aRepoNumberIn(earlier, number)
+      if (was !== undefined && value > was) nudges.push({ kind: 'drift', member: '', package: '', repo, since, number, value, was })
+      if (aMostIsSet(most) && value > most) nudges.push({ kind: 'drift', member: '', package: '', repo, since, number, value, most })
+    }
+  }
+  return nudges
+}
+
+/** The house rule each repo number is read against, by its own name. */
+const THE_MOST_OF: Readonly<Record<RepoNumber, HouseRuleRepoMost>> = {
+  [OPEN_ISSUES]: OPEN_ISSUES_MOST,
+  [UNTOUCHED_ISSUES]: UNTOUCHED_ISSUES_MOST,
+  [ABANDONED_PRS]: ABANDONED_PR_PERCENT_MOST,
 }
 
 /**
@@ -392,6 +429,11 @@ export function aDeclaredName(name: string, crew: TheDeclaredNames): string {
 
 /** One nudge as a prompt line, or null when it names nothing a line may carry. */
 export function theNudgeLine(nudge: Nudge, crew: TheNudgeLinesCrew): string | null {
+  // A repo's drift is about the repo, not a member: the repo's own shape is what the line may print.
+  if (nudge.repo !== undefined) {
+    const words = theDriftWords(nudge)
+    return A_REPO.test(nudge.repo) && words === '' ? null : `- ${nudge.kind}: ${nudge.repo}${words}, since ${theClockOf(nudge.since, crew.clock_zone)}`
+  }
   const member = aDeclaredName(nudge.member, crew)
   if (member === '' || !MEMBER_NAME.test(member)) return null
   const package_name = WORK_PACKAGE.test(nudge.package) ? nudge.package : ''
@@ -401,11 +443,13 @@ export function theNudgeLine(nudge: Nudge, crew: TheNudgeLinesCrew): string | nu
   return `- ${nudge.kind}: ${member}${on}${beside}${theDriftWords(nudge)}, since ${theClockOf(nudge.since, crew.clock_zone)}`
 }
 
-/** The drift a nudge names: which number, what it came to, and the crew's most. A count and one of our own names. */
+/** The drift a nudge names: which number, what it came to, and either its value a week earlier or the crew's most. */
 function theDriftWords(nudge: Nudge): string {
-  const { number, value, most } = nudge
-  if (number === undefined || value === undefined || most === undefined) return ''
+  const { number, value, most, was } = nudge
+  if (number === undefined || value === undefined) return ''
   if (!(DRIFT_NUMBERS as readonly string[]).includes(number)) return ''
+  if (was !== undefined) return `, ${String(value)} ${number} (was ${String(was)} a week ago)`
+  if (most === undefined) return ''
   return `, ${String(value)} ${number} (the crew's most is ${String(most)})`
 }
 

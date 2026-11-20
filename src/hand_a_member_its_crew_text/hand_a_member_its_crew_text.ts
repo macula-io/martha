@@ -23,7 +23,7 @@ import { join, relative, sep } from 'node:path'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf, DeclarationRefused, declareCrew, DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 export { crewTextFilesOf }
-import { aMostIsSet, CREW_LINE_LINES_MOST, FAIL_ONLY_ON_HARM, HOUSE_RULE_TRIMS, MUTANTS_ON_GUARDS_ONLY, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { aMostIsSet, CREW_LINE_LINES_MOST, FAIL_ONLY_ON_HARM, MUTANTS_ON_GUARDS_ONLY, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { DocumentStore, FileTree } from '../host_contract/host_contract.ts'
 import { CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
@@ -168,9 +168,10 @@ export async function crewTextFilesToApprove(documents: DocumentStore, root: str
 export const LINE_PLACEHOLDERS = ['handoff', 'doc_handoff', 'verdict', 'doc_verdict'] as const
 export type LinePlaceholder = (typeof LINE_PLACEHOLDERS)[number]
 
-/** The placeholders one of the crew's trims fills, named as the house rule is (martha#1010). */
-export const TRIM_PLACEHOLDERS = HOUSE_RULE_TRIMS
-export type TrimPlaceholder = (typeof HOUSE_RULE_TRIMS)[number]
+/** The placeholders one of the crew's trims fills (martha#1010): the four the cards hold a rule for. The repo's three
+ * numbers are the owner's pane and `martha week`, never a card, so no card names one. */
+export const TRIM_PLACEHOLDERS = [REVIEW_ROUNDS_MOST, CREW_LINE_LINES_MOST, FAIL_ONLY_ON_HARM, MUTANTS_ON_GUARDS_ONLY] as const
+export type TrimPlaceholder = (typeof TRIM_PLACEHOLDERS)[number]
 
 /** The placeholders a text may carry, in the words the crew's own texts use. The owner's is the word the declaration
  * names the owner by, so a text and a declaration cannot come to spell the same person two ways. The crew's four trims
