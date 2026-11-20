@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 6824" role="img" aria-label="Martha components">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 5850" role="img" aria-label="Martha components">
 <title>Martha components</title>
 <style>
 .t-name { font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700; }
@@ -48,8 +48,8 @@
 }
 </style>
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10z"/></marker></defs>
-<rect class="bg" x="0" y="0" width="1000" height="6824"/>
-<rect class="b-sys" x="32" y="70" width="300" height="452" rx="10"/>
+<rect class="bg" x="0" y="0" width="1000" height="5850"/>
+<rect class="b-sys" x="32" y="70" width="300" height="356" rx="10"/>
 <text class="t-code" x="48" y="98">run_the_martha_command</text>
 <text class="t-type" x="48" y="116">[the acts]</text>
 <text class="t-desc" x="48" y="140">init, approve, start &lt;member&gt;, run &lt;shape&gt;,</text>
@@ -69,24 +69,14 @@
 <text class="t-desc" x="48" y="364">refuse_an_owner_act_from_inside_a_</text>
 <text class="t-desc" x="48" y="380">member, record_where_an_owners_act_</text>
 <text class="t-desc" x="48" y="396">was_typed, keep_where_owners_acts_</text>
-<text class="t-desc" x="48" y="412">were_typed, and show_the_week_of_</text>
-<text class="t-desc" x="48" y="428">the_ledger is martha week: one ISO</text>
-<text class="t-desc" x="48" y="444">week of the crew's ledger read from</text>
-<text class="t-desc" x="48" y="460">its own rows and its ask queue;</text>
-<text class="t-desc" x="48" y="476">open_the_crew_in_kitty is bare martha</text>
-<text class="t-desc" x="48" y="492">start: each member in a kitty tab,</text>
-<text class="t-desc" x="48" y="508">its strip a split (#547 S6)</text>
-<rect class="b-cmp" x="348" y="70" width="300" height="196" rx="10"/>
+<text class="t-desc" x="48" y="412">were_typed</text>
+<rect class="b-cmp" x="348" y="70" width="300" height="132" rx="10"/>
 <text class="t-code" x="364" y="98">declare_a_solo_crew, declare_crew</text>
 <text class="t-type" x="364" y="116">[the declaration]</text>
 <text class="t-desc" x="364" y="140">Reads .martha/martha.json once into typed</text>
 <text class="t-desc" x="364" y="156">settings; writes it only when none exists.</text>
 <text class="t-desc" x="364" y="172">The mode's table says who may assign,</text>
-<text class="t-desc" x="364" y="188">approve, resume, take asks and restart.</text>
-<text class="t-desc" x="364" y="204">A member's host names a host Martha knows:</text>
-<text class="t-desc" x="364" y="220">the engine's name is its own recording's,</text>
-<text class="t-desc" x="364" y="236">engine_name, which know_the_goose_</text>
-<text class="t-desc" x="364" y="252">engines_facts holds (martha#541)</text>
+<text class="t-desc" x="364" y="188">approve, resume, take asks and restart</text>
 <rect class="b-cmp" x="664" y="70" width="300" height="132" rx="10"/>
 <text class="t-code" x="680" y="98">approve_a_checkouts_config</text>
 <text class="t-type" x="680" y="116">[the owner's yes]</text>
@@ -94,569 +84,496 @@
 <text class="t-desc" x="680" y="156">the checkout's tree, asks on the owner's</text>
 <text class="t-desc" x="680" y="172">own terminal, and keeps the fingerprint</text>
 <text class="t-desc" x="680" y="188">it was given in approvals.jsonl</text>
-<rect class="b-cmp" x="32" y="538" width="300" height="196" rx="10"/>
-<text class="t-code" x="48" y="566">start_a_member</text>
-<text class="t-type" x="48" y="584">[one member]</text>
-<text class="t-desc" x="48" y="608">Refuses no terminal, a name the crew lacks</text>
-<text class="t-desc" x="48" y="624">and a stale approval; -- words pass only</text>
-<text class="t-desc" x="48" y="640">pass_only_switches_that_load_no_config</text>
-<text class="t-desc" x="48" y="656">allows, then names the approval it starts</text>
-<text class="t-desc" x="48" y="672">on and holds the terminal.</text>
-<text class="t-desc" x="48" y="688">start_the_member_on_its_host is the table</text>
-<text class="t-desc" x="48" y="704">a start picks its host's launcher from,</text>
-<text class="t-desc" x="48" y="720">refusing a host this release cannot start</text>
-<rect class="b-cmp" x="348" y="538" width="300" height="868" rx="10"/>
-<text class="t-code" x="364" y="566">launch_a_claude_code_member</text>
-<text class="t-type" x="364" y="584">[the launcher]</text>
-<text class="t-desc" x="364" y="608">The launch itself: Martha's places, the</text>
-<text class="t-desc" x="364" y="624">approved snapshot and the launch record</text>
-<text class="t-desc" x="364" y="640">written before the host starts.</text>
-<text class="t-desc" x="364" y="656">place_the_hosts_settings settles what the</text>
-<text class="t-desc" x="364" y="672">host reads, ask_the_host_what_it_loads</text>
-<text class="t-desc" x="364" y="688">proves it loads the relay copy, and</text>
-<text class="t-desc" x="364" y="704">serve_the_relay_to_a_launch makes the</text>
-<text class="t-desc" x="364" y="720">socket and the copy; answer_the_relay</text>
-<text class="t-desc" x="364" y="736">answers the relay's events on it,</text>
-<text class="t-desc" x="364" y="752">keep_the_relays_journal keeps what the</text>
-<text class="t-desc" x="364" y="768">launch did, and end_a_launch starts the</text>
-<text class="t-desc" x="364" y="784">host in its own process group and cleans</text>
-<text class="t-desc" x="364" y="800">up when it ends. start_the_member_on_</text>
-<text class="t-desc" x="364" y="816">the_owners_terminal gives it the owner's</text>
-<text class="t-desc" x="364" y="832">terminal, sweep_leftover_launch_</text>
-<text class="t-desc" x="364" y="848">directories takes a dead launch's</text>
-<text class="t-desc" x="364" y="864">directories away; raise_a_turn_to_the_</text>
-<text class="t-desc" x="364" y="880">member raises each kept turn to its</text>
-<text class="t-desc" x="364" y="896">listeners, hand_a_crew_message_to_its_</text>
-<text class="t-desc" x="364" y="912">member hands one message at a time and</text>
-<text class="t-desc" x="364" y="928">counts it taken in, and run_an_owner_</text>
-<text class="t-desc" x="364" y="944">signed_command runs a shape the owner</text>
-<text class="t-desc" x="364" y="960">signed on a verified copy, in a sandbox;</text>
-<text class="t-desc" x="364" y="976">end_a_launch_when_its_run_ends gives</text>
-<text class="t-desc" x="364" y="992">the launch its run's lifeline, so a run</text>
-<text class="t-desc" x="364" y="1008">that ends takes its member with it;</text>
-<text class="t-desc" x="364" y="1024">give_a_member_its_own_config makes the</text>
-<text class="t-desc" x="364" y="1040">member a config folder of its own, so</text>
-<text class="t-desc" x="364" y="1056">the owner's own hooks never load in it;</text>
-<text class="t-desc" x="364" y="1072">tell_a_member_what_its_relaunch_killed</text>
-<text class="t-desc" x="364" y="1088">holds what a killed run left, for the</text>
-<text class="t-desc" x="364" y="1104">member to read on its next start;</text>
-<text class="t-desc" x="364" y="1120">release_what_a_killed_run_left is the</text>
-<text class="t-desc" x="364" y="1136">act that releases a leftover the member</text>
-<text class="t-desc" x="364" y="1152">says is its own (#693 r=2);</text>
-<text class="t-desc" x="364" y="1168">a_launch_end_on_this_machine is what a</text>
-<text class="t-desc" x="364" y="1184">launch end reads of this machine (its</text>
-<text class="t-desc" x="364" y="1200">process group, its boot, and what a run</text>
-<text class="t-desc" x="364" y="1216">left), the readings linux_process_</text>
-<text class="t-desc" x="364" y="1232">identity no longer takes;</text>
-<text class="t-desc" x="364" y="1248">watch_the_crew_tools_a_launch_served</text>
-<text class="t-desc" x="364" y="1264">reads which crew tools each session</text>
-<text class="t-desc" x="364" y="1280">still holds, through the journal the</text>
-<text class="t-desc" x="364" y="1296">launch keeps (martha#658);</text>
-<text class="t-desc" x="364" y="1312">keep_the_backstop_of_a_launch stops</text>
-<text class="t-desc" x="364" y="1328">a member whose relay never reported</text>
-<text class="t-desc" x="364" y="1344">its start, at the deadline it was given,</text>
-<text class="t-desc" x="364" y="1360">tell_the_owner_the_workspace_drift</text>
-<text class="t-desc" x="364" y="1376">folds the workspace's drift onto the</text>
-<text class="t-desc" x="364" y="1392">member's row (martha#562)</text>
-<rect class="b-cmp" x="664" y="538" width="300" height="294" rx="10"/>
-<text class="t-code" x="680" y="566">refuse_launch_of_</text>
-<text class="t-code" x="680" y="584">unapproved_config</text>
-<text class="t-type" x="680" y="602">[the launch gate]</text>
-<text class="t-desc" x="680" y="626">Fingerprints the config and the tree</text>
-<text class="t-desc" x="680" y="642">id at start, and allows only what was</text>
-<text class="t-desc" x="680" y="658">approved, plus remember_a_members_</text>
-<text class="t-desc" x="680" y="674">own_writes; judge_a_checkouts_tree</text>
-<text class="t-desc" x="680" y="690">reads and judges a checkout's tree;</text>
-<text class="t-desc" x="680" y="706">refuse_code_a_checkout_</text>
-<text class="t-desc" x="680" y="722">runs_itself closes a checkout's scripts;</text>
-<text class="t-desc" x="680" y="738">run_marthas_own_git the settings each</text>
-<text class="t-desc" x="680" y="754">of Martha's own git runs carries, and</text>
-<text class="t-desc" x="680" y="770">empty_directory_of_a_launch the place</text>
-<text class="t-desc" x="680" y="786">their hooks are pointed at;</text>
-<text class="t-desc" x="680" y="802">know_claude_codes_own_facts the names</text>
-<text class="t-desc" x="680" y="818">and switches Claude Code itself reads</text>
-<rect class="b-dat" x="32" y="1422" width="300" height="230" rx="10"/>
-<text class="t-code" x="48" y="1450">keep_martha_state_</text>
-<text class="t-code" x="48" y="1468">outside_the_checkout</text>
-<text class="t-type" x="48" y="1486">[Martha's state]</text>
-<text class="t-desc" x="48" y="1510">One directory per project, named by a</text>
-<text class="t-desc" x="48" y="1526">hash of its path: approvals, launches,</text>
-<text class="t-desc" x="48" y="1542">keep_what_the_owner_signed;</text>
-<text class="t-desc" x="48" y="1558">find_a_homes_state_root says where a</text>
-<text class="t-desc" x="48" y="1574">home's state root is and what it keeps;</text>
-<text class="t-desc" x="48" y="1590">row_streams_directory appends rows</text>
-<text class="t-desc" x="48" y="1606">as files; dashboard_rows_directory</text>
-<text class="t-desc" x="48" y="1622">writes the owner's row for a member as</text>
-<text class="t-desc" x="48" y="1638">one file, renamed into place whole</text>
-<rect class="b-cmp" x="348" y="1422" width="300" height="294" rx="10"/>
-<text class="t-code" x="364" y="1450">host_contract,</text>
-<text class="t-code" x="364" y="1468">linux_process_identity</text>
-<text class="t-type" x="364" y="1486">[the host contract, and this machine]</text>
-<text class="t-desc" x="364" y="1510">What the core may ask of a coding tool:</text>
-<text class="t-desc" x="364" y="1526">a clock, stores, running a process,</text>
-<text class="t-desc" x="364" y="1542">delivery in and out; linux_process_identity</text>
-<text class="t-desc" x="364" y="1558">answers all of it for this machine, and</text>
-<text class="t-desc" x="364" y="1574">read_a_kernel_and_a_home adds a whole</text>
-<text class="t-desc" x="364" y="1590">process tree's readings and the launch</text>
-<text class="t-desc" x="364" y="1606">records a home's state root holds;</text>
-<text class="t-desc" x="364" y="1622">read_one_file_held_by_its_descriptor</text>
-<text class="t-desc" x="364" y="1638">reads a session's transcript by the</text>
-<text class="t-desc" x="364" y="1654">descriptor it opened, and hold_a_</text>
-<text class="t-desc" x="364" y="1670">session_to_its_served_tools folds the</text>
-<text class="t-desc" x="364" y="1686">host's tool deltas into whether the</text>
-<text class="t-desc" x="364" y="1702">session still holds its tools</text>
-<rect class="b-cmp" x="664" y="1422" width="300" height="164" rx="10"/>
-<text class="t-code" x="680" y="1450">install_the_recorded_mesh_server</text>
-<text class="t-type" x="680" y="1468">[recorded trees]</text>
-<text class="t-desc" x="680" y="1492">A tree by bytes, never by version:</text>
-<text class="t-desc" x="680" y="1508">record_mesh_server_tools records it,</text>
-<text class="t-desc" x="680" y="1524">record_ring_results rings one server</text>
-<text class="t-desc" x="680" y="1540">with another and keeps the keys,</text>
-<text class="t-desc" x="680" y="1556">prove_the_mesh_server_bytes compares it</text>
-<text class="t-desc" x="680" y="1572">again, and the launcher installs it</text>
-<rect class="b-cmp" x="32" y="1732" width="300" height="132" rx="10"/>
-<text class="t-code" x="48" y="1760">inbound_paths</text>
-<text class="t-type" x="48" y="1778">[every path, and its control]</text>
-<text class="t-desc" x="48" y="1802">Every way text reaches a session and</text>
-<text class="t-desc" x="48" y="1818">every way a checkout starts code, each</text>
-<text class="t-desc" x="48" y="1834">row naming the gate on it; check_every_</text>
-<text class="t-desc" x="48" y="1850">path_is_gated fails CI on a gap</text>
-<rect class="b-cmp" x="348" y="1732" width="300" height="614" rx="10"/>
-<text class="t-code" x="364" y="1760">take_in_a_turn, shell_tools,</text>
-<text class="t-code" x="364" y="1778">answer_a_tool_call</text>
-<text class="t-type" x="364" y="1796">[the shell gate]</text>
-<text class="t-desc" x="364" y="1820">A turn or a tool's result: take_in_a_turn,</text>
-<text class="t-desc" x="364" y="1836">take_in_a_tool_result, shell_tools,</text>
-<text class="t-desc" x="364" y="1852">answer_a_tool_call, read_a_ring_results_</text>
-<text class="t-desc" x="364" y="1868">sender, refuse_execution_after_ungated_</text>
-<text class="t-desc" x="364" y="1884">text, trust_only_framed_envelopes; keep_</text>
-<text class="t-desc" x="364" y="1900">the_shell_for_an_owner_signed_command;</text>
-<text class="t-desc" x="364" y="1916">hash_a_file_under_a_tree, what a file is;</text>
-<text class="t-desc" x="364" y="1932">prove_a_mesh_answer_is_wordless,</text>
-<text class="t-desc" x="364" y="1948">name_a_node_by_its_petname; session_</text>
-<text class="t-desc" x="364" y="1964">records_in_rows keeps a session's</text>
-<text class="t-desc" x="364" y="1980">records in the host's row streams, and</text>
-<text class="t-desc" x="364" y="1996">a record nobody can vouch for is lost.</text>
-<text class="t-desc" x="364" y="2012">vouch_for_the_agents_a_session_</text>
-<text class="t-desc" x="364" y="2028">started keeps what a launcher knows</text>
-<text class="t-desc" x="364" y="2044">of the agents a session started and</text>
-<text class="t-desc" x="364" y="2060">whether one may be vouched for;</text>
-<text class="t-desc" x="364" y="2076">answer_what_a_host_reports is the one</text>
-<text class="t-desc" x="364" y="2092">entry every gate is answered from, that</text>
-<text class="t-desc" x="364" y="2108">names no host (martha#541); it holds</text>
-<text class="t-desc" x="364" y="2124">the sessions, their records and the</text>
-<text class="t-desc" x="364" y="2140">order every answer is given in, and the</text>
-<text class="t-desc" x="364" y="2156">reports of a host are moved onto it</text>
-<text class="t-desc" x="364" y="2172">one family at a time.</text>
-<text class="t-desc" x="364" y="2188">read_the_gate_mode says what the gate</text>
-<text class="t-desc" x="364" y="2204">does to each member (off, enforced or</text>
-<text class="t-desc" x="364" y="2220">audited); refuse_calls_outside_the_</text>
-<text class="t-desc" x="364" y="2236">package_contract holds a package's</text>
-<text class="t-desc" x="364" y="2252">contract against every call (martha#513);</text>
-<text class="t-desc" x="364" y="2268">audit_the_gate_for_a_member</text>
-<text class="t-desc" x="364" y="2284">keeps the refusal an audited member was</text>
-<text class="t-desc" x="364" y="2300">not given, and say_what_the_gate_does</text>
-<text class="t-desc" x="364" y="2316">prints it; apply_the_owners_release reads</text>
-<text class="t-desc" x="364" y="2332">a member the owner released</text>
-<rect class="b-cmp" x="664" y="1732" width="300" height="212" rx="10"/>
-<text class="t-code" x="680" y="1760">name_the_source_of_a_prompt</text>
-<text class="t-type" x="680" y="1778">[whose text it was]</text>
-<text class="t-desc" x="680" y="1802">The origin a host attests, carried with</text>
-<text class="t-desc" x="680" y="1818">the turn: attribute_a_cross_session_sender,</text>
-<text class="t-desc" x="680" y="1834">carry_taint_across_a_refresh, and the shell</text>
-<text class="t-desc" x="680" y="1850">gate's reading; hear_every_turn_the_</text>
-<text class="t-desc" x="680" y="1866">model_runs hears every main turn the</text>
-<text class="t-desc" x="680" y="1882">model runs, whatever started it, and</text>
-<text class="t-desc" x="680" y="1898">records its source; trust_only_signed_</text>
-<text class="t-desc" x="680" y="1914">lists is how every list a gate trusts is</text>
-<text class="t-desc" x="680" y="1930">opened</text>
-<rect class="b-cmp" x="32" y="2362" width="300" height="148" rx="10"/>
-<text class="t-code" x="48" y="2390">admit_a_room_message</text>
-<text class="t-type" x="48" y="2408">[loaded; the room is not built]</text>
-<text class="t-desc" x="48" y="2432">Every launch loads these, though the room</text>
-<text class="t-desc" x="48" y="2448">they serve is not built: the node id a</text>
-<text class="t-desc" x="48" y="2464">member has; read_a_room_through_its_gate</text>
-<text class="t-desc" x="48" y="2480">gives the mesh server's tools, and refuse_</text>
-<text class="t-desc" x="48" y="2496">widening_a_member_reach refuses the rest</text>
-<rect class="b-cmp" x="348" y="2362" width="300" height="438" rx="10"/>
-<text class="t-code" x="364" y="2390">claude_code_host,</text>
-<text class="t-code" x="364" y="2408">claude_code_relay</text>
-<text class="t-type" x="364" y="2426">[the Claude Code host]</text>
-<text class="t-desc" x="364" y="2450">The host contract on Claude Code: the</text>
-<text class="t-desc" x="364" y="2466">plugin, its hooks, the relay on a socket</text>
-<text class="t-desc" x="364" y="2482">and the member's tools; cut_the_rules_</text>
-<text class="t-desc" x="364" y="2498">from_the_host_binary holds the rules cut</text>
-<text class="t-desc" x="364" y="2514">out of the host, and refuse_settings_</text>
-<text class="t-desc" x="364" y="2530">that_turn_hooks_off the refusal of a</text>
-<text class="t-desc" x="364" y="2546">launch that reads one; load_the_hosts_</text>
-<text class="t-desc" x="364" y="2562">markdown is the markdown it loads and</text>
-<text class="t-desc" x="364" y="2578">the settings env reaching servers, and</text>
-<text class="t-desc" x="364" y="2594">install_the_mesh_server_for_claude_code</text>
-<text class="t-desc" x="364" y="2610">the server a launch hands the model;</text>
-<text class="t-desc" x="364" y="2626">hear_the_hosts_dialogs reads in the</text>
-<text class="t-desc" x="364" y="2642">crew's words the dialogs the host</text>
-<text class="t-desc" x="364" y="2658">raises; refuse_a_member_writing_</text>
-<text class="t-desc" x="364" y="2674">owner_memory keeps a member's writes</text>
-<text class="t-desc" x="364" y="2690">out of the owner's memory, and find_</text>
-<text class="t-desc" x="364" y="2706">what_a_later_git_run_reads reads what a</text>
-<text class="t-desc" x="364" y="2722">later git run would read; read_what_</text>
-<text class="t-desc" x="364" y="2738">claude_code_says_of_an_agent reads what</text>
-<text class="t-desc" x="364" y="2754">the host says of an agent that failed;</text>
-<text class="t-desc" x="364" y="2770">read_what_claude_code_records_of_its_</text>
-<text class="t-desc" x="364" y="2786">tools reads the tool deltas it records</text>
-<rect class="b-cmp" x="664" y="2362" width="300" height="470" rx="10"/>
-<text class="t-code" x="680" y="2390">check_nothing_private_gets_in,</text>
-<text class="t-code" x="680" y="2408">check_every_link_resolves</text>
-<text class="t-type" x="680" y="2426">[this repository's own checks]</text>
-<text class="t-desc" x="680" y="2450">A private issue link, an internal host</text>
-<text class="t-desc" x="680" y="2466">name or a private remote fails CI by</text>
-<text class="t-desc" x="680" y="2482">name; so does a home path in the text</text>
-<text class="t-desc" x="680" y="2498">members post on GitHub, which check_</text>
-<text class="t-desc" x="680" y="2514">posted_text_carries_nothing_private</text>
-<text class="t-desc" x="680" y="2530">reads daily. Every link to a file or a</text>
-<text class="t-desc" x="680" y="2546">heading of this repository resolves;</text>
-<text class="t-desc" x="680" y="2562">check_no_test_the_base_passed_goes_</text>
-<text class="t-desc" x="680" y="2578">missing names a dropped test, and</text>
-<text class="t-desc" x="680" y="2594">check_no_literal_restates_a_value</text>
-<text class="t-desc" x="680" y="2610">names a literal spelling out a value</text>
-<text class="t-desc" x="680" y="2626">an exported constant already holds;</text>
-<text class="t-desc" x="680" y="2642">check_every_recorded_host_test_is_run</text>
-<text class="t-desc" x="680" y="2658">names a recorded-host case no CI job runs;</text>
-<text class="t-desc" x="680" y="2674">check_marthas_names_are_its_own fails</text>
-<text class="t-desc" x="680" y="2690">a file, folder, tool, marker or</text>
-<text class="t-desc" x="680" y="2706">variable of Martha's that crew-code</text>
-<text class="t-desc" x="680" y="2722">names too, by name; check_the_pictures_</text>
-<text class="t-desc" x="680" y="2738">change_with_the_version lets a C4 picture</text>
-<text class="t-desc" x="680" y="2754">change only where the version does;</text>
-<text class="t-desc" x="680" y="2770">check_no_import_cycle names the whole</text>
-<text class="t-desc" x="680" y="2786">loop when files of the core load each</text>
-<text class="t-desc" x="680" y="2802">other; and check_every_check_runs_in_a_</text>
-<text class="t-desc" x="680" y="2818">job names a check no pull request runs</text>
-<rect class="b-cmp" x="32" y="2848" width="300" height="228" rx="10"/>
-<text class="t-code" x="48" y="2876">install_the_pinned_installer</text>
-<text class="t-type" x="48" y="2894">[the installer this release pins]</text>
-<text class="t-desc" x="48" y="2918">martha install: reads the pin from the</text>
-<text class="t-desc" x="48" y="2934">running release, fetches exactly that</text>
-<text class="t-desc" x="48" y="2950">installer version through run_the_nodes_</text>
-<text class="t-desc" x="48" y="2966">own_npm_alone, refuses other bytes, and</text>
-<text class="t-desc" x="48" y="2982">runs it with the words unchanged;</text>
-<text class="t-desc" x="48" y="2998">read_the_words_of_martha_install says</text>
-<text class="t-desc" x="48" y="3014">which words it takes, and hold_the_</text>
-<text class="t-desc" x="48" y="3030">launch_to_the_version_floor refuses</text>
-<text class="t-desc" x="48" y="3046">every other act of a release below the</text>
-<text class="t-desc" x="48" y="3062">floor this machine holds (martha#21)</text>
-<rect class="b-cmp" x="348" y="2848" width="300" height="164" rx="10"/>
-<text class="t-code" x="364" y="2876">run_the_nodes_own_npm_alone</text>
-<text class="t-type" x="364" y="2894">[npm, and nothing of the machine's]</text>
-<text class="t-desc" x="364" y="2918">The npm beside this node, run with</text>
-<text class="t-desc" x="364" y="2934">empty user and global config, one named</text>
-<text class="t-desc" x="364" y="2950">registry, --ignore-scripts and an</text>
-<text class="t-desc" x="364" y="2966">environment built from HOME and PATH</text>
-<text class="t-desc" x="364" y="2982">alone: the mesh server and the installer,</text>
-<text class="t-desc" x="364" y="2998">one isolation</text>
-<rect class="b-cmp" x="664" y="2848" width="300" height="1206" rx="10"/>
-<text class="t-code" x="680" y="2876">show_dashboard_beat,</text>
-<text class="t-code" x="680" y="2894">keep_the_ledger</text>
-<text class="t-type" x="680" y="2912">[the crew's rows and its ledger]</text>
-<text class="t-desc" x="680" y="2936">show_dashboard_beat holds a member's row</text>
-<text class="t-desc" x="680" y="2952">and the rule the newest beat wins;</text>
-<text class="t-desc" x="680" y="2968">report_where_the_work_stands moves it,</text>
-<text class="t-desc" x="680" y="2984">see_the_crew lays every one out,</text>
-<text class="t-desc" x="680" y="3000">draw_the_crew_strip draws that in any</text>
-<text class="t-desc" x="680" y="3016">terminal (martha crew) and</text>
-<text class="t-desc" x="680" y="3032">title_a_members_tab makes a member's</text>
-<text class="t-desc" x="680" y="3048">tab title from its row (martha#572);</text>
-<text class="t-desc" x="680" y="3064">see_who_is_free says who can take a</text>
-<text class="t-desc" x="680" y="3080">package, tell_the_owner_a_session_waits</text>
-<text class="t-desc" x="680" y="3096">says what</text>
-<text class="t-desc" x="680" y="3112">the host is asking the owner;</text>
-<text class="t-desc" x="680" y="3128">say_what_the_host_is_asking decides which</text>
-<text class="t-desc" x="680" y="3144">of its events opens a dialog and which</text>
-<text class="t-desc" x="680" y="3160">closes it, ring_the_owner rings for it</text>
-<text class="t-desc" x="680" y="3176">once, and</text>
-<text class="t-desc" x="680" y="3192">a_crews_tools answers every tool the</text>
-<text class="t-desc" x="680" y="3208">crew registers.</text>
-<text class="t-desc" x="680" y="3224">keep_the_ledger loads log_ledger, whose</text>
-<text class="t-desc" x="680" y="3240">streams sit in the crew's own state;</text>
-<text class="t-desc" x="680" y="3256">keep_the_crew_channel is where a message</text>
-<text class="t-desc" x="680" y="3272">lives, send_a_crew_message writes one,</text>
-<text class="t-desc" x="680" y="3288">tell_a_citer_of_a_volatile_path says so</text>
-<text class="t-desc" x="680" y="3304">to the member whose text cites a path a</text>
-<text class="t-desc" x="680" y="3320">reboot deletes (martha#314), and</text>
-<text class="t-desc" x="680" y="3336">show_what_a_message_became reads back</text>
-<text class="t-desc" x="680" y="3352">what became of it; read_a_crew_line reads</text>
-<text class="t-desc" x="680" y="3368">the HANDOFF and VERDICT lines of a</text>
-<text class="t-desc" x="680" y="3384">message, and hand_a_member_its_crew_text</text>
-<text class="t-desc" x="680" y="3400">composes the crew text a member is</text>
-<text class="t-desc" x="680" y="3416">handed at every session's start;</text>
-<text class="t-desc" x="680" y="3432">tell_the_member_a_line puts one line</text>
-<text class="t-desc" x="680" y="3448">of Martha's own in the row the owner</text>
-<text class="t-desc" x="680" y="3464">reads and the member's own channel;</text>
-<text class="t-desc" x="680" y="3480">nudge_the_supervisor and watch_waits</text>
-<text class="t-desc" x="680" y="3496">find what has stalled from those rows</text>
-<text class="t-desc" x="680" y="3512">and lines, and the nudge asks GitHub</text>
-<text class="t-desc" x="680" y="3528">for each waiting package's pull-request</text>
-<text class="t-desc" x="680" y="3544">head and issue state (martha#320);</text>
-<text class="t-desc" x="680" y="3560">spend_the_github_budget spends the</text>
-<text class="t-desc" x="680" y="3576">crew's one GitHub allowance on those</text>
-<text class="t-desc" x="680" y="3592">reads, and wait_for_ci reads the CI on</text>
-<text class="t-desc" x="680" y="3608">a sha through it; find_the_unheld_work</text>
-<text class="t-desc" x="680" y="3624">lists the backlog work no member holds</text>
-<text class="t-desc" x="680" y="3640">and nudge_an_idle_crew names members</text>
-<text class="t-desc" x="680" y="3656">idle beside it (martha#319);</text>
-<text class="t-desc" x="680" y="3672">recover_a_failed_act names a failed</text>
-<text class="t-desc" x="680" y="3688">outward act, reads what is really</text>
-<text class="t-desc" x="680" y="3704">there and decides, one attempt at</text>
-<text class="t-desc" x="680" y="3720">most, then the Supervisor (martha#512);</text>
-<text class="t-desc" x="680" y="3736">hold_a_package_to_its_budget counts what</text>
-<text class="t-desc" x="680" y="3752">a package spends, in a stream of its</text>
-<text class="t-desc" x="680" y="3768">own beside the ledger, and refuses a</text>
-<text class="t-desc" x="680" y="3784">call past its budget while keeping open</text>
-<text class="t-desc" x="680" y="3800">the calls that end a package</text>
-<text class="t-desc" x="680" y="3816">(martha#513 slice 3);</text>
-<text class="t-desc" x="680" y="3832">keep_what_a_session_spent keeps what</text>
-<text class="t-desc" x="680" y="3848">a session's host says it spent, as</text>
-<text class="t-desc" x="680" y="3864">readings in usage/ streams of their</text>
-<text class="t-desc" x="680" y="3880">own, and reads a window's spend from</text>
-<text class="t-desc" x="680" y="3896">them; a session that reported nothing</text>
-<text class="t-desc" x="680" y="3912">is named, never counted as 0</text>
-<text class="t-desc" x="680" y="3928">(martha#860);</text>
-<text class="t-desc" x="680" y="3944">keep_a_members_crew_tools_window keeps</text>
-<text class="t-desc" x="680" y="3960">the time a member works without its</text>
-<text class="t-desc" x="680" y="3976">crew tools, tells the Supervisor once</text>
-<text class="t-desc" x="680" y="3992">and hands its successor what it owes</text>
-<text class="t-desc" x="680" y="4008">(martha#658); a_week_of_the_ledger</text>
-<text class="t-desc" x="680" y="4024">answers one ISO week from those rows</text>
-<text class="t-desc" x="680" y="4040">(martha#308)</text>
-<rect class="b-cmp" x="32" y="4070" width="300" height="422" rx="10"/>
-<text class="t-code" x="48" y="4098">check_a_range_before_</text>
-<text class="t-code" x="48" y="4116">the_owner_says_yes</text>
-<text class="t-type" x="48" y="4134">[the crew's tools that act]</text>
-<text class="t-desc" x="48" y="4158">The eight tools a member</text>
-<text class="t-desc" x="48" y="4174">calls (martha#256): the range</text>
-<text class="t-desc" x="48" y="4190">check reads a clone and the</text>
-<text class="t-desc" x="48" y="4206">CI on its tip; land_passed_</text>
-<text class="t-desc" x="48" y="4222">work_as_one_batch cuts the</text>
-<text class="t-desc" x="48" y="4238">batch, find_the_work_a_</text>
-<text class="t-desc" x="48" y="4254">verdict_passed says which head</text>
-<text class="t-desc" x="48" y="4270">a verdict passed, and fast_</text>
-<text class="t-desc" x="48" y="4286">forward_after_the_owners_yes</text>
-<text class="t-desc" x="48" y="4302">moves the default branch;</text>
-<text class="t-desc" x="48" y="4318">open_and_finish_a_worktree</text>
-<text class="t-desc" x="48" y="4334">opens and finishes one;</text>
-<text class="t-desc" x="48" y="4350">read_the_origin_a_clone_has</text>
-<text class="t-desc" x="48" y="4366">says what a clone is of;</text>
-<text class="t-desc" x="48" y="4382">hold_a_package_back_from_a_</text>
-<text class="t-desc" x="48" y="4398">batch stops a held package</text>
-<text class="t-desc" x="48" y="4414">(martha#364); forecast_what_a_</text>
-<text class="t-desc" x="48" y="4430">batch_lands is its dry run,</text>
-<text class="t-desc" x="48" y="4446">and find_where_a_merge_</text>
-<text class="t-desc" x="48" y="4462">clashes names what a pull</text>
-<text class="t-desc" x="48" y="4478">request clashes with (#339)</text>
-<rect class="b-cmp" x="348" y="4070" width="300" height="342" rx="10"/>
-<text class="t-code" x="364" y="4098">keep_the_owners_todo_list,</text>
-<text class="t-code" x="364" y="4116">queue_the_owners_asks</text>
-<text class="t-type" x="364" y="4134">[what waits on the owner]</text>
-<text class="t-desc" x="364" y="4158">The owner's to-do list (martha#316):</text>
-<text class="t-desc" x="364" y="4174">the acts only the owner can do, each</text>
-<text class="t-desc" x="364" y="4190">command shown in full under what it</text>
-<text class="t-desc" x="364" y="4206">does. A member the table lets assign</text>
-<text class="t-desc" x="364" y="4222">work adds one; its own check or the</text>
-<text class="t-desc" x="364" y="4238">member takes it off. The pane and</text>
-<text class="t-desc" x="364" y="4254">martha todo show it. queue_the_owners_</text>
-<text class="t-desc" x="364" y="4270">asks is the ask queue (martha#313):</text>
-<text class="t-desc" x="364" y="4286">a routine ask waits instead of a menu,</text>
-<text class="t-desc" x="364" y="4302">and the session the table names hands</text>
-<text class="t-desc" x="364" y="4318">the whole batch over as one menu;</text>
-<text class="t-desc" x="364" y="4334">read_the_tips_a_removal_covers reads</text>
-<text class="t-desc" x="364" y="4350">both copies a branch deletion covers,</text>
-<text class="t-desc" x="364" y="4366">the clone's and origin's, which it</text>
-<text class="t-desc" x="364" y="4382">asks origin for with git ls-remote,</text>
-<text class="t-desc" x="364" y="4398">so one yes removes them both (martha#391)</text>
-<rect class="b-cmp" x="664" y="4070" width="300" height="198" rx="10"/>
-<text class="t-code" x="680" y="4098">keep_the_supervisors_</text>
-<text class="t-code" x="680" y="4116">standing_items</text>
-<text class="t-type" x="680" y="4134">[what the Supervisor holds back]</text>
-<text class="t-desc" x="680" y="4158">The Supervisor's standing items</text>
-<text class="t-desc" x="680" y="4174">(martha#317): what it holds back, who</text>
-<text class="t-desc" x="680" y="4190">owes what, and the rulings it recorded</text>
-<text class="t-desc" x="680" y="4206">as the owner's words. A hold closes</text>
-<text class="t-desc" x="680" y="4222">only on evidence; a fresh Supervisor</text>
-<text class="t-desc" x="680" y="4238">session is handed them at its start,</text>
-<text class="t-desc" x="680" y="4254">and the pane shows them</text>
-<rect class="b-cmp" x="32" y="4508" width="300" height="342" rx="10"/>
-<text class="t-code" x="48" y="4536">write_my_handover,</text>
-<text class="t-code" x="48" y="4554">refresh_a_member</text>
-<text class="t-type" x="48" y="4572">[the host writes a handover]</text>
-<text class="t-desc" x="48" y="4596">A member's handover is written by the</text>
-<text class="t-desc" x="48" y="4612">host, at the path the host chose, and</text>
-<text class="t-desc" x="48" y="4628">stamped: one file per member per day</text>
-<text class="t-desc" x="48" y="4644">in the crew's own store, so a file the</text>
-<text class="t-desc" x="48" y="4660">member wrote itself is not a handover.</text>
-<text class="t-desc" x="48" y="4676">refresh_a_member is the flow around it:</text>
-<text class="t-desc" x="48" y="4692">when a refresh is due, the ask, the</text>
-<text class="t-desc" x="48" y="4708">send-back and the decline, the clear,</text>
-<text class="t-desc" x="48" y="4724">and the prompt the successor resumes on;</text>
-<text class="t-desc" x="48" y="4740">end_a_running_turn ends the turn a</text>
-<text class="t-desc" x="48" y="4756">handover waits behind (martha#311).</text>
-<text class="t-desc" x="48" y="4772">keep_the_package_contract keeps a</text>
-<text class="t-desc" x="48" y="4788">package's contract as a version of it</text>
-<text class="t-desc" x="48" y="4804">in the package's ledger and hands the</text>
-<text class="t-desc" x="48" y="4820">same version to a member at its start</text>
-<text class="t-desc" x="48" y="4836">and after a refresh (martha#513)</text>
-<rect class="b-cmp" x="348" y="4508" width="300" height="260" rx="10"/>
-<text class="t-code" x="364" y="4536">park_and_wake_a_member</text>
-<text class="t-type" x="364" y="4554">[a park that outlives a session]</text>
-<text class="t-desc" x="364" y="4578">A member's park is a marker in the</text>
-<text class="t-desc" x="364" y="4594">crew's store, so a clear, a restart or a</text>
-<text class="t-desc" x="364" y="4610">refresh cannot lose it; who may park</text>
-<text class="t-desc" x="364" y="4626">another member is the declaration's</text>
-<text class="t-desc" x="364" y="4642">table, not a node id (martha#255 r=3).</text>
-<text class="t-desc" x="364" y="4658">wake_a_member is martha wake: the park</text>
-<text class="t-desc" x="364" y="4674">cleared and the member started on its</text>
-<text class="t-desc" x="364" y="4690">newest handover (part 2).</text>
-<text class="t-desc" x="364" y="4706">stop_and_restart_a_member is martha ls</text>
-<text class="t-desc" x="364" y="4722">and martha stop: a stop is a request the</text>
-<text class="t-desc" x="364" y="4738">launcher holding the member acts on</text>
-<text class="t-desc" x="364" y="4754">(martha#312)</text>
-<rect class="b-cmp" x="664" y="4508" width="300" height="166" rx="10"/>
-<text class="t-code" x="680" y="4536">keep_the_crews_</text>
-<text class="t-code" x="680" y="4554">files_as_directories</text>
-<text class="t-type" x="680" y="4572">[the crew's store, on this machine]</text>
-<text class="t-desc" x="680" y="4596">The host contract's crew store as files</text>
-<text class="t-desc" x="680" y="4612">in one directory: a place per name, a</text>
-<text class="t-desc" x="680" y="4628">file kept whole under a staging name</text>
-<text class="t-desc" x="680" y="4644">and 0600, and nothing read that is not</text>
-<text class="t-desc" x="680" y="4660">this user's alone (martha#254, #255)</text>
-<rect class="b-cmp" x="32" y="4866" width="300" height="374" rx="10"/>
-<text class="t-code" x="48" y="4894">switch_a_members_model,</text>
-<text class="t-code" x="48" y="4912">put_the_owners_model_back</text>
-<text class="t-type" x="48" y="4930">[a model, the owner's, a review's]</text>
-<text class="t-desc" x="48" y="4954">switch_a_members_model keeps the model a</text>
-<text class="t-desc" x="48" y="4970">member runs on for one package, in the</text>
-<text class="t-desc" x="48" y="4986">crew's own store, and the ways back;</text>
-<text class="t-desc" x="48" y="5002">put_the_owners_model_back undoes what a</text>
-<text class="t-desc" x="48" y="5018">switch does to the owner's own default:</text>
-<text class="t-desc" x="48" y="5034">the lock, the snapshot, the wait on the</text>
-<text class="t-desc" x="48" y="5050">file, the restore and the recovery a</text>
-<text class="t-desc" x="48" y="5066">killed launch leaves, over owners_</text>
-<text class="t-desc" x="48" y="5082">settings_directory, that file whole;</text>
-<text class="t-desc" x="48" y="5098">run_reviews_on_the_review_model refuses a</text>
-<text class="t-desc" x="48" y="5114">review spawn that names no reviewer model;</text>
-<text class="t-desc" x="48" y="5130">name_a_review_the_host_reported_failed</text>
-<text class="t-desc" x="48" y="5146">names a review the host reports failed,</text>
-<text class="t-desc" x="48" y="5162">from the report read_what_claude_code_s</text>
-<text class="t-desc" x="48" y="5178">ays_of_an_agent cuts</text>
-<text class="t-desc" x="48" y="5194">from the host's own text, on the model it</text>
-<text class="t-desc" x="48" y="5210">ran on and in the host's words</text>
-<text class="t-desc" x="48" y="5226">(martha#390)</text>
-<rect class="b-cmp" x="32" y="5256" width="300" height="502" rx="10"/>
-<text class="t-code" x="48" y="5284">guard_workspace, read_the_</text>
-<text class="t-code" x="48" y="5302">git_calls_in_a_shell_line</text>
-<text class="t-type" x="48" y="5320">[the workspace guard]</text>
-<text class="t-desc" x="48" y="5344">What the workspace's layout refuses of</text>
-<text class="t-desc" x="48" y="5360">a git call: read_the_git_calls_in_a_</text>
-<text class="t-desc" x="48" y="5376">shell_line reads each call and the</text>
-<text class="t-desc" x="48" y="5392">directory it runs in, ask_git_what_a_</text>
-<text class="t-desc" x="48" y="5408">member_is_about_to_change asks git what</text>
-<text class="t-desc" x="48" y="5424">a call is about to move, and guard_</text>
-<text class="t-desc" x="48" y="5440">workspace refuses a call that leaves a</text>
-<text class="t-desc" x="48" y="5456">clone's branch or touches another</text>
-<text class="t-desc" x="48" y="5472">member's worktree or branch; check_the_</text>
-<text class="t-desc" x="48" y="5488">workspace_matches_its_layout names the</text>
-<text class="t-desc" x="48" y="5504">drift in a workspace, and refuse_a_git_</text>
-<text class="t-desc" x="48" y="5520">call_in_a_members_shell and guard_the_</text>
-<text class="t-desc" x="48" y="5536">git_a_member_runs are the seams that ask</text>
-<text class="t-desc" x="48" y="5552">it: the shell line a tool call carries,</text>
-<text class="t-desc" x="48" y="5568">the git first on the member's PATH, and</text>
-<text class="t-desc" x="48" y="5584">the clone's ref transaction, each read</text>
-<text class="t-desc" x="48" y="5600">and judged before it runs; judge_the_</text>
-<text class="t-desc" x="48" y="5616">commit_a_member_is_about_to_make</text>
-<text class="t-desc" x="48" y="5632">judges a commit on the bytes it would</text>
-<text class="t-desc" x="48" y="5648">carry, the index and what a staging</text>
-<text class="t-desc" x="48" y="5664">line adds (#693 r=2), and refuse_a_</text>
-<text class="t-desc" x="48" y="5680">handoff_with_a_leftover refuses a</text>
-<text class="t-desc" x="48" y="5696">HANDOFF that would carry them while</text>
-<text class="t-desc" x="48" y="5712">they still stand (#719). A crew that</text>
-<text class="t-desc" x="48" y="5728">declared no layout is judged by none</text>
-<text class="t-desc" x="48" y="5744">of it (martha#562)</text>
-<rect class="b-cmp" x="348" y="5256" width="300" height="294" rx="10"/>
-<text class="t-code" x="364" y="5284">speak_acp_to_an_agent,</text>
-<text class="t-code" x="364" y="5302">hear_an_acp_agents_asks</text>
-<text class="t-type" x="364" y="5320">[an ACP agent, as its client]</text>
-<text class="t-desc" x="364" y="5344">Martha as the client of an engine it</text>
-<text class="t-desc" x="364" y="5360">drives over ACP on stdio (martha#541):</text>
-<text class="t-desc" x="364" y="5376">sessions, prompts, each tool call's</text>
-<text class="t-desc" x="364" y="5392">updates and the turn's end; a call is</text>
-<text class="t-desc" x="364" y="5408">answered allow_once or reject_once</text>
-<text class="t-desc" x="364" y="5424">from the gate's decision, else</text>
-<text class="t-desc" x="364" y="5440">cancelled. hear_an_acp_agents_asks</text>
-<text class="t-desc" x="364" y="5456">holds a call the gate allows and the</text>
-<text class="t-desc" x="364" y="5472">owner's list does not name until</text>
-<text class="t-desc" x="364" y="5488">martha answer answers it, over the</text>
-<text class="t-desc" x="364" y="5504">socket serve_the_owners_answers</text>
-<text class="t-desc" x="364" y="5520">serves for a launch. Not yet</text>
-<text class="t-desc" x="364" y="5536">wired to a launch</text>
-<rect class="b-cmp" x="32" y="5774" width="300" height="196" rx="10"/>
-<text class="t-code" x="48" y="5802">read_the_body_a_request_carries</text>
-<text class="t-type" x="48" y="5820">[a request to the launcher]</text>
-<text class="t-desc" x="48" y="5844">The body a request to the</text>
-<text class="t-desc" x="48" y="5860">launcher's socket carries: read</text>
-<text class="t-desc" x="48" y="5876">whole, up to the largest the</text>
-<text class="t-desc" x="48" y="5892">launcher reads, as JSON, and no</text>
-<text class="t-desc" x="48" y="5908">body at all when it is larger</text>
-<text class="t-desc" x="48" y="5924">or not JSON. Every endpoint of</text>
-<text class="t-desc" x="48" y="5940">the socket reads one this way</text>
-<text class="t-desc" x="48" y="5956">(martha#41)</text>
-<rect class="bound" x="16" y="40" width="968" height="5954" rx="12"/>
+<rect class="b-cmp" x="32" y="442" width="300" height="148" rx="10"/>
+<text class="t-code" x="48" y="470">start_a_member</text>
+<text class="t-type" x="48" y="488">[one member]</text>
+<text class="t-desc" x="48" y="512">Refuses no terminal, a name the crew lacks</text>
+<text class="t-desc" x="48" y="528">and a stale approval; -- words pass only</text>
+<text class="t-desc" x="48" y="544">pass_only_switches_that_load_no_config</text>
+<text class="t-desc" x="48" y="560">allows, then names the approval it starts</text>
+<text class="t-desc" x="48" y="576">on and holds the terminal</text>
+<rect class="b-cmp" x="348" y="442" width="300" height="532" rx="10"/>
+<text class="t-code" x="364" y="470">launch_a_claude_code_member</text>
+<text class="t-type" x="364" y="488">[the launcher]</text>
+<text class="t-desc" x="364" y="512">The launch itself: Martha's places, the</text>
+<text class="t-desc" x="364" y="528">approved snapshot and the launch record</text>
+<text class="t-desc" x="364" y="544">written before the host starts.</text>
+<text class="t-desc" x="364" y="560">place_the_hosts_settings settles what the</text>
+<text class="t-desc" x="364" y="576">host reads, ask_the_host_what_it_loads</text>
+<text class="t-desc" x="364" y="592">proves it loads the relay copy, and</text>
+<text class="t-desc" x="364" y="608">serve_the_relay_to_a_launch makes the</text>
+<text class="t-desc" x="364" y="624">socket and the copy; answer_the_relay</text>
+<text class="t-desc" x="364" y="640">answers the relay's events on it,</text>
+<text class="t-desc" x="364" y="656">keep_the_relays_journal keeps what the</text>
+<text class="t-desc" x="364" y="672">launch did, and end_a_launch starts the</text>
+<text class="t-desc" x="364" y="688">host in its own process group and cleans</text>
+<text class="t-desc" x="364" y="704">up when it ends. start_the_member_on_</text>
+<text class="t-desc" x="364" y="720">the_owners_terminal gives it the owner's</text>
+<text class="t-desc" x="364" y="736">terminal, sweep_leftover_launch_</text>
+<text class="t-desc" x="364" y="752">directories takes a dead launch's</text>
+<text class="t-desc" x="364" y="768">directories away; raise_a_turn_to_the_</text>
+<text class="t-desc" x="364" y="784">member raises each kept turn to its</text>
+<text class="t-desc" x="364" y="800">listeners, hand_a_crew_message_to_its_</text>
+<text class="t-desc" x="364" y="816">member hands one message at a time and</text>
+<text class="t-desc" x="364" y="832">counts it taken in, and run_an_owner_</text>
+<text class="t-desc" x="364" y="848">signed_command runs a shape the owner</text>
+<text class="t-desc" x="364" y="864">signed on a verified copy, in a sandbox;</text>
+<text class="t-desc" x="364" y="880">end_a_launch_when_its_run_ends gives</text>
+<text class="t-desc" x="364" y="896">the launch its run's lifeline, so a run</text>
+<text class="t-desc" x="364" y="912">that ends takes its member with it;</text>
+<text class="t-desc" x="364" y="928">give_a_member_its_own_config makes the</text>
+<text class="t-desc" x="364" y="944">member a config folder of its own, so</text>
+<text class="t-desc" x="364" y="960">the owner's own hooks never load in it</text>
+<rect class="b-cmp" x="664" y="442" width="300" height="294" rx="10"/>
+<text class="t-code" x="680" y="470">refuse_launch_of_</text>
+<text class="t-code" x="680" y="488">unapproved_config</text>
+<text class="t-type" x="680" y="506">[the launch gate]</text>
+<text class="t-desc" x="680" y="530">Fingerprints the config and the tree</text>
+<text class="t-desc" x="680" y="546">id at start, and allows only what was</text>
+<text class="t-desc" x="680" y="562">approved, plus remember_a_members_</text>
+<text class="t-desc" x="680" y="578">own_writes; judge_a_checkouts_tree</text>
+<text class="t-desc" x="680" y="594">reads and judges a checkout's tree;</text>
+<text class="t-desc" x="680" y="610">refuse_code_a_checkout_</text>
+<text class="t-desc" x="680" y="626">runs_itself closes a checkout's scripts;</text>
+<text class="t-desc" x="680" y="642">run_marthas_own_git the settings each</text>
+<text class="t-desc" x="680" y="658">of Martha's own git runs carries, and</text>
+<text class="t-desc" x="680" y="674">empty_directory_of_a_launch the place</text>
+<text class="t-desc" x="680" y="690">their hooks are pointed at;</text>
+<text class="t-desc" x="680" y="706">know_claude_codes_own_facts the names</text>
+<text class="t-desc" x="680" y="722">and switches Claude Code itself reads</text>
+<rect class="b-dat" x="32" y="990" width="300" height="230" rx="10"/>
+<text class="t-code" x="48" y="1018">keep_martha_state_</text>
+<text class="t-code" x="48" y="1036">outside_the_checkout</text>
+<text class="t-type" x="48" y="1054">[Martha's state]</text>
+<text class="t-desc" x="48" y="1078">One directory per project, named by a</text>
+<text class="t-desc" x="48" y="1094">hash of its path: approvals, launches,</text>
+<text class="t-desc" x="48" y="1110">keep_what_the_owner_signed;</text>
+<text class="t-desc" x="48" y="1126">find_a_homes_state_root says where a</text>
+<text class="t-desc" x="48" y="1142">home's state root is and what it keeps;</text>
+<text class="t-desc" x="48" y="1158">row_streams_directory appends rows</text>
+<text class="t-desc" x="48" y="1174">as files; dashboard_rows_directory</text>
+<text class="t-desc" x="48" y="1190">writes the owner's row for a member as</text>
+<text class="t-desc" x="48" y="1206">one file, renamed into place whole</text>
+<rect class="b-cmp" x="348" y="990" width="300" height="294" rx="10"/>
+<text class="t-code" x="364" y="1018">host_contract,</text>
+<text class="t-code" x="364" y="1036">linux_process_identity</text>
+<text class="t-type" x="364" y="1054">[the host contract, and this machine]</text>
+<text class="t-desc" x="364" y="1078">What the core may ask of a coding tool:</text>
+<text class="t-desc" x="364" y="1094">a clock, stores, running a process,</text>
+<text class="t-desc" x="364" y="1110">delivery in and out; linux_process_identity</text>
+<text class="t-desc" x="364" y="1126">answers all of it for this machine, and</text>
+<text class="t-desc" x="364" y="1142">read_a_kernel_and_a_home adds a whole</text>
+<text class="t-desc" x="364" y="1158">process tree's readings and the launch</text>
+<text class="t-desc" x="364" y="1174">records a home's state root holds;</text>
+<text class="t-desc" x="364" y="1190">read_one_file_held_by_its_descriptor</text>
+<text class="t-desc" x="364" y="1206">reads a session's transcript by the</text>
+<text class="t-desc" x="364" y="1222">descriptor it opened, and hold_a_</text>
+<text class="t-desc" x="364" y="1238">session_to_its_served_tools folds the</text>
+<text class="t-desc" x="364" y="1254">host's tool deltas into whether the</text>
+<text class="t-desc" x="364" y="1270">session still holds its tools</text>
+<rect class="b-cmp" x="664" y="990" width="300" height="164" rx="10"/>
+<text class="t-code" x="680" y="1018">install_the_recorded_mesh_server</text>
+<text class="t-type" x="680" y="1036">[recorded trees]</text>
+<text class="t-desc" x="680" y="1060">A tree by bytes, never by version:</text>
+<text class="t-desc" x="680" y="1076">record_mesh_server_tools records it,</text>
+<text class="t-desc" x="680" y="1092">record_ring_results rings one server</text>
+<text class="t-desc" x="680" y="1108">with another and keeps the keys,</text>
+<text class="t-desc" x="680" y="1124">prove_the_mesh_server_bytes compares it</text>
+<text class="t-desc" x="680" y="1140">again, and the launcher installs it</text>
+<rect class="b-cmp" x="32" y="1300" width="300" height="132" rx="10"/>
+<text class="t-code" x="48" y="1328">inbound_paths</text>
+<text class="t-type" x="48" y="1346">[every path, and its control]</text>
+<text class="t-desc" x="48" y="1370">Every way text reaches a session and</text>
+<text class="t-desc" x="48" y="1386">every way a checkout starts code, each</text>
+<text class="t-desc" x="48" y="1402">row naming the gate on it; check_every_</text>
+<text class="t-desc" x="48" y="1418">path_is_gated fails CI on a gap</text>
+<rect class="b-cmp" x="348" y="1300" width="300" height="614" rx="10"/>
+<text class="t-code" x="364" y="1328">take_in_a_turn, shell_tools,</text>
+<text class="t-code" x="364" y="1346">answer_a_tool_call</text>
+<text class="t-type" x="364" y="1364">[the shell gate]</text>
+<text class="t-desc" x="364" y="1388">A turn or a tool's result: take_in_a_turn,</text>
+<text class="t-desc" x="364" y="1404">take_in_a_tool_result, shell_tools,</text>
+<text class="t-desc" x="364" y="1420">answer_a_tool_call, read_a_ring_results_</text>
+<text class="t-desc" x="364" y="1436">sender, refuse_execution_after_ungated_</text>
+<text class="t-desc" x="364" y="1452">text, trust_only_framed_envelopes; keep_</text>
+<text class="t-desc" x="364" y="1468">the_shell_for_an_owner_signed_command;</text>
+<text class="t-desc" x="364" y="1484">hash_a_file_under_a_tree, what a file is;</text>
+<text class="t-desc" x="364" y="1500">prove_a_mesh_answer_is_wordless,</text>
+<text class="t-desc" x="364" y="1516">name_a_node_by_its_petname; session_</text>
+<text class="t-desc" x="364" y="1532">records_in_rows keeps a session's</text>
+<text class="t-desc" x="364" y="1548">records in the host's row streams, and</text>
+<text class="t-desc" x="364" y="1564">a record nobody can vouch for is lost.</text>
+<text class="t-desc" x="364" y="1580">vouch_for_the_agents_a_session_</text>
+<text class="t-desc" x="364" y="1596">started keeps what a launcher knows</text>
+<text class="t-desc" x="364" y="1612">of the agents a session started and</text>
+<text class="t-desc" x="364" y="1628">whether one may be vouched for;</text>
+<text class="t-desc" x="364" y="1644">answer_what_a_host_reports is the one</text>
+<text class="t-desc" x="364" y="1660">entry every gate is answered from, that</text>
+<text class="t-desc" x="364" y="1676">names no host (martha#541); it holds</text>
+<text class="t-desc" x="364" y="1692">the sessions, their records and the</text>
+<text class="t-desc" x="364" y="1708">order every answer is given in, and the</text>
+<text class="t-desc" x="364" y="1724">reports of a host are moved onto it</text>
+<text class="t-desc" x="364" y="1740">one family at a time.</text>
+<text class="t-desc" x="364" y="1756">read_the_gate_mode says what the gate</text>
+<text class="t-desc" x="364" y="1772">does to each member (off, enforced or</text>
+<text class="t-desc" x="364" y="1788">audited); refuse_calls_outside_the_</text>
+<text class="t-desc" x="364" y="1804">package_contract holds a package's</text>
+<text class="t-desc" x="364" y="1820">contract against every call (martha#513);</text>
+<text class="t-desc" x="364" y="1836">audit_the_gate_for_a_member</text>
+<text class="t-desc" x="364" y="1852">keeps the refusal an audited member was</text>
+<text class="t-desc" x="364" y="1868">not given, and say_what_the_gate_does</text>
+<text class="t-desc" x="364" y="1884">prints it; apply_the_owners_release reads</text>
+<text class="t-desc" x="364" y="1900">a member the owner released</text>
+<rect class="b-cmp" x="664" y="1300" width="300" height="212" rx="10"/>
+<text class="t-code" x="680" y="1328">name_the_source_of_a_prompt</text>
+<text class="t-type" x="680" y="1346">[whose text it was]</text>
+<text class="t-desc" x="680" y="1370">The origin a host attests, carried with</text>
+<text class="t-desc" x="680" y="1386">the turn: attribute_a_cross_session_sender,</text>
+<text class="t-desc" x="680" y="1402">carry_taint_across_a_refresh, and the shell</text>
+<text class="t-desc" x="680" y="1418">gate's reading; hear_every_turn_the_</text>
+<text class="t-desc" x="680" y="1434">model_runs hears every main turn the</text>
+<text class="t-desc" x="680" y="1450">model runs, whatever started it, and</text>
+<text class="t-desc" x="680" y="1466">records its source; trust_only_signed_</text>
+<text class="t-desc" x="680" y="1482">lists is how every list a gate trusts is</text>
+<text class="t-desc" x="680" y="1498">opened</text>
+<rect class="b-cmp" x="32" y="1930" width="300" height="148" rx="10"/>
+<text class="t-code" x="48" y="1958">admit_a_room_message</text>
+<text class="t-type" x="48" y="1976">[loaded; the room is not built]</text>
+<text class="t-desc" x="48" y="2000">Every launch loads these, though the room</text>
+<text class="t-desc" x="48" y="2016">they serve is not built: the node id a</text>
+<text class="t-desc" x="48" y="2032">member has; read_a_room_through_its_gate</text>
+<text class="t-desc" x="48" y="2048">gives the mesh server's tools, and refuse_</text>
+<text class="t-desc" x="48" y="2064">widening_a_member_reach refuses the rest</text>
+<rect class="b-cmp" x="348" y="1930" width="300" height="438" rx="10"/>
+<text class="t-code" x="364" y="1958">claude_code_host,</text>
+<text class="t-code" x="364" y="1976">claude_code_relay</text>
+<text class="t-type" x="364" y="1994">[the Claude Code host]</text>
+<text class="t-desc" x="364" y="2018">The host contract on Claude Code: the</text>
+<text class="t-desc" x="364" y="2034">plugin, its hooks, the relay on a socket</text>
+<text class="t-desc" x="364" y="2050">and the member's tools; cut_the_rules_</text>
+<text class="t-desc" x="364" y="2066">from_the_host_binary holds the rules cut</text>
+<text class="t-desc" x="364" y="2082">out of the host, and refuse_settings_</text>
+<text class="t-desc" x="364" y="2098">that_turn_hooks_off the refusal of a</text>
+<text class="t-desc" x="364" y="2114">launch that reads one; load_the_hosts_</text>
+<text class="t-desc" x="364" y="2130">markdown is the markdown it loads and</text>
+<text class="t-desc" x="364" y="2146">the settings env reaching servers, and</text>
+<text class="t-desc" x="364" y="2162">install_the_mesh_server_for_claude_code</text>
+<text class="t-desc" x="364" y="2178">the server a launch hands the model;</text>
+<text class="t-desc" x="364" y="2194">hear_the_hosts_dialogs reads in the</text>
+<text class="t-desc" x="364" y="2210">crew's words the dialogs the host</text>
+<text class="t-desc" x="364" y="2226">raises; refuse_a_member_writing_</text>
+<text class="t-desc" x="364" y="2242">owner_memory keeps a member's writes</text>
+<text class="t-desc" x="364" y="2258">out of the owner's memory, and find_</text>
+<text class="t-desc" x="364" y="2274">what_a_later_git_run_reads reads what a</text>
+<text class="t-desc" x="364" y="2290">later git run would read; read_what_</text>
+<text class="t-desc" x="364" y="2306">claude_code_says_of_an_agent reads what</text>
+<text class="t-desc" x="364" y="2322">the host says of an agent that failed;</text>
+<text class="t-desc" x="364" y="2338">read_what_claude_code_records_of_its_</text>
+<text class="t-desc" x="364" y="2354">tools reads the tool deltas it records</text>
+<rect class="b-cmp" x="664" y="1930" width="300" height="534" rx="10"/>
+<text class="t-code" x="680" y="1958">check_nothing_private_gets_in,</text>
+<text class="t-code" x="680" y="1976">check_every_link_resolves</text>
+<text class="t-type" x="680" y="1994">[this repository's own checks]</text>
+<text class="t-desc" x="680" y="2018">A private issue link, an internal host</text>
+<text class="t-desc" x="680" y="2034">name or a private remote fails CI by</text>
+<text class="t-desc" x="680" y="2050">name; so does a home path in the text</text>
+<text class="t-desc" x="680" y="2066">members post on GitHub, which check_</text>
+<text class="t-desc" x="680" y="2082">posted_text_carries_nothing_private</text>
+<text class="t-desc" x="680" y="2098">reads daily. A badge host that answers</text>
+<text class="t-desc" x="680" y="2114">408 is asked again before its link is</text>
+<text class="t-desc" x="680" y="2130">broken; check_the_logos_are_valid_svg</text>
+<text class="t-desc" x="680" y="2146">holds every logo to well-formed XML;</text>
+<text class="t-desc" x="680" y="2162">check_no_test_the_base_passed_goes_</text>
+<text class="t-desc" x="680" y="2178">missing names a dropped test, and</text>
+<text class="t-desc" x="680" y="2194">check_no_literal_restates_a_value</text>
+<text class="t-desc" x="680" y="2210">names a literal spelling out a value</text>
+<text class="t-desc" x="680" y="2226">an exported constant already holds;</text>
+<text class="t-desc" x="680" y="2242">check_a_host_directory_stays_under_</text>
+<text class="t-desc" x="680" y="2258">its_ceiling fails a host directory</text>
+<text class="t-desc" x="680" y="2274">one code line over its ceiling, by name;</text>
+<text class="t-desc" x="680" y="2290">check_every_recorded_host_test_is_run</text>
+<text class="t-desc" x="680" y="2306">names a recorded-host case no CI job runs;</text>
+<text class="t-desc" x="680" y="2322">check_marthas_names_are_its_own fails</text>
+<text class="t-desc" x="680" y="2338">a file, folder, tool, marker or</text>
+<text class="t-desc" x="680" y="2354">variable of Martha's that crew-code</text>
+<text class="t-desc" x="680" y="2370">names too, by name; check_the_pictures_</text>
+<text class="t-desc" x="680" y="2386">change_with_the_version lets a C4 picture</text>
+<text class="t-desc" x="680" y="2402">change only where the version does;</text>
+<text class="t-desc" x="680" y="2418">and check_no_</text>
+<text class="t-desc" x="680" y="2434">import_cycle names the whole loop when</text>
+<text class="t-desc" x="680" y="2450">files of the core load each other</text>
+<rect class="b-cmp" x="32" y="2480" width="300" height="228" rx="10"/>
+<text class="t-code" x="48" y="2508">install_the_pinned_installer</text>
+<text class="t-type" x="48" y="2526">[the installer this release pins]</text>
+<text class="t-desc" x="48" y="2550">martha install: reads the pin from the</text>
+<text class="t-desc" x="48" y="2566">running release, fetches exactly that</text>
+<text class="t-desc" x="48" y="2582">installer version through run_the_nodes_</text>
+<text class="t-desc" x="48" y="2598">own_npm_alone, refuses other bytes, and</text>
+<text class="t-desc" x="48" y="2614">runs it with the words unchanged;</text>
+<text class="t-desc" x="48" y="2630">read_the_words_of_martha_install says</text>
+<text class="t-desc" x="48" y="2646">which words it takes, and hold_the_</text>
+<text class="t-desc" x="48" y="2662">launch_to_the_version_floor refuses</text>
+<text class="t-desc" x="48" y="2678">every other act of a release below the</text>
+<text class="t-desc" x="48" y="2694">floor this machine holds (martha#21)</text>
+<rect class="b-cmp" x="348" y="2480" width="300" height="164" rx="10"/>
+<text class="t-code" x="364" y="2508">run_the_nodes_own_npm_alone</text>
+<text class="t-type" x="364" y="2526">[npm, and nothing of the machine's]</text>
+<text class="t-desc" x="364" y="2550">The npm beside this node, run with</text>
+<text class="t-desc" x="364" y="2566">empty user and global config, one named</text>
+<text class="t-desc" x="364" y="2582">registry, --ignore-scripts and an</text>
+<text class="t-desc" x="364" y="2598">environment built from HOME and PATH</text>
+<text class="t-desc" x="364" y="2614">alone: the mesh server and the installer,</text>
+<text class="t-desc" x="364" y="2630">one isolation</text>
+<rect class="b-cmp" x="664" y="2480" width="300" height="982" rx="10"/>
+<text class="t-code" x="680" y="2508">show_dashboard_beat,</text>
+<text class="t-code" x="680" y="2526">keep_the_ledger</text>
+<text class="t-type" x="680" y="2544">[the crew's rows and its ledger]</text>
+<text class="t-desc" x="680" y="2568">show_dashboard_beat holds a member's row</text>
+<text class="t-desc" x="680" y="2584">and the rule the newest beat wins;</text>
+<text class="t-desc" x="680" y="2600">report_where_the_work_stands moves it,</text>
+<text class="t-desc" x="680" y="2616">see_the_crew lays every one out,</text>
+<text class="t-desc" x="680" y="2632">draw_the_crew_strip draws that in any</text>
+<text class="t-desc" x="680" y="2648">terminal (martha crew) and</text>
+<text class="t-desc" x="680" y="2664">title_a_members_tab makes a member's</text>
+<text class="t-desc" x="680" y="2680">tab title from its row (martha#572);</text>
+<text class="t-desc" x="680" y="2696">see_who_is_free says who can take a</text>
+<text class="t-desc" x="680" y="2712">package, tell_the_owner_a_session_waits</text>
+<text class="t-desc" x="680" y="2728">says what</text>
+<text class="t-desc" x="680" y="2744">the host is asking the owner;</text>
+<text class="t-desc" x="680" y="2760">say_what_the_host_is_asking decides which</text>
+<text class="t-desc" x="680" y="2776">of its events opens a dialog and which</text>
+<text class="t-desc" x="680" y="2792">closes it, ring_the_owner rings for it</text>
+<text class="t-desc" x="680" y="2808">once, and</text>
+<text class="t-desc" x="680" y="2824">a_crews_tools answers every tool the</text>
+<text class="t-desc" x="680" y="2840">crew registers.</text>
+<text class="t-desc" x="680" y="2856">keep_the_ledger loads log_ledger, whose</text>
+<text class="t-desc" x="680" y="2872">streams sit in the crew's own state;</text>
+<text class="t-desc" x="680" y="2888">keep_the_crew_channel is where a message</text>
+<text class="t-desc" x="680" y="2904">lives, send_a_crew_message writes one,</text>
+<text class="t-desc" x="680" y="2920">tell_a_citer_of_a_volatile_path says so</text>
+<text class="t-desc" x="680" y="2936">to the member whose text cites a path a</text>
+<text class="t-desc" x="680" y="2952">reboot deletes (martha#314), and</text>
+<text class="t-desc" x="680" y="2968">show_what_a_message_became reads back</text>
+<text class="t-desc" x="680" y="2984">what became of it; read_a_crew_line reads</text>
+<text class="t-desc" x="680" y="3000">the HANDOFF and VERDICT lines of a</text>
+<text class="t-desc" x="680" y="3016">message, and hand_a_member_its_crew_text</text>
+<text class="t-desc" x="680" y="3032">composes the crew text a member is</text>
+<text class="t-desc" x="680" y="3048">handed at every session's start;</text>
+<text class="t-desc" x="680" y="3064">tell_the_member_a_line puts one line</text>
+<text class="t-desc" x="680" y="3080">of Martha's own in the row the owner</text>
+<text class="t-desc" x="680" y="3096">reads and the member's own channel;</text>
+<text class="t-desc" x="680" y="3112">nudge_the_supervisor and watch_waits</text>
+<text class="t-desc" x="680" y="3128">find what has stalled from those rows</text>
+<text class="t-desc" x="680" y="3144">and lines, and the nudge asks GitHub</text>
+<text class="t-desc" x="680" y="3160">for each waiting package's pull-request</text>
+<text class="t-desc" x="680" y="3176">head and issue state (martha#320);</text>
+<text class="t-desc" x="680" y="3192">spend_the_github_budget spends the</text>
+<text class="t-desc" x="680" y="3208">crew's one GitHub allowance on those</text>
+<text class="t-desc" x="680" y="3224">reads, and wait_for_ci reads the CI on</text>
+<text class="t-desc" x="680" y="3240">a sha through it; find_the_unheld_work</text>
+<text class="t-desc" x="680" y="3256">lists the backlog work no member holds</text>
+<text class="t-desc" x="680" y="3272">and nudge_an_idle_crew names members</text>
+<text class="t-desc" x="680" y="3288">idle beside it (martha#319);</text>
+<text class="t-desc" x="680" y="3304">recover_a_failed_act names a failed</text>
+<text class="t-desc" x="680" y="3320">outward act, reads what is really</text>
+<text class="t-desc" x="680" y="3336">there and decides, one attempt at</text>
+<text class="t-desc" x="680" y="3352">most, then the Supervisor (martha#512);</text>
+<text class="t-desc" x="680" y="3368">hold_a_package_to_its_budget counts what</text>
+<text class="t-desc" x="680" y="3384">a package spends, in a stream of its</text>
+<text class="t-desc" x="680" y="3400">own beside the ledger, and refuses a</text>
+<text class="t-desc" x="680" y="3416">call past its budget while keeping open</text>
+<text class="t-desc" x="680" y="3432">the calls that end a package</text>
+<text class="t-desc" x="680" y="3448">(martha#513 slice 3)</text>
+<rect class="b-cmp" x="32" y="3478" width="300" height="422" rx="10"/>
+<text class="t-code" x="48" y="3506">check_a_range_before_</text>
+<text class="t-code" x="48" y="3524">the_owner_says_yes</text>
+<text class="t-type" x="48" y="3542">[the crew's tools that act]</text>
+<text class="t-desc" x="48" y="3566">The eight tools a member</text>
+<text class="t-desc" x="48" y="3582">calls (martha#256): the range</text>
+<text class="t-desc" x="48" y="3598">check reads a clone and the</text>
+<text class="t-desc" x="48" y="3614">CI on its tip; land_passed_</text>
+<text class="t-desc" x="48" y="3630">work_as_one_batch cuts the</text>
+<text class="t-desc" x="48" y="3646">batch, find_the_work_a_</text>
+<text class="t-desc" x="48" y="3662">verdict_passed says which head</text>
+<text class="t-desc" x="48" y="3678">a verdict passed, and fast_</text>
+<text class="t-desc" x="48" y="3694">forward_after_the_owners_yes</text>
+<text class="t-desc" x="48" y="3710">moves the default branch;</text>
+<text class="t-desc" x="48" y="3726">open_and_finish_a_worktree</text>
+<text class="t-desc" x="48" y="3742">opens and finishes one;</text>
+<text class="t-desc" x="48" y="3758">read_the_origin_a_clone_has</text>
+<text class="t-desc" x="48" y="3774">says what a clone is of;</text>
+<text class="t-desc" x="48" y="3790">hold_a_package_back_from_a_</text>
+<text class="t-desc" x="48" y="3806">batch stops a held package</text>
+<text class="t-desc" x="48" y="3822">(martha#364); forecast_what_a_</text>
+<text class="t-desc" x="48" y="3838">batch_lands is its dry run,</text>
+<text class="t-desc" x="48" y="3854">and find_where_a_merge_</text>
+<text class="t-desc" x="48" y="3870">clashes names what a pull</text>
+<text class="t-desc" x="48" y="3886">request clashes with (#339)</text>
+<rect class="b-cmp" x="348" y="3478" width="300" height="342" rx="10"/>
+<text class="t-code" x="364" y="3506">keep_the_owners_todo_list,</text>
+<text class="t-code" x="364" y="3524">queue_the_owners_asks</text>
+<text class="t-type" x="364" y="3542">[what waits on the owner]</text>
+<text class="t-desc" x="364" y="3566">The owner's to-do list (martha#316):</text>
+<text class="t-desc" x="364" y="3582">the acts only the owner can do, each</text>
+<text class="t-desc" x="364" y="3598">command shown in full under what it</text>
+<text class="t-desc" x="364" y="3614">does. A member the table lets assign</text>
+<text class="t-desc" x="364" y="3630">work adds one; its own check or the</text>
+<text class="t-desc" x="364" y="3646">member takes it off. The pane and</text>
+<text class="t-desc" x="364" y="3662">martha todo show it. queue_the_owners_</text>
+<text class="t-desc" x="364" y="3678">asks is the ask queue (martha#313):</text>
+<text class="t-desc" x="364" y="3694">a routine ask waits instead of a menu,</text>
+<text class="t-desc" x="364" y="3710">and the session the table names hands</text>
+<text class="t-desc" x="364" y="3726">the whole batch over as one menu;</text>
+<text class="t-desc" x="364" y="3742">read_the_tips_a_removal_covers reads</text>
+<text class="t-desc" x="364" y="3758">both copies a branch deletion covers,</text>
+<text class="t-desc" x="364" y="3774">the clone's and origin's, which it</text>
+<text class="t-desc" x="364" y="3790">asks origin for with git ls-remote,</text>
+<text class="t-desc" x="364" y="3806">so one yes removes them both (martha#391)</text>
+<rect class="b-cmp" x="664" y="3478" width="300" height="198" rx="10"/>
+<text class="t-code" x="680" y="3506">keep_the_supervisors_</text>
+<text class="t-code" x="680" y="3524">standing_items</text>
+<text class="t-type" x="680" y="3542">[what the Supervisor holds back]</text>
+<text class="t-desc" x="680" y="3566">The Supervisor's standing items</text>
+<text class="t-desc" x="680" y="3582">(martha#317): what it holds back, who</text>
+<text class="t-desc" x="680" y="3598">owes what, and the rulings it recorded</text>
+<text class="t-desc" x="680" y="3614">as the owner's words. A hold closes</text>
+<text class="t-desc" x="680" y="3630">only on evidence; a fresh Supervisor</text>
+<text class="t-desc" x="680" y="3646">session is handed them at its start,</text>
+<text class="t-desc" x="680" y="3662">and the pane shows them</text>
+<rect class="b-cmp" x="32" y="3916" width="300" height="342" rx="10"/>
+<text class="t-code" x="48" y="3944">write_my_handover,</text>
+<text class="t-code" x="48" y="3962">refresh_a_member</text>
+<text class="t-type" x="48" y="3980">[the host writes a handover]</text>
+<text class="t-desc" x="48" y="4004">A member's handover is written by the</text>
+<text class="t-desc" x="48" y="4020">host, at the path the host chose, and</text>
+<text class="t-desc" x="48" y="4036">stamped: one file per member per day</text>
+<text class="t-desc" x="48" y="4052">in the crew's own store, so a file the</text>
+<text class="t-desc" x="48" y="4068">member wrote itself is not a handover.</text>
+<text class="t-desc" x="48" y="4084">refresh_a_member is the flow around it:</text>
+<text class="t-desc" x="48" y="4100">when a refresh is due, the ask, the</text>
+<text class="t-desc" x="48" y="4116">send-back and the decline, the clear,</text>
+<text class="t-desc" x="48" y="4132">and the prompt the successor resumes on;</text>
+<text class="t-desc" x="48" y="4148">end_a_running_turn ends the turn a</text>
+<text class="t-desc" x="48" y="4164">handover waits behind (martha#311).</text>
+<text class="t-desc" x="48" y="4180">keep_the_package_contract keeps a</text>
+<text class="t-desc" x="48" y="4196">package's contract as a version of it</text>
+<text class="t-desc" x="48" y="4212">in the package's ledger and hands the</text>
+<text class="t-desc" x="48" y="4228">same version to a member at its start</text>
+<text class="t-desc" x="48" y="4244">and after a refresh (martha#513)</text>
+<rect class="b-cmp" x="348" y="3916" width="300" height="260" rx="10"/>
+<text class="t-code" x="364" y="3944">park_and_wake_a_member</text>
+<text class="t-type" x="364" y="3962">[a park that outlives a session]</text>
+<text class="t-desc" x="364" y="3986">A member's park is a marker in the</text>
+<text class="t-desc" x="364" y="4002">crew's store, so a clear, a restart or a</text>
+<text class="t-desc" x="364" y="4018">refresh cannot lose it; who may park</text>
+<text class="t-desc" x="364" y="4034">another member is the declaration's</text>
+<text class="t-desc" x="364" y="4050">table, not a node id (martha#255 r=3).</text>
+<text class="t-desc" x="364" y="4066">wake_a_member is martha wake: the park</text>
+<text class="t-desc" x="364" y="4082">cleared and the member started on its</text>
+<text class="t-desc" x="364" y="4098">newest handover (part 2).</text>
+<text class="t-desc" x="364" y="4114">stop_and_restart_a_member is martha ls</text>
+<text class="t-desc" x="364" y="4130">and martha stop: a stop is a request the</text>
+<text class="t-desc" x="364" y="4146">launcher holding the member acts on</text>
+<text class="t-desc" x="364" y="4162">(martha#312)</text>
+<rect class="b-cmp" x="664" y="3916" width="300" height="166" rx="10"/>
+<text class="t-code" x="680" y="3944">keep_the_crews_</text>
+<text class="t-code" x="680" y="3962">files_as_directories</text>
+<text class="t-type" x="680" y="3980">[the crew's store, on this machine]</text>
+<text class="t-desc" x="680" y="4004">The host contract's crew store as files</text>
+<text class="t-desc" x="680" y="4020">in one directory: a place per name, a</text>
+<text class="t-desc" x="680" y="4036">file kept whole under a staging name</text>
+<text class="t-desc" x="680" y="4052">and 0600, and nothing read that is not</text>
+<text class="t-desc" x="680" y="4068">this user's alone (martha#254, #255)</text>
+<rect class="b-cmp" x="32" y="4274" width="300" height="374" rx="10"/>
+<text class="t-code" x="48" y="4302">switch_a_members_model,</text>
+<text class="t-code" x="48" y="4320">put_the_owners_model_back</text>
+<text class="t-type" x="48" y="4338">[a model, the owner's, a review's]</text>
+<text class="t-desc" x="48" y="4362">switch_a_members_model keeps the model a</text>
+<text class="t-desc" x="48" y="4378">member runs on for one package, in the</text>
+<text class="t-desc" x="48" y="4394">crew's own store, and the ways back;</text>
+<text class="t-desc" x="48" y="4410">put_the_owners_model_back undoes what a</text>
+<text class="t-desc" x="48" y="4426">switch does to the owner's own default:</text>
+<text class="t-desc" x="48" y="4442">the lock, the snapshot, the wait on the</text>
+<text class="t-desc" x="48" y="4458">file, the restore and the recovery a</text>
+<text class="t-desc" x="48" y="4474">killed launch leaves, over owners_</text>
+<text class="t-desc" x="48" y="4490">settings_directory, that file whole;</text>
+<text class="t-desc" x="48" y="4506">run_reviews_on_the_review_model refuses a</text>
+<text class="t-desc" x="48" y="4522">review spawn that names no reviewer model;</text>
+<text class="t-desc" x="48" y="4538">name_a_review_the_host_reported_failed</text>
+<text class="t-desc" x="48" y="4554">names a review the host reports failed,</text>
+<text class="t-desc" x="48" y="4570">from the report read_what_claude_code_s</text>
+<text class="t-desc" x="48" y="4586">ays_of_an_agent cuts</text>
+<text class="t-desc" x="48" y="4602">from the host's own text, on the model it</text>
+<text class="t-desc" x="48" y="4618">ran on and in the host's words</text>
+<text class="t-desc" x="48" y="4634">(martha#390)</text>
+<rect class="b-cmp" x="32" y="4664" width="300" height="390" rx="10"/>
+<text class="t-code" x="48" y="4692">guard_workspace, read_the_</text>
+<text class="t-code" x="48" y="4710">git_calls_in_a_shell_line</text>
+<text class="t-type" x="48" y="4728">[the workspace guard]</text>
+<text class="t-desc" x="48" y="4752">What the workspace's layout refuses of</text>
+<text class="t-desc" x="48" y="4768">a git call: read_the_git_calls_in_a_</text>
+<text class="t-desc" x="48" y="4784">shell_line reads each call and the</text>
+<text class="t-desc" x="48" y="4800">directory it runs in, ask_git_what_a_</text>
+<text class="t-desc" x="48" y="4816">member_is_about_to_change asks git what</text>
+<text class="t-desc" x="48" y="4832">a call is about to move, and guard_</text>
+<text class="t-desc" x="48" y="4848">workspace refuses a call that leaves a</text>
+<text class="t-desc" x="48" y="4864">clone's branch or touches another</text>
+<text class="t-desc" x="48" y="4880">member's worktree or branch; check_the_</text>
+<text class="t-desc" x="48" y="4896">workspace_matches_its_layout names the</text>
+<text class="t-desc" x="48" y="4912">drift in a workspace, and refuse_a_git_</text>
+<text class="t-desc" x="48" y="4928">call_in_a_members_shell and guard_the_</text>
+<text class="t-desc" x="48" y="4944">git_a_member_runs are the seams that ask</text>
+<text class="t-desc" x="48" y="4960">it: the shell line a tool call carries,</text>
+<text class="t-desc" x="48" y="4976">the git first on the member's PATH, and</text>
+<text class="t-desc" x="48" y="4992">the clone's ref transaction, each read</text>
+<text class="t-desc" x="48" y="5008">and judged before it runs. A crew that</text>
+<text class="t-desc" x="48" y="5024">declared no layout is judged by none</text>
+<text class="t-desc" x="48" y="5040">of it (martha#562)</text>
+<rect class="b-cmp" x="32" y="5070" width="300" height="196" rx="10"/>
+<text class="t-code" x="48" y="5098">read_the_body_a_request_carries</text>
+<text class="t-type" x="48" y="5116">[a request to the launcher]</text>
+<text class="t-desc" x="48" y="5140">The body a request to the</text>
+<text class="t-desc" x="48" y="5156">launcher's socket carries: read</text>
+<text class="t-desc" x="48" y="5172">whole, up to the largest the</text>
+<text class="t-desc" x="48" y="5188">launcher reads, as JSON, and no</text>
+<text class="t-desc" x="48" y="5204">body at all when it is larger</text>
+<text class="t-desc" x="48" y="5220">or not JSON. Every endpoint of</text>
+<text class="t-desc" x="48" y="5236">the socket reads one this way</text>
+<text class="t-desc" x="48" y="5252">(martha#41)</text>
+<rect class="bound" x="16" y="40" width="968" height="5250" rx="12"/>
 <text class="t-bound" x="32" y="62">Martha [the code in src/, one directory per capability]</text>
-<text class="t-desc" x="24" y="6034">Every box is a directory in src/: the name is the capability, and its test sits beside it. These 22 directories are drawn nowhere on purpose:</text>
-<text class="t-desc" x="24" y="6052">check_the_workspace_layout: the entry npm run check:workspace-layout and the CI job run, over the scan check_the_workspace_matches_its_layout holds;</text>
-<text class="t-desc" x="24" y="6070">a host adapter may import no program, so the launch runs that slice and never this entry.</text>
-<text class="t-desc" x="24" y="6088">probe_launch_hosts: a script run by hand, npm run probe:launch, to probe a host; the command never loads it.</text>
-<text class="t-desc" x="24" y="6106">land_a_package_on_a_throwaway_repository: the nightly live run's guards for its throwaway repository (martha#639); the command never loads them.</text>
-<text class="t-desc" x="24" y="6124">declare_a_launch_probe: what one row of npm run probe:launch is, shared by its rows and its runner; the command never loads it.</text>
-<text class="t-desc" x="24" y="6142">probe_a_checkouts_own_config: npm run probe:launch's rows about a checkout's own config; the command never loads them.</text>
-<text class="t-desc" x="24" y="6160">probe_the_owners_hooks: npm run probe:launch's rows about the owner's hooks; the command never loads them.</text>
-<text class="t-desc" x="24" y="6178">probe_the_owners_own_folders: npm run probe:launch's rows about the owner's own folders; the command never loads them.</text>
-<text class="t-desc" x="24" y="6196">probe_the_hosts_auto_memory: npm run probe:launch's rows about the host's auto-memory; the command never loads them.</text>
-<text class="t-desc" x="24" y="6214">drive_the_recorded_host: the harness the recorded-host tests drive: a recorded host stood up with a script, and the waits its runs need; no member ever loads it.</text>
-<text class="t-desc" x="24" y="6232">pin_what_a_read_carries: the recorded-host case that pins which instruction text a host attaches to a session, run by node --test and ci.yml's relay job; no</text>
-<text class="t-desc" x="24" y="6250">member ever loads it.</text>
-<text class="t-desc" x="24" y="6268">record_mesh_answers: a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote,</text>
-<text class="t-desc" x="24" y="6286">and never runs it.</text>
-<text class="t-desc" x="24" y="6304">record_claude_code_host: a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it.</text>
-<text class="t-desc" x="24" y="6322">compare_two_host_recordings: what two recordings of the host say once the minifier's names are taken out (martha#811); only record_claude_code_host</text>
-<text class="t-desc" x="24" y="6340">loads it, to run --check.</text>
-<text class="t-desc" x="24" y="6358">follow_what_host_code_calls: the definitions a recorded text of the host reaches in its bundle (martha#811); only record_claude_code_host loads it, to record</text>
-<text class="t-desc" x="24" y="6376">and to --check.</text>
-<text class="t-desc" x="24" y="6394">record_the_goose_engine: a script run by hand, npm run record:goose-engine, when the Goose engine moves to a new version (martha#541); the daily engine</text>
-<text class="t-desc" x="24" y="6412">drift job runs its --check, and no member ever loads it.</text>
-<text class="t-desc" x="24" y="6430">stand_in_for_an_openai_model: a model behind an OpenAI-compatible URL, answered from a script, for runs of the Goose engine with no model (martha#541);</text>
-<text class="t-desc" x="24" y="6448">tests and npm run stand-in:openai-model load it, and no member ever does.</text>
-<text class="t-desc" x="24" y="6466">launch_a_goose_member: one Goose member's launch: its own root and home, the config root it writes, the engine in a process group of its own, and the</text>
-<text class="t-desc" x="24" y="6484">permission store checked empty when the launch ends (martha#541 packages 7-8); nothing loads it until the one start call picks a member's host, and its tests</text>
-<text class="t-desc" x="24" y="6502">do today.</text>
-<text class="t-desc" x="24" y="6520">derive_the_config_of_a_goose_launch: the config text one Goose launch writes into its own root, read from the recorded engine's facts: the provider and the</text>
-<text class="t-desc" x="24" y="6538">model, the mode that asks the client, slash commands off, one switch per platform extension, and the crew's tool server switched on (martha#541); nothing</text>
-<text class="t-desc" x="24" y="6556">loads it until the one start call picks a member's host, and launch_a_goose_member's tests do today.</text>
-<text class="t-desc" x="24" y="6574">serve_the_crews_tools_to_an_engine: the crew's tool server for a Goose member: an MCP server on stdio over the crew's tools, each call answered by the</text>
-<text class="t-desc" x="24" y="6592">launcher on the launch's relay socket with the launch's own token (martha#541 packages 7-8, part C); a Goose launch writes its entry, the engine starts it, and</text>
-<text class="t-desc" x="24" y="6610">nothing loads it until the one start call picks a member's host.</text>
-<text class="t-desc" x="24" y="6628">stand_in_for_an_acp_agent: an ACP agent on stdio answered from a script, offering the recorded Goose engine's permission answers, for the tests of</text>
-<text class="t-desc" x="24" y="6646">speak_acp_to_an_agent (martha#541); tests and npm run stand-in:acp-agent load it, and no member ever does.</text>
-<text class="t-desc" x="24" y="6664">check_no_member_outlives_its_run: a script run by hand, npm run check:no-member-outlives-its-run, over this machine's /proc;</text>
-<text class="t-desc" x="24" y="6682">find_a_member_a_run_left_behind is what it reads with, and martha ls shows the same lines without loading the program.</text>
-<text class="t-desc" x="24" y="6700">check_no_member_works_without_its_crew_tools: a script run by hand and as a CI job, npm run check:no-member-works-without-its-crew-tools, over this</text>
-<text class="t-desc" x="24" y="6718">machine's Martha state; it reads the windows keep_a_members_crew_tools_window keeps, and no member ever loads it.</text>
-<text class="t-desc" x="24" y="6736">The crew ledger is drawn in the crew's own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it</text>
-<text class="t-desc" x="24" y="6754">recorded; the room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.</text>
-<rect class="b-sys" x="24" y="6794" width="22" height="14" rx="3"/>
-<text class="t-leg" x="54" y="6806">Martha</text>
-<rect class="b-cmp" x="103.168" y="6794" width="22" height="14" rx="3"/>
-<text class="t-leg" x="133.168" y="6806">Container or component</text>
-<rect class="b-dat" x="277.93999999999994" y="6794" width="22" height="14" rx="3"/>
-<text class="t-leg" x="307.93999999999994" y="6806">Data, in the project</text>
-<rect class="bound" x="424.5719999999999" y="6794" width="22" height="14" rx="3"/>
-<text class="t-leg" x="454.5719999999999" y="6806">Boundary</text>
+<text class="t-desc" x="24" y="5330">Every box is a directory in src/: the name is the capability, and its test sits beside it. These 16 directories are drawn nowhere on purpose:</text>
+<text class="t-desc" x="24" y="5348">probe_launch_hosts: a script run by hand, npm run probe:launch, to probe a host; the command never loads it.</text>
+<text class="t-desc" x="24" y="5366">land_a_package_on_a_throwaway_repository: the nightly live run's guards for its throwaway repository (martha#639); the command never loads them.</text>
+<text class="t-desc" x="24" y="5384">declare_a_launch_probe: what one row of npm run probe:launch is, shared by its rows and its runner; the command never loads it.</text>
+<text class="t-desc" x="24" y="5402">probe_a_checkouts_own_config: npm run probe:launch's rows about a checkout's own config; the command never loads them.</text>
+<text class="t-desc" x="24" y="5420">probe_the_owners_hooks: npm run probe:launch's rows about the owner's hooks; the command never loads them.</text>
+<text class="t-desc" x="24" y="5438">probe_the_owners_own_folders: npm run probe:launch's rows about the owner's own folders; the command never loads them.</text>
+<text class="t-desc" x="24" y="5456">probe_the_hosts_auto_memory: npm run probe:launch's rows about the host's auto-memory; the command never loads them.</text>
+<text class="t-desc" x="24" y="5474">drive_the_recorded_host: the harness the recorded-host tests drive: a recorded host stood up with a script, and the waits its runs need; no member ever loads it.</text>
+<text class="t-desc" x="24" y="5492">pin_what_a_read_carries: the recorded-host case that pins which instruction text a host attaches to a session, run by node --test and ci.yml's relay job; no</text>
+<text class="t-desc" x="24" y="5510">member ever loads it.</text>
+<text class="t-desc" x="24" y="5528">record_mesh_answers: a script run by hand, npm run record:mesh-answers, when a version of the mesh server is recorded; the gate reads the answers it wrote,</text>
+<text class="t-desc" x="24" y="5546">and never runs it.</text>
+<text class="t-desc" x="24" y="5564">redo_the_generated_files_of_a_merge: a program land_batch runs over a clone when two passed heads clash only in a C4 picture or the host ceilings</text>
+<text class="t-desc" x="24" y="5582">(martha#381); it is run over the tree, never loaded by the core.</text>
+<text class="t-desc" x="24" y="5600">record_claude_code_host: a script run by hand, npm run record:claude-code-host, when the host is upgraded; the adapter reads what it writes, and never runs it.</text>
+<text class="t-desc" x="24" y="5618">record_the_goose_engine: a script run by hand, npm run record:goose-engine, when the Goose engine moves to a new version (martha#541); the daily engine</text>
+<text class="t-desc" x="24" y="5636">drift job runs its --check, and no member ever loads it.</text>
+<text class="t-desc" x="24" y="5654">know_the_goose_engines_facts: the Goose engine's facts as recorded from its source, and the reader that takes them (martha#541); only the recorder and the</text>
+<text class="t-desc" x="24" y="5672">model stand-in load it until the Goose adapter is built.</text>
+<text class="t-desc" x="24" y="5690">stand_in_for_an_openai_model: a model behind an OpenAI-compatible URL, answered from a script, for runs of the Goose engine with no model (martha#541);</text>
+<text class="t-desc" x="24" y="5708">tests and npm run stand-in:openai-model load it, and no member ever does.</text>
+<text class="t-desc" x="24" y="5726">check_no_member_outlives_its_run: a script run by hand, npm run check:no-member-outlives-its-run, over this machine's /proc;</text>
+<text class="t-desc" x="24" y="5744">find_a_member_a_run_left_behind is what it reads with, and martha ls shows the same lines without loading the program.</text>
+<text class="t-desc" x="24" y="5762">The crew ledger is drawn in the crew's own box because a lockup now loads it. record_mesh_server_tools is drawn because the launcher imports what it</text>
+<text class="t-desc" x="24" y="5780">recorded; the room itself is not built, and solo admits nothing, though every launch loads the node id, the tool list and the gates its slices hold.</text>
+<rect class="b-sys" x="24" y="5820" width="22" height="14" rx="3"/>
+<text class="t-leg" x="54" y="5832">Martha</text>
+<rect class="b-cmp" x="103.168" y="5820" width="22" height="14" rx="3"/>
+<text class="t-leg" x="133.168" y="5832">Container or component</text>
+<rect class="b-dat" x="277.93999999999994" y="5820" width="22" height="14" rx="3"/>
+<text class="t-leg" x="307.93999999999994" y="5832">Data, in the project</text>
+<rect class="bound" x="424.5719999999999" y="5820" width="22" height="14" rx="3"/>
+<text class="t-leg" x="454.5719999999999" y="5832">Boundary</text>
 </svg>
