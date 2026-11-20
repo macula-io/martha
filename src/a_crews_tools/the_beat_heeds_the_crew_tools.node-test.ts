@@ -11,7 +11,7 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER } from '../declare_crew/declare_crew.ts'
 import type { ServedToolsHeld } from '../host_contract/host_contract.ts'
 import { theOwedLineAtStart, type TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
-import { CREW_TOOLS_STREAM, SAME_SESSION, theOwedLineOf, type ACrewToolsWindow } from '../keep_a_members_crew_tools_window/keep_a_members_crew_tools_window.ts'
+import { CREW_TOOLS_PLACE, CREW_TOOLS_STREAM, SAME_SESSION, theOwedLineOf, theTimesLineOf, theWindowOf, type ACrewToolsWindow } from '../keep_a_members_crew_tools_window/keep_a_members_crew_tools_window.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
@@ -115,14 +115,61 @@ test('a session that starts while its member\'s window is open is handed the owe
   t.mock.timers.tick(BEAT_INTERVAL_MS)
   stop()
   await untilTheLookSettles(member.places)
-  const owed = theOwedLineAtStart(member.places)
-  assert.ok(owed !== null, 'the beat opened the window')
-  const handed = await member.tools.theLineToHandAtStart()
+  const owed = theOwedLineAtStart(member.places, 'a-successor')?.line ?? ''
+  assert.notEqual(owed, '', 'the beat opened the window, and no beats were owed')
+  const handed = await member.tools.theLineToHandAtStart('a-successor')
   assert.ok(handed !== null, 'a line is handed')
   assert.equal(handed.line.split('\n\n').at(-1), owed)
+  // Once that start is taken the beats are marked handed, so no other start takes them again (martha#658 Done-when 4).
+  member.tools.noteTheStart('a-successor', true)
+  const again = await member.tools.theLineToHandAtStart('another-successor')
+  assert.equal(again, null, 'a second start was handed the same beats')
+  const window = member.places.stores.crew.place(CREW_TOOLS_PLACE)
+  assert.ok(!('refusal' in window), 'the window place could not be read')
+  assert.equal(!('refusal' in window) ? theWindowOf(window, BUILDER)?.beats_handed : undefined, true, 'the start that took the beats left no mark')
 })
 
-test('the owed line rides only the report: a turn\'s answer is still the act alone, and the next report carries it once (martha#658)', async (t) => {
+test('a successor starting after a refresh is handed the owed beats, with the launcher\'s own session still the lost one (martha#658 Done-when 4)', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  const member = aWatchedMember(t)
+  await member.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 1, of: 3 }, SESSION)
+  const stop = member.tools.startBeating()
+  t.mock.timers.tick(BEAT_INTERVAL_MS)
+  await untilTheLookSettles(member.places)
+  // The same session earns its tools back, so the window closes SAME_SESSION — and the launcher's own last session is
+  // still the session that lost the tools, which is what a guard reading it instead of the start event would trip on.
+  member.setFact(HELD)
+  member.clock.at += 1_000
+  t.mock.timers.tick(BEAT_INTERVAL_MS)
+  await untilTheLookSettles(member.places, 2)
+  stop()
+  const closed = (await member.places.ledger.stores.rows.read(CREW_TOOLS_STREAM)).map(({ row }) => row as unknown as ACrewToolsWindow).at(-1)
+  assert.equal(closed?.closed_by, SAME_SESSION)
+  const handed = await member.tools.theLineToHandAtStart('the-successor')
+  assert.ok(handed !== null, 'the successor was handed nothing after the close')
+  assert.equal(handed.line.split('\n\n').at(-1), theOwedLineOf(closed!), 'the successor was not handed the beats the closed window owes')
+  assert.equal(theOwedLineAtStart(member.places, SESSION), null, 'the session that lost the tools was handed its own beats')
+})
+
+test('a refused start leaves the beats unmarked, and the next start is handed them (martha#658 Done-when 4)', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  const member = aWatchedMember(t)
+  await member.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 1, of: 3 }, SESSION)
+  const stop = member.tools.startBeating()
+  t.mock.timers.tick(BEAT_INTERVAL_MS)
+  stop()
+  await untilTheLookSettles(member.places)
+  const first = await member.tools.theLineToHandAtStart('refused-successor')
+  assert.ok(first !== null, 'the first start was handed no beats')
+  // The start was refused, so the crew is told it was not taken: the record is dropped and no mark is left.
+  member.tools.noteTheStart('refused-successor', false)
+  const next = await member.tools.theLineToHandAtStart('the-next-successor')
+  assert.ok(next !== null, 'a refused start consumed the beats, so the next start was handed nothing')
+  member.tools.noteTheStart('the-next-successor', true)
+  assert.equal(await member.tools.theLineToHandAtStart('a-third-successor'), null, 'the beats were handed twice after a refused start')
+})
+
+test('the report hands the returning session the times, once, and never the beats (martha#658 Done-when 4)', async (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] })
   const member = aWatchedMember(t)
   await member.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 1, of: 3 }, SESSION)
@@ -137,17 +184,18 @@ test('the owed line rides only the report: a turn\'s answer is still the act alo
   stop()
   const said = await member.tools.answer(THE_TOOLS_ASK, {}, SESSION)
   const text = 'answer' in said ? said.answer : said.refused
-  assert.ok(!text.includes('You owe one'), `the owed line did not ride the turn's answer: ${text}`)
+  assert.ok(!text.includes('You owe one'), `the times rode the turn's answer: ${text}`)
   if ('answer' in said) assert.doesNotThrow(() => JSON.parse(said.answer), `the turn's answer is still the act alone: ${said.answer}`)
   // The window closed by the same session, as the stream keeps it: the line the report must hand is made from it.
   const closed = (await member.places.ledger.stores.rows.read(CREW_TOOLS_STREAM)).map(({ row }) => row as unknown as ACrewToolsWindow).at(-1)
   assert.equal(closed?.closed_by, SAME_SESSION, 'the beat closed the window by the same session')
-  const owed = theOwedLineOf(closed!)
+  const times = theTimesLineOf(closed!)
   // Through the crew tools' own report call, so the composition site in a_crews_tools.ts is what is proven.
   const reported = await member.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 2, of: 3 }, SESSION)
   assert.ok('answer' in reported, JSON.stringify(reported))
-  assert.equal(reported.answer.split('\n\n').at(-1), owed, 'the returning session was not told what it owes')
-  assert.equal(reported.answer.split(owed).length - 1, 1, 'the line was told more than once in one answer')
+  assert.equal(reported.answer.split('\n\n').at(-1), times, 'the returning session was not told the times')
+  assert.equal(reported.answer.split(times).length - 1, 1, 'the times were told more than once in one answer')
+  assert.ok(!/owe one/i.test(reported.answer), `the returning session was handed what it owes, not only the times: ${reported.answer}`)
   const again = await member.tools.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'build', step: 3, of: 3 }, SESSION)
-  assert.ok('answer' in again && !again.answer.includes(owed), `the line was told twice: ${JSON.stringify(again)}`)
+  assert.ok('answer' in again && !again.answer.includes(times), `the times were told twice: ${JSON.stringify(again)}`)
 })

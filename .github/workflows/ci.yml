@@ -147,6 +147,18 @@ jobs:
           install_from_the_ubuntu_archive/install_from_the_ubuntu_archive.sh bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind / / true && bwrap --version
+      # kitty for K1 and K2 (macula-io/martha#547 S6, PR 890 r=1 R2): the session text and the checker are read through
+      # kitty's own parser and authorizer, so the gate needs a kitty, at Martha's floor, or those tests skip by name.
+      # It comes from kitty's upstream release, not the archive, and unpacks into the runner's temp: no sudo. The
+      # version is KITTY_FLOOR, read from the source; the digest is the one line of fetch_the_kitty/kitty_release.sha256,
+      # checked against kitty's signature by the owner. The fetch's check is proved first on bytes it must refuse.
+      - name: the kitty fetch refuses bytes that are not the ones its digest names
+        run: fetch_the_kitty/fetch_the_kitty.sh --self-test
+      - name: kitty at Martha's floor, from its upstream release
+        run: |
+          version="$(node --input-type=module -e "import { KITTY_FLOOR } from './src/open_the_crew_in_kitty/the_session_kitty_reads.ts'; console.log(KITTY_FLOOR)")"
+          bin="$(fetch_the_kitty/fetch_the_kitty.sh --to "${{ runner.temp }}/kitty" --version "$version" --sha256 "$(<fetch_the_kitty/kitty_release.sha256)")"
+          echo "$bin" >> "$GITHUB_PATH"
       - run: npm ci
       # npm test runs the installer job's own steps too (martha#496), so a suite green here is green there: the
       # installer's dependencies go in first, as that job installs them.

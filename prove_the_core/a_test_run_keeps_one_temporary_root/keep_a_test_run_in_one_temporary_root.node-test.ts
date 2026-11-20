@@ -2,6 +2,10 @@
 // the run ends, whatever the run left in them; a root a hard-killed run left is removed by the next run, and a live
 // run's root is never touched; the runtime root it picks can hold the deepest relay socket this repository builds, and a
 // directory that cannot is not used; and a TMPDIR reached through a link stays the path it was given.
+//
+// Said plainly: a root whose owner file cannot be read is kept, never removed, so a suite run on a busy machine can
+// still print the kept-root line on stderr. It fails nothing by itself — a run's answers are read from its own stream,
+// stdout for the runtime directory and stderr for what a sweep kept and why (martha#892).
 
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
@@ -37,16 +41,23 @@ function withoutTheRootsOfThisRun(): NodeJS.ProcessEnv {
   return Object.fromEntries(Object.entries(withoutTheTestContext(process.env)).filter(([name]) => !names.includes(name)))
 }
 
-/** Runs `words` through the wrapper as the test script does, with `env` added, and answers what it wrote. */
-function throughTheWrapper(words: readonly string[], env: NodeJS.ProcessEnv = {}): { code: number | null; output: string } {
+/**
+ * Runs `words` through the wrapper as the test script does, with `env` added, and answers what it wrote — its two streams
+ * apart. The wrapper says the runtime root it picked on stdout and why it kept a root left by an earlier run on stderr,
+ * so a reading that takes both is not the run's answer the moment any root is kept (martha#892).
+ */
+function throughTheWrapper(words: readonly string[], env: NodeJS.ProcessEnv = {}): { code: number | null; stdout: string; stderr: string } {
   const ran = spawnSync(process.execPath, [THE_WRAPPER, ...words], {
     cwd: repository,
     encoding: 'utf8',
     timeout: RUN_DEADLINE_MS,
     env: { ...withoutTheRootsOfThisRun(), ...env },
   })
-  return { code: ran.status, output: `${ran.stdout ?? ''}${ran.stderr ?? ''}` }
+  return { code: ran.status, stdout: ran.stdout ?? '', stderr: ran.stderr ?? '' }
 }
+
+/** Everything a run said, both streams, for a failed check's message and for nothing else: never for an answer. */
+const everythingTheRunSaid = (ran: { readonly stdout: string; readonly stderr: string }): string => `${ran.stdout}${ran.stderr}`
 
 /** A node program that writes `text` into the temp directory the run gave it, then answers where everything is. */
 const makesAndAnswers = (where: string): readonly string[] => [
@@ -66,7 +77,7 @@ test('a run\'s roots, and what it wrote in them, are gone when it ends', (t) => 
   t.after(() => removeTheTree(holder))
   const where = join(holder, 'the-roots')
   const ran = throughTheWrapper(makesAndAnswers(where))
-  assert.equal(ran.code, 0, ran.output)
+  assert.equal(ran.code, 0, everythingTheRunSaid(ran))
   const [temp, runtime] = readFileSync(where, 'utf8').split('\n')
   // The temp root goes under the TMPDIR the run inherited, as given and never resolved (ci.yml runs the whole suite
   // again under a long one reached through a link), and never under the system's own directory: the two are the same
@@ -82,11 +93,11 @@ test('a runtime directory too long for the deepest socket is not used, and the s
   t.after(() => removeTheTree(longer))
   const printsItsRuntime = [process.execPath, '-e', 'process.stdout.write(process.env.XDG_RUNTIME_DIR ?? "")']
   const unset = throughTheWrapper(printsItsRuntime, { XDG_RUNTIME_DIR: '' })
-  assert.equal(unset.code, 0, unset.output)
-  assert.ok(unset.output.startsWith(join(SYSTEM_TEMPORARY_DIRECTORY, RUN_ROOT_PREFIX)), `with no runtime directory the fallback was not used: ${unset.output}`)
+  assert.equal(unset.code, 0, everythingTheRunSaid(unset))
+  assert.ok(unset.stdout.startsWith(join(SYSTEM_TEMPORARY_DIRECTORY, RUN_ROOT_PREFIX)), `with no runtime directory the fallback was not used: ${everythingTheRunSaid(unset)}`)
   const tooLong = throughTheWrapper(printsItsRuntime, { XDG_RUNTIME_DIR: longer })
-  assert.equal(tooLong.code, 0, tooLong.output)
-  assert.ok(tooLong.output.startsWith(join(SYSTEM_TEMPORARY_DIRECTORY, RUN_ROOT_PREFIX)), `a runtime directory with no room for the deepest socket was used: ${tooLong.output}`)
+  assert.equal(tooLong.code, 0, everythingTheRunSaid(tooLong))
+  assert.ok(tooLong.stdout.startsWith(join(SYSTEM_TEMPORARY_DIRECTORY, RUN_ROOT_PREFIX)), `a runtime directory with no room for the deepest socket was used: ${everythingTheRunSaid(tooLong)}`)
 })
 
 test('the deepest relay socket this repository builds has room in the runtime root the run picked', (t) => {
@@ -95,8 +106,8 @@ test('the deepest relay socket this repository builds has room in the runtime ro
   // nests under this user's, a launch's uuid, and the socket's own name.
   const printsItsRuntime = [process.execPath, '-e', 'process.stdout.write(process.env.XDG_RUNTIME_DIR ?? "")']
   const ran = throughTheWrapper(printsItsRuntime)
-  assert.equal(ran.code, 0, ran.output)
-  const runtime_root = ran.output.trim()
+  assert.equal(ran.code, 0, everythingTheRunSaid(ran))
+  const runtime_root = ran.stdout.trim()
   const per_file = join(runtime_root, 'f1a2b')
   const deepest = join(per_file, `${RELAY_ROOT_PREFIX}aB3dE9`, `martha-${String(process.getuid?.() ?? -1)}`, '00000000-0000-4000-8000-000000000000', RELAY_SOCKET_NAME)
   assert.equal(existsSync(runtime_root), false, 'the run\'s runtime root outlived it, so what this measured was not a run\'s root')
@@ -139,8 +150,8 @@ test('a TMPDIR reached through a link stays the path it was given, and its entri
       `process.stdout.write(process.env.TMPDIR + '\\n' + fs.realpathSync(process.env.TMPDIR))`,
     ].join('\n')]
   const ran = throughTheWrapper(printsBoth, { TMPDIR: linked_place })
-  assert.equal(ran.code, 0, ran.output)
-  const [given, resolved] = ran.output.split('\n')
+  assert.equal(ran.code, 0, everythingTheRunSaid(ran))
+  const [given, resolved] = ran.stdout.split('\n')
   assert.ok(given !== undefined && given.startsWith(linked_place), `the run's temp directory was ${String(given)}, not the link it was given`)
   assert.ok(resolved !== undefined && resolved.startsWith(realpathSync(private_place)), `the link was resolved to ${String(resolved)}, so a path built under TMPDIR is no longer the linked one`)
 })
@@ -190,7 +201,29 @@ test('the root a hard-killed run left is removed by the next run', async (t) => 
   assert.ok(temp !== undefined && existsSync(temp), 'the roots went with a run that was killed, so this check proves nothing')
   assert.equal(existsSync(runtime ?? ''), true, 'the runtime root went with a run that was killed, so this check proves nothing')
   const next = throughTheWrapper([process.execPath, '-e', 'process.stdout.write("ran")'])
-  assert.equal(next.code, 0, next.output)
+  assert.equal(next.code, 0, everythingTheRunSaid(next))
   assert.equal(existsSync(temp), false, 'the temp root a hard-killed run left was still there after the next run')
   assert.equal(existsSync(runtime ?? ''), false, 'the runtime root a hard-killed run left was still there after the next run')
+})
+
+test('a root whose owner file is gone is kept and said on stderr, and the runtime directory a run picks is read from stdout alone (martha#892)', (t) => {
+  // Exactly what a run killed past its owner file leaves behind: a root of the run's own name with nothing in it saying
+  // whose it was. The sweep keeps it — 'unknown' is not 'gone' — and says so; that line is on stderr, and the runtime
+  // directory the run picked is on stdout. Read together they are the kept-root line, not a path, which is what failed a
+  // socket-length check on a machine where an earlier run had been killed (martha#892).
+  const left = mkdtempSync(join(SYSTEM_TEMPORARY_DIRECTORY, RUN_ROOT_PREFIX))
+  t.after(() => removeTheTree(left))
+  const printsItsRuntime = [process.execPath, '-e', 'process.stdout.write(process.env.XDG_RUNTIME_DIR ?? "")']
+  const ran = throughTheWrapper(printsItsRuntime)
+  assert.equal(ran.code, 0, everythingTheRunSaid(ran))
+  assert.ok(ran.stderr.includes(`${left} is kept:`), `the root left beside the run was not said to be kept, on stderr: ${everythingTheRunSaid(ran)}`)
+  assert.match(ran.stderr, /owner\.json could not be read \(ENOENT\)/, `the root kept beside the run was not said to be kept for its owner file: ${everythingTheRunSaid(ran)}`)
+  assert.equal(existsSync(left), true, 'the root whose owner file is gone was removed, so this check proves nothing about keeping it')
+  const runtime_root = ran.stdout.trim()
+  assert.ok(runtime_root.startsWith(join(SYSTEM_TEMPORARY_DIRECTORY, RUN_ROOT_PREFIX)), `stdout carried something that is not the runtime directory the run picked: ${ran.stdout}`)
+  assert.equal(ran.stdout.includes(' is kept: '), false, 'the kept-root line reached stdout, where a run\'s answer is read')
+  assert.equal(existsSync(runtime_root), false, 'the runtime root read from stdout was not one this run made, since it outlived the run')
+  // The reading that failed: with a root kept, both streams together are not the runtime directory, so a check that took
+  // them as one answered the kept-root line.
+  assert.notEqual(`${ran.stdout}${ran.stderr}`.trim(), runtime_root, 'the kept-root line did not reach stderr, so reading the two streams as one would have done no harm')
 })

@@ -145,7 +145,7 @@ async function switched(tools: CrewTools): Promise<void> {
 
 /** The question the mod puts to the launcher at a turn's end, as a real one does. */
 const questionOf = (crew: ACrewMade): Record<string, unknown> => ({
-  usage: { context: { percent: 5 }, cost: { usd: 0.1 } },
+  usage: { startedAt: 0, context: { percent: 5 }, cost: { usd: 0.1 } },
   turn_id: `t-${String(crew.theRow()?.['at'] ?? 0)}`,
   answer: '',
 })
