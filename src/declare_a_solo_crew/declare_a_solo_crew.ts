@@ -53,21 +53,23 @@ export type SoloCrewDeclared =
   | { readonly declared: true; readonly settings: CrewSettings; readonly declaration: string; readonly workspace: string }
   | { readonly declared: false; readonly refusal: string }
 
-const NO_OWNER =
+export const NO_OWNER =
   'Martha needs your name as the crew\'s owner and git has none. Set it with git config user.name "Your Name", then run martha init again.'
 
-/** Makes the declaration's directory when missing; why it may not hold one (not a directory), or undefined. */
-function declarationDirectory(directory: string): string | undefined {
+/** Makes the declaration's directory when missing; why it may not hold one (not a directory), or undefined. A
+ * directory that is a link is followed: the owner cut that refusal (martha#601), so what it points at is where the
+ * crew is declared. */
+export function declarationDirectory(directory: string): string | undefined {
   const found = fs.statSync(directory, { throwIfNoEntry: false })
   if (found === undefined) {
     fs.mkdirSync(directory)
     return undefined
   }
-  return found.isDirectory() ? undefined : `${directory} is not a directory, so martha init cannot declare a crew in it.`
+  return found.isDirectory() ? undefined : `${directory} is not a directory, so Martha cannot declare a crew in it.`
 }
 
 /** Writes the declaration, failing when one is there; why not, or undefined. */
-function writeOnce(path: string, text: string): string | undefined {
+export function writeOnce(path: string, text: string): string | undefined {
   try {
     fs.writeFileSync(path, text, { flag: 'wx' })
     return undefined

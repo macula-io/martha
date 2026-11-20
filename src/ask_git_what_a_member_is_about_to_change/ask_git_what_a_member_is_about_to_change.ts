@@ -131,7 +131,9 @@ async function theWorktreesOf(host: AQuestionAboutACall['host'], where: string |
 
 /** Every fact the rules need, asked of the clone the call lands in and the place its worktrees are listed: asked together. */
 async function theFactsOf(host: AQuestionAboutACall['host'], clone: string | null, where: string | null): Promise<TheFacts> {
-  const [branches, defaultBranch, worktrees] = await Promise.all([theBranchesOf(host, clone), theDefaultBranchOf(host, clone), theWorktreesOf(host, where)])
+  // The default branch is asked where the call runs when it is no clone: a push from a worktree reads its origin's
+  // default branch there (martha#925), and the switch rule, which reads it too, fires only in a clone.
+  const [branches, defaultBranch, worktrees] = await Promise.all([theBranchesOf(host, clone), theDefaultBranchOf(host, clone ?? where), theWorktreesOf(host, where)])
   return { branches, defaultBranch, worktrees }
 }
 

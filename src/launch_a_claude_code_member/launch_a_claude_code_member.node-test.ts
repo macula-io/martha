@@ -2334,15 +2334,17 @@ for (const [which, pathOf] of OWNERS_FILES) {
   }
 }
 
-test("a plugin folder in the launcher's own environment starts nothing, naming the variable", async (t) => {
-  const recorded = RECORDED_MESH_SERVERS[0]
-  assert.ok(recorded !== undefined)
-  const { recording } = await recordedTreeOf(t, recorded.server_version)
-  const place = placeFor(t, meshServerAt(recorded.server_version))
-  const fake = fakeClaude(place)
-  const launch = memberLaunch(place, fake.command, place.approved, [], recording)
-  const refusal = await refusedLeavingNothing(t, place, { ...launch, inherited: { ...launch.inherited, [PLUGIN_DIRS_VARIABLE]: join(place.home, 'plugins') } }, fake.ranFile)
-  assert.ok(refusal.includes(PLUGIN_DIRS_VARIABLE), refusal)
+test("#511 (#601 row 72): a plugin folder in the launcher's own environment is not handed to the member, which starts, and the owner is told so once", async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const lines: string[] = []
+  const launch = memberLaunch(place, fake.command, place.approved)
+  const started = await aMemberStartedIn(t, place, { ...launch, inherited: { ...launch.inherited, [PLUGIN_DIRS_VARIABLE]: join(place.home, 'plugins') }, tellOwner: (line) => void lines.push(line) })
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write what it was started with', () => existsSync(fake.envFile), t)
+  const spawned = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
+  assert.equal(Object.hasOwn(spawned, PLUGIN_DIRS_VARIABLE), false, 'the member was handed the launcher\'s plugin folder')
+  assert.deepEqual(lines.filter((line) => line.includes(PLUGIN_DIRS_VARIABLE)), [`${launch.member_name} is not handed ${PLUGIN_DIRS_VARIABLE} from this shell, so the plugins it names do not load in the member (martha#121).`])
 })
 
 test('an empty user settings file, or one whose hooks and plugins are empty or off, starts the member', async (t) => {
