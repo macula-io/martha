@@ -46,7 +46,7 @@
 import { lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-import { API_KEY_VARIABLE, apiKeyAnsweredYes, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, API_KEY_ANSWERS_KEY, TRUST_ACCEPTED_KEY, type TheSignIn } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { API_KEY_VARIABLE, apiKeyAnsweredYes, AUTH_TOKEN_VARIABLE, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, API_KEY_ANSWERS_KEY, TRUST_ACCEPTED_KEY, type TheSignIn } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, type Billing } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, SKILLS_KIND, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
@@ -78,15 +78,18 @@ export function theMembersHostRecord(checkout: string, billedKey: string | undef
   return { [FIRST_RUN_DONE_KEY]: true, ...answered, projects: Object.fromEntries([...new Set([checkout, realpathSync(checkout)])].map((path) => [path, trusted])) }
 }
 
-/** The credential each billing hands a member: the variable that carries it to the host (martha#916). */
-const THE_CREDENTIAL_OF: Readonly<Record<Billing, string>> = {
-  [BILLED_BY_SUBSCRIPTION]: CLAUDE_CODE_SIGN_IN_STORE_VARIABLE,
-  [BILLED_BY_API_KEY]: API_KEY_VARIABLE,
+/**
+ * The credentials each billing hands a member: the variables that carry them to the host (martha#916). A bearer token
+ * bills the API as a key does, and the host takes it over the owner's sign-in unasked (seen live on 2.1.329, r=3).
+ */
+const THE_CREDENTIALS_OF: Readonly<Record<Billing, readonly string[]>> = {
+  [BILLED_BY_SUBSCRIPTION]: [CLAUDE_CODE_SIGN_IN_STORE_VARIABLE],
+  [BILLED_BY_API_KEY]: [API_KEY_VARIABLE, AUTH_TOKEN_VARIABLE],
 }
 
-/** The variables a member billed by `billing` is never given, whatever it inherits: the other billing's credential. */
+/** The variables a member billed by `billing` is never given, whatever it inherits: the other billing's credentials. */
 export function notGivenUnder(billing: Billing): readonly string[] {
-  return Object.entries(THE_CREDENTIAL_OF).flatMap(([other, variable]) => (other === billing ? [] : [variable]))
+  return Object.entries(THE_CREDENTIALS_OF).flatMap(([other, variables]) => (other === billing ? [] : variables))
 }
 
 /**

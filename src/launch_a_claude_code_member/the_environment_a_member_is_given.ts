@@ -159,7 +159,9 @@ async function theOwnersSignIn(asking: ALaunchesBilling): Promise<TheSignIn> {
   if ('refusal' in resolved) return { untold: resolved.refusal }
   const folder = mkdtempSync(join(tmpdir(), 'martha-sign-in-question-'))
   try {
-    const kept = Object.entries(asking.inherited).filter((entry): entry is [string, string] => entry[1] !== undefined && entry[0] !== API_KEY_VARIABLE)
+    // Asked as a member billed by the subscription is started: without the credentials it is never given (martha#916 r=3).
+    const notGiven = notGivenUnder(BILLED_BY_SUBSCRIPTION)
+    const kept = Object.entries(asking.inherited).filter((entry): entry is [string, string] => entry[1] !== undefined && !notGiven.includes(entry[0]))
     const env = { ...Object.fromEntries(kept), ...theMembersConfigEnvironment(folder, BILLED_BY_SUBSCRIPTION) }
     // Asked in its own folder, not the checkout: the question runs before the launch gate has judged the checkout's
     // config, so no project folder of the checkout's is in reach of it.
