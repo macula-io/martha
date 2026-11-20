@@ -18,6 +18,9 @@
 // A raw mesh read is refused next, tainted or not
 // (../read_a_room_through_its_gate): the room is read through its gate instead.
 //
+// A call that widens a member's reach is the owner's decision, not this gate's (martha#601): the call is answered as
+// asked, and one line on the process's own error output says what the owner's decision is made in.
+//
 // Two of the refusals below stand on text the session took in rather than on
 // the call itself: a record that cannot be read, and an agent the host started
 // that has not stopped. The owner's switch (`house_rules.strict_gate`, martha#259)
@@ -34,6 +37,7 @@ import {
   refuseExecutionAfterUngatedText,
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import process from 'node:process'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { ToolNames } from '../host_contract/host_contract.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
@@ -99,8 +103,8 @@ export function answerToolCall(asked: ToolCall): ToolCallAnswer {
 }
 
 /**
- * The refusals that come before the gate, each of which stands on the call, the launch or the session: the launch
- * rechecked, the reach rule, the raw mesh read, and the two that stand on text the session took in.
+ * What stands before the gate, each of which reads the call, the launch or the session: the launch rechecked, the raw
+ * mesh read, and the two that stand on text the session took in. The reach rule is read here too, as a notice.
  */
 function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, agents_running = [], gate = 'enforced', audit }: ToolCall): ToolCallAnswer {
   const launched = recheckLaunchPassingOwnWrites(launch, host)
@@ -113,7 +117,9 @@ function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, ag
   }
 
   if (widensMemberReach(tool, names)) {
-    return { deny: `${tool} is not called in a member's session: ${WHO_DECIDES_REACH}.` }
+    // The owner ruled the reach rule a notice (martha#601): the call is answered as asked, and one line says who decides
+    // who can reach a member.
+    process.stderr.write(`notice: ${tool} is not called in a member's session, and the call was answered as asked: ${WHO_DECIDES_REACH}.\n`)
   }
 
   if (isRawMeshRead(tool, input, names)) {

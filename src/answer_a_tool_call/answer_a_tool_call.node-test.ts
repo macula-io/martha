@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import process from 'node:process'
 import { after, test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
@@ -29,6 +30,7 @@ import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { MESH_TOOLS_THAT_WIDEN_REACH } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const names = claudeCodeToolNames
@@ -57,6 +59,21 @@ const store = (): SessionRecordStore => {
 const denied = (answer: ToolCallAnswer): string => {
   assert.notEqual(answer, undefined, 'the tool call was allowed; it must be refused')
   return (answer as { deny: string }).deny
+}
+
+/** The answer, and everything written to the process's own error output while the call is judged (martha#601). */
+const theNoticeWhile = (act: () => ToolCallAnswer): { readonly answer: ToolCallAnswer; readonly notice: string } => {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: act(), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
 }
 
 // --- the host's whole loop ----------------------------------------------------
@@ -139,6 +156,18 @@ test('every tool that executes is refused, by whatever name the host uses', () =
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
   for (const tool of [CLAUDE_CODE_SHELL_TOOL, 'bash', 'patch', 'MultiEdit', 'Agent', 'SendMessage', 'NeverSeenTool']) {
     denied(answerToolCall({ names, tool, session: tainted, policy, launch, host: thisMachine }))
+  }
+})
+
+test('#601: a call that widens a member\'s reach gets one line about who decides it, and no refusal of its own', () => {
+  const fresh = beginSession(store(), 's-1')
+  for (const tool of MESH_TOOLS_THAT_WIDEN_REACH) {
+    const { answer, notice } = theNoticeWhile(() => answerToolCall({ names, tool, session: fresh, policy, launch, host: thisMachine }))
+    assert.match(notice, new RegExp(`${tool} is not called in a member's session`), `${tool} got no notice`)
+    assert.match(notice, /answered as asked/, 'the notice did not say the call went ahead')
+    // The raw mesh read stands beside it and is not one of the rows cut (martha#601), so it still refuses the call; what
+    // this pins is that the reach rule no longer answers for it.
+    assert.doesNotMatch(denied(answer), /who can reach a member/, 'the reach rule still refused the call')
   }
 })
 

@@ -1,19 +1,18 @@
-// The hand-off refused while a killed run's leftover still stands (martha#719).
+// The notice a hand-off carries while a killed run's leftover still stands (martha#719, martha#601).
 //
-// The record a killed run left refuses a commit that would carry its bytes (martha#693). A hand-off is the other way the
-// same bytes leave a member's tree: the message it sends names what the member did, and the crew that reads it cannot
-// tell the run's bytes from the member's. So a HANDOFF line is refused while a leftover still stands where the record
-// says it stands — judged on the bytes at that path now, never on the path alone — and the same message is sent once the
-// path is restored or released. The sentence is the commit refusal's own, built with the act passed in
-// (theRefusalOfWhatAKilledRunLeft), so the two cannot drift apart in either direction.
+// The record a killed run left used to refuse a commit that would carry its bytes (martha#693). A hand-off is the other
+// way the same bytes leave a member's tree: the message it sends names what the member did, and the crew that reads it
+// cannot tell the run's bytes from the member's. Under the owner's decision of 2026-11-20 (#601) the hand-off goes
+// ahead: one line names the files, judged on the bytes at that path now, never on the path alone. The sentence is the
+// commit notice's own, built with the act passed in (theRefusalOfWhatAKilledRunLeft), so the two cannot drift apart in
+// either direction.
 //
-// It fails open exactly as that refusal does: no record, a record nobody can read, a place that cannot be asked, or a
-// path whose bytes cannot be read refuses nothing.
+// It fails open exactly as that judgement does: no record, a record nobody can read, a place that cannot be asked, or a
+// path whose bytes cannot be read says nothing.
 //
 // Stated limit (martha#719, R4): a hand-off is judged only where the crew's `say_to_crew` is the act that makes it. A
 // hand-off by any other path — the host's own messaging between sessions, which is how this crew's members hand off
-// today — is not judged. This is a speed bump on the crew's act, and not on handing off as such; the commit refusal
-// stays the gate that holds for every path, because every path ends in a commit.
+// today — is not judged. This is a notice on the crew's act, and not on handing off as such.
 
 import { join } from 'node:path'
 
@@ -77,9 +76,9 @@ const whatStandsNow = (host: TheFilesAndProcesses, record: WhatAKilledRunLeft, r
   })
 
 /**
- * Why a hand-off is refused while a killed run's leftover stands, or undefined when nothing refuses it: not a
- * `say_to_crew` call, a message whose first line is no HANDOFF, a crew that kept no record for this member, a record
- * nobody can read, or no path whose bytes still hold the kept digest.
+ * The notice a hand-off prints while a killed run's leftover stands, or undefined when none does: not a `say_to_crew`
+ * call, a message whose first line is no HANDOFF, a crew that kept no record for this member, a record nobody can read,
+ * or no path whose bytes still hold the kept digest. The hand-off goes ahead either way (martha#601).
  */
 export function refuseAHandOffWithALeftover(asked: AHandOffAsked): string | undefined {
   if (asked.tool !== SAY_TO_THE_CREW) return undefined

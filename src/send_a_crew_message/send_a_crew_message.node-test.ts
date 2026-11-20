@@ -22,7 +22,7 @@ import { appendToTheChannel, readTheChannel, THE_WHOLE_CREW } from '../keep_the_
 import { readLedger, ledgerStreamOf, noteRecovery } from '../log_ledger/log_ledger.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_directory.ts'
-import { addresseesOf, CREW_SAY_DESCRIPTION, NOBODY_TO_REPORT_TO, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
+import { addresseesOf, CREW_SAY_DESCRIPTION, LONGEST_MESSAGE, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
@@ -227,13 +227,25 @@ test('#343: every hook forwards the tool it was called for, so a wake cannot be 
   assert.deepEqual(misdirected, [], `these calls reach the launcher as another tool, so a member's act becomes a different one: ${misdirected.join('; ')}`)
 })
 
-test('#253: a hand-off whose line does not read is answered with the field, before anything is sent', async () => {
+test('#601: a hand-off whose line does not read is sent as prose, with the field named in one line', async () => {
   const channel = channelHost()
   const sent = await sendACrewMessage(channel, sending({ text: 'HANDOFF macula-io/martha#253 aaaa..bbbb r=1' }))
 
-  assert.ok('refused' in sent)
-  assert.match(sent.refused, /range/)
-  assert.deepEqual(await readTheChannel(channel), [], 'a line that does not read was put in the channel anyway')
+  assert.ok('sent' in sent, `a line that does not read was refused instead of sent as prose: ${JSON.stringify(sent)}`)
+  assert.match(sent.told, /notice: HANDOFF: /, 'the sender was not told the line went as prose')
+  assert.match(sent.told, /range/, 'the notice did not name the field that did not read')
+  assert.equal((await readTheChannel(channel)).length, 1, 'a line that does not read was not put in the channel as prose')
+})
+
+test('#601: a message longer than the channel is meant for is sent as it is, with one line saying it is long', async () => {
+  const channel = channelHost()
+  const long = 'x'.repeat(LONGEST_MESSAGE + 1)
+  const sent = await sendACrewMessage(channel, sending({ text: long }))
+
+  assert.ok('sent' in sent, `an over-long message was refused instead of sent: ${JSON.stringify(sent)}`)
+  assert.match(sent.told, new RegExp(`at most ${LONGEST_MESSAGE} characters`), 'the sender was not told the message is long')
+  const [kept] = await readTheChannel(channel)
+  assert.equal(kept?.message.text.length, long.length, 'the message was truncated instead of sent as it is')
 })
 
 test('#253: a well-formed hand-off sent through the crew says its line reached the package\'s ledger', async () => {
@@ -259,7 +271,7 @@ test('#253: the description a member reads teaches every line a card teaches', (
 })
 
 // martha#512 slice 2: a crew message goes through the recovery. A message whose row was refused is sent once more; one
-// whose outcome was not kept is read back from the channel and never sent twice; a paused package holds it.
+// whose outcome was not kept is read back from the channel and never sent twice. A pause no longer holds a message.
 
 /** A row store over the in-memory one that refuses the append at `refused` (1-based), counting every stream. */
 function aStoreThatRefusesTheAppendAt(refused: number): HostContract['stores']['rows'] {
@@ -297,17 +309,6 @@ test('#512 slice 2: a message whose outcome was not kept is read back from the c
   assert.ok(rows.some((row) => row.kind === 'recovery_decided'), 'the recovery did not keep what it read in the channel')
 })
 
-test('#512 slice 2: a paused package holds a message to a member, and nothing reaches the channel', async () => {
-  const { host } = hostForTests({ now: 7_500 })
-  await aPausedPackage(host)
-  const before = (await readLedger(host, PAUSED)).length
-  const sent = await sendACrewMessage(host, sending({ package: PAUSED, to: ['Reviewer'] }))
-  assert.ok('refused' in sent, `a paused package sent a message: ${JSON.stringify(sent)}`)
-  assert.match(sent.refused, /paused/)
-  assert.deepEqual(await readTheChannel(host), [], 'the message reached the channel')
-  assert.equal((await readLedger(host, PAUSED)).length, before, 'the message was announced')
-})
-
 /** A package paused by a recovery the failure could not be read for, as slice 1 records it. */
 async function aPausedPackage(host: Parameters<typeof noteRecovery>[0]): Promise<void> {
   await noteRecovery(host, {
@@ -329,34 +330,6 @@ test('#512 slice 2: a message only to those the nudges go to passes a pause, com
   assert.equal((await readTheChannel(host)).length, 1, 'the report did not reach the channel exactly once')
   const kinds = (await readLedger(host, PAUSED)).map((row) => row.kind)
   assert.deepEqual(kinds.slice(-2), ['act_announced', 'act_concluded'], 'the report was not announced and concluded in the ledger')
-})
-
-test('#512 slice 2: a message to those the nudges go to and to another member is held by a pause, and nothing reaches the channel', async () => {
-  const { host } = hostForTests({ now: 7_500 })
-  await aPausedPackage(host)
-  const before = (await readLedger(host, PAUSED)).length
-  // One addressee is the Supervisor the nudges go to, the other is not: the message reaches a member the pause holds from.
-  const sent = await sendACrewMessage(host, sending({ package: PAUSED, to: ['Supervisor', 'Reviewer'], receivers: ['Supervisor'] }))
-  assert.ok('refused' in sent, `a message to the Supervisor and another member passed a pause: ${JSON.stringify(sent)}`)
-  assert.deepEqual(await readTheChannel(host), [], 'the message reached the channel')
-  assert.equal((await readLedger(host, PAUSED)).length, before, 'the message was announced')
-})
-
-test('#512 slice 2: a paused member whose crew names nobody for the nudges is told so by name, and nothing is sent', async () => {
-  const { host } = hostForTests({ now: 7_500 })
-  await aPausedPackage(host)
-  const sent = await sendACrewMessage(host, sending({ package: PAUSED, to: ['Supervisor'], receivers: [] }))
-  assert.ok('refused' in sent, `a message passed a pause with nobody to report to: ${JSON.stringify(sent)}`)
-  assert.ok(sent.refused.endsWith(NOBODY_TO_REPORT_TO), `the member was not told that nobody is named: ${sent.refused}`)
-  assert.deepEqual(await readTheChannel(host), [], 'the message reached the channel')
-})
-
-test('#512 slice 2: the words of a pause name the one message it lets through', async () => {
-  const { host } = hostForTests({ now: 7_500 })
-  await aPausedPackage(host)
-  const sent = await sendACrewMessage(host, sending({ package: PAUSED, to: ['Reviewer'] }))
-  assert.ok('refused' in sent, `a paused package sent a message to a member: ${JSON.stringify(sent)}`)
-  assert.ok(sent.refused.includes("except a message only to those the crew's nudges go to"), `the pause words do not name the exception: ${sent.refused}`)
 })
 
 test('#512 slice 2: the same words sent before the send began are not taken for this send, and the failure stands', async () => {

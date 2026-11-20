@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import process from 'node:process'
 import { test } from 'node:test'
 
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
@@ -10,6 +11,22 @@ const STARTED_AT = ENDED_AT - MINUTE_MS
 const THE_TREE = '/work/a-tree'
 const OTHER_TREE = '/work/another-tree'
 const A_FILE = 'src/a_slice/a_file.ts'
+
+/** Everything written to the process's own error output while `act` runs (martha#601). */
+const theNoticeWhile = (act: () => void): string => {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    act()
+  } finally {
+    process.stderr.write = original
+  }
+  return written.join('')
+}
 
 /** The bytes a test's file holds, and the digest of them. */
 const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text)
@@ -63,12 +80,16 @@ test('a process list the kernel will not give is told as unreadable, and nothing
   assert.deepEqual(record.leftovers, [])
 })
 
-test('a file written after its command started is recorded as what the killed run left, and the commit is refused', () => {
+test('#601: a file written after its command started is recorded as what the killed run left, and the commit goes ahead with a notice', () => {
   const record = theRecordAtTheEnd(anEnd())
   assert.equal(record.leftovers.length, 1)
   assert.equal(record.leftovers[0]?.digest, theDigestOf(bytesOf('if (false) return\n')))
-  assert.rejects
-  assert.ok(theRefusalOfACommit(record, [{ path: A_FILE, digest: theDigestOf(bytesOf('if (false) return\n')) }]) !== undefined)
+  let answer: string | undefined
+  const notice = theNoticeWhile(() => {
+    answer = theRefusalOfACommit(record, [{ path: A_FILE, digest: theDigestOf(bytesOf('if (false) return\n')) }])
+  })
+  assert.equal(answer, undefined, 'the commit was refused')
+  assert.match(notice, /notice: this commit carries what a killed run left/, 'the commit went ahead without a notice')
 })
 
 test('a file written before its command started is kept as dirty and told, and the commit is not refused', () => {
@@ -104,7 +125,7 @@ test('a tree git will not answer for is told as unreadable, and the other tree i
   assert.equal(record.dirty.length, 1)
 })
 
-test('an end over a record whose leftover still holds its bytes carries it over (rule 5)', () => {
+test('an end over a record whose leftover still holds its bytes carries it over (rule 5), and the commit is noticed', () => {
   const killed = theRecordAtTheEnd(anEnd())
   const later = theRecordAtTheEnd(
     anEnd({
@@ -114,5 +135,10 @@ test('an end over a record whose leftover still holds its bytes carries it over 
     }),
   )
   assert.equal(later.leftovers.length, 1)
-  assert.ok(theRefusalOfACommit(later, [{ path: A_FILE, digest: theDigestOf(bytesOf('if (false) return\n')) }]) !== undefined)
+  let answer: string | undefined
+  const notice = theNoticeWhile(() => {
+    answer = theRefusalOfACommit(later, [{ path: A_FILE, digest: theDigestOf(bytesOf('if (false) return\n')) }])
+  })
+  assert.equal(answer, undefined, 'the commit was refused')
+  assert.match(notice, /notice: this commit carries what a killed run left/, 'the carried-over leftover was not noticed')
 })
