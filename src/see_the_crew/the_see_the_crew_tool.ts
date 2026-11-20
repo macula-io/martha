@@ -66,9 +66,9 @@ async function theNudgesFor(asked: SeeTheCrewAsked): Promise<readonly string[]> 
   const channel = await readTheChannel(asked.ledger)
   const messages: SentMessage[] = channel.map(({ message }) => ({ from: message.from, to: message.to, text: message.text, sent_at: message.sent_at }))
   const waits = await theWaitsTheClosesLeave(messages, receivers, await whatEndsAWaitIn(asked, messages))
-  const input = { rows: Object.values(asked.rows), waits, parked: theParkedMembers({ stores: asked.stores }, settings.members.map((member) => member.name)), windows: windowsOf(settings.house_rules), now: asked.now, owner: settings.owner, receivers }
+  const input = { rows: Object.values(asked.rows), waits, parked: theParkedMembers({ stores: asked.stores }, settings.members.map((member) => member.name)), windows: windowsOf(settings.house_rules, settings.thresholds), now: asked.now, owner: settings.owner, receivers }
   const heads = await theHeadsOfTheWaiters(asked, waits)
-  const unheld = await theUnheldNudgesFor({ backlog: settings.backlog, members: settings.members.map((member) => member.name), reader: theBacklogReaderIn(asked), rows: input.rows, parked: input.parked, receivers })
+  const unheld = await theUnheldNudgesFor({ backlog: settings.backlog, members: settings.members.map((member) => member.name), reader: theBacklogReaderIn(asked), rows: input.rows, parked: input.parked, receivers, offline_ms: input.windows.offline_ms })
   const paused = await thePausedNudges(asked.ledger, [...input.rows.map((row) => row.holds), ...packagesNamedIn(messages)])
   return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads), ...unheld, ...paused]), settings)
 }

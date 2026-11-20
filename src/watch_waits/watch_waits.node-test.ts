@@ -8,14 +8,17 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
-import { IDLE, OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import type { NudgeInput } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { IDLE, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { windowsOf, type NudgeInput } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { deadlockNudges, deadlocksOf } from './watch_waits.ts'
+import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
 
 const NOW = 1_762_900_000_000
 const PERSON = 30 * MINUTE_MS
 const STALLED = 60 * MINUTE_MS
-const WINDOWS = { stalled_ms: STALLED, review_ms: 45 * MINUTE_MS, person_ms: PERSON }
+const WINDOWS = { stalled_ms: STALLED, review_ms: 45 * MINUTE_MS, person_ms: PERSON, offline_ms: OFFLINE_AFTER_MS }
 const RECEIVERS = ['Supervisor']
 /** The dashboard's own word for a parked member, read here as the slice reads it. */
 const PARKED_STATE: State = 'parked'
@@ -125,4 +128,14 @@ test('a stalled member inside a cycle is one deadlock, not the cycle plus a chai
   const found = deadlocksOf(input(rows))
   assert.equal(found.length, 1, 'the same waits were drawn twice: the cycle is the one kept')
   assert.equal(found[0]?.kind, 'cycle', 'and it is the whole situation')
+})
+
+test('#931 A: a member is quiet past the declared offline time, not past the default', () => {
+  const declared = windowsOf({ stalled_minutes: STALLED / MINUTE_MS, review_minutes: 45, person_minutes: PERSON / MINUTE_MS }, { ...THRESHOLDS_WHEN_UNNAMED, offline_after_seconds: THRESHOLDS_WHEN_UNNAMED.offline_after_seconds * 3 })
+  const rows = [
+    row('Vesta', { state: 'waiting', waits: { on: 'Mars', for: 'a verdict', since: NOW - PERSON } }),
+    row('Mars', { at: NOW - OFFLINE_AFTER_MS * 2, state: IDLE, progress: { step: 4, of: 4, at: NOW - PERSON } }),
+  ]
+  assert.match(deadlocksOf(input(rows))[0]?.act ?? '', /is quiet/, 'under the default Mars is quiet')
+  assert.doesNotMatch(deadlocksOf(input(rows, { windows: declared }))[0]?.act ?? '', /is quiet/, 'inside the declared offline time Mars is not quiet')
 })

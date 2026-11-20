@@ -7,7 +7,8 @@
 // writer records it — so a session that dies leaves a row that says so within one interval instead of a row
 // claiming work it is not doing.
 
-import { BEAT_INTERVAL_MS, IDLE, OFFLINE, OFFLINE_AFTER_MS, STATES, type CrewToolsOnARow, type DashboardRow, type HostFacts, type Progress, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED, type CrewThresholds } from '../declare_crew/the_crews_thresholds.ts'
+import { BEAT_INTERVAL_MS, IDLE, OFFLINE, STATES, type CrewToolsOnARow, type DashboardRow, type HostFacts, type Progress, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 
 /** One member's row as a reader is shown it. */
@@ -45,7 +46,7 @@ export function theCrewToolsFlag(row: Pick<CrewRow, 'served_tools'>): string | n
 /** What the pane's header counts. */
 export interface CrewCounts {
   readonly members: number
-  /** Members whose row is younger than OFFLINE_AFTER_MS. */
+  /** Members whose row is younger than the crew's offline time. */
   readonly online: number
   readonly working: number
   readonly waiting: number
@@ -55,16 +56,19 @@ export interface CrewCounts {
 /** The declaration, as this slice needs it: the crew's members, in the order the declaration names them. */
 export interface TheDeclaredCrew {
   readonly members: readonly { readonly name: string }[]
+  /** The crew's thresholds (martha#931 A); a crew that names none reads THRESHOLDS_WHEN_UNNAMED. */
+  readonly thresholds?: CrewThresholds
 }
 
 /** Every member's row, in the declaration's order, and the counts a header shows. */
 export function seeTheCrew(crew: TheDeclaredCrew, beats: Readonly<Record<string, DashboardRow>>, now: number): { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts } {
-  const rows = crew.members.map((member) => rowOf(member.name, beats[member.name], now))
+  const offline_after_ms = offlineAfterMsOf(crew.thresholds ?? THRESHOLDS_WHEN_UNNAMED)
+  const rows = crew.members.map((member) => rowOf(member.name, beats[member.name], now, offline_after_ms))
   return { rows, counts: countsOf(rows) }
 }
 
 /** One member's row: its beat, or the row a member that never beat reads as. */
-function rowOf(member: string, beat: DashboardRow | undefined, now: number): CrewRow {
+function rowOf(member: string, beat: DashboardRow | undefined, now: number, offline_after_ms: number): CrewRow {
   if (beat === undefined) {
     return {
       member,
@@ -86,7 +90,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
   // What the owner reads: the host's own question first (martha#313), then the member's word, and a row that has gone
   // quiet says so whatever either of them said, because nothing is left to answer it.
   const shown = whatTheOwnerIsShown(beat)
-  const state: ShownState = quiet_for > OFFLINE_AFTER_MS ? OFFLINE : shown.state
+  const state: ShownState = quiet_for > offline_after_ms ? OFFLINE : shown.state
   return {
     member,
     session: beat.session,
@@ -106,7 +110,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
 
 function countsOf(rows: readonly CrewRow[]): CrewCounts {
   // Online is the header's own word about a row being fresh, which is what CrewCounts says it is: a member whose row
-  // is younger than OFFLINE_AFTER_MS, whatever that row says it is doing (r=1 R2: a live member that has reported
+  // is younger than the crew's offline time, whatever that row says it is doing (r=1 R2: a live member that has reported
   // nothing has a row, and it reads idle, so counting only the working states would drop it from the crew's size).
   const online = rows.filter((row) => row.at !== null && row.state !== OFFLINE)
   return {

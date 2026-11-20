@@ -6,8 +6,11 @@ import { test } from 'node:test'
 import { BACKLOG, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { theNudgeLine } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
-import { OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { UNHELD_IDLE_FILE, theIdleClockAfter, theUnheldNudgesFor, unheldNudges, type UnheldNudgesAsked } from './nudge_an_idle_crew.ts'
+import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
 
 const NOW = Date.parse('2026-11-16T12:00:00Z')
 const IDLE_MINUTES = 30
@@ -33,6 +36,7 @@ const at = (now: number, rows: readonly DashboardRow[], changes: { parked?: read
   parked: changes.parked ?? [],
   receivers: ['Supervisor'],
   unheld: changes.unheld ?? 2,
+  offline_ms: OFFLINE_AFTER_MS,
   now,
 })
 
@@ -93,6 +97,7 @@ const twoUnheld = async (): Promise<ProcessOutcome> => ({
 const asked = (place: CrewPlace, now: number, changes: Partial<UnheldNudgesAsked> = {}): UnheldNudgesAsked => ({
   backlog: { places: ['macula-io'], idle_minutes: IDLE_MINUTES },
   members: ['Supervisor', 'Vesta'],
+  offline_ms: OFFLINE_AFTER_MS,
   reader: { place, run: twoUnheld, now },
   rows: [row('Vesta', { at: now })],
   parked: [],
