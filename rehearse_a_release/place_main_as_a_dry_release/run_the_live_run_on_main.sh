@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# run_the_night_on_main.sh <ssh-host> --evidence <folder> [--sha <sha40>] [--proof-tree <git checkout>] [-- <proof args>]
+# run_the_live_run_on_main.sh <ssh-host> --evidence <folder> [--sha <sha40>] [--proof-tree <git checkout>] [-- <proof args>]
 #
-# The nightly live run's driver (martha#696, on #639's path): it packs main at a commit with the packer beside it,
-# pack_main_as_a_dry_layer.sh, and runs the clean-install proof on that layer as a dry run, with the night's evidence
+# The live run's driver (martha#696, on #639's path): it packs main at a commit with the packer beside it,
+# pack_main_as_a_dry_layer.sh, and runs the clean-install proof on that layer as a dry run, with the live run's evidence
 # kept under one folder.
 #
 # 1. Each tool the driver runs (DRIVERS_TOOLS) is on PATH, or the run is refused naming it. The arguments are then read
@@ -13,9 +13,9 @@
 #    the same way. A missing one refuses the run before anything is packed.
 # 3. The repository is fetched, and the sha is origin/main, or the given one, which must be a commit here.
 # 4. The packer packs main at the sha into <evidence>/<date>_<sha7>/, and the layer's sha256 is kept in run.txt, beside
-#    dry_passed=, the proof's DRY_PASSED, which the owner's follow script reads to say whether the night passed.
-# 5. The proof runs with --log in the same folder and --dry-layer <layer> <sha>. When the proof names --night in its
-#    usage, it is also given --night <that folder>/NIGHT_FOLDER_NAME, a path the driver names and never makes: the
+#    dry_passed=, the proof's DRY_PASSED, which the owner's follow script reads to say whether the live run passed.
+# 5. The proof runs with --log in the same folder and --dry-layer <layer> <sha>. When the proof names --live-run in its
+#    usage, it is also given --live-run <that folder>/LIVE_RUN_FOLDER_NAME, a path the driver names and never makes: the
 #    proof makes its own run folder and refuses one that is there. When it names --owner-commands, it is given
 #    --owner-commands <that folder>/OWNER_COMMANDS_NAME, named in run.txt as owner_commands= beside host=, which is
 #    where the owner's follow script reads its commands from. Anything after `--` goes to the proof unchanged.
@@ -31,7 +31,7 @@
 # anything was packed. A proof that exits 0 on a dry layer claims a release's pass, which a dry run never is, so that is
 # FAILED, and so is a run a signal stopped. The packer's exits are not passed through, because its codes collide with
 # the proof's: the packer's NOT_PACKABLE is 3, and the proof's 3 is "the registry carries no release". So a packer that
-# refused or could not run is PACK_FAILED, and a tree whose installer/ names differ from its tag's is NOT_PACKABLE_TONIGHT,
+# refused or could not run is PACK_FAILED, and a tree whose installer/ names differ from its tag's is NOT_PACKABLE_FOR_THE_LIVE_RUN,
 # reported as "not packable" in the packer's own words, never as a pass. Before the proof runs the driver checks that each
 # of its codes is above
 # DRY_PASSED, the proof's highest code today, so a proof whose DRY_PASSED moves up to one of them is refused. A code the
@@ -42,23 +42,23 @@ set -euo pipefail
 # run would go on writing an empty value (Saturnus, #639 PR 821 r=1: layer_sha256= written empty).
 DRIVERS_TOOLS='git sed awk sha256sum mktemp date readlink dirname'
 PACK_FAILED=6
-NOT_PACKABLE_TONIGHT=7
+NOT_PACKABLE_FOR_THE_LIVE_RUN=7
 REFUSED=8
 FAILED=9
 STOP_GRACE_SECONDS=20
-NIGHT_FOLDER_NAME=night
+LIVE_RUN_FOLDER_NAME=live_run
 # The file the proof writes the owner's commands to, and nothing else: the owner's follow script reads its commands
 # from it alone, never from proof.log, which carries the members' text (the threat model on #639).
 OWNER_COMMANDS_NAME=owner_commands
 
-refuse() { printf 'night: %s\n' "$1" >&2; exit "${REFUSED}"; }
+refuse() { printf 'live run: %s\n' "$1" >&2; exit "${REFUSED}"; }
 for tool in ${DRIVERS_TOOLS}; do command -v "${tool}" > /dev/null || refuse "${tool} is not on your PATH"; done
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
 PACKER="${HERE}/pack_main_as_a_dry_layer.sh"
 PROOF_REL='prove_a_clean_install_in_a_throwaway_container/prove_a_clean_install_in_a_throwaway_container.sh'
-USAGE='usage: run_the_night_on_main.sh <ssh-host> --evidence <folder> [--sha <sha40>] [--proof-tree <git checkout>] [-- <proof args>]'
+USAGE='usage: run_the_live_run_on_main.sh <ssh-host> --evidence <folder> [--sha <sha40>] [--proof-tree <git checkout>] [-- <proof args>]'
 
 # The digits of NAME in a script: exactly one line starts `NAME=`, and it is `NAME=<digits>`; otherwise nothing. The
 # same rule as read_a_scripts_constant.mjs, which the tests read the codes with.
@@ -91,7 +91,7 @@ PROOF="${PROOF_TREE}/${PROOF_REL}"
 [[ -z "$(git -C "${PROOF_TREE}" status --porcelain)" ]] || refuse "the proof tree ${PROOF_TREE} is not clean"
 DRY_PASSED="$(a_scripts_constant "${PROOF}" DRY_PASSED)" || refuse "the proof in ${PROOF_TREE} defines no DRY_PASSED, so it takes no --dry-layer"
 NOT_PACKABLE="$(a_scripts_constant "${PACKER}" NOT_PACKABLE)" || refuse "the packer defines no NOT_PACKABLE"
-for code in "${PACK_FAILED}" "${NOT_PACKABLE_TONIGHT}" "${REFUSED}" "${FAILED}"; do
+for code in "${PACK_FAILED}" "${NOT_PACKABLE_FOR_THE_LIVE_RUN}" "${REFUSED}" "${FAILED}"; do
   ((code > DRY_PASSED)) || refuse "the driver's code ${code} is not above the proof's DRY_PASSED ${DRY_PASSED}, so an exit could not say whose it is"
 done
 
@@ -101,7 +101,7 @@ git -C "${REPO}" cat-file -e "${SHA}^{commit}" 2> /dev/null || refuse "${SHA} is
 
 RUN="${EVIDENCE}/$(date +%F)_${SHA:0:7}"
 LAYER="${RUN}/main-${SHA:0:7}.tar.gz"
-[[ ! -e "${LAYER}" ]] || refuse "${LAYER} is there already: tonight's run for this sha has its folder"
+[[ ! -e "${LAYER}" ]] || refuse "${LAYER} is there already: the live run for this sha has its folder"
 mkdir -p "${RUN}"
 
 RUN_TMP="$(mktemp -d)"
@@ -121,7 +121,7 @@ stop() {
     kill -KILL "${CHILD}" 2> /dev/null || true
     wait "${CHILD}" 2> /dev/null || true
   fi
-  printf 'night: stopped by a signal; evidence %s\n' "${RUN}" >&2
+  printf 'live run: stopped by a signal; evidence %s\n' "${RUN}" >&2
   printf 'interrupted=%s\n' "$(date -Is)" >> "${RUN}/run.txt"
   exit "${FAILED}"
 }
@@ -144,7 +144,7 @@ run_child() {
   printf 'run_folder=%s\n' "${RUN}"
   printf 'sha=%s\n' "${SHA}"
   printf 'host=%s\n' "${HOST}"
-  # The proof's code of a dry pass, so the owner's follow script can say whether the night passed without knowing it.
+  # The proof's code of a dry pass, so the owner's follow script can say whether the live run passed without knowing it.
   printf 'dry_passed=%s\n' "${DRY_PASSED}"
   printf 'proof_tree=%s at %s\n' "${PROOF_TREE}" "$(git -C "${PROOF_TREE}" rev-parse HEAD)"
   printf 'started=%s\n' "$(date -Is)"
@@ -161,16 +161,16 @@ if [[ "${CHILD_EXIT}" -ne 0 ]]; then
     # inside a `${VAR:-default}` between double quotes ends the parsing early and eats the line's redirection.
     [[ -n "${PACKERS_REASON}" ]] || PACKERS_REASON="installer/ names differ from its tag's"
     printf 'result=not packable: %s\n' "${PACKERS_REASON}" >> "${RUN}/run.txt"
-    printf 'night: not packable: %s at %s; nothing was proven; evidence %s\n' "${PACKERS_REASON}" "${SHA}" "${RUN}" >&2
-    exit "${NOT_PACKABLE_TONIGHT}"
+    printf 'live run: not packable: %s at %s; nothing was proven; evidence %s\n' "${PACKERS_REASON}" "${SHA}" "${RUN}" >&2
+    exit "${NOT_PACKABLE_FOR_THE_LIVE_RUN}"
   fi
   printf 'result=the packer exited %s\n' "${CHILD_EXIT}" >> "${RUN}/run.txt"
-  printf 'night: the packer exited %s; nothing was proven; evidence %s\n' "${CHILD_EXIT}" "${RUN}" >&2
+  printf 'live run: the packer exited %s; nothing was proven; evidence %s\n' "${CHILD_EXIT}" "${RUN}" >&2
   exit "${PACK_FAILED}"
 fi
 printf 'layer_sha256=%s\n' "$(sha256sum "${LAYER}" | sed 's/ .*//')" >> "${RUN}/run.txt"
 
-# Main's own installer, when the packer packed one: a drifted tree's proof is given it and its digest, so the night
+# Main's own installer, when the packer packed one: a drifted tree's proof is given it and its digest, so the live run
 # proves main's installer rather than the published one and says so on its result line (martha#695 Done-when 2, #696).
 DRY_INSTALLER_ARGS=()
 PACKED_AS="$(awk '/^dry: main.s installer at .* packed as .* \(sha256:[0-9a-f]+\)$/{print; exit}' "${RUN}/pack.log")"
@@ -183,10 +183,10 @@ if [[ -n "${PACKED_AS}" ]]; then
   printf 'dry_installer=%s %s\n' "${DRY_TARBALL}" "${DRY_DIGEST}" >> "${RUN}/run.txt"
 fi
 
-NIGHT_ARGS=()
-if sed -n 's/^USAGE=//p' "${PROOF}" | sed -n '/\[--night </p' | read -r _; then
-  NIGHT_ARGS=(--night "${RUN}/${NIGHT_FOLDER_NAME}")
-  printf 'night_folder=%s\n' "${RUN}/${NIGHT_FOLDER_NAME}" >> "${RUN}/run.txt"
+LIVE_RUN_ARGS=()
+if sed -n 's/^USAGE=//p' "${PROOF}" | sed -n '/\[--live-run </p' | read -r _; then
+  LIVE_RUN_ARGS=(--live-run "${RUN}/${LIVE_RUN_FOLDER_NAME}")
+  printf 'live_run_folder=%s\n' "${RUN}/${LIVE_RUN_FOLDER_NAME}" >> "${RUN}/run.txt"
 fi
 
 OWNER_ARGS=()
@@ -195,12 +195,12 @@ if sed -n 's/^USAGE=//p' "${PROOF}" | sed -n '/\[--owner-commands </p' | read -r
   printf 'owner_commands=%s\n' "${RUN}/${OWNER_COMMANDS_NAME}" >> "${RUN}/run.txt"
 fi
 
-run_child "${PROOF}" "${HOST}" --log "${RUN}/proof.log" "${OWNER_ARGS[@]}" "${NIGHT_ARGS[@]}" --dry-layer "${LAYER}" "${SHA}" "${DRY_INSTALLER_ARGS[@]}" "${PROOF_EXTRA[@]}"
+run_child "${PROOF}" "${HOST}" --log "${RUN}/proof.log" "${OWNER_ARGS[@]}" "${LIVE_RUN_ARGS[@]}" --dry-layer "${LAYER}" "${SHA}" "${DRY_INSTALLER_ARGS[@]}" "${PROOF_EXTRA[@]}"
 PROOF_EXIT="${CHILD_EXIT}"
 printf 'proof_exit=%s\nended=%s\n' "${PROOF_EXIT}" "$(date -Is)" >> "${RUN}/run.txt"
 if [[ "${PROOF_EXIT}" -eq 0 ]]; then
-  printf 'night: the proof claimed a release'"'"'s pass on a dry layer; evidence %s\n' "${RUN}" >&2
+  printf 'live run: the proof claimed a release'"'"'s pass on a dry layer; evidence %s\n' "${RUN}" >&2
   exit "${FAILED}"
 fi
-printf 'night: the proof exited %s (%s is a dry pass); evidence %s\n' "${PROOF_EXIT}" "${DRY_PASSED}" "${RUN}"
+printf 'live run: the proof exited %s (%s is a dry pass); evidence %s\n' "${PROOF_EXIT}" "${DRY_PASSED}" "${RUN}"
 exit "${PROOF_EXIT}"
