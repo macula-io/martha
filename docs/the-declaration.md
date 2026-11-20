@@ -151,7 +151,7 @@ One entry per provider, by a name the crew picks.
 | `key_from` | no | The name of the environment variable that holds the key. |
 | `key_file` | no | The file the key is in: absolute, or under `~/`. Never beside `key_from`, and never the key. |
 | `account` | no | The account it bills. |
-| `billing` | no | How a Claude Code member on a profile of this provider is billed: `subscription` (the owner's sign-in) or `api_key` (the key the launcher carries). Only that credential reaches the member. Left out, the launch picks: the subscription when the owner is signed in, else the key. |
+| `billing` | no | How a Claude Code member on a profile of this provider is billed: `subscription` (the owner's sign-in) or `api_key` (the key the launcher carries). Only that credential reaches the member. Left out, the launch asks the host whether you are signed in: the key only when you are not and the launcher carries one; otherwise the subscription, also when the host cannot say. |
 
 ## `profiles`
 
