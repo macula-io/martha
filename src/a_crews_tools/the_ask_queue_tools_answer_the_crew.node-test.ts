@@ -47,6 +47,8 @@ import { crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
 import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
 import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-ask-queue-tools-'))
@@ -228,6 +230,8 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
     thresholds: THRESHOLDS_WHEN_UNNAMED,
     github: GITHUB_WHEN_UNNAMED,
     transcripts: TRANSCRIPTS_WHEN_UNNAMED,
+    owner_notices: OWNER_NOTICES_WHEN_UNNAMED,
+    clock_zone: CLOCK_ZONE_WHEN_UNNAMED,
     opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
 })
 

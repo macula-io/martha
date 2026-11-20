@@ -36,12 +36,13 @@ import { framed } from '../hand_a_crew_message_to_its_member/hand_a_crew_message
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { AnAgentScript, AStandInsSessionRow, AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 import { PassThrough } from 'node:stream'
-import { hearTheOwnersLines, theCrewToolsHeardBy } from './start_an_engine_member.ts'
+import { hearTheOwnersLines, theCrewToolsHeardBy, theScreenAnEngineStartSees } from './start_an_engine_member.ts'
 import { ONLY_THE_CREW_COMMAND, TYPED_TURNS_ARE_NOT_THERE_YET } from './the_owners_lines_at_the_tab.ts'
 import { THE_CREW_COMMAND } from '../claude_code_relay/hooks/crew_command.ts'
 import type { ACrewToolAsked } from '../host_contract/host_contract.ts'
 import { SAY_TO_THE_CREW_TOOL } from '../send_a_crew_message/say_to_the_crew_tool.ts'
 import { SEE_THE_CREW_TOOL } from '../see_the_crew/the_see_the_crew_tool.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
@@ -545,4 +546,12 @@ test('#927 part 2 DW3, DW4, DW6: at a running engine member\'s tab, /crew shows 
   const said = (await readTheChannel(theChannelOf(place))).filter((placed) => placed.message.text === A_CREW_MESSAGE)
   assert.deepEqual(said.map((placed) => ({ from: placed.message.from, to: placed.message.to })), [{ from: MEMBER, to: [A_CREW_MATE] }], 'the mate was not said the text once, from this member')
   assert.equal(theRequests(engine.heard).filter((request) => request.method === 'session/prompt').length, 1, 'a typed line reached the engine as a prompt')
+})
+
+test('#931 C: an engine member\'s owner\'s screen is told of the notices its crew declares', () => {
+  // A list that is not the default: one notice the table shows as a dialog, and one it does not.
+  const declared = ['agent_completed', 'idle_prompt']
+  assert.notDeepEqual(declared, OWNER_NOTICES_WHEN_UNNAMED.show)
+  const start = { member: MEMBER, places: { dashboard: '/the-rows' }, settings: { house_rules: { owner_bell: undefined }, owner_notices: { show: declared } }, stdio: 'pipe' } as unknown as Parameters<typeof theScreenAnEngineStartSees>[0]
+  assert.deepEqual(theScreenAnEngineStartSees(start, () => false).shown_notices, declared, 'the owner\'s screen is not told of the crew\'s declared notices')
 })

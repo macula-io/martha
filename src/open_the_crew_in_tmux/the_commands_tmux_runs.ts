@@ -15,6 +15,7 @@
 // another member's window. That is a speed bump, not a boundary, as kitty's files are (martha#1 decision 2). Other
 // users cannot: tmux keeps its socket in a folder only the owner may enter, and checks the user of every client.
 
+import { THE_FIRST_PROMPT_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { THE_TMUX_VARIABLE } from '../ring_the_owner/ring_the_owner.ts'
 
 /** tmux, and the name of Martha's own server beside the owner's: kept here, so the words are said once. */
@@ -81,9 +82,13 @@ export interface AMembersWindow {
   readonly member: string
   /** The command that is this release of `martha`: the program and its arguments before the act. */
   readonly martha: readonly string[]
+  /** The owner's first prompt for this member, typed in once its session starts (martha#919); none when not given. */
+  readonly prompt?: string
 }
 
-const theMemberHeld = (window: AMembersWindow): readonly string[] => [...window.martha, THE_ACTS_A_WINDOW_RUNS.held, window.member]
+const theMemberHeld = (window: AMembersWindow): readonly string[] => [
+  ...window.martha, THE_ACTS_A_WINDOW_RUNS.held, window.member, ...(window.prompt === undefined ? [] : [THE_FIRST_PROMPT_SWITCH, window.prompt]),
+]
 
 /** The command that opens the crew's session, detached, with `window.member`'s window as its first. */
 export const theSessionOpened = (window: AMembersWindow): readonly string[] => [
@@ -151,6 +156,50 @@ export function whyTmuxCannotOpen(tmuxSays: string | undefined, id: string | nul
   const why = whyNotATarget(id)
   return why === undefined ? undefined : `this crew opens in a tmux session named by the declaration's "id", and ${why}.`
 }
+
+/**
+ * The member's own pane, when this process runs in a window of Martha's own tmux server: tmux names its server's socket
+ * in TMUX (`<socket path>,<pid>,<session>`) and the pane in TMUX_PANE (martha#919). Undefined anywhere else.
+ */
+export function thePaneOnMarthasServer(env: Readonly<Record<string, string | undefined>>): string | undefined {
+  const socket = theSocketOfThisTmux(env)
+  const pane = env[`${THE_TMUX_VARIABLE}_PANE`]
+  return socket !== undefined && socket.split('/').at(-1) === MARTHAS_SERVER && pane !== undefined && /^%\d+$/.test(pane) ? pane : undefined
+}
+
+/** The socket of the tmux server this process runs in, as TMUX names it (`<socket path>,<pid>,<session>`); undefined outside tmux. */
+export const theSocketOfThisTmux = (env: Readonly<Record<string, string | undefined>>): string | undefined => env[THE_TMUX_VARIABLE]?.split(',')[0]
+
+/**
+ * The command that asks a tmux server for the path of its own socket: a socket's name alone does not make a server
+ * Martha's, since the owner may start one with `tmux -S <folder>/martha` (martha#919, review r=1).
+ */
+export const theServersSocketAsked: readonly string[] = ['display-message', '-p', '#{socket_path}']
+
+/**
+ * What each leading character a host's composer reads as a command, not as words, would run: `/` a slash command, `!`
+ * a shell command (Claude Code's shell mode, seen typed through `send-keys -l` on 2.1.329; martha#919 review r=1).
+ */
+const THE_COMPOSERS_COMMAND_MARKS: Readonly<Record<string, string>> = { '/': 'a slash command', '!': 'a shell command' }
+
+/**
+ * Why `text` cannot be typed in as a member's first prompt, or undefined when it can (martha#919). It is typed into the
+ * host's composer as the owner's own keys, so a leading `-` is only text; a leading `/` or `!` would run a command, and
+ * a line break would end the turn early and start another, so each is refused by name, as is any other control character.
+ */
+export function whyNotAFirstPrompt(text: string): string | undefined {
+  if (text.trim() === '') return 'a first prompt is empty'
+  if ([...text].some((character) => character.charCodeAt(0) < 0x20 || character.charCodeAt(0) === 0x7f)) return `the first prompt ${JSON.stringify(text)} holds a line break or another control character, which would end the turn it is typed as and start another`
+  const mark = text.trimStart()[0]!
+  const runs = THE_COMPOSERS_COMMAND_MARKS[mark]
+  return runs === undefined ? undefined : `the first prompt ${JSON.stringify(text)} starts with ${mark}, which the member would run as ${runs}, not read as your words`
+}
+
+/** The command that types `text` into `pane` as keys, each as written: `-l` reads no key name, `--` ends tmux's switches. */
+export const theTextTyped = (pane: string, text: string): readonly string[] => ['send-keys', '-t', pane, '-l', '--', text]
+
+/** The command that ends the typed turn: the Enter key, in `pane`. */
+export const theTurnSent = (pane: string): readonly string[] => ['send-keys', '-t', pane, 'Enter']
 
 /** The environment Martha's server is started with: the owner's, with no variable of a tmux this may run inside. */
 export function outsideAnyTmux(env: Readonly<Record<string, string | undefined>>): Record<string, string> {

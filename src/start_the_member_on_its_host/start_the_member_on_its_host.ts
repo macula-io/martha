@@ -99,6 +99,8 @@ export interface AStartOnItsHost {  readonly member: string
   /** The owner's lines at the member's tab (martha#927 part 2): a test's own; a real start gives none, and the tab's
    * terminal is read when it is the owner's. */
   readonly owners_lines?: NodeJS.ReadableStream
+  /** Called each time the member's relay reports its session started (martha#919): where a first prompt is typed in. */
+  readonly hear_session_start?: () => void
   tellOwner(line: string): void
 }
 
@@ -350,6 +352,7 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeM
     stdio: start.stdio,
     tellOwner: (line) => start.tellOwner(line),
     ...(start.hear_relay_place === undefined ? {} : { hearRelayPlace: start.hear_relay_place }),
+    ...(start.hear_session_start === undefined ? {} : { hearSessionStart: start.hear_session_start }),
     turns: turnsRaised(),
     crew_tools: (sessions, member) =>
       crewToolsOver(theCrewToolsOfAStart(start, sessions, member.served_tools, {

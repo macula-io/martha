@@ -20,6 +20,8 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { A_FRESH_BUDGET, BACKOFF_MAX_MS, BACKOFF_MIN_MS, CALLS_PER_WAIT, GITHUB_BUDGET_PLACE, THE_BUDGET_FILE, theBudgetIn, theHeadsOfTheWaits, theTextOf, type TheGithubSpender } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { waitForCi } from './wait_for_ci.ts'
 import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
+import { theCiWaitOver } from './the_ci_wait_tool.ts'
 /** The crew's default, as a declaration that names no block reads it (martha#931 B). */
 const THE_FLOOR = GITHUB_WHEN_UNNAMED.budget_floor
 
@@ -85,7 +87,7 @@ const aRunner = (
 const theReadsOf = (asked: readonly (readonly string[])[]): readonly (readonly string[])[] => asked.filter((args) => !asksWhatIsLeft(args))
 
 /** A spender over the place and the runner the test gives it, with a window the test wrote or none. */
-const aSpender = (place: CrewPlace, clock: { now: () => number }, run: (args: readonly string[]) => Promise<ProcessOutcome>): TheGithubSpender => ({ place, clock, run, floor: THE_FLOOR })
+const aSpender = (place: CrewPlace, clock: { now: () => number }, run: (args: readonly string[]) => Promise<ProcessOutcome>): TheGithubSpender => ({ place, clock, run, floor: THE_FLOOR, zone: CLOCK_ZONE_WHEN_UNNAMED })
 
 /** The budget a test starts from: a window with plenty left and the wait before a call over. */
 const withRoom = (now: number): typeof A_FRESH_BUDGET => ({ ...A_FRESH_BUDGET, remaining: THE_FLOOR * 10, resets_at: now + A_HOUR })
@@ -229,4 +231,15 @@ test('#320 B: a run that was cancelled or timed out answers red, never green', a
     assert.ok(!('refusal' in held), 'the budget could not be read back')
     assert.equal(held.greens[A_SHA], undefined, `a ${conclusion} run was kept as a green for the whole crew`)
   }
+})
+
+test('#931 C: a wait still running names the moment of its next read in the spender\'s declared zone', async () => {
+  const zone = 'Asia/Kolkata'
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  const runner = aRunner([theRuns(aRun(1, 'in_progress', null))])
+  const answered = await theCiWaitOver({ ...aSpender(place, clock, runner.run), zone }, { repo: A_REPO, sha: A_SHA })
+  assert.ok('answer' in answered)
+  assert.ok(answered.answer.endsWith(`may be spent at ${theClockOf(clock.now() + BACKOFF_MIN_MS, zone)}.`), `the next read's moment is not in the declared zone: ${answered.answer}`)
 })
