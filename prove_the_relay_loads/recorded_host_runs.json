@@ -64,7 +64,7 @@
   },
   {
     "file": "src/drive_the_recorded_host/the_crew_command_on_the_recorded_host.node-test.ts",
-    "cases": 2,
-    "proves": "the owner's /crew at a member's tab draws the crew or sends one message, and the model is sent nothing (martha#927)"
+    "cases": 3,
+    "proves": "the owner's /crew at a member's tab draws the crew or sends one message, /martha opens the pane, and the model is sent nothing (martha#927)"
   }
 ]

@@ -425,6 +425,8 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // by itself only when the crew's declaration switched the dashboard on.
   on('session.start', async ($: CrewEngine, e: unknown, next: CrewNext) => {
     for (const tool of await toolsFromTheLauncher($)) await $.tool.register(tool)
+    // Both commands are registered, or the host answers "Unknown command" and never reaches the hooks below (martha#927).
+    await $.command.register({ name: PANE, description: "Open the crew's pane" })
     await $.command.register({ name: CREW_COMMAND, description: 'See your crew, or say one thing to one member', argumentHint: '[<member> <text>]' })
     const first = await askTheLauncher($, 'see_the_crew', {})
     if (paneIn(first)?.open_at_start === true) await openThePane($)

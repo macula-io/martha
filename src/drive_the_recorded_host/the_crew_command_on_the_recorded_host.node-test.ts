@@ -105,3 +105,13 @@ test('#927 DW2 DW6: /crew <member> <text> sends it as this member and draws the 
   assert.match(drawnWithoutGaps(ran.shown), new RegExp(`sentasmessage\\d+to${THE_OTHER_MEMBER}\\.`), `the launcher's receipt was not drawn:\n${plainTextOf(ran.shown).slice(-3000)}`)
   assert.equal(ran.requests.length, 0, `the model was sent ${ran.requests.length} request(s) for a /crew: ${JSON.stringify(ran.requests.map((request) => request.body['messages'])).slice(-2000)}`)
 })
+
+// The `/martha` pane the `/crew` lines are the same as (martha#927, found on the way): the mod hooked the command but
+// never registered it, so the host answered "Unknown command: /martha" and the pane only ever opened by itself.
+test('#927: /martha at a member\'s tab opens the crew\'s pane, and the model is sent nothing', { skip: RECORDED_HOST_SKIP }, async (t) => {
+  const project = approvedProject(t)
+  const ran = await theOwnerTypesTheCommand(project, '/martha', 'online·')
+  assert.equal(ran.exit_code, 0, plainTextOf(ran.shown).slice(-3000))
+  assert.ok(!drawnWithoutGaps(ran.shown).includes('Unknowncommand'), `the host does not know /martha:\n${plainTextOf(ran.shown).slice(-3000)}`)
+  assert.equal(ran.requests.length, 0, `the model was sent ${ran.requests.length} request(s) for a /martha: ${JSON.stringify(ran.requests.map((request) => request.body['messages'])).slice(-2000)}`)
+})
