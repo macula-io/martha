@@ -5,6 +5,7 @@
 import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { TREE_PARAMETER } from '../install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts'
+import { THE_ENGINES_USAGE_HOST } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 
 /**
  * Why the engine's approving mode is written by the same word the owner types at `martha approve`. The constant
@@ -27,6 +28,13 @@ const THE_ENGINES_OWN_CONFIG_FOLDER = "the config folder under the engine's path
  */
 const THE_ENGINES_TREE_TOOL = "the engine's tree tool is the developer extension's own (martha#541); the constant is the mesh server's confinement parameter"
 
+/**
+ * Why the engine's own folders are written by the same word as the host an engine member's usage is kept under. The
+ * test spells the folders the engine's paths module names after its binary; the constant is the name a usage row
+ * carries (martha#999 package 5), which no folder of a launch reads.
+ */
+const THE_ENGINES_FOLDER_NAME = "the engine's folders are named after its binary (martha#541); the constant is the host a usage row is kept under (martha#999)"
+
 export const COINCIDENCES: readonly Exception[] = [
   { value: CONFIG, file: 'launch_a_goose_member/launch_a_goose_member.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
   // The test spells the engine root's folders as the design table names them, so a reader that drops one fails it.
@@ -36,4 +44,6 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: CONFIG, file: 'launch_a_goose_member/the_roots_watch.node-test.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
   // The rows test spells the recorded tool names as the design table does, so a row keyed by another name fails it.
   { value: TREE_PARAMETER, file: 'launch_a_goose_member/the_engines_decisions.node-test.ts', reason: THE_ENGINES_TREE_TOOL },
+  // The folders test spells the engine's folders as the design table names them.
+  { value: THE_ENGINES_USAGE_HOST, file: 'launch_a_goose_member/the_engines_decisions.node-test.ts', reason: THE_ENGINES_FOLDER_NAME },
 ]

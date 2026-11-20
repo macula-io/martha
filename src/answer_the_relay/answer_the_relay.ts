@@ -185,6 +185,11 @@ export interface MemberRelayPlace {
    * launch tells neither and every other answer is as it was.
    */
   readonly telling?: TheMembersTelling
+  /**
+   * Why a call this member's billing cannot run is refused before anything else asks of it (martha#957 gap 13): an
+   * Artifact call by a member billed by the key, which carries no claude.ai login. Absent, no call is refused for it.
+   */
+  readonly refusesACallItsBillingCannotRun?: ((tool: string) => string | undefined) | undefined
   /** Sends SIGKILL to the member's process group. */
   stopMember(why: string): void
 }
@@ -413,6 +418,7 @@ const placesOfTheEntry = (place: MemberRelayPlace, reviews: TheReviewSpawns, age
   signed_runs: place.signed_runs,
   // This host's own two decisions, closed over the files it reads, the launch's directory, the owner's home and the
   // machine (packages 2-4's design, row "2"): they stay here until each host has its own recorded fact set (#257 row 5).
+  refusesACallItsBillingCannotRun: place.refusesACallItsBillingCannotRun,
   refusesAWriteToTheOwnersSettings: (input) => namesTheOwnersSettings(input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home, CLAUDE_CODE_FILE_TOOLS),
   refusesAWriteToTheOwnersMemory: (tool, input) => writesTheOwnersMemory(tool, input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine, CLAUDE_CODE_FILE_TOOLS),
   // What recording a result needs (PR 3): this host's own table and switches as values, and its two decisions over its

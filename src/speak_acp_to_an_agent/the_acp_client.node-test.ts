@@ -362,3 +362,30 @@ test('a listener that throws is noted, and the turn goes on (#541 package A, des
     await exited
   }
 })
+
+/** A usage the engine reports, as the standard ACP `usage_update` carries it (martha-engine acp/server.rs build_usage_updates). */
+const aUsage = (used: number, size: number, cost?: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> => ({ sessionUpdate: 'usage_update', used, size, ...(cost === undefined ? {} : { cost }) })
+
+test('#999 package 5: the client keeps each session\'s latest usage, mid-turn and at the turn\'s end, and a session that reported none has none (mutant: the usage not kept)', async () => {
+  const first = aUsage(1_200, 200_000)
+  const last = aUsage(152_000, 200_000, { amount: 0.75, currency: 'USD' })
+  await withTheAgent({ turns: [[{ update: first }, { say: 'mid' }, { update: last }]] }, allow, async (client) => {
+    const { sessionId } = await client.newSession('/')
+    assert.equal(client.usageOf(sessionId), undefined)
+    await client.prompt(sessionId, 'go')
+    assert.deepEqual(client.usageOf(sessionId), { used: 152_000, size: 200_000, cost: { amount: 0.75, currency: 'USD' } })
+    assert.equal(client.usageOf('another-session'), undefined)
+  })
+})
+
+test('#999 package 5: a usage update the client cannot read is noted, and drops what was kept, so a stale share is never read as now (mutant: the malformed update kept, or the old one left)', async () => {
+  const unreadable = [aUsage(10, 0), { sessionUpdate: 'usage_update', used: 'many', size: 100 }, aUsage(10, 100, { amount: 'cheap', currency: 'USD' })]
+  for (const bad of unreadable) {
+    await withTheAgent({ turns: [[{ update: aUsage(50, 100) }, { update: bad }]] }, allow, async (client) => {
+      const { sessionId } = await client.newSession('/')
+      await client.prompt(sessionId, 'go')
+      assert.equal(client.usageOf(sessionId), undefined, JSON.stringify(bad))
+      assert.ok(client.notes.some((note) => note.startsWith('a usage update this client cannot read')), JSON.stringify(client.notes))
+    })
+  }
+})

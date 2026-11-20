@@ -108,6 +108,7 @@ import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_hando
 import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { FILE_A_FRICTION_NOTE_TOOL, fileAFrictionNote } from '../file_a_friction_note/the_friction_tool.ts'
 import { startSweepingTheNotes } from '../file_a_friction_note/the_friction_sweep.ts'
+import type { AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
@@ -193,6 +194,8 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * declaration naming one is then refused — nothing here invents a model list.
    */
   readonly models?: ModelVocabulary
+  /** The host a session's usage is kept under (martha#999 package 5): an engine launch names its own; Claude Code when none. */
+  readonly usage_host?: AUsageHost
   /** The model this member was launched on (martha#315): what its row says until a switch is confirmed. */
   readonly launched_on?: string
   /**
@@ -1041,6 +1044,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     root: places.root,
     documents: places.documents,
     models: places.models ?? NO_MODEL_NAMED,
+    ...(places.usage_host === undefined ? {} : { usage_host: places.usage_host }),
     ledger: places.ledger,
     row_model: state.row_model,
     began_at: state.began_at,
