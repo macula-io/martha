@@ -328,15 +328,15 @@ export const UP = 'up'
 export const CLAUDE_SWITCH = '--claude'
 
 /**
- * `martha up --claude` (martha#511): the team declared at this folder, or its missing Claude Code members added, then
- * every Claude Code member that is not running opened in a kitty tab of its own. Plain `martha up` is the engine's.
+ * `martha up --claude` (martha#511): the team seeded at this folder when it has no declaration, then every Claude Code
+ * member the declaration names that is not running opened in a kitty tab of its own, on its own model. The declaration
+ * is the config: no member is added back. Plain `martha up` is the engine's.
  */
 async function up(io: CommandIo, places: Places): Promise<number> {
   if (!io.terminal.is_terminal) return refused(io, START_NEEDS_A_TERMINAL)
-  const declared = await declareTheTeam({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, state: places.state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: CLAUDE_CODE, members: CLAUDE_CODE_TEAM })
+  const declared = await declareTheTeam({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, state: places.state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: CLAUDE_CODE, seed: CLAUDE_CODE_TEAM })
   if (!declared.declared) return refused(io, declared.refusal)
-  if (declared.wrote) io.out(`Declared a team in ${declared.declaration}: ${declared.added.join(', ')}.`)
-  else if (declared.added.length > 0) io.out(`Added to the team in ${declared.declaration}: ${declared.added.join(', ')}.`)
+  if (declared.wrote) io.out(`Declared a team in ${declared.declaration}: ${declared.settings.members.map((member) => member.name).join(', ')}. Change it with martha crew, or edit the file.`)
   return openTheCrew(io, places, (settings, member) => theHostOfMember(settings, member) === CLAUDE_CODE)
 }
 

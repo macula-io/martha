@@ -5,14 +5,15 @@
 // the engine. The workspace is not a git checkout, so the crew is the folder's own, keyed in Martha's state by its real
 // path (../keep_martha_state_outside_the_checkout, crewKeyOf): every member started there reads one store and one channel.
 //
-// One declaration, written by whichever of the two commands runs first, with the parts both share: the owner, the team's
-// table, how often a session reads the channel and the workspace layout. Each command then adds only its own members
-// that are missing, through the owner's own `crew add` change (../declare_crew/change_a_member.ts), so a second run adds
-// nothing and a member the owner removed is not the other command's business. Every member names its own host, so the
-// command that starts one host's members can tell them by the declaration alone.
+// The members are config, not code (DECIDED 2026-11-20, Raf: "are the members hardcoded or via config?"). The team in
+// ./the_claude_code_team.json only seeds the first declaration, written by whichever command runs first, with the parts
+// every member shares: the owner, the team's table, how often a session reads the channel and the workspace layout.
+// From then on the declaration is the config: each command starts the members it declares on its own host, with each
+// member's own name and model, and a run never adds a member back. The owner changes the crew with `martha crew add`,
+// `remove` and `set-model`, or by editing the file. Every member names its own host, so the command that starts one
+// host's members can tell them by the declaration alone.
 //
-// It never writes over a declaration it did not read: the first write is O_EXCL, and each added member is written only
-// while the file still holds the bytes it was changed from (../declare_a_solo_crew/write_a_changed_declaration.ts).
+// It never writes over a declaration: the first write is O_EXCL.
 
 import fs, { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -38,10 +39,7 @@ import {
   type TheVocabulariesOfHost,
   type WorkspaceLayout,
 } from '../declare_crew/declare_crew.ts'
-import { ADD, aChangedDeclaration } from '../declare_crew/change_a_member.ts'
-import { sameMemberName } from '../declare_crew/member_names.ts'
 import { declarationDirectory, NO_OWNER, writeOnce } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { nodeIdsFor, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
@@ -85,7 +83,7 @@ export const CLAUDE_CODE_WORKERS = THE_CLAUDE_CODE_TEAM.workers
 /** The prefix a Claude Code worker's name takes before its number. */
 export const CLAUDE_CODE_WORKER_PREFIX = `${CLAUDE_CODE_TEAM_MODEL}-`
 
-/** The members `martha up --claude` adds (martha#511): one Supervisor and the workers, each on Claude Code. */
+/** The Claude Code members the first declaration is seeded with (martha#511): one Supervisor and the workers. */
 export const CLAUDE_CODE_TEAM: readonly TeamMember[] = [
   { name: SUPERVISOR_ROLE, role: SUPERVISOR_ROLE, model: CLAUDE_CODE_TEAM_MODEL, host: CLAUDE_CODE },
   ...Array.from({ length: CLAUDE_CODE_WORKERS }, (_, i) => ({ name: `${CLAUDE_CODE_WORKER_PREFIX}${i + 1}`, role: BUILDER_ROLE, model: CLAUDE_CODE_TEAM_MODEL, host: CLAUDE_CODE })),
@@ -127,12 +125,12 @@ export interface TeamRequest {
   readonly vocabularies: TheVocabulariesOfHost
   /** The crew-level host a first write names. */
   readonly host: string
-  /** The members this command adds when they are missing. */
-  readonly members: readonly TeamMember[]
+  /** The members the first declaration is seeded with; once a declaration exists, it is not read. */
+  readonly seed: readonly TeamMember[]
 }
 
 export type TeamDeclared =
-  | { readonly declared: true; readonly settings: CrewSettings; readonly declaration: string; readonly wrote: boolean; readonly added: readonly string[] }
+  | { readonly declared: true; readonly settings: CrewSettings; readonly declaration: string; readonly wrote: boolean }
   | { readonly declared: false; readonly refusal: string }
 
 /** The crew the reader makes of the declaration at `root`, or its refusal's words. */
@@ -151,24 +149,12 @@ function writeTheFirst(request: TeamRequest, declaration: string): string | unde
   if (owner === '') return NO_OWNER
   const unmade = declarationDirectory(join(request.root, DECLARATION_DIRECTORY))
   if (unmade !== undefined) return unmade
-  return writeOnce(declaration, `${JSON.stringify(teamDeclaration(owner, theLayoutAt(request.root), request.host, request.members), null, 2)}\n`)
-}
-
-/** Adds each of `members` the declaration does not name, one change at a time; the names added, or why not. */
-async function addTheMissing(request: TeamRequest, settings: CrewSettings): Promise<readonly string[] | string> {
-  const missing = request.members.filter((member) => !settings.members.some((declared) => sameMemberName(declared.name, member.name)))
-  for (const member of missing) {
-    const change = await aChangedDeclaration(request.documents, request.root, request.vocabularies, { kind: ADD, member: member.name, role: member.role, model: member.model, host: member.host })
-    if ('refusal' in change) return change.refusal
-    const unwritten = writeAChangedDeclaration(request.root, change)
-    if (unwritten !== undefined) return unwritten
-  }
-  return missing.map((member) => member.name)
+  return writeOnce(declaration, `${JSON.stringify(teamDeclaration(owner, theLayoutAt(request.root), request.host, request.seed), null, 2)}\n`)
 }
 
 /**
- * The team declared at `root`: written with every member of the request when there is no declaration, else with each
- * missing one added; then read back, and each added member given its node id, as `martha init` gives one.
+ * The team declared at `root`: seeded with the request's members when there is no declaration, else read as it is;
+ * then the seeded members are given their node ids, as `martha init` gives them.
  */
 export async function declareTheTeam(request: TeamRequest): Promise<TeamDeclared> {
   const declaration = join(request.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
@@ -177,13 +163,9 @@ export async function declareTheTeam(request: TeamRequest): Promise<TeamDeclared
     const unwritten = writeTheFirst(request, declaration)
     if (unwritten !== undefined) return { declared: false, refusal: unwritten }
   }
-  const before = await readTheCrew(request)
-  if (typeof before === 'string') return { declared: false, refusal: before }
-  const added = wrote ? request.members.map((member) => member.name) : await addTheMissing(request, before)
-  if (typeof added === 'string') return { declared: false, refusal: added }
   const settings = await readTheCrew(request)
   if (typeof settings === 'string') return { declared: false, refusal: settings }
-  const ids = nodeIdsFor(request.state, added)
+  const ids = nodeIdsFor(request.state, wrote ? request.seed.map((member) => member.name) : [])
   if ('refusal' in ids) return { declared: false, refusal: ids.refusal }
-  return { declared: true, settings, declaration, wrote, added }
+  return { declared: true, settings, declaration, wrote }
 }

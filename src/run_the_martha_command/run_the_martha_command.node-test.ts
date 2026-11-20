@@ -275,7 +275,7 @@ test('#511: martha up --claude in a workspace that is no checkout declares the t
   const kitty = kittyThatAnswers(place)
   const run = marthaOnATerminal(place, kitty.env, UP, CLAUDE_SWITCH)
   assert.equal(run.status, EXIT_REFUSED, run.said)
-  assert.ok(run.said.includes(`Declared a team in ${join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)}: ${CLAUDE_CODE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
+  assert.ok(run.said.includes(`Declared a team in ${join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)}: ${CLAUDE_CODE_TEAM.map((member) => member.name).join(', ')}. Change it with martha crew, or edit the file.`), run.said)
   assert.ok(run.said.includes(NO_DESKTOP_SESSION), run.said)
   assert.equal(existsSync(kitty.started), false, 'kitty was started with no desktop session')
   const again = marthaOnATerminal(place, kitty.env, UP, CLAUDE_SWITCH)
@@ -290,16 +290,36 @@ test('#511: on a desktop, martha up --claude opens kitty with a tab for each Cla
   const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
   assert.ok('directory' in state)
   const documents = { read: (path: string) => import('node:fs/promises').then((fs) => fs.readFile(path, 'utf8')) }
-  const first = await declareTheTeam({ root: place.root, owner: 'Ada Owner', state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: THE_ENGINES_HOST, members: [engine] })
+  const first = await declareTheTeam({ root: place.root, owner: 'Ada Owner', state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: THE_ENGINES_HOST, seed: [...CLAUDE_CODE_TEAM, engine] })
   assert.ok(first.declared, first.declared ? '' : first.refusal)
   const run = marthaOnATerminal(place, { ...kitty.env, WAYLAND_DISPLAY: 'wayland-511' }, UP, CLAUDE_SWITCH)
   assert.equal(run.status, EXIT_DONE, run.said)
-  assert.ok(run.said.includes(`Added to the team in ${join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)}: ${CLAUDE_CODE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
   assert.ok(existsSync(kitty.started), 'kitty was not started')
   const session = readFileSync(join(state.directory, KITTY_PLACE, SESSION_FILE), 'utf8')
   const tabs = session.split('\n').filter((line) => line.startsWith('new_tab ')).map((line) => line.slice('new_tab '.length))
   assert.deepEqual(tabs, CLAUDE_CODE_TEAM.map((member) => member.name))
   assert.ok(!session.includes(engine.name), session)
+})
+
+test('#511: the declaration is the config: after the first run, up --claude opens exactly the members it declares, on their own models, and adds no default back', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const file = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  assert.equal(marthaOnATerminal(place, kitty.env, UP, CLAUDE_SWITCH).status, EXIT_REFUSED, 'the first run seeds the declaration and stops at kitty')
+  // The owner's edit: two workers instead of three, both on another model the host runs.
+  const declared = JSON.parse(readFileSync(file, 'utf8')) as { members: { name: string; model: string }[] }
+  const kept = declared.members.filter((member) => member.name !== 'opus-3').map((member) => (member.name === 'supervisor' ? member : { ...member, model: 'sonnet' }))
+  const edited = `${JSON.stringify({ ...declared, members: kept }, null, 2)}\n`
+  writeFileSync(file, edited)
+
+  const run = marthaOnATerminal(place, { ...kitty.env, WAYLAND_DISPLAY: 'wayland-511' }, UP, CLAUDE_SWITCH)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.equal(readFileSync(file, 'utf8'), edited, 'up --claude changed the owner\'s declaration')
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok('directory' in state)
+  const session = readFileSync(join(state.directory, KITTY_PLACE, SESSION_FILE), 'utf8')
+  const tabs = session.split('\n').filter((line) => line.startsWith('new_tab ')).map((line) => line.slice('new_tab '.length))
+  assert.deepEqual(tabs, ['supervisor', 'opus-1', 'opus-2'])
 })
 
 // --- the owner's release and the gate (martha#321) -------------------------------

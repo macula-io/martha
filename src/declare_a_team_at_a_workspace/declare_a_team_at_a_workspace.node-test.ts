@@ -4,7 +4,7 @@
 // Real directories under a temporary home. Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -48,7 +48,7 @@ function workspaceFor(t: TestContext, clones: boolean): { root: string; state: M
   return { root, state }
 }
 
-const requestFor = (root: string, state: MarthaState, members: readonly TeamMember[], owner: string | null = 'Ada Owner'): TeamRequest => ({ root, owner, state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: CLAUDE_CODE, members })
+const requestFor = (root: string, state: MarthaState, seed: readonly TeamMember[], owner: string | null = 'Ada Owner'): TeamRequest => ({ root, owner, state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: CLAUDE_CODE, seed })
 
 test('#511: up --claude declares a team at a folder that is no checkout: a Supervisor and three workers, each on Claude Code running Opus', async (t) => {
   const { root, state } = workspaceFor(t, false)
@@ -100,35 +100,46 @@ test('#511: a second up --claude adds nothing and leaves the file byte for byte'
   const again = await declareTheTeam(requestFor(root, state, CLAUDE_CODE_TEAM))
   assert.ok(again.declared, again.declared ? '' : again.refusal)
   assert.equal(again.wrote, false)
-  assert.deepEqual(again.added, [])
   assert.equal(readFileSync(file, 'utf8'), before)
 })
 
-test('#511: the other command adds only its own missing members, on their own host, and every member keeps its own', async (t) => {
+test('#511: the declaration is the config: a later run with another seed adds nothing, and the file is left byte for byte', async (t) => {
   const { root, state } = workspaceFor(t, false)
   assert.ok((await declareTheTeam(requestFor(root, state, CLAUDE_CODE_TEAM))).declared)
-  const engine = await declareTheTeam({ ...requestFor(root, state, ENGINE_MEMBERS), host: THE_ENGINES_HOST })
-  assert.ok(engine.declared, engine.declared ? '' : engine.refusal)
-  assert.deepEqual(engine.added, ENGINE_MEMBERS.map((member) => member.name))
+  const file = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  const before = readFileSync(file, 'utf8')
+  const later = await declareTheTeam({ ...requestFor(root, state, ENGINE_MEMBERS), host: THE_ENGINES_HOST })
+  assert.ok(later.declared, later.declared ? '' : later.refusal)
+  assert.equal(later.wrote, false)
+  assert.equal(readFileSync(file, 'utf8'), before)
+  assert.deepEqual(later.settings.members.map((member) => member.name), CLAUDE_CODE_TEAM.map((member) => member.name))
+})
+
+test('#511: a member the owner removed and a model the owner changed stay as the owner left them', async (t) => {
+  const { root, state } = workspaceFor(t, false)
+  assert.ok((await declareTheTeam(requestFor(root, state, CLAUDE_CODE_TEAM))).declared)
+  const file = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  const declared = JSON.parse(readFileSync(file, 'utf8')) as { members: { name: string; model: string }[] }
+  const edited = `${JSON.stringify({ ...declared, members: declared.members.slice(0, -1).map((member) => ({ ...member, model: 'sonnet' })) }, null, 2)}\n`
+  writeFileSync(file, edited)
+  const again = await declareTheTeam(requestFor(root, state, CLAUDE_CODE_TEAM))
+  assert.ok(again.declared, again.declared ? '' : again.refusal)
+  assert.equal(readFileSync(file, 'utf8'), edited)
+  assert.deepEqual(again.settings.members.map((member) => [member.name, member.model]), [['supervisor', 'sonnet'], ['opus-1', 'sonnet'], ['opus-2', 'sonnet']])
+})
+
+test('#511: a first run seeded with both hosts\' members declares each on its own host', async (t) => {
+  const { root, state } = workspaceFor(t, false)
+  const declared = await declareTheTeam(requestFor(root, state, [...CLAUDE_CODE_TEAM, ...ENGINE_MEMBERS]))
+  assert.ok(declared.declared, declared.declared ? '' : declared.refusal)
   const settings = await declareCrewOnHosts(documents, root, THE_VOCABULARIES_OF_HOST)
-  // The crew-level host the first command wrote stays; each member's own host says where it starts.
-  assert.equal(settings.host, CLAUDE_CODE)
   assert.deepEqual(settings.members.filter((member) => theHostOfMember(settings, member) === THE_ENGINES_HOST).map((member) => member.name), ENGINE_MEMBERS.map((member) => member.name))
   assert.deepEqual(settings.members.filter((member) => theHostOfMember(settings, member) === CLAUDE_CODE).map((member) => member.name), CLAUDE_CODE_TEAM.map((member) => member.name))
   const written = JSON.parse(readFileSync(join(root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as { members: Record<string, unknown>[] }
   for (const member of written.members) assert.ok(typeof member[HOST] === 'string', String(member['name']))
 })
 
-test('#511: the engine\'s command run first writes the shared parts, and up --claude then adds its own', async (t) => {
-  const { root, state } = workspaceFor(t, false)
-  assert.ok((await declareTheTeam({ ...requestFor(root, state, ENGINE_MEMBERS), host: THE_ENGINES_HOST })).declared)
-  const claude = await declareTheTeam(requestFor(root, state, CLAUDE_CODE_TEAM))
-  assert.ok(claude.declared, claude.declared ? '' : claude.refusal)
-  assert.equal(claude.wrote, false)
-  assert.deepEqual(claude.added, CLAUDE_CODE_TEAM.map((member) => member.name))
-})
-
-test('#511: every member a run added has a node id kept in Martha\'s state, none of them in the workspace', async (t) => {
+test('#511: every member the first run seeds has a node id kept in Martha\'s state, none of them in the workspace', async (t) => {
   const { root, state } = workspaceFor(t, false)
   assert.ok((await declareTheTeam(requestFor(root, state, CLAUDE_CODE_TEAM))).declared)
   // Read from the file itself: nodeIdsFor would make an id that is missing, and so prove nothing about this run.
