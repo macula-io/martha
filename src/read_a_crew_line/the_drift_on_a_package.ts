@@ -10,7 +10,7 @@
 // The notices are words about what is about to be sent, never a refusal. A notice rides on the answer the sender reads,
 // the way an over-long message does (../send_a_crew_message), and the message goes either way.
 
-import { aMostIsSet, CREW_LINE_LINES_MOST, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { aMostIsSet, HANDOFF_LINES_MOST, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import { isActAnnouncedRow, readLedger, VERDICT_GIVEN, type LedgerHost, type LedgerRow, type MilestoneRow } from '../log_ledger/log_ledger.ts'
 import { REPO_NUMBERS } from '../spend_the_github_budget/the_repos_numbers.ts'
 import { readACrewLine } from './read_a_crew_line.ts'
@@ -101,13 +101,13 @@ export interface ALineAboutToBeSent {
 
 /**
  * What a send says about the crew's mosts, before the line goes out: one line for a round past `review_rounds_most`,
- * one for a message past `crew_line_lines_most`, and nothing for a number the declaration set to 0 or turned off with
+ * one for a message past `handoff_lines_most`, and nothing for a number the declaration set to 0 or turned off with
  * false. The message is sent anyway.
  */
 export function theDriftNotices(about: ALineAboutToBeSent, drift: APackagesDrift, trims: TheCrewsTrims): readonly string[] {
   const most = trims[REVIEW_ROUNDS_MOST]
   const rounds = [about.round ?? 0, drift.rounds]
-  const lines_most = trims[CREW_LINE_LINES_MOST]
+  const lines_most = trims[HANDOFF_LINES_MOST]
   return [
     ...(aMostIsSet(most) && Math.max(...rounds) > most ? [`this is round ${String(Math.max(...rounds))}; the crew's most is ${String(most)}.`] : []),
     ...(aMostIsSet(lines_most) && about.lines > lines_most

@@ -14,6 +14,6 @@ A plan or a design for review (an issue comment) is handed off as:
 
 Say plainly in the handoff what you have not observed live, and claim only what you ran.
 
-{{crew_line_lines_most}}
+{{handoff_lines_most}}
 
 {{mutants_on_guards_only}}

@@ -24,7 +24,7 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { noteMilestone, noteRecovery, readLedger } from '../log_ledger/log_ledger.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
-import { CREW_LINE_LINES_MOST_WHEN_UNNAMED, REVIEW_ROUNDS_MOST_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
+import { HANDOFF_LINES_MOST_WHEN_UNNAMED, REVIEW_ROUNDS_MOST_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 import { LOG_A_MILESTONE, RESUME_EVENT } from '../keep_the_ledger/keep_the_ledger.ts'
 import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
@@ -406,7 +406,7 @@ test('#1010: a package whose rounds went past the crew\'s most is drawn as drift
 test('#1010: a package inside the crew\'s mosts is drawn with no drift line at all', async (t) => {
   const crew = aCrew(t)
   crew.beat(row(MEMBER))
-  await keepALine(crew, MEMBER, `HANDOFF macula-io/martha#320 ${'a'.repeat(40)}..${'b'.repeat(40)} r=${String(REVIEW_ROUNDS_MOST_WHEN_UNNAMED)} ci=none:paths`, CREW_LINE_LINES_MOST_WHEN_UNNAMED)
+  await keepALine(crew, MEMBER, `HANDOFF macula-io/martha#320 ${'a'.repeat(40)}..${'b'.repeat(40)} r=${String(REVIEW_ROUNDS_MOST_WHEN_UNNAMED)} ci=none:paths`, HANDOFF_LINES_MOST_WHEN_UNNAMED)
 
   const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
   assert.deepEqual(drawn.filter((line) => line.startsWith('- drift: ')), [], `a package at the crew's mosts was drawn as drifting: ${JSON.stringify(drawn)}`)

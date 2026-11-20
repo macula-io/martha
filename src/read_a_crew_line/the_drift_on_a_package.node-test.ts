@@ -7,7 +7,7 @@ import { test } from 'node:test'
 
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { noteMilestone, readLedger, sendOutwardAct } from '../log_ledger/log_ledger.ts'
-import { CREW_LINE_LINES_MOST, REVIEW_ROUNDS_MOST, TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { HANDOFF_LINES_MOST, REVIEW_ROUNDS_MOST, TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import { driftOnAPackage, theDriftNotices, theDriftOf, theRoundOf } from './the_drift_on_a_package.ts'
 import { readACrewLine } from './read_a_crew_line.ts'
 
@@ -17,7 +17,7 @@ const RANGE = `${'a'.repeat(40)}..${'b'.repeat(40)}`
 /** The crew's mosts as a test sets them: numbers none of the defaults is, so a notice read from a default would show. */
 const ROUNDS_MOST = 4
 const LINES_MOST = 7
-const TRIMS = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: ROUNDS_MOST, crew_line_lines_most: LINES_MOST }
+const TRIMS = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: ROUNDS_MOST, handoff_lines_most: LINES_MOST }
 
 /** A hand-off line as a member writes one, at the round and with the run ids the test names. */
 const handoff = (round: number): string => `HANDOFF ${PACKAGE} ${RANGE} r=${round} ci=none:paths`
@@ -87,9 +87,9 @@ test('#1010: 0 is no fixed line and false is notices off, so neither raises one'
   await aHandoffRow(host, 'Vesta', 30, 300)
   const drift = await theDriftOf(host, PACKAGE)
 
-  const noLine: TheCrewsTrims = { ...TRIMS_WHEN_UNNAMED, [REVIEW_ROUNDS_MOST]: 0, [CREW_LINE_LINES_MOST]: 0 }
+  const noLine: TheCrewsTrims = { ...TRIMS_WHEN_UNNAMED, [REVIEW_ROUNDS_MOST]: 0, [HANDOFF_LINES_MOST]: 0 }
   assert.deepEqual(theDriftNotices({ verb: 'HANDOFF', round: 31, lines: 301 }, drift, noLine), [], '0 is no fixed line')
 
-  const off: TheCrewsTrims = { ...TRIMS_WHEN_UNNAMED, [REVIEW_ROUNDS_MOST]: false, [CREW_LINE_LINES_MOST]: false }
+  const off: TheCrewsTrims = { ...TRIMS_WHEN_UNNAMED, [REVIEW_ROUNDS_MOST]: false, [HANDOFF_LINES_MOST]: false }
   assert.deepEqual(theDriftNotices({ verb: 'HANDOFF', round: 31, lines: 301 }, drift, off), [], 'false turns the notices off')
 })

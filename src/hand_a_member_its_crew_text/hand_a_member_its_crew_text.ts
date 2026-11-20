@@ -23,7 +23,7 @@ import { join, relative, sep } from 'node:path'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf, DeclarationRefused, declareCrew, DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 export { crewTextFilesOf }
-import { aMostIsSet, CREW_LINE_LINES_MOST, FAIL_ONLY_ON_HARM, MUTANTS_ON_GUARDS_ONLY, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { aMostIsSet, FAIL_ONLY_ON_HARM, HANDOFF_LINES_MOST, MUTANTS_ON_GUARDS_ONLY, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { DocumentStore, FileTree } from '../host_contract/host_contract.ts'
 import { CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
@@ -169,8 +169,8 @@ export const LINE_PLACEHOLDERS = ['handoff', 'doc_handoff', 'verdict', 'doc_verd
 export type LinePlaceholder = (typeof LINE_PLACEHOLDERS)[number]
 
 /** The placeholders one of the crew's trims fills (martha#1010): the four the cards hold a rule for. The repo's three
- * numbers are the owner's pane and `martha week`, never a card, so no card names one. */
-export const TRIM_PLACEHOLDERS = [REVIEW_ROUNDS_MOST, CREW_LINE_LINES_MOST, FAIL_ONLY_ON_HARM, MUTANTS_ON_GUARDS_ONLY] as const
+ * numbers are read from the owner's pane, never from a card, so no card names one. */
+export const TRIM_PLACEHOLDERS = [REVIEW_ROUNDS_MOST, HANDOFF_LINES_MOST, FAIL_ONLY_ON_HARM, MUTANTS_ON_GUARDS_ONLY] as const
 export type TrimPlaceholder = (typeof TRIM_PLACEHOLDERS)[number]
 
 /** The placeholders a text may carry, in the words the crew's own texts use. The owner's is the word the declaration
@@ -311,12 +311,12 @@ function placeholdersFor(texts: TheTextsAMemberReads): Readonly<Record<Placehold
  */
 function theTrimSentences(trims: TheCrewsTrims): Readonly<Record<TrimPlaceholder, string>> {
   const rounds = trims[REVIEW_ROUNDS_MOST]
-  const lines = trims[CREW_LINE_LINES_MOST]
+  const lines = trims[HANDOFF_LINES_MOST]
   return {
     [REVIEW_ROUNDS_MOST]: aMostIsSet(rounds)
       ? `At most ${String(rounds)} review rounds per package. A FAIL after the last one goes to the owner as a scope question, never as another round.`
       : 'Review rounds repeat as fix-and-verify until every required review passes; the bar never drops to end a round.',
-    [CREW_LINE_LINES_MOST]: aMostIsSet(lines) ? `A HANDOFF or VERDICT is at most ${String(lines)} lines.` : '',
+    [HANDOFF_LINES_MOST]: aMostIsSet(lines) ? `A HANDOFF or VERDICT is at most ${String(lines)} lines.` : '',
     [FAIL_ONLY_ON_HARM]: trims[FAIL_ONLY_ON_HARM]
       ? 'FAIL only for harm a user or the owner would hit: a behaviour bug, lost work, a leak, a security hole. Anything else is a PASS note.'
       : '',

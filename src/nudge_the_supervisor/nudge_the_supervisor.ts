@@ -21,14 +21,14 @@
 // the same rule and the tests hold it.
 
 import { memberNameKey, sameMemberName, MEMBER_NAME, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
-import { aMostIsSet, ABANDONED_PR_PERCENT_MOST, CREW_LINE_LINES_MOST, OPEN_ISSUES_MOST, REVIEW_ROUNDS_MOST, UNTOUCHED_ISSUES_MOST, type AMost, type HouseRuleRepoMost, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { aMostIsSet, ABANDONED_PR_PERCENT_MOST, HANDOFF_LINES_MOST, OPEN_ISSUES_MOST, REVIEW_ROUNDS_MOST, UNTOUCHED_ISSUES_MOST, type AMost, type HouseRuleRepoMost, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { LandedPackage } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import type { CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
 import type { APackagesDrift, DriftNumber, PackageNumber } from '../read_a_crew_line/the_drift_on_a_package.ts'
 import { DRIFT_NUMBERS, LINES, ROUNDS } from '../read_a_crew_line/the_drift_on_a_package.ts'
-import { A_DAY_MS, A_REPO, A_WEEK_DAYS, ABANDONED_PRS, aRepoNumberIn, dayOf, OPEN_ISSUES, REPO_NUMBERS, UNTOUCHED_ISSUES, type RepoNumber, type TheDriftRecord } from '../spend_the_github_budget/the_repos_numbers.ts'
+import { A_DAY_MS, A_REPO, A_WEEK_DAYS, ABANDONED_PRS, aRepoNumberIn, dayOf, OPEN_ISSUES, REPO_NUMBERS, UNTOUCHED_ISSUES, type AReposNumbers, type RepoNumber, type TheDriftRecord } from '../spend_the_github_budget/the_repos_numbers.ts'
 import type { AHead } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 import { offlineAfterMsOf, type CrewThresholds } from '../declare_crew/the_crews_thresholds.ts'
@@ -322,7 +322,7 @@ export function headNudges(waits: readonly ReviewWait[], heads: Readonly<Record<
 export function driftNudges(drifts: readonly APackagesDrift[], trims: TheCrewsTrims): Nudge[] {
   return drifts.flatMap((drift) => [
     ...aCrossing(drift, ROUNDS, drift.rounds, drift.rounds_member, drift.rounds_at, trims[REVIEW_ROUNDS_MOST]),
-    ...aCrossing(drift, LINES, drift.longest, drift.longest_member, drift.longest_at, trims[CREW_LINE_LINES_MOST]),
+    ...aCrossing(drift, LINES, drift.longest, drift.longest_member, drift.longest_at, trims[HANDOFF_LINES_MOST]),
   ])
 }
 
@@ -341,21 +341,31 @@ export function repoDriftNudges(record: TheDriftRecord, now: number, trims: TheC
   const day = dayOf(now)
   const week_ago = dayOf(now - A_WEEK_DAYS * A_DAY_MS)
   const since = Date.parse(`${day}T00:00:00Z`)
-  const nudges: Nudge[] = []
-  for (const [repo, rows] of Object.entries(record)) {
-    const today = rows[day]
-    if (today === undefined || !A_REPO.test(repo)) continue
-    for (const number of REPO_NUMBERS) {
-      const most = trims[THE_MOST_OF[number]]
-      if (most === false) continue
-      const value = aRepoNumberIn(today, number)
-      const earlier = rows[week_ago]
-      const was = earlier === undefined ? undefined : aRepoNumberIn(earlier, number)
-      if (was !== undefined && value > was) nudges.push({ kind: 'drift', member: '', package: '', repo, since, number, value, was })
-      if (aMostIsSet(most) && value > most) nudges.push({ kind: 'drift', member: '', package: '', repo, since, number, value, most })
-    }
-  }
-  return nudges
+  return Object.entries(record)
+    .filter(([repo, rows]) => A_REPO.test(repo) && rows[day] !== undefined)
+    .flatMap(([repo, rows]) => aReposCrossings(repo, rows, day, week_ago, since, trims))
+}
+
+/** One repo's numbers, each read against its most and against the same number a week earlier. */
+function aReposCrossings(repo: string, rows: Readonly<Record<string, AReposNumbers>>, day: string, week_ago: string, since: number, trims: TheCrewsTrims): Nudge[] {
+  const today = rows[day]
+  if (today === undefined) return []
+  return REPO_NUMBERS.flatMap((number) => aNumbersCrossing(repo, number, today, rows[week_ago], since, trims))
+}
+
+/**
+ * One number of a repo's today row: one nudge when it rose above the same number a week earlier or past the most the
+ * owner set, carrying each fact that holds, and none when it did neither. One number is one line, either way.
+ */
+function aNumbersCrossing(repo: string, number: RepoNumber, today: AReposNumbers, earlier: AReposNumbers | undefined, since: number, trims: TheCrewsTrims): Nudge[] {
+  const most = trims[THE_MOST_OF[number]]
+  if (most === false) return []
+  const value = aRepoNumberIn(today, number)
+  const was = earlier === undefined ? undefined : aRepoNumberIn(earlier, number)
+  const rose = was !== undefined && value > was
+  const past = aMostIsSet(most) && value > most
+  if (!rose && !past) return []
+  return [{ kind: 'drift', member: '', package: '', repo, since, number, value, ...(rose ? { was } : {}), ...(past ? { most } : {}) }]
 }
 
 /** The house rule each repo number is read against, by its own name. */
@@ -430,10 +440,7 @@ export function aDeclaredName(name: string, crew: TheDeclaredNames): string {
 /** One nudge as a prompt line, or null when it names nothing a line may carry. */
 export function theNudgeLine(nudge: Nudge, crew: TheNudgeLinesCrew): string | null {
   // A repo's drift is about the repo, not a member: the repo's own shape is what the line may print.
-  if (nudge.repo !== undefined) {
-    const words = theDriftWords(nudge)
-    return A_REPO.test(nudge.repo) && words === '' ? null : `- ${nudge.kind}: ${nudge.repo}${words}, since ${theClockOf(nudge.since, crew.clock_zone)}`
-  }
+  if (nudge.repo !== undefined) return aReposNudgeLine(nudge, crew)
   const member = aDeclaredName(nudge.member, crew)
   if (member === '' || !MEMBER_NAME.test(member)) return null
   const package_name = WORK_PACKAGE.test(nudge.package) ? nudge.package : ''
@@ -443,14 +450,24 @@ export function theNudgeLine(nudge: Nudge, crew: TheNudgeLinesCrew): string | nu
   return `- ${nudge.kind}: ${member}${on}${beside}${theDriftWords(nudge)}, since ${theClockOf(nudge.since, crew.clock_zone)}`
 }
 
-/** The drift a nudge names: which number, what it came to, and either its value a week earlier or the crew's most. */
+/**
+ * A repo's drift as a line, or null: printed only for a repo of the shape GitHub names, and only when its drift has
+ * words to say. A repo name that is not that shape is text a store held, and no prompt prints it.
+ */
+function aReposNudgeLine(nudge: Nudge, crew: TheNudgeLinesCrew): string | null {
+  const repo = nudge.repo ?? ''
+  const words = theDriftWords(nudge)
+  if (!A_REPO.test(repo) || words === '') return null
+  return `- ${nudge.kind}: ${repo}${words}, since ${theClockOf(nudge.since, crew.clock_zone)}`
+}
+
+/** The drift a nudge names: which number and what it came to, beside its value a week earlier, the crew's most, or both. */
 function theDriftWords(nudge: Nudge): string {
   const { number, value, most, was } = nudge
   if (number === undefined || value === undefined) return ''
   if (!(DRIFT_NUMBERS as readonly string[]).includes(number)) return ''
-  if (was !== undefined) return `, ${String(value)} ${number} (was ${String(was)} a week ago)`
-  if (most === undefined) return ''
-  return `, ${String(value)} ${number} (the crew's most is ${String(most)})`
+  const facts = [...(was === undefined ? [] : [`was ${String(was)} a week ago`]), ...(most === undefined ? [] : [`the crew's most is ${String(most)}`])]
+  return facts.length === 0 ? '' : `, ${String(value)} ${number} (${facts.join('; ')})`
 }
 
 /**

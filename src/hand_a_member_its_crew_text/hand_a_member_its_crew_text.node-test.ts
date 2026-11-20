@@ -319,7 +319,7 @@ test('#306: a project with no declaration approves no crew text, and a declarati
 // the line that carried it rather than leaving a blank one.
 
 test('#1010: the cards teach the crew\'s mosts and its two trims, filled from the declaration', () => {
-  const trims = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: 5, crew_line_lines_most: 12 }
+  const trims = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: 5, handoff_lines_most: 12 }
   const builder = handAMemberItsCrewText(textsOf({ trims }))
   const reviewer = handAMemberItsCrewText(textsOf({
     trims,
@@ -328,14 +328,14 @@ test('#1010: the cards teach the crew\'s mosts and its two trims, filled from th
   }))
 
   assert.match(builder, new RegExp(`At most ${String(trims.review_rounds_most)} review rounds per package`), 'the practice does not teach the crew\'s most rounds')
-  assert.match(builder, new RegExp(`A HANDOFF or VERDICT is at most ${String(trims.crew_line_lines_most)} lines`), 'the builder\'s card does not teach the crew\'s most lines')
+  assert.match(builder, new RegExp(`A HANDOFF or VERDICT is at most ${String(trims.handoff_lines_most)} lines`), 'the builder\'s card does not teach the crew\'s most lines')
   assert.match(builder, /Mutants and planted bugs only on guard and security code/, 'the builder\'s card does not teach where mutants go')
   assert.match(reviewer, /FAIL only for harm a user or the owner would hit/, 'the reviewer\'s card does not teach a FAIL only for harm')
   assert.doesNotMatch(`${builder}\n${reviewer}`, /\{\{/, 'a placeholder reached the member unfilled')
 })
 
 test('#1010: a trim turned off drops its line rather than leaving a blank one, and the rounds sentence falls back', () => {
-  const off = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: false, crew_line_lines_most: false, fail_only_on_harm: false, mutants_on_guards_only: false } as TheCrewsTrims
+  const off = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: false, handoff_lines_most: false, fail_only_on_harm: false, mutants_on_guards_only: false } as TheCrewsTrims
   const section = handAMemberItsCrewText(textsOf({ role: 'reviewer', role_text: textAt(join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, 'reviewer.md'), shipped(join(ROLE_TEXTS_DIRECTORY, 'reviewer.md'))), trims: off }))
 
   assert.doesNotMatch(section, /At most .* review rounds/, 'a number turned off was still taught')

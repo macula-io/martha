@@ -13,9 +13,9 @@ import {
   A_PERCENT,
   A_TRIM_SWITCH_WHEN_UNNAMED,
   ABANDONED_PR_PERCENT_MOST,
-  CREW_LINE_LINES_MOST,
-  CREW_LINE_LINES_MOST_WHEN_UNNAMED,
   FAIL_ONLY_ON_HARM,
+  HANDOFF_LINES_MOST,
+  HANDOFF_LINES_MOST_WHEN_UNNAMED,
   HOUSE_RULE_MOSTS,
   HOUSE_RULE_REPO_MOSTS,
   HOUSE_RULE_TRIMS,
@@ -54,7 +54,7 @@ const refusedWith = async (house_rules: unknown, field: string) => {
 test('#1010: a declaration that names none of the four trims reads the crew as it runs today', async () => {
   const { house_rules } = await declare({})
   assert.equal(house_rules[REVIEW_ROUNDS_MOST], REVIEW_ROUNDS_MOST_WHEN_UNNAMED)
-  assert.equal(house_rules[CREW_LINE_LINES_MOST], CREW_LINE_LINES_MOST_WHEN_UNNAMED)
+  assert.equal(house_rules[HANDOFF_LINES_MOST], HANDOFF_LINES_MOST_WHEN_UNNAMED)
   assert.equal(house_rules[FAIL_ONLY_ON_HARM], A_TRIM_SWITCH_WHEN_UNNAMED)
   assert.equal(house_rules[MUTANTS_ON_GUARDS_ONLY], A_TRIM_SWITCH_WHEN_UNNAMED)
 })
@@ -63,29 +63,29 @@ test('#1010: a crew that names its own trims reads them back, not the defaults',
   // The values are deliberately none of the defaults: a value equal to the one it would fall back to proves nothing.
   const { house_rules } = await declare({
     [REVIEW_ROUNDS_MOST]: REVIEW_ROUNDS_MOST_WHEN_UNNAMED + 1,
-    [CREW_LINE_LINES_MOST]: CREW_LINE_LINES_MOST_WHEN_UNNAMED + 4,
+    [HANDOFF_LINES_MOST]: HANDOFF_LINES_MOST_WHEN_UNNAMED + 4,
     [FAIL_ONLY_ON_HARM]: !A_TRIM_SWITCH_WHEN_UNNAMED,
     [MUTANTS_ON_GUARDS_ONLY]: !A_TRIM_SWITCH_WHEN_UNNAMED,
   })
   assert.equal(house_rules[REVIEW_ROUNDS_MOST], REVIEW_ROUNDS_MOST_WHEN_UNNAMED + 1)
-  assert.equal(house_rules[CREW_LINE_LINES_MOST], CREW_LINE_LINES_MOST_WHEN_UNNAMED + 4)
+  assert.equal(house_rules[HANDOFF_LINES_MOST], HANDOFF_LINES_MOST_WHEN_UNNAMED + 4)
   assert.equal(house_rules[FAIL_ONLY_ON_HARM], !A_TRIM_SWITCH_WHEN_UNNAMED)
   assert.equal(house_rules[MUTANTS_ON_GUARDS_ONLY], !A_TRIM_SWITCH_WHEN_UNNAMED)
 })
 
 test('#1010: 0 is a number with no fixed line, and false is the separate word that turns a number off', async () => {
-  const { house_rules } = await declare({ [REVIEW_ROUNDS_MOST]: 0, [CREW_LINE_LINES_MOST]: false })
+  const { house_rules } = await declare({ [REVIEW_ROUNDS_MOST]: 0, [HANDOFF_LINES_MOST]: false })
   assert.equal(house_rules[REVIEW_ROUNDS_MOST], 0, '0 read as anything but 0 loses the one meaning the numbers share')
-  assert.equal(house_rules[CREW_LINE_LINES_MOST], false, 'false read as a number would make "off" and "no line" the same word')
+  assert.equal(house_rules[HANDOFF_LINES_MOST], false, 'false read as a number would make "off" and "no line" the same word')
   assert.equal(aMostIsSet(house_rules[REVIEW_ROUNDS_MOST]), false, '0 is no fixed line')
-  assert.equal(aMostIsSet(house_rules[CREW_LINE_LINES_MOST]), false, 'false is notices off')
+  assert.equal(aMostIsSet(house_rules[HANDOFF_LINES_MOST]), false, 'false is notices off')
   assert.equal(aMostIsSet(REVIEW_ROUNDS_MOST_WHEN_UNNAMED), true, 'a whole number above zero is a fixed line')
 })
 
 test('#1010: a number that is not a whole number, zero or more, or false, is refused by its own name', async () => {
   for (const value of [1.5, -1, '2', true]) {
     await refusedWith({ [REVIEW_ROUNDS_MOST]: value }, `house_rules.${REVIEW_ROUNDS_MOST}`)
-    await refusedWith({ [CREW_LINE_LINES_MOST]: value }, `house_rules.${CREW_LINE_LINES_MOST}`)
+    await refusedWith({ [HANDOFF_LINES_MOST]: value }, `house_rules.${HANDOFF_LINES_MOST}`)
   }
 })
 

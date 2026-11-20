@@ -28,7 +28,7 @@ import {
   type NudgeInput,
   type SentMessage,
 } from './nudge_the_supervisor.ts'
-import { CREW_LINE_LINES_MOST, REVIEW_ROUNDS_MOST, TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { HANDOFF_LINES_MOST, REVIEW_ROUNDS_MOST, TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 /** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
@@ -407,7 +407,7 @@ const DRIFT = {
 }
 
 /** The trims as a test sets them: numbers none of the defaults is, so a default read would show. */
-const TRIMS = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: 4, crew_line_lines_most: 7 }
+const TRIMS = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: 4, handoff_lines_most: 7 }
 
 test('#1010: a package past the crew\'s mosts is one drift nudge per number, naming the member whose row crossed it', () => {
   const nudges = driftNudges([DRIFT], TRIMS)
@@ -415,15 +415,15 @@ test('#1010: a package past the crew\'s mosts is one drift nudge per number, nam
     nudges.map((nudge) => [nudge.kind, nudge.member, nudge.number, nudge.value, nudge.most]),
     [
       ['drift', 'Vesta', ROUNDS, DRIFT.rounds, TRIMS.review_rounds_most],
-      ['drift', 'Mars', LINES, DRIFT.longest, TRIMS.crew_line_lines_most],
+      ['drift', 'Mars', LINES, DRIFT.longest, TRIMS.handoff_lines_most],
     ],
   )
   assert.deepEqual(nudges.map((nudge) => nudge.since), [DRIFT.rounds_at, DRIFT.longest_at], 'a drift is read from the moment its row was kept')
 })
 
 test('#1010: a package inside the crew\'s mosts is no drift nudge, and a number at 0 or false raises none', () => {
-  assert.deepEqual(driftNudges([{ ...DRIFT, rounds: TRIMS.review_rounds_most as number, longest: TRIMS.crew_line_lines_most as number }], TRIMS), [], 'a number at the most is inside it')
-  const off: TheCrewsTrims = { ...TRIMS, [REVIEW_ROUNDS_MOST]: 0, [CREW_LINE_LINES_MOST]: false }
+  assert.deepEqual(driftNudges([{ ...DRIFT, rounds: TRIMS.review_rounds_most as number, longest: TRIMS.handoff_lines_most as number }], TRIMS), [], 'a number at the most is inside it')
+  const off: TheCrewsTrims = { ...TRIMS, [REVIEW_ROUNDS_MOST]: 0, [HANDOFF_LINES_MOST]: false }
   assert.deepEqual(driftNudges([DRIFT], off), [], '0 is no fixed line and false is notices off')
 })
 

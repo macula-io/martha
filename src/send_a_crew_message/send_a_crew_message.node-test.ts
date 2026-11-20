@@ -26,7 +26,7 @@ import { addresseesOf, CREW_SAY_DESCRIPTION, LONGEST_MESSAGE, SAY_TO_THE_CREW, s
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
-import { CREW_LINE_LINES_MOST_WHEN_UNNAMED, REVIEW_ROUNDS_MOST, REVIEW_ROUNDS_MOST_WHEN_UNNAMED, TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { HANDOFF_LINES_MOST_WHEN_UNNAMED, REVIEW_ROUNDS_MOST, REVIEW_ROUNDS_MOST_WHEN_UNNAMED, TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 
 const ROSTER = ['Builder', 'Reviewer', 'Supervisor'] as const
 
@@ -268,7 +268,7 @@ test('#1010: a hand-off past the crew\'s line count is sent anyway, with one not
   const channel = channelHost()
   const base = 'a'.repeat(40)
   const tip = 'b'.repeat(40)
-  const most = CREW_LINE_LINES_MOST_WHEN_UNNAMED
+  const most = HANDOFF_LINES_MOST_WHEN_UNNAMED
   const text = [`HANDOFF macula-io/martha#253 ${base}..${tip} r=1 ci=41700170944`, ...Array.from({ length: most }, () => 'and a line of notes')].join('\n')
   const sent = await sendACrewMessage(channel, sending({ package: 'macula-io/martha#253', text }))
 
