@@ -15,7 +15,7 @@
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -709,7 +709,10 @@ test('worktree_finish refuses the branch form while a live worktree holds the br
   const tools = toolsOf(settingsFor(fixture, fixture))
   const path = await aPushedWorktree(fixture, tools)
   landTheBranch(fixture)
-  assert.match(refusedOf(await tools.finish.answer(finishedBranch(`${MEMBER}/${SLUG}`))), new RegExp(`the worktree at ${path} holds branch "${MEMBER}/${SLUG}"; finish it with its repo, its slug and the package`))
+  // Git names the worktree by the path it resolved, which differs from the one this test made wherever the temporary
+  // directory is a link to another (macOS's /var to /private/var): both name the same directory, and git's is the one
+  // the refusal carries.
+  assert.match(refusedOf(await tools.finish.answer(finishedBranch(`${MEMBER}/${SLUG}`))), new RegExp(`the worktree at ${realpathSync(path)} holds branch "${MEMBER}/${SLUG}"; finish it with its repo, its slug and the package`))
   assert.ok(existsSync(path), 'the worktree is still there')
   assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'nothing was deleted')
 })
