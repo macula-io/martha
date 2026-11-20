@@ -10,6 +10,7 @@ import {
   ACTS,
   BACKLOG,
   ENGINE_ENDPOINT,
+  THE_HOMES_PREFIX,
   CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   CLONES,
   CREW_CODE_DECLARATION_DIRECTORY,
@@ -718,11 +719,23 @@ test('#319 B: a declaration without a backlog has none, and one with it reads it
 
 test('#541 package A: a declaration without an engine endpoint has none, and one with it reads its host, base path and key variable', async () => {
   assert.equal((await declare(solo).settings).engine_endpoint, null)
-  assert.deepEqual((await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test:8080' } }).settings).engine_endpoint, { host: 'http://a-host.test:8080', base_path: null, key_from: null })
+  assert.deepEqual((await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test:8080' } }).settings).engine_endpoint, { host: 'http://a-host.test:8080', base_path: null, key_from: null, key_file: null })
   assert.deepEqual(
     (await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', base_path: 'a/path', key_from: 'A_KEY_VARIABLE' } }).settings).engine_endpoint,
-    { host: 'https://a-host.test', base_path: 'a/path', key_from: 'A_KEY_VARIABLE' },
+    { host: 'https://a-host.test', base_path: 'a/path', key_from: 'A_KEY_VARIABLE', key_file: null },
   )
+})
+
+test('#511 part B: an engine endpoint may name the file its key is in, absolute or under the home, and never beside a key variable', async () => {
+  for (const key_file of ['/an/absolute/key-file', `${THE_HOMES_PREFIX}a/key-file`]) {
+    assert.deepEqual((await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file } }).settings).engine_endpoint, { host: 'https://a-host.test', base_path: null, key_from: null, key_file })
+  }
+  for (const key_file of ['a/relative/key-file', '~a-user/key-file', `${THE_HOMES_PREFIX}a/../../key-file`, '/a/../key-file', 7]) {
+    await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file } }, `${ENGINE_ENDPOINT}.key_file`)
+  }
+  await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file: 'sk-a-key' } }).settings, /the key itself never goes in the declaration/)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_from: 'A_KEY_VARIABLE', key_file: '/a/key-file' } }, `${ENGINE_ENDPOINT}.key_file`)
+  await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_from: 'A_KEY_VARIABLE', key_file: '/a/key-file' } }).settings, /the key is read from one place/)
 })
 
 test('#541 package A: an engine endpoint is a URL on http or https, a path, and a variable name: a key written there is refused by name', async () => {

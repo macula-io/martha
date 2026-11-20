@@ -9,7 +9,7 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { lstatSync, readFileSync, type Stats } from 'node:fs'
 
 import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
@@ -52,7 +52,8 @@ import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_
 import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
 import type { AStartOnItsHost, TheCrewToolsOfAHost } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { theMembersTelling } from '../tell_the_member_a_line/tell_the_member_a_line.ts'
-import { theModelOfAnEngineMember, whyTheConfigRunsAnotherModel } from './the_engines_model.ts'
+import { theModelOfAnEngineMember, whyAKeyFileIsNotTheOwners, whyTheConfigRunsAnotherModel } from './the_engines_model.ts'
+import { ENGINE_ENDPOINT, THE_HOMES_PREFIX } from '../declare_crew/declare_crew.ts'
 
 /** What every host's start builds alike from the start, handed in by the start table so this slice imports none of it. */
 export interface TheSharedOfAStart {
@@ -96,7 +97,7 @@ const NOTHING_REPORTED: TheServedToolsWatch = {
  * that turns hooks off already refuses the start, and the launch runs it first in every re-check. Or why not.
  */
 function whatTheLaunchIsGiven(start: AStartOnItsHost) {
-  const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited })
+  const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited, readTheKeyFile: (key_file) => theKeyInAFile(key_file, start.home) })
   if ('refusal' in model) return model
   const user = userSettingsPath(start.inherited)
   if ('refusal' in user) return user
@@ -105,6 +106,25 @@ function whatTheLaunchIsGiven(start: AStartOnItsHost) {
   const already = owners.check()
   if (already !== undefined) return { refusal: already }
   return { model, user, managed, owners }
+}
+
+/**
+ * The key in the file the crew's endpoint names (martha#511 part B), read under the home this start runs with: only this
+ * user's own plain file, closed to the group and to others, and never a link, since a link's own mode says nothing of
+ * its target. The key is trimmed of the line end a file ends with and never named in a refusal.
+ */
+export function theKeyInAFile(key_file: string, home: string): { readonly key: string } | { readonly refusal: string } {
+  const at = key_file.startsWith(THE_HOMES_PREFIX) ? join(home, key_file.slice(THE_HOMES_PREFIX.length)) : key_file
+  let found: Stats
+  try {
+    found = lstatSync(at)
+  } catch (error) {
+    return { refusal: `${ENGINE_ENDPOINT}.key_file ${at} cannot be read (${(error as NodeJS.ErrnoException).code ?? String(error)})` }
+  }
+  const why = whyAKeyFileIsNotTheOwners(at, { plain_file: found.isFile(), owner_is_this_user: found.uid === process.getuid?.(), mode: found.mode })
+  if (why !== undefined) return { refusal: why }
+  const key = readFileSync(at, 'utf8').trim()
+  return key === '' ? { refusal: `${ENGINE_ENDPOINT}.key_file ${at} is empty` } : { key }
 }
 
 /** The launch's config read back to the declared model, then the crew text composed from what the launch carried; or why not. */

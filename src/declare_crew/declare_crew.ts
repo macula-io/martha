@@ -202,19 +202,30 @@ export const VOLATILE_PATHS = 'volatile_paths'
  */
 export const ENGINE_ENDPOINT = 'engine_endpoint'
 export const ENGINE_ENDPOINT_REQUIRED_KEYS = ['host'] as const
-export const ENGINE_ENDPOINT_OPTIONAL_KEYS = ['base_path', 'key_from'] as const
+export const ENGINE_ENDPOINT_OPTIONAL_KEYS = ['base_path', 'key_from', 'key_file'] as const
 
 /** A name `key_from` may hold: an environment variable's, as a shell spells one. */
 export const AN_ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 
+/**
+ * What a `key_file` path opens with when it is the owner's home (martha#511 part B): the path is written as the owner
+ * spells it, and the start reads it under the home it runs with. Any other path is absolute.
+ */
+export const THE_HOMES_PREFIX = '~/'
+
 /** The schemes an endpoint's host may be reached on. */
 export const ENDPOINT_SCHEMES: readonly string[] = ['http:', 'https:']
 
-/** A declared engine endpoint: the host as a URL, the base path when one is named, and the variable the key is read from when one is named. */
+/**
+ * A declared engine endpoint: the host as a URL, the base path when one is named, and where the key is read from when
+ * one is named: the variable it is in, or the file it is in (martha#511 part B), never both.
+ */
 export interface EngineEndpoint {
   readonly host: string
   readonly base_path: string | null
   readonly key_from: string | null
+  /** The file the key is in, absolute or under the owner's home (`~/…`); the start reads it, and only the start. */
+  readonly key_file: string | null
 }
 
 /** A declared backlog: the places to look in, and how long a member may sit idle beside unheld work before a nudge. */
@@ -579,9 +590,24 @@ function engineEndpointOf(refuse: Refuse, value: unknown): EngineEndpoint | null
   const { host } = checked
   const base_path = value['base_path']
   if (!isAbsentOrText(base_path)) return refuse.at(`${ENGINE_ENDPOINT}.base_path`, 'is not a path')
+  return { host, base_path: base_path ?? null, ...theKeysPlaceOf(refuse, value) }
+}
+
+/** Where an endpoint's key is read from: the variable it is in, the file it is in (martha#511 part B), or neither; never both. */
+function theKeysPlaceOf(refuse: Refuse, value: Readonly<Record<string, unknown>>): Pick<EngineEndpoint, 'key_from' | 'key_file'> {
   const key_from = value['key_from']
   if (!isAbsentOrAVariablesName(key_from)) return refuse.at(`${ENGINE_ENDPOINT}.key_from`, 'is not the name of an environment variable: the key itself never goes in the declaration')
-  return { host, base_path: base_path ?? null, key_from: key_from ?? null }
+  const key_file = value['key_file']
+  if (!isAbsentOrAKeyFilesPath(key_file)) return refuse.at(`${ENGINE_ENDPOINT}.key_file`, `is not an absolute path or one under ${THE_HOMES_PREFIX}: the key itself never goes in the declaration`)
+  if (key_from !== undefined && key_file !== undefined) return refuse.at(`${ENGINE_ENDPOINT}.key_file`, 'is named beside key_from: the key is read from one place')
+  return { key_from: key_from ?? null, key_file: key_file ?? null }
+}
+
+/** Whether a value is absent or a key file's path: absolute, or under the owner's home, with no `..` part. */
+function isAbsentOrAKeyFilesPath(value: unknown): value is string | undefined {
+  if (value === undefined) return true
+  if (!isText(value) || !(value.startsWith('/') || value.startsWith(THE_HOMES_PREFIX))) return false
+  return !value.split('/').includes('..')
 }
 
 /**
