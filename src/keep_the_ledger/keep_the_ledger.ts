@@ -15,7 +15,7 @@ import {
   actsAwaitingOutcome,
   concludeAct,
   FIX_SHIPPED_AFTER_RELEASE,
-  noteMilestone,
+  noteMilestoneOnce,
   PACKAGE_RESUMED,
   RELEASE_SHIPPED,
   REVIEW_ROUND_CLOSED,
@@ -23,6 +23,7 @@ import {
   type LedgerHost,
   type Milestone,
 } from '../log_ledger/log_ledger.ts'
+import { agoOf } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { resumeAPausedPackage } from '../recover_a_failed_act/resume_a_paused_package.ts'
 
 /** The milestone names the crew's own tool uses, and the ledger's name for each. */
@@ -67,7 +68,11 @@ export async function keepTheMilestone(
     return { told: `Not recorded: a ${event} needs a note saying what it was, in one short line.` }
   }
   if (event === RESUME_EVENT) return resumeAPausedPackage(host, { package: input.package, member: input.member, note: input.note.trim(), may: await whoMayResume() })
-  await noteMilestone(host, { package: input.package, member: input.member, milestone: MILESTONE_OF_EVENT[event], note: input.note.trim() })
+  // One entry with a crew line that already said it (martha#983): the same key, event, package and round, as crew-code's.
+  const held = await noteMilestoneOnce(host, { package: input.package, member: input.member, milestone: MILESTONE_OF_EVENT[event], note: input.note.trim() })
+  if (held !== undefined) {
+    return { told: `${event} for ${input.package} is already in the ledger, written ${agoOf(host.clock.now(), held.at)} ago by ${held.member} (${JSON.stringify(held.note)}); not logged twice.` }
+  }
   return { told: `Kept: ${event} on ${input.package}.` }
 }
 
