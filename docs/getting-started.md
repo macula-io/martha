@@ -256,9 +256,9 @@ has started, then Enter, so the member takes it as a turn you typed. One member
 is given its first turn from its own window of Martha's tmux with
 `martha start <member> --prompt <text>`. `--prompt` is Martha's word, read
 before `--`; it is never handed to the host. A text that begins with `-` is
-typed as text. One that begins with `/`, or holds a line break or another
-control character, is refused, since it would run a slash command or start a
-second turn. A member that runs on martha-engine is not given one, and a crew
+typed as text. One that begins with `/` or `!`, or holds a line break or
+another control character, is refused, since it would run a slash command or a
+shell command, or start a second turn. A member that runs on martha-engine is not given one, and a crew
 that opens in kitty refuses `--prompt`.
 
 The crew is the folder's own: every member started there reads one store and
