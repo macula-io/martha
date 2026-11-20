@@ -351,7 +351,9 @@ async function theStartRuns(start: AStartOnItsHost, seams: TheEnginesStartSeams,
   queued(turns, seams, await refresh.atTheStart())
   queued(turns, seams, start.prompt === undefined ? undefined : { text: start.prompt, arrival: { source: THE_START_PROMPTS_SOURCE } })
   const crew = theCrewsTurnsOf(start, turns, seams)
-  const owners = theOwnersLinesOf(start, theCrewToolsHeardBy(answers, driven.session_id))
+  // The owner's `/crew-refresh now` asks the refresh question at once, and its act goes on the queue (martha#999 package 3).
+  const refreshNow = (): void => void refresh.onTheOwnersNow().then((turn) => queued(turns, seams, turn), () => undefined)
+  const owners = theOwnersLinesOf(start, theCrewToolsHeardBy(answers, driven.session_id), refreshNow)
   // The turns still queued settle before the end: a refresh question still in flight writes the crew's stores, which
   // the end must not outlive (martha#999 package 5).
   const stopped = launch.engine.exited.then(() => theReadersStopped(owners, crew)).then(() => turns.settled()).then(theEnd)
@@ -395,13 +397,13 @@ export interface TheOwnersLines {
  * The owner's lines at this member's tab (martha#927 part 2), each told what it gets, one line at a time and in the
  * order typed. None reaches the engine. A line whose answer throws is told so, and the next line is still heard.
  */
-export function hearTheOwnersLines(input: NodeJS.ReadableStream, hear: HearTheLauncher, tell: (line: string) => void): TheOwnersLines {
+export function hearTheOwnersLines(input: NodeJS.ReadableStream, hear: HearTheLauncher, tell: (line: string) => void, refreshNow: () => void = () => {}): TheOwnersLines {
   const lines = createInterface({ input, terminal: false })
   let heard: Promise<void> = Promise.resolve()
   lines.on('line', (line) => {
     heard = heard
       .then(async () => {
-        const told = await whatTheOwnersLineGets(line, hear)
+        const told = await whatTheOwnersLineGets(line, hear, refreshNow)
         if (told !== null) tell(told)
       })
       .catch((error: unknown) => tell(`Martha could not answer that line: ${String(error)}`))
@@ -410,10 +412,10 @@ export function hearTheOwnersLines(input: NodeJS.ReadableStream, hear: HearTheLa
 }
 
 /** Where this start hears the owner: the lines a start is handed, else this process's input when it is the owner's terminal. */
-function theOwnersLinesOf(start: AStartOnItsHost, hear: HearTheLauncher): TheOwnersLines {
+function theOwnersLinesOf(start: AStartOnItsHost, hear: HearTheLauncher, refreshNow: () => void): TheOwnersLines {
   const input = start.owners_lines ?? (isOnTheOwnersTerminal(start.stdio) ? process.stdin : undefined)
   if (input === undefined) return { stop: () => {} }
-  return hearTheOwnersLines(input, hear, (line) => start.tellOwner(line))
+  return hearTheOwnersLines(input, hear, (line) => start.tellOwner(line), refreshNow)
 }
 
 /** The owner's lines and the crew's messages, no longer heard once the engine has exited. */

@@ -18,9 +18,13 @@ import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_direc
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {aDeclineIsAllowed, theFlowSentBack, aFlowStarting, aFlowStalled, aRefreshIsDue, FLOW_WINDOW_MS, keepTheFlow, REFRESH_MARGIN_PERCENT, refreshesPlace, theFlowAbandoned, theFlowClearing, theFlowDeclined, theFlowOf, theRefreshFile, type ARefresh, type TheSessionsReading} from './refresh_a_member.ts'
+import { theAfterATaskOf } from './the_refresh_mode.ts'
 import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 /** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
 const HANDOVER_LIMIT_PERCENT = THRESHOLDS_WHEN_UNNAMED.handover_percent
+
+/** The declaration's switch on, as the mode a member starts in measures a finished task. */
+const BETWEEN_TASKS = theAfterATaskOf({ kind: 'between_tasks' })
 
 const home = mkdtempSync(join(tmpdir(), 'martha-refresh-'))
 after(() => removeTheTree(home))
@@ -32,7 +36,7 @@ const reading = (over: Partial<TheSessionsReading> = {}): TheSessionsReading => 
   limit_percent: HANDOVER_LIMIT_PERCENT,
   started_at_percent: 10,
   finished_report: '',
-  refresh_between_tasks: false,
+  after_a_task: null,
   parked: false,
   asked: false,
   flow: undefined,
@@ -46,31 +50,31 @@ const aFlow = (over: Partial<ARefresh> = {}): ARefresh => ({
 })
 
 test('#255: past the limit a member hands over whatever the declaration switches on', () => {
-  const due = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT, refresh_between_tasks: false }))
+  const due = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT, after_a_task: null }))
   assert.deepEqual(due, { due: true, trigger: 'at_the_limit' })
 })
 
 test('#255: a session that began above the threshold is not asked on its first report (#470)', () => {
-  const due = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT + 5, started_at_percent: HANDOVER_LIMIT_PERCENT + 5, refresh_between_tasks: true, finished_report: 'a task' }))
+  const due = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT + 5, started_at_percent: HANDOVER_LIMIT_PERCENT + 5, after_a_task: BETWEEN_TASKS, finished_report: 'a task' }))
   assert.deepEqual(due, { due: false, why: 'it has not grown past the share this session began at' })
 })
 
 test('#255: a finished task past the margin above where the session began is asked once', () => {
   const beganAt = HANDOVER_LIMIT_PERCENT - 3 * REFRESH_MARGIN_PERCENT
-  const due = aRefreshIsDue(reading({ percent: beganAt + REFRESH_MARGIN_PERCENT, started_at_percent: beganAt, refresh_between_tasks: true, finished_report: 'a task' }))
+  const due = aRefreshIsDue(reading({ percent: beganAt + REFRESH_MARGIN_PERCENT, started_at_percent: beganAt, after_a_task: BETWEEN_TASKS, finished_report: 'a task' }))
   assert.deepEqual(due, { due: true, trigger: 'after_a_task' })
 })
 
 test('#255: the switch being off keeps the after-a-task trigger off, and the limit still bites', () => {
-  const under = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT - 1, started_at_percent: 0, refresh_between_tasks: false, finished_report: 'a task' }))
-  assert.deepEqual(under, { due: false, why: 'the crew did not switch the after-a-task trigger on' })
-  assert.deepEqual(aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT, refresh_between_tasks: false })), { due: true, trigger: 'at_the_limit' })
+  const under = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT - 1, started_at_percent: 0, after_a_task: null, finished_report: 'a task' }))
+  assert.deepEqual(under, { due: false, why: 'its refresh mode is off' })
+  assert.deepEqual(aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT, after_a_task: null })), { due: true, trigger: 'at_the_limit' })
 })
 
 test('#255: a parked member is not refreshed between tasks, and still hands over at the limit', () => {
-  const parked = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT, started_at_percent: 0, refresh_between_tasks: true, finished_report: 'a task', parked: true }))
+  const parked = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT, started_at_percent: 0, after_a_task: BETWEEN_TASKS, finished_report: 'a task', parked: true }))
   assert.deepEqual(parked, { due: true, trigger: 'at_the_limit' })
-  const underTheLimit = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT - 1, started_at_percent: 0, refresh_between_tasks: true, finished_report: 'a task', parked: true }))
+  const underTheLimit = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT - 1, started_at_percent: 0, after_a_task: BETWEEN_TASKS, finished_report: 'a task', parked: true }))
   assert.deepEqual(underTheLimit, { due: false, why: 'it is parked' })
 })
 
@@ -78,10 +82,10 @@ test('#255: a decline holds the ask back on the very task it was taken on, and t
   // The design's at-limit rule is one ask per finished turn: a decline taken at the limit is not asked again on the
   // same report, so the flow does not beat, and the next task that finishes asks once more.
   const declined = aFlow({ phase: 'declined', percent: HANDOVER_LIMIT_PERCENT, asked_on: 'a task' })
-  const sameTask = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT, started_at_percent: 10, refresh_between_tasks: true, finished_report: 'a task', flow: declined }))
+  const sameTask = aRefreshIsDue(reading({ percent: HANDOVER_LIMIT_PERCENT, started_at_percent: 10, after_a_task: BETWEEN_TASKS, finished_report: 'a task', flow: declined }))
   assert.deepEqual(sameTask, { due: false, why: 'it declined on this task' })
   const nextTask = aRefreshIsDue(
-    reading({ percent: HANDOVER_LIMIT_PERCENT, started_at_percent: 10, refresh_between_tasks: true, finished_report: 'another task', flow: declined }),
+    reading({ percent: HANDOVER_LIMIT_PERCENT, started_at_percent: 10, after_a_task: BETWEEN_TASKS, finished_report: 'another task', flow: declined }),
   )
   assert.deepEqual(nextTask, { due: true, trigger: 'at_the_limit' })
 })
@@ -92,7 +96,7 @@ test('#255: a successor past the limit is asked on the finished task its predece
   // setting and a hold that outlasted it would grow a member to 90% and never ask (design §4).
   const itsPredecessorsFlow = aFlow({ phase: 'abandoned', percent: 40, asked_on: 'a task' })
   const pastTheLimit = aRefreshIsDue(
-    reading({ percent: HANDOVER_LIMIT_PERCENT + 20, started_at_percent: 5, refresh_between_tasks: true, finished_report: 'a task', flow: itsPredecessorsFlow }),
+    reading({ percent: HANDOVER_LIMIT_PERCENT + 20, started_at_percent: 5, after_a_task: BETWEEN_TASKS, finished_report: 'a task', flow: itsPredecessorsFlow }),
   )
   assert.deepEqual(pastTheLimit, { due: true, trigger: 'at_the_limit' })
 })

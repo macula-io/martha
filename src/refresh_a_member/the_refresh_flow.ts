@@ -10,6 +10,7 @@
 
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { declareCrew, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { theAfterATaskOf, theModeOf } from './the_refresh_mode.ts'
 import type { CrewPlace, DocumentStore, HandoverStampStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { keepTheMilestone, whatWasSent } from '../keep_the_ledger/keep_the_ledger.ts'
 import { theContractPartOf } from '../keep_the_package_contract/keep_the_package_contract.ts'
@@ -213,14 +214,18 @@ async function theOpenFlow(places: TheRefreshPlaces): Promise<AnOpenFlow | { rea
   return { place, flow: read, settings }
 }
 
-/** Whether a refresh is due, over what this session reported and what the launcher knows of it. */
+/**
+ * Whether a refresh is due, over what this session reported and what the launcher knows of it. A mode the store cannot
+ * read refreshes nothing after a task, and /crew-refresh says why; the limit still hands over (martha#999 package 3).
+ */
 function theDueOf(places: TheRefreshPlaces, question: TheSessionsQuestion, opened: AnOpenFlow, beganAt: number): Due {
+  const mode = theModeOf(opened.place, places.member, opened.settings.house_rules[REFRESH_BETWEEN_TASKS])
   return aRefreshIsDue({
     percent: question.percent,
     limit_percent: opened.settings.thresholds.handover_percent,
     started_at_percent: beganAt,
     finished_report: finishedReportIn(places),
-    refresh_between_tasks: opened.settings.house_rules[REFRESH_BETWEEN_TASKS],
+    after_a_task: 'refusal' in mode ? null : theAfterATaskOf(mode),
     parked: isParked(places),
     asked: aWaitingAsk(opened.place, places.member) !== undefined,
     flow: opened.flow,
@@ -518,7 +523,7 @@ function placeBegan(places: TheRefreshPlaces, question: TheSessionsQuestion): nu
 }
 
 /** The reason an ask someone made is waiting, or undefined: the file is one per member, written whole. */
-function aWaitingAsk(place: CrewPlace, member: string): string | undefined {
+export function aWaitingAsk(place: CrewPlace, member: string): string | undefined {
   return askIn(place, member)?.reason
 }
 

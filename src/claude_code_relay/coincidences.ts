@@ -20,6 +20,7 @@ import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owner
 import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { THE_BUDGET_ASK } from '../keep_what_a_session_spent/the_crews_budget.ts'
+import { THE_REFRESH_MODE_ASK } from '../refresh_a_member/the_refresh_command.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { UNHELD_WORK } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
@@ -47,6 +48,7 @@ export const COINCIDENCES: readonly Exception[] = [
   // value, so the value is written as the constant that holds it: a literal here
   // would be the same copy the rule exists to catch, in the very file that excuses it.
   { value: THE_REFRESH_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
+  { value: THE_REFRESH_MODE_ASK, file: 'claude_code_relay/hooks/crew_command.ts', reason: `the ask either host's /crew-refresh puts to the launcher (martha#999 package 3); ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   { value: THE_BUDGET_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher when the owner types /crew-budget (martha#990); ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   { value: WRITE_MY_HANDOVER_TOOL, file: 'claude_code_relay/hooks/crew.tsx', reason: `the name of a tool this mod answers and registers; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   // The five landing tools' hooks (martha#256): a hooks module runs with no Node and may import only its own files,

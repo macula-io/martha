@@ -4,7 +4,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { CREW_USAGE, THE_CREW_COMMAND, theCrewCommandAnswers, type Heard } from '../claude_code_relay/hooks/crew_command.ts'
+import { CREW_USAGE, THE_CREW_COMMAND, THE_REFRESH_COMMAND, theCrewCommandAnswers, type Heard } from '../claude_code_relay/hooks/crew_command.ts'
+import { THE_REFRESH_MODE_ASK } from '../refresh_a_member/the_refresh_command.ts'
 import { SAY_TO_THE_CREW_TOOL } from '../send_a_crew_message/say_to_the_crew_tool.ts'
 import { SEE_THE_CREW_TOOL } from '../see_the_crew/the_see_the_crew_tool.ts'
 import { seeTheCrew, thePaneAnsweredBy } from '../see_the_crew/see_the_crew.ts'
@@ -79,4 +80,21 @@ test('#927 part 2: a /crew the launcher refuses prints the refusal as worded', a
   const refusal = '"Ceres" is not a member of this crew. The crew is Pallas, Vesta. Nothing was sent.'
   const launcher = aLauncher({ [SAY_TO_THE_CREW_TOOL.name]: { why: refusal } })
   assert.equal(await whatTheOwnersLineGets(`${THE_CREW_COMMAND} Ceres hello`, launcher.hear), refusal)
+})
+
+test('#999 package 3: /crew-refresh at an engine tab asks the launcher what a Claude Code tab asks, and starts a taken now', async () => {
+  const said = 'Refreshing Vesta now.'
+  const nows: string[] = []
+  const launcher = aLauncher({ [THE_REFRESH_MODE_ASK]: { said } })
+  assert.equal(await whatTheOwnersLineGets(`${THE_REFRESH_COMMAND}  on 61 `, launcher.hear, () => nows.push('on')), said)
+  assert.equal(await whatTheOwnersLineGets(`${THE_REFRESH_COMMAND} now`, launcher.hear, () => nows.push('now')), said)
+  assert.deepEqual(launcher.asked, [
+    { tool: THE_REFRESH_MODE_ASK, args: { typed: 'on 61' } },
+    { tool: THE_REFRESH_MODE_ASK, args: { typed: 'now' } },
+  ])
+  assert.deepEqual(nows, ['now'], 'only a now starts a refresh')
+  // A now the launcher refused starts nothing, and the owner reads why.
+  const refusing = aLauncher({})
+  assert.equal(await whatTheOwnersLineGets(`${THE_REFRESH_COMMAND} now`, refusing.hear, () => nows.push('refused')), `nothing answers ${THE_REFRESH_MODE_ASK}`)
+  assert.deepEqual(nows, ['now'])
 })
