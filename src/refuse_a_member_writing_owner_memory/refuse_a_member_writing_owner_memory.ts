@@ -234,6 +234,24 @@ export const XDG_CONFIG_HOME_VARIABLE = 'XDG_CONFIG_HOME'
 
 /** The user-level git config file, under the home git reads it from. */
 const OWNERS_GITCONFIG = '.gitconfig'
+/**
+ * The files under a home that run later (martha#987, gap 15 of #957; crew-code's protected writes, macula-sponsors
+ * 6f353d51 core/protected_writes.ts:58 and :101): a shell's startup files, which run on the next shell anyone starts
+ * there, and the ssh config, whose ProxyCommand runs a program on the next ssh. Nothing reads these files: only a
+ * path is compared. This binds the file tools and the host's own rules, and nothing else: a member's shell can still
+ * write any of them, the same-user residual every place here has (A13).
+ */
+const SHELL_STARTUP_FILES: readonly string[] = ['.zshrc', '.zprofile', '.zshenv', '.profile', '.bashrc', '.bash_profile']
+const SSH_CONFIG: readonly string[] = ['.ssh', 'config']
+/** Whose runs load the files that run later, as the notice names them. */
+const RUN_LATER_BY = "the owner's next shells and ssh runs"
+
+/** The files under each home that run later, each denied as a file (martha#987). */
+function filesThatRunLaterUnder(homes: readonly string[]): DeniedPlace[] {
+  return homes.flatMap((home) =>
+    [...SHELL_STARTUP_FILES.map((file) => join(home, file)), join(home, ...SSH_CONFIG)].map((what): DeniedPlace => ({ what, issue: 'martha#987', loaded_by: RUN_LATER_BY })),
+  )
+}
 /** The user-level git config file's path under `$XDG_CONFIG_HOME` (and under `~/.config` when that is unset). */
 const GIT_CONFIG_UNDER_XDG = ['git', CONFIG] as const
 /** The file in a worktree's git dir that names the git dir it shares, relative to its own. */
@@ -431,6 +449,8 @@ export function ownerMemoryPlaces({ launcher_env, member_env, home, launch_dir, 
     files: deniedPlaces([
       ...configDirs.map((dir): DeniedPlace => ({ what: join(dir, OWNER_INSTRUCTIONS), issue: 'martha#136' })),
       ...code.files.map((what): DeniedPlace => ({ what, issue: 'martha#187' })),
+      // The launcher's home and the member's, when its environment names another (martha#987).
+      ...filesThatRunLaterUnder(unique([home, launcher_env.HOME, member_env.HOME])),
     ]),
     name_shapes: globalConfigFamiliesIn(launcher_env, member_env),
     // Every user-level git config file git 2.56.0 can read: the two the variables
