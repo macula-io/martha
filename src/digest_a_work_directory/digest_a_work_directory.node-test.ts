@@ -15,6 +15,7 @@ import { test, type TestContext } from 'node:test'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { EXIT_DONE, EXIT_USAGE } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { aWorkDirectoryOnThisMachine } from '../a_work_directory_on_this_machine/a_work_directory_on_this_machine.ts'
+import { CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE } from '../declare_crew/declare_crew.ts'
 import { digestOf, THE_MANIFEST_SEPARATOR } from './digest_a_work_directory.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
@@ -61,15 +62,15 @@ function asCrewCodeDigests(directory: string): string {
 }
 
 /** The line the slice answers for `directory`, or a failure naming the refusal. */
-async function lineOf(directory: string, runtime_place?: string): Promise<string> {
-  const answered = await digestOf({ directory, ...(runtime_place === undefined ? {} : { runtime_place }), read: aWorkDirectoryOnThisMachine })
+async function lineOf(directory: string): Promise<string> {
+  const answered = await digestOf({ directory, read: aWorkDirectoryOnThisMachine })
   assert.ok('line' in answered, 'refusal' in answered ? answered.refusal : '')
   return answered.line
 }
 
 /** The refusal the slice answers for `directory`. */
-async function refusalOf(directory: string, runtime_place?: string): Promise<string> {
-  const answered = await digestOf({ directory, ...(runtime_place === undefined ? {} : { runtime_place }), read: aWorkDirectoryOnThisMachine })
+async function refusalOf(directory: string): Promise<string> {
+  const answered = await digestOf({ directory, read: aWorkDirectoryOnThisMachine })
   assert.ok('refusal' in answered, 'line' in answered ? answered.line : '')
   return answered.refusal
 }
@@ -121,31 +122,51 @@ test('a directory holding no files is refused rather than given the digest of no
   assert.match(await refusalOf(tree), /holds no files$/)
 })
 
-test('the crew\'s runtime place is left out when it lies inside the directory named', async (t) => {
+test('a crew directory\'s own state is left out, by crew-code\'s rule: ./state beside its declaration', async (t) => {
   const tree = aTree(t)
+  writeFileSync(join(tree, CREW_CODE_DECLARATION_FILE), '{}\n')
   writeFileSync(join(tree, 'work.md'), 'the work\n')
   const state = join(tree, 'state')
   mkdirSync(state)
   writeFileSync(join(state, 'a-row.json'), '{}\n')
-  const without = join(aTree(t), 'flat')
-  mkdirSync(without)
-  writeFileSync(join(without, 'work.md'), 'the work\n')
-  const hexOf = (line: string): string => line.slice(line.indexOf('@sha256:') + '@sha256:'.length)
-  assert.equal(hexOf(await lineOf(tree, state)), hexOf(await lineOf(without)), 'the state inside is not the work')
+  assert.equal(await lineOf(tree), asCrewCodeDigestsWith(String.raw`-path ./state -prune -o`, tree), 'the state beside crew-code\'s declaration is not the work')
 })
 
-test('a runtime place whose name starts with two dots is inside, not above (mutant: `..` matched by prefix)', async (t) => {
+test('a crew directory\'s own state is left out, by crew-code\'s rule: the state under its declaration folder', async (t) => {
+  const tree = aTree(t)
+  const declaration = join(tree, CREW_CODE_DECLARATION_DIRECTORY)
+  mkdirSync(declaration)
+  writeFileSync(join(declaration, CREW_CODE_DECLARATION_FILE), '{}\n')
+  mkdirSync(join(declaration, 'state'))
+  writeFileSync(join(declaration, 'state', 'a-row.json'), '{}\n')
+  writeFileSync(join(tree, 'work.md'), 'the work\n')
+  assert.equal(await lineOf(tree), asCrewCodeDigestsWith(`-path ./${CREW_CODE_DECLARATION_DIRECTORY}/state -prune -o`, tree), 'the state under .crew is not the work')
+})
+
+test('a state directory with no crew-code declaration beside it is work, and counts (mutant: the prune applied to every tree)', async (t) => {
   const tree = aTree(t)
   writeFileSync(join(tree, 'work.md'), 'the work\n')
-  const named = join(tree, '..held')
-  mkdirSync(named)
-  writeFileSync(join(named, 'a-row.json'), '{}\n')
-  const line = await lineOf(tree, named)
-  assert.equal(line, asCrewCodeDigestsWithout(String.raw`-path ./..held -prune -o`, tree), 'the same value as the pipeline with that place pruned')
+  mkdirSync(join(tree, 'state'))
+  writeFileSync(join(tree, 'state', 'a-row.json'), '{}\n')
+  assert.equal(await lineOf(tree), asCrewCodeDigests(tree), 'a state directory the rule does not name was left out')
 })
 
-/** crew-code's pipeline with one more prune, for a tree whose runtime place has a name of its own. */
-function asCrewCodeDigestsWithout(prune: string, directory: string): string {
+test('a name holding a backslash is written as sha256sum writes it (mutant: the name left unescaped)', async (t) => {
+  const tree = aTree(t)
+  writeFileSync(join(tree, 'a\\b.txt'), 'one\n')
+  writeFileSync(join(tree, 'plain.txt'), 'two\n')
+  assert.equal(await lineOf(tree), asCrewCodeDigests(tree))
+})
+
+test('a name holding a newline is written as sha256sum writes it (mutant: the newline left as itself)', async (t) => {
+  const tree = aTree(t)
+  writeFileSync(join(tree, 'a\nb.txt'), 'one\n')
+  writeFileSync(join(tree, 'plain.txt'), 'two\n')
+  assert.equal(await lineOf(tree), asCrewCodeDigests(tree))
+})
+
+/** crew-code's own pipeline with one prune, as `bin/crew digest` builds it from the directory's own declaration. */
+function asCrewCodeDigestsWith(prune: string, directory: string): string {
   const script = [
     `modes="$(cd "$1" && find . ${prune} -type f -printf '%m %p\\n' | LC_ALL=C sort)"`,
     `sums="$(cd "$1" && find . ${prune} -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum)"`,

@@ -328,6 +328,14 @@ export function moveANodeId(state: MarthaState, from: string, to: string, note: 
   return undefined
 }
 
+/**
+ * The node ids the crew keeps, as they are, and nothing made: for an act that must ask whether a name already has one
+ * without giving it one (martha#985, a rename's `name_in_use`).
+ */
+export function nodeIdsKept(state: MarthaState, note: (line: string) => void = () => {}): { readonly ids: Readonly<Record<string, string>> } | Refused {
+  return readNodeIds(join(state.directory, MEMBERS_FILE), note)
+}
+
 export function nodeIdsFor(
   state: MarthaState,
   names: readonly string[],
