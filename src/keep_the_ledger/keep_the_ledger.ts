@@ -14,8 +14,11 @@
 import {
   actsAwaitingOutcome,
   concludeAct,
+  FIX_SHIPPED_AFTER_RELEASE,
   noteMilestoneOnce,
   PACKAGE_RESUMED,
+  RELEASE_SHIPPED,
+  REVIEW_ROUND_CLOSED,
   type ActAwaitingOutcome,
   type LedgerHost,
   type Milestone,
@@ -29,9 +32,9 @@ export type CrewLogEvent = (typeof CREW_LOG_EVENTS)[number]
 
 export const MILESTONE_OF_EVENT: Readonly<Record<CrewLogEvent, Milestone>> = {
   checkpoint: 'checkpoint_reached',
-  review_round: 'review_round_closed',
-  release: 'release_shipped',
-  fix_after_ship: 'fix_shipped_after_release',
+  review_round: REVIEW_ROUND_CLOSED,
+  release: RELEASE_SHIPPED,
+  fix_after_ship: FIX_SHIPPED_AFTER_RELEASE,
   resume: PACKAGE_RESUMED,
 }
 
