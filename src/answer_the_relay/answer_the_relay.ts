@@ -78,6 +78,7 @@ import type { JournalAnswer, RelayJournal } from '../keep_the_relays_journal/kee
 import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { theGitCallJudged, theRefTransactionJudged, type AGuardsAnswer } from '../guard_the_git_a_member_runs/judge_a_guards_question.ts'
+import { THE_CREW_STATE_ASK } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 
 /** What the launcher sends back, or that it is stopping the member and sends nothing. */
 export type RelayReply =
@@ -229,7 +230,7 @@ const isBody = (value: unknown): value is Body => typeof value === 'object' && v
 const isText = (value: unknown): value is string => typeof value === 'string' && value !== ''
 
 /** What one member's answers share: its place, and the entry that holds the sessions and the order they are answered in. */
-interface RelayState {
+export interface RelayState {
   readonly place: MemberRelayPlace
   /**
    * What this launch answers from: its sessions, the record of each, one order its events are answered in, and the tree
@@ -359,8 +360,10 @@ async function answerACoreTool(state: RelayState, body: unknown): Promise<Answer
  * A tool call the mod posted, answered; and a main turn's start it reported, recorded among the host's events after the
  * carrier decided what the turn took in (martha#440): the record follows that decision, never one of its own.
  */
-async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrder: (work: () => Promise<void>) => Promise<void>): Promise<Answered | Refused> {
-  const answer = await answerACoreTool(state, body)
+export async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrder: <T>(work: () => Promise<T>) => Promise<T>): Promise<Answered | Refused> {
+  // The crew state is taken in on A28 before it is answered (martha#984), so its keep waits behind the host's events
+  // already asked for, as an engine launch's crew call does.
+  const answer = bodyOfAToolCall(body)?.tool === THE_CREW_STATE_ASK ? await inOrder(async () => answerACoreTool(state, body)) : await answerACoreTool(state, body)
   const start = state.everyTurn.startIn(body, answer)
   if (start !== undefined) await inOrder(async () => state.everyTurn.recorded(start))
   return answer
