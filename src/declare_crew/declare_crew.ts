@@ -587,10 +587,20 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
   }
 }
 
+/**
+ * The fields a key itself is written in (martha#601): a field this reader does not know is one notice and the crew is
+ * read on, but a key written into the declaration is the leaked key the cut keeps, so it is still refused by name.
+ */
+const FIELDS_A_KEY_IS_WRITTEN_IN = ['key', 'token'] as const
+
 /** The declared engine endpoint, or null when there is none: a host reached over http or https, a base path, and a variable's name. */
 function engineEndpointOf(refuse: Refuse, value: unknown): EngineEndpoint | null {
   if (value === undefined) return null
   if (!isObject(value)) return refuse.at(ENGINE_ENDPOINT, `is not ${shapeOf(ENGINE_ENDPOINT_REQUIRED_KEYS, ENGINE_ENDPOINT_OPTIONAL_KEYS)}`)
+  const writtenKey = FIELDS_A_KEY_IS_WRITTEN_IN.find((field) => field in value)
+  if (writtenKey !== undefined) {
+    return refuse.at(`${ENGINE_ENDPOINT}.${writtenKey}`, 'never goes in the declaration: key_from names the environment variable that holds it')
+  }
   refuse.unknownKeys(value, [...ENGINE_ENDPOINT_REQUIRED_KEYS, ...ENGINE_ENDPOINT_OPTIONAL_KEYS], `${ENGINE_ENDPOINT}.`)
   const checked = anEndpointsHost(value['host'])
   if ('why' in checked) return refuse.at(`${ENGINE_ENDPOINT}.host`, checked.why)
