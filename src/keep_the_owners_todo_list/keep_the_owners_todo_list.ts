@@ -61,13 +61,13 @@ export const SWEEP_INTERVAL_MS = 45_000
  */
 export const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u
 
+/** A fine-grained GitHub token's prefix: one definition, which the live run's kept record builds its pattern from too. */
+export const FINE_GRAINED_TOKEN_PREFIX = 'github_pat_'
+
 /**
  * A GitHub token's prefixes: the classic personal, OAuth, user-to-server, server-to-server and refresh forms, and the
  * fine-grained one. The private scan refuses the same in any text it reads (martha#904).
  */
-/** A fine-grained GitHub token's prefix: one definition, which the live run's kept record builds its pattern from too. */
-export const FINE_GRAINED_TOKEN_PREFIX = 'github_pat_'
-
 export const GITHUB_TOKEN_PREFIXES = ['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', FINE_GRAINED_TOKEN_PREFIX] as const
 
 /** The prefixes of the secrets a command may not hold: a row names a variable, never its value. */
