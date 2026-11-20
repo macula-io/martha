@@ -40,7 +40,10 @@ up.
   resolves. A member is a Claude Code session, so the same sign-in serves it.
 
 - **git**, and a project that is a git checkout. Martha reads the top of the
-  checkout it is run in, and every member works in that same tree.
+  checkout it is run in, and every member works in that same tree. Run outside
+  any checkout, Martha takes the folder it is run in as the crew's root: that is
+  how a team works across a whole workspace (see
+  [A team across your workspace](#a-team-across-your-workspace)).
 
 ## 1. Declare the crew
 
@@ -199,9 +202,9 @@ each `martha start` holds the terminal it was run in.
 
 ## 6. Relay the hand-off
 
-Members do not message each other in this release, and the builder may send no
-executable text to the reviewer. You carry the change across: in the reviewer's
-terminal, type the range you want reviewed:
+Members message each other with the crew's `say_to_the_crew` tool, but the
+builder may send no executable text to the reviewer. You carry the change
+across: in the reviewer's terminal, type the range you want reviewed:
 
 ```text
 review main..first-task
@@ -215,6 +218,30 @@ Claude Code may hand the review to its own agent. Martha follows that agent:
 its start, its stop and every call it makes are recorded, so the answer it
 hands back is placed by that record. By default the reviewer keeps its shell
 while the agent runs; the answer is recorded and nothing is refused.
+
+## A team across your workspace
+
+Open one kitty terminal in the folder that holds your clones and worktrees, say
+`~/work` with `~/work/github.com/<org>/<repo>` and `~/work/worktrees`, and run:
+
+```sh
+martha up --claude
+```
+
+The first run declares a team in `~/work/.martha/martha.json`: a Supervisor and
+three workers, `opus-1` to `opus-3`, each on Claude Code running Opus, with
+Martha's own tools and no other plugin. The declaration's table lets the
+Supervisor assign work, offer your asks, restart and resume members beside you;
+a landing still needs your yes. When `~/work/github.com` exists, its layout is
+declared too, with the worktrees beside it. Then every one of those members
+that is not running opens in a kitty tab of its own.
+
+A second run adds nothing to the declaration and opens only the members that
+are not running. When your shell sets `CLAUDE_CODE_PLUGIN_DIRS`, each member
+is started without it, and Martha says so in one line per member.
+
+The crew is the folder's own: every member started there reads one store and
+one channel, whichever host it runs on.
 
 ## Parking a member, and waking it
 
@@ -362,7 +389,6 @@ it:
 
 | What you see | What to do |
 |---|---|
-| `... is not inside a git checkout. Run martha in the checkout your crew works in.` | `cd` to your project and run it there |
 | `.../.martha/martha.json already exists, and martha init never writes over a declaration.` | keep it; `martha init` is done |
 | `... carries no readable installer pin ...` | this release predates the pin; upgrade once with the bootstrap line |
 | `... npm does not serve <name>@<version>, which this release pins ...` | that installer version is not on npm; nothing was installed |

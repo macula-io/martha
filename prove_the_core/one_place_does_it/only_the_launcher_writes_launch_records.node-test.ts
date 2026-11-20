@@ -42,6 +42,7 @@ const THE_HOST_ADAPTERS = [
     'cut_the_rules_from_the_host_binary',
     'dashboard_rows_directory',
     'declare_a_solo_crew',
+    'declare_a_team_at_a_workspace',
     'drive_the_recorded_host',
     'end_a_launch',
     'end_a_launch_when_its_run_ends',

@@ -1,0 +1,6 @@
+{
+  "_why": "The team `martha up --claude` declares at a workspace (martha#511, DECIDED 2026-11-20 \"1 Opus Supervisor + 3 Opus Workers\"): the mode's name a person reads, the model each member runs as Claude Code's own vocabulary spells it (recorded_claude_code_models.json), and how many workers stand beside the Supervisor. Kept as data, as the host's vocabulary is, so the declaration's words are read from one place.",
+  "mode": "team",
+  "model": "opus",
+  "workers": 3
+}

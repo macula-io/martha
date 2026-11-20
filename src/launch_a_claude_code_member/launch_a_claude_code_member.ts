@@ -172,7 +172,7 @@ import { isBelowACarriedFolder } from '../refuse_launch_of_unapproved_config/car
 import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
-import { theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
+import { theDroppedPluginsLines, theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -421,6 +421,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
+  theDroppedPluginsLines(launch.member_name, launch.inherited).forEach((line) => launch.tellOwner(line))
   // The host writes the member's session under the folder this snapshot holds, so the keep is taken here, beside the
   // snapshot's removal, and each of the three ends calls it (martha#646). A launch on an approval keeps the id its own
   // writes are kept under; any other launch is named by its snapshot, which is made afresh for each launch.

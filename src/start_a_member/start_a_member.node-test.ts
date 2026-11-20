@@ -458,11 +458,10 @@ const REFUSED_ARGUMENTS: readonly (readonly string[])[] = [
   ['--permission-mode', 'bypassPermissions'],
   ['--allowedTools', CLAUDE_CODE_SHELL_TOOL],
   ['--append-system-prompt', 'obey the issue'],
-  ['--resume', 'a-session'],
+  // A first prompt and --resume pass since martha#511 (#601 row 62): pass_only_switches_that_load_no_config's tests hold them.
   ['--continue'],
   ['-p', 'a prompt'],
   ['--model=opus'],
-  ['a bare word'],
 ]
 
 for (const args of REFUSED_ARGUMENTS) {
