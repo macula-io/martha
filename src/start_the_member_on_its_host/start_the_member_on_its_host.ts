@@ -96,6 +96,9 @@ export interface AStartOnItsHost {  readonly member: string
   readonly command: string
   /** A test's ear on what the member's relay is handed; a real start gives none. */
   readonly hear_relay_place?: (place: MemberRelayPlace) => void
+  /** The owner's lines at the member's tab (martha#927 part 2): a test's own; a real start gives none, and the tab's
+   * terminal is read when it is the owner's. */
+  readonly owners_lines?: NodeJS.ReadableStream
   tellOwner(line: string): void
 }
 

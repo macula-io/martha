@@ -127,6 +127,8 @@ export interface MemberStartRequest {
    * measured through the launcher rather than inferred from the line that passes it. A real start gives none.
    */
   readonly hear_relay_place?: (place: MemberRelayPlace) => void
+  /** The owner's lines at an engine member's tab (martha#927 part 2): a test's own; a real start gives none. */
+  readonly owners_lines?: NodeJS.ReadableStream
   tellOwner(line: string): void
 }
 
@@ -242,6 +244,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     command: ready.command,
     channel,
     ...(request.hear_relay_place === undefined ? {} : { hear_relay_place: request.hear_relay_place }),
+    ...(request.owners_lines === undefined ? {} : { owners_lines: request.owners_lines }),
     tellOwner: (line) => request.tellOwner(line),
   })
   if (started.started) watchForAStopOf(request, started, channel)
