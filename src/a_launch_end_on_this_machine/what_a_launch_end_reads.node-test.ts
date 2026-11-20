@@ -9,10 +9,12 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import type { LaunchMade } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
+import { groupIn } from '../linux_process_identity/process_identity_from_proc.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { bootTimeMsUnder, cleanUpIfTheLauncherEnds, processesInGroupUnder, startedAtMs } from './what_a_launch_end_reads.ts'
 
-/** A synthetic start, never a real one: this repository is public. */
+/** A synthetic pid and start, never a real one: this repository is public. */
+const PLUTO = { pid: 4101 }
 const STARTED = '900100'
 
 const scratch = (t: TestContext): string => {
@@ -64,6 +66,15 @@ test('#693: the boot moment and a start in ticks make a moment on the machine cl
   const ticks_per_second = 100
   assert.equal(startedAtMs(String(ticks_per_second), BOOT_SECONDS * 1000, ticks_per_second), (BOOT_SECONDS + 1) * 1000)
   assert.equal(bootTimeMsUnder(join(tmpdir(), 'no-proc-at-all-of-ours')), null)
+})
+
+/** The reader this adapter reads a group with, which martha#802 moved to the stat fields: the case stays in this file,
+ * where the base passed it, and names the reader where it now lives. */
+test('#693: the group id is read after a command name that holds spaces and brackets, and a line with no command has none', () => {
+  const fields = Array.from({ length: 20 }, (_, index) => `${index + 3}`)
+  fields[2] = '777'
+  assert.equal(groupIn(`${PLUTO.pid} (a (shell)) ${fields.join(' ')}`), 777)
+  assert.equal(groupIn('not a stat line'), null)
 })
 
 test('a launcher that exits first keeps the member\'s transcripts after the relay and before the snapshot (martha#646, D1)', () => {
