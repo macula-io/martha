@@ -13,14 +13,17 @@
 // target passes, and so does every push where git names none.
 
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 import process from 'node:process'
 import { test } from 'node:test'
 
 import { readTheGitCallsInAShellLine } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import { theWorkspacesClonesOf } from '../declare_crew/the_crews_workspace.ts'
 import {
   refuseACallInTheWorkspace,
   refuseARefUpdate,
+  theCloneOf,
   theWorkspaceTheCrewDeclared,
   type TheFacts,
   type TheWorkspace,
@@ -29,6 +32,9 @@ import {
 /** The crew's places: two directories nothing else in the tree names, so a test never borrows a constant's words. */
 const CLONES = '/place/a'
 const WORKTREES = '/place/b'
+
+/** The folder a declaration's `workspace.root` is read against: the crew's project root, absolute. */
+const A_PROJECT_ROOT = '/place'
 
 /** A crew of three members, the Supervisor among them, so a test can hold the rule to no role being exempt. */
 const WORKSPACE: TheWorkspace = { clones: CLONES, worktrees: WORKTREES, members: ['Hygiea', 'Uranus', 'Supervisor'] }
@@ -250,4 +256,19 @@ test('a ref update the shell never saw is judged on the ref it deletes, and only
   assert.equal(refuseARefUpdate({ ref: 'refs/tags/v1', deletes: true }, WORKSPACE, 'Hygiea'), undefined)
   // A create is not a delete: a push of a new branch past the shell is not this rule's.
   assert.equal(refuseARefUpdate({ ref: 'refs/heads/uranus/9', deletes: false }, WORKSPACE, 'Hygiea'), undefined)
+})
+
+// --- the places, however their root is spelled (martha#995) --------------------------
+
+test('#995: a root declared with a trailing slash places the same clones folder, so the clone under it is found', () => {
+  const said = (field: string, why: string): never => assert.fail(`${field} ${why}`)
+  const clonesOf = (root: string) => theWorkspacesClonesOf({ workspace: { root } }, A_PROJECT_ROOT, said)
+  const withoutOne = clonesOf('projects')
+  const withOne = clonesOf('projects/')
+  assert.equal(withOne, withoutOne)
+  assert.ok(withoutOne !== null, 'the root names no clones folder')
+  const clone = join(withoutOne, 'org', 'repo')
+  // The clone the guard is asked about is found under both spellings, since both read as one place.
+  assert.equal(theCloneOf(clone, withoutOne), clone)
+  assert.equal(theCloneOf(clone, withOne), clone)
 })
