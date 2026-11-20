@@ -88,7 +88,7 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
   paths: { root: fixture.clone, crew: join(fixture.clone, DECLARATION_DIRECTORY), declaration: join(fixture.clone, DECLARATION_DIRECTORY, DECLARATION_FILE), conventions: null },
   owner: 'Ann',
   host: THE_HOST_A_MEMBER_RAN_ON,
-  members: [{ name: MEMBER, role: 'builder', model: null, host: null, parked: false }],
+  members: [{ name: MEMBER, role: 'builder', model: null, host: null, parked: false, billing: null }],
   mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER], [HOLD_REVIEWS]: [OWNER] } },
   house_rules: {
     owner_items: false,

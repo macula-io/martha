@@ -36,6 +36,7 @@ import { QUEUE_ASK } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { theAsksTheOwnerSaidYesTo } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { readTheOriginACloneHas } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { aConflictMarkerNotice, theMarkersAt } from '../find_a_committed_conflict_marker/find_a_committed_conflict_marker.ts'
 import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 /** The tool this slice registers. */
@@ -43,9 +44,6 @@ export const VERIFY_RANGE = 'verify_range'
 
 /** GitHub answers a page of runs or jobs at a time; more than this on one tip is said on the line rather than hidden. */
 const PER_PAGE = 100
-
-/** A line that begins with one of these is a committed conflict marker, whatever the file holds it in. */
-const CONFLICT_MARKER = '^(<<<<<<<|>>>>>>>) '
 
 /** A change under one of these is not covered by any job of this repository, so the owner reads it by eye. */
 const BY_EYE_PREFIXES: readonly string[] = ['.github/workflows/', '.github/actions/']
@@ -212,18 +210,10 @@ async function theEndsOfTheRange(host: RangeCheckHost, range: TheRange, default_
  * that could not search is still refused: nothing can be said about the tree.
  */
 async function theTreeCarriesNoConflictMarker(host: RangeCheckHost, path: string, tip: string): Promise<Step<readonly string[]>> {
-  const found = await git(host, path, ['grep', '-I', '-l', '-E', CONFLICT_MARKER, tip])
-  if (found.exit_code === 1) return { ok: [] }
-  if (found.exit_code !== 0) return no(`${path} could not be searched for a conflict marker at ${tip}: ${saidBy(found)}.`)
-  return { ok: [`the tree at ${tip} holds a committed conflict marker: ${theFilesIn(found.stdout, tip).join(', ')}.`] }
-}
-
-/** The files a `git grep -l` answer names, with the tree it searched taken off each line. */
-function theFilesIn(said: string, tip: string): readonly string[] {
-  return said
-    .split('\n')
-    .filter((line) => line !== '')
-    .map((line) => (line.startsWith(`${tip}:`) ? line.slice(tip.length + 1) : line))
+  const found = await theMarkersAt(host, path, tip)
+  if ('refused' in found) return found
+  const notice = aConflictMarkerNotice(tip, found.ok)
+  return { ok: notice === undefined ? [] : [notice] }
 }
 
 /** The work the range's packages passed, once the range is exactly one `--no-ff` merge per package. */
