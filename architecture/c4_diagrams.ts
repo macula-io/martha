@@ -393,6 +393,10 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
     { col: 0, kind: 'b-cmp', name: 'keep_the_transcripts_of_a_launch, choose_the_transcripts_to_keep', names: ['keep_the_transcripts_of_a_launch', 'choose_the_transcripts_to_keep'], type: '[a session, after it ends]', code: true,
       desc: ['choose_the_transcripts_to_keep reads', 'no file and writes none: from what', 'the member\'s config folder holds', 'it takes the host\'s own transcripts', 'alone, redacts every token shape', 'and the key the launch handed it,', 'withholds whole a text a line break', 'split a token across, and replaces', 'a file the bounds leave no room for', 'with the line that says so;', 'keep_the_transcripts_of_a_launch is', 'the folder work the launch does', 'before it removes the snapshot at', 'every end: 0700 and 0600, written', 'whole and renamed, the mark of a', 'token found beside them, and the', 'launches past the newest 64 pruned', '(martha#646)'] },
   ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'know_the_private_text_classes', names: ['know_the_private_text_classes'], type: '[what a public text may not carry]', code: true,
+      desc: ['The private-text classes, one list', 'the scans share: a home path, a', 'private address, an email outside', 'the declared domains, a hex id, a', 'GitHub token and a lab hostname,', 'read line by line with a hit', 'naming the class and withholding', 'the value (martha#855); the digest', 'forms a public id may be written', 'in are here too (martha#289). It', 'reads nothing, so the two check', 'programs supply the sources and', 'the visibility GitHub answers'] },
+  ],
 ]
 
 /**

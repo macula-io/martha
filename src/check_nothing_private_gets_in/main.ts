@@ -12,7 +12,7 @@ import {
   type Resolve,
   type Source,
   type Visibility,
-} from './check_nothing_private_gets_in.ts'
+} from '../know_the_private_text_classes/the_private_text_classes.ts'
 import { DECLARED } from './declared.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
 import { resolveOnGitHub, rulesOf } from './scan_rules_and_visibility.ts'

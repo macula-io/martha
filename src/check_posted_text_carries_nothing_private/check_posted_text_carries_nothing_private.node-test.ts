@@ -17,9 +17,9 @@ import {
   type Hit,
   type Resolve,
   type Rules,
-} from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
+} from '../know_the_private_text_classes/the_private_text_classes.ts'
 import { rulesOf } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
-import { PUBLIC_TEXT_PATTERNS } from '../check_nothing_private_gets_in/public_text.ts'
+import { PUBLIC_TEXT_PATTERNS } from '../know_the_private_text_classes/public_text.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { postedTextSources } from './posted_text.ts'
 import { standInPage } from './plant_every_surface.ts'
