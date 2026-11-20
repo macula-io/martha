@@ -23,6 +23,9 @@ import process from 'node:process'
 import { createInterface } from 'node:readline/promises'
 import { isatty } from 'node:tty'
 
+import { digestOf } from '../digest_a_work_directory/digest_a_work_directory.ts'
+import { ROSTER_FILE, whereLinesOf } from '../say_where_the_crew_keeps_things/say_where_the_crew_keeps_things.ts'
+import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
@@ -32,13 +35,14 @@ import { DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, OWNER_BELL, sameM
 import { noCrewDeclaredAt, upStarts } from '../bring_up_the_declared_crew/bring_up_the_declared_crew.ts'
 import { declareTheEnginesEndpoint } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import { theKeyInAFile } from '../start_an_engine_member/start_an_engine_member.ts'
-import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
+import { ADD, aChangedDeclaration, aNameToRenameTo, REMOVE, RENAMED, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
+import { moveTheRecordedName, type TheRecordsMoved } from '../move_a_members_records/move_a_members_records.ts'
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { appendStateLine, crewRowsDirectory, crewStateDirectory, nodeIdsFor, openState, readApprovals, readStateFile, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, moveANodeId, nodeIdsFor, openState, readApprovals, readStateFile, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -460,6 +464,38 @@ async function changeTheCrew(io: CommandIo, places: Places, change: CrewChange):
   return ids !== undefined && 'refusal' in ids ? refused(io, ids.refusal) : EXIT_DONE
 }
 
+/** What a rename wrote again, in one line: what `martha start <New>` resumes, and what the crew's buttons read. */
+function theRecordsMovedTold(moved: TheRecordsMoved, to: string): string {
+  const parts = [...(moved.handovers.length > 0 ? [`${moved.handovers.length} handover(s)`] : []), ...(moved.row ? ['the dashboard row'] : []), ...(moved.park ? ['the park'] : [])]
+  return parts.length === 0 ? `Nothing that was left under another name had to move.` : `Moved to ${to}: ${parts.join(', ')}.`
+}
+
+/**
+ * `martha rename <Old> <New>` (martha#985, gap 20 of #957): the declaration changes first, through its own reader, so
+ * every refusal leaves the declaration, the node ids and the records exactly as they were; then the node id moves to
+ * the new name, the same id, and the records the member left move with it.
+ */
+async function renamed(io: CommandIo, places: Places, from: string, to: string): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  const unnameable = aNameToRenameTo(crew.settings.members, from, to)
+  if (unnameable !== undefined) return refused(io, unnameable)
+  const running = await whyItStays(io, places, from)
+  if (running !== undefined) return refused(io, running)
+  const change: CrewChange = { kind: RENAMED, member: from, to }
+  const outcome = await aChangedDeclaration(documents, places.root, THE_VOCABULARIES_OF_HOST, change)
+  if ('refusal' in outcome) return refused(io, outcome.refusal)
+  const unwritten = writeAChangedDeclaration(places.root, outcome)
+  if (unwritten !== undefined) return refused(io, unwritten)
+  const node_id = moveANodeId(places.state, from, to, tellOwnerOn(io))
+  if (node_id !== undefined) return refused(io, node_id.refusal)
+  const moved = moveTheRecordedName({ crew: keepTheCrewsFilesAsDirectories(crew.crew), stamps: handoverStampsIn(crew.crew), rows: dashboardRowsIn(crew.launcher.dashboard) }, from, to)
+  if ('refusal' in moved) return refused(io, moved.refusal)
+  theChangeTold(change, outcome, THE_VOCABULARIES_OF_HOST).forEach(tellOwnerOn(io))
+  io.out(theRecordsMovedTold(moved, to))
+  return EXIT_DONE
+}
+
 /** Why `member` stays on the crew: it is running, as `martha stop` reads it, or the crew cannot be read; or undefined. */
 async function whyItStays(io: CommandIo, places: Places, member: string): Promise<string | undefined> {
   const crew = await crewsPlacesOf(io, places)
@@ -593,7 +629,7 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
 export const VERSION_WORDS: readonly string[] = ['--version', 'version']
-export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', ...VERSION_WORDS]
+export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', 'where', ...VERSION_WORDS]
 
 /** The words that ask for the help (martha#511): each alone prints HELP. */
 export const HELP_WORDS: readonly string[] = ['help', '-h', '--help']
@@ -619,6 +655,9 @@ export const HELP: readonly string[] = [
   'martha restart <member>      stop a member and start it again',
   'martha crew [<verb> ...]     show the crew strip, or add, remove or change a member',
   'martha run <shape>           run a command shape the owner signed, from inside a member',
+  'martha digest <dir>          print <dir>@sha256:<hex> over every file under it, for a handoff outside git',
+  'martha where                 print where this crew keeps its declaration, state, crew files and roster',
+  'martha rename <Old> <New>    rename a member in the declaration, keeping its node id and the records it left',
   'martha install [<version>]   install or upgrade Martha',
   'martha pin-key <file>        pin your hardware key for this project',
   'martha keep-shapes <file>    keep the command shapes you signed',
@@ -629,7 +668,7 @@ export const HELP: readonly string[] = [
 /** Whether `word` is a word the command knows as an act. */
 const isAnAct = (word: string): boolean => ACTS_ALONE.includes(word) || ACTS_OF_ONE.includes(word) || Object.hasOwn(ACTS_OF_THEIR_OWN, word)
 /** The acts that take exactly one argument (martha#129). */
-export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release']
+export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release', 'digest']
 
 type Asked = { readonly act: string; readonly member?: string; readonly args: readonly string[]; readonly prompt?: string }
 
@@ -648,6 +687,7 @@ const installOf = (act: string, argv: readonly string[]): Asked | undefined => (
 /** The acts that read their own arguments: each parser answers undefined when the words are no way it is used. */
 export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: readonly string[]) => Asked | undefined>> = {
   install: installOf,
+  rename: renameOf,
   gate: gateOf,
   bells: bellsOf,
   [STOP]: stopOf,
@@ -665,6 +705,13 @@ function crewOf(act: string, argv: readonly string[]): Asked | undefined {
   if (argv.length === 3 && argv[1] === TAB_OF && argv[2] !== '') return { act, args: argv.slice(1) }
   const change = theCrewChangeAsked(argv.slice(1))
   return change === undefined ? undefined : { act, member: change.member, args: argv.slice(1) }
+}
+
+/** `rename <Old> <New>` (martha#985): two plain words, neither a switch. */
+function renameOf(act: string, argv: readonly string[]): Asked | undefined {
+  const [, from, to, ...rest] = argv
+  const aWord = (word: string | undefined): word is string => word !== undefined && word !== '' && !word.startsWith('-')
+  return rest.length === 0 && aWord(from) && aWord(to) ? { act, args: [from, to] } : undefined
 }
 
 /** `--prompt <text>` at the head of `words`: the prompt and the words after it; nothing when the head is not it; undefined when it has no text. */
@@ -813,6 +860,7 @@ const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Place
   [UP]: (io, places, asked) => up(io, places, asked.prompt),
   [ATTACH]: (io, places, asked) => attach(io, places, asked.member),
   answer: (io, places, asked) => answerInAProject(io, places, asked.member, asked.args),
+  rename: (io, places, asked) => renamed(io, places, asked.args[0]!, asked.args[1]!),
 }
 
 /**
@@ -840,6 +888,38 @@ function theMemberThisRunsInside(io: CommandIo, places: Places, act: string): st
   })
 }
 
+/**
+ * `martha digest <dir>` (martha#985): the one line a handoff of work outside git names, `<dir>@sha256:<hex>`, or the
+ * refusal that says why there is none. The crew's runtime place is left out when it lies inside the directory named.
+ */
+async function theDigest(io: CommandIo, places: Places, directory: string): Promise<number> {
+  const answered = await digestOf({ directory, runtime_place: places.state.state_root })
+  if ('refusal' in answered) return refused(io, answered.refusal)
+  io.out(answered.line)
+  return EXIT_DONE
+}
+
+/**
+ * `martha where` (martha#985): every place this crew keeps something, one `KEY=path` a line, each read from the slice
+ * that already knows it, so a script outside the launcher acts on this crew instead of assuming a layout.
+ */
+async function theWhere(io: CommandIo, places: Places): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  const shown = {
+    declaration: join(places.root, DECLARATION_DIRECTORY, DECLARATION_FILE),
+    state: places.state.directory,
+    crew: crew.crew,
+    handovers: join(crew.crew, HANDOVERS_PLACE),
+    clones: crew.settings.house_rules.clones,
+    worktrees: crew.settings.house_rules.worktrees,
+    roster: existsSync(join(crew.crew, ROSTER_FILE)) ? join(crew.crew, ROSTER_FILE) : null,
+    mode: crew.settings.mode.name,
+  }
+  whereLinesOf(shown).forEach((line) => io.out(line))
+  return EXIT_DONE
+}
+
 /** Each act that works inside a project but `start`, which every other word falls to, by its word. */
 const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places, asked: Asked) => Promise<number>>> = {
   ...THE_OWNERS_OWN_ACTS,
@@ -852,6 +932,8 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   crew: (io, places, asked) => (asked.member === undefined ? crew(io, places, asked.args[1]) : changeTheCrew(io, places, theCrewChangeAsked(asked.args)!)),
   [STOP]: (io, places, asked) => stop(io, places, asked.member),
   [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),
+  digest: (io, places, asked) => theDigest(io, places, asked.args[0]!),
+  where: (io, places) => theWhere(io, places),
 }
 
 /**
