@@ -35,7 +35,9 @@ Each of those can enter through four paths:
    own merge of its parents: a resolved conflict, or a change made in the merge.
    A line a parent brought is that parent's commit's to answer for, so a merge of
    main never reads main's lines as the branch's, even one main has since removed
-   (martha#933).
+   (martha#933). Git will not remerge an octopus merge (more than two parents),
+   so one is read against its first parent: it may name a line a parent brought,
+   and it never hides one the merge wrote.
 3. **A commit message.** It is published with the commit. The check reads it.
 4. **The check's own output.** A CI log of a public repository is public. No
    value a hit found is therefore ever printed, whatever its class: a lab

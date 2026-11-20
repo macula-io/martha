@@ -464,6 +464,37 @@ test('martha#933: what a merge writes itself is still the branch\'s, in a resolv
   }
 })
 
+test('martha#933 review r=1: an octopus merge, which git will not remerge, is still read for what it writes itself', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'nothing-private-'))
+  try {
+    gitIn(root, 'init', '-q', '-b', 'main')
+    writeFileSync(join(root, 'start.txt'), 'clean\n')
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '-m', 'start')
+    const base = gitIn(root, 'rev-parse', 'HEAD')
+    for (const side of ['one', 'two', 'three']) {
+      gitIn(root, 'switch', '-q', '-c', side, 'main')
+      writeFileSync(join(root, `${side}.txt`), `${side}\n`)
+      gitIn(root, 'add', '.')
+      gitIn(root, 'commit', '-q', '-m', side)
+    }
+    gitIn(root, 'switch', '-q', 'one')
+    gitIn(root, 'merge', '-q', '--no-edit', 'two', 'three')
+    writeFileSync(join(root, 'evil.txt'), tokenLine())
+    // A path is published too: an empty file whose name is a token carries no line, only its path.
+    const named = `${drawnToken(GITHUB_TOKEN_PREFIXES[0] ?? '')}.txt`
+    writeFileSync(join(root, named), '')
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '--amend', '--no-edit')
+    assert.equal(gitIn(root, 'log', '-1', '--format=%P').split(' ').length, 3, 'the merge is an octopus')
+    const merge = gitIn(root, 'rev-parse', 'HEAD').slice(0, 12)
+    const { hits } = await hitsOver(root, base)
+    assert.deepEqual(hits.map((hit) => hit.where).sort(), [`commit ${merge} evil.txt:1`, `commit ${merge} path ${named}`].sort())
+  } finally {
+    removeTheTree(root)
+  }
+})
+
 test('a declared public address passes as that exact string, and its domain does not', async () => {
   assert.deepEqual(await hitsOf('the key type ada@synthetic.invalid'), [])
   assert.deepEqual(await refusedIn('the key type xada@synthetic.invalid'), ['an email address (xada@synthetic.invalid)'])

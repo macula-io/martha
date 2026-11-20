@@ -68,14 +68,24 @@ const step = (prefix: string) => (state: DiffState, text: string): DiffState => 
 // a merge of main carries every line main brought, even one main has since removed, as the branch's.
 const A_MERGES_OWN_LINES = '--diff-merges=remerge'
 
+// How an octopus merge is read (martha#933, review r=1): git will not remerge more than two parents. It says so on
+// stderr and shows nothing, so read that way an octopus merge would hide every line it wrote. It is read against its
+// first parent, as every merge was before #933: that may name a line a parent brought, and it never misses one.
+const AN_OCTOPUS_MERGES_LINES = '--diff-merges=first-parent'
+
+/** How a commit's lines are read: an octopus merge against its first parent, any other commit as A_MERGES_OWN_LINES says. */
+const howToRead = (root: string, sha: string): string =>
+  git(root, ['log', '-1', '--format=%P', sha]).trim().split(' ').length > 2 ? AN_OCTOPUS_MERGES_LINES : A_MERGES_OWN_LINES
+
 export const commitSources = (root: string, sha: string): Source[] => {
   const short = sha.slice(0, 12)
   const message = git(root, ['log', '-1', '--format=%B', sha])
-  const diff = git(root, ['show', '--format=', '--unified=0', '--no-color', '--no-ext-diff', A_MERGES_OWN_LINES, sha])
+  const reading = howToRead(root, sha)
+  const diff = git(root, ['show', '--format=', '--unified=0', '--no-color', '--no-ext-diff', reading, sha])
   const added = diff.split('\n').reduce(step(`commit ${short}`), { path: '', next: 0, lines: [] })
   // Every path the commit adds or keeps, from git's own list: a rename, an empty
   // file and a binary file name a path with no added line to carry it.
-  const paths = git(root, ['show', '--format=', '--name-only', '-z', '--diff-filter=d', A_MERGES_OWN_LINES, sha])
+  const paths = git(root, ['show', '--format=', '--name-only', '-z', '--diff-filter=d', reading, sha])
     .split('\0')
     .filter((path) => path.trim() !== '')
     .map((path) => ({ where: `commit ${short} path ${path}`, text: path }))
