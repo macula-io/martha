@@ -46,6 +46,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: TRANSCRIPTS_PLACE, file: 'declare_crew/the_crews_workspace.ts', reason: 'the declaration\'s transcripts block, not the state folder transcripts are kept in' },
   { value: TRANSCRIPTS_PLACE, file: 'declare_crew/the_drafts_declaration.node-test.ts', reason: 'the declaration\'s transcripts block, not the state folder transcripts are kept in' },
   // martha#931: the declaration names its terminal as the owner types it; the kitty opener's own constant sits in an adapter, which a slice may not import.
+  { value: KITTY, file: 'declare_crew/the_drafts_declaration.node-test.ts', reason: 'the terminal a declaration names, as the owner types it, and the one a declaration naming none opens in (martha#932); the opener\'s program is another value' },
   { value: KITTY, file: 'declare_crew/the_crews_workspace.ts', reason: 'the terminal a declaration names, as the owner types it; the opener\'s constant is in an adapter a slice may not import' },
   // martha#307: the switch the owner gives martha crew add for a member's model, which a host's own switch happens to share.
   // martha#541 package A: engine_endpoint's `host` is the server an engine member's model is reached on (the provider's

@@ -22,8 +22,8 @@ page does not name.
 | `host` | no | The host a member runs on when the member names none. | `claude-code` |
 | `engine_endpoint` | no | Where an engine member's model is reached (below). | none; an engine member is refused at its start |
 | `thresholds` | no | When a row reads offline, when a member hands over, when a report is stale (below). | the values below |
-| `id` | no | The crew's name. Read by no part of Martha today. | none |
-| `terminal` | no | The terminal members open in: `kitty` or `tmux`. Read by no part of Martha today: members open in kitty, and tmux is martha#932. | none |
+| `id` | no | The crew's name: the name of its tmux session when `terminal` is `tmux` (martha#932). | none |
+| `terminal` | no | The terminal `martha up` opens members in: `kitty`, or `tmux`, where each member gets a window in one session named by `id` on Martha's own tmux server, shown with `martha attach [<member>]` (martha#932). `tmux` needs `id`. | `kitty` |
 | `workspace` | no | Where the crew's clones sit (below). | no places from it |
 | `mesh` | no | The crew's mesh realm, key folder and services (below). Read by no part of Martha today. | none |
 | `harnesses` | no | The harnesses a profile may name (below). | none |

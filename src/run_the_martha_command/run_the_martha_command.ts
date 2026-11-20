@@ -52,6 +52,8 @@ import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_t
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { drawTheCrewStrip, holdOnThisTerminal, isRunning, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { KITTY_PLACE, kittySaysOnThisMachine, openTheCrewInKitty, startKittyDetached, writeOwnerOnly } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
+import { TMUX_PLACE, attachOnThisTerminal, attachToTheCrew, openTheCrewInTmux, tmuxOnThisMachine, tmuxSaysOnThisMachine } from '../open_the_crew_in_tmux/open_the_crew_in_tmux.ts'
+import { opensInTmux } from '../open_the_crew_in_tmux/the_commands_tmux_runs.ts'
 import { TAB_OF } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { kittenOnThisMachine, theStripsKitten } from '../open_the_crew_in_kitty/the_strips_kitten.ts'
 import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, refused, showingSafely, tellOwnerOn } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
@@ -78,7 +80,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha up | martha approve | martha todo | martha start [<member> [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha version | martha help'
+  'usage: martha init | martha up | martha attach [<member>] | martha approve | martha todo | martha start [<member> [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha version | martha help'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -322,7 +324,37 @@ async function openTheCrew(io: CommandIo, places: Places, which: (settings: Crew
   if (typeof crew === 'string') return refused(io, crew)
   const place = stateSubdirectory(places.state, KITTY_PLACE)
   if ('refusal' in place) return refused(io, place.refusal)
-  return openTheCrewInKitty(io, { root: places.root, members: crew.settings.members.filter((member) => which(crew.settings, member)).map((member) => member.name), isRunning: (member) => isRunning(crew, member), martha: [process.execPath, ...process.execArgv, process.argv[1]!], env: io.env, place: place.path, kittySays: kittySaysOnThisMachine, write: writeOwnerOnly, startKitty: startKittyDetached })
+  return openTheCrewInKitty(io, { root: places.root, members: crew.settings.members.filter((member) => which(crew.settings, member)).map((member) => member.name), isRunning: (member) => isRunning(crew, member), martha: THIS_MARTHA(), env: io.env, place: place.path, kittySays: kittySaysOnThisMachine, write: writeOwnerOnly, startKitty: startKittyDetached })
+}
+
+/** The command that is this release of `martha`: the program and its arguments before the act. */
+const THIS_MARTHA = (): readonly string[] => [process.execPath, ...process.execArgv, process.argv[1]!]
+
+/** The act that shows the owner the crew's tmux session (martha#932). */
+const ATTACH = 'attach'
+
+/** Martha's own tmux, for the crew read at `places`: its config's place in Martha's state, and this machine's tmux. */
+function marthasTmuxFor(io: CommandIo, places: Places, settings: CrewSettings) {
+  const place = stateSubdirectory(places.state, TMUX_PLACE)
+  return 'refusal' in place ? place : { id: settings.opens.id, env: io.env, place: place.path, tmuxSays: tmuxSaysOnThisMachine, write: writeOwnerOnly, tmux: tmuxOnThisMachine }
+}
+
+/** `martha up` for a crew declared `"terminal": "tmux"` (martha#932): every member `up` starts, a window each in Martha's own tmux. */
+async function openTheCrewInTmuxHere(io: CommandIo, places: Places, crew: TheCrewsPlaces): Promise<number> {
+  const tmux = marthasTmuxFor(io, places, crew.settings)
+  if ('refusal' in tmux) return refused(io, tmux.refusal)
+  const members = crew.settings.members.filter(upStarts).map((member) => member.name)
+  return openTheCrewInTmux(io, { ...tmux, root: places.root, members, isRunning: (member) => isRunning(crew, member), martha: THIS_MARTHA() })
+}
+
+/** `martha attach [<member>]` (martha#932): the owner's terminal on the crew's tmux session, at a member's window when one is named. */
+async function attach(io: CommandIo, places: Places, member: string | undefined): Promise<number> {
+  if (!io.terminal.is_terminal) return refused(io, START_NEEDS_A_TERMINAL)
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  const tmux = marthasTmuxFor(io, places, crew.settings)
+  if ('refusal' in tmux) return refused(io, tmux.refusal)
+  return attachToTheCrew(io, { ...tmux, terminal: crew.settings.opens.terminal, members: crew.settings.members.map((one) => one.name), member, attach: attachOnThisTerminal })
 }
 
 /** The act that brings up every member the workspace declares (martha#511). */
@@ -350,6 +382,7 @@ async function up(io: CommandIo, places: Places): Promise<number> {
     if ('refusal' in endpoint) return refused(io, endpoint.refusal)
     io.out(endpoint.told)
   }
+  if (opensInTmux(crew.settings.opens.terminal)) return openTheCrewInTmuxHere(io, places, crew)
   return openTheCrew(io, places, (_settings, member) => upStarts(member))
 }
 
@@ -514,7 +547,8 @@ export const UNKNOWN_COMMAND = 'unknown command:'
 /** One plain line per act, saying what it does (martha#511, DECIDED 2026-11-20 "no `martha version` or `martha help`?"). */
 export const HELP: readonly string[] = [
   'martha init                  declare a solo crew of a builder and a reviewer in this checkout',
-  `martha ${UP}                    open every member .martha/martha.json declares and not parked, in kitty`,
+  `martha ${UP}                    open every member .martha/martha.json declares and not parked, in kitty or tmux`,
+  `martha ${ATTACH} [<member>]    show the crew's tmux session, at a member's window when one is named`,
   'martha approve               read the config your members start from, and approve it',
   'martha start [<member>]      start one member here, or open every member in kitty',
   'martha wake <member>         start a parked member on its newest handover',
@@ -561,6 +595,7 @@ export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: read
   bells: bellsOf,
   [STOP]: stopOf,
   [RESTART]: restartOf,
+  [ATTACH]: stopOf,
   start: startOf,
   answer: answerOf,
   crew: crewOf,
@@ -583,7 +618,7 @@ function startOf(act: string, argv: readonly string[]): Asked | undefined {
   return separator === '--' ? { act, member, args: rest } : undefined
 }
 
-/** `stop [<member>]`: one member's name at most, and no switch. */
+/** `stop [<member>]` and `attach [<member>]`: one member's name at most, and no switch. */
 function stopOf(act: string, argv: readonly string[]): Asked | undefined {
   const [, member] = argv
   if (argv.length === 1) return { act, args: [] }
@@ -703,6 +738,7 @@ const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Place
   approve: (io, places) => approve(io, places),
   release: (io, places, asked) => release(io, places, asked.args[0]!),
   [UP]: (io, places) => up(io, places),
+  [ATTACH]: (io, places, asked) => attach(io, places, asked.member),
   answer: (io, places, asked) => answerInAProject(io, places, asked.member, asked.args),
 }
 
