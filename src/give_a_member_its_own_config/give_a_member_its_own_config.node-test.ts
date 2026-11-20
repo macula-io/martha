@@ -8,12 +8,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { API_KEY_ANSWERS_KEY, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, hostTrustsTheFolder, KEY_TAIL_LENGTH } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { API_KEY_ANSWERS_KEY, API_KEY_VARIABLE, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, hostTrustsTheFolder, KEY_TAIL_LENGTH } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, SKILLS_KIND, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { USER_SETTINGS_FILE, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { CONNECTORS_OFF_SETTING, FILE_MODE, makeTheMembersConfig, MEMBER_CONFIG_MODE, theMembersConfigEnvironment } from './give_a_member_its_own_config.ts'
+import { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION } from '../declare_crew/declare_crew.ts'
+import { CONNECTORS_OFF_SETTING, FILE_MODE, makeTheMembersConfig, MEMBER_CONFIG_MODE, notGivenUnder, theBillingAMemberGets, theMembersConfigEnvironment } from './give_a_member_its_own_config.ts'
 
 /** A launch that carries no skill. */
 const NO_SKILLS: Readonly<Record<string, Uint8Array>> = {}
@@ -34,12 +35,12 @@ test("the folder is made new and 0700, with the member's settings and a trust re
   assert.deepEqual(readdirSync(folder).sort(), [HOST_TRUST_RECORD_FILE, USER_SETTINGS_FILE].sort())
   // The owner's choice (martha#602): the account's connectors off and its skills not synced, each the value the host reads as that.
   assert.deepEqual(JSON.parse(readFileSync(join(folder, USER_SETTINGS_FILE), 'utf8')), { [CONNECTORS_OFF_SETTING]: true, [SYNC_OFF_SETTING]: false })
-  // With no key handed to the member, the host's record holds the first run done and the trust, and no other key:
-  // nothing else of the owner's is answered.
+  // With no key billed, the host's record holds the first run done and the trust, and no other key: nothing else of
+  // the owner's is answered.
   const record = JSON.parse(readFileSync(join(folder, HOST_TRUST_RECORD_FILE), 'utf8')) as Record<string, unknown>
   assert.deepEqual(Object.keys(record).sort(), [FIRST_RUN_DONE_KEY, 'projects'].sort())
   assert.equal(record[FIRST_RUN_DONE_KEY], true)
-  const env = theMembersConfigEnvironment(folder)
+  const env = theMembersConfigEnvironment(folder, BILLED_BY_SUBSCRIPTION)
   // The launcher's own reading of the host's record trusts the checkout, and no other folder, not even its parent.
   assert.equal(hostTrustsTheFolder(env, checkout, []), true)
   assert.equal(hostTrustsTheFolder(env, dir, []), false)
@@ -71,10 +72,16 @@ test('a folder that exists, or a link where it would go, is never reused', (t) =
 })
 
 test("the member's environment names its own folder and the owner's default sign-in store, set and empty, and nothing else", () => {
-  assert.deepEqual(theMembersConfigEnvironment('/a/members/folder'), { [CONFIG_DIR_VARIABLE]: '/a/members/folder', [RECORDED_HOST.sign_in_store_variable]: '' })
+  assert.deepEqual(theMembersConfigEnvironment('/a/members/folder', BILLED_BY_SUBSCRIPTION), { [CONFIG_DIR_VARIABLE]: '/a/members/folder', [RECORDED_HOST.sign_in_store_variable]: '' })
 })
 
-test('a key handed to the member is answered yes by its tail alone, and an empty one is not answered', (t) => {
+test("martha#916: a member billed by the key is handed its own folder and no sign-in store, and each billing leaves the other's credential out", () => {
+  assert.deepEqual(theMembersConfigEnvironment('/a/members/folder', BILLED_BY_API_KEY), { [CONFIG_DIR_VARIABLE]: '/a/members/folder' })
+  assert.deepEqual(notGivenUnder(BILLED_BY_SUBSCRIPTION), [API_KEY_VARIABLE])
+  assert.deepEqual(notGivenUnder(BILLED_BY_API_KEY), [RECORDED_HOST.sign_in_store_variable])
+})
+
+test('martha#916: a key billed is answered yes by its tail alone, and an empty one is not answered', (t) => {
   const dir = scratch(t)
   const checkout = join(dir, 'checkout')
   mkdirSync(checkout)
@@ -89,6 +96,22 @@ test('a key handed to the member is answered yes by its tail alone, and an empty
   const empty = join(dir, 'with-an-empty-key')
   assert.deepEqual(makeTheMembersConfig(empty, checkout, '', NO_SKILLS), { made: true })
   assert.ok(!(API_KEY_ANSWERS_KEY in (JSON.parse(readFileSync(join(empty, HOST_TRUST_RECORD_FILE), 'utf8')) as Record<string, unknown>)))
+})
+
+test('martha#916: a declared billing is kept whatever the sign-in; with none, a signed-in owner is billed by the subscription, one not signed in by the key it carries, and an untold sign-in never by the key', () => {
+  const signedIn = { signed_in: true }
+  const notSignedIn = { signed_in: false }
+  const untold = { untold: 'it exited 1' }
+  for (const signIn of [signedIn, notSignedIn, untold]) {
+    for (const carries of [true, false]) {
+      assert.equal(theBillingAMemberGets(BILLED_BY_API_KEY, signIn, carries), BILLED_BY_API_KEY)
+      assert.equal(theBillingAMemberGets(BILLED_BY_SUBSCRIPTION, signIn, carries), BILLED_BY_SUBSCRIPTION)
+    }
+  }
+  assert.equal(theBillingAMemberGets(null, signedIn, true), BILLED_BY_SUBSCRIPTION)
+  assert.equal(theBillingAMemberGets(null, notSignedIn, true), BILLED_BY_API_KEY)
+  assert.equal(theBillingAMemberGets(null, notSignedIn, false), BILLED_BY_SUBSCRIPTION)
+  assert.equal(theBillingAMemberGets(null, untold, true), BILLED_BY_SUBSCRIPTION)
 })
 
 test("the carried skills are written under the folder the host reads as user-scope skills, byte-equal, in files only the launcher's user reads (martha#747)", (t) => {
