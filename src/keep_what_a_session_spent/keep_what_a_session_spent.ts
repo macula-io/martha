@@ -35,8 +35,11 @@ import { BILLINGS, type AHostsReading, type Billing } from './the_hosts_usage.ts
 /** The kind every row of a usage stream carries. */
 export const USAGE_READ = 'usage_read'
 
+/** The name a row carries for an engine member's usage (martha#999 package 5: its launch asks the refresh question too). */
+export const THE_ENGINES_USAGE_HOST = 'martha-engine'
+
 /** The hosts whose usage is kept, by the name a row carries. */
-export const USAGE_HOSTS = [CLAUDE_CODE, 'martha-engine'] as const
+export const USAGE_HOSTS = [CLAUDE_CODE, THE_ENGINES_USAGE_HOST] as const
 export type AUsageHost = (typeof USAGE_HOSTS)[number]
 
 /** The word that names the crew's own stream: the readings of sessions that hold no package. */
