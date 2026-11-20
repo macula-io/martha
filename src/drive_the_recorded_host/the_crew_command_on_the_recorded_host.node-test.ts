@@ -19,7 +19,7 @@ import { test, type TestContext } from 'node:test'
 
 import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_test_is_run/recorded_host_skip.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, type RecordedHostRan, type TheOwnersHands } from './drive_the_recorded_host.ts'
+import { driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, type ModelRequest, type RecordedHostRan, type TheOwnersHands } from './drive_the_recorded_host.ts'
 import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
 
 /** The member whose tab the owner types in, and the other member of the solo crew `martha init` declares. */
@@ -114,4 +114,34 @@ test('#927: /martha at a member\'s tab opens the crew\'s pane, and the model is 
   assert.equal(ran.exit_code, 0, plainTextOf(ran.shown).slice(-3000))
   assert.ok(!drawnWithoutGaps(ran.shown).includes('Unknowncommand'), `the host does not know /martha:\n${plainTextOf(ran.shown).slice(-3000)}`)
   assert.equal(ran.requests.length, 0, `the model was sent ${ran.requests.length} request(s) for a /martha: ${JSON.stringify(ran.requests.map((request) => request.body['messages'])).slice(-2000)}`)
+})
+
+// Done-when 6's other half (martha#927 r=1, the reviewer's case): no request is sent FOR the command, and none sent
+// later carries what it printed. A count of requests alone cannot see the second: the text kept in the conversation
+// reaches the model only on the owner's next turn, so this case types one and reads what that request holds.
+test('#927 DW6: what /crew printed is not in the request of the owner\'s next turn', { skip: RECORDED_HOST_SKIP }, async (t) => {
+  const project = approvedProject(t)
+  const NEXT_TURN = 'What is in this folder?'
+  const carriesTheNextTurn = (request: ModelRequest): boolean => JSON.stringify(request.body['messages']).includes(NEXT_TURN)
+  const ran = await driveTheRecordedHost({
+    claude: recordedHost(),
+    ...project,
+    member: MEMBER,
+    owner_turn: '/crew',
+    script: () => ({ text: 'Done.' }),
+    requests: 1,
+    completesWhen: (requests) => requests.some(carriesTheNextTurn),
+    silence_ms: HOST_SILENCE_MS,
+    atTheTerminal: async (hands: TheOwnersHands) => {
+      await hands.until(`the host drawing ${THE_OTHER_MEMBER}:`, () => drawnWithoutGaps(hands.shown()).includes(`${THE_OTHER_MEMBER}:`))
+      hands.type(`${NEXT_TURN}\r`)
+    },
+  })
+  assert.equal(ran.exit_code, 0, plainTextOf(ran.shown).slice(-3000))
+  const theTurn = ran.requests.filter(carriesTheNextTurn)
+  assert.ok(theTurn.length > 0, `the owner's next turn reached no request:\n${plainTextOf(ran.shown).slice(-3000)}`)
+  for (const request of ran.requests) {
+    const sent = JSON.stringify(request.body['messages'])
+    assert.doesNotMatch(sent, /\d+\/\d+ online/, `a request carried the crew's header /crew printed: ${sent.slice(-2000)}`)
+  }
 })
