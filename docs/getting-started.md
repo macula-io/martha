@@ -243,6 +243,24 @@ key is in, which only you may read. The key itself is never written.
 When your shell sets `CLAUDE_CODE_PLUGIN_DIRS`, each member is started without
 it, and Martha says so in one line per member.
 
+### A first prompt
+
+A crew declared `"terminal": "tmux"` can be given its first turn as it starts:
+
+```sh
+martha up --prompt 'read your brief and carry on'
+```
+
+Martha types the text into each Claude Code member's own window once its session
+has started, then Enter, so the member takes it as a turn you typed. One member
+is given its first turn from its own window of Martha's tmux with
+`martha start <member> --prompt <text>`. `--prompt` is Martha's word, read
+before `--`; it is never handed to the host. A text that begins with `-` is
+typed as text. One that begins with `/` or `!`, or holds a line break or
+another control character, is refused, since it would run a slash command or a
+shell command, or start a second turn. A member that runs on martha-engine is not given one, and a crew
+that opens in kitty refuses `--prompt`.
+
 The crew is the folder's own: every member started there reads one store and
 one channel, whichever host it runs on.
 
@@ -425,6 +443,8 @@ it:
 | `The member is not started: ... does not load Martha's relay (...), so the member's gates would be off: ...` | that `claude` cannot run Martha's gates: use one that loads them, such as an updated Claude Code |
 | `... is stopped: its relay did not report the session's start within ... s. If the host was still asking whether to trust ..., start the member again and answer it; if it was not, the host is not running Martha's gates` | answer the trust question, then start the member again; if no question was asked, that `claude` is not running Martha's gates |
 | `... -p is not a switch martha start passes. martha start passes only --model, --effort, --verbose ...` | drop it, and pass those three after `--`; they are the only arguments `martha start` passes on |
+| `a prompt is no switch, and a word handed to the host would be a turn no host stamped as yours. ... A first prompt is given before --, as --prompt <text>.` | give it as `martha start <member> --prompt <text>`, before `--`, from the member's window of Martha's tmux, or as `martha up --prompt <text>` |
+| `--prompt types your first turn into the member's own window of Martha's tmux, and this is no such window. ...` | declare `"terminal": "tmux"` and run `martha up --prompt <text>` |
 
 Exit codes: `0` done, `1` refused, `2` not a way the command is used
 (`martha start` with no member prints the usage line and exits 2).

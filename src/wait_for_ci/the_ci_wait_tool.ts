@@ -29,7 +29,7 @@ type AToolAnswer = { readonly answer: string } | { readonly refused: string }
 /** `wait_for_ci`: the CI on one sha, read through the crew's one GitHub budget, for a wait already read. */
 export async function theCiWaitOver(spender: TheGithubSpender, asked: TheCiWait): Promise<AToolAnswer> {
   const outcome = await waitForCi(spender, asked)
-  return { answer: theAnswerOf(outcome, asked.sha) }
+  return { answer: theAnswerOf(outcome, asked.sha, spender.zone) }
 }
 
 /** The wait a call names, or why it names none: a repository as owner/name, and a commit of forty hex digits. */

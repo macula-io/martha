@@ -10,7 +10,7 @@
 
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { mayKeepTheOwnersList } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
-import { clockOf } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 import { BACKLOG_PAGES_MOST, theSplitInWords, theSplitOf } from './find_the_unheld_work.ts'
 import { theBacklogNow, type TheBacklogReader, type TheKeptRead } from './keep_the_backlog_read.ts'
 
@@ -29,7 +29,7 @@ export const UNHELD_WORK_TOOL = {
 
 /** What the tool is handed: the declaration, who asks, and how the backlog is read. */
 export interface UnheldWorkAsked {
-  readonly settings: Pick<CrewSettings, 'members' | 'mode' | 'backlog'>
+  readonly settings: Pick<CrewSettings, 'members' | 'mode' | 'backlog' | 'clock_zone'>
   readonly asker: string
   readonly reader: TheBacklogReader
 }
@@ -45,14 +45,17 @@ export async function unheldWorkOver(asked: UnheldWorkAsked): Promise<{ readonly
   if (kept !== undefined && 'refusal' in kept) return { refused: `the crew's backlog read cannot be kept: ${kept.refusal}` }
   if (kept === undefined) return { refused: 'nothing has read the backlog yet, and this launch cannot run gh to read it.' }
   // No read has succeeded, so there is no list: an empty split here would say "nothing is unheld" (review r=1).
-  if (kept.read_at === null) return { refused: `no read of the backlog has succeeded yet, so there is no list to tell unheld work from; the try at ${clockOf(kept.tried_at)} failed: ${String(kept.error)}` }
-  return { answer: theAnswerOf({ ...kept, read_at: kept.read_at }, backlog.places, asked.settings.members.map((member) => member.name), asked.reader.now) }
+  if (kept.read_at === null) return { refused: `no read of the backlog has succeeded yet, so there is no list to tell unheld work from; the try at ${theClockOf(kept.tried_at, asked.settings.clock_zone)} failed: ${String(kept.error)}` }
+  return { answer: theAnswerOf({ ...kept, read_at: kept.read_at }, backlog.places, asked.settings.members.map((member) => member.name), asked.reader.now, asked.settings.clock_zone) }
 }
 
-/** The answer's words: where it looked and when, what failed, then the split. Only a read that once succeeded has a list. */
-export function theAnswerOf(kept: TheKeptRead & { readonly read_at: number }, places: readonly string[], members: readonly string[], now: number): string {
-  const head = [`Backlog of ${places.join(', ')}, read at ${clockOf(kept.read_at)}.`]
+/**
+ * The answer's words: where it looked and when, in the crew's clock_zone (martha#931 C), what failed, then the split.
+ * Only a read that once succeeded has a list.
+ */
+export function theAnswerOf(kept: TheKeptRead & { readonly read_at: number }, places: readonly string[], members: readonly string[], now: number, zone: string): string {
+  const head = [`Backlog of ${places.join(', ')}, read at ${theClockOf(kept.read_at, zone)}.`]
   if (kept.cut) head.push(`The search was cut at ${String(BACKLOG_PAGES_MOST)} pages: issues newer than the last one read are not in this list.`)
-  if (kept.error !== null) head.push(`The newest read failed at ${clockOf(kept.tried_at)}: ${kept.error}. This is the last good list.`)
+  if (kept.error !== null) head.push(`The newest read failed at ${theClockOf(kept.tried_at, zone)}: ${kept.error}. This is the last good list.`)
   return [...head, theSplitInWords(theSplitOf(kept.issues, members), now)].join('\n')
 }

@@ -19,6 +19,7 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import {
   CrewTextRefused,
+  noCrewTextFor,
   crewTextFilesOf,
   crewTextFilesToApprove,
   crewTextToHand,
@@ -34,6 +35,8 @@ import {
 import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
 import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
 import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 
 const ROOT = `/${CREWS_PLACE}/site`
@@ -64,6 +67,8 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     thresholds: THRESHOLDS_WHEN_UNNAMED,
     github: GITHUB_WHEN_UNNAMED,
     transcripts: TRANSCRIPTS_WHEN_UNNAMED,
+    owner_notices: OWNER_NOTICES_WHEN_UNNAMED,
+    clock_zone: CLOCK_ZONE_WHEN_UNNAMED,
     opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
   }
 }
@@ -126,16 +131,22 @@ test('#306: a role with no text refuses the launch, naming the file to write', (
   assert.throws(
     () => handAMemberItsCrewText(textsOf({ role_text: null })),
     (error: unknown) =>
-      error instanceof CrewTextRefused && error.file === join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md') && /no a role text/.test(error.message),
+      error instanceof CrewTextRefused && error.file === join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md') && error.message === `${join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md')}: Martha ships no role text for "builder", and this crew has written none. Write one at that path.`,
     'a role with no text did not refuse by the path the owner would write',
   )
 })
 
 test('#306: a mode with no text refuses the launch too, naming its file', () => {
+  const file = join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, SOLO_MODE + '.md')
   assert.throws(
     () => handAMemberItsCrewText(textsOf({ mode_text: null })),
-    (error: unknown) => error instanceof CrewTextRefused && error.file === join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, SOLO_MODE + '.md'),
+    (error: unknown) => error instanceof CrewTextRefused && error.file === file && error.message === `${file}: Martha ships no mode text for "${SOLO_MODE}", and this crew has written none. Write one at that path.`,
   )
+})
+
+test('a member refused its crew text is named first, then what to write: the words the owner reads, exactly', () => {
+  const refusal = `${join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, 'proof.md')}: Martha ships no mode text for "proof", and this crew has written none. Write one at that path.`
+  assert.equal(noCrewTextFor('Probe-a', refusal), `Probe-a would be handed no crew text. ${refusal}`)
 })
 
 test('#306: a crew\'s own role text wins over the one Martha ships, and its own mode text too', () => {

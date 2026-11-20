@@ -35,6 +35,8 @@ import { appendToTheChannel, takenInBy, type ChannelHost } from '../keep_the_cre
 import { framed } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { AnAgentScript, AStandInsSessionRow, AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
+import { theScreenAnEngineStartSees } from './start_an_engine_member.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
@@ -470,4 +472,12 @@ test('#511 part B: a crew message for the engine member reaches its engine as a 
   await new Promise((settle) => setTimeout(settle, 2_500))
   assert.equal(theRequests(engine.heard).filter((request) => request.method === 'session/prompt').length, 2, lines.join('\n'))
   assert.deepEqual([...(await takenInBy(channel, MEMBER))], [position])
+})
+
+test('#931 C: an engine member\'s owner\'s screen is told of the notices its crew declares', () => {
+  // A list that is not the default: one notice the table shows as a dialog, and one it does not.
+  const declared = ['agent_completed', 'idle_prompt']
+  assert.notDeepEqual(declared, OWNER_NOTICES_WHEN_UNNAMED.show)
+  const start = { member: MEMBER, places: { dashboard: '/the-rows' }, settings: { house_rules: { owner_bell: undefined }, owner_notices: { show: declared } }, stdio: 'pipe' } as unknown as Parameters<typeof theScreenAnEngineStartSees>[0]
+  assert.deepEqual(theScreenAnEngineStartSees(start, () => false).shown_notices, declared, 'the owner\'s screen is not told of the crew\'s declared notices')
 })

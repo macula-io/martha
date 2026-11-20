@@ -20,7 +20,7 @@ import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST }
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS, THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
-import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import { crewTextToHand, noCrewTextFor } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { theOwnersAsks, type TheOwnersAsks } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -42,7 +42,7 @@ import type { SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse
 import { dropInFiles, hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
+import { theOwnersScreenOfALaunch, type TheScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { theEngineMembersTurns, type ATurnToSend, type TheEngineMembersTurns, type WhatATurnDid } from '../send_an_engine_member_its_turns/the_engine_members_turns.ts'
 import { theCrewsMessagesAsTurns, type TheCrewsMessagesAsTurns } from '../send_an_engine_member_its_turns/the_crews_messages_as_turns.ts'
 import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
@@ -141,7 +141,7 @@ function theCrewTextOfALaunchHeldToItsModel(start: AStartOnItsHost, launch: AGoo
   const another = whyTheConfigRunsAnotherModel(readFileSync(launch.config_at, 'utf8'), launch.config_at, model)
   if (another !== undefined) return { refusal: another }
   const crew = crewTextToHand(start.settings, start.member, launch.carried_files, thisMachine.stores.files)
-  return 'refusal' in crew ? { refusal: `${crew.refusal}, so ${start.member} is handed no crew text` } : crew
+  return 'refusal' in crew ? { refusal: noCrewTextFor(start.member, crew.refusal) } : crew
 }
 
 /** The engine's entry in the start table: one engine member started, or why not. */
@@ -235,6 +235,18 @@ function theSharedPlacesOf(start: AStartOnItsHost, shared: TheSharedOfAStart, la
   }
 }
 
+/** What an engine member's owner's screen is made from: its row, its bells, its terminal, and the notices its crew shows. */
+export const theScreenAnEngineStartSees = (start: Pick<AStartOnItsHost, 'member' | 'places' | 'settings' | 'stdio'>, muted: () => boolean): TheScreenOfALaunch => ({
+  member: start.member,
+  beats: dashboardRowsIn(start.places.dashboard),
+  declared_bells: start.settings.house_rules.owner_bell,
+  muted,
+  on_the_owners_terminal: isOnTheOwnersTerminal(start.stdio),
+  environment: process.env,
+  write: (bytes) => void process.stdout.write(bytes),
+  shown_notices: start.settings.owner_notices.show,
+})
+
 /** The owner's asks of this launch, served on a route `martha answer` finds by the member's name; or why not. */
 async function theAsksServed(start: AStartOnItsHost, launch: AGooseLaunch): Promise<{ readonly asks: TheOwnersAsks; readonly route: TheRouteServed; readonly routes: string } | { readonly refusal: string }> {
   const routes = crewSubdirectory(start.state.state_root, start.root, THE_ANSWER_ROUTES_PLACE)
@@ -243,7 +255,7 @@ async function theAsksServed(start: AStartOnItsHost, launch: AGooseLaunch): Prom
   const mute = (): TheMute => (start.places.bells === undefined ? NOTHING_IS_MUTED : theMuteOf({ directory: start.places.bells, lines: { append: appendStateLine, read: readStateFile } }, start.member))
   if (mute().muted) start.tellOwner(theMutedStartLine(start.member))
   const asks = theOwnersAsks({
-    screen: theOwnersScreenOfALaunch({ member: start.member, beats: dashboardRowsIn(start.places.dashboard), declared_bells: start.settings.house_rules.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(start.stdio), environment: process.env, write: (bytes) => void process.stdout.write(bytes) }),
+    screen: theOwnersScreenOfALaunch(theScreenAnEngineStartSees(start, () => mute().muted)),
     now: Date.now,
     anOwnerActStandsBehind: (heard) => {
       const read = readStateFile(answers_typed)

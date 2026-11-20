@@ -29,10 +29,10 @@ page does not name.
 | `harnesses` | no | The harnesses a profile may name (below). | none |
 | `providers` | no | The providers a profile may name (below). | none |
 | `profiles` | no | Named model, harness and provider sets a member may name (below). | none |
-| `clock_zone` | no | The time zone the crew's clock reads in. Checked as text; read by no part of Martha today. | none |
+| `clock_zone` | no | The time zone every clock time Martha prints for the crew reads in, by its IANA name (`Europe/Brussels`): the nudge lines, the CI wait and budget answers, the backlog and the crew-tools flag. A name this machine's time zone data does not know is refused. | `UTC` |
 | `github` | no | How the crew spends its GitHub allowance (below). | the values below |
 | `transcripts` | no | How many launches' transcripts are kept, and how large (below). | the values below |
-| `owner_notices` | no | Which of the host's notices reach the owner (below). Read by no part of Martha today. | none |
+| `owner_notices` | no | Which of the host's notices reach the owner (below). | the notices shown as a dialog before |
 
 ## `members[]`
 
@@ -183,4 +183,4 @@ Martha keeps each ended launch's transcripts, redacted, so the owner can read wh
 
 | Field | Required | What it holds |
 |---|---|---|
-| `show` | no | The notices that reach the owner, by name. |
+| `show` | no | The notices that reach the owner, by the host's own names (`agent_needs_input`, `worker_permission_prompt`, ...). A name the host does not send is refused; an empty list tells the owner of nothing. Left out, the owner is told of every notice Martha showed as a dialog before. |

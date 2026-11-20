@@ -9,6 +9,7 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { GATE_ENFORCES } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { OPEN_VOCABULARY } from './a_hosts_model_vocabulary.ts'
+import { CLOCK_ZONE } from './the_crews_clock_zone.ts'
 import {
   ACTS,
   BILLED_BY_API_KEY,
@@ -67,7 +68,7 @@ const draft = {
   thresholds: { offline_after_seconds: 31, progress_stale_minutes: 29, handover_percent: 71 },
   github: { budget_floor: 501 },
   transcripts: { launches_kept: 63, megabytes_kept: 15 },
-  owner_notices: { show: ['a-notice', 'another-notice'] },
+  owner_notices: { show: ['agent_needs_input', 'agent_completed'] },
 }
 
 const declare = (declaration: unknown, also: Readonly<Record<string, string>> = {}) => {
@@ -236,7 +237,7 @@ test('#931: a declaration that names no conventions reads the crew\'s convention
 })
 
 test('#931: the blocks the later packages read are checked for their shape, so a misspelt field is refused by name', async () => {
-  await refusedWith({ ...draft, clock_zone: 7 }, 'clock_zone')
+  await refusedWith({ ...draft, [CLOCK_ZONE]: 7 }, CLOCK_ZONE)
   await refusedWith({ ...draft, github: { budget_floor: -1 } }, 'github.budget_floor')
   await refusedWith({ ...draft, github: { budget: 1 } }, 'github.budget')
   await refusedWith({ ...draft, transcripts: { launches_kept: 0 } }, 'transcripts.launches_kept')

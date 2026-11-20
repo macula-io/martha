@@ -10,6 +10,7 @@ import { unheldWorkOver, type UnheldWorkAsked } from './unheld_work_tool.ts'
 import { UNHELD_WORK_PATH } from './unheld_work_path.ts'
 import { INBOUND_PATHS } from '../inbound_paths/inbound_paths.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
 
 const NOW = Date.parse('2026-11-16T12:00:00Z')
 
@@ -64,7 +65,7 @@ function aReader(place: CrewPlace, now: number, ...outcomes: ProcessOutcome[]): 
 }
 
 /** The tool asked by the Supervisor of a crew that declares a backlog. */
-const theSupervisorAsks = (reader: TheBacklogReader, changes: Partial<UnheldWorkAsked> = {}): ReturnType<typeof unheldWorkOver> =>
+const theSupervisorAsks = (reader: TheBacklogReader, changes: Partial<UnheldWorkAsked> = {}, zone: string = CLOCK_ZONE_WHEN_UNNAMED): ReturnType<typeof unheldWorkOver> =>
   unheldWorkOver({
     settings: {
       members: [
@@ -73,6 +74,7 @@ const theSupervisorAsks = (reader: TheBacklogReader, changes: Partial<UnheldWork
       ],
       mode: { name: 'team', roles: [SUPERVISOR, 'builder'], may: { assign_work: [SUPERVISOR], approve_landing: ['owner'], resume_parked_work: [SUPERVISOR], offer_owner_asks: ['owner'], restart_member: ['owner'], [HOLD_REVIEWS]: ['owner'] } },
       backlog: { places: ['macula-io'], idle_minutes: 30 },
+      clock_zone: zone,
     },
     asker: 'Supervisor',
     reader,
@@ -137,7 +139,7 @@ test('#319 B: only a role the table grants assign_work may ask, and a crew with 
   const builder = await theSupervisorAsks(reader, { asker: 'Vesta' })
   assert.ok('refused' in builder && builder.refused.startsWith('Vesta may not ask for unheld work'))
   const none = await theSupervisorAsks(reader, {
-    settings: { members: [{ name: 'Supervisor', role: SUPERVISOR, model: null, host: null, parked: false, billing: null }], mode: { name: 'team', roles: [SUPERVISOR], may: { assign_work: [SUPERVISOR], approve_landing: ['owner'], resume_parked_work: ['owner'], offer_owner_asks: ['owner'], restart_member: ['owner'], [HOLD_REVIEWS]: ['owner'] } }, backlog: null },
+    settings: { members: [{ name: 'Supervisor', role: SUPERVISOR, model: null, host: null, parked: false, billing: null }], mode: { name: 'team', roles: [SUPERVISOR], may: { assign_work: [SUPERVISOR], approve_landing: ['owner'], resume_parked_work: ['owner'], offer_owner_asks: ['owner'], restart_member: ['owner'], [HOLD_REVIEWS]: ['owner'] } }, backlog: null , clock_zone: CLOCK_ZONE_WHEN_UNNAMED },
   })
   assert.deepEqual(none, { refused: 'this crew declares no backlog, so there are no places to look for unheld work in.' })
   assert.equal(reader.calls(), 0, 'a refused ask still asked GitHub')
@@ -148,4 +150,18 @@ test('#319 B test 7: the inbound table names where the answer\'s issue text come
   assert.ok(row !== undefined, `no inbound path ${UNHELD_WORK_PATH} names the unheld_work answer`)
   assert.deepEqual({ klass: row.klass, control: row.control, attestation: row.attestation }, { klass: 'fetched', control: { kind: 'shell-gate' }, attestation: 'none' })
   assert.match(row.what, /unheld_work/)
+})
+
+test('#931 C: the backlog answer and its refusal name their times in the crew\'s declared clock_zone', async () => {
+  // NOW is 12:00 UTC; Asia/Kolkata is UTC+05:30 all year.
+  const zone = 'Asia/Kolkata'
+  const place = aPlace()
+  assert.deepEqual(await theSupervisorAsks(aReader(aPlace(), NOW, FAILED), {}, zone), {
+    refused: 'no read of the backlog has succeeded yet, so there is no list to tell unheld work from; the try at 17:30 Asia/Kolkata failed: HTTP 502: Bad Gateway',
+  })
+  await theSupervisorAsks(aReader(place, NOW, aPage(1)), {}, zone)
+  const later = await theSupervisorAsks(aReader(place, NOW + BACKLOG_READ_INTERVAL_MS, FAILED), {}, zone)
+  assert.ok('answer' in later)
+  assert.match(later.answer, /read at 17:30 Asia\/Kolkata\./, 'the read time is not in the declared zone')
+  assert.match(later.answer, /The newest read failed at 17:40 Asia\/Kolkata:/, 'the failed read time is not in the declared zone')
 })

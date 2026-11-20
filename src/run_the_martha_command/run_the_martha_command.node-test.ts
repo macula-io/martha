@@ -18,7 +18,9 @@ import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/sta
 import { KITTEN, KITTY, NO_DESKTOP_SESSION } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, UP, USAGE } from './run_the_martha_command.ts'
+import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, aFirstPromptNeedsMarthasTmux, startedLine, UP, USAGE } from './run_the_martha_command.ts'
+import { THE_FIRST_PROMPT_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { THE_COMPOSER_SETTLES_MS } from '../open_the_crew_in_tmux/open_the_crew_in_tmux.ts'
 import { NOT_A_KEY_FILES_PATH } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import { noCrewDeclaredAt, THE_ENGINES_ENDPOINT, THE_KEY_FILE_QUESTION, THE_SMALLEST_DECLARATION } from '../bring_up_the_declared_crew/bring_up_the_declared_crew.ts'
 import { SESSION_FILE, KITTY_PLACE } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
@@ -27,7 +29,7 @@ import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, SAID_BY } from '../show_the_owners
 import { MEMBER_SWITCH } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { A_MUTE_NEEDS_THE_OWNERS_TERMINAL, BELLS_HEARD, BELLS_MUTED, THE_BELLS_FILE, THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { NOT_IN_A_MEMBER } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
-import { RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/relay_protocol.ts'
+import { RELAY_PATHS, RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { hostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -304,13 +306,13 @@ function aProcessThatRuns(t: TestContext): number {
   return child.pid
 }
 
-test('#511: martha up takes no word; up --claude and any other word are usage errors', (t) => {
+test('#919: martha up takes only --prompt <text>; up --claude, a bare --prompt and any other word are usage errors', (t) => {
   const place = aWorkspace(t)
-  for (const words of [[UP, '--claude'], [UP, 'extra']]) {
+  for (const words of [[UP, '--claude'], [UP, 'extra'], [UP, THE_FIRST_PROMPT_SWITCH], [UP, THE_FIRST_PROMPT_SWITCH, 'hi', 'extra']]) {
     const run = martha(place, ...words)
     assert.equal(run.status, EXIT_USAGE, `${words.join(' ')}: ${run.said}`)
   }
-  assert.ok(USAGE.includes(`martha ${UP} |`), USAGE)
+  assert.ok(USAGE.includes(`martha ${UP} [${THE_FIRST_PROMPT_SWITCH} <text>] |`), USAGE)
   assert.ok(HELP.some((line) => line.startsWith(`martha ${UP} `)), HELP.join('\n'))
   assert.equal(HELP.some((line) => line.includes('--claude')), false, HELP.join('\n'))
 })
@@ -352,9 +354,17 @@ test('#511: the declaration is the config: martha up opens exactly the members t
   assert.equal(readFileSync(theDeclarationAt(place), 'utf8'), declared, 'up changed the owner\'s declaration')
 })
 
+/** A file whose presence makes the fake tmux fail to name its socket, as a server that has ended does. */
+const SERVER_GONE = 'tmux-server-gone'
+
+/** Where the fake tmux says Martha's server keeps its socket, as `display-message -p '#{socket_path}'` would. */
+function theSocketOfMarthasServer(place: Place): string {
+  return join(place.home, 'tmux-sockets', 'martha')
+}
+
 /**
  * A stand-in tmux on the place's PATH: it says it is tmux 3.8, keeps each command it is run with as one line of words
- * after the server's four, and has the crew's session once a session is opened.
+ * after the server's four, has the crew's session once a session is opened, and names its socket when asked.
  */
 function tmuxThatAnswers(place: Place): { readonly ran: string; readonly bin: string; readonly env: Readonly<Record<string, string>> } {
   const bin = join(place.home, 'tmux-bin')
@@ -367,7 +377,7 @@ function tmuxThatAnswers(place: Place): { readonly ran: string; readonly bin: st
     `[ "$1 $2 $3" = "-L martha -f" ] || exit 9`,
     'shift 4',
     `echo "$*" >> '${ran}'`,
-    `case "$1" in has-session) [ -e '${opened}' ] ;; new-session) : > '${opened}' ;; esac`,
+    `case "$1" in has-session) [ -e '${opened}' ] ;; new-session) : > '${opened}' ;; display-message) [ -e '${join(place.home, SERVER_GONE)}' ] && exit 1; echo '${theSocketOfMarthasServer(place)}' ;; esac`,
     '',
   ].join('\n'), { mode: 0o700 })
   return { ran, bin, env: { PATH: `${bin}:${process.env.PATH}` } }
@@ -410,6 +420,128 @@ test('#932: martha attach takes one member at most and no switch, needs a termin
   assert.equal(kittyCrew.status, EXIT_REFUSED, kittyCrew.said)
   assert.ok(kittyCrew.said.includes('this crew opens in kitty'), kittyCrew.said)
   assert.equal(existsSync(tmux.ran), false, 'tmux was run for a crew that opens in kitty')
+})
+
+/** The environment of a window of Martha's own tmux server, pane %3: tmux names the socket in TMUX and the pane in TMUX_PANE. */
+const inMarthasTmux = (place: Place): Readonly<Record<string, string>> => ({ TMUX: `${theSocketOfMarthasServer(place)},1,0`, TMUX_PANE: '%3' })
+
+test('#919: martha start --prompt outside a window of Martha\'s tmux is refused, saying how to give one, and starts nothing', (t) => {
+  const place = aWorkspace(t)
+  theOwnerDeclares(place, [{ name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE }], { id: 'a-crew', terminal: 'tmux' })
+  const claude = claudeThatEnds(place, t)
+  const tmux = tmuxThatAnswers(place)
+  const outside = [
+    {},
+    { TMUX: `${join(place.home, 'default')},1,0`, TMUX_PANE: '%3' },
+    // A server of the owner's own whose socket is also named martha, in another folder (tmux -S): a pane of that server
+    // shares its id with a pane of Martha's, perhaps another member's, so its name alone does not make it Martha's.
+    { TMUX: `${join(place.home, 'elsewhere', 'martha')},1,0`, TMUX_PANE: '%3' },
+  ]
+  for (const env of outside) {
+    const run = marthaOnATerminal(place, { ...claude.env, ...env, PATH: `${tmux.bin}:${claude.env.PATH}` }, 'start', 'Lead', THE_FIRST_PROMPT_SWITCH, 'hi')
+    assert.equal(run.status, EXIT_REFUSED, run.said)
+    assert.ok(run.said.replaceAll('\n', ' ').includes(aFirstPromptNeedsMarthasTmux()), run.said)
+    assert.equal(existsSync(claude.ran), false, run.said)
+  }
+  // Martha's server does not answer for its socket: the window cannot be shown to be one of its.
+  writeFileSync(join(place.home, SERVER_GONE), '')
+  const gone = marthaOnATerminal(place, { ...claude.env, ...inMarthasTmux(place), PATH: `${tmux.bin}:${claude.env.PATH}` }, 'start', 'Lead', THE_FIRST_PROMPT_SWITCH, 'hi')
+  assert.equal(gone.status, EXIT_REFUSED, gone.said)
+  assert.ok(gone.said.replaceAll('\n', ' ').includes(aFirstPromptNeedsMarthasTmux()), gone.said)
+  assert.equal(existsSync(claude.ran), false, gone.said)
+  assert.equal(existsSync(tmux.ran) && readFileSync(tmux.ran, 'utf8').includes('send-keys'), false, 'a key was typed outside Martha\'s tmux')
+})
+
+test('#919: a word after -- is no first prompt any more: martha start refuses it, naming --prompt', (t) => {
+  const place = aWorkspace(t)
+  theOwnerDeclares(place, [{ name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE }])
+  const claude = claudeThatEnds(place, t)
+  const run = marthaOnATerminal(place, claude.env, 'start', 'Lead', '--', 'a prompt')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.said.includes(`${THE_FIRST_PROMPT_SWITCH} <text>`), run.said)
+  assert.equal(existsSync(claude.ran), false, run.said)
+})
+
+test('#919: martha start --prompt for a member that runs on martha-engine is refused in Martha\'s tmux, naming its host', (t) => {
+  const place = aWorkspace(t)
+  theOwnerDeclares(place, [anEngineMember('flash-a')], { ...AN_ENDPOINT, id: 'a-crew', terminal: 'tmux' })
+  const run = marthaOnATerminal(place, inMarthasTmux(place), 'start', 'flash-a', THE_FIRST_PROMPT_SWITCH, 'hi')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.said.includes(`flash-a runs on ${THE_ENGINES_HOST}`), run.said)
+})
+
+/**
+ * A fake claude on the place's PATH that keeps its arguments, reports its session's start to its relay twice (a start,
+ * then a /clear), waits past the composer's settling time, and ends: as a Claude Code member whose owner types nothing.
+ */
+function claudeThatReportsItsStartTwice(place: Place, t: TestContext): { readonly args: string; readonly env: Readonly<Record<string, string>> } {
+  const bin = join(place.home, 'reporting-bin')
+  mkdirSync(bin)
+  const args = join(place.home, 'reporting-args')
+  const reporter = join(bin, 'report.mjs')
+  writeFileSync(reporter, [
+    "import { request } from 'node:http'",
+    'const post = (source) => new Promise((done) => {',
+    `  const asked = request({ socketPath: process.env.${RELAY_SOCKET_VARIABLE}, path: '${RELAY_PATHS.session_started}', method: 'POST', headers: { 'content-type': 'application/json' } }, (answer) => { answer.resume(); answer.on('end', done) })`,
+    "  asked.end(JSON.stringify({ session_id: 'a-session', source, hook_event_name: 'SessionStart', transcript_path: '/nowhere' }))",
+    '})',
+    "await post('startup')",
+    "await post('clear')",
+    `await new Promise((done) => setTimeout(done, ${THE_COMPOSER_SETTLES_MS * 2}))`,
+    '',
+  ].join('\n'))
+  writeFileSync(join(bin, CLAUDE), ['#!/bin/sh', ...hostAnswers(), `printf '%s\\n' "$@" > '${args}'`, `exec '${process.execPath}' '${reporter}'`, ''].join('\n'), { mode: 0o700 })
+  return { args, env: { PATH: `${bin}:${process.env.PATH}`, XDG_RUNTIME_DIR: shortRelayRoot(t) } }
+}
+
+test('#919: martha start --prompt in Martha\'s tmux types the prompt into the member\'s own pane once, after its session starts, then Enter; the host is never handed it', (t) => {
+  const place = placeFor(t)
+  const claude = claudeThatReportsItsStartTwice(place, t)
+  const tmux = tmuxThatAnswers(place)
+  assert.equal(marthaWith(place, claude.env, 'init').status, 0)
+  const [builder] = SOLO_MEMBERS
+  const prompt = '-v read your brief'
+  const run = marthaOnATerminal(place, { ...claude.env, ...inMarthasTmux(place), PATH: `${tmux.bin}:${claude.env.PATH}` }, 'start', builder!.name, THE_FIRST_PROMPT_SWITCH, prompt)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  const keys = readFileSync(tmux.ran, 'utf8').split('\n').filter((line) => line.startsWith('send-keys '))
+  assert.deepEqual(keys, [`send-keys -t %3 -l -- ${prompt}`, 'send-keys -t %3 Enter'])
+  assert.equal(readFileSync(claude.args, 'utf8').split('\n').some((word) => word.includes('read your brief')), false, 'the host was handed the first prompt')
+})
+
+test('#919: martha up --prompt refuses a prompt that starts with / or holds a line break, and opens nothing', (t) => {
+  const place = aWorkspace(t)
+  const tmux = tmuxThatAnswers(place)
+  theOwnerDeclares(place, [{ name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE }], { id: 'a-crew', terminal: 'tmux' })
+  for (const [prompt, why] of [['/hello', 'starts with /'], ['one\ntwo', 'line break']] as const) {
+    const run = marthaOnATerminal(place, tmux.env, UP, THE_FIRST_PROMPT_SWITCH, prompt)
+    assert.equal(run.status, EXIT_REFUSED, run.said)
+    assert.ok(run.said.includes(why), run.said)
+  }
+  assert.equal(existsSync(tmux.ran), false, 'tmux was run for a refused first prompt')
+})
+
+test('#919: martha up --prompt on a tmux crew hands the prompt to each Claude Code member\'s window only; an engine member is told it gets none', (t) => {
+  const place = aWorkspace(t)
+  const tmux = tmuxThatAnswers(place)
+  theOwnerDeclares(place, [{ name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE }, anEngineMember('flash-a')], { ...AN_ENDPOINT, id: 'a-crew', terminal: 'tmux' })
+  const prompt = '-v read your brief'
+  const run = marthaOnATerminal(place, tmux.env, UP, THE_FIRST_PROMPT_SWITCH, prompt)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  const windows = readFileSync(tmux.ran, 'utf8').split('\n').filter((line) => /^(new-session|new-window) /.test(line))
+  assert.equal(windows.length, 2, windows.join('\n'))
+  assert.ok(windows[0]!.endsWith(` start Lead ${THE_FIRST_PROMPT_SWITCH} ${prompt}`), windows.join('\n'))
+  assert.ok(windows[1]!.endsWith(' start flash-a'), windows.join('\n'))
+  assert.ok(run.said.includes(`flash-a runs on ${THE_ENGINES_HOST}, so it is not given your first prompt.`), run.said)
+})
+
+test('#919: martha up --prompt on a crew that opens in kitty is refused, and kitty is not started', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  theOwnerDeclares(place, [{ name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE }])
+  const run = marthaOnATerminal(place, { ...kitty.env, ...ON_A_DESKTOP }, UP, THE_FIRST_PROMPT_SWITCH, 'hi')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.said.includes('Declare "terminal": "tmux"'), run.said)
+  assert.equal(existsSync(kitty.started), false, 'kitty was started for a refused first prompt')
 })
 
 test('#511 part B: with an engine member to start and no key variable, martha up asks once for the key file; an answer that is no path is refused unechoed, and nothing is written', (t) => {

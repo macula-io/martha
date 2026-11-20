@@ -28,6 +28,8 @@ import { memberNameKey } from './member_names.ts'
 import { GITHUB, GITHUB_KEYS, githubOf, type CrewGithub } from './the_crews_github.ts'
 import { TRANSCRIPTS, TRANSCRIPTS_KEYS, transcriptsOf, type CrewTranscripts } from './the_crews_transcripts.ts'
 import { THRESHOLDS, THRESHOLDS_KEYS, thresholdsOf, type CrewThresholds } from './the_crews_thresholds.ts'
+import { OWNER_NOTICES, OWNER_NOTICES_KEYS, ownerNoticesOf, type CrewOwnerNotices } from './the_crews_owner_notices.ts'
+import { CLOCK_ZONE, clockZoneOf } from './the_crews_clock_zone.ts'
 import { PROFILE, PROFILE_BLOCK_FIELDS, PROFILE_TOP_LEVEL_KEYS, profilesOf, theProfileOfAMember, type Billing, type TheProfiles } from './the_crews_profiles.ts'
 export { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, BILLINGS, type Billing } from './the_crews_profiles.ts'
 import { ENGINE_ENDPOINT, ENGINE_ENDPOINT_OPTIONAL_KEYS, ENGINE_ENDPOINT_REQUIRED_KEYS, theEnginesEndpointOf, type EngineEndpoint } from './the_engines_endpoint.ts'
@@ -420,6 +422,10 @@ export interface CrewSettings {
   readonly github: CrewGithub
   /** The crew's transcript bounds (martha#931 B): see ./the_crews_transcripts. */
   readonly transcripts: CrewTranscripts
+  /** The host's notifications the owner is told of (martha#931 C): see ./the_crews_owner_notices. */
+  readonly owner_notices: CrewOwnerNotices
+  /** The time zone every clock time Martha prints for the crew reads in (martha#931 C): see ./the_crews_clock_zone. */
+  readonly clock_zone: string
   /** The crew's name and the terminal its members open in (martha#932): see ./the_crews_workspace's whereTheCrewOpens. */
   readonly opens: WhereTheCrewOpens
 }
@@ -437,7 +443,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS, GITHUB, TRANSCRIPTS, ...WORKSPACE_TOP_LEVEL_KEYS, ...PROFILE_TOP_LEVEL_KEYS] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS, GITHUB, TRANSCRIPTS, OWNER_NOTICES, CLOCK_ZONE, ...WORKSPACE_TOP_LEVEL_KEYS, ...PROFILE_TOP_LEVEL_KEYS] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 /** The member key `martha up` reads to leave a declared member down (martha#511). */
 export const PARKED = 'parked'
@@ -483,6 +489,7 @@ export const DECLARATION_FIELDS: Readonly<Record<string, readonly string[]>> = {
   [THRESHOLDS]: THRESHOLDS_KEYS,
   [GITHUB]: GITHUB_KEYS,
   [TRANSCRIPTS]: TRANSCRIPTS_KEYS,
+  [OWNER_NOTICES]: OWNER_NOTICES_KEYS,
   ...WORKSPACE_BLOCK_FIELDS,
   ...PROFILE_BLOCK_FIELDS,
 }
@@ -626,6 +633,8 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
     thresholds: thresholdsOf(value[THRESHOLDS], (field, why) => refuse.at(field, why)),
     github: githubOf(value[GITHUB], (field, why) => refuse.at(field, why)),
     transcripts: transcriptsOf(value[TRANSCRIPTS], (field, why) => refuse.at(field, why)),
+    owner_notices: ownerNoticesOf(value[OWNER_NOTICES], (field, why) => refuse.at(field, why)),
+    clock_zone: clockZoneOf(value[CLOCK_ZONE], (field, why) => refuse.at(field, why)),
     backlog: backlogOf(refuse, value[BACKLOG]),
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
     engine_endpoint: theEnginesEndpointOf(said, value, profiles),

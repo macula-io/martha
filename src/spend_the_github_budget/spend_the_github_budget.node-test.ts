@@ -22,8 +22,9 @@ import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_direc
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
-import { A_FRESH_BUDGET, BACKOFF_MAX_MS, BACKOFF_MIN_MS, GITHUB_BUDGET_PLACE, THE_BUDGET_FILE, keepTheClose, keepTheHead, namesTheWholeNumber, readTheHeadOfAPackagesPullRequest, readTheStateOfAPackagesIssue, spendTheGithubBudget, theBudgetIn, theClosesOfTheWaits, theHeadsOfTheWaits, theNextBackoff, theTextOf, type TheBudget, type TheGithubSpender } from './spend_the_github_budget.ts'
+import { A_FRESH_BUDGET, BACKOFF_MAX_MS, BACKOFF_MIN_MS, GITHUB_BUDGET_PLACE, THE_BUDGET_FILE, keepTheClose, keepTheHead, namesTheWholeNumber, readTheHeadOfAPackagesPullRequest, readTheStateOfAPackagesIssue, spendTheGithubBudget, theBudgetIn, theClosesOfTheWaits, theHeadsOfTheWaits, theNextBackoff, theTextOf, type TheBudget, theGithubSpenderOf, type TheGithubSpender } from './spend_the_github_budget.ts'
 import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 /** The crew's default, as a declaration that names no block reads it (martha#931 B). */
 const THE_FLOOR = GITHUB_WHEN_UNNAMED.budget_floor
 
@@ -89,7 +90,7 @@ const aRunner = (
 const theReadsOf = (asked: readonly (readonly string[])[]): readonly (readonly string[])[] => asked.filter((args) => !asksWhatIsLeft(args))
 
 /** A spender over the place and the runner the test gives it. */
-const aSpender = (place: CrewPlace, clock: { now: () => number }, run: (args: readonly string[]) => Promise<ProcessOutcome>): TheGithubSpender => ({ place, clock, run, floor: THE_FLOOR })
+const aSpender = (place: CrewPlace, clock: { now: () => number }, run: (args: readonly string[]) => Promise<ProcessOutcome>): TheGithubSpender => ({ place, clock, run, floor: THE_FLOOR, zone: CLOCK_ZONE_WHEN_UNNAMED })
 
 /** The budget a test starts from: a window with plenty left, and the wait before a call over. GitHub resets its
  * allowance on the hour, which is longer than any wait a test moves its clock through. */
@@ -500,4 +501,21 @@ test('#320 close: the issue and the pull request of one package are both read on
   await theHeadsOfTheWaits(spender, [A_PACKAGE])
   await theClosesOfTheWaits(spender, [A_PACKAGE])
   assert.equal(theIssueReadsOf(runner.asked).length, 1, 'the head read\'s wait held the issue read of the same package')
+})
+
+test('#931 C: the spender\'s backing-off refusal names its time in the spender\'s declared zone', async () => {
+  const zone = 'Asia/Kolkata'
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  const runner = aRunner([anAnswer('{}'), anAnswer('{}')], whatsLeft(THE_FLOOR * 20, MINUTE_MS * 60))
+  const spender = { ...aSpender(place, clock, runner.run), zone }
+  await spendTheGithubBudget(spender, ['api', 'one'])
+  const tooSoon = await spendTheGithubBudget(spender, ['api', 'two'])
+  assert.ok('refusal' in tooSoon)
+  assert.ok(tooSoon.refusal.endsWith(`backing off until ${theClockOf(clock.now() + BACKOFF_MIN_MS, zone)}.`), `the refusal's time is not in the declared zone: ${tooSoon.refusal}`)
+})
+
+test('#931 C: a spender holds the clock_zone its places declare', () => {
+  const spender = theGithubSpenderOf({ stores: { crew: { place: () => ({}) } }, root: '/nowhere', processes: { run: async () => ({ exit_code: 0, stdout: '', stderr: '' }) }, clock: { now: Date.now }, github: GITHUB_WHEN_UNNAMED, clock_zone: 'Asia/Kolkata' } as unknown as Parameters<typeof theGithubSpenderOf>[0])
+  assert.equal(spender.zone, 'Asia/Kolkata')
 })
