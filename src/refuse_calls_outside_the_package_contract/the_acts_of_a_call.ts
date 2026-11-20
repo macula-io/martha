@@ -1,7 +1,7 @@
 // What act a tool call is, in the words a package's contract allows (martha#513 slice 2).
 //
 // This exists so a contract's `allowed` line can be held against every tool call without the gate knowing what a host
-// calls its tools. The table is closed: a call that is not on it is not an act, and no contract refuses it. Every act is
+// calls its tools. The table is closed: a call that is not on it is not an act, and no contract notices it. Every act is
 // read from what the call itself says, never from a name given to it — the same rule the shell gate reads text by.
 //
 //   land     the crew's own tools that move the default branch, under whatever name the host calls them by

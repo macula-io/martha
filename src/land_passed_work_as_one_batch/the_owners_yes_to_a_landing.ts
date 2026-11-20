@@ -3,8 +3,8 @@
 // This exists so a default branch moves only on a yes Martha recorded, never on a member's word that it heard one. The
 // declaration's table says who may approve a landing (APPROVE_LANDING, read as every act is read: an act the table leaves
 // out is the owner's alone). When it grants the act to the caller's role, the caller's own call is the yes. When it grants
-// it to the owner, the yes is an ask the owner said yes to in the owner's ask queue (../queue_the_owners_asks), the same
-// record an unbounded contract stands on (martha#513). Otherwise nobody the call can name may approve, and it is refused.
+// it to the owner, the yes is an ask the owner said yes to in the owner's ask queue (../queue_the_owners_asks).
+// Otherwise nobody the call can name may approve, and it is refused.
 //
 // An owner's yes counts only for the landing it was asked about: the ask's question must be, exactly, the question this
 // slice builds for the landing (the repository, its default branch, the full tip and every package). `verify_range`

@@ -286,7 +286,7 @@ export interface CrewTools extends TheReviewRule {
   theSpendInForce(session_id: string): Promise<ASpendInForce | undefined>
   /**
    * One more call counted against that package's budget, before the call runs (martha#513, slice 3): undefined when it
-   * was kept, and the reason when it was not — a call nobody counted is a budget a member can walk around.
+   * was kept, and the reason when it was not, for the launch's journal: the call runs either way (martha#601, row 113).
    */
   noteTheCallCounted(session_id: string, own_name: string): Promise<string | undefined>
   /**
@@ -302,9 +302,9 @@ export interface CrewTools extends TheReviewRule {
   readonly ends: TheEndsHold
   /**
    * What the package this member holds says about this call (martha#513 slice 2): the package its own row holds, then
-   * that package's newest contract in the ledger — read only for a call that is an act at all, since a contract can
-   * refuse nothing else. Undefined when it holds none, the package has no contract, or the call is no act; a contract
-   * the ledger cannot read back comes back as that, so the act is refused and every other call still runs.
+   * that package's newest contract in the ledger — read only for a call that is an act at all, since a contract has
+   * nothing to say of any other. Undefined when it holds none, the package has no contract or one the ledger cannot read
+   * back, or the call is no act. A call outside it runs, with a notice to its member (martha#601, row 110).
    */
   theContractInForce(call: AReadableCall, names: ToolNames): Promise<TheContractHanded>
   /**
@@ -415,7 +415,7 @@ interface SessionState {
 
 /**
  * What the package this member holds says about this call, or none when the launch has no crew to ask (martha#513
- * slice 2): the relay hands it to the gate, which refuses nothing without one.
+ * slice 2): the relay reads it after the gate, for the notice of an act the contract leaves out (martha#601, row 110).
  */
 export async function theContractACrewHolds(
   crew: CrewTools | undefined,
@@ -500,16 +500,12 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
 }
 
 /**
- * What the package this member holds says about this call (martha#513 slice 2, martha#597), read from the two places
+ * What the package this member holds says about this call (martha#513 slice 2, martha#601), read from the two places
  * that already know it: the member's own dashboard row says which package it holds, and the package's ledger says which
  * contract it is on.
  *
- * A package with no version at all answers "none recorded", whatever the call is: none of its work runs until a
- * contract is kept (martha#597), so the act table is not consulted first for it — a call that is no act is refused too.
- * A ledger that cannot answer for the contract comes back as that rather than as a throw, and keeps slice 2's rule: one
- * unreadable row refuses the act it cannot judge and never the member's every call, its handover among them. For a
- * readable ledger, the acts are read first and the version's own acts are answered only for an act: a contract refuses
- * nothing that is no act.
+ * The acts are read first, so a call that is no act reads no ledger. A package with no version, or a ledger that cannot
+ * answer for it, comes back as none (martha#601, rows 109 and 111): the call runs, with nothing to notice.
  */
 async function theContractTheMemberHolds(
   places: CrewToolPlaces,
@@ -518,13 +514,12 @@ async function theContractTheMemberHolds(
 ): Promise<TheContractHanded> {
   const held_package = places.beats.read(places.member)?.holds ?? ''
   if (held_package === '') return undefined
-  const read = await theNewestContractOrWhy(places.ledger, held_package)
-  if ('why' in read) {
-    return theActsOfACall(call, held_package, names.ownNameOf).length === 0 ? undefined : { package: held_package, why: read.why }
-  }
-  const newest = read.newest
-  if (newest === undefined) return { package: held_package }
   if (theActsOfACall(call, held_package, names.ownNameOf).length === 0) return undefined
+  // No contract, or one the ledger could not read back, gives nothing to compare the call with (martha#601, rows 109
+  // and 111): the call runs and no notice is said.
+  const read = await theNewestContractOrWhy(places.ledger, held_package)
+  const newest = 'why' in read ? undefined : read.newest
+  if (newest === undefined) return undefined
   const { version, contract } = newest
   const allowed: readonly AContractAct[] = contract.kind === 'bounded' ? CONTRACT_ACTS.filter((act) => contract.allowed.includes(act)) : []
   return { package: held_package, version, kind: contract.kind, allowed }
@@ -792,7 +787,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [LOG_A_MILESTONE_TOOL.name]: async (args) => logTheMilestone(ledger, { package: textOf(args['package']), event: args['event'], note: args['note'] }, async () => whoMayResume(places)),
     [WHAT_WAS_SENT_TOOL.name]: async (args) => whatTheMemberSent(ledger, textOf(args['package'])),
     [NOTE_WHAT_BECAME_TOOL.name]: async (args) => noteTheActsOutcome(ledger, { package: textOf(args['package']), announced_at: args['announced_at'], succeeded: args['succeeded'], detail: args['detail'] }),
-    [KEEP_THE_CONTRACT_TOOL.name]: declaring(places, async (declared, args) => keepTheContract({ ...ledger, documents: places.documents, settings: declared.settings }, args)),
+    [KEEP_THE_CONTRACT_TOOL.name]: async (args) => keepTheContract({ ...ledger, documents: places.documents }, args),
     [SEE_THE_CREW_TOOL.name]: declaring(places, async (declared) => seeTheCrewOver(thePaneAsked(places, declared.settings))),
     [WHO_IS_FREE_TOOL.name]: declaring(places, async (declared, args) => whoIsFreeOver(theWhoIsFreeAsked(places, declared.settings, args))),
     [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn(places) })),
