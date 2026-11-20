@@ -10,12 +10,13 @@ import { CARRY_THE_END } from '../end_a_running_turn/end_the_running_turn.ts'
 import type { AnAgentsUsage } from '../speak_acp_to_an_agent/the_acp_client.ts'
 import {
   THE_ARRIVAL_OF_A_REFRESH_PROMPT,
-  THE_CLEAR_WAITS,
+  THE_CLEAR_AT_A_START,
   THE_CURRENCY_A_COST_IS_KEPT_IN,
   theEnginesRefresh,
   theEnginesUsageAsAHostsUsage,
   theLineOfAnActNotCarried,
   type Heard,
+  type TheEnginesRefreshPlaces,
 } from './the_engines_refresh.ts'
 
 const MEMBER = 'a-member-a-test-names'
@@ -33,16 +34,18 @@ interface Asked {
 }
 
 /** A refresh answered with `answer`, whose engine reported `usage`, or nothing at all for null. */
-function aRefresh(answer: Heard, usage: AnAgentsUsage | null = A_USAGE) {
+function aRefresh(answer: Heard | readonly Heard[], usage: AnAgentsUsage | null = A_USAGE, clear: TheEnginesRefreshPlaces['clear'] = async () => ({ why: 'no clear in this test' })) {
   const asked: Asked[] = []
   const told: string[] = []
+  const answers = Array.isArray(answer) ? [...answer] : undefined
   const refresh = theEnginesRefresh({
     member: MEMBER,
     session_id: SESSION,
     started_at: STARTED_AT,
     usageOf: (session_id) => (session_id === SESSION && usage !== null ? usage : undefined),
-    ask: async (session_id, tool, args) => (asked.push({ session_id, tool, args }), answer),
+    ask: async (session_id, tool, args) => (asked.push({ session_id, tool, args }), answers === undefined ? (answer as Heard) : (answers.shift() ?? said({ carry: 'none' }))),
     tell: (line) => void told.push(line),
+    clear,
   })
   return { refresh, asked, told }
 }
@@ -99,9 +102,8 @@ test('#999 package 5: a prompt the crew orders is the member\'s next turn, recor
   assert.deepEqual(told, [])
 })
 
-test('#999 package 5: the clear, a model switch and the end of a running turn are told to the owner by name and never carried (mutant: an order dropped silently)', async () => {
+test('#999 package 5: a model switch and the end of a running turn are told to the owner by name and never carried (mutant: an order dropped silently)', async () => {
   for (const [order, why] of [
-    [{ carry: CARRY_THE_CLEAR }, THE_CLEAR_WAITS],
     [{ carry: CARRY_A_MODEL, model: 'm' }, `an engine member is not ordered to ${CARRY_A_MODEL}`],
     [{ carry: CARRY_THE_END, turn_id: 't' }, `an engine member is not ordered to ${CARRY_THE_END}`],
   ] as const) {
@@ -120,4 +122,32 @@ test('#999 package 5: a question the crew tools could not answer is told, and an
     assert.equal(await refresh.afterATurn({ text: '' }), undefined)
     assert.deepEqual(told, [])
   }
+})
+
+/** The next session a clear opens in these tests, and when. */
+const NEXT = { session_id: 'the-next-session', started_at: STARTED_AT + 1 }
+
+test('martha#1002: a clear after a turn opens the next session, asks at its start as that session, and its resume is the next turn (mutant: the start question asked as the predecessor)', async () => {
+  let clears = 0
+  const resume = 'resume from your handover'
+  const { refresh, asked, told } = aRefresh([said({ carry: CARRY_THE_CLEAR }), said({ carry: CARRY_A_TEXT, text: resume })], A_USAGE, async () => (clears++, NEXT))
+  assert.deepEqual(await refresh.afterATurn({ text: 'handover written' }), { text: resume, arrival: THE_ARRIVAL_OF_A_REFRESH_PROMPT })
+  assert.equal(clears, 1)
+  assert.deepEqual(told, [])
+  assert.deepEqual(asked.map((one) => one.session_id), [SESSION, NEXT.session_id])
+  const start = theQuestionIn(asked[1]?.args ?? {}, NEXT.session_id)
+  assert.ok(typeof start !== 'string', String(start))
+  assert.equal(start.at_start, true, 'the question at the new start is the first question')
+  assert.equal(start.started_at, NEXT.started_at)
+})
+
+test('martha#1002: a clear the launch cannot open is told by name; a clear ordered at a start is told and opens nothing (mutant: a clear at the start carried)', async () => {
+  const failed = aRefresh(said({ carry: CARRY_THE_CLEAR }), A_USAGE, async () => ({ why: 'the next session was refused' }))
+  assert.equal(await failed.refresh.afterATurn({ text: '' }), undefined)
+  assert.deepEqual(failed.told, [theLineOfAnActNotCarried(MEMBER, 'the next session was refused')])
+  let clears = 0
+  const atStart = aRefresh(said({ carry: CARRY_THE_CLEAR }), A_USAGE, async () => (clears++, NEXT))
+  assert.equal(await atStart.refresh.atTheStart(), undefined)
+  assert.equal(clears, 0)
+  assert.deepEqual(atStart.told, [theLineOfAnActNotCarried(MEMBER, THE_CLEAR_AT_A_START)])
 })
