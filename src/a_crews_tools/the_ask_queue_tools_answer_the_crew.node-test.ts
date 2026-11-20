@@ -44,6 +44,7 @@ import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_a
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-ask-queue-tools-'))
 after(() => removeTheTree(home))
@@ -221,6 +222,7 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
   backlog: null,
   volatile_paths: [],
   engine_endpoint: null,
+    thresholds: THRESHOLDS_WHEN_UNNAMED,
 })
 
 /** A place of the test's own, over `rows`, with the git and declaration it is handed: either may be left out. */

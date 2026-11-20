@@ -25,6 +25,7 @@ import { hostRuns, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 
 export type { ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { memberNameKey } from './member_names.ts'
+import { THRESHOLDS, THRESHOLDS_KEYS, thresholdsOf, type CrewThresholds } from './the_crews_thresholds.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -411,6 +412,8 @@ export interface CrewSettings {
   readonly volatile_paths: readonly string[]
   /** Where an engine member's model is reached (martha#541 package A), or null when the declaration names none. */
   readonly engine_endpoint: EngineEndpoint | null
+  /** The crew's thresholds (martha#931 A): see ./the_crews_thresholds; each field the declaration leaves out reads today's value. */
+  readonly thresholds: CrewThresholds
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -426,7 +429,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 const OPTIONAL_MEMBER_KEYS = ['model', HOST] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
@@ -443,6 +446,21 @@ const HOUSE_RULE_KEYS: readonly string[] = [
   GATE_ENFORCES,
   GATE_AUDITS,
 ]
+
+/**
+ * Every field a declaration may hold, by the block it sits in ('' for the top level; `members` for each member): the
+ * lists the parse below refuses an unknown key by. docs/the-declaration.md names each one, and
+ * ./the_declaration_page.node-test.ts holds the page to these lists both ways (martha#931).
+ */
+export const DECLARATION_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  '': TOP_LEVEL_KEYS,
+  members: MEMBER_KEYS,
+  mode: MODE_KEYS,
+  house_rules: HOUSE_RULE_KEYS,
+  [BACKLOG]: BACKLOG_KEYS,
+  [ENGINE_ENDPOINT]: [...ENGINE_ENDPOINT_REQUIRED_KEYS, ...ENGINE_ENDPOINT_OPTIONAL_KEYS],
+  [THRESHOLDS]: THRESHOLDS_KEYS,
+}
 
 type Json = Record<string, unknown>
 
@@ -563,6 +581,7 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     gate: gateOf(refuse, value['house_rules'], members),
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
+    thresholds: thresholdsOf(value[THRESHOLDS], (field, why) => refuse.at(field, why)),
     backlog: backlogOf(refuse, value[BACKLOG]),
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
     engine_endpoint: engineEndpointOf(refuse, value[ENGINE_ENDPOINT]),

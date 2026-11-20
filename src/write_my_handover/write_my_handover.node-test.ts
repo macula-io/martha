@@ -21,7 +21,7 @@ import type { HandoverStamp, HandoverStampStore } from '../host_contract/host_co
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rememberSession, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
-import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
+
 import {
   HANDOVERS_PLACE,
   THE_HANDOVER_WRITTEN,
@@ -34,6 +34,9 @@ import {
   writeMyHandover,
 } from './write_my_handover.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const HANDOVER_LIMIT_PERCENT = THRESHOLDS_WHEN_UNNAMED.handover_percent
 
 /** A home of the tests: the crew's own directory, as the launcher resolves one, under the state root. */
 const home = mkdtempSync(join(tmpdir(), 'martha-handover-'))
@@ -225,9 +228,9 @@ test('#255: the send-back note names what was missing and the word to answer wit
 })
 
 test('#255: the handover prompt names the limit and the tool, and asks for the word', () => {
-  const atTheLimit = theHandoverPrompt({ at_limit: true, percent: HANDOVER_LIMIT_PERCENT + 2 })
+  const atTheLimit = theHandoverPrompt({ at_limit: true, percent: HANDOVER_LIMIT_PERCENT + 2, limit_percent: HANDOVER_LIMIT_PERCENT })
   assert.ok(atTheLimit.includes(`${HANDOVER_LIMIT_PERCENT}%`), 'the prompt does not name the limit')
   assert.ok(atTheLimit.includes(WRITE_MY_HANDOVER_TOOL), 'the prompt does not name the tool that writes the handover')
   assert.ok(atTheLimit.includes(THE_HANDOVER_WRITTEN), 'the prompt does not name the word to answer with')
-  assert.ok(!theHandoverPrompt({ at_limit: false, percent: 30 }).includes('handover limit'), 'a task’s end reads as the limit')
+  assert.ok(!theHandoverPrompt({ at_limit: false, percent: 30, limit_percent: HANDOVER_LIMIT_PERCENT }).includes('handover limit'), 'a task’s end reads as the limit')
 })

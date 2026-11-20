@@ -35,6 +35,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { crewToolsOver, NO_ACTING_PLACE, THE_TOOLS_ASK, type CrewTools } from './a_crews_tools.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 
 const MEMBER = 'Ceres'
 const SLUG = '256-the-five'
@@ -136,6 +137,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     backlog: null,
     volatile_paths: [],
     engine_endpoint: null,
+    thresholds: THRESHOLDS_WHEN_UNNAMED,
   }
 }
 

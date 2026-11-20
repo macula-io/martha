@@ -25,10 +25,13 @@ import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in
 import { CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { HANDOVERS_PLACE, THE_HANDOVER_WRITTEN, THE_REFRESH_DECLINED, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { keepThePackageContract } from '../keep_the_package_contract/keep_the_package_contract.ts'
-import { HANDOVER_LIMIT_PERCENT, REFRESH_MARGIN_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
+import { REFRESH_MARGIN_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { crewToolsOver, CREW_TOOL_NAMES, REFRESH_THIS_SESSION, type CrewTools } from './a_crews_tools.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const HANDOVER_LIMIT_PERCENT = THRESHOLDS_WHEN_UNNAMED.handover_percent
 
 /** The models this test's host runs (martha#315): the vocabulary a declaration's review_model is read against. */
 const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
@@ -70,6 +73,8 @@ interface ACrewOptions {
   readonly supervisor?: boolean
   /** The machine roots a launch hands in for a crew whose declaration names none (martha#314). */
   readonly volatile_roots?: readonly string[]
+  /** The declaration's thresholds block (martha#931 A), written into the file as the owner would. */
+  readonly thresholds?: Readonly<Record<string, number>>
 }
 
 /** One crew the test made: its member's tools, where its own store is, and the session that member's launcher holds. */
@@ -105,7 +110,7 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
   const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
-  if (options.refresh_between_tasks === true || options.supervisor === true) switchOnInTheDeclaration(root, options)
+  if (options.refresh_between_tasks === true || options.supervisor === true || options.thresholds !== undefined) switchOnInTheDeclaration(root, options)
   const records = aSessionStore()
   const held = new Map((options.sessions ?? ['a-session']).map((id) => [id, beginSession(records, id)] as const))
   const ledger = { clock: { now: () => clock.at }, stores: { rows } }
@@ -151,7 +156,8 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
 /** The declaration as a test needs it to read: the after-a-task trigger on, or a member whose role is `supervisor`. */
 function switchOnInTheDeclaration(root: string, options: ACrewOptions): void {
   const file = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
-  const declared = JSON.parse(readFileSync(file, 'utf8')) as { members: { name: string; role: string }[]; mode: { roles: string[] }; house_rules?: Record<string, unknown> }
+  const declared = JSON.parse(readFileSync(file, 'utf8')) as { members: { name: string; role: string }[]; mode: { roles: string[] }; house_rules?: Record<string, unknown>; thresholds?: unknown }
+  if (options.thresholds !== undefined) declared.thresholds = options.thresholds
   if (options.supervisor === true) {
     declared.members = [...declared.members, { name: SUPERVISOR, role: SUPERVISOR }]
     declared.mode.roles = [...declared.mode.roles, SUPERVISOR]
@@ -215,6 +221,24 @@ test('#255: a session past the limit is answered with the handover prompt, and i
   assert.ok(row !== null, 'the question wrote no row')
   assert.equal(row.host.contextPercent, HANDOVER_LIMIT_PERCENT + 5, 'the row does not carry the context the session reported')
   assert.equal(row.refresh?.phase, 'handing_over', 'the row does not say a refresh is in flight')
+})
+
+test('#931 A: the handover limit is the declaration\'s thresholds.handover_percent: a session past it is asked, one below it is not', async () => {
+  const declared = HANDOVER_LIMIT_PERCENT - 15
+  const crew = await aCrewOfTools('builder', { supervisor: true, thresholds: { handover_percent: declared } })
+  const { tools } = crew
+  assert.ok('answer' in (await tools.answer(THE_REFRESH_ASK, questionOf(10, 0.1, '', ''), 'a-session')))
+  const below = await tools.answer(THE_REFRESH_ASK, questionOf(declared - 1, 0.2, 't-1', ''), 'a-session')
+  assert.ok('answer' in below)
+  assert.deepEqual(JSON.parse(below.answer), { carry: 'none' }, 'a session below the declared limit was asked')
+  const past = await tools.answer(THE_REFRESH_ASK, questionOf(declared + 1, 0.3, 't-2', ''), 'a-session')
+  assert.ok('answer' in past)
+  const act = JSON.parse(past.answer) as { readonly carry?: unknown; readonly text?: unknown }
+  assert.equal(act.carry, CARRY_A_TEXT, `a session past the declared limit, and below the default, was not asked: ${JSON.stringify(act)}`)
+  assert.ok(String(act.text).includes(`past the ${declared}% handover limit`), `the prompt does not name the declared limit: ${String(act.text)}`)
+  assert.equal(await crew.ask('a-session', declared + 1, `${THE_REFRESH_DECLINED} it cannot reach a safe point at all`), 'none')
+  const said = await crew.saidInTheChannel()
+  assert.ok(said[0]?.message.text.includes(`past the ${declared}% handover limit`), `the line to the Supervisor does not name the declared limit: ${said[0]?.message.text ?? 'nothing said'}`)
 })
 
 test('#255: a member whose session began above the limit is not asked on its first report (#470)', async () => {

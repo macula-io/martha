@@ -21,7 +21,7 @@
 import { memberNameKey, sameMemberName, OWNER } from '../declare_crew/declare_crew.ts'
 import { BUSY, lastSaidAt, type Nudge, type NudgeInput, type ReviewWait } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
-import { IDLE, OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { IDLE, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** One wait: `from` waits on `to` for `what`, since `since`. */
 export interface WaitEdge {
@@ -52,7 +52,7 @@ const named = sameMemberName
 const rowOf = (name: string, rows: readonly DashboardRow[]): DashboardRow | undefined => rows.find((row) => named(row.member, name))
 
 /** Whether a row has gone quiet: the reader's word for it (../see_the_crew), from the row's own beat. */
-const quiet = (row: DashboardRow, now: number): boolean => now - row.at > OFFLINE_AFTER_MS
+const quiet = (row: DashboardRow, input: Pick<NudgeInput, 'now' | 'windows'>): boolean => input.now - row.at > input.windows.offline_ms
 
 /** The row's own word for a parked member: the dashboard's state, not the place a crew keeps its markers in. Private to
  * this file, as ../nudge_the_supervisor's is to that one, so the load-bearing word is written where it is read. */
@@ -173,7 +173,7 @@ function unableBecause(name: string, input: NudgeInput, stalled: ReadonlySet<str
   const row = rowOf(name, input.rows)
   if (row === undefined) return input.receivers.some((receiver) => named(receiver, name)) ? 'has no row' : ''
   if (parked(row, input) && !atWork(row, input)) return 'is parked'
-  if (quiet(row, input.now)) return 'is quiet'
+  if (quiet(row, input)) return 'is quiet'
   return stalled.has(keyOf(name)) ? 'has stalled' : ''
 }
 
@@ -214,7 +214,7 @@ function deadEndDeadlock(end: string, why: string, chain: readonly WaitEdge[], i
 const stalledMembers = (input: NudgeInput): ReadonlySet<string> =>
   new Set(
     input.rows
-      .filter((row) => (BUSY as readonly string[]).includes(row.state) && !quiet(row, input.now) && !parked(row, input) && input.now - lastSaidAt(row) >= input.windows.stalled_ms)
+      .filter((row) => (BUSY as readonly string[]).includes(row.state) && !quiet(row, input) && !parked(row, input) && input.now - lastSaidAt(row) >= input.windows.stalled_ms)
       .map((row) => keyOf(row.member)),
   )
 

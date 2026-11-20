@@ -19,7 +19,7 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
-import { BEAT_INTERVAL_MS, OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { BEAT_INTERVAL_MS, OFFLINE, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { REQUEST_PENDING_LAUNCHER_GONE, theListLine, theMembersListed } from './list_the_members.ts'
 import {
   ANSWER_AFTER_EXIT_MS,
@@ -36,6 +36,9 @@ import {
   type StoppingHost,
   type TheRequest,
 } from './stop_and_restart_a_member.ts'
+import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
 
 const home = mkdtempSync(join(tmpdir(), 'martha-stop-'))
 after(() => removeTheTree(home))
