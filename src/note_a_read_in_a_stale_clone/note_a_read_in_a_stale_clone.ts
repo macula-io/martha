@@ -15,9 +15,8 @@
 // `origin/<branch>` has not moved either. So the age of the last fetch is part of the answer, and a clone not fetched
 // for an hour says so even when the count is zero.
 
-import { join, sep } from 'node:path'
-
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { isUnder, theCloneOf } from '../guard_workspace/guard_workspace.ts'
 
 /** The crew's two declared places a read is judged against: where its clones are, and where its worktrees are. */
 export interface TheReadPlaces {
@@ -25,16 +24,13 @@ export interface TheReadPlaces {
   readonly worktrees: string
 }
 
-const isUnder = (path: string, place: string): boolean => path === place || path.startsWith(`${place}${sep}`)
-
 /**
  * The clone a read lands in, `<clones>/<org>/<repo>` as the crew lays one out, or null: a read in a worktree, outside
  * the clones, or above any one clone lands in none. The path is the one the read names, as its host resolves it.
  */
 export function theCloneAReadLandsIn(path: string, at: TheReadPlaces): string | null {
-  if (isUnder(path, at.worktrees) || !isUnder(path, at.clones)) return null
-  const [org, repo] = path.slice(at.clones.length + 1).split(sep)
-  return org === undefined || org === '' || repo === undefined || repo === '' ? null : join(at.clones, org, repo)
+  // The clone is found as the workspace guard finds one, so the two never disagree on where a clone is.
+  return isUnder(path, at.worktrees) ? null : theCloneOf(path, at.clones)
 }
 
 /**
