@@ -11,6 +11,19 @@ export interface CheckoutSkillRoots {
   readonly plugin_settings: readonly string[]
 }
 
+/**
+ * Where the engine reads skills from outside the checkout (martha#614 slice 3, R2), each path relative to its base: the
+ * folders it joins onto the home, the folders it joins onto one of its own folders (by the kind `engine_folders` names),
+ * the kind of its own folder the user's plugins are in, and the user's plugin settings file, under the path root when
+ * there is one and under the home when not. A launch makes each of them inside its own root, empty.
+ */
+export interface SkillRootsOutsideTheCheckout {
+  readonly home_folders: readonly string[]
+  readonly engine_folders: ReadonlyArray<{ readonly kind: string; readonly folder: string }>
+  readonly plugin_folder: string
+  readonly settings_file: { readonly under_root: string; readonly under_home: string }
+}
+
 /** Where in the engine each skill root is decided, relative to the checkout; spread into ENGINE_PLACES (martha#614). */
 export const SKILL_ROOT_PLACES = {
   skill_folders: 'crates/goose/src/skills/mod.rs',
@@ -23,6 +36,8 @@ export const SKILL_ROOT_READERS = {
   skill_folders: 'all_skill_dirs_with_config',
   plugin_folder: 'project_plugin_dir',
   plugin_settings: 'project_settings_path',
+  user_plugin_folder: 'plugin_install_dir',
+  user_settings: 'user_settings_path',
 } as const
 
 /**
@@ -150,7 +165,7 @@ function pluginsFromKnownBases(source: EngineSource): void {
   const body = squeezed(functionBody(text, fn, path))
   const root = boundFrom(functionBody(text, fn, path), rootParameterOf(text, fn, path), fn, path)
   const project = captured(body, new RegExp(`let(\\w+)=${SKILL_ROOT_READERS.plugin_folder}\\(${root}\\);`), `the project plugin folder ${fn} reads`, path)
-  const user = captured(body, /let(\w+)=plugin_install_dir\(\);/, `the user plugin folder ${fn} reads`, path)
+  const user = captured(body, new RegExp(`let(\\w+)=${SKILL_ROOT_READERS.user_plugin_folder}\\(\\);`), `the user plugin folder ${fn} reads`, path)
   const listedFrom = (bases: string): string => `\\w+\\.extend\\(list_dir_children\\(&(?:${bases})\\)\\.into_iter\\(\\)\\.map\\(\\|\\((\\w+),(\\w+)\\)\\|DiscoveredPlugin\\{\\1,\\2,`
   const grown = leftOver(body, [listedFrom(`${project}|${user}`)], '\\.(?:push|extend|append|chain)\\(|list_dir_children\\(|DiscoveredPlugin\\{')
   if (grown !== undefined) throw unknownBase(path, fn, grown)
@@ -169,7 +184,7 @@ function settingsFromKnownBases(source: EngineSource): void {
   const body = squeezed(raw)
   const root = boundFrom(raw, rootParameterOf(text, fn, path), fn, path)
   const list = captured(body, /letmut(\w+):Vec<\(SettingsScope,PathBuf\)>=Vec::new\(\);/, `the settings files ${fn} gathers`, path)
-  const binding = (name: string): string => `ifletSome\\(${name}\\)=user_settings_path\\(\\)\\{`
+  const binding = (name: string): string => `ifletSome\\(${name}\\)=${SKILL_ROOT_READERS.user_settings}\\(\\)\\{`
   const user = new RegExp(binding('(\\w+)')).exec(body)?.[1]
   const files = [...(user === undefined ? [] : [user]), `${SKILL_ROOT_READERS.plugin_settings}\\(${root},(?:true|false)\\)`].join('|')
   const pushedOf = (file: string): string => `${list}\\.push\\(\\(SettingsScope::\\w+,(?:${file})\\)\\);`
@@ -327,4 +342,56 @@ function pluginRootsIn(source: EngineSource): Pick<CheckoutSkillRoots, 'plugin_f
   if (local === undefined || shared === undefined || folder === undefined) throw new Error(`${plugins} says nothing of the files ${SKILL_ROOT_READERS.plugin_settings} builds`)
   const settingsFolder = joinedFrom(`project_root${folder}`, 'project_root') ?? ''
   return { plugin_folder, plugin_settings: [`${settingsFolder}/${shared}`, `${settingsFolder}/${local}`] }
+}
+
+/** A `.join("a").join("b")` chain as the path "a/b" it builds. */
+const pathOfJoins = (joins: string): string => [...joins.matchAll(/\.join\("([^"]+)"\)/g)].map((found) => found[1] ?? '').join('/')
+
+/** The kind of the engine's own folder `Paths::<kind>_dir()` names, or a throw naming it when `kinds` has no such kind. */
+function folderKindOf(method: string, kinds: readonly string[], path: string, fn: string): string {
+  const kind = method.replace(/_dir$/, '')
+  if (!kinds.includes(kind)) throw unknownBase(path, fn, `Paths::${method}(), a folder the recorded engine folders do not name`)
+  return kind
+}
+
+/**
+ * Where the engine reads skills from outside the checkout (martha#614 slice 3, R2), read through the same known bases
+ * the checkout's roots are, so a root the engine gains under any of them is in what this gives back, and a root under
+ * any other base is a throw naming the function. `engineName` stands for the constant the settings file is joined
+ * with, and `kinds` are the engine's own folder kinds.
+ */
+export function skillRootsOutsideTheCheckoutIn(source: EngineSource, engineName: string, kinds: readonly string[]): SkillRootsOutsideTheCheckout {
+  for (const fromKnownBases of FOLDERS_FROM_KNOWN_BASES) fromKnownBases(source)
+  const skills = SKILL_ROOT_PLACES.skill_folders
+  const reader = SKILL_ROOT_READERS.skill_folders
+  const text = fileOf(source, skills)
+  const body = squeezed(functionBody(text, reader, skills))
+  const home = captured(body, /let(\w+)=dirs::home_dir\(\);/, `the home ${reader} reads`, skills)
+  const homes = [...new Set([...body.matchAll(new RegExp(`ifletSome\\((\\w+)\\)=${home}\\.as_ref\\(\\)\\{`, 'g'))].map((found) => found[1] ?? ''))]
+  const home_folders = homes.length === 0 ? [] : [...body.matchAll(new RegExp(`(?<![.\\w])(?:${homes.join('|')})(${JOINS})`, 'g'))].map((found) => pathOfJoins(found[1] ?? ''))
+  const engine_folders = [...body.matchAll(new RegExp(`Paths::(\\w+)\\(\\)(${JOINS})`, 'g'))].map((found) => ({ kind: folderKindOf(found[1] ?? '', kinds, skills, reader), folder: pathOfJoins(found[2] ?? '') }))
+  return { home_folders, engine_folders, plugin_folder: userPluginFolderIn(source, kinds), settings_file: userSettingsFileIn(source, engineName) }
+}
+
+/** The kind of the engine's own folder `plugin_install_dir` gives back, which is all it does, or a throw naming it. */
+function userPluginFolderIn(source: EngineSource, kinds: readonly string[]): string {
+  const path = SKILL_ROOT_PLACES.plugin_skill_dirs
+  const fn = SKILL_ROOT_READERS.user_plugin_folder
+  const body = squeezed(functionBody(fileOf(source, path), fn, path))
+  const method = /^Paths::(\w+)\(\)$/.exec(body)?.[1]
+  if (method === undefined) throw unknownBase(path, fn, body)
+  return folderKindOf(method, kinds, path, fn)
+}
+
+/**
+ * The user's plugin settings file `user_settings_path` builds: under the path root when there is one, else under the
+ * home, each joined with strings and the engine's name and nothing else, or a throw naming the function.
+ */
+function userSettingsFileIn(source: EngineSource, engineName: string): SkillRootsOutsideTheCheckout['settings_file'] {
+  const path = SKILL_ROOT_PLACES.plugin_discovery
+  const fn = SKILL_ROOT_READERS.user_settings
+  const body = squeezed(functionBody(fileOf(source, path), fn, path)).replace(/\.join\((?:\w+::)*ENGINE_NAME\)/g, `.join("${engineName}")`)
+  const [, , underRoot, underHome] = new RegExp(`^ifletSome\\((\\w+)\\)=Paths::path_root\\(\\)\\{returnSome\\(\\1(${JOINS}),?\\);\\}Some\\(dirs::home_dir\\(\\)\\?(${JOINS}),?\\)$`).exec(body) ?? []
+  if (underRoot === undefined || underHome === undefined) throw unknownBase(path, fn, body)
+  return { under_root: pathOfJoins(underRoot), under_home: pathOfJoins(underHome) }
 }

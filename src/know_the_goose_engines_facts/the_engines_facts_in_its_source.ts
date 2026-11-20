@@ -14,9 +14,9 @@
 import { dirname, join } from 'node:path'
 
 import { captured, fileOf, type EngineSource } from './read_an_engines_source.ts'
-import { checkoutSkillRootsIn, SKILL_ROOT_PLACES, type CheckoutSkillRoots } from './the_checkout_skill_roots_in_its_source.ts'
+import { checkoutSkillRootsIn, SKILL_ROOT_PLACES, skillRootsOutsideTheCheckoutIn, type CheckoutSkillRoots, type SkillRootsOutsideTheCheckout } from './the_checkout_skill_roots_in_its_source.ts'
 export type { EngineSource } from './read_an_engines_source.ts'
-export { CHECKOUT_ROOT_CARRIERS, SKILL_ROOT_READERS, WORKING_DIRECTORY_AS_THE_ROOT, type CheckoutSkillRoots } from './the_checkout_skill_roots_in_its_source.ts'
+export { CHECKOUT_ROOT_CARRIERS, SKILL_ROOT_READERS, WORKING_DIRECTORY_AS_THE_ROOT, type CheckoutSkillRoots, type SkillRootsOutsideTheCheckout } from './the_checkout_skill_roots_in_its_source.ts'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, vocabularyOf, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
@@ -81,6 +81,8 @@ export interface EngineFacts {
   readonly skills_advertised: ASkillsSwitch
   /** The setting that offers the model the engine's compiled-in skills on their own, and its unset default (martha#839). */
   readonly builtin_skills_advertised: ASkillsSwitch
+  /** The tool the engine loads a skill with, by the name a call carries (martha#614 slice 3): the result row is keyed by it. */
+  readonly skills_tool: { readonly name: string }
   /**
    * How the engine names a called tool to its client (#541 part C4): the path under a `tool_call` update's `_meta` that
    * holds the tool's name (its permission request carries only a title made for people), the separator between an
@@ -132,6 +134,12 @@ export interface EngineFacts {
    * engine renames or adds is a drift the check names, never a skill that reaches the model past the gate.
    */
   readonly checkout_skill_roots: CheckoutSkillRoots
+  /**
+   * Every root the engine reads skills from that is not built from the checkout (martha#614 slice 3, R2): the home's
+   * folders, its own folders' ones, the user plugin folder and the user settings file. A launch makes each inside its
+   * own root, empty, so the checkout's approved skills are the only ones a member is offered.
+   */
+  readonly skill_roots_outside_the_checkout: SkillRootsOutsideTheCheckout
 }
 
 /** Each folder kind of the engine: the folders joined to a path root, and the place it takes without one. */
@@ -259,6 +267,7 @@ export const ENGINE_PLACES = {
   context_relevance: 'crates/goose/src/agents/state_machine/ops_context_relevance.rs',
   permission_inspector: 'crates/goose/src/permission/permission_inspector.rs',
   tool_approval: 'crates/goose/src/agents/state_machine/tool_approval.rs',
+  skills_tool: 'crates/goose-agent/src/skills/operation.rs',
   ...SKILL_ROOT_PLACES,
 } as const
 
@@ -267,6 +276,9 @@ export const ENGINE_PLACES = {
  * one struct per file or several, so the reader looks in every file there rather than a file of its own.
  */
 export const DEVELOPER_DIR = 'crates/goose/src/agents/platform_extensions/developer'
+
+/** The constant the engine names its skills tool with, in the file ENGINE_PLACES names for it (martha#614 slice 3). */
+export const SKILLS_TOOL_CONSTANT = 'LOAD_SKILL_TOOL_NAME'
 
 /** The function that reads each skills switch, in the file ENGINE_PLACES names for it (martha#839). */
 export const SKILLS_SWITCH_READERS = { skills_advertised: 'skills_advertised', builtin_skills_advertised: 'builtin_skills_advertised' } as const
@@ -311,6 +323,11 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'engine folders', read: (source) => ({ engine_folders: engineFoldersIn(source) }) },
   { part: 'secret storage', read: (source) => ({ secret_storage: secretStorageIn(source) }) },
   { part: 'checkout skill roots', read: (source) => ({ checkout_skill_roots: checkoutSkillRootsIn(source) }) },
+  { part: 'skills tool', read: (source) => ({ skills_tool: { name: skillsToolIn(source) } }) },
+  {
+    part: 'skill roots outside the checkout',
+    read: (source) => ({ skill_roots_outside_the_checkout: skillRootsOutsideTheCheckoutIn(source, engineNameIn(source), Object.keys(engineFoldersIn(source).under_root)) }),
+  },
 ]
 
 /** The function that builds a tool call's `_meta`, and the maps it fills from the outside in, in the file that builds it. */
@@ -331,6 +348,12 @@ export const SPLITS_ONCE = { first: 'split_once', last: 'rsplit_once' } as const
 function engineNameIn(source: EngineSource): string {
   const path = ENGINE_PLACES.engine_name
   return captured(fileOf(source, path), /macro_rules!\s*engine_name\s*\{\s*\(\)\s*=>\s*\{\s*"([^"]+)"/, 'the engine name', path)
+}
+
+/** The name the engine's skills tool is called by: the value of SKILLS_TOOL_CONSTANT (martha#614 slice 3). */
+function skillsToolIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.skills_tool
+  return captured(fileOf(source, path), new RegExp(`pub const ${SKILLS_TOOL_CONSTANT}: &str = "([^"]+)";`), `the value of ${SKILLS_TOOL_CONSTANT}`, path)
 }
 
 function engineVersionIn(source: EngineSource): string {

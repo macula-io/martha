@@ -375,5 +375,26 @@
       ".config/goose/settings.json",
       ".config/goose/settings.local.json"
     ]
+  },
+  "skills_tool": {
+    "name": "load_skill"
+  },
+  "skill_roots_outside_the_checkout": {
+    "home_folders": [
+      ".agents/skills",
+      ".claude/skills",
+      ".config/agents/skills"
+    ],
+    "engine_folders": [
+      {
+        "kind": "config",
+        "folder": "skills"
+      }
+    ],
+    "plugin_folder": "plugins",
+    "settings_file": {
+      "under_root": ".config/martha-engine/settings.json",
+      "under_home": ".config/martha-engine/settings.json"
+    }
   }
 }
