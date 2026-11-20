@@ -17,6 +17,12 @@ export const THRESHOLDS_KEYS = ['offline_after_seconds', 'handover_percent', 'pr
 /** One second, in the milliseconds every clock in the crew counts. */
 export const SECOND_MS = 1_000
 
+/**
+ * The least offline time, in seconds: the first whole second past one beat. A time no longer than one beat reads a live
+ * member offline while its next beat is merely due, the same harm an offline time of 0 does.
+ */
+export const OFFLINE_AFTER_SECONDS_LEAST = Math.floor(BEAT_INTERVAL_MS / SECOND_MS) + 1
+
 /** One minute, in milliseconds. */
 const MINUTE_IN_SECONDS = 60
 
@@ -64,16 +70,16 @@ export function thresholdsOf(value: unknown, refuse: RefuseAThreshold): CrewThre
   const unknown = Object.keys(block).find((key) => !(THRESHOLDS_KEYS as readonly string[]).includes(key))
   if (unknown !== undefined) return refuse(`${THRESHOLDS}.${unknown}`, `is not a field here (they are ${THRESHOLDS_KEYS.join(', ')})`)
   return Object.freeze({
-    offline_after_seconds: aWholeNumberAtLeastOne(block, 'offline_after_seconds', 'seconds', refuse),
+    offline_after_seconds: aWholeNumberAtLeast(block, 'offline_after_seconds', 'seconds', OFFLINE_AFTER_SECONDS_LEAST, refuse),
     handover_percent: aShare(block, refuse),
-    progress_stale_minutes: aWholeNumberAtLeastOne(block, 'progress_stale_minutes', 'minutes', refuse),
+    progress_stale_minutes: aWholeNumberAtLeast(block, 'progress_stale_minutes', 'minutes', 1, refuse),
   })
 }
 
-function aWholeNumberAtLeastOne(block: Readonly<Record<string, unknown>>, key: 'offline_after_seconds' | 'progress_stale_minutes', unit: string, refuse: RefuseAThreshold): number {
+function aWholeNumberAtLeast(block: Readonly<Record<string, unknown>>, key: 'offline_after_seconds' | 'progress_stale_minutes', unit: string, least: number, refuse: RefuseAThreshold): number {
   const value = block[key]
   if (value === undefined) return THRESHOLDS_WHEN_UNNAMED[key]
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) return refuse(`${THRESHOLDS}.${key}`, `is not a whole number of ${unit}, at least 1`)
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < least) return refuse(`${THRESHOLDS}.${key}`, `is not a whole number of ${unit}, at least ${least}`)
   return value
 }
 

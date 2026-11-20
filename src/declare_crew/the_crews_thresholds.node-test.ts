@@ -82,6 +82,11 @@ test('#931 A: a value that is not a threshold is refused by name, never read as 
   for (const key of ['offline_after_seconds', 'progress_stale_minutes'] as const) {
     for (const bad of [0, -1, 1.5, '30', null]) await refusedAt({ [key]: bad }, `${THRESHOLDS}.${key}`)
   }
+  // An offline time no longer than one beat reads a live member offline while its next beat is merely due: the same
+  // harm as 0, so it is refused the same way; the least it may be is the first whole second past one beat.
+  const oneBeatInSeconds = BEAT_INTERVAL_MS / SECOND_MS
+  for (const bad of [1, oneBeatInSeconds]) await refusedAt({ offline_after_seconds: bad }, `${THRESHOLDS}.offline_after_seconds`)
+  assert.equal((await declared(aCrewWith({ offline_after_seconds: oneBeatInSeconds + 1 }))).thresholds.offline_after_seconds, oneBeatInSeconds + 1)
   for (const bad of [HANDOVER_PERCENT_LEAST - 1, HANDOVER_PERCENT_MOST + 1, 55.5, '70', null]) await refusedAt({ handover_percent: bad }, `${THRESHOLDS}.handover_percent`)
   assert.equal((await declared(aCrewWith({ handover_percent: HANDOVER_PERCENT_LEAST }))).thresholds.handover_percent, HANDOVER_PERCENT_LEAST)
   assert.equal((await declared(aCrewWith({ handover_percent: HANDOVER_PERCENT_MOST }))).thresholds.handover_percent, HANDOVER_PERCENT_MOST)

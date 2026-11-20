@@ -85,7 +85,7 @@ Each field is optional. A field left out reads the value Martha used before it w
 
 | Field | What it holds | When left out |
 |---|---|---|
-| `offline_after_seconds` | How quiet, in whole seconds (at least 1), a member's row must be before it reads offline. An offline member is not nudged and is never free. | 30 |
+| `offline_after_seconds` | How quiet, in whole seconds (at least 6: more than one 5-second beat), a member's row must be before it reads offline. An offline member is not nudged and is never free. | 30 |
 | `handover_percent` | The share of its context, a whole percent from 1 to 100, at which a member hands over. A member at or past it takes no new package. | 70 |
 | `progress_stale_minutes` | How old, in whole minutes (at least 1), a member's last report may be in the middle of a package before its row is flagged. | 30 |
 
