@@ -928,8 +928,8 @@ const sayTheNotice = (line: string): void => {
 }
 
 /** Every notice once, in the order they were found, so a path met twice is said once. */
-const sayTheNotices = (notices: readonly string[]): void => {
-  for (const line of [...new Set(notices)]) sayTheNotice(line)
+const sayTheNotices = (notices: readonly string[], note: (line: string) => void): void => {
+  for (const line of [...new Set(notices)]) note(line)
 }
 
 /**
@@ -944,6 +944,7 @@ export function writesTheOwnersMemory(
   home: string,
   host: LaunchHost,
   tools: HostFileTools,
+  note: (line: string) => void = sayTheNotice,
 ): string | undefined {
   if (!tools.writing_tools.includes(tool)) return undefined
   // Read at each call, not at launch: a checkout or a git directory that appears
@@ -958,12 +959,12 @@ export function writesTheOwnersMemory(
   for (const argument of tools.file_arguments) {
     const why = whyTheArgumentIsRefused(input[argument], places, git, later, host, { cwd, home, resolve: tools.resolve })
     if (why.refusal !== undefined) {
-      sayTheNotices(notices)
+      sayTheNotices(notices, note)
       return why.refusal
     }
     notices.push(...why.notices)
   }
-  sayTheNotices(notices)
+  sayTheNotices(notices, note)
   return undefined
 }
 
@@ -1063,10 +1064,10 @@ export function userScopeUnder(home: string): OwnerUserScope {
  * it reads the machine and a slice may import no adapter; whoever runs the check
  * passes it in.
  */
-export function admitsAWriteNoLaterGitRunReads(probe: PathProbe): boolean {
+export function admitsAWriteNoLaterGitRunReads(probe: PathProbe, note?: (line: string) => void): boolean {
   const env: Readonly<Record<string, string | undefined>> = { HOME: probe.home }
   const places = ownerMemoryPlaces({ launcher_env: env, member_env: env, home: probe.home, launch_dir: probe.cwd, settings_files: [], user_scope: userScopeUnder(probe.home) })
-  return writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine, CLAUDE_CODE_FILE_TOOLS) === undefined
+  return writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine, CLAUDE_CODE_FILE_TOOLS, note) === undefined
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)

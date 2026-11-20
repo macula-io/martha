@@ -477,7 +477,12 @@ export interface LaunchRequest extends LaunchState {
 }
 
 /** A launch gate: may the host start here? */
-export type LaunchGate = (request: LaunchRequest) => boolean
+/**
+ * Whether a launch gate admits a request, and the lines it says while deciding (martha#601). The note sink is how the
+ * structural check reads the notice a cut refusal became: it asks the gate and reads what it says, so a gate that
+ * admits in silence is a gap.
+ */
+export type LaunchGate = (request: LaunchRequest, note?: (line: string) => void) => boolean
 
 export type LaunchDecision =
   | { readonly allow: true }
@@ -609,7 +614,7 @@ export function recheckLaunch(launch: ApprovedLaunch, host: LaunchHost): LaunchD
 }
 
 /** The launch gate the registry names. */
-export const admitsLaunch: LaunchGate = (request) => decideLaunch(request).allow
+export const admitsLaunch: LaunchGate = (request, note) => decideLaunch(request, note).allow
 
 /** Where the host starts, where the walk up stops, and the host. */
 export interface LaunchPlace {
