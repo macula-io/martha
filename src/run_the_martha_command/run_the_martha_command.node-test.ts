@@ -321,14 +321,14 @@ const theTabsIn = (session: string): string[] => session.split('\n').filter((lin
 const theEndpointDeclared = (place: Place): unknown =>
   (JSON.parse(readFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as Record<string, unknown>)[ENGINE_ENDPOINT]
 
-/** A key file under the place's home, with `mode`; its path as the owner types it, under `~/`. */
-function aKeyFile(place: Place, mode: number): string {
+/** A key file under the place's home, with `mode`: its path as the owner types it, under `~/`, and in full. */
+function aKeyFile(place: Place, mode: number): { readonly typed: string; readonly at: string } {
   const typed = '~/keys-a-test-made/the-key'
   const at = join(place.home, 'keys-a-test-made', 'the-key')
   mkdirSync(join(place.home, 'keys-a-test-made'), { mode: 0o700 })
   writeFileSync(at, 'a-key-a-test-made\n', { mode })
   chmodSync(at, mode)
-  return typed
+  return { typed, at }
 }
 
 const ON_A_DESKTOP = { WAYLAND_DISPLAY: 'wayland-511' }
@@ -352,10 +352,10 @@ test('#511 part B: plain martha up writes the key file the owner names, when onl
   const place = aWorkspace(t)
   const kitty = kittyThatAnswers(place)
   const env = { ...kitty.env, ...ON_A_DESKTOP }
-  const typed = aKeyFile(place, 0o600)
-  const run = marthaOnATerminalTyping(`${typed}\n`, place, env, UP)
+  const key = aKeyFile(place, 0o600)
+  const run = marthaOnATerminalTyping(`${key.typed}\n`, place, env, UP)
   assert.equal(run.status, EXIT_DONE, run.said)
-  assert.deepEqual(theEndpointDeclared(place), { host: ENGINE_TEAM_ENDPOINT.host, key_file: typed })
+  assert.deepEqual(theEndpointDeclared(place), { host: ENGINE_TEAM_ENDPOINT.host, key_file: key.at })
   assert.ok(run.said.includes(`${ENGINE_ENDPOINT} written`), run.said)
   assert.equal(run.said.includes('a-key-a-test-made'), false, run.said)
   assert.ok(existsSync(kitty.started), 'kitty was not started')
@@ -367,7 +367,7 @@ test('#511 part B: plain martha up writes the key file the owner names, when onl
 test('#511 part B: a key file the group or others may read is refused by plain martha up, and nothing is written', (t) => {
   const place = aWorkspace(t)
   const kitty = kittyThatAnswers(place)
-  const run = marthaOnATerminalTyping(`${aKeyFile(place, 0o644)}\n`, place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
+  const run = marthaOnATerminalTyping(`${aKeyFile(place, 0o644).typed}\n`, place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
   assert.equal(run.status, EXIT_REFUSED, run.said)
   assert.equal(theEndpointDeclared(place), undefined)
   assert.equal(existsSync(kitty.started), false, 'kitty was started for members with no model to reach')
@@ -376,7 +376,8 @@ test('#511 part B: a key file the group or others may read is refused by plain m
 test('#511 part B: with the provider\'s key variable set, plain martha up writes key_from and asks nothing', (t) => {
   const place = aWorkspace(t)
   const kitty = kittyThatAnswers(place)
-  const run = marthaOnATerminal(place, { ...kitty.env, ...ON_A_DESKTOP, [ENGINE_TEAM_ENDPOINT.key_variable]: 'a-key-a-test-names' }, UP)
+  // An answer typed in case it is asked anyway: one that is no path, so a question asked fails here instead of waiting.
+  const run = marthaOnATerminalTyping('an-answer-never-asked-for\n', place, { ...kitty.env, ...ON_A_DESKTOP, [ENGINE_TEAM_ENDPOINT.key_variable]: 'a-key-a-test-names' }, UP)
   assert.equal(run.status, EXIT_DONE, run.said)
   assert.deepEqual(theEndpointDeclared(place), { host: ENGINE_TEAM_ENDPOINT.host, key_from: ENGINE_TEAM_ENDPOINT.key_variable })
   assert.equal(run.said.includes(THE_KEY_FILE_QUESTION.trim()), false, run.said)

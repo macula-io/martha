@@ -10,7 +10,6 @@ import {
   ACTS,
   BACKLOG,
   ENGINE_ENDPOINT,
-  THE_HOMES_PREFIX,
   CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   CLONES,
   CREW_CODE_DECLARATION_DIRECTORY,
@@ -726,11 +725,12 @@ test('#541 package A: a declaration without an engine endpoint has none, and one
   )
 })
 
-test('#511 part B: an engine endpoint may name the file its key is in, absolute or under the home, and never beside a key variable', async () => {
-  for (const key_file of ['/an/absolute/key-file', `${THE_HOMES_PREFIX}a/key-file`]) {
+test('#511 part B: an engine endpoint may name the file its key is in, by an absolute path, and never beside a key variable', async () => {
+  for (const key_file of ['/an/absolute/key-file']) {
     assert.deepEqual((await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file } }).settings).engine_endpoint, { host: 'https://a-host.test', base_path: null, key_from: null, key_file })
   }
-  for (const key_file of ['a/relative/key-file', '~a-user/key-file', `${THE_HOMES_PREFIX}a/../../key-file`, '/a/../key-file', 7]) {
+  // A path under the home is written out by `martha up` before it reaches the declaration: the reader takes none.
+  for (const key_file of ['a/relative/key-file', '~a-user/key-file', '~/a/key-file', '/a/../key-file', 7]) {
     await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file } }, `${ENGINE_ENDPOINT}.key_file`)
   }
   await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file: 'sk-a-key' } }).settings, /the key itself never goes in the declaration/)

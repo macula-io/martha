@@ -346,7 +346,7 @@ async function up(io: CommandIo, places: Places, claude: boolean): Promise<numbe
   if (!declared.declared) return refused(io, declared.refusal)
   if (declared.wrote) io.out(`Declared a team in ${declared.declaration}: ${declared.settings.members.map((member) => member.name).join(', ')}. Change it with martha crew, or edit the file.`)
   if (!claude && declared.settings.engine_endpoint === null) {
-    const endpoint = await declareTheEnginesEndpoint({ root: places.root, documents, env: io.env, ask: io.terminal.ask, whyNotTheOwnersKeyFile: (key_file) => whyNotAKey(theKeyInAFile(key_file, places.home)) })
+    const endpoint = await declareTheEnginesEndpoint({ root: places.root, home: places.home, documents, env: io.env, ask: io.terminal.ask, whyNotTheOwnersKeyFile: (key_file) => whyNotAKey(theKeyInAFile(key_file)) })
     if ('refusal' in endpoint) return refused(io, endpoint.refusal)
     io.out(endpoint.told)
   }

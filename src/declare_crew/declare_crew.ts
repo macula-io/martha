@@ -207,12 +207,6 @@ export const ENGINE_ENDPOINT_OPTIONAL_KEYS = ['base_path', 'key_from', 'key_file
 /** A name `key_from` may hold: an environment variable's, as a shell spells one. */
 export const AN_ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 
-/**
- * What a `key_file` path opens with when it is the owner's home (martha#511 part B): the path is written as the owner
- * spells it, and the start reads it under the home it runs with. Any other path is absolute.
- */
-export const THE_HOMES_PREFIX = '~/'
-
 /** The schemes an endpoint's host may be reached on. */
 export const ENDPOINT_SCHEMES: readonly string[] = ['http:', 'https:']
 
@@ -598,19 +592,22 @@ function theKeysPlaceOf(refuse: Refuse, value: Readonly<Record<string, unknown>>
   const key_from = value['key_from']
   if (!isAbsentOrAVariablesName(key_from)) return refuse.at(`${ENGINE_ENDPOINT}.key_from`, 'is not the name of an environment variable: the key itself never goes in the declaration')
   const key_file = value['key_file']
-  if (!isAbsentOrAKeyFilesPath(key_file)) return refuse.at(`${ENGINE_ENDPOINT}.key_file`, `is not an absolute path or one under ${THE_HOMES_PREFIX}: the key itself never goes in the declaration`)
+  if (!isAbsentOrAKeyFilesPath(key_file)) return refuse.at(`${ENGINE_ENDPOINT}.key_file`, 'is not an absolute path: the key itself never goes in the declaration')
   if (key_from !== undefined && key_file !== undefined) return refuse.at(`${ENGINE_ENDPOINT}.key_file`, 'is named beside key_from: the key is read from one place')
   return { key_from: key_from ?? null, key_file: key_file ?? null }
 }
 
-/** Whether a value is absent or a key file's path: absolute, or under the owner's home, with no `..` part. */
+/** Whether a value is absent or a key file's path: absolute, with no `..` part. */
 function isAbsentOrAKeyFilesPath(value: unknown): value is string | undefined {
   return value === undefined || isAKeyFilesPath(value)
 }
 
-/** Whether a value is a key file's path: absolute, or under the owner's home, with no `..` part. */
+/**
+ * Whether a value is a key file's path (martha#511 part B): absolute, with no `..` part. The declaration is this
+ * machine's own, so a path the owner typed under their home is written out in full by `martha up` before it lands here.
+ */
 export function isAKeyFilesPath(value: unknown): value is string {
-  if (!isText(value) || !(value.startsWith('/') || value.startsWith(THE_HOMES_PREFIX))) return false
+  if (!isText(value) || !value.startsWith('/')) return false
   return !value.split('/').includes('..')
 }
 

@@ -14,13 +14,15 @@
 
 import { join } from 'node:path'
 
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, ENGINE_ENDPOINT, isAKeyFilesPath, THE_HOMES_PREFIX } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, ENGINE_ENDPOINT, isAKeyFilesPath } from '../declare_crew/declare_crew.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { ENGINE_TEAM_ENDPOINT, THE_KEY_FILE_QUESTION } from './declare_a_team_at_a_workspace.ts'
 
 export interface EndpointRequest {
   readonly root: string
+  /** The owner's home, a typed path under `~/` is written out against. */
+  readonly home: string
   readonly documents: DocumentStore
   /** The environment `martha up` runs in, where the provider's key variable may be set. */
   readonly env: Readonly<Record<string, string | undefined>>
@@ -33,6 +35,15 @@ export interface EndpointRequest {
 /** Where the key is read from: the provider's variable, or a file the owner named. */
 type TheKeysPlace = { readonly key_from: string } | { readonly key_file: string }
 
+/**
+ * What a typed key file's path opens with when it is under the owner's home. The declaration takes absolute paths
+ * only, so the path is written out against the home here, in the adapter, before it is checked or written.
+ */
+export const THE_HOMES_PREFIX = '~/'
+
+/** An owner's typed path, with a leading `~/` written out against `home`. */
+const writtenOut = (typed: string, home: string): string => (typed.startsWith(THE_HOMES_PREFIX) ? join(home, typed.slice(THE_HOMES_PREFIX.length)) : typed)
+
 /** An answer refused before it is checked as a file: it is not repeated, since it may be the key itself. */
 export const NOT_A_KEY_FILES_PATH = `that is not an absolute path or one under ${THE_HOMES_PREFIX}, so nothing was written. Name the file your key is in, never the key.`
 
@@ -40,7 +51,7 @@ export const NOT_A_KEY_FILES_PATH = `that is not an absolute path or one under $
 async function theKeysPlace(request: EndpointRequest): Promise<TheKeysPlace | { readonly refusal: string }> {
   const variable = ENGINE_TEAM_ENDPOINT.key_variable
   if ((request.env[variable] ?? '') !== '') return { key_from: variable }
-  const answer = (await request.ask(THE_KEY_FILE_QUESTION)).trim()
+  const answer = writtenOut((await request.ask(THE_KEY_FILE_QUESTION)).trim(), request.home)
   if (!isAKeyFilesPath(answer)) return { refusal: NOT_A_KEY_FILES_PATH }
   const why = request.whyNotTheOwnersKeyFile(answer)
   return why === undefined ? { key_file: answer } : { refusal: `${why}, so nothing was written` }
