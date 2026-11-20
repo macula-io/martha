@@ -30,7 +30,7 @@ import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { CLAUDE_CODE_SEND_MESSAGE_TOOL } from '../claude_code_host/claude_code_messaging_tool.ts'
+import { SEND_MESSAGE_TOOL } from '../answer_a_tool_call/a_crew_line_goes_through_say_to_the_crew.ts'
 import { MESH_TOOLS_THAT_WIDEN_REACH } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
@@ -155,7 +155,7 @@ test('a turn the policy names may run a shell straight away', () => {
 
 test('every tool that executes is refused, by whatever name the host uses', () => {
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
-  for (const tool of [CLAUDE_CODE_SHELL_TOOL, 'bash', 'patch', 'MultiEdit', 'Agent', CLAUDE_CODE_SEND_MESSAGE_TOOL, 'NeverSeenTool']) {
+  for (const tool of [CLAUDE_CODE_SHELL_TOOL, 'bash', 'patch', 'MultiEdit', 'Agent', SEND_MESSAGE_TOOL, 'NeverSeenTool']) {
     denied(answerToolCall({ names, tool, session: tainted, policy, launch, host: thisMachine }))
   }
 })
@@ -177,7 +177,7 @@ test('a tainted member cannot send: every tool that hands text to someone else i
   // It cannot: sending is acting, and only tools that read stay allowed.
   const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
   const sends = [
-    CLAUDE_CODE_SEND_MESSAGE_TOOL,
+    SEND_MESSAGE_TOOL,
     'mcp__macula__mesh_say',
     'mcp__macula__mesh_publish',
     'mcp__macula__mesh_ring',

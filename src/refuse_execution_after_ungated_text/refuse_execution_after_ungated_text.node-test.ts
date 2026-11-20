@@ -13,7 +13,7 @@ import {
 } from './refuse_execution_after_ungated_text.ts'
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
-import { CLAUDE_CODE_SEND_MESSAGE_TOOL } from '../claude_code_host/claude_code_messaging_tool.ts'
+import { SEND_MESSAGE_TOOL } from '../answer_a_tool_call/a_crew_line_goes_through_say_to_the_crew.ts'
 
 // Synthetic node ids, never a real one: this repository is public.
 const crewmate = 'a'.repeat(64)
@@ -47,7 +47,7 @@ const EXECUTING_TOOLS = [
   NOTEBOOK_EDIT_TOOL,
   'Agent',
   'Task',
-  CLAUDE_CODE_SEND_MESSAGE_TOOL,
+  SEND_MESSAGE_TOOL,
   'Workflow',
   'Skill',
   'CronCreate',

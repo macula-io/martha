@@ -22,7 +22,7 @@ import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
-import { CLAUDE_CODE_SEND_MESSAGE_TOOL } from '../claude_code_host/claude_code_messaging_tool.ts'
+import { SEND_MESSAGE_TOOL } from '../answer_a_tool_call/a_crew_line_goes_through_say_to_the_crew.ts'
 import { theVolatileNote } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
@@ -300,7 +300,7 @@ const A_CITED_PATH = `${A_VOLATILE_ROOT}/the-notes.md`
 
 test('#980: a SendMessage citing a path a reboot deletes is handed the volatile note beside its answer (mutant: no note)', async (t) => {
   const { relay } = await aStartedRelay(t, undefined, [A_VOLATILE_ROOT])
-  const send = call(CLAUDE_CODE_SEND_MESSAGE_TOOL, { to: 'a-member', message: `The notes are in ${A_CITED_PATH}, read them.` })
+  const send = call(SEND_MESSAGE_TOOL, { to: 'a-member', message: `The notes are in ${A_CITED_PATH}, read them.` })
   assert.deepEqual(await relay.answer('tool_called', send), { answered: true, body: { allow: 1 } }, 'the gate did not allow the send this test runs')
   const answered = await relay.answer('tool_answered', { ...send, answer: { success: true } })
   assert.deepEqual(answered, { answered: true, body: { taken: 1, handed: theVolatileNote([A_CITED_PATH]) } })
@@ -309,8 +309,8 @@ test('#980: a SendMessage citing a path a reboot deletes is handed the volatile 
 
 test('#980: no note for a send that cites no such path, a send the host answered with an error, another tool, or a launch with no roots (mutants: note every send; note every tool)', async (t) => {
   const { relay } = await aStartedRelay(t, undefined, [A_VOLATILE_ROOT])
-  const plain = call(CLAUDE_CODE_SEND_MESSAGE_TOOL, { to: 'a-member', message: 'The notes are in the handover.' })
-  const failed = call(CLAUDE_CODE_SEND_MESSAGE_TOOL, { to: 'a-member', message: `See ${A_CITED_PATH}.` })
+  const plain = call(SEND_MESSAGE_TOOL, { to: 'a-member', message: 'The notes are in the handover.' })
+  const failed = call(SEND_MESSAGE_TOOL, { to: 'a-member', message: `See ${A_CITED_PATH}.` })
   const shell = call(CLAUDE_CODE_SHELL_TOOL, { command: `cat ${A_CITED_PATH}` })
   // Another tool whose input also holds a message: only the send is told.
   const other = call('AnotherTool', { message: `See ${A_CITED_PATH}.` })

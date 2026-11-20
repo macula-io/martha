@@ -11,12 +11,17 @@
 // the message (../read_a_crew_line). The tools are told apart by their own name, which only the host takes out of the
 // name it calls (`ToolNames.ownNameOf`). The Supervisor ruled the turn-back a refusal (martha#980, 2026-11-20).
 
-import { CLAUDE_CODE_SEND_MESSAGE_TOOL } from '../claude_code_host/claude_code_messaging_tool.ts'
 import type { ToolNames } from '../host_contract/host_contract.ts'
 import { readEveryCrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { crewVerbOf } from '../read_a_crew_line/the_other_crew_verbs.ts'
 import { RINGS_AND_RETURNS_THE_ANSWER, SENDS_AND_MAY_WAIT } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+
+/**
+ * The tool a Claude Code session sends another session a message with. A host's own tool name is kept in the slice that
+ * reads it, as ../shell_tools keeps the ones that only read: a slice imports no host adapter.
+ */
+export const SEND_MESSAGE_TOOL = 'SendMessage'
 
 /**
  * Each tool that hands text to another session by a path not the crew's own, by its own name, and the argument of its
@@ -25,7 +30,7 @@ import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
  * say's wait argument.
  */
 const THE_TEXT_OF_A_MESSAGING_TOOL: Readonly<Record<string, string>> = {
-  [CLAUDE_CODE_SEND_MESSAGE_TOOL]: 'message',
+  [SEND_MESSAGE_TOOL]: 'message',
   [SENDS_AND_MAY_WAIT]: 'text',
   [RINGS_AND_RETURNS_THE_ANSWER]: 'purpose',
 }
@@ -59,7 +64,7 @@ function theLineNamed(line: string, number: number | undefined): string {
  */
 export function theTextASendMessageSends(tool: string, input: Readonly<Record<string, unknown>> | undefined, names: ToolNames): string | undefined {
   const own = names.ownNameOf(tool)
-  if (own !== CLAUDE_CODE_SEND_MESSAGE_TOOL) return undefined
+  if (own !== SEND_MESSAGE_TOOL) return undefined
   const text = input?.[THE_TEXT_OF_A_MESSAGING_TOOL[own] ?? '']
   return typeof text === 'string' ? text : undefined
 }

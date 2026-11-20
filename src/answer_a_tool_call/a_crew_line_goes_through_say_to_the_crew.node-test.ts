@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { CLAUDE_CODE_SEND_MESSAGE_TOOL } from '../claude_code_host/claude_code_messaging_tool.ts'
+import { SEND_MESSAGE_TOOL } from '../answer_a_tool_call/a_crew_line_goes_through_say_to_the_crew.ts'
 import { claudeCodeToolNames, openCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import type { ToolNames } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -38,7 +38,7 @@ const openCodeName = (own: string): string => `${MESH_SERVER}_${own}`
 
 /** Each path that is not the crew's own: the name a host calls it by, that host's split, and the argument holding the text, as each tool names it. */
 const PATHS: readonly { readonly tool: string; readonly names: ToolNames; readonly argument: string }[] = [
-  { tool: CLAUDE_CODE_SEND_MESSAGE_TOOL, names: claudeCodeToolNames, argument: 'message' },
+  { tool: SEND_MESSAGE_TOOL, names: claudeCodeToolNames, argument: 'message' },
   { tool: claudeCodeName(SENDS_AND_MAY_WAIT), names: claudeCodeToolNames, argument: 'text' },
   { tool: claudeCodeName(RINGS_AND_RETURNS_THE_ANSWER), names: claudeCodeToolNames, argument: 'purpose' },
   { tool: openCodeName(SENDS_AND_MAY_WAIT), names: openCode, argument: 'text' },
