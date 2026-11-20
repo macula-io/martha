@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--owner-commands <file>] [--dry-layer <layer .tar.gz> <sha>] [--night <run folder>]
+# prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--owner-commands <file>] [--dry-layer <layer .tar.gz> <sha>] [--live-run <run folder>]
 #                                                    --self-test
 #
 # The clean-install proof (martha#69). A stranger's machine carries nothing of ours, so this starts a container that
@@ -95,8 +95,8 @@ IMAGE_PINS=(
 # Node image is pinned. Nothing of it outlives the container.
 CONTAINER_USER='node'
 CONTAINER_HOME='/tmp/martha-home'
-# What keeps the container up while the steps are run in it, and what every one of its names starts with. A night
-# keeps it up for longer: its own windows on top (container_idles, the_night_in_the_container.sh).
+# What keeps the container up while the steps are run in it, and what every one of its names starts with. A live run
+# keeps it up for longer: its own windows on top (container_idles, the_live_run_in_the_container.sh).
 CONTAINER_IDLE_S=3600
 CONTAINER_IDLES="sleep ${CONTAINER_IDLE_S}"
 CONTAINER_PREFIX='martha-clean-install'
@@ -166,8 +166,8 @@ SOLO_CREW_EXPORT='SOLO_MEMBERS'
 # release gives, and the crew step refuses a release that names a member this table has no turn for, and a key the
 # release does not name, before anything starts. A builder carries out the README's command; a reviewer is asked
 # only what it asks for, so a shell call is neither required of it nor counted against it.
-# The member whose role carries out the README's command: the night's builder, the only member the owner attaches to
-# (follow_the_night_as_the_owner.sh reads this line, martha#843).
+# The member whose role carries out the README's command: the live run's builder, the only member the owner attaches to
+# (follow_the_live_run_as_the_owner.sh reads this line, martha#843).
 THE_BUILDER='builder'
 declare -A ROLE_TURNS=(
   ["${THE_BUILDER}"]='Read README.md in this checkout, then carry out the one command it asks for, then tell me what happened.'
@@ -197,6 +197,13 @@ TERMINAL_COLUMNS=160
 # MEMBER_CONFIG_FOLDER in src/), so its transcripts are there and not under the owner's .claude, whose transcripts are
 # the sign-in session's. They are read while the member runs: the folder goes with its launch.
 TRANSCRIPTS="${CONTAINER_HOME}/.local/state/martha/*/snapshots/*/the-members-own-config/projects/*/*.jsonl"
+# What Martha kept of an ended launch's transcripts (martha#646): the snapshot goes when the launch ends, and this copy
+# under the project's own state is what is left of what the member did. The failure capture reads it when the live one
+# is gone, so a member that ended is still read rather than said to be a container that could not give it.
+KEPT_TRANSCRIPTS="${CONTAINER_HOME}/.local/state/martha/*/transcripts/*/projects/*/*.jsonl"
+# What the failure capture says when the text it logs is the copy kept after the launch ended.
+KEPT_COPY_WORDS='(its launch has ended; this is the copy Martha kept) '
+
 REQUEST_BLOB='"type":"api-request-blob"'
 ANSWER_LINE='"role":"assistant","content":[{"type":"text","text":"'
 # The host's Read returns every line of the file with its number and a tab, so a real read of the outsider's README
@@ -225,11 +232,11 @@ KEY_PAUSE_S="${MARTHA_CLEAN_INSTALL_KEY_PAUSE_S:-2}"
 # fails by name: 250 polls is 50 s, the window the interrupt cases used before the helper (martha#718).
 INTERRUPT_STEP_POLLS=250
 
-USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--owner-commands <file>] [--dry-layer <layer .tar.gz> <sha> [--dry-installer <tarball> <sha256:…>]] [--night <run folder>] | --self-test'
+USAGE='usage: prove_a_clean_install_in_a_throwaway_container.sh <ssh-host> [--log <file>] [--owner-commands <file>] [--dry-layer <layer .tar.gz> <sha> [--dry-installer <tarball> <sha256:…>]] [--live-run <run folder>] | --self-test'
 
-# The nightly live run's container side (martha#639), taken with --night: its steps, its stand-ins and its cases.
-# shellcheck source=prove_a_clean_install_in_a_throwaway_container/the_night_in_the_container.sh
-. "${HERE}/the_night_in_the_container.sh"
+# The live run's container side (martha#639), taken with --live-run: its steps, its stand-ins and its cases.
+# shellcheck source=prove_a_clean_install_in_a_throwaway_container/the_live_run_in_the_container.sh
+. "${HERE}/the_live_run_in_the_container.sh"
 
 LOG_FILE=''
 # The file the owner's commands go to, one per line, with --owner-commands: the proof alone writes it, and the owner's
@@ -260,11 +267,11 @@ MEMBER_FILES='' MEMBER_TEXT=''
 # Where the self-test found a kept record's headings and the tear-down, for the checks that read between them.
 KEPT_AT='' SCREEN_AT='' TORN_AT=''
 
-# One line of the run's: on a night, through the token's redactor first, so neither the terminal nor the log file ever
+# One line of the run's: on a live run, through the token's redactor first, so neither the terminal nor the log file ever
 # holds the token (martha#639 section 5, R4).
 log() {
   local line="$*"
-  if night_redacts; then line="$(night_redacted_line "${line}")"; fi
+  if live_run_redacts; then line="$(live_run_redacted_line "${line}")"; fi
   printf '%s\n' "${line}" >&3
   if [ -n "${LOG_FILE}" ]; then printf '%s\n' "${line}" >> "${LOG_FILE}"; fi
 }
@@ -745,10 +752,25 @@ turn_line() {
 # blobs, each as `line <line>`. A blob repeats the conversation, so a blob that repeats the turn picks no file, and
 # what a blob repeats is not what happened.
 member_read() {
-  local blob turn
+  member_read_in "${TRANSCRIPTS}" "$1"
+}
+
+# The member named `name` read from `where` in the container, kept as MEMBER_FILES and MEMBER_TEXT: the read the
+# failure capture and the turn checks do, from the live folder or from the copy Martha kept (martha#646).
+read_member_from() {
+  local where="$1" name="$2" read
+  read="$(member_read_in "${where}" "${name}")" || return 1
+  MEMBER_FILES="$(sed -n 's/^file //p' <<< "${read}")"
+  MEMBER_TEXT="$(sed -n 's/^line //p' <<< "${read}")"
+}
+
+# The member named `name` read from `where` in the container: its session files holding the owner's turn to it, one a
+# line, then their text.
+member_read_in() {
+  local where="$1" name="$2" blob turn
   blob="$(remote_word "${REQUEST_BLOB}")"
-  turn="$(remote_word "$(turn_line "$1")")"
-  on_the_host podman exec "${CONTAINER}" sh -c "for f in ${TRANSCRIPTS}; do if [ -f \"\$f\" ] && grep -vF -- ${blob} \"\$f\" | grep -qF -- ${turn}; then printf 'file %s\n' \"\$f\"; grep -vF -- ${blob} \"\$f\" | sed 's/^/line /'; fi; done; true"
+  turn="$(remote_word "$(turn_line "${name}")")"
+  on_the_host podman exec "${CONTAINER}" sh -c "for f in ${where}; do if [ -f \"\$f\" ] && grep -vF -- ${blob} \"\$f\" | grep -qF -- ${turn}; then printf 'file %s\n' \"\$f\"; grep -vF -- ${blob} \"\$f\" | sed 's/^/line /'; fi; done; true"
 }
 
 # The session files holding the owner's turn to `name`, one a line.
@@ -760,10 +782,13 @@ member_files() {
 
 # The member named `name` read now: its session files, and their text.
 read_member() {
-  local read
-  read="$(member_read "$1")" || return 1
-  MEMBER_FILES="$(sed -n 's/^file //p' <<< "${read}")"
-  MEMBER_TEXT="$(sed -n 's/^line //p' <<< "${read}")"
+  read_member_from "${TRANSCRIPTS}" "$1"
+}
+
+# The member named `name` read from the copy Martha kept of its launch, once the live folder has gone with it: the same
+# files and their text, from KEPT_TRANSCRIPTS (martha#646).
+read_member_kept() {
+  read_member_from "${KEPT_TRANSCRIPTS}" "$1"
 }
 
 # Whether one line of the member's text holds both `first` and `second`.
@@ -879,7 +904,15 @@ member_done() {
 # screen. It is kept before the tear-down, which takes the container and the terminal's folder with it.
 keep_what_the_member_did() {
   local name="${MEMBERS[$1]}" text
-  if read_member "${name}"; then text="${MEMBER_TEXT}"; else text='(the container could not give it)'; fi
+  # The live transcript first, and the copy Martha kept when its launch has ended (martha#646, issue item 3): a member
+  # that ended is read, never said to be a container that could not give it.
+  if read_member "${name}" && [ -n "${MEMBER_TEXT}" ]; then
+    text="${MEMBER_TEXT}"
+  elif read_member_kept "${name}" && [ -n "${MEMBER_TEXT}" ]; then
+    text="${KEPT_COPY_WORDS}${MEMBER_TEXT}"
+  else
+    text='(the container could not give it, and no copy of it was kept)'
+  fi
   log "${name}${KEPT_TRANSCRIPT_WORDS}"
   log "${text}"
   log "${name}${KEPT_SCREEN_WORDS}"
@@ -1002,9 +1035,9 @@ tear_down_step() {
 # The steps before the tear-down, in order; the first failure ends them, and a refusal that is the run's outcome ends
 # them without failing.
 run_the_steps() {
-  if a_night; then
-    night_open_step || return 1
-    night_fetch_step || return 1
+  if a_live_run; then
+    live_run_open_step || return 1
+    live_run_fetch_step || return 1
   fi
   image_step || return 1
   pull_step || return 1
@@ -1015,16 +1048,16 @@ run_the_steps() {
   if [ -n "${DRY_LAYER_FILE}" ]; then dry_step || return 1; fi
   version_step || return 1
   claude_code_step || return 1
-  if a_night; then night_tools_step || return 1; fi
+  if a_live_run; then live_run_tools_step || return 1; fi
   solo_crew_step || return 1
   checkout_step || return 1
-  if a_night; then night_clone_step || return 1; fi
+  if a_live_run; then live_run_clone_step || return 1; fi
   sign_in_step || return 1
   if [ -n "${SIGN_IN_MISSED}" ]; then return 0; fi
   members_step || return 1
-  if a_night; then
-    night_steps || return 1
-    night_landing_steps || return 1
+  if a_live_run; then
+    live_run_steps || return 1
+    live_run_landing_steps || return 1
   fi
 }
 
@@ -1032,15 +1065,15 @@ run_the_steps() {
 finish() {
   local status=$?
   trap - EXIT INT TERM
-  # A night's record is kept while its members still run: a launch's transcripts go with it.
-  if [ -n "${CONTAINER}" ] && ! night_keep_and_claim; then status=1; fi
+  # A live run's record is kept while its members still run: a launch's transcripts go with it.
+  if [ -n "${CONTAINER}" ] && ! live_run_keep_and_claim; then status=1; fi
   close_every_terminal
   if [ -n "${CONTAINER}" ]; then
     if ! tear_down_step; then status=1; fi
   fi
-  # The night's repository goes after the container that held its clone and the token, whatever happened.
-  if ! night_close; then status=1; fi
-  if ! night_log_held_no_token; then status=1; fi
+  # The live run's repository goes after the container that held its clone and the token, whatever happened.
+  if ! live_run_close; then status=1; fi
+  if ! live_run_log_held_no_token; then status=1; fi
   if [ -n "${INTERRUPTED}" ]; then
     failed run "interrupted by ${INTERRUPTED}"
     status=1
@@ -1069,13 +1102,13 @@ finish() {
     log failed
     exit 1
   fi
-  if a_night && [ -z "${NIGHT_READY}" ]; then
-    failed run 'the night did not get ready'
+  if a_live_run && [ -z "${LIVE_RUN_READY}" ]; then
+    failed run 'the live run did not get ready'
     log failed
     exit 1
   fi
-  if a_night && [ -z "${NIGHT_CLAIMED}" ]; then
-    failed run 'the night'"'"'s claims were not proven'
+  if a_live_run && [ -z "${LIVE_RUN_CLAIMED}" ]; then
+    failed run 'the live run'"'"'s claims were not proven'
     log failed
     exit 1
   fi
@@ -1273,7 +1306,7 @@ PODMAN
   # numbers it, and the command its README asks for.
   printf 'heading=%q\nnumbered=%q\ncommand=%q\nhome=%q\ntranscripts=%q\nrecord=%q\ncrew=%q\nstarted=%q\nended=%q\ndry=%q\nclones=%q\n' \
     "${OUTSIDER_HEADING}" "${READ_NUMBERED}" "${SHELL_CALL_WORDS}" "${CONTAINER_HOME}" "${TRANSCRIPTS%/*/*}/the-checkout" \
-    "${HOST_RECORD_IN_A_TREE}" "${SOLO_CREW_IN_A_TREE}" "${STARTED_WORDS}" "${ENDED_WORDS}" "${DRY_ROOT}" "${NIGHT_CLONES}" > "${dir}/member.facts"
+    "${HOST_RECORD_IN_A_TREE}" "${SOLO_CREW_IN_A_TREE}" "${STARTED_WORDS}" "${ENDED_WORDS}" "${DRY_ROOT}" "${LIVE_RUN_CLONES}" > "${dir}/member.facts"
   cat > "${dir}/member" <<'MEMBER'
 #!/usr/bin/env bash
 # A member, as far as a run can tell: its command says it started, a folder question that drops what is typed until a
@@ -1321,11 +1354,11 @@ answer() {
   : > "${standin}/answered"
   # The read of the README as the host writes it: the assistant asks for it by name, and the tool_result carries every
   # line with its number and a tab. A case's flags plant the two shapes a run must not accept in its place: the bare
-  # heading the old stand-in wrote, and tonight's line for line, which a real read does send (martha#638).
+  # heading the old stand-in wrote, and the live run's line for line, which a real read does send (martha#638).
   if flag read-bare; then
     read_content="# ${heading}\\n"
   elif flag read-as-logged; then
-    # Tonight's bytes, written out: the line numbers and the tabs a real read carries are here as the host sent them,
+    # The live run's bytes, written out: the line numbers and the tabs a real read carries are here as the host sent them,
     # never taken from the constant the check is held to, so a wrong prefix fails this case instead of moving with it
     # (martha#638 r=1).
     read_content="1\\t# ${heading}\\n2\\t\\n3\\tThanks for picking this up. To reproduce what I see, run this one command in\\n4\\tthe checkout and tell me what it prints:\\n5\\t\\n6\\t    ${command}\\n"
@@ -1649,7 +1682,7 @@ self_test() {
   # The member half's windows, short enough for a self-test: the stand-ins answer at once.
   export MARTHA_CLEAN_INSTALL_SIGN_IN_WINDOW_S=2 MARTHA_CLEAN_INSTALL_MEMBER_WINDOW_S=2 MARTHA_CLEAN_INSTALL_TURN_WINDOW_S=2
   export MARTHA_CLEAN_INSTALL_STARTED_WINDOW_S=3 MARTHA_CLEAN_INSTALL_POLL_S=1 MARTHA_CLEAN_INSTALL_KEY_PAUSE_S=0.2
-  export MARTHA_CLEAN_INSTALL_NIGHT_WORK_WINDOW_S=3 MARTHA_CLEAN_INSTALL_NIGHT_YES_WINDOW_S=3 MARTHA_CLEAN_INSTALL_NIGHT_ROWS_POLL_S=1
+  export MARTHA_CLEAN_INSTALL_LIVE_RUN_WORK_WINDOW_S=3 MARTHA_CLEAN_INSTALL_LIVE_RUN_YES_WINDOW_S=3 MARTHA_CLEAN_INSTALL_LIVE_RUN_ROWS_POLL_S=1
   mkdir -p "${STAND_INS}"
   write_stand_ins "${STAND_INS}"
   local root="${SELF_TEST_ROOT}"
@@ -1803,12 +1836,33 @@ self_test() {
   member_case 'a-member-that-never-answers' member.silent '' 1 "^FAIL member ${first}: the member gave no answer\$" || case_failed=1
   member_case 'a-member-that-reads-nothing' member.unread '' 1 "^FAIL member ${first}: the member did not read the outsider's README\$" || case_failed=1
   kept_the_record 'a-member-that-reads-nothing' "${first}" || case_failed=1
-  # The read as the host really writes it, line for line from tonight's live run, is a read; the bare heading the old
+  # The read as the host really writes it, line for line from the live run, is a read; the bare heading the old
   # stand-in wrote is not one, and a check that took it would pass on a shape the host never sends (martha#638).
   member_case 'a-read-as-the-host-writes-it' member.read-as-logged '' 0 "^ok member ${later}: " || case_failed=1
   member_case 'a-read-without-the-numbering' member.read-bare '' 1 "^FAIL member ${first}: the member did not read the outsider's README\$" || case_failed=1
   member_case 'the-transcript-goes-after-the-answer' transcript.goes '' 1 "^FAIL member ${first}: the container could not give the host transcript\$" || case_failed=1
   kept_the_record 'the-transcript-goes-after-the-answer' "${first}" || case_failed=1
+  # Once the launch has ended the live folder has gone with it, and the failure capture reads the copy Martha kept
+  # (martha#646, issue item 3): a member that ended is still read, never said to be a container that could not give it.
+  local kept_root kept_copy kept_nowhere kept_log
+  kept_root="${root}/the-kept-copy"
+  kept_copy="${kept_root}/state/*/*/transcripts/*/projects/*/*.jsonl"
+  kept_nowhere="${kept_root}/no-live-folder/*/*/*/*.jsonl"
+  kept_log="${root}/the-kept-copy.log"
+  mkdir -p "${kept_root}/state/martha/p/transcripts/launch-1/projects/the-project"
+  printf '{%s}\n' "$(turn_line "${first}")" \
+    > "${kept_root}/state/martha/p/transcripts/launch-1/projects/the-project/s-1.jsonl"
+  : > "${kept_log}"
+  # The host's ssh runs the container's own command here, as the container would, so the reader is the real one.
+  (
+    MEMBERS=("${first}")
+    on_the_host() { local last; for last in "$@"; do :; done; sh -c "${last}"; }
+    KEPT_TRANSCRIPTS="${kept_copy}" TRANSCRIPTS="${kept_nowhere}" LOG_FILE="${kept_log}" keep_what_the_member_did 0
+  )
+  if ! grep -qF -- "${KEPT_COPY_WORDS}{$(turn_line "${first}")}" "${kept_log}"; then
+    echo 'the self-test: a failed step read no copy of an ended launch, so what its member did was said to be gone' >&2
+    case_failed=1
+  fi
   # A member step that fails keeps what the member did in the log before the tear-down: the transcript as the checks
   # read it and the screen. The credentials hold words of their own here, and none of them may reach the log.
   standin="${root}/a-failed-member-keeps-its-record"
@@ -2208,8 +2262,8 @@ self_test() {
     fi
   done
 
-  # The nightly live run's container side (martha#639): its own stand-ins and cases.
-  night_self_test "${root}" || case_failed=1
+  # The live run's container side (martha#639): its own stand-ins and cases.
+  live_run_self_test "${root}" || case_failed=1
 
   if [ "${case_failed}" -ne 0 ]; then
     echo 'the self-test: a case failed, above' >&2
@@ -2242,10 +2296,10 @@ main() {
         OWNER_COMMANDS_FILE="$2"
         shift 2
         ;;
-      --night)
-        # A run folder is one night's: the throwaway script makes it, and refuses one that is there already.
+      --live-run)
+        # A run folder is one live run's: the throwaway script makes it, and refuses one that is there already.
         if [ -z "${2:-}" ]; then printf '%s\n' "${USAGE}" >&2; exit 2; fi
-        NIGHT_DIR="$2"
+        LIVE_RUN_DIR="$2"
         shift 2
         ;;
       --dry-layer)

@@ -13,7 +13,8 @@ import { hostForTests, type HostForTests } from '../host_contract/host_for_tests
 import type { ApprovedLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { OWN_WRITE_MODES, type OwnWrite } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { ownWriteOfCall, rememberOwnWriteOfCall, type CallThatRan } from './remember_own_write_of_a_call.ts'
-import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_FILE_TOOLS, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { OTHER_HOSTS_FILE_TOOLS } from '../host_contract/tool_names_for_tests.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
 const HOME = '/the-owners-home'
@@ -124,7 +125,7 @@ test('a Write of a file under the checkout is kept, read only through the host: 
   const asked: Asked[] = []
   const host = hostWith(treeOf({ [WRITTEN]: { bytes: 'hello\n' } }, asked))
 
-  const write = ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW)
+  const write = ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW, CLAUDE_CODE_FILE_TOOLS)
 
   assert.deepEqual(write, {
     path: WRITTEN,
@@ -145,7 +146,7 @@ test('a Write of a file under the checkout is kept, read only through the host: 
 test('a file its owner may execute is kept at mode 100755, as the contract says of the file', () => {
   const host = hostWith(treeOf({ [WRITTEN]: { bytes: '#!/bin/sh\n', ownerExecutes: true } }, []))
 
-  const write = ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, '#!/bin/sh\n'), host.host, NOW)
+  const write = ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, '#!/bin/sh\n'), host.host, NOW, CLAUDE_CODE_FILE_TOOLS)
 
   assert.equal(write?.mode, EXECUTABLE)
 })
@@ -153,20 +154,20 @@ test('a file its owner may execute is kept at mode 100755, as the contract says 
 test('a Write whose bytes on disk are not the call content is not kept, and nothing is asked for its blob', () => {
   const host = hostWith(treeOf({ [WRITTEN]: { bytes: 'what someone else left\n' } }, []))
 
-  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW), undefined)
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW, CLAUDE_CODE_FILE_TOOLS), undefined)
 })
 
 test('a Write whose bytes on disk have the same length as the call content and differ in one of them is not kept (review r=1)', () => {
   const host = hostWith(treeOf({ [WRITTEN]: { bytes: 'hellO\n' } }, []))
 
-  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW), undefined)
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW, CLAUDE_CODE_FILE_TOOLS), undefined)
 })
 
 test('a path that is not a regular file under the checkout is not kept, and its bytes are never read', () => {
   const asked: Asked[] = []
   const host = hostWith(treeOf({ [TOP]: { bytes: '' } }, asked))
 
-  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(TOP, 'hello\n'), host.host, NOW), undefined)
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(TOP, 'hello\n'), host.host, NOW, CLAUDE_CODE_FILE_TOOLS), undefined)
   assert.deepEqual(asked.filter(({ what }) => what === 'bytes'), [])
 })
 
@@ -174,7 +175,7 @@ test('a path that is a pipe or a socket, holding the call content, is not kept a
   const asked: Asked[] = []
   const host = hostWith(treeOf({ [WRITTEN]: { kind: 'other', bytes: 'hello\n' } }, asked))
 
-  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW), undefined)
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW, CLAUDE_CODE_FILE_TOOLS), undefined)
   assert.deepEqual(asked.filter(({ what }) => what === 'bytes'), [])
 })
 
@@ -182,7 +183,7 @@ test('a path that is a link, resolved to itself under the checkout, is not kept 
   const asked: Asked[] = []
   const host = hostWith(treeOf({ [WRITTEN]: { kind: 'symlink', bytes: 'hello\n' } }, asked))
 
-  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW), undefined)
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW, CLAUDE_CODE_FILE_TOOLS), undefined)
   assert.deepEqual(asked.filter(({ what }) => what === 'bytes'), [])
 })
 
@@ -191,14 +192,14 @@ test('a path outside the checkout is not kept, and its kind is never read', () =
   const elsewhere = `${HOME}/notes.txt`
   const host = hostWith(treeOf({ [elsewhere]: { bytes: 'hello\n' } }, asked))
 
-  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(elsewhere, 'hello\n'), host.host, NOW), undefined)
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(elsewhere, 'hello\n'), host.host, NOW, CLAUDE_CODE_FILE_TOOLS), undefined)
   assert.deepEqual(asked.filter(({ what }) => what === 'kind'), [])
 })
 
 test('a tree that refuses every read leaves nothing kept, and does not throw out of the relay answer', () => {
   const host = hostWith(REFUSING)
 
-  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW), undefined)
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW, CLAUDE_CODE_FILE_TOOLS), undefined)
 })
 
 test('a read that fails with a bug of our own, carrying no code, is thrown rather than read as someone else’s change (review r=1)', () => {
@@ -211,7 +212,7 @@ test('a read that fails with a bug of our own, carrying no code, is thrown rathe
     realPathOf: (path) => path,
   }
 
-  assert.throws(() => ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), hostWith(buggy).host, NOW), TypeError)
+  assert.throws(() => ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), hostWith(buggy).host, NOW, CLAUDE_CODE_FILE_TOOLS), TypeError)
 })
 
 test('a call that made an own write has it kept on the launch; a call that made none keeps nothing', () => {
@@ -219,8 +220,21 @@ test('a call that made an own write has it kept on the launch; a call that made 
   const host = hostWith(treeOf({ [WRITTEN]: { bytes: 'hello\n' } }, []))
   const launch = launchKeeping(kept)
 
-  assert.equal(rememberOwnWriteOfCall(launch, writeOf(WRITTEN, 'hello\n'), host.host), undefined)
+  assert.equal(rememberOwnWriteOfCall(launch, writeOf(WRITTEN, 'hello\n'), host.host, CLAUDE_CODE_FILE_TOOLS), undefined)
   assert.deepEqual(kept.map(({ path, mode }) => ({ path, mode })), [{ path: WRITTEN, mode: REGULAR }])
-  assert.equal(rememberOwnWriteOfCall(launch, writeOf(`${TOP}/other.txt`, 'gone\n'), host.host), undefined)
+  assert.equal(rememberOwnWriteOfCall(launch, writeOf(`${TOP}/other.txt`, 'gone\n'), host.host, CLAUDE_CODE_FILE_TOOLS), undefined)
   assert.equal(kept.length, 1)
+})
+
+test("a write is kept as the member's own by the host's own writing tool and argument, with that host's whole-file check, never by Claude Code's (#541 package A, design G1; mutants: Claude Code's own writes, whole-file check or resolver used)", () => {
+  const host = hostWith(treeOf({ [WRITTEN]: { bytes: 'hello\n' } }, []))
+  const [[tool, argument] = []] = Object.entries(OTHER_HOSTS_FILE_TOOLS.own_writes)
+  assert.ok(tool !== undefined && argument !== undefined)
+  const othersWrite: CallThatRan = { tool, input: { [argument]: WRITTEN, tool_use_id: 'a_call' }, session: SESSION, home: HOME }
+  assert.equal(ownWriteOfCall(launchKeeping([]), othersWrite, host.host, NOW, OTHER_HOSTS_FILE_TOOLS)?.path, WRITTEN, 'the host has no whole-file check, so the file there is its write')
+  assert.equal(ownWriteOfCall(launchKeeping([]), othersWrite, host.host, NOW, CLAUDE_CODE_FILE_TOOLS), undefined, "the tool is not one of Claude Code's")
+  assert.equal(ownWriteOfCall(launchKeeping([]), writeOf(WRITTEN, 'hello\n'), host.host, NOW, OTHER_HOSTS_FILE_TOOLS), undefined, "Claude Code's Write is not this host's")
+  const named = { ...othersWrite, input: { ...othersWrite.input, [argument]: 'a name only this host resolves' } }
+  const resolving = { ...OTHER_HOSTS_FILE_TOOLS, resolve: () => WRITTEN }
+  assert.equal(ownWriteOfCall(launchKeeping([]), named, host.host, NOW, resolving)?.path, WRITTEN, 'the file is where the host resolves the name to')
 })
