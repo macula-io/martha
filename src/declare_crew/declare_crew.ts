@@ -723,13 +723,20 @@ const TEAM_SUPERVISOR_ROLE = 'supervisor'
 
 /**
  * Martha's own team table (the Supervisor's ruling on PR 939, matching how this crew works today; Raf may overrule):
- * a supervisor, builders and reviewers; the supervisor assigns work and holds reviews, and every other act is the
- * owner's, as solo's table words it.
+ * a supervisor, builders and reviewers. The supervisor assigns work, unparks and restarts members, and brings the
+ * owner's asks; the reviewers hold reviews; a landing is the owner's to approve.
  */
 function theTeamTable(): Mode {
   const roles = [TEAM_SUPERVISOR_ROLE, SOLO_MEMBERS[0].role, SOLO_REVIEWER_ROLE]
-  const granted: Partial<Record<Act, string[]>> = { assign_work: [TEAM_SUPERVISOR_ROLE], [HOLD_REVIEWS]: [TEAM_SUPERVISOR_ROLE], [APPROVE_LANDING]: [OWNER] }
-  return { name: TEAM_MODE, roles, may: Object.fromEntries(ACTS.map((act) => [act, granted[act] ?? [...whoTheTableGrants(undefined)]])) as Record<Act, string[]> }
+  const may: Record<Act, string[]> = {
+    assign_work: [TEAM_SUPERVISOR_ROLE],
+    [APPROVE_LANDING]: [OWNER],
+    resume_parked_work: [TEAM_SUPERVISOR_ROLE],
+    [OFFER_OWNER_ASKS]: [TEAM_SUPERVISOR_ROLE],
+    [RESTART_MEMBER]: [TEAM_SUPERVISOR_ROLE],
+    [HOLD_REVIEWS]: [SOLO_REVIEWER_ROLE],
+  }
+  return { name: TEAM_MODE, roles, may }
 }
 
 /** The table Martha writes for a mode of this name (`martha init`'s solo crew, and its team table), or undefined when it has none. */
