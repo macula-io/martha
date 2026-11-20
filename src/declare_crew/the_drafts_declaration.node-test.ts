@@ -102,7 +102,7 @@ test('#931: a mode Martha has no table for has the roles its members hold, and a
   await refusedWith({ ...draft, members: [{ name: 'Lead', role: OWNER, profile: 'big' }] }, 'members[0].role')
 })
 
-test('#931 (PR 939 ruling): a mode named team takes Martha\'s team table: the supervisor assigns, unparks, restarts and brings asks, reviewers hold reviews, the owner approves landings', async () => {
+test('#931 (PR 939 ruling): a mode named team takes Martha\'s team table: the supervisor assigns, unparks, restarts, brings asks and closes another member\'s worktree, reviewers hold reviews, the owner approves landings', async () => {
   const { mode } = await declare(draft)
   assert.deepEqual(mode, {
     name: 'team',
@@ -114,6 +114,7 @@ test('#931 (PR 939 ruling): a mode named team takes Martha\'s team table: the su
       offer_owner_asks: ['supervisor'],
       restart_member: ['supervisor'],
       hold_reviews: ['reviewer'],
+      finish_a_members_worktree: ['supervisor'],
     },
   })
   await refusedWith({ ...draft, members: [{ name: 'Lead', role: 'lead', profile: 'big' }] }, 'members[0].role')
