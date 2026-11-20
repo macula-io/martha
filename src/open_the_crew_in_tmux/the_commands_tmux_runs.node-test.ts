@@ -3,6 +3,7 @@
 // environment the server starts with. Every expected value is spelt out here, never read from the constant it pins.
 
 import assert from 'node:assert/strict'
+import { THE_FIRST_PROMPT_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { test } from 'node:test'
 
 import {
@@ -14,11 +15,15 @@ import {
   theSessionAsked,
   theSessionOpened,
   theStripSplit,
+  thePaneOnMarthasServer,
+  theTextTyped,
   theTmuxVersionIn,
+  theTurnSent,
   theWindowClosed,
   theWindowOpened,
   theWindowsIn,
   theWindowsListed,
+  whyNotAFirstPrompt,
   whyNotATarget,
   whyTmuxCannotOpen,
 } from './the_commands_tmux_runs.ts'
@@ -87,4 +92,32 @@ test('#932: tmux cannot open with no tmux, an old one, no id, or an id tmux cann
 
 test('#932: Martha\'s server starts with the owner\'s environment, minus a tmux it may run inside', () => {
   assert.deepEqual(outsideAnyTmux({ HOME: '/srv/owner', TMUX: '/tmp/tmux-1000/default,1,0', TMUX_PANE: '%3', TERM: 'xterm-kitty', GONE: undefined }), { HOME: '/srv/owner', TERM: 'xterm-kitty' })
+})
+
+test('#919: a member given a first prompt is started with it after --prompt, before any word for the host', () => {
+  assert.deepEqual(theSessionOpened({ ...window, prompt: '-read the brief' }).slice(-5), ['/opt/martha/bin/martha', 'start', 'Vesta', THE_FIRST_PROMPT_SWITCH, '-read the brief'])
+  assert.deepEqual(theWindowOpened({ ...window, prompt: 'go' }).slice(-4), ['start', 'Vesta', THE_FIRST_PROMPT_SWITCH, 'go'])
+})
+
+test('#919: the first prompt is typed as keys, each as written, into the member\'s own pane, then Enter ends the turn', () => {
+  assert.deepEqual(theTextTyped('%7', '-v #{pid} Enter'), ['send-keys', '-t', '%7', '-l', '--', '-v #{pid} Enter'])
+  assert.deepEqual(theTurnSent('%7'), ['send-keys', '-t', '%7', 'Enter'])
+})
+
+test('#919: a leading - is text; a leading /, a line break, a control character or nothing is refused by name', () => {
+  assert.equal(whyNotAFirstPrompt('-read the brief'), undefined)
+  assert.equal(whyNotAFirstPrompt('read the brief at docs/brief.md'), undefined)
+  assert.match(whyNotAFirstPrompt('/hello') ?? '', /starts with \/, which the member would run as a slash command/)
+  assert.match(whyNotAFirstPrompt('  /hello') ?? '', /slash command/)
+  assert.match(whyNotAFirstPrompt('read\n/hello') ?? '', /line break/)
+  assert.match(whyNotAFirstPrompt('read\u001b[2J') ?? '', /control character/)
+  assert.match(whyNotAFirstPrompt('  ') ?? '', /empty/)
+})
+
+test('#919: the member\'s pane is known only in a window of Martha\'s own server', () => {
+  assert.equal(thePaneOnMarthasServer({ TMUX: '/tmp/tmux-1000/martha,4242,0', TMUX_PANE: '%3' }), '%3')
+  assert.equal(thePaneOnMarthasServer({ TMUX: '/tmp/tmux-1000/default,4242,0', TMUX_PANE: '%3' }), undefined)
+  assert.equal(thePaneOnMarthasServer({ TMUX: '/tmp/tmux-1000/martha,4242,0' }), undefined)
+  assert.equal(thePaneOnMarthasServer({ TMUX: '/tmp/tmux-1000/martha,4242,0', TMUX_PANE: '3' }), undefined)
+  assert.equal(thePaneOnMarthasServer({}), undefined)
 })

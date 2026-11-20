@@ -281,6 +281,8 @@ export interface ClaudeCodeMemberLaunch {
    * launch gives none.
    */
   readonly hearRelayPlace?: (place: MemberRelayPlace) => void
+  /** Called each time the relay reports the session's start (martha#919): where the owner's first prompt is typed in. */
+  readonly hearSessionStart?: () => void
   /**
    * The crew's own store and the layout it declared, so this launch's end keeps what a killed command left in the
    * member's trees (#693): the record the member's next start is told from, and the two refusals judge. A launch given
@@ -608,7 +610,10 @@ async function servedRelay(
   const relay: MemberRelay = {
     ...answering,
     answer: (event, body) => {
-      if (event === 'session_started') sessionReported()
+      if (event === 'session_started') {
+        sessionReported()
+        launch.hearSessionStart?.()
+      }
       return answering.answer(event, body)
     },
   }

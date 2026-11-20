@@ -10,10 +10,13 @@
 // someone reads what it does. A switch that takes a value refuses a missing value or one that starts with `-`, so
 // `--model --settings x` cannot carry the second switch through.
 //
-// Two more pass since martha#511 (#601 row 62, DECIDED 2026-11-20 "no buts, no caveats"): a first prompt, a word that
-// is no switch, so the owner can hand a member its first turn on the command line; and --resume, with or without the
-// session it names, so a member can be started back into a session. Neither loads config or changes a permission.
-// The permission bypass is still refused by name.
+// --resume passes since martha#511 (#601 row 62), with or without the session it names, so a member can be started back
+// into a session: it loads no config and changes no permission. The permission bypass is still refused by name.
+//
+// A word that is no switch is refused (martha#919, which changes #601 row 62 from "let it through" to "refused, use
+// --prompt"; the Supervisor's ruling on #919): handed to the host, it would be a turn no host stamped as the owner's,
+// and one that began with `/` would run as a slash command. The owner's first prompt is `martha start <member> --prompt
+// <text>`, read before `--`, which Martha types into the member's own window as the owner's turn.
 
 /**
  * The host's switch that names the model a session runs on (martha#541 package 6b): one spelling, used by the table
@@ -57,13 +60,16 @@ const isAValue = (word: string | undefined): word is string => word !== undefine
 const PASSED_SWITCHES = [...Object.keys(SWITCHES_THAT_LOAD_NO_CONFIG), THE_RESUME_SWITCH].join(', ')
 
 const refused = (arg: string, why: string): string =>
-  `${arg} ${why}. martha start passes only ${PASSED_SWITCHES} to the host, beside a first prompt, since any other can load config, code or a permission you did not approve.`
+  `${arg} ${why}. martha start passes only ${PASSED_SWITCHES} to the host, since any other can load config, code or a permission you did not approve. A first prompt is given before --, as ${THE_FIRST_PROMPT_SWITCH} <text>.`
+
+/** The word, read before `--`, that gives a member its first prompt as the owner's own turn (martha#919). */
+export const THE_FIRST_PROMPT_SWITCH = '--prompt'
 
 /** Why the owner's words may not reach the host, naming the first that may not; undefined when every one may. */
 export function unpassedOwnerArgument(args: readonly string[]): string | undefined {
   for (let at = 0; at < args.length; at += 1) {
     const arg = args[at]!
-    if (isAValue(arg)) continue
+    if (isAValue(arg)) return refused(arg, 'is no switch, and a word handed to the host would be a turn no host stamped as yours')
     if (arg === THE_RESUME_SWITCH) {
       at += isAValue(args[at + 1]) ? 1 : 0
       continue

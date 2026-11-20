@@ -26,7 +26,9 @@ import {
   theWindowClosed,
   theWindowOpened,
   theWindowsIn,
+  theTextTyped,
   theTmuxProgram,
+  theTurnSent,
   theWindowsListed,
   whyNotATarget,
   whyTmuxCannotOpen,
@@ -68,6 +70,8 @@ export interface OpeningTheCrewInTmux extends MarthasTmux {
   readonly isRunning: (member: string) => boolean
   /** This release of `martha`: the program and its arguments before the act. */
   readonly martha: readonly string[]
+  /** The owner's first prompt for a member, typed in once its session starts (martha#919); none for a member given none. */
+  readonly promptFor?: (member: string) => string | undefined
 }
 
 /** One tmux command on Martha's own server, with the owner's environment outside any tmux. */
@@ -92,7 +96,8 @@ export function openTheCrewInTmux(io: LinesShownToTheOwner, opening: OpeningTheC
   opening.write(join(opening.place, CONFIG_FILE), THE_SERVERS_CONFIG)
   const run = onTheServer(opening)
   for (const member of members) {
-    const failed = openAMembersWindow(io, run, { id, root: opening.root, member, martha: opening.martha })
+    const prompt = opening.promptFor?.(member)
+    const failed = openAMembersWindow(io, run, { id, root: opening.root, member, martha: opening.martha, ...(prompt === undefined ? {} : { prompt }) })
     if (failed !== undefined) return refused(io, `tmux did not open ${member}'s window: ${failed}`)
   }
   tellOwnerOn(io)(`the crew is in tmux session ${id}: martha attach shows it, from any terminal.`)
@@ -136,6 +141,25 @@ export function attachToTheCrew(io: LinesShownToTheOwner, attaching: AttachingTo
   }
   if (onTheServer(attaching)(theSessionAsked(id)).status !== 0) return refused(io, `the crew's tmux session ${id} is not open. Open it with: martha up`)
   return attaching.attach([...onMarthasServer(join(attaching.place, CONFIG_FILE), attaching.server), ...theAttach(id, attaching.member)], outsideAnyTmux(attaching.env))
+}
+
+/**
+ * How long, in ms, the member's composer is given after the relay reports the session's start before the first prompt
+ * is typed: the host reports the start as its screen is drawn, before its composer reads keys.
+ */
+export const THE_COMPOSER_SETTLES_MS = 1500
+
+/**
+ * The owner's first prompt typed into the member's own pane on Martha's server, as the owner's keys, then Enter
+ * (martha#919): the host takes it from its composer, stamped as a typed turn is. What tmux said when it could not, else
+ * undefined.
+ */
+export function typeTheFirstPrompt(tmux: MarthasTmux, pane: string, text: string): string | undefined {
+  const run = onTheServer(tmux)
+  const typed = run(theTextTyped(pane, text))
+  if (typed.status !== 0) return typed.said.trim()
+  const sent = run(theTurnSent(pane))
+  return sent.status === 0 ? undefined : sent.said.trim()
 }
 
 /** What `tmux -V` says on this machine, or undefined when tmux does not answer. */

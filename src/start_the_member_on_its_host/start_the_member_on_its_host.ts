@@ -96,6 +96,8 @@ export interface AStartOnItsHost {  readonly member: string
   readonly command: string
   /** A test's ear on what the member's relay is handed; a real start gives none. */
   readonly hear_relay_place?: (place: MemberRelayPlace) => void
+  /** Called each time the member's relay reports its session started (martha#919): where a first prompt is typed in. */
+  readonly hear_session_start?: () => void
   tellOwner(line: string): void
 }
 
@@ -347,6 +349,7 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeM
     stdio: start.stdio,
     tellOwner: (line) => start.tellOwner(line),
     ...(start.hear_relay_place === undefined ? {} : { hearRelayPlace: start.hear_relay_place }),
+    ...(start.hear_session_start === undefined ? {} : { hearSessionStart: start.hear_session_start }),
     turns: turnsRaised(),
     crew_tools: (sessions, member) =>
       crewToolsOver(theCrewToolsOfAStart(start, sessions, member.served_tools, {

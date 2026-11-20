@@ -52,8 +52,9 @@ import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_t
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { drawTheCrewStrip, holdOnThisTerminal, isRunning, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { KITTY_PLACE, kittySaysOnThisMachine, openTheCrewInKitty, startKittyDetached, writeOwnerOnly } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
-import { TMUX_PLACE, attachOnThisTerminal, attachToTheCrew, openTheCrewInTmux, tmuxOnThisMachine, tmuxSaysOnThisMachine } from '../open_the_crew_in_tmux/open_the_crew_in_tmux.ts'
-import { opensInTmux } from '../open_the_crew_in_tmux/the_commands_tmux_runs.ts'
+import { THE_COMPOSER_SETTLES_MS, TMUX_PLACE, attachOnThisTerminal, attachToTheCrew, openTheCrewInTmux, tmuxOnThisMachine, tmuxSaysOnThisMachine, typeTheFirstPrompt } from '../open_the_crew_in_tmux/open_the_crew_in_tmux.ts'
+import { opensInTmux, thePaneOnMarthasServer, whyNotAFirstPrompt } from '../open_the_crew_in_tmux/the_commands_tmux_runs.ts'
+import { THE_FIRST_PROMPT_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { TAB_OF } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { kittenOnThisMachine, theStripsKitten } from '../open_the_crew_in_kitty/the_strips_kitten.ts'
 import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, refused, showingSafely, tellOwnerOn } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
@@ -80,7 +81,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha up | martha attach [<member>] | martha approve | martha todo | martha start [<member> [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha version | martha help'
+  'usage: martha init | martha up [--prompt <text>] | martha attach [<member>] | martha approve | martha todo | martha start [<member> [--prompt <text>] [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha version | martha help'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -178,11 +179,44 @@ function exitOf(stopped: { readonly exit_code: number | null; readonly signal: s
   return signal === undefined ? EXIT_REFUSED : 128 + signal
 }
 
-async function start(io: CommandIo, places: Places, member: string, args: readonly string[]): Promise<number> {
-  const started = await startingTheMember(io, places, member, args)
+async function start(io: CommandIo, places: Places, member: string, args: readonly string[], prompt?: string): Promise<number> {
+  const typing = prompt === undefined ? undefined : await theFirstPromptTyped(io, places, member, prompt)
+  if (typeof typing === 'string') return refused(io, typing)
+  const started = await startingTheMember(io, places, member, args, undefined, typing)
   if (!started.started) return EXIT_REFUSED
   io.out(startedLine(member, started.pid))
   return held(io, places, member, args, started)
+}
+
+/** Why `--prompt` is refused outside a window of Martha's tmux (martha#919): where it works, and how the owner gets there. */
+export const aFirstPromptNeedsMarthasTmux = (): string =>
+  `${THE_FIRST_PROMPT_SWITCH} types your first turn into the member's own window of Martha's tmux, and this is no such window. Declare "terminal": "tmux" in .martha/martha.json and run: martha ${UP} ${THE_FIRST_PROMPT_SWITCH} <text>`
+
+/**
+ * What types the owner's first prompt into `member` once its session starts (martha#919), as the owner's own keys in the
+ * member's pane of Martha's tmux, never as a word on the host's command line; or why it cannot. It types once: a later
+ * start of the same session (a /clear, a resume) is not given the prompt again.
+ */
+async function theFirstPromptTyped(io: CommandIo, places: Places, member: string, prompt: string): Promise<(() => void) | string> {
+  const why = whyNotAFirstPrompt(prompt)
+  if (why !== undefined) return `martha start cannot type ${member}'s first prompt: ${why}.`
+  const pane = thePaneOnMarthasServer(io.env)
+  if (pane === undefined) return aFirstPromptNeedsMarthasTmux()
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return crew
+  const declared = crew.settings.members.find((one) => sameMemberName(one.name, member))
+  if (declared !== undefined && theHostOfMember(crew.settings, declared) !== CLAUDE_CODE) return `${member} runs on ${theHostOfMember(crew.settings, declared)}, and ${THE_FIRST_PROMPT_SWITCH} types into a Claude Code member's composer only.`
+  const tmux = marthasTmuxFor(io, places, crew.settings)
+  if ('refusal' in tmux) return tmux.refusal
+  let typed = false
+  return () => {
+    if (typed) return
+    typed = true
+    setTimeout(() => {
+      const failed = typeTheFirstPrompt(tmux, pane, prompt)
+      if (failed !== undefined) tellOwnerOn(io)(`${member}'s first prompt was not typed in: ${failed}`)
+    }, THE_COMPOSER_SETTLES_MS).unref()
+  }
 }
 
 /**
@@ -248,6 +282,7 @@ async function startingTheMember(
   member: string,
   args: readonly string[],
   prompt?: string,
+  heardSessionStart?: () => void,
 ): Promise<MemberStarted> {
   const launcher = launcherOf(io, places)
   if ('refusal' in launcher) {
@@ -265,6 +300,7 @@ async function startingTheMember(
     documents,
     tellOwner: tellOwnerOn(io),
     ...(prompt === undefined ? {} : { initial_prompt: prompt }),
+    ...(heardSessionStart === undefined ? {} : { hear_session_start: heardSessionStart }),
   })
 }
 
@@ -340,11 +376,14 @@ function marthasTmuxFor(io: CommandIo, places: Places, settings: CrewSettings) {
 }
 
 /** `martha up` for a crew declared `"terminal": "tmux"` (martha#932): every member `up` starts, a window each in Martha's own tmux. */
-async function openTheCrewInTmuxHere(io: CommandIo, places: Places, crew: TheCrewsPlaces): Promise<number> {
+async function openTheCrewInTmuxHere(io: CommandIo, places: Places, crew: TheCrewsPlaces, prompt?: string): Promise<number> {
   const tmux = marthasTmuxFor(io, places, crew.settings)
   if ('refusal' in tmux) return refused(io, tmux.refusal)
-  const members = crew.settings.members.filter(upStarts).map((member) => member.name)
-  return openTheCrewInTmux(io, { ...tmux, root: places.root, members, isRunning: (member) => isRunning(crew, member), martha: THIS_MARTHA() })
+  const starting = crew.settings.members.filter(upStarts)
+  const typedInto = starting.filter((member) => theHostOfMember(crew.settings, member) === CLAUDE_CODE).map((member) => member.name)
+  if (prompt !== undefined) starting.filter((member) => !typedInto.includes(member.name)).forEach((member) => tellOwnerOn(io)(`${member.name} runs on ${theHostOfMember(crew.settings, member)}, so it is not given your first prompt.`))
+  const promptFor = (member: string): string | undefined => (typedInto.includes(member) ? prompt : undefined)
+  return openTheCrewInTmux(io, { ...tmux, root: places.root, members: starting.map((member) => member.name), isRunning: (member) => isRunning(crew, member), martha: THIS_MARTHA(), promptFor })
 }
 
 /** `martha attach [<member>]` (martha#932): the owner's terminal on the crew's tmux session, at a member's window when one is named. */
@@ -370,8 +409,10 @@ const whyNotAKey = (read: { readonly key: string } | { readonly refusal: string 
  * with no declaration it starts nothing and says where the file goes. When an engine member is to start and the crew
  * names no endpoint, `up` first declares it (../bring_up_the_declared_crew/declare_the_engines_endpoint.ts).
  */
-async function up(io: CommandIo, places: Places): Promise<number> {
+async function up(io: CommandIo, places: Places, prompt?: string): Promise<number> {
   if (!io.terminal.is_terminal) return refused(io, START_NEEDS_A_TERMINAL)
+  const why = whyNotUpsFirstPrompt(prompt)
+  if (why !== undefined) return refused(io, why)
   const declaration = join(places.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   if (!existsSync(declaration)) return refused(io, noCrewDeclaredAt(declaration))
   const crew = await crewsPlacesOf(io, places)
@@ -382,7 +423,18 @@ async function up(io: CommandIo, places: Places): Promise<number> {
     if ('refusal' in endpoint) return refused(io, endpoint.refusal)
     io.out(endpoint.told)
   }
-  if (opensInTmux(crew.settings.opens.terminal)) return openTheCrewInTmuxHere(io, places, crew)
+  return opensInTmux(crew.settings.opens.terminal) ? openTheCrewInTmuxHere(io, places, crew, prompt) : openTheCrewInKittyHere(io, places, crew.settings, prompt)
+}
+
+/** Why `martha up`'s first prompt cannot be typed in (martha#919), or undefined when it can or none was given. */
+function whyNotUpsFirstPrompt(prompt: string | undefined): string | undefined {
+  const why = prompt === undefined ? undefined : whyNotAFirstPrompt(prompt)
+  return why === undefined ? undefined : `martha ${UP} cannot type a first prompt: ${why}.`
+}
+
+/** `martha up` for a crew that opens in kitty: a first prompt is refused, since only Martha's tmux types one in (martha#919). */
+function openTheCrewInKittyHere(io: CommandIo, places: Places, settings: CrewSettings, prompt: string | undefined): Promise<number> {
+  if (prompt !== undefined) return Promise.resolve(refused(io, `martha ${UP} ${THE_FIRST_PROMPT_SWITCH} types the first turn in through Martha's tmux, and this crew opens in ${settings.opens.terminal}. Declare "terminal": "tmux" in .martha/martha.json to give one.`))
   return openTheCrew(io, places, (_settings, member) => upStarts(member))
 }
 
@@ -536,7 +588,7 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
 export const VERSION_WORDS: readonly string[] = ['--version', 'version']
-export const ACTS_ALONE: readonly string[] = ['init', UP, 'approve', 'todo', 'ls', ...VERSION_WORDS]
+export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', ...VERSION_WORDS]
 
 /** The words that ask for the help (martha#511): each alone prints HELP. */
 export const HELP_WORDS: readonly string[] = ['help', '-h', '--help']
@@ -547,10 +599,10 @@ export const UNKNOWN_COMMAND = 'unknown command:'
 /** One plain line per act, saying what it does (martha#511, DECIDED 2026-11-20 "no `martha version` or `martha help`?"). */
 export const HELP: readonly string[] = [
   'martha init                  declare a solo crew of a builder and a reviewer in this checkout',
-  `martha ${UP}                    open every member .martha/martha.json declares and not parked, in kitty or tmux`,
+  `martha ${UP} [--prompt <text>]  open every member .martha/martha.json declares and not parked, in kitty or tmux; in tmux, type <text> into each Claude Code member as your first turn`,
   `martha ${ATTACH} [<member>]    show the crew's tmux session, at a member's window when one is named`,
   'martha approve               read the config your members start from, and approve it',
-  'martha start [<member>]      start one member here, or open every member in kitty',
+  'martha start [<member>]      start one member here, or open every member in kitty; --prompt <text> types your first turn into it, in Martha\'s tmux',
   'martha wake <member>         start a parked member on its newest handover',
   'martha release <member>      release a member Martha holds',
   'martha bells [<member> ...]  list, mute or hear a member\'s bells',
@@ -574,7 +626,7 @@ const isAnAct = (word: string): boolean => ACTS_ALONE.includes(word) || ACTS_OF_
 /** The acts that take exactly one argument (martha#129). */
 export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release']
 
-type Asked = { readonly act: string; readonly member?: string; readonly args: readonly string[] }
+type Asked = { readonly act: string; readonly member?: string; readonly args: readonly string[]; readonly prompt?: string }
 
 export function actOf(argv: readonly string[]): Asked | undefined {
   const [act] = argv
@@ -596,6 +648,7 @@ export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: read
   [STOP]: stopOf,
   [RESTART]: restartOf,
   [ATTACH]: stopOf,
+  [UP]: upOf,
   start: startOf,
   answer: answerOf,
   crew: crewOf,
@@ -609,13 +662,29 @@ function crewOf(act: string, argv: readonly string[]): Asked | undefined {
   return change === undefined ? undefined : { act, member: change.member, args: argv.slice(1) }
 }
 
-/** `start <member> [-- <claude arguments>]`. */
+/** `--prompt <text>` at the head of `words`: the prompt and the words after it; nothing when the head is not it; undefined when it has no text. */
+function aFirstPromptOf(words: readonly string[]): { readonly prompt?: string; readonly rest: readonly string[] } | undefined {
+  if (words[0] !== THE_FIRST_PROMPT_SWITCH) return { rest: words }
+  return words[1] === undefined ? undefined : { prompt: words[1], rest: words.slice(2) }
+}
+
+/** `start <member> [--prompt <text>] [-- <claude arguments>]`: the prompt is Martha's word, read before `--` (martha#919). */
 function startOf(act: string, argv: readonly string[]): Asked | undefined {
-  const [, member, separator, ...rest] = argv
+  const [, member, ...after] = argv
   if (argv.length === 1) return { act, args: [] }
   if (member === undefined || member.startsWith('-')) return undefined
-  if (separator === undefined) return { act, member, args: [] }
-  return separator === '--' ? { act, member, args: rest } : undefined
+  const prompted = aFirstPromptOf(after)
+  if (prompted === undefined) return undefined
+  const [separator, ...rest] = prompted.rest
+  const prompt = prompted.prompt === undefined ? {} : { prompt: prompted.prompt }
+  if (separator === undefined) return { act, member, args: [], ...prompt }
+  return separator === '--' ? { act, member, args: rest, ...prompt } : undefined
+}
+
+/** `up [--prompt <text>]` (martha#919): the prompt typed into every Claude Code member up starts in Martha's tmux. */
+function upOf(act: string, argv: readonly string[]): Asked | undefined {
+  const prompted = aFirstPromptOf(argv.slice(1))
+  return prompted === undefined || prompted.rest.length > 0 ? undefined : { act, args: [], ...(prompted.prompt === undefined ? {} : { prompt: prompted.prompt }) }
 }
 
 /** `stop [<member>]` and `attach [<member>]`: one member's name at most, and no switch. */
@@ -698,7 +767,7 @@ async function actIn(asked: Asked, places: Places, io: CommandIo): Promise<numbe
     const inside = theMemberThisRunsInside(io, places, asked.act)
     if (inside !== undefined) return refused(io, inside)
   }
-  if (act === undefined) return asked.member === undefined ? openTheCrew(io, places) : start(io, places, asked.member, asked.args)
+  if (act === undefined) return asked.member === undefined ? openTheCrew(io, places) : start(io, places, asked.member, asked.args, asked.prompt)
   return isAnOwnersOwnAct(asked, act) ? await recordedWhereItWasTyped(io, places, asked, act) : act(io, places, asked)
 }
 
@@ -737,7 +806,7 @@ const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Place
   'keep-shapes': (io, places, asked) => keepShapes(io, places, asked.args[0]!),
   approve: (io, places) => approve(io, places),
   release: (io, places, asked) => release(io, places, asked.args[0]!),
-  [UP]: (io, places) => up(io, places),
+  [UP]: (io, places, asked) => up(io, places, asked.prompt),
   [ATTACH]: (io, places, asked) => attach(io, places, asked.member),
   answer: (io, places, asked) => answerInAProject(io, places, asked.member, asked.args),
 }
