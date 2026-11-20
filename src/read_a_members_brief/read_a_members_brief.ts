@@ -4,7 +4,7 @@
 // - The place and the name: the Supervisor writes each brief as BRIEF_<YYYY-MM-DD>_<Name>.md beside the member's
 //   handovers, and the newest is the last by name (hooks/register.tsx:3086-3095). In Martha both live in the crew's
 //   own store: handovers in `handovers`, briefs in `briefs`.
-// - The packages a brief names: synthetic-owner/repo#n, and synthetic-owner/repo#8,#11 is one package per issue (core/handover_shape.ts:15-30).
+// - The packages a brief names: <org>/<repo>#<n>, and <org>/<repo>#8,#11 is one package per issue (core/handover_shape.ts:15-30).
 // - Which of them the member still holds: a package counts unless GitHub says it is not the member's, closed or
 //   labelled crew:<name> for other members only, or the member has an open pull request from its own branch for it
 //   (core/handover_shape.ts:32-58, hooks/register.tsx:3359-3379). What GitHub could not answer keeps the package, so a
@@ -63,7 +63,7 @@ export function theNewestBriefOf(crew: CrewStore, member: string): ABrief | unde
   return { file: newest, path: join(place.path, newest), text: read.text }
 }
 
-/** A package as a brief names it: synthetic-owner/repo#n, or several issues of one repository as synthetic-owner/repo#8,#11. */
+/** A package as a brief names it: <org>/<repo>#<n>, or several issues of one repository as <org>/<repo>#8,#11. */
 const A_PACKAGE = /\b([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#([0-9]+(?:,#[0-9]+)*)\b/g
 
 /** Every package a brief names, once each, in the order it names them. */
@@ -119,7 +119,7 @@ export function pullsIn(stdout: string): readonly APull[] | undefined {
 }
 
 // A branch names an issue where the number starts a path segment and ends it: `ada/143-hygiene-r2` is #143, and its
-// `-r2` is not #2. A body names one as a bare `#n`: `Refs #143` is #143, while `synthetic-owner/repo#143` and `#1434` are not.
+// `-r2` is not #2. A body names one as a bare `#n`: `Refs #143` is #143, while `<org>/<repo>#143` and `#1434` are not.
 const branchNames = (branch: string, issue: number): boolean => new RegExp(`(^|/)${String(issue)}(-|$)`).test(branch)
 const bodyNames = (body: string, issue: number): boolean => new RegExp(`(^|[^\\w/-])#${String(issue)}(?!\\d)`).test(body)
 
@@ -138,7 +138,7 @@ export function ownsTheLinkedPull(pulls: readonly APull[], issue: number, member
   return slash > 0 && sameMemberName(branch.slice(0, slash), member)
 }
 
-/** A package's repository and issue number, or undefined when it is not synthetic-owner/repo#n. */
+/** A package's repository and issue number, or undefined when it is not <org>/<repo>#<n>. */
 const A_WHOLE_PACKAGE = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#([0-9]+)$/
 function partsOf(named: string): { readonly repo: string; readonly issue: number } | undefined {
   const found = A_WHOLE_PACKAGE.exec(named)
