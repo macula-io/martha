@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, MINUTE_MS } from '../declare_crew/declare_crew.ts'
-import { aFlowStarting, HANDOVER_LIMIT_PERCENT, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
+import { aFlowStarting, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
 import {
   anEndIsDue,
   anEndOutlived,
@@ -23,6 +23,9 @@ import {
   type AnEndPending,
   type TheRunningTurn,
 } from './end_a_running_turn.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const HANDOVER_LIMIT_PERCENT = THRESHOLDS_WHEN_UNNAMED.handover_percent
 
 /** The crew's ceiling when its file names none. */
 const CEILING_MS = HANDOVER_CEILING_MINUTES_WHEN_UNNAMED * MINUTE_MS

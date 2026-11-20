@@ -143,11 +143,9 @@ const RANGE = { path: root, base: BASE, tip: TIP, packages: [PACKAGE] }
  * acts on another (park, wake, restart) acts on ANOTHER, so no row is refused for acting on itself.
  */
 const ROWS: readonly ARow[] = [
-  { act: 'assign_work', handler: 'check_a_range_before_the_owner_says_yes/the_verify_range_tool', tool: VERIFY_RANGE_TOOL.name, args: RANGE },
   { act: 'assign_work', handler: 'find_the_unheld_work/unheld_work_tool', tool: UNHELD_WORK_TOOL.name, args: {} },
   { act: 'assign_work', handler: 'keep_the_owners_todo_list/the_todo_tools', tool: OWNER_TODO_ADD_TOOL.name, args: { text: 'say yes to the landing' } },
   { act: 'assign_work', handler: 'keep_the_owners_todo_list/the_todo_tools', tool: OWNER_TODO_DONE_TOOL.name, args: { id: 'an-act' } },
-  { act: 'assign_work', handler: 'keep_the_package_contract/the_contract_tools', tool: KEEP_THE_CONTRACT_TOOL.name, args: { package: PACKAGE } },
   { act: 'assign_work', handler: 'keep_the_supervisors_standing_items/the_standing_tools', tool: STANDING_ADD_TOOL.name, args: { package: PACKAGE, text: 'watch it' } },
   { act: 'assign_work', handler: 'keep_the_supervisors_standing_items/the_standing_tools', tool: STANDING_CLOSE_TOOL.name, args: { package: PACKAGE } },
   { act: 'assign_work', handler: 'nudge_the_supervisor/nudge_the_supervisor', tool: LOG_A_MILESTONE_TOOL.name, args: { package: PACKAGE, event: 'resume', note: 'go on' } },
@@ -184,7 +182,7 @@ const EVERY_CREW_TOOL: Readonly<Record<string, ALedgerLine>> = {
   [LOG_A_MILESTONE_TOOL.name]: { asks: ['assign_work'] },
   [WHAT_WAS_SENT_TOOL.name]: { ungated: 'reads what the caller itself sent' },
   [NOTE_WHAT_BECAME_TOOL.name]: { ungated: "records how the caller's own announced act ended" },
-  [KEEP_THE_CONTRACT_TOOL.name]: { asks: ['assign_work'] },
+  [KEEP_THE_CONTRACT_TOOL.name]: { ungated: 'records a contract, which stops no call: only a notice reads it (martha#601, row 114)' },
   [SEE_THE_CREW_TOOL.name]: { ungated: "reads the crew's pane; its nudges part shows to whom theNudgesGoTo names, the reader the milestone row pins" },
   [WHO_IS_FREE_TOOL.name]: { asks: ['assign_work'] },
   [UNHELD_WORK_TOOL.name]: { asks: ['assign_work'] },
@@ -197,7 +195,7 @@ const EVERY_CREW_TOOL: Readonly<Record<string, ALedgerLine>> = {
   [RETURN_TO_YOUR_OWN_MODEL_TOOL.name]: { ungated: 'returns the caller to its own declared model' },
   [WRITE_MY_HANDOVER_SCHEMA.name]: { ungated: "writes the caller's own handover" },
   [REFRESH_THIS_SESSION]: { ungated: "refreshes the caller's own session" },
-  [VERIFY_RANGE_TOOL.name]: { asks: ['assign_work'] },
+  [VERIFY_RANGE_TOOL.name]: { ungated: 'checks a range and writes nothing; its refusal by role was cut in martha#601, so it asks no act' },
   [LAND_BATCH_TOOL.name]: { ungated: 'pushes an integration branch, never a default branch; moving the default branch is the fast-forward, which asks approve_landing' },
   [FAST_FORWARD_TOOL.name]: { asks: [APPROVE_LANDING] },
   [WORKTREE_OPEN_TOOL.name]: { ungated: "opens a worktree under the declaration's worktree place, for the caller's own work" },

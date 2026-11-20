@@ -3,8 +3,8 @@
 // This exists so the next package can land what a reviewer really passed: from a package's ledger it reads the latest
 // VERDICT, takes the head that verdict's range names, and asks GitHub for the one open pull request at that head. It
 // merges nothing, pushes nothing and registers no tool; it answers with the pull request and its head, or refuses by
-// name. No PASS row, a package of another repository, a head no open pull request stands at, and two open pull
-// requests at one head are the four the design names, and each is answered in its own words.
+// name. No PASS row, a package of another repository, and a row that names no head are refused in their own words. A
+// pull request that cannot be found is one notice, and the passed head is what lands either way (martha#601).
 //
 // GitHub's answers in these tests are recordings, kept beside this file: the shape is GitHub's own, trimmed to the
 // fields this slice reads (see recorded_pulls_at_a_head.json). The two answers a recording cannot hold — two open
@@ -13,6 +13,7 @@
 
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import process from 'node:process'
 import { test } from 'node:test'
 
 import { CLONES } from '../declare_crew/declare_crew.ts'
@@ -22,7 +23,7 @@ import { keepTheMilestone } from '../keep_the_ledger/keep_the_ledger.ts'
 import { noteMilestone } from '../log_ledger/log_ledger.ts'
 import { readACrewLine, keepTheLinesRow } from '../read_a_crew_line/read_a_crew_line.ts'
 import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import { findTheWorkAVerdictPassed } from './find_the_work_a_verdict_passed.ts'
+import { findTheWorkAVerdictPassed, NO_OPEN_PULL_REQUEST } from './find_the_work_a_verdict_passed.ts'
 
 /** One pull request as the recording kept it, to the fields this slice reads and GitHub's nesting of `head`. */
 interface RecordedPull {
@@ -94,6 +95,21 @@ async function aLedgerOf(
 const ghSaid = (answer: unknown): { readonly ok: ProcessOutcome } => ({
   ok: { exit_code: 0, stdout: JSON.stringify(answer), stderr: '' },
 })
+
+/** The answer, and everything written to the process's own error output while the lookup runs (martha#601). */
+async function theNoticeWhile(act: (note: (line: string) => void) => Promise<unknown>): Promise<{ readonly answer: unknown; readonly notice: string }> {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: await act((line) => void process.stderr.write(`${line}\n`)), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
+}
 
 test('#256: the one open pull request at the head the latest PASS row names is found, and its number is not the issue number', async () => {
   const recorded = recordedPull(OPEN)
@@ -174,16 +190,17 @@ test('#256: a package of another repository is refused, naming both', async () =
   assert.match(found.refused, /macula-io\/martha/, 'the answer did not name the repository it was asked for')
 })
 
-test('#256: a head no open pull request stands at is refused by name, and the recorded closed answer says so', async () => {
+test('#601: no open pull request at the passed head is one notice, and the head lands anyway', async () => {
   const landed = 'macula-io/martha#243'
   const { host } = await aLedgerOf(landed, [verdictLine(landed, 'PASS', CLOSED.sha)], ghSaid(CLOSED.answer))
-  const found = await findTheWorkAVerdictPassed(host, { package: landed, repo: REPO, cwd: CWD })
-  assert.ok('refused' in found, `a closed pull request was taken for one to land: ${JSON.stringify(found)}`)
-  assert.match(found.refused, /no open pull request/, 'the answer did not name what is missing')
-  assert.match(found.refused, new RegExp(CLOSED.sha), 'the answer did not name the head it asked about')
+  const { answer, notice } = await theNoticeWhile((note) => findTheWorkAVerdictPassed(host, { package: landed, repo: REPO, cwd: CWD }, note))
+  assert.deepEqual(answer, { pr: NO_OPEN_PULL_REQUEST, head: CLOSED.sha }, `a closed pull request was taken for one to land: ${JSON.stringify(answer)}`)
+  assert.match(notice, /no open pull request/, 'the notice did not name what is missing')
+  assert.match(notice, new RegExp(CLOSED.sha), 'the notice did not name the head it asked about')
+  assert.match(notice, /landed as it is/, 'the notice did not say the passed head lands anyway')
 })
 
-test('#256: two open pull requests at one head are refused, naming both', async () => {
+test('#601: two open pull requests at one head are one notice naming both, and the head lands anyway', async () => {
   // Written, not recorded: GitHub allows one open pull request per head and base, so the state is rare enough that no
   // recording of it was at hand. Its shape is GitHub's own, though, which is what this case pins.
   const written = [
@@ -191,20 +208,20 @@ test('#256: two open pull requests at one head are refused, naming both', async 
     { number: 902, state: 'open', merged_at: null, head: { sha: OPEN.sha } },
   ]
   const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], ghSaid(written))
-  const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
-  assert.ok('refused' in found, `two open pull requests were taken for one: ${JSON.stringify(found)}`)
-  assert.match(found.refused, /#901/, 'the answer did not name the first pull request')
-  assert.match(found.refused, /#902/, 'the answer did not name the second pull request')
+  const { answer, notice } = await theNoticeWhile((note) => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }, note))
+  assert.deepEqual(answer, { pr: NO_OPEN_PULL_REQUEST, head: OPEN.sha }, `two open pull requests were taken for one: ${JSON.stringify(answer)}`)
+  assert.match(notice, /#901/, 'the notice did not name the first pull request')
+  assert.match(notice, /#902/, 'the notice did not name the second pull request')
 })
 
-test('#256: an open pull request whose head moved is not this package\'s, so the exact head is what is matched', async () => {
+test('#601: an open pull request whose head moved is not this package\'s, so the exact head is what is matched', async () => {
   // Written, not recorded: GitHub answers for the head it was asked about and the pull request's own head may have
-  // moved past it since, which is the "the head moved after the PASS" case the design refuses.
+  // moved past it since, which is the "the head moved after the PASS" case.
   const moved = [{ number: 903, state: 'open', merged_at: null, head: { sha: 'f'.repeat(40) } }]
   const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], ghSaid(moved))
-  const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
-  assert.ok('refused' in found, `a pull request at another head was taken for this package's: ${JSON.stringify(found)}`)
-  assert.match(found.refused, /no open pull request/)
+  const { answer, notice } = await theNoticeWhile((note) => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }, note))
+  assert.deepEqual(answer, { pr: NO_OPEN_PULL_REQUEST, head: OPEN.sha }, `a pull request at another head was taken for this package's: ${JSON.stringify(answer)}`)
+  assert.match(notice, /no open pull request/)
 })
 
 test('#256: a PASS row written before the range was kept is refused by name, never a crash', async () => {
@@ -225,19 +242,19 @@ test('#256: a verdict on a design names no head, so it is refused by name too', 
   assert.match(found.refused, /no range/)
 })
 
-test('#256: a GitHub that cannot answer is refused in its own words', async () => {
+test('#601: a GitHub that cannot answer is one notice, and the passed head lands anyway', async () => {
   const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], {
     run: () => Promise.resolve({ exit_code: 1, stdout: '', stderr: 'gh: Not Found (HTTP 404)\n' }),
   })
-  const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
-  assert.ok('refused' in found)
-  assert.match(found.refused, /gh could not answer/, 'the answer did not say GitHub could not be read')
-  assert.match(found.refused, /404/, 'the answer did not keep what gh said')
+  const { answer, notice } = await theNoticeWhile((note) => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }, note))
+  assert.deepEqual(answer, { pr: NO_OPEN_PULL_REQUEST, head: OPEN.sha })
+  assert.match(notice, /gh could not answer/, 'the notice did not say GitHub could not be read')
+  assert.match(notice, /404/, 'the notice did not keep what gh said')
 })
 
-test('#256: an answer that is not a list of pull requests is refused, not read as none', async () => {
+test('#601: an answer that is not a list of pull requests is one notice, and the passed head lands anyway', async () => {
   const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], ghSaid({ message: 'Not Found' }))
-  const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
-  assert.ok('refused' in found, `an answer that is not a list was read as one: ${JSON.stringify(found)}`)
-  assert.match(found.refused, /not a list of pull requests/)
+  const { answer, notice } = await theNoticeWhile((note) => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }, note))
+  assert.deepEqual(answer, { pr: NO_OPEN_PULL_REQUEST, head: OPEN.sha })
+  assert.match(notice, /not a list of pull requests/)
 })

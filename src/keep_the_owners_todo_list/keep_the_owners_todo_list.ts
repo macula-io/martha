@@ -61,11 +61,20 @@ export const SWEEP_INTERVAL_MS = 45_000
  */
 export const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u
 
-/** The prefixes of the secrets a command may not hold: a row names a variable, never its value. */
-export const TOKEN_PREFIXES = ['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'github_pat_', 'glpat-', 'xoxb-', 'xoxp-', 'sk-ant-', 'AKIA', 'npm_', 'hf_'] as const
+/** A fine-grained GitHub token's prefix: one definition, which the live run's kept record builds its pattern from too. */
+export const FINE_GRAINED_TOKEN_PREFIX = 'github_pat_'
 
-/** How many characters of a token's body follow its prefix before a word is read as a secret. */
-const TOKEN_BODY = 16
+/**
+ * A GitHub token's prefixes: the classic personal, OAuth, user-to-server, server-to-server and refresh forms, and the
+ * fine-grained one. The private scan refuses the same in any text it reads (martha#904).
+ */
+export const GITHUB_TOKEN_PREFIXES = ['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', FINE_GRAINED_TOKEN_PREFIX] as const
+
+/** The prefixes of the secrets a command may not hold: a row names a variable, never its value. */
+export const TOKEN_PREFIXES = [...GITHUB_TOKEN_PREFIXES, 'glpat-', 'xoxb-', 'xoxp-', 'sk-ant-', 'AKIA', 'npm_', 'hf_'] as const
+
+/** How many characters of a token's body follow its prefix before a word is read as a secret; the private scan's too. */
+export const TOKEN_BODY = 16
 
 /** The longest command a row holds, in characters. */
 export const MAX_COMMAND = 500

@@ -319,14 +319,22 @@ test('a link in place of the file is refused, read or appended to, and the file 
   assert.equal(readFileSync(target, 'utf8'), `${JSON.stringify(ownWrite())}${NEWLINE}`)
 })
 
-test('a file others may read is refused, read or appended to', (t) => {
+test('a file others may read is said in one line, then read and appended to anyway', (t) => {
   const { state } = stateFor(t)
-  kept(state, ownWrite())
-  chmodSync(filePath(state, 'launch-1'), 0o644)
-  assert.deepEqual(ofLaunch(state, 'launch-1'), {
-    refusal: `${filePath(state, 'launch-1')} is not a file only this user may read and write, so Martha does not trust it.`,
-  })
-  assert.deepEqual(appendOwnWrite(state, ownWrite()), {
-    refusal: `${filePath(state, 'launch-1')} is not a file only this user may read and write, so Martha does not trust it.`,
-  })
+  const first = ownWrite()
+  kept(state, first)
+  const file = filePath(state, 'launch-1')
+  chmodSync(file, 0o644)
+  const said: string[] = []
+  const store = ownWritesKeptForLaunch(state, 'launch-1', (line) => said.push(line))
+  assert.deepEqual(store.all(), { writes: [first] }, 'the file is read')
+  assert.deepEqual(said, [`${file} is not a file only this user may read and write, so Martha does not trust it; reading it anyway.`])
+
+  const next = ownWrite({ path: '/project/next.txt', tool_use_id: 'toolu_2' })
+  said.length = 0
+  assert.equal(store.append(next), undefined, 'the write is kept')
+  // An own write is written whole, so its file is read before it is rewritten: the same line is said, then it goes on.
+  assert.deepEqual(said, [`${file} is not a file only this user may read and write, so Martha does not trust it; reading it anyway.`])
+  assert.equal(readFileSync(file, 'utf8'), `${JSON.stringify(first)}${NEWLINE}${JSON.stringify(next)}${NEWLINE}`)
+  assert.equal(lstatSync(file).mode & PERMISSIONS, STATE_FILE_MODE, 'the file is kept closed again')
 })

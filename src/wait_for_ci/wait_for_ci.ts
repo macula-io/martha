@@ -29,7 +29,7 @@ import {
   type TheBudget,
   type TheGithubSpender,
 } from '../spend_the_github_budget/spend_the_github_budget.ts'
-import { clockOf } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 import type { CrewPlace } from '../host_contract/host_contract.ts'
 
 /** The tool a member calls to read the CI on a sha. */
@@ -114,9 +114,10 @@ const overItsReads = (sha: string): string =>
 
 /**
  * What a wait answers, in the words a member reads. A green names how many runs it saw and whether the crew already
- * knew it; a red names the runs that did not pass; a wait still running names the moment its next read may be spent.
+ * knew it; a red names the runs that did not pass; a wait still running names the moment its next read may be spent, in
+ * the crew's clock_zone (martha#931 C).
  */
-export function theAnswerOf(outcome: CiOutcome, sha: string): string {
+export function theAnswerOf(outcome: CiOutcome, sha: string, zone: string): string {
   if (outcome.kind === 'green') {
     const known = outcome.reused ? ' (already kept for this crew, so no call was made)' : ''
     return `green: ${String(outcome.run_ids.length)} run(s) on ${sha.slice(0, 7)} all succeeded${known}.`
@@ -125,7 +126,7 @@ export function theAnswerOf(outcome: CiOutcome, sha: string): string {
   if (outcome.kind === 'still_running') {
     const ends = outcome.ended.map(theRunEnd).join('; ')
     const waiting = ends === '' ? 'no run answers to it yet' : ends
-    return `still running: ${waiting}. Another read may be spent at ${clockOf(outcome.read_again_at)}.`
+    return `still running: ${waiting}. Another read may be spent at ${theClockOf(outcome.read_again_at, zone)}.`
   }
   return outcome.refusal
 }

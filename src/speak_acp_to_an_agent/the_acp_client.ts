@@ -41,6 +41,9 @@ export const ACP = {
 /** The session updates a turn reads; every other kind is left for a later reader. */
 export const UPDATE = { toolCall: 'tool_call', toolCallUpdate: 'tool_call_update', messageChunk: 'agent_message_chunk' } as const
 
+/** A tool call's statuses, in the protocol's own words (ACP `ToolCallStatus`). */
+export const TOOL_CALL_STATUS = { pending: 'pending', inProgress: 'in_progress', completed: 'completed', failed: 'failed' } as const
+
 /** The field of any ACP object that carries an agent's own extensions. */
 export const ACP_META = '_meta'
 
@@ -103,6 +106,13 @@ export interface ASession {
  */
 export type Decide = (request: APermissionRequest, withdrawn: AbortSignal) => ADecision | Promise<ADecision>
 
+/**
+ * A listener for every `session/update` the agent sends, inside a turn or not (#541 package A, design R4): called with
+ * the session id and the update as sent, before the turn's own record reads it. A listener that throws is noted, and
+ * the client goes on.
+ */
+export type HearAnUpdate = (sessionId: string, update: unknown) => void
+
 interface Pending {
   readonly method: string
   readonly settle: (value: unknown) => void
@@ -137,7 +147,7 @@ const objectOf = (value: unknown): Json => (isObject(value) ? value : {})
 export const startsACommand = (text: string): boolean => THE_COMMAND_STARTS.includes(text.trimStart().charAt(0))
 
 /** The fields of a tool-call update the agent sent, with only the ones it named. */
-function toolCallFields(update: Json): Partial<AToolCall> {
+export function toolCallFields(update: Json): Partial<AToolCall> {
   const fields: Record<string, unknown> = {}
   for (const key of ['title', 'kind', 'status'] as const) if (typeof update[key] === 'string') fields[key] = update[key]
   for (const key of ['rawInput', 'rawOutput', 'content'] as const) if (key in update) fields[key] = update[key]
@@ -164,15 +174,17 @@ export class AcpClient {
   readonly notes: string[] = []
   readonly #to: Writable
   readonly #decide: Decide
+  readonly #hearAnUpdate: HearAnUpdate | undefined
   readonly #pending = new Map<number, Pending>()
   readonly #turns = new Map<string, ATurnBeingHeard>()
   #nextId = 1
   #buffered = ''
   #ended: string | undefined
 
-  constructor(from: Readable, to: Writable, decide: Decide) {
+  constructor(from: Readable, to: Writable, decide: Decide, hearAnUpdate?: HearAnUpdate) {
     this.#to = to
     this.#decide = decide
+    this.#hearAnUpdate = hearAnUpdate
     from.setEncoding('utf8')
     from.on('data', (chunk: string) => this.#read(chunk))
     from.on('end', () => this.#end('the agent\'s output ended'))
@@ -181,9 +193,9 @@ export class AcpClient {
   }
 
   /** A client over a child's stdio, which the launcher started with both piped. */
-  static overAChild(child: ChildProcess, decide: Decide): AcpClient {
+  static overAChild(child: ChildProcess, decide: Decide, hearAnUpdate?: HearAnUpdate): AcpClient {
     if (child.stdout === null || child.stdin === null) throw new Error('the agent was started without piped stdio')
-    return new AcpClient(child.stdout, child.stdin, decide)
+    return new AcpClient(child.stdout, child.stdin, decide, hearAnUpdate)
   }
 
   /** Opens the connection: this client's version, and no file or terminal capability, so the agent asks for none. */
@@ -280,7 +292,22 @@ export class AcpClient {
     if (!isObject(message)) this.notes.push(`not a JSON-RPC message: ${line.slice(0, 200)}`)
     else if (typeof message['method'] !== 'string') this.#settle(message)
     else if ('id' in message) void this.#answerTheAgent(message['id'], message['method'], objectOf(message['params']))
-    else if (message['method'] === ACP.update) this.#hear(objectOf(message['params']))
+    else if (message['method'] === ACP.update) {
+      const params = objectOf(message['params'])
+      // Every update reaches the listener first, a turn open or not: #hear's record is the turn's own and returns early
+      // outside one (design R4).
+      this.#tell(textOf(params['sessionId']), params['update'])
+      this.#hear(params)
+    }
+  }
+
+  #tell(sessionId: string, update: unknown): void {
+    if (this.#hearAnUpdate === undefined) return
+    try {
+      this.#hearAnUpdate(sessionId, update)
+    } catch (error) {
+      this.notes.push(`the listener for updates failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   #settle(message: Json): void {

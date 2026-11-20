@@ -14,7 +14,6 @@
 // rendered half read.
 
 import { isContractKeptRow, readLedger, noteTheContract, WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
-import { theAsksSaidYesToWithTheirWords } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import {
   theContractIn,
   theContractOfABlock,
@@ -31,7 +30,7 @@ export interface AContractVersion {
   readonly version: number
   readonly digest: string
   readonly contract: APackageContract
-  /** The member that kept it: the Supervisor, since only a role the table lets assign work may. */
+  /** The member that kept it. */
   readonly member: string
   readonly at: number
 }
@@ -55,7 +54,7 @@ export async function theNewestContractOf(host: LedgerHost, package_name: string
 
 /**
  * The newest version a package holds, or why the ledger could not say: a read that throws is an answer here, not a
- * crash, because the gate refuses a package on an unreadable ledger rather than guess one is kept.
+ * crash, so a call on an unreadable ledger runs with no notice rather than stopping the member (martha#601, row 111).
  */
 export async function theNewestContractOrWhy(
   host: LedgerHost,
@@ -81,48 +80,10 @@ export type TheContractKept = { readonly answer: string } | { readonly refused: 
 /** Whether this version is the one the package already holds, so a re-read of the same brief keeps no second row. */
 const alreadyHeld = (newest: AContractVersion | undefined, digest: string): boolean => newest?.digest === digest
 
-/** A character that carries a package's name on, so a package numbered 7 is not named by one numbered 70. */
-const isANameCharacter = (character: string): boolean => character !== '' && /[a-z0-9_/#-]/.test(character)
-
-/**
- * Whether an ask's own question names this package, whole: the package's name appears in it, and neither end of that
- * appearance runs on into another name. A yes is about the package it named, and the package numbered 7 is not the one
- * numbered 70 — nor does a question saying the word "unbounded" about anything at all say this package needs none.
- */
-const asksAboutThePackage = (package_name: string, question: string): boolean => {
-  const said = question.toLowerCase()
-  const name = package_name.toLowerCase()
-  for (let at = said.indexOf(name); at !== -1; at = said.indexOf(name, at + 1)) {
-    const before = at === 0 ? '' : said.charAt(at - 1)
-    if (!isANameCharacter(before) && !isANameCharacter(said.charAt(at + name.length))) return true
-  }
-  return false
-}
-
-/**
- * Why an unbounded contract may not be kept, or undefined when the owner's yes is there: only the owner says it, and
- * what they answered yes to is an ask about this package, because a yes to something else says nothing about this one.
- */
-async function whyNotUnbounded(host: LedgerHost, package_name: string, contract: APackageContract): Promise<string | undefined> {
-  if (contract.kind !== 'unbounded') return undefined
-  const said_yes = await theAsksSaidYesToWithTheirWords(host)
-  const answered = said_yes.find((ask) => ask.id === contract.owner_yes)
-  if (answered === undefined) {
-    return `the owner has not said yes to ask ${String(contract.owner_yes)}, and only the owner may mark a package unbounded (martha#513).`
-  }
-  if (!asksAboutThePackage(package_name, answered.question)) {
-    return (
-      `the owner said yes to ask ${String(contract.owner_yes)}, which asked ${JSON.stringify(answered.question)}: their word ` +
-      `about ${package_name} is what marks it unbounded, and that ask did not ask about it (martha#513).`
-    )
-  }
-  return undefined
-}
-
 /**
  * Keeps the contract the brief carries as the package's next version — or says why not: a package name that is not one,
- * a brief whose block this slice cannot read, an unbounded contract whose ask the owner never answered yes to, or the
- * version the package already holds, which keeps nothing.
+ * a brief whose block this slice cannot read, or the version the package already holds, which keeps nothing. Who may
+ * keep one, and whether an unbounded one carries the owner's yes, is not checked (martha#601, rows 114 and 115).
  */
 export async function keepThePackageContract(host: LedgerHost, keeping: TheKeeping): Promise<TheContractKept> {
   if (!WORK_PACKAGE.test(keeping.package)) {
@@ -130,8 +91,6 @@ export async function keepThePackageContract(host: LedgerHost, keeping: TheKeepi
   }
   const read = theContractIn(keeping.brief)
   if ('refused' in read) return read
-  const why_not = await whyNotUnbounded(host, keeping.package, read.ok.contract)
-  if (why_not !== undefined) return { refused: why_not }
   const newest = await theNewestContractOf(host, keeping.package)
   if (alreadyHeld(newest, read.ok.digest)) {
     return { answer: `${keeping.package} already holds this contract as version ${String(newest?.version ?? 0)}; nothing was kept.` }
@@ -176,16 +135,15 @@ function theBoundContractSaid(version: AContractVersion): string {
 }
 
 /**
- * The part of a session's first line that carries the package's contract, or says the package has none: a package may
- * not be worked without one, so a contract the owner called unbounded says so with the reason they gave, and a package
- * with no version at all says that none of its work runs (martha#597).
+ * The part of a session's first line that carries the package's contract, or says the package has none: an unbounded
+ * contract says so with the reason it gave, and a package with no version says that nothing is noticed against it
+ * (martha#601, row 109).
  */
 export function theContractPart(package_name: string, version: AContractVersion | undefined): string {
   if (version === undefined) {
     return (
-      `${package_name} has no package contract recorded, so none of its work runs: its calls are refused except the ones ` +
-      `that end it — its handover, say to the crew, report and park still run. Its Supervisor keeps the contract with ` +
-      `the ${KEEP_THE_PACKAGE_CONTRACT} tool, and a package the owner says needs none is kept as unbounded with their reason.`
+      `${package_name} has no package contract recorded, so no act of its work is noticed against one. Its Supervisor ` +
+      `may keep one with the ${KEEP_THE_PACKAGE_CONTRACT} tool.`
     )
   }
   if (version.contract.kind === 'unbounded') {

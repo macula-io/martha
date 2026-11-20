@@ -20,7 +20,7 @@
 import { sameMemberName, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, Refused } from '../host_contract/host_contract.ts'
 import type { Nudge } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
-import { IDLE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { IDLE, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theSplitOf } from '../find_the_unheld_work/find_the_unheld_work.ts'
 import { theBacklogNow, type TheBacklogReader } from '../find_the_unheld_work/keep_the_backlog_read.ts'
 
@@ -40,6 +40,8 @@ export interface IdleInput {
   /** How many issues the kept backlog read holds that nobody in the crew holds. */
   readonly unheld: number
   readonly now: number
+  /** How quiet a row must be to read offline (martha#931 A): an offline member is never idle beside the work. */
+  readonly offline_ms: number
 }
 
 const same = sameMemberName
@@ -47,7 +49,7 @@ const same = sameMemberName
 /** Whether a row is a member idle beside the work: idle, live, not parked, not a receiver. */
 const idleBeside = (row: DashboardRow, input: IdleInput): boolean =>
   row.state === IDLE &&
-  input.now - row.at <= OFFLINE_AFTER_MS &&
+  input.now - row.at <= input.offline_ms &&
   !input.parked.some((name) => same(name, row.member)) &&
   !input.receivers.some((name) => same(name, row.member))
 
@@ -99,6 +101,8 @@ export interface UnheldNudgesAsked {
   readonly rows: readonly DashboardRow[]
   readonly parked: readonly string[]
   readonly receivers: readonly string[]
+  /** How quiet a row must be to read offline, as the crew's nudge windows hold it. */
+  readonly offline_ms: number
 }
 
 /**
@@ -112,7 +116,7 @@ export async function theUnheldNudgesFor(asked: UnheldNudgesAsked): Promise<read
   const kept = theIdleClockIn(asked.reader.place)
   if ((read !== undefined && 'refusal' in read) || 'refusal' in kept) return []
   const unheld = read === undefined ? 0 : theSplitOf(read.issues, asked.members).unheld.length
-  const input = { rows: asked.rows, parked: asked.parked, receivers: asked.receivers, unheld, now: asked.reader.now }
+  const input = { rows: asked.rows, parked: asked.parked, receivers: asked.receivers, unheld, now: asked.reader.now, offline_ms: asked.offline_ms }
   const clock = theIdleClockAfter(kept, input)
   if (keepTheIdleClock(asked.reader.place, clock) !== undefined) return []
   return unheldNudges(clock, asked.backlog.idle_minutes, unheld, asked.reader.now)

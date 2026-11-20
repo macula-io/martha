@@ -28,11 +28,14 @@ import { CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_mem
 import { A_TOOL_WAS_STILL_RUNNING, CARRY_THE_END, THE_TURN_ENDED } from './end_the_running_turn.ts'
 import { A_TOOL_WHILE_THE_END_IS_HELD } from './hold_the_end.ts'
 import { THE_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
-import { HANDOVER_LIMIT_PERCENT, refreshesPlace, theFlowOf, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
+import { refreshesPlace, theFlowOf, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
 import { FORCED_ENDS } from './end_a_running_turn.ts'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const HANDOVER_LIMIT_PERCENT = THRESHOLDS_WHEN_UNNAMED.handover_percent
 
 const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 const MEMBER = 'builder'

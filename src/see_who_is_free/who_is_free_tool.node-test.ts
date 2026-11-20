@@ -14,6 +14,9 @@ import { ACTS, OWNER } from '../declare_crew/declare_crew.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { whoIsFreeOver } from './who_is_free_tool.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
+import { IDLE, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 const NOT_PARKED: ThePark = { kind: 'not_parked', last_marker: null }
 const LEAD = 'Lead'
@@ -59,4 +62,17 @@ test('a table granting assign_work to the owner and a role no member holds still
   } as unknown as Parameters<typeof whoIsFreeOver>[0]['settings']
   const said = askedBy(unfilled, BUILDER)
   assert.ok('refused' in said, 'a builder asked because the role the table names besides the owner is held by nobody')
+})
+
+test('#931 A: the tool hands the declaration\'s thresholds to the rule: a member past the declared share is not free', () => {
+  const declared = { ...THRESHOLDS_WHEN_UNNAMED, handover_percent: THRESHOLDS_WHEN_UNNAMED.handover_percent - 15 }
+  const share = THRESHOLDS_WHEN_UNNAMED.handover_percent - 10
+  const beat: DashboardRow = {
+    member: BUILDER, session: 's', at: 1, state: IDLE, holds: '', task: '', progress: { step: 0, of: 1 }, waits: null, needs: '',
+    host: { model: 'opus', provider: 'anthropic', contextPercent: share, costUsd: 1 },
+  }
+  const settings = { ...aTeamGrantingTheOwnerAndTheSupervisor, thresholds: declared }
+  const said = whoIsFreeOver({ settings, asker: LEAD, rows: seeTheCrew(settings, { [BUILDER]: beat }, 1).rows, parkOf: () => NOT_PARKED, now: 1, member: BUILDER })
+  assert.ok('answer' in said, 'the Supervisor was refused')
+  assert.match(said.answer, new RegExp(`at or past the ${String(declared.handover_percent)}% handover limit`), `the tool did not read the declared share: ${said.answer}`)
 })

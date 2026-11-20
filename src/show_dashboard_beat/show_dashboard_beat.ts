@@ -14,7 +14,7 @@
 // (../a_crews_tools), not in the store: a beat taken earlier and landing later is dropped whole there, before it is
 // offered. A dialog the host opens is not a beat, so the rule never refuses one.
 //
-// The row is never removed. A member that stops beating reads `offline` once OFFLINE_AFTER_MS has passed, which is
+// The row is never removed. A member that stops beating reads `offline` once the crew's offline time (its declared thresholds, martha#931 A) has passed, which is
 // the reader's word about a row that has gone quiet, not a state anyone writes.
 
 /** The states a row can be in, as the owner reads them. */
@@ -33,8 +33,6 @@ export type ShownState = State | typeof OFFLINE
 /** How often a member's launcher offers its beat, so a pane can tell a working member from a session that has died. */
 export const BEAT_INTERVAL_MS = 5_000
 
-/** How quiet a row must be to read `offline`: six beats missed, so a slow turn is never mistaken for a dead session. */
-export const OFFLINE_AFTER_MS = BEAT_INTERVAL_MS * 6
 
 /** A wait a member names: who holds it up, what for, and since when. */
 export interface Waits {

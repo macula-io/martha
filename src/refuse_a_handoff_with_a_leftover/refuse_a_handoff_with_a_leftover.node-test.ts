@@ -1,11 +1,11 @@
-// The hand-off refused while a killed run's leftover stands (martha#719).
+// The hand-off's notice while a killed run's leftover stands (martha#719, martha#601).
 //
 // Every case builds the crew the way a launch does — the guard's own places from theGitGuardPlacesOf, spread into
 // crewToolsOver — and asks the crew through whatTheCrewRefusesOfACall, the seam a tool call really takes. A slice
 // tested only through its own function would stay green with the wiring line gone, which is #710's hole.
 //
 // The record is made over the member's own worktree, never over the crew's checkout (martha#719 N1): a record that
-// names one tree names a worktree, and the refusal reads the bytes there. A record that names no tree — one kept
+// names one tree names a worktree, and the notice reads the bytes there. A record that names no tree — one kept
 // before every record did — is not judged, and is not read at the checkout instead.
 //
 // The repositories and folders are the test's own, removed when it ends, whatever it found.
@@ -14,6 +14,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { whatTheCrewRefusesOfACall } from '../answer_a_tool_call/answer_a_tool_call.ts'
@@ -99,7 +100,22 @@ function crewOf(crew: CrewStore, home: string): CrewTools {
 const refusedFor = (crew: CrewTools, text: string, tool: string = SAY_TO_THE_CREW): Promise<string | undefined> =>
   whatTheCrewRefusesOfACall(crew, { tool, input: { to: ['Supervisor'], text } }, 'a-session')
 
-test("a hand-off is refused while the leftover's bytes stand in the member's one worktree, and sent once they change", async (t) => {
+/** The answer, and everything written to the process's own error output while the call is judged (martha#601). */
+async function theNoticeWhile(act: () => Promise<string | undefined>): Promise<{ readonly answer: string | undefined; readonly notice: string }> {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: await act(), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
+}
+
+test("#601: a hand-off goes ahead while the leftover's bytes stand, and one line names the file and its tree", async (t) => {
   const home = aFolder(t)
   const tree = join(home, WORKTREES, 'a-tree')
   written(join(tree, A_PATH), KEPT)
@@ -107,14 +123,16 @@ test("a hand-off is refused while the leftover's bytes stand in the member's one
   keepTheLeftoverRecordOf(crew, aRecordOver(tree))
   const tools = crewOf(crew, home)
 
-  // The whole sentence, opening and closing both: the hand-off's own words, never the commit's (martha#719 N3). What
-  // the record chose — the tree, the path, the command — stands in it as data, quoted, as the telling quotes it.
-  assert.equal(
-    await refusedFor(tools, A_HAND_OFF),
-    `this hand-off comes while what a killed run left stands: ${JSON.stringify(`${tree}: ${A_PATH}`)} (the bytes are the ones kept when the launch ended). ` +
-      `It was running when the launch ended: ${JSON.stringify(THE_COMMAND)}. ` +
-      `Restore what is not yours, or take ${THE_RELEASE_ACT} for the paths that are, and then hand off.`,
+  // The whole line, opening and closing both: the hand-off's own words, never the commit's (martha#719 N3). What the
+  // record chose — the tree, the path, the command — stands in it as data, quoted, as the telling quotes it.
+  const { answer, notice } = await theNoticeWhile(() => refusedFor(tools, A_HAND_OFF))
+  assert.equal(answer, undefined, 'the hand-off was still refused')
+  assert.match(
+    notice,
+    new RegExp(`^notice: this hand-off comes while what a killed run left stands: ${JSON.stringify(`${tree}: ${A_PATH}`).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
   )
+  assert.match(notice, /node run_the_mutants\.mjs src\//, 'the notice did not name the command that left it')
+  assert.ok(notice.includes(THE_RELEASE_ACT), 'the notice did not name the release act')
 
   written(join(tree, A_PATH), CHANGED)
   assert.equal(await refusedFor(tools, A_HAND_OFF), undefined)

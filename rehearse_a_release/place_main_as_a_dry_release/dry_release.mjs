@@ -118,7 +118,8 @@ export async function placeADryRelease ({ steps, layer, version, sha, home, xdgD
   const places = steps.placesOnThisMachine(home, xdgDataHome)
   // The machine's floor is read before anything is placed, where installRelease reads it (martha#659).
   const held = await steps.machineFloor(places)
-  let declared = ''
+  /** @type {string | undefined} */
+  let declared
   const release = await steps.placeRelease({
     releases: places.releases,
     name: steps.releaseName(version, digestOf(layer)),
@@ -131,7 +132,7 @@ export async function placeADryRelease ({ steps, layer, version, sha, home, xdgD
   const command = await steps.linkCommand({ release, places })
   const lines = [
     `${DRY} placed ${version} from main's layer: ${places.current} -> ${release}`,
-    `${DRY} version floor ${floor}`,
+    `${DRY} version floor ${floor ?? 'none'}`,
     `${DRY} ${command}`,
     dryResultLine(sha, proven)
   ]

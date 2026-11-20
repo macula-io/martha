@@ -25,8 +25,6 @@ export const NO_ACT: TheAct = { act: 'none' }
 /** Where a crew keeps its flows, under the one crew store. */
 export const REFRESHES_PLACE = 'refresh'
 
-/** The percent of its limit past which a member hands over, whatever any switch says. */
-export const HANDOVER_LIMIT_PERCENT = 70
 
 /**
  * The margin above the share a session began at, and above the share a decline was taken at: a member is not asked
@@ -205,6 +203,11 @@ export function aFlowStarting(starting: {
 export interface TheSessionsReading {
   /** The member's context as a share of its limit, as the host reports it. */
   readonly percent: number
+  /**
+   * The percent of its limit past which a member hands over, whatever any switch says: the crew's declared
+   * thresholds.handover_percent (martha#931 A), which only the owner's declaration sets.
+   */
+  readonly limit_percent: number
   /** The share this session began at: the reference every threshold here is measured from. */
   readonly started_at_percent: number
   /** The report this turn finished, named as the row names it: '' when it finished none. */
@@ -267,7 +270,7 @@ function heldByItsLastAsk(reading: TheSessionsReading): Due | undefined {
 /** One finished task is asked once, held back only below the limit — or on a decline taken at the limit. */
 function heldOnTheTaskItAskedOn(reading: TheSessionsReading, flow: ARefresh): Due | undefined {
   if (reading.finished_report === '' || flow.asked_on !== reading.finished_report) return undefined
-  const theLimitAnswersOverIt = reading.percent >= HANDOVER_LIMIT_PERCENT && !aDeclineTakenAtTheLimit(flow)
+  const theLimitAnswersOverIt = reading.percent >= reading.limit_percent && !aDeclineTakenAtTheLimit(flow, reading.limit_percent)
   if (theLimitAnswersOverIt) return undefined
   return { due: false, why: flow.phase === 'declined' ? 'it declined on this task' : 'this task was already asked about' }
 }
@@ -275,14 +278,14 @@ function heldOnTheTaskItAskedOn(reading: TheSessionsReading, flow: ARefresh): Du
 /** A decline is held until another task finishes past the share it was taken at, by the margin every threshold uses. */
 function heldOnTheShareItDeclinedAt(reading: TheSessionsReading, flow: ARefresh): Due | undefined {
   if (flow.phase !== 'declined' || flow.trigger !== 'after_a_task') return undefined
-  if (reading.percent >= HANDOVER_LIMIT_PERCENT) return undefined
+  if (reading.percent >= reading.limit_percent) return undefined
   if (reading.percent >= flow.percent + REFRESH_MARGIN_PERCENT) return undefined
   return { due: false, why: 'it has not grown past the share it declined at' }
 }
 
 /** Whether the flow was declined at a share at or past the limit: the one hold the limit does not answer over. */
-function aDeclineTakenAtTheLimit(flow: ARefresh): boolean {
-  return flow.phase === 'declined' && flow.percent >= HANDOVER_LIMIT_PERCENT
+function aDeclineTakenAtTheLimit(flow: ARefresh, limit_percent: number): boolean {
+  return flow.phase === 'declined' && flow.percent >= limit_percent
 }
 
 /** The one comparison both thresholds are measured by: a session that began at 75% is not refreshed into the same 75%. */
@@ -295,7 +298,7 @@ function heldByWhereItBegan(reading: TheSessionsReading): Due | undefined {
 
 /** The limit first, because it is not a setting; then a finished task, when the crew switched that trigger on. */
 function atTheLimitOrAfterATask(reading: TheSessionsReading): Due {
-  if (reading.percent >= HANDOVER_LIMIT_PERCENT) return { due: true, trigger: 'at_the_limit' }
+  if (reading.percent >= reading.limit_percent) return { due: true, trigger: 'at_the_limit' }
   if (reading.parked) return { due: false, why: 'it is parked' }
   if (!reading.refresh_between_tasks) return { due: false, why: 'the crew did not switch the after-a-task trigger on' }
   if (reading.finished_report === '') return { due: false, why: 'it finished no task' }

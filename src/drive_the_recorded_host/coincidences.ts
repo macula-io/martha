@@ -48,6 +48,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: CONFIG, file: 'drive_the_recorded_host/run_nothing_a_checkout_planted.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   // The same git subcommand, in the muted bell's throwaway repository (martha#371).
   { value: CONFIG, file: 'drive_the_recorded_host/a_muted_bell_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'drive_the_recorded_host/the_crew_command_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: STATE_ROOT_NAME, file: 'drive_the_recorded_host/drive_the_recorded_host.ts', reason: THE_REPOSITORYS_OWN_NAME },
   // Bounds the recorded-host cases put on their own waits, and ages they make up for a journal entry (martha#441):
   // each is the same figure as a duration the tree names, and none of them is that duration.
@@ -69,4 +70,6 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_switch_does_not_move_the_owners_default.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_switch_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/own_writes_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/the_crew_command_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  // The owner's /crew (martha#927) is typed as the command's own name, which the channel also spells for every member.
 ]

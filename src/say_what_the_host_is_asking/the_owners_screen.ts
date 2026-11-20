@@ -12,6 +12,7 @@
 import { theRowWithNothingSaid, type DashboardRow, type DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { isInsideTmux, NO_BELLS, theBellsFor, theBellsTheOwnerDeclared, type TheBellsSwitch } from '../ring_the_owner/ring_the_owner.ts'
 import { takeAnOwnerDialog, type OwnerDialogEvent } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 import { NOTHING_IS_ASKED, theAsksAfter, type WhatTheHostIsAsking, type WhatTheHostSaid } from './say_what_the_host_is_asking.ts'
 
 /** Where a member's row is kept, and where the bell's bytes go: the two things this slice is given, never reads. */
@@ -33,6 +34,11 @@ export interface AnOwnersScreen {
   readonly insideTmux?: boolean
   /** Writes the bell's bytes where the owner is looking. */
   write(bytes: string): void
+  /**
+   * The host's notifications the owner is told of: the crew's declared owner_notices.show (martha#931 C). Left out, the
+   * declaration's default; a launch always passes its crew's (TheScreenOfALaunch).
+   */
+  readonly shown_notices?: readonly string[]
 }
 
 /** What a member's launcher does with what the host said: it keeps the asks, writes the row, and rings the bell. */
@@ -62,6 +68,8 @@ export interface TheScreenOfALaunch {
   readonly environment: Readonly<Record<string, string | undefined>>
   /** Writes the bell's bytes where the owner is looking. */
   write(bytes: string): void
+  /** The host's notifications the owner is told of, as the crew declares them (martha#931 C). */
+  readonly shown_notices: readonly string[]
 }
 
 /**
@@ -78,6 +86,7 @@ export function theOwnersScreenOfALaunch(seen: TheScreenOfALaunch): TheScreenKee
     onTheOwnersTerminal: seen.on_the_owners_terminal,
     insideTmux: isInsideTmux(seen.environment),
     write: seen.write,
+    shown_notices: seen.shown_notices,
   })
 }
 
@@ -88,10 +97,11 @@ export function theOwnersScreenOfALaunch(seen: TheScreenOfALaunch): TheScreenKee
  */
 export function theOwnersScreen(place: AnOwnersScreen): TheScreenKeeper {
   let asks: WhatTheHostIsAsking = NOTHING_IS_ASKED
+  const shown = place.shown_notices ?? OWNER_NOTICES_WHEN_UNNAMED.show
   return {
     held: () => asks,
     heard: (session_id, said, at) => {
-      const left = theAsksAfter(asks, said, at)
+      const left = theAsksAfter(asks, said, at, shown)
       asks = left.state
       for (const event of left.events) applyTheEvent(place, session_id, event)
     },

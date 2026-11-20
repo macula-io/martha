@@ -10,6 +10,7 @@
 // is refused without this public tree having to name it.
 
 import { digestStartsFinder } from './public_digest.ts'
+import { GITHUB_TOKEN_PREFIXES, TOKEN_BODY } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { HEX_DIGIT, ID_HEX_DIGITS, PUBLIC_TEXT_PATTERNS } from './public_text.ts'
 
 export interface Rules {
@@ -47,6 +48,11 @@ export type Visibility = 'public' | 'not_public'
 // Throws when it cannot tell: the check then cannot be made, and never passes.
 export type Resolve = (owner: string, repo: string) => Promise<Visibility>
 
+// A GitHub token: one of its prefixes and a body at least TOKEN_BODY long, so a word that only starts the same way (a
+// variable named `ghs_`) is not one. The prefixes and the length are the owner's to-do list's, which refuses the same
+// in a command; like the hex class, it has no word boundary (martha#904).
+const GITHUB_TOKEN = `(${GITHUB_TOKEN_PREFIXES.join('|')})[A-Za-z0-9_]{${TOKEN_BODY},}`
+
 // The scan's own synthetic forms, one per class. Each is a whole-value match.
 export const SYNTHETIC = {
   lab_fqdn: String.raw`^[a-z0-9-]+-synthetic\.lab$`,
@@ -55,6 +61,7 @@ export const SYNTHETIC = {
   email: String.raw`^[A-Za-z0-9._%+-]+@synthetic\.invalid$`,
   hex_id: `^(${HEX_DIGIT})\\1{${ID_HEX_DIGITS - 1}}$`,
   repo_owner: String.raw`^synthetic-[a-z0-9-]+$`,
+  github_token: `^(${GITHUB_TOKEN_PREFIXES.join('|')})synthetic[A-Za-z0-9_]*$`,
 }
 
 // Paths on github.com that are not an owner: a link there is not a repository.
@@ -126,6 +133,12 @@ const textClasses = (rules: Rules): readonly TextClass[] => {
       // id is a node id or a key until shown otherwise.
       accepts: (value, at, text) =>
         synthetic(SYNTHETIC.hex_id)(value) || (oneId.test(value) && digestStarts(text).has(at)),
+    },
+    {
+      // A GitHub token in a post is a key to whatever it reaches, for as long as it lives (martha#904).
+      what: 'a GitHub token',
+      matches: (text) => each(GITHUB_TOKEN, text),
+      accepts: synthetic(SYNTHETIC.github_token),
     },
   ]
 }

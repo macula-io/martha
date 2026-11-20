@@ -173,6 +173,11 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    */
   readonly processes?: HostContract['processes']
   /**
+   * The sink a line about an act the tools carried on past is said through (martha#601): the launcher's writer to the
+   * process's own error output. Absent, nothing is said.
+   */
+  readonly note?: ((line: string) => void) | undefined
+  /**
    * Where a restart is asked of a member's launcher (martha#312): the crew's lifecycle requests, the launch records and
    * the ledger. A launch given none refuses `restart_a_member` by name.
    */
@@ -286,7 +291,7 @@ export interface CrewTools extends TheReviewRule {
   theSpendInForce(session_id: string): Promise<ASpendInForce | undefined>
   /**
    * One more call counted against that package's budget, before the call runs (martha#513, slice 3): undefined when it
-   * was kept, and the reason when it was not — a call nobody counted is a budget a member can walk around.
+   * was kept, and the reason when it was not, for the launch's journal: the call runs either way (martha#601, row 113).
    */
   noteTheCallCounted(session_id: string, own_name: string): Promise<string | undefined>
   /**
@@ -302,9 +307,9 @@ export interface CrewTools extends TheReviewRule {
   readonly ends: TheEndsHold
   /**
    * What the package this member holds says about this call (martha#513 slice 2): the package its own row holds, then
-   * that package's newest contract in the ledger — read only for a call that is an act at all, since a contract can
-   * refuse nothing else. Undefined when it holds none, the package has no contract, or the call is no act; a contract
-   * the ledger cannot read back comes back as that, so the act is refused and every other call still runs.
+   * that package's newest contract in the ledger — read only for a call that is an act at all, since a contract has
+   * nothing to say of any other. Undefined when it holds none, the package has no contract or one the ledger cannot read
+   * back, or the call is no act. A call outside it runs, with a notice to its member (martha#601, row 110).
    */
   theContractInForce(call: AReadableCall, names: ToolNames): Promise<TheContractHanded>
   /**
@@ -415,7 +420,7 @@ interface SessionState {
 
 /**
  * What the package this member holds says about this call, or none when the launch has no crew to ask (martha#513
- * slice 2): the relay hands it to the gate, which refuses nothing without one.
+ * slice 2): the relay reads it after the gate, for the notice of an act the contract leaves out (martha#601, row 110).
  */
 export async function theContractACrewHolds(
   crew: CrewTools | undefined,
@@ -500,16 +505,12 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
 }
 
 /**
- * What the package this member holds says about this call (martha#513 slice 2, martha#597), read from the two places
+ * What the package this member holds says about this call (martha#513 slice 2, martha#601), read from the two places
  * that already know it: the member's own dashboard row says which package it holds, and the package's ledger says which
  * contract it is on.
  *
- * A package with no version at all answers "none recorded", whatever the call is: none of its work runs until a
- * contract is kept (martha#597), so the act table is not consulted first for it — a call that is no act is refused too.
- * A ledger that cannot answer for the contract comes back as that rather than as a throw, and keeps slice 2's rule: one
- * unreadable row refuses the act it cannot judge and never the member's every call, its handover among them. For a
- * readable ledger, the acts are read first and the version's own acts are answered only for an act: a contract refuses
- * nothing that is no act.
+ * The acts are read first, so a call that is no act reads no ledger. A package with no version, or a ledger that cannot
+ * answer for it, comes back as none (martha#601, rows 109 and 111): the call runs, with nothing to notice.
  */
 async function theContractTheMemberHolds(
   places: CrewToolPlaces,
@@ -518,13 +519,12 @@ async function theContractTheMemberHolds(
 ): Promise<TheContractHanded> {
   const held_package = places.beats.read(places.member)?.holds ?? ''
   if (held_package === '') return undefined
-  const read = await theNewestContractOrWhy(places.ledger, held_package)
-  if ('why' in read) {
-    return theActsOfACall(call, held_package, names.ownNameOf).length === 0 ? undefined : { package: held_package, why: read.why }
-  }
-  const newest = read.newest
-  if (newest === undefined) return { package: held_package }
   if (theActsOfACall(call, held_package, names.ownNameOf).length === 0) return undefined
+  // No contract, or one the ledger could not read back, gives nothing to compare the call with (martha#601, rows 109
+  // and 111): the call runs and no notice is said.
+  const read = await theNewestContractOrWhy(places.ledger, held_package)
+  const newest = 'why' in read ? undefined : read.newest
+  if (newest === undefined) return undefined
   const { version, contract } = newest
   const allowed: readonly AContractAct[] = contract.kind === 'bounded' ? CONTRACT_ACTS.filter((act) => contract.allowed.includes(act)) : []
   return { package: held_package, version, kind: contract.kind, allowed }
@@ -748,6 +748,19 @@ const declaring =
   }
 
 /**
+ * A tool that reads its call's own words before the crew's declaration, and the place after both: a call that names
+ * nothing it can ask is refused in its own words whatever the launch holds (martha#931 B: wait_for_ci now reads the
+ * declaration's github.budget_floor, and the arguments-first rule still holds).
+ */
+const namedThenDeclaring =
+  <Named>(places: CrewToolPlaces, name: (args: Readonly<Record<string, unknown>>) => AnAsked<Named>, act: (declared: CrewDeclared, named: AnAsked<Named>) => Promise<CoreToolAnswer>): AHandler =>
+  async (args) => {
+    const named = name(args)
+    if ('refused' in named) return { refused: named.refused }
+    return declaring(places, async (declared) => act(declared, named))(args)
+  }
+
+/**
  * What a park or a wake is asked, read once for both (martha#255): the crew's own store, this member, the declaration's
  * table and the call's own words, so the two tools differ only in which of the two acts they run.
  */
@@ -792,10 +805,10 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [LOG_A_MILESTONE_TOOL.name]: async (args) => logTheMilestone(ledger, { package: textOf(args['package']), event: args['event'], note: args['note'] }, async () => whoMayResume(places)),
     [WHAT_WAS_SENT_TOOL.name]: async (args) => whatTheMemberSent(ledger, textOf(args['package'])),
     [NOTE_WHAT_BECAME_TOOL.name]: async (args) => noteTheActsOutcome(ledger, { package: textOf(args['package']), announced_at: args['announced_at'], succeeded: args['succeeded'], detail: args['detail'] }),
-    [KEEP_THE_CONTRACT_TOOL.name]: declaring(places, async (declared, args) => keepTheContract({ ...ledger, documents: places.documents, settings: declared.settings }, args)),
+    [KEEP_THE_CONTRACT_TOOL.name]: async (args) => keepTheContract({ ...ledger, documents: places.documents }, args),
     [SEE_THE_CREW_TOOL.name]: declaring(places, async (declared) => seeTheCrewOver(thePaneAsked(places, declared.settings))),
     [WHO_IS_FREE_TOOL.name]: declaring(places, async (declared, args) => whoIsFreeOver(theWhoIsFreeAsked(places, declared.settings, args))),
-    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn(places) })),
+    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn({ ...places, github: declared.settings.github, clock_zone: declared.settings.clock_zone }) })),
     [SAY_TO_THE_CREW_TOOL.name]: declaring(places, async (declared, args) => sayToTheCrewOver(theSendAsked(places, state, declared.settings, args))),
     [READ_THE_RECEIPTS_TOOL.name]: declaring(places, async (declared) => theReceiptsOver(theReceiptsAsked(places, declared.settings))),
     [PARK_A_MEMBER_TOOL.name]: declaring(places, (declared, args) => parked(declared, args, parkAMember)),
@@ -808,9 +821,9 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [REFRESH_THIS_SESSION]: async (args) => theRefreshAskedOf(places, args),
     [VERIFY_RANGE_TOOL.name]: (args) =>
       actingOn(theRangeACallNames(args), async (on, asked) =>
-        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), { member: places.member, declaration: on.settings }, asked)),
+        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), asked, places.note)),
     [LAND_BATCH_TOOL.name]: (args) =>
-      actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry)),
+      actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry, places.note)),
     [FAST_FORWARD_TOOL.name]: (args) =>
       actingOn(theFastForwardACallNames(args), async (on, asked) =>
         on.settings === undefined ? { refused: NO_ACTING_PLACE } : fastForwardOntoTheApprovedTipOver(actingHost(on), places.member, asked, on.settings)),
@@ -825,8 +838,9 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [STANDING_ADD_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => recordAStandingItem(places.ledger, args, places.member))),
     [STANDING_CLOSE_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => closeAStandingItem(places.ledger, args, places.member))),
     [STANDING_TOOL.name]: async () => theStandingToolOver({ ledger: places.ledger, now: places.ledger.clock.now() }),
-    [WAIT_FOR_CI_TOOL.name]: (args) =>
-      actingOn(theCiWaitACallNames(args), (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock }), asked)),
+    [WAIT_FOR_CI_TOOL.name]: namedThenDeclaring(places, theCiWaitACallNames, async (declared, named) =>
+      actingOn(named, (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock, github: declared.settings.github, clock_zone: declared.settings.clock_zone }), asked)),
+    ),
   }
 }
 

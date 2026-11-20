@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, sep } from 'node:path'
+import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { ARGUMENT_GATES, ASK_GATES, COMMAND_GATES, DELIVERY_GATES, INBOUND_PATHS, LAUNCH_GATES, SOURCE_GATES, type InboundPath } from '../inbound_paths/inbound_paths.ts'
@@ -460,8 +460,8 @@ test('a launch gate that refuses everyone is caught too', () => {
 const [SERVERS] = CLAUDE_CODE_FILES
 
 test('a gate that approves by file name, not content, is caught', () => {
-  const by_name: LaunchGate = (request) =>
-    admitsLaunch(request) ||
+  const by_name: LaunchGate = (request, note) =>
+    admitsLaunch(request, note) ||
     (Object.hasOwn(LAUNCH_FILES_OF_HOST, request.host) &&
       request.entries.every((entry) => entry.kind === 'absent' || (entry.kind === 'file' && entry.path === SERVERS)) &&
       request.approved_fingerprints.length > 0)
@@ -474,8 +474,8 @@ test('a gate that approves by file name, not content, is caught', () => {
 })
 
 test('a gate that only looks at the checkout itself, not the directories above, is caught', () => {
-  const here_only: LaunchGate = (request) =>
-    admitsLaunch({ ...request, entries: request.entries.filter((entry) => !entry.path.startsWith('../')) })
+  const here_only: LaunchGate = (request, note) =>
+    admitsLaunch({ ...request, entries: request.entries.filter((entry) => !entry.path.startsWith('../')) }, note)
   const gaps = withLaunchGates(here_only)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
@@ -485,8 +485,8 @@ test('a gate that only looks at the checkout itself, not the directories above, 
 })
 
 test('a gate that trusts an approved symlink is caught', () => {
-  const trusts_links: LaunchGate = (request) =>
-    admitsLaunch(request) ||
+  const trusts_links: LaunchGate = (request, note) =>
+    admitsLaunch(request, note) ||
     (Object.hasOwn(LAUNCH_FILES_OF_HOST, request.host) &&
       request.tree !== null &&
       request.approved_fingerprints.includes(fingerprintOf(request)))
@@ -499,8 +499,8 @@ test('a gate that trusts an approved symlink is caught', () => {
 })
 
 test('a gate that lets a host it has no file list for start is caught', () => {
-  const any_host: LaunchGate = (request) =>
-    admitsLaunch(request) || !Object.hasOwn(LAUNCH_FILES_OF_HOST, request.host)
+  const any_host: LaunchGate = (request, note) =>
+    admitsLaunch(request, note) || !Object.hasOwn(LAUNCH_FILES_OF_HOST, request.host)
   const gaps = withLaunchGates(any_host)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
@@ -510,8 +510,8 @@ test('a gate that lets a host it has no file list for start is caught', () => {
 })
 
 test('a gate that takes an empty read for an empty checkout is caught', () => {
-  const trusts_empty: LaunchGate = (request) =>
-    admitsLaunch(request) || (Object.hasOwn(LAUNCH_FILES_OF_HOST, request.host) && request.entries.length === 0)
+  const trusts_empty: LaunchGate = (request, note) =>
+    admitsLaunch(request, note) || (Object.hasOwn(LAUNCH_FILES_OF_HOST, request.host) && request.entries.length === 0)
   const gaps = withLaunchGates(trusts_empty)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
@@ -651,8 +651,8 @@ test('a name both allowed and refused is named', () => {
 
 test('a gate that pins the config but not the checkout it runs is caught', () => {
   const approved_tree = LAUNCH_PROBES[0]?.request.tree ?? null
-  const config_only: LaunchGate = (request) =>
-    admitsLaunch({ ...request, tree: request.tree === null ? null : approved_tree })
+  const config_only: LaunchGate = (request, note) =>
+    admitsLaunch({ ...request, tree: request.tree === null ? null : approved_tree }, note)
   const gaps = withLaunchGates(config_only)
   assert.deepEqual(
     gaps.map((gap) => gap.path),
@@ -760,7 +760,7 @@ test('a path gate that admits everything, and one that refuses everything, are b
   const refusesAll: PathGate = () => false
   assert.deepEqual(
     coverageOf(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, ARGUMENT_GATES, { 'nothing-a-later-git-run-reads': admitsAll }).map((gap) => gap.why),
-    ['the gate nothing-a-later-git-run-reads admits the checkout\'s own git directory'],
+    ['the gate nothing-a-later-git-run-reads admits the checkout\'s own git directory, and says nothing about it'],
   )
   assert.deepEqual(
     coverageOf(INBOUND_PATHS, gateRefuses, DELIVERY_GATES, LAUNCH_GATES, ARGUMENT_GATES, { 'nothing-a-later-git-run-reads': refusesAll }).map((gap) => gap.why),
@@ -835,7 +835,8 @@ test('the gate answers the configuration questions too, and a gate that lost the
 
   // The value rule dropped: the ordinary file is still admitted, so every name-only
   // probe passes, and only these questions notice the loss.
-  const withoutTheRule = (probe: PathProbe): boolean => !probe.path.includes(`${sep}.git${sep}`)
+  // A gate that lost the value rule: it admits a write a tree config names, and says nothing about it (martha#601).
+  const withoutTheRule: PathGate = () => true
   assert.notEqual(gapsInConfigPathCoverage(withoutTheRule, standIn), undefined, 'a gate that lost the value rule is named')
   assert.ok(gapsInConfigPathCoverage(withoutTheRule, standIn)?.includes('admits'), `the gap says the gate admits what it should refuse (${gapsInConfigPathCoverage(withoutTheRule, standIn)})`)
 
@@ -846,8 +847,8 @@ test('the gate answers the configuration questions too, and a gate that lost the
   // them too, so a gate that lost the value rule is named there. A gate that answers
   // every name-only probe as the shipped one does, and admits every write into a
   // checkout whose config names a tree path, stands for the loss.
-  const lostTheRule = (probe: PathProbe): boolean =>
-    PATH_PROBES.some((known) => known.path === probe.path && known.what === probe.what) ? admitsAWriteNoLaterGitRunReads(probe) : true
+  const lostTheRule: PathGate = (probe, note) =>
+    PATH_PROBES.some((known) => known.path === probe.path && known.what === probe.what) ? admitsAWriteNoLaterGitRunReads(probe, note) : true
   const row: InboundPath = {
     id: 'A95',
     what: 'a planted row whose path gate lost the configuration rule',

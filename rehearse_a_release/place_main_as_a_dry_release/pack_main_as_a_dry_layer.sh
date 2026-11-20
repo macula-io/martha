@@ -23,7 +23,7 @@
 # The order is the release's own: main's installer packed by `git archive` from the sha, then the restore commit, then
 # `npm ci` on the restored installer/, then pack_a_release/pack_a_release.sh. So the installer the pin runs is the
 # published one -- its lockfile and its pin_the_installer.mjs, never main's -- and a pin change on main is proven by
-# main's own tests and never by this night's run.
+# main's own tests and never by this live run's run.
 #
 # And main's installer is packed as an artifact of its own, from the sha itself by `git archive`, BEFORE that restore,
 # so the tarball can only ever hold main's bytes: `npm pack --ignore-scripts` of it, renamed main-installer-<sha7>.tgz
@@ -36,7 +36,7 @@
 # Nothing is signed and nothing is pushed: this layer is placed by the dry harness, never installed as a release, and
 # the clone this script makes is of the local repository, so nothing it commits can be pushed anywhere.
 # Exit: 0 packed, 1 the packer refused, 2 it could not run, NOT_PACKABLE (below) not packable: installer/ names differ
-# from its tag's. NOT_PACKABLE is one line of its own, read by the nightly driver beside this script and by this
+# from its tag's. NOT_PACKABLE is one line of its own, read by the live run's driver beside this script and by this
 # script's tests, so no reader spells the number (martha#696).
 set -euo pipefail
 

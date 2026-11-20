@@ -16,25 +16,29 @@ import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { holdingTheEnds, A_TOOL_WHILE_THE_END_IS_HELD } from '../end_a_running_turn/hold_the_end.ts'
 import type { ACalledTool, ToolNames } from '../host_contract/host_contract.ts'
+import { theNoticeOfACallPastTheBudget, type ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
+import { theNoticeOfACallOutsideTheContract, type TheContractInForce } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { sessionRecordsIn, type SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
-import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
+import { A_CALL_NOT_COUNTED, agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from './answer_what_a_host_reports.ts'
 import { runOf, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
 
 /** The made-up host's names: a called tool is its own name, as a host with no tool servers names it. */
 const A_MADE_UP_HOSTS_NAMES: ToolNames = { ownNameOf: (called) => called }
+/** A synthetic package, never a real one: this repository is public. */
+const A_PACKAGE = 'synthetic-owner/repo#7'
 /** A tool of the made-up host that runs commands: no read-only list names it, so the shell rules hold it. */
 const ITS_SHELL = 'run-a-command'
 const THE_REVIEWER_MODEL = 'the-reviewer'
 const THE_SETTINGS_REFUSAL = 'that call writes the owner’s settings'
 const THE_MEMORY_REFUSAL = 'that call writes the owner’s memory'
-const THE_SPEND_REFUSAL = 'the spend row could not be kept'
+const WHY_THE_SPEND_ROW_WAS_NOT_KEPT = 'the spend row could not be kept'
 
 /** What each step the entry may take left behind, in the order it was taken. */
 interface Seen {
@@ -48,6 +52,10 @@ interface TheLaunchDoes {
   readonly spend_unkept?: boolean
   readonly review_model_of_the_call?: string | null
   readonly end_held_for?: string
+  /** The contract the crew answers for every call: none when absent. */
+  readonly contract?: TheContractInForce
+  /** The spend the crew answers for every session: none when absent. */
+  readonly spend?: ASpendInForce
 }
 
 function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
@@ -58,8 +66,8 @@ function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
     answer: async () => ({ answer: '' }),
     startBeating: () => () => {},
     theContractInForce: async () => {
-      seen.steps.push('the gate')
-      return undefined
+      seen.steps.push('the contract read')
+      return does.contract
     },
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
@@ -73,10 +81,10 @@ function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
       },
     },
     thePredecessorOf: async () => null,
-    theSpendInForce: async () => undefined,
+    theSpendInForce: async () => does.spend,
     noteTheCallCounted: async () => {
       seen.steps.push('counted')
-      return does.spend_unkept === true ? THE_SPEND_REFUSAL : undefined
+      return does.spend_unkept === true ? WHY_THE_SPEND_ROW_WAS_NOT_KEPT : undefined
     },
     theReviewModelOfTheCall: async () => does.review_model_of_the_call ?? null,
     theReviewModel: async () => THE_REVIEWER_MODEL,
@@ -137,7 +145,12 @@ function anEntry(t: TestContext, does: TheLaunchDoes = {}): AnEntry {
     crew: aCrew(does, seen),
     reviews,
     agents,
-    told: { theRow: () => {}, theMember: async () => {}, takeTheLineBack: () => void seen.steps.push('line taken back') },
+    told: {
+      theRow: () => {},
+      theMember: async (line, call) => void seen.steps.push(`told the member ${call}: ${line}`),
+      takeTheLineBack: () => void seen.steps.push('line taken back'),
+    },
+    journal: { noted: (event, why, call) => void seen.steps.push(`journal ${String(call)}: ${event}: ${why}`) },
     policy: { may_send_executable_text: [] },
     names: A_MADE_UP_HOSTS_NAMES,
     signed_runs: aSignedRuns(seen),
@@ -168,7 +181,7 @@ test('#541 2: a call in a session the entry holds is allowed in the contract’s
   const answer = await answers.aToolCalled(aCall())
 
   assert.deepEqual(answer, { allowed: 1 })
-  assert.deepEqual(seen.steps, ['settings asked', 'memory asked', 'the gate', 'counted', `signed run noted ${ITS_SHELL}`, 'a call allowed call-1'])
+  assert.deepEqual(seen.steps, ['settings asked', 'memory asked', 'the contract read', 'counted', `signed run noted ${ITS_SHELL}`, 'a call allowed call-1'])
 })
 
 test('#541 2: a call in a session never started is denied by name, and nothing is asked', async (t) => {
@@ -255,14 +268,73 @@ test('#541 2: a review the gate denies is not remembered and leaves the line', a
   assert.ok(!seen.steps.includes('line taken back'))
 })
 
-test('#541 2: a call whose spend row cannot be kept is denied, and is neither noted as a signed run nor told as allowed (martha#513)', async (t) => {
+test('#601 row 113: a call whose spend row cannot be kept runs, and why it was not counted is written in the journal', async (t) => {
   const { answers, seen } = anEntry(t, { spend_unkept: true })
   await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
 
   const answer = await answers.aToolCalled(aCall())
 
-  assert.equal(deniedBecause(answer), THE_SPEND_REFUSAL)
-  assert.deepEqual(seen.steps, ['settings asked', 'memory asked', 'the gate', 'counted'])
+  assert.deepEqual(answer, { allowed: 1 })
+  assert.deepEqual(seen.steps, [
+    'settings asked',
+    'memory asked',
+    'the contract read',
+    'counted',
+    `journal call-1: ${A_CALL_NOT_COUNTED}: ${WHY_THE_SPEND_ROW_WAS_NOT_KEPT}`,
+    `signed run noted ${ITS_SHELL}`,
+    'a call allowed call-1',
+  ])
+})
+
+test('#601 rows 110 and 112: a call past its package\'s budget and outside its contract runs, and its member is told both in a notice each', async (t) => {
+  const contract: TheContractInForce = { package: A_PACKAGE, version: 2, kind: 'bounded', allowed: [] }
+  const spend: ASpendInForce = { package: A_PACKAGE, version: 2, units: [{ unit: 'tool calls', spent: 3, limit: 3 }] }
+  const { answers, seen } = anEntry(t, { contract, spend })
+  await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+  const pushes = aCall({ input: { command: 'git push origin main' } })
+
+  const answer = await answers.aToolCalled(pushes)
+
+  assert.deepEqual(answer, { allowed: 1 })
+  const own = A_MADE_UP_HOSTS_NAMES.ownNameOf
+  assert.deepEqual(seen.steps, [
+    'settings asked',
+    'memory asked',
+    'the contract read',
+    `told the member call-1: ${String(theNoticeOfACallPastTheBudget({ tool: pushes.tool }, spend, own))}`,
+    `told the member call-1: ${String(theNoticeOfACallOutsideTheContract({ tool: pushes.tool, input: pushes.input }, contract, own))}`,
+    'counted',
+    `signed run noted ${ITS_SHELL}`,
+    'a call allowed call-1',
+  ])
+  // Each notice is a real one, not an empty line the comparison above would also match.
+  assert.ok(seen.steps.filter((step) => step.startsWith('told the member call-1: Notice: ')).length === 2)
+})
+
+test('#601 row 112: a member told once that its spend could not be read is still told when the spend is read and found spent', async (t) => {
+  const unreadable: ASpendInForce = { package: A_PACKAGE, version: 2, units: [], why_unreadable: 'a row the test could not read' }
+  const spent: ASpendInForce = { package: A_PACKAGE, version: 2, units: [{ unit: 'tool calls', spent: 3, limit: 3 }] }
+  const does: { spend?: ASpendInForce } = { spend: unreadable }
+  const { answers, seen } = anEntry(t, does)
+  await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+  const own = A_MADE_UP_HOSTS_NAMES.ownNameOf
+
+  await answers.aToolCalled(aCall({ call_id: 'call-1' }))
+  await answers.aToolCalled(aCall({ call_id: 'call-2' }))
+  does.spend = spent
+  await answers.aToolCalled(aCall({ call_id: 'call-3' }))
+  await answers.aToolCalled(aCall({ call_id: 'call-4' }))
+
+  assert.deepEqual(
+    seen.steps.filter((step) => step.startsWith('told the member ')),
+    [
+      `told the member call-1: ${String(theNoticeOfACallPastTheBudget({ tool: ITS_SHELL }, unreadable, own))}`,
+      `told the member call-3: ${String(theNoticeOfACallPastTheBudget({ tool: ITS_SHELL }, spent, own))}`,
+    ],
+  )
+  // Two different lines, each a real notice: the comparison above cannot pass on two empty or equal ones.
+  const [first, second] = [theNoticeOfACallPastTheBudget({ tool: ITS_SHELL }, unreadable, own), theNoticeOfACallPastTheBudget({ tool: ITS_SHELL }, spent, own)]
+  assert.ok(first?.startsWith('Notice: ') === true && second?.startsWith('Notice: ') === true && first !== second)
 })
 
 test('#541 2: a held end of the turn denies the call last, after the gate, and the call is not counted', async (t) => {
@@ -272,5 +344,5 @@ test('#541 2: a held end of the turn denies the call last, after the gate, and t
   const answer = await answers.aToolCalled(aCall())
 
   assert.equal(deniedBecause(answer), A_TOOL_WHILE_THE_END_IS_HELD)
-  assert.deepEqual(seen.steps, ['settings asked', 'memory asked', 'the gate'])
+  assert.deepEqual(seen.steps, ['settings asked', 'memory asked'])
 })

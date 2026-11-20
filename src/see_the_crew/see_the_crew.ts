@@ -7,7 +7,9 @@
 // writer records it — so a session that dies leaves a row that says so within one interval instead of a row
 // claiming work it is not doing.
 
-import { BEAT_INTERVAL_MS, IDLE, OFFLINE, OFFLINE_AFTER_MS, STATES, type CrewToolsOnARow, type DashboardRow, type HostFacts, type Progress, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED, type CrewThresholds } from '../declare_crew/the_crews_thresholds.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
+import { BEAT_INTERVAL_MS, IDLE, OFFLINE, STATES, type CrewToolsOnARow, type DashboardRow, type HostFacts, type Progress, type ShownState, type Waits } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 
 /** One member's row as a reader is shown it. */
@@ -29,23 +31,25 @@ export interface CrewRow {
   readonly reported_at: number | null
   /** Whether it holds its crew tools (martha#658); unknown for a row that never said, never held. */
   readonly served_tools: CrewToolsOnARow
+  /** The flag a loss of the crew tools raises, its time in the crew's clock_zone, or null (theCrewToolsFlag). */
+  readonly tools_flag: string | null
 }
 
 /** What a row that says nothing of the crew tools reads as: nothing known. */
 const NOTHING_KNOWN: CrewToolsOnARow = { state: 'unknown' }
 
 /**
- * The flag a loss raises (martha#658), in the row's own time words: the strip and the free list both say it beside the
- * state, so a member working without its tools reads as working, crew tools lost.
+ * The flag a loss raises (martha#658), its time in the crew's clock_zone (martha#931 C): the strip and the free list both
+ * say it beside the state, so a member working without its tools reads as working, crew tools lost.
  */
-export function theCrewToolsFlag(row: Pick<CrewRow, 'served_tools'>): string | null {
-  return row.served_tools.state === 'lost' ? `crew tools lost since ${new Date(row.served_tools.since).toISOString().slice(11, 16)}Z` : null
+export function theCrewToolsFlag(row: Pick<CrewRow, 'served_tools'>, zone: string): string | null {
+  return row.served_tools.state === 'lost' ? `crew tools lost since ${theClockOf(row.served_tools.since, zone)}` : null
 }
 
 /** What the pane's header counts. */
 export interface CrewCounts {
   readonly members: number
-  /** Members whose row is younger than OFFLINE_AFTER_MS. */
+  /** Members whose row is younger than the crew's offline time. */
   readonly online: number
   readonly working: number
   readonly waiting: number
@@ -55,16 +59,25 @@ export interface CrewCounts {
 /** The declaration, as this slice needs it: the crew's members, in the order the declaration names them. */
 export interface TheDeclaredCrew {
   readonly members: readonly { readonly name: string }[]
+  /** The crew's thresholds (martha#931 A); a crew that names none reads THRESHOLDS_WHEN_UNNAMED. */
+  readonly thresholds?: CrewThresholds
+  /** The crew's clock_zone (martha#931 C); a crew that names none reads CLOCK_ZONE_WHEN_UNNAMED. */
+  readonly clock_zone?: string
 }
 
 /** Every member's row, in the declaration's order, and the counts a header shows. */
 export function seeTheCrew(crew: TheDeclaredCrew, beats: Readonly<Record<string, DashboardRow>>, now: number): { readonly rows: readonly CrewRow[]; readonly counts: CrewCounts } {
-  const rows = crew.members.map((member) => rowOf(member.name, beats[member.name], now))
+  const offline_after_ms = offlineAfterMsOf(crew.thresholds ?? THRESHOLDS_WHEN_UNNAMED)
+  const zone = crew.clock_zone ?? CLOCK_ZONE_WHEN_UNNAMED
+  const rows = crew.members.map((member) => withTheToolsFlag(rowOf(member.name, beats[member.name], now, offline_after_ms), zone))
   return { rows, counts: countsOf(rows) }
 }
 
+/** A row with the flag its crew tools raise, read once here in the crew's zone, for the pane and the free list. */
+const withTheToolsFlag = (row: Omit<CrewRow, 'tools_flag'>, zone: string): CrewRow => ({ ...row, tools_flag: theCrewToolsFlag(row, zone) })
+
 /** One member's row: its beat, or the row a member that never beat reads as. */
-function rowOf(member: string, beat: DashboardRow | undefined, now: number): CrewRow {
+function rowOf(member: string, beat: DashboardRow | undefined, now: number, offline_after_ms: number): Omit<CrewRow, 'tools_flag'> {
   if (beat === undefined) {
     return {
       member,
@@ -86,7 +99,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
   // What the owner reads: the host's own question first (martha#313), then the member's word, and a row that has gone
   // quiet says so whatever either of them said, because nothing is left to answer it.
   const shown = whatTheOwnerIsShown(beat)
-  const state: ShownState = quiet_for > OFFLINE_AFTER_MS ? OFFLINE : shown.state
+  const state: ShownState = quiet_for > offline_after_ms ? OFFLINE : shown.state
   return {
     member,
     session: beat.session,
@@ -106,7 +119,7 @@ function rowOf(member: string, beat: DashboardRow | undefined, now: number): Cre
 
 function countsOf(rows: readonly CrewRow[]): CrewCounts {
   // Online is the header's own word about a row being fresh, which is what CrewCounts says it is: a member whose row
-  // is younger than OFFLINE_AFTER_MS, whatever that row says it is doing (r=1 R2: a live member that has reported
+  // is younger than the crew's offline time, whatever that row says it is doing (r=1 R2: a live member that has reported
   // nothing has a row, and it reads idle, so counting only the working states would drop it from the crew's size).
   const online = rows.filter((row) => row.at !== null && row.state !== OFFLINE)
   return {
@@ -141,7 +154,7 @@ export function thePaneLine(row: CrewRow): string {
   const waits = row.waits === null ? '' : ` · waits on ${row.waits.on} for ${row.waits.for}`
   const needs = row.needs === '' ? '' : ` · needs you: ${row.needs}`
   const holds = row.holds === '' ? '' : ` · ${row.holds}`
-  const tools = theCrewToolsFlag(row)
+  const tools = row.tools_flag
   return `${row.member}: ${row.state}${tools === null ? '' : `, ${tools}`} · ${row.task} ${bar}${holds}${waits}${needs}`
 }
 

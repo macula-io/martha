@@ -37,7 +37,7 @@ test('#307: add puts a member on the crew in a role of the mode, with its model 
   assert.ok('after' in outcome, 'refusal' in outcome ? outcome.refusal : '')
   assert.deepEqual(membersIn(outcome.after).at(-1), { name: 'scout', role: REVIEWER.role, model: 'other-model', [HOST]: THE_ENGINES_HOST })
   const scout = outcome.settings.members.find((member) => member.name === 'scout')
-  assert.deepEqual(scout, { name: 'scout', role: REVIEWER.role, model: 'other-model', host: THE_ENGINES_HOST })
+  assert.deepEqual(scout, { name: 'scout', role: REVIEWER.role, model: 'other-model', host: THE_ENGINES_HOST, parked: false, billing: null })
   assert.equal(outcome.before, solo())
 })
 
@@ -105,19 +105,19 @@ test('#307: set-host writes the member\'s host, and the crew default takes the k
 })
 
 test('#307: a declaration the reader already refuses is refused before any change, with the reader\'s words', async () => {
-  const broken = solo().replace('"members"', '"memberz"')
+  const broken = JSON.stringify({ ...(JSON.parse(solo()) as object), members: 'not a list' })
   const outcome = await changed(broken, { kind: REMOVE, member: BUILDER.name })
   assert.ok('refusal' in outcome)
-  assert.match(outcome.refusal, /memberz/)
+  assert.match(outcome.refusal, /members is not a list of members/)
 })
 
 test('#307: a change the reader refuses is never handed out, even when the change itself is well formed', async () => {
-  // The reviewer model is held to the reviewer's host: moving the reviewer to a host that runs none of it is refused.
+  // A host Martha does not know is still refused by the reader (martha#541), so the change is never handed out.
   const vocabularies: TheVocabulariesOfHost = new Map([[THE_HOST_A_MEMBER_RAN_ON, SOME_MODELS], [THE_ENGINES_HOST, { kind: CLOSED_VOCABULARY, names: ['engine-only'] }]])
   const with_review_model = JSON.stringify({ ...JSON.parse(solo()) as object, house_rules: { review_model: 'some-model' } })
-  const outcome = await aChangedDeclaration(holding(with_review_model), ROOT, vocabularies, { kind: SET_HOST, member: REVIEWER.name, host: THE_ENGINES_HOST })
+  const outcome = await aChangedDeclaration(holding(with_review_model), ROOT, vocabularies, { kind: SET_HOST, member: REVIEWER.name, host: 'a-host-nothing-runs' })
   assert.ok('refusal' in outcome)
-  assert.match(outcome.refusal, /review_model/)
+  assert.match(outcome.refusal, /\.host/)
 })
 
 test('#307: the changed text is written in init\'s format, and says when the file it read was not', async () => {

@@ -45,6 +45,7 @@ import { crewRowsDirectoryOf, driveTheRecordedHost, firstRunDone, marthaOnATermi
 import { OPEN_WORK_MS } from './wait_while_the_host_keeps_showing.ts'
 import { stateHomeUnder } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 
 const MEMBER = 'builder'
 const OWNER_TURN = 'Do the first task.'
@@ -82,7 +83,7 @@ const THE_SHELL_LIMIT_MS = 600_000
 /** The message that waits in the crew channel for the member to be idle. */
 const THE_WAITING_MESSAGE = 'A message that waited in the crew channel while the long turn ran.'
 /** The first sentence of the handover prompt a refresh someone asked for submits: how a request is known to carry it. */
-const THE_HANDOVER_ASK = theHandoverPrompt({ at_limit: false, percent: 0 }).split('.')[0] ?? ''
+const THE_HANDOVER_ASK = theHandoverPrompt({ at_limit: false, percent: 0, limit_percent: THRESHOLDS_WHEN_UNNAMED.handover_percent }).split('.')[0] ?? ''
 /**
  * How long the host may show nothing new. The long tool's wait is an open call, which the driver does not count as
  * silence, so this covers only the idle member after the tool has returned: one of the mod's beats, a minute apart,

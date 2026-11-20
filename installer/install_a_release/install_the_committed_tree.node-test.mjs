@@ -92,7 +92,7 @@ test('the launcher finds the record the real installer wrote, from its own real 
   }
 })
 
-test('a placed release below this machine\'s record refuses to launch whatever XDG_DATA_HOME says, and still says its version', async (t) => {
+test('a placed release below this machine\'s record is told the floor in one line whatever XDG_DATA_HOME says, and goes ahead', async (t) => {
   const { installOn } = await theCommittedRelease(t)
   const { home, places } = await installOn('<home>/data')
   const elsewhere = mkdtempSync(join(tmpdir(), 'martha-elsewhere-'))
@@ -111,8 +111,8 @@ test('a placed release below this machine\'s record refuses to launch whatever X
   for (const [name, xdg] of atLaunch) {
     const env = { PATH: process.env['PATH'] ?? '', HOME: home, ...xdg }
     const launched = spawnSync(process.execPath, [command, 'ls'], { encoding: 'utf8', env, cwd: home })
-    assert.equal(launched.status, 1, `${name}: ${launched.stderr}`)
-    assert.equal(launched.stderr, `martha: this is Martha ${committed.version}, below ${above}, the version floor this machine holds (${record}); refused. Put the highest signed release back with: martha install\n`, name)
+    assert.ok(launched.stderr.includes(`this is Martha ${committed.version}, below ${above}, the version floor this machine holds (${record}); going ahead`), `${name}: ${launched.stderr}`)
+    assert.ok(!launched.stderr.includes('refused'), `${name}: the floor is read as a refusal again: ${launched.stderr}`)
     const asked = spawnSync(process.execPath, [command, '--version'], { encoding: 'utf8', env })
     assert.equal(asked.status, 0, `${name}: ${asked.stderr}`)
     assert.equal(asked.stdout, `${committed.version}\n`, name)

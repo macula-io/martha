@@ -1,4 +1,4 @@
-// The nightly live run's guards for its throwaway repository (martha#639): the delete (R2), the kept record (R4), the
+// The live run's guards for its throwaway repository (martha#639): the delete (R2), the kept record (R4), the
 // reach of its calls (R1) and a clean start for the restarted members (R3). Each case is one the review named, or one a
 // weaker guard would let through.
 
@@ -69,7 +69,7 @@ test('an answer for another id, an empty stamp, and no answer at all are each re
 
 // --- R4: the kept record --------------------------------------------------------------------------------------------
 
-const TOKEN = 'github_pat_11AAAAAAA0ThisIsAStandInToken_xyz'
+const TOKEN = 'github_pat_synthetic11AAAAAAA0ThisIsAStandInToken_xyz'
 
 test("a member's transcript that printed the token keeps no token, and says one reached it", () => {
   const kept = redactTheToken(`$ gh auth token\n${TOKEN}\n$ echo again ${TOKEN}`, TOKEN)
@@ -84,7 +84,7 @@ test('a fine-grained token the run was not given is caught by its shape', () => 
 })
 
 test('a token of another shape is still caught by its exact value', () => {
-  const kept = redactTheToken('hosts: oauth_token: ghp_plainOldToken123', 'ghp_plainOldToken123')
+  const kept = redactTheToken('hosts: oauth_token: ghp_syntheticPlainOldToken123', 'ghp_syntheticPlainOldToken123')
   assert.deepEqual(kept, { text: `hosts: oauth_token: ${REDACTED}`, reached: true })
 })
 
@@ -98,7 +98,7 @@ test('a record with no token stays as it was, and an empty token is refused', ()
 test("a record that names no repository is could-not-look (2), never a delete: the review's own case", (t) => {
   const made = join(aFolder(t), 'made.json')
   writeFileSync(made, JSON.stringify({ stamp: 's1', run_started_at: '2026-01-01T00:00:00Z' }))
-  const said = runTheGuard(['delete', made], JSON.stringify({ name: 'night-s1', created_at: '2026-02-01T00:00:00Z' }))
+  const said = runTheGuard(['delete', made], JSON.stringify({ name: 'live-run-s1', created_at: '2026-02-01T00:00:00Z' }))
   assert.equal(said.code, 2)
   assert.equal(said.out, undefined)
 })
@@ -150,7 +150,7 @@ test('a token split by a title sequence or a bare carriage return is caught the 
 })
 
 test('a fine-grained token the run was not given, wrapped after its prefix, is withheld too, leaving no tail', () => {
-  const other = 'github_pat_22BBBBBBB0AnotherStandInToken_abc'
+  const other = 'github_pat_synthetic22BBBBBBB0AnotherStandInToken_abc'
   const kept = redactTheToken(`x ${other.slice(0, 16)}\r\n${other.slice(16)} y`, TOKEN)
   assert.deepEqual(kept, { text: WITHHELD, reached: true })
 })
@@ -169,7 +169,7 @@ const holdsAPieceOfTheToken = (kept: string): boolean =>
 /** The reviewer's first row: a wrap inside the prefix, the next line padded by the gutter the TUI draws. */
 const PADDED_WRAP = `  \u23bf  ${TOKEN.slice(0, 9)}\r\n     ${TOKEN.slice(9)}\r\n`
 
-/** Tonight's shape: the TUI redrew only the cells that changed, so letters are missing between cursor moves. */
+/** The live run's shape: the TUI redrew only the cells that changed, so letters are missing between cursor moves. */
 const CELLS_DROPPED = `${TOKEN.slice(0, 6)}\u001b[3C${TOKEN.slice(9, 20)}\u001b[2C${TOKEN.slice(22)}`
 
 test("once the token is placed, a screen is not kept at all: the padded wrap and the dropped cells keep no piece of it", () => {
@@ -222,7 +222,7 @@ test("calls that answer as the owner's own login fail by name, as do an organisa
   assert.equal(runTheGuard(['who', 'the-bot'], '{}').code, 2)
 })
 
-// --- the token's expiry, read each night ----------------------------------------------------------------------------
+// --- the token's expiry, read each live run ----------------------------------------------------------------------------
 
 const NOW = new Date('2026-11-18T03:00:00Z')
 
@@ -230,7 +230,7 @@ test('a token a month from its expiry holds with nothing to say', () => {
   assert.deepEqual(theTokensExpiry('2026-12-18 03:00:00 UTC', NOW), { refuses: false })
 })
 
-test("a token with no expiry is the owner's choice: a note, not a warning, and the night goes on", () => {
+test("a token with no expiry is the owner's choice: a note, not a warning, and the live run goes on", () => {
   const said = theTokensExpiry('', NOW)
   assert.equal(said.refuses, false)
   assert.equal(said.warning, undefined)
@@ -244,7 +244,7 @@ test('a token within the near days is warned about, one just outside them is not
   assert.deepEqual(theTokensExpiry(far, NOW), { refuses: false })
 })
 
-test('an expired token, or an expiry that cannot be read, refuses the night', () => {
+test('an expired token, or an expiry that cannot be read, refuses the live run', () => {
   assert.match(theTokensExpiry('2026-11-18 02:59:59 UTC', NOW).why ?? '', /^the token expired at/)
   assert.match(theTokensExpiry('next tuesday', NOW).why ?? '', /could not be read$/)
   assert.equal(runTheGuard(['expiry', NOW.toISOString()], '2026-11-18 02:59:59 UTC').code, 1)

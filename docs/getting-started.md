@@ -40,7 +40,10 @@ up.
   resolves. A member is a Claude Code session, so the same sign-in serves it.
 
 - **git**, and a project that is a git checkout. Martha reads the top of the
-  checkout it is run in, and every member works in that same tree.
+  checkout it is run in, and every member works in that same tree. Run outside
+  any checkout, Martha takes the folder it is run in as the crew's root: that is
+  how a team works across a whole workspace (see
+  [A team across your workspace](#a-team-across-your-workspace)).
 
 ## 1. Declare the crew
 
@@ -199,9 +202,9 @@ each `martha start` holds the terminal it was run in.
 
 ## 6. Relay the hand-off
 
-Members do not message each other in this release, and the builder may send no
-executable text to the reviewer. You carry the change across: in the reviewer's
-terminal, type the range you want reviewed:
+Members message each other with the crew's `say_to_the_crew` tool, but the
+builder may send no executable text to the reviewer. You carry the change
+across: in the reviewer's terminal, type the range you want reviewed:
 
 ```text
 review main..first-task
@@ -215,6 +218,77 @@ Claude Code may hand the review to its own agent. Martha follows that agent:
 its start, its stop and every call it makes are recorded, so the answer it
 hands back is placed by that record. By default the reviewer keeps its shell
 while the agent runs; the answer is recorded and nothing is refused.
+
+## A team across your workspace
+
+Open one kitty terminal in the folder that holds your clones and worktrees, say
+`~/work` with `~/work/github.com/<org>/<repo>` and `~/work/worktrees`, and run:
+
+```sh
+martha up
+```
+
+`martha up` reads `~/work/.martha/martha.json`, which you write, and opens
+every member it declares in a kitty tab of its own, each on its own host and
+model: Claude Code members and engine members alike. A member marked
+`"parked": true` stays down, and a member that is already running gets no new
+tab. `martha up` never writes a member into the file; with no file it starts
+nothing and prints where the file goes and the smallest one it takes.
+
+The first time an engine member is to start and the file names no
+`engine_endpoint`, `martha up` writes one: the key is read from the provider's
+variable when your shell sets it, else `martha up` asks once for the file your
+key is in, which only you may read. The key itself is never written.
+
+When your shell sets `CLAUDE_CODE_PLUGIN_DIRS`, each member is started without
+it, and Martha says so in one line per member.
+
+### A first prompt
+
+A crew declared `"terminal": "tmux"` can be given its first turn as it starts:
+
+```sh
+martha up --prompt 'read your brief and carry on'
+```
+
+Martha types the text into each Claude Code member's own window once its session
+has started, then Enter, so the member takes it as a turn you typed. One member
+is given its first turn from its own window of Martha's tmux with
+`martha start <member> --prompt <text>`. `--prompt` is Martha's word, read
+before `--`; it is never handed to the host. A text that begins with `-` is
+typed as text. One that begins with `/` or `!`, or holds a line break or
+another control character, is refused, since it would run a slash command or a
+shell command, or start a second turn. A member that runs on martha-engine is not given one, and a crew
+that opens in kitty refuses `--prompt`.
+
+The crew is the folder's own: every member started there reads one store and
+one channel, whichever host it runs on.
+
+## Seeing your crew from a member's tab
+
+In any member's terminal, type:
+
+```text
+/crew
+```
+
+It prints the crew's header and one line per member: its state, its task and
+progress, what it holds and what it waits on. These are the same lines the
+`/martha` pane draws. To say one thing to one member, name them first:
+
+```text
+/crew reviewer the first task is ready for you
+```
+
+The message goes out as the member whose tab you typed in, and the tab prints
+the receipt. Neither command takes a turn of that member's model, so the model
+never reads what you typed. In a session Martha did not start, `/crew` says so
+and sends nothing.
+
+A martha-engine member's tab takes `/crew` the same way, and prints the same
+lines and receipt. It takes nothing else yet: any other command is refused in
+one line, and so is plain text, because typing a turn to an engine member is not
+there yet (martha#953). Nothing you type there reaches the engine.
 
 ## Parking a member, and waking it
 
@@ -362,7 +436,6 @@ it:
 
 | What you see | What to do |
 |---|---|
-| `... is not inside a git checkout. Run martha in the checkout your crew works in.` | `cd` to your project and run it there |
 | `.../.martha/martha.json already exists, and martha init never writes over a declaration.` | keep it; `martha init` is done |
 | `... carries no readable installer pin ...` | this release predates the pin; upgrade once with the bootstrap line |
 | `... npm does not serve <name>@<version>, which this release pins ...` | that installer version is not on npm; nothing was installed |
@@ -375,6 +448,8 @@ it:
 | `The member is not started: ... does not load Martha's relay (...), so the member's gates would be off: ...` | that `claude` cannot run Martha's gates: use one that loads them, such as an updated Claude Code |
 | `... is stopped: its relay did not report the session's start within ... s. If the host was still asking whether to trust ..., start the member again and answer it; if it was not, the host is not running Martha's gates` | answer the trust question, then start the member again; if no question was asked, that `claude` is not running Martha's gates |
 | `... -p is not a switch martha start passes. martha start passes only --model, --effort, --verbose ...` | drop it, and pass those three after `--`; they are the only arguments `martha start` passes on |
+| `a prompt is no switch, and a word handed to the host would be a turn no host stamped as yours. ... A first prompt is given before --, as --prompt <text>.` | give it as `martha start <member> --prompt <text>`, before `--`, from the member's window of Martha's tmux, or as `martha up --prompt <text>` |
+| `--prompt types your first turn into the member's own window of Martha's tmux, and this is no such window. ...` | declare `"terminal": "tmux"` and run `martha up --prompt <text>` |
 
 Exit codes: `0` done, `1` refused, `2` not a way the command is used
 (`martha start` with no member prints the usage line and exits 2).

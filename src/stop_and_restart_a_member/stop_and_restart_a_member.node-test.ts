@@ -19,8 +19,8 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
-import { BEAT_INTERVAL_MS, OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { REQUEST_PENDING_LAUNCHER_GONE, theListLine, theMembersListed } from './list_the_members.ts'
+import { BEAT_INTERVAL_MS, OFFLINE, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { PARKED_IN_THE_DECLARATION, REQUEST_PENDING_LAUNCHER_GONE, theListLine, theMembersListed } from './list_the_members.ts'
 import {
   ANSWER_AFTER_EXIT_MS,
   ANSWER_DEADLINE_MS,
@@ -36,6 +36,9 @@ import {
   type StoppingHost,
   type TheRequest,
 } from './stop_and_restart_a_member.ts'
+import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
 
 const home = mkdtempSync(join(tmpdir(), 'martha-stop-'))
 after(() => removeTheTree(home))
@@ -112,9 +115,9 @@ const beat = (member: string, at: number, extra: Partial<DashboardRow> = {}): Da
 })
 
 const MEMBERS = [
-  { name: 'lead', model: null },
-  { name: 'builder', model: 'sonnet' },
-  { name: 'reviewer', model: null },
+  { name: 'lead', model: null, parked: false },
+  { name: 'builder', model: 'sonnet', parked: false },
+  { name: 'reviewer', model: null, parked: false },
 ] as const
 
 function aList(options: { launches: readonly KeyedRow[]; running: Record<number, string>; beats?: Record<string, DashboardRow>; parks?: Record<string, ThePark>; requests?: Record<string, TheRequest>; now?: number }) {
@@ -148,6 +151,30 @@ test('#312 test 1: ls lists every declared member in the declaration order, each
   )
   assert.equal(theListLine(listed[1]!), "builder  running  /work/builder  since 2026-11-13T09:00:00.000Z  opus  builder's task")
   assert.equal(theListLine(listed[0]!), 'lead  stopped', 'a member nothing is known of shows its name and state, with no gaps')
+})
+
+test('#931: a member the declaration parks reads parked while it is not running, and running while it runs, with the note on both lines', () => {
+  const members = [
+    { name: 'lead', model: null, parked: true },
+    { name: 'builder', model: null, parked: true },
+    { name: 'reviewer', model: null, parked: false },
+  ]
+  const { host } = hostForTests({ launches: [launchOf('builder', 101, 'boot:1')] })
+  const listed = theMembersListed({
+    members,
+    rows: seeTheCrew({ members }, { builder: beat('builder', START - BEAT_INTERVAL_MS) }, START).rows,
+    launches: launchesIn(host.stores.launches),
+    processes: aMachine({ 101: 'boot:1' }).processes,
+    parks: {},
+    requests: {},
+    now: START,
+  })
+  assert.deepEqual(listed.map((one) => [one.member, one.state, one.note]), [
+    ['lead', 'parked', PARKED_IN_THE_DECLARATION],
+    ['builder', 'running', PARKED_IN_THE_DECLARATION],
+    ['reviewer', 'stopped', ''],
+  ])
+  assert.equal(theListLine(listed[0]!), 'lead  parked (parked in the declaration)')
 })
 
 test('#312 test 1: a record whose pid now names another process reads stopped, never running', () => {

@@ -30,8 +30,8 @@ export interface ListedMember {
 
 /** What the list is made of: each read once, by the reader that owns it. */
 export interface WhatTheListReads {
-  /** The declaration's members in its order, with the model each is declared on (null for the host's own). */
-  readonly members: readonly { readonly name: string; readonly model: string | null }[]
+  /** The declaration's members in its order, with the model each is declared on (null for the host's own) and whether the declaration keeps it down. */
+  readonly members: readonly Declared[]
   /** The crew's rows, as see_the_crew answered them. */
   readonly rows: readonly CrewRow[]
   /** The launcher's records as `launchesIn` reads them. */
@@ -50,7 +50,10 @@ export function theMembersListed(reads: WhatTheListReads): readonly ListedMember
   return reads.members.map((member) => listed(reads, member))
 }
 
-type Declared = { readonly name: string; readonly model: string | null }
+type Declared = { readonly name: string; readonly model: string | null; readonly parked: boolean }
+
+/** The note on the line of a member the declaration keeps down (martha#931): `martha up` leaves it, and its state reads parked while it is not running. */
+export const PARKED_IN_THE_DECLARATION = 'parked in the declaration'
 
 function listed(reads: WhatTheListReads, member: Declared): ListedMember {
   const row = reads.rows.find((one) => one.member === member.name)
@@ -58,10 +61,10 @@ function listed(reads: WhatTheListReads, member: Declared): ListedMember {
   const park = reads.parks[member.name] ?? { kind: 'not_parked', last_marker: null }
   return {
     member: member.name,
-    state: stateOf(launch !== undefined, park.kind === 'parked', row?.state === OFFLINE),
+    state: stateOf(launch !== undefined, park.kind === 'parked' || (member.parked && launch === undefined), row?.state === OFFLINE),
     ...whereAndWhatOf(launch, row),
     model: modelOf(member, row),
-    note: [noteOfThePark(park), noteOfTheRequest(reads.requests[member.name], launch, reads.now)].filter((note) => note !== '').join('; '),
+    note: [member.parked ? PARKED_IN_THE_DECLARATION : '', noteOfThePark(park), noteOfTheRequest(reads.requests[member.name], launch, reads.now)].filter((note) => note !== '').join('; '),
   }
 }
 

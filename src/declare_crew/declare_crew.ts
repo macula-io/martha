@@ -11,10 +11,11 @@
 // table in which the owner may do everything, team is a table with roles. The
 // name is carried for people to read and is never compared here.
 //
-// Nothing is defaulted silently. A missing or unreadable declaration, a field of
-// the wrong shape and a key this slice does not know are each refused with the
-// file and the field, so a misspelt switch cannot leave a rule off while the
-// declaration looks right. What a release's init did not write is another matter,
+// Nothing is defaulted silently. A missing or unreadable declaration and a field
+// of the wrong shape are each refused with the file and the field. A key this
+// slice does not know, and a review model a host cannot run, are said in one line
+// naming them and the crew is read on (martha#601): neither stops a leaked key,
+// lost work, or a push to main without the owner's yes. What a release's init did not write is another matter,
 // and each such field reads as the value init writes today: a house rule the
 // declaration does not name is off, a table that names no act grants it to the
 // owner alone (whoTheTableGrants), and a declaration that names no
@@ -25,6 +26,25 @@ import { hostRuns, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 
 export type { ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { memberNameKey } from './member_names.ts'
+import { GITHUB, GITHUB_KEYS, githubOf, type CrewGithub } from './the_crews_github.ts'
+import { TRANSCRIPTS, TRANSCRIPTS_KEYS, transcriptsOf, type CrewTranscripts } from './the_crews_transcripts.ts'
+import { THRESHOLDS, THRESHOLDS_KEYS, thresholdsOf, type CrewThresholds } from './the_crews_thresholds.ts'
+import { OWNER_NOTICES, OWNER_NOTICES_KEYS, ownerNoticesOf, type CrewOwnerNotices } from './the_crews_owner_notices.ts'
+import { CLOCK_ZONE, clockZoneOf } from './the_crews_clock_zone.ts'
+import { PROFILE, PROFILE_BLOCK_FIELDS, PROFILE_TOP_LEVEL_KEYS, profilesOf, theProfileOfAMember, type Billing, type TheProfiles } from './the_crews_profiles.ts'
+export { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, BILLINGS, type Billing } from './the_crews_profiles.ts'
+import { ENGINE_ENDPOINT, ENGINE_ENDPOINT_OPTIONAL_KEYS, ENGINE_ENDPOINT_REQUIRED_KEYS, theEnginesEndpointOf, type EngineEndpoint } from './the_engines_endpoint.ts'
+export {
+  AN_ENVIRONMENT_NAME,
+  ENDPOINT_SCHEMES,
+  ENGINE_ENDPOINT,
+  ENGINE_ENDPOINT_OPTIONAL_KEYS,
+  ENGINE_ENDPOINT_REQUIRED_KEYS,
+  THE_SCHEME_OF_A_BARE_HOST,
+  isAKeyFilesPath,
+  type EngineEndpoint,
+} from './the_engines_endpoint.ts'
+import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theWorkspacesClonesOf, whereTheCrewOpens, type WhereTheCrewOpens } from './the_crews_workspace.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -325,6 +345,16 @@ export interface Member {
   readonly model: string | null
   /** The host this member is started on, when the declaration names one for it; null when the crew's own applies. */
   readonly host: string | null
+  /**
+   * Declared but kept down (martha#511, the `parked` of Raf's draft on #931): `martha up` starts every member that is
+   * not parked; false when the declaration does not say. Not the park a running member's work is put in.
+   */
+  readonly parked: boolean
+  /**
+   * The credential this member is billed through when it runs on Claude Code (martha#916): its profile's provider's
+   * `billing`; null when it names no profile, or its provider names none, and the launch then picks.
+   */
+  readonly billing: Billing | null
 }
 
 export interface Mode {
@@ -385,6 +415,20 @@ export interface CrewSettings {
    * own machine roots apply there. Read by ../tell_a_citer_of_a_volatile_path, which never writes a root of its own.
    */
   readonly volatile_paths: readonly string[]
+  /** Where an engine member's model is reached (martha#541 package A), or null when the declaration names none. */
+  readonly engine_endpoint: EngineEndpoint | null
+  /** The crew's thresholds (martha#931 A): see ./the_crews_thresholds; each field the declaration leaves out reads today's value. */
+  readonly thresholds: CrewThresholds
+  /** The crew's GitHub block (martha#931 B): see ./the_crews_github. */
+  readonly github: CrewGithub
+  /** The crew's transcript bounds (martha#931 B): see ./the_crews_transcripts. */
+  readonly transcripts: CrewTranscripts
+  /** The host's notifications the owner is told of (martha#931 C): see ./the_crews_owner_notices. */
+  readonly owner_notices: CrewOwnerNotices
+  /** The time zone every clock time Martha prints for the crew reads in (martha#931 C): see ./the_crews_clock_zone. */
+  readonly clock_zone: string
+  /** The crew's name and the terminal its members open in (martha#932): see ./the_crews_workspace's whereTheCrewOpens. */
+  readonly opens: WhereTheCrewOpens
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -400,15 +444,27 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS, GITHUB, TRANSCRIPTS, OWNER_NOTICES, CLOCK_ZONE, ...WORKSPACE_TOP_LEVEL_KEYS, ...PROFILE_TOP_LEVEL_KEYS] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
-const OPTIONAL_MEMBER_KEYS = ['model', HOST] as const
+/** The member key `martha up` reads to leave a declared member down (martha#511). */
+export const PARKED = 'parked'
+/**
+ * The member key naming the file a member's mesh key is in (martha#931, DECIDED 2026-11-20 "ok we rely on the default"):
+ * left out, the key is `<mesh.keys>/agent-<lowercased name>.key`. Checked as a path, read by no part of Martha today.
+ */
+export const MESH_KEY = 'mesh_key'
+const OPTIONAL_MEMBER_KEYS = ['model', HOST, PARKED, PROFILE, MESH_KEY] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
 const MODE_KEYS = ['name', 'roles', 'may'] as const
 
 // What a field must look like, written from its keys: `{ a, b, c? }`.
 const shapeOf = (required: readonly string[], optional: readonly string[] = []) =>
   `{ ${[...required, ...optional.map(key => `${key}?`)].join(', ')} }`
+/**
+ * `gate_enforces` as Raf's draft spells it (martha#931): read as `gate_enforces`, and refused beside it, so one file
+ * never names who the gate enforces for twice. The draft is open for comment; this keeps the file he has declaring.
+ */
+export const GATE_ENFORCE_AS_DRAFTED = 'gate_enforce'
 const HOUSE_RULE_KEYS: readonly string[] = [
   ...HOUSE_RULE_SWITCHES,
   REVIEW_MODEL,
@@ -416,7 +472,28 @@ const HOUSE_RULE_KEYS: readonly string[] = [
   ...HOUSE_RULE_MINUTES,
   GATE_ENFORCES,
   GATE_AUDITS,
+  GATE_ENFORCE_AS_DRAFTED,
 ]
+
+/**
+ * Every field a declaration may hold, by the block it sits in ('' for the top level; `members` for each member): the
+ * lists the parse below refuses an unknown key by. docs/the-declaration.md names each one, and
+ * ./the_declaration_page.node-test.ts holds the page to these lists both ways (martha#931).
+ */
+export const DECLARATION_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  '': TOP_LEVEL_KEYS,
+  members: MEMBER_KEYS,
+  mode: MODE_KEYS,
+  house_rules: HOUSE_RULE_KEYS,
+  [BACKLOG]: BACKLOG_KEYS,
+  [ENGINE_ENDPOINT]: [...ENGINE_ENDPOINT_REQUIRED_KEYS, ...ENGINE_ENDPOINT_OPTIONAL_KEYS],
+  [THRESHOLDS]: THRESHOLDS_KEYS,
+  [GITHUB]: GITHUB_KEYS,
+  [TRANSCRIPTS]: TRANSCRIPTS_KEYS,
+  [OWNER_NOTICES]: OWNER_NOTICES_KEYS,
+  ...WORKSPACE_BLOCK_FIELDS,
+  ...PROFILE_BLOCK_FIELDS,
+}
 
 type Json = Record<string, unknown>
 
@@ -438,8 +515,8 @@ const isText = (value: unknown): value is string => typeof value === 'string' &&
  * alone, whatever host a member names. A caller that knows each host's vocabulary reads the crew with
  * `declareCrewOnHosts`, which holds the model to every member's own host.
  */
-export async function declareCrew(documents: DocumentStore, root: string, models: ModelVocabulary): Promise<CrewSettings> {
-  return readTheCrew(documents, root, { every_host: models })
+export async function declareCrew(documents: DocumentStore, root: string, models: ModelVocabulary, note: (line: string) => void = () => {}): Promise<CrewSettings> {
+  return readTheCrew(documents, root, { every_host: models }, note)
 }
 
 /**
@@ -453,8 +530,13 @@ export type TheVocabulariesOfHost = ReadonlyMap<string, ModelVocabulary>
  * Read the crew's declaration under `root` once, with a vocabulary per host (martha#541 package 6b): a crew whose
  * members run on different hosts is held to what each member's own host runs, not to one host's list.
  */
-export async function declareCrewOnHosts(documents: DocumentStore, root: string, vocabularies: TheVocabulariesOfHost): Promise<CrewSettings> {
-  return readTheCrew(documents, root, { by_host: vocabularies })
+export async function declareCrewOnHosts(
+  documents: DocumentStore,
+  root: string,
+  vocabularies: TheVocabulariesOfHost,
+  note: (line: string) => void = () => {},
+): Promise<CrewSettings> {
+  return readTheCrew(documents, root, { by_host: vocabularies }, note)
 }
 
 /**
@@ -463,13 +545,28 @@ export async function declareCrewOnHosts(documents: DocumentStore, root: string,
  */
 type TheModelsTheRuleReads = { readonly every_host: ModelVocabulary } | { readonly by_host: TheVocabulariesOfHost }
 
-async function readTheCrew(documents: DocumentStore, root: string, models: TheModelsTheRuleReads): Promise<CrewSettings> {
+async function readTheCrew(
+  documents: DocumentStore,
+  root: string,
+  models: TheModelsTheRuleReads,
+  note: (line: string) => void,
+): Promise<CrewSettings> {
   const crew = join(root, DECLARATION_DIRECTORY)
   const declaration = join(crew, DECLARATION_FILE)
   if (!isAbsolute(root)) throw new DeclarationRefused(declaration, null, 'is not under an absolute project root')
   const text = await readDeclaration(documents, declaration, join(root, CREW_CODE_DECLARATION_DIRECTORY, CREW_CODE_DECLARATION_FILE))
   const parsed = parseDeclaration(declaration, text)
-  return deepFreeze(settingsOf(new Refuse(declaration), parsed, { root, crew, declaration }, models))
+  const conventions = isObject(parsed) && parsed['conventions'] === undefined ? await theConventionsWhenUnnamed(documents, crew) : null
+  return deepFreeze(settingsOf(new Refuse(declaration, note), parsed, { root, crew, declaration, conventions_when_unnamed: conventions }, models))
+}
+
+/** The file a crew's conventions are read from when the declaration names none (martha#931): `conventions.md` in the crew directory. */
+const CONVENTIONS_FILE_WHEN_UNNAMED = 'conventions.md'
+
+/** The crew's conventions file when one sits at its default place, or null; read only to learn whether it is there, and only when the declaration names none. */
+async function theConventionsWhenUnnamed(documents: DocumentStore, crew: string): Promise<string | null> {
+  const path = join(crew, CONVENTIONS_FILE_WHEN_UNNAMED)
+  return documents.read(path).then(() => path, () => null)
 }
 
 /**
@@ -501,45 +598,83 @@ function parseDeclaration(declaration: string, text: string): unknown {
   }
 }
 
-// Throws a refusal for the declaration being read, naming the field.
+// Throws a refusal for the declaration being read, naming the field; or says a line and reads on (martha#601).
 class Refuse {
   readonly file: string
+  readonly note: (line: string) => void
 
-  constructor(file: string) {
+  constructor(file: string, note: (line: string) => void = () => {}) {
     this.file = file
+    this.note = note
   }
 
   at(field: string | null, why: string): never {
     throw new DeclarationRefused(this.file, field, why)
   }
 
+  /** A field this reader does not know, and anything else the crew is read past (martha#601): one line, naming it. */
+  say(field: string, why: string): void {
+    this.note(`${this.file}: ${field} ${why}`)
+  }
+
   unknownKeys(value: Json, known: readonly string[], prefix: string): void {
     const unknown = Object.keys(value).find(key => !known.includes(key))
-    if (unknown !== undefined) this.at(`${prefix}${unknown}`, `is not a field here (they are ${known.join(', ')})`)
+    if (unknown !== undefined) this.say(`${prefix}${unknown}`, `is not a field here (they are ${known.join(', ')}); ignoring it`)
   }
 }
 
-function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conventions'>, models: TheModelsTheRuleReads): CrewSettings {
+/** The places the reader is handed: the crew's own, and its conventions file when the declaration names none. */
+type ThePlacesRead = Omit<CrewPaths, 'conventions'> & { readonly conventions_when_unnamed: string | null }
+
+function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, models: TheModelsTheRuleReads): CrewSettings {
   if (!isObject(value)) return refuse.at(null, 'is not a JSON object')
   refuse.unknownKeys(value, TOP_LEVEL_KEYS, '')
   if (value['version'] !== DECLARATION_VERSION) refuse.at('version', `is not ${DECLARATION_VERSION}`)
   if (!isText(value['owner'])) refuse.at('owner', 'is not a name')
-  const mode = modeOf(refuse, value['mode'])
-  const members = membersOf(refuse, value['members'], mode.roles)
+  const { conventions_when_unnamed, ...paths } = places
+  const said = (field: string, why: string): never => refuse.at(field, why)
+  const profiles = profilesOf(value, said)
+  const mode = modeOf(refuse, value['mode'], value['members'])
+  const members = membersOf(refuse, value['members'], mode.roles, profiles)
   const host = crewHostOf(refuse, value[HOST])
+  const rules = houseRulesAsRead(refuse, value['house_rules'], theWorkspacesClonesOf(value, paths.root, said))
   return {
-    paths: { ...paths, conventions: conventionsOf(refuse, value['conventions'], paths.crew) },
+    paths: { ...paths, conventions: conventionsOf(refuse, value['conventions'], paths.crew) ?? conventions_when_unnamed },
     owner: value['owner'].trim(),
     host,
     members,
     mode,
-    house_rules: houseRulesOf(refuse, value['house_rules'], models, { members, mode, crew_host: host }),
-    gate: gateOf(refuse, value['house_rules'], members),
+    house_rules: houseRulesOf(refuse, rules, models, { members, mode, crew_host: host }),
+    gate: gateOf(refuse, rules, members),
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
+    thresholds: thresholdsOf(value[THRESHOLDS], (field, why) => refuse.at(field, why)),
+    github: githubOf(value[GITHUB], (field, why) => refuse.at(field, why)),
+    transcripts: transcriptsOf(value[TRANSCRIPTS], (field, why) => refuse.at(field, why)),
+    owner_notices: ownerNoticesOf(value[OWNER_NOTICES], (field, why) => refuse.at(field, why)),
+    clock_zone: clockZoneOf(value[CLOCK_ZONE], (field, why) => refuse.at(field, why)),
     backlog: backlogOf(refuse, value[BACKLOG]),
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
+    engine_endpoint: theEnginesEndpointOf(said, value, profiles, (field, why) => refuse.say(field, why)),
+    opens: whereTheCrewOpens(value),
   }
+}
+
+/**
+ * The house rules as the reader judges them (martha#931): `gate_enforce`, as Raf's draft spells it, read as
+ * `gate_enforces`; and, when the declaration names a workspace root and the rules name neither place, the clones in that
+ * root and the worktrees beside it, as a checkout's own path proves them (workspaceLayoutOf). A place named in both is
+ * refused, so the two can never disagree.
+ */
+function houseRulesAsRead(refuse: Refuse, value: unknown, clones: string | null): unknown {
+  if (!isObject(value)) return value
+  const { [GATE_ENFORCE_AS_DRAFTED]: drafted, ...rules } = value
+  if (drafted !== undefined && rules[GATE_ENFORCES] !== undefined) refuse.at(`house_rules.${GATE_ENFORCE_AS_DRAFTED}`, `is named beside ${GATE_ENFORCES}, which it is read as`)
+  const read: Json = drafted === undefined ? rules : { ...rules, [GATE_ENFORCES]: drafted }
+  if (clones === null) return read
+  const named = HOUSE_RULE_PLACES.find((place) => read[place] !== undefined)
+  if (named !== undefined) refuse.at(`house_rules.${named}`, `is named beside ${THE_WORKSPACES_ROOT}, which places the clones and the worktrees`)
+  return { ...read, [CLONES]: clones, [WORKTREES]: join(dirname(clones), WORKTREES_BESIDE_CLONES) }
 }
 
 /**
@@ -603,12 +738,59 @@ function handoverCeilingOf(refuse: Refuse, value: unknown): number {
   return value
 }
 
-function modeOf(refuse: Refuse, value: unknown): Mode {
-  if (!isObject(value)) return refuse.at('mode', `is not ${shapeOf(MODE_KEYS)}`)
+function modeOf(refuse: Refuse, value: unknown, members: unknown): Mode {
+  if (typeof value === 'string') return aModeByName(refuse, value, members)
+  if (!isObject(value)) return refuse.at('mode', `is not a mode's name, or ${shapeOf(MODE_KEYS)}`)
   refuse.unknownKeys(value, MODE_KEYS, 'mode.')
   if (!isText(value['name'])) refuse.at('mode.name', 'is not a name')
   const roles = rolesOf(refuse, value['roles'])
   return { name: value['name'], roles, may: mayOf(refuse, value['may'], roles) }
+}
+
+/**
+ * A mode named by its name alone (martha#931, Raf's draft writes `"mode": "team"`): its text is
+ * `.martha/modes/<name>.md`, as for every mode. A name Martha has a table of takes that table, as `martha init` writes
+ * it (the Supervisor's ruling on PR 939). Any other name has the roles its members hold and a table that names no act,
+ * so every act is the owner's (whoTheTableGrants), the reading a table that leaves an act out has always had. A crew
+ * that grants an act to a role writes the mode as `{ name, roles, may }`.
+ */
+function aModeByName(refuse: Refuse, name: string, members: unknown): Mode {
+  if (!isText(name)) return refuse.at('mode', 'is not a name')
+  const own = marthasOwnTableOf(name.trim())
+  if (own !== undefined) return own
+  const held = Array.isArray(members) ? members.flatMap((member: unknown) => (isObject(member) && isText(member['role']) && member['role'] !== OWNER ? [member['role']] : [])) : []
+  const may = Object.fromEntries(ACTS.map((act) => [act, [...whoTheTableGrants(undefined)]])) as Record<Act, string[]>
+  return { name: name.trim(), roles: [...new Set(held)], may }
+}
+
+/** The mode Martha keeps a team table for, and its supervisor's role: the declaration's own words, kept here alone. */
+const TEAM_MODE = 'team'
+const TEAM_SUPERVISOR_ROLE = 'supervisor'
+
+/**
+ * Martha's own team table (the Supervisor's ruling on PR 939, matching how this crew works today; Raf may overrule):
+ * a supervisor, builders and reviewers. The supervisor assigns work, unparks and restarts members, and brings the
+ * owner's asks; the reviewers hold reviews; a landing is the owner's to approve.
+ */
+function theTeamTable(): Mode {
+  const roles = [TEAM_SUPERVISOR_ROLE, SOLO_MEMBERS[0].role, SOLO_REVIEWER_ROLE]
+  const may: Record<Act, string[]> = {
+    assign_work: [TEAM_SUPERVISOR_ROLE],
+    [APPROVE_LANDING]: [OWNER],
+    resume_parked_work: [TEAM_SUPERVISOR_ROLE],
+    [OFFER_OWNER_ASKS]: [TEAM_SUPERVISOR_ROLE],
+    [RESTART_MEMBER]: [TEAM_SUPERVISOR_ROLE],
+    [HOLD_REVIEWS]: [SOLO_REVIEWER_ROLE],
+  }
+  return { name: TEAM_MODE, roles, may }
+}
+
+/** The table Martha writes for a mode of this name (`martha init`'s solo crew, and its team table), or undefined when it has none. */
+function marthasOwnTableOf(name: string): Mode | undefined {
+  if (name === TEAM_MODE) return theTeamTable()
+  const solo = soloDeclaration(OWNER).mode
+  if (name !== solo.name) return undefined
+  return { name: solo.name, roles: [...solo.roles], may: Object.fromEntries(ACTS.map((act) => [act, [...whoTheTableGrants((solo.may as Readonly<Record<string, unknown>>)[act])]])) as Record<Act, string[]> }
 }
 
 function rolesOf(refuse: Refuse, value: unknown): string[] {
@@ -655,20 +837,45 @@ function whoMayOf(refuse: Refuse, entry: unknown, act: Act, allowed: readonly st
   return who
 }
 
-function membersOf(refuse: Refuse, value: unknown, roles: readonly string[]): Member[] {
+function membersOf(refuse: Refuse, value: unknown, roles: readonly string[], profiles: TheProfiles): Member[] {
   if (!Array.isArray(value)) return refuse.at('members', 'is not a list of members')
   const seen = new Set<string>()
-  return value.map((member: unknown, i) => memberOf(refuse, member, `members[${i}]`, roles, seen))
+  return value.map((member: unknown, i) => memberOf(refuse, member, `members[${i}]`, { roles, seen, profiles }))
 }
 
-function memberOf(refuse: Refuse, member: unknown, at: string, roles: readonly string[], seen: Set<string>): Member {
+/** What a member is read against: the mode's roles, the names already on the crew, and the declared profiles. */
+interface TheMembersRead {
+  readonly roles: readonly string[]
+  readonly seen: Set<string>
+  readonly profiles: TheProfiles
+}
+
+function memberOf(refuse: Refuse, member: unknown, at: string, read: TheMembersRead): Member {
   if (!isObject(member)) return refuse.at(at, `is not ${shapeOf(REQUIRED_MEMBER_KEYS, OPTIONAL_MEMBER_KEYS)}`)
   refuse.unknownKeys(member, MEMBER_KEYS, `${at}.`)
-  const { role, model, host } = member
-  const name = memberNameOf(refuse, member.name, at, seen)
-  if (typeof role !== 'string' || !roles.includes(role)) refuse.at(`${at}.role`, `is not a role of this mode (${roles.join(', ')})`)
+  const { role, parked } = member
+  const name = memberNameOf(refuse, member.name, at, read.seen)
+  if (typeof role !== 'string' || !read.roles.includes(role)) refuse.at(`${at}.role`, `is not a role of this mode (${read.roles.join(', ')})`)
+  if (member[MESH_KEY] !== undefined && !isText(member[MESH_KEY])) refuse.at(`${at}.${MESH_KEY}`, 'is not a path')
+  return { name, role, ...theModelAndHostOf(refuse, member, at, read.profiles), parked: parkedOf(refuse, parked, `${at}.${PARKED}`) }
+}
+
+/**
+ * A member's model and host: its profile's (martha#931), or the member's own `model` and `host` as before. Its billing
+ * is its profile's provider's (martha#916); a member with no profile names no billing, and the launch picks.
+ */
+function theModelAndHostOf(refuse: Refuse, member: Json, at: string, read: TheProfiles): Pick<Member, 'model' | 'host' | 'billing'> {
+  const profiled = theProfileOfAMember(member, at, read, ['model', HOST], (field, why) => refuse.at(field, why))
+  if (profiled !== null) return profiled
+  const { model, host } = member
   if (model !== undefined && model !== null && !isText(model)) refuse.at(`${at}.model`, 'is not a model name, or null for the host\'s own')
-  return { name, role, model: model ?? null, host: host === undefined ? null : hostNamed(refuse, host, `${at}.${HOST}`) }
+  return { model: model ?? null, host: host === undefined ? null : hostNamed(refuse, host, `${at}.${HOST}`), billing: null }
+}
+
+/** A member's `parked` (martha#511): false when the declaration does not say, and refused by its field when it is not true or false. */
+function parkedOf(refuse: Refuse, value: unknown, at: string): boolean {
+  if (value === undefined) return false
+  return typeof value === 'boolean' ? value : refuse.at(at, 'is not true or false')
 }
 
 /**
@@ -738,7 +945,7 @@ function houseRulesOf(refuse: Refuse, value: unknown, models: TheModelsTheRuleRe
   if (!isObject(value)) return refuse.at('house_rules', `is not ${shapeOf(HOUSE_RULE_KEYS)}`)
   refuse.unknownKeys(value, HOUSE_RULE_KEYS, 'house_rules.')
   refuseSwitches(refuse, value)
-  refuseTheReviewModel(refuse, value[REVIEW_MODEL], models, crew)
+  noteTheReviewModel(refuse, value[REVIEW_MODEL], models, crew)
   refusePlaces(refuse, value)
   refuseMinutes(refuse, value)
   return houseRulesFrom(value)
@@ -759,18 +966,17 @@ interface TheCrewRead {
 
 /**
  * The reviewer model, read against the models each host a member runs on takes (martha#315, martha#541 package 6b): a
- * name a member's own host cannot spell is refused here, where the owner sees which model that host does run, rather
- * than left as a rule nothing could ever match.
+ * name a member's own host cannot spell is said in one line, naming the models that host does run, and the crew is
+ * read anyway (martha#601). A rule nothing could ever match is not one of the three harms the refusals are kept for.
  *
  * Every member's host is held to the name, not only the reviewer members': any member can spawn a subagent, so a name
- * one of the crew's hosts can never spell would refuse every review spawned there forever. A host this release records
- * no vocabulary for is refused by name too, never read as runnable.
+ * one of the crew's hosts can never spell is said, and so is a host this release records no vocabulary for.
  */
-function refuseTheReviewModel(refuse: Refuse, model: unknown, models: TheModelsTheRuleReads, crew: TheCrewRead): void {
+function noteTheReviewModel(refuse: Refuse, model: unknown, models: TheModelsTheRuleReads, crew: TheCrewRead): void {
   if (model === undefined) return
-  if (!isText(model)) return refuse.at(`house_rules.${REVIEW_MODEL}`, 'is not a model name')
+  if (!isText(model)) return refuse.say(`house_rules.${REVIEW_MODEL}`, 'is not a model name; reading the crew without one')
   const name = model.trim()
-  if ('every_host' in models) return refuseOnTheOneHost(refuse, name, models.every_host)
+  if ('every_host' in models) return noteOnTheOneHost(refuse, name, models.every_host)
   const vocabularies = models.by_host
   const held = new Set<string>()
   for (const member of crew.members) {
@@ -781,22 +987,23 @@ function refuseTheReviewModel(refuse: Refuse, model: unknown, models: TheModelsT
     const where = `house_rules.${REVIEW_MODEL}`
     if (vocabulary === undefined) {
       const known = [...vocabularies.keys()].join(', ')
-      refuse.at(where, `cannot be held on ${host}, a host this release records no models for (it records ${known}), so a review could never be held to it`)
+      refuse.say(where, `cannot be held on ${host}, a host this release records no models for (it records ${known}); reading the crew anyway`)
+      continue
     }
     if (hostRuns(vocabulary, name)) continue
     const runs = vocabulary.names.length === 0 ? 'none Martha can name' : vocabulary.names.join(', ')
-    refuse.at(where, `is not a model ${host} runs (it runs ${runs}), so a review could never be held to it`)
+    refuse.say(where, `is not a model ${host} runs (it runs ${runs}), so a review could never be held to it; reading the crew anyway`)
   }
 }
 
 /**
- * The reviewer model read against the one vocabulary `declareCrew` is handed (martha#315), exactly as before martha#541
- * package 6b: a name that host cannot spell is refused, where the owner sees which model it does run.
+ * The reviewer model read against the one vocabulary `declareCrew` is handed (martha#315), said in one line and
+ * read on (martha#601).
  */
-function refuseOnTheOneHost(refuse: Refuse, name: string, models: ModelVocabulary): void {
+function noteOnTheOneHost(refuse: Refuse, name: string, models: ModelVocabulary): void {
   if (hostRuns(models, name)) return
   const runs = models.names.length === 0 ? 'none Martha can name' : models.names.join(', ')
-  refuse.at(`house_rules.${REVIEW_MODEL}`, `is not a model this host runs (it runs ${runs}), so a review could never be held to it`)
+  refuse.say(`house_rules.${REVIEW_MODEL}`, `is not a model this host runs (it runs ${runs}), so a review could never be held to it; reading the crew anyway`)
 }
 
 /**
@@ -844,7 +1051,8 @@ function houseRulesFrom(value: Json): HouseRules {
     ...(switches as Record<HouseRuleSwitch, boolean>),
     ...(places as Record<HouseRulePlace, string | null>),
     ...(minutes as Record<HouseRuleMinutes, number | null>),
-    review_model: textOrNull(value[REVIEW_MODEL]),
+    // A value that is not a model name is read as no model, since a notice names it and the crew reads on (martha#601).
+    review_model: isText(value[REVIEW_MODEL]) ? textOrNull(value[REVIEW_MODEL]) : null,
   }
 }
 
