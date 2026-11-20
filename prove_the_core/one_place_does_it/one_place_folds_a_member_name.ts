@@ -43,6 +43,7 @@ export const FOLDS_THAT_ARE_NOT_NAMES: readonly AFoldThatIsNotAName[] = [
   { path: 'name_a_node_by_its_petname/name_a_node_by_its_petname.ts', folds: 1, reason: A_NODE_ID },
   { path: 'prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts', folds: 4, reason: A_NODE_ID },
   { path: 'read_a_crew_line/the_other_crew_verbs.ts', folds: 3, reason: "a crew line's kind or ARTIFACT action, which crew-code's shorthand reads ignoring case" },
+  { path: 'read_a_members_brief/read_a_members_brief.ts', folds: 1, reason: "an issue's state from gh, read ignoring case as crew-code reads it" },
   { path: 'read_a_ring_results_sender/read_a_ring_results_sender.ts', folds: 2, reason: A_NODE_ID },
   { path: 'recover_a_failed_act/recover_a_failed_act.ts', folds: 1, reason: 'the first letter of a sentence, capitalised for the member to read' },
   { path: 'refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts', folds: 1, reason: 'one ASCII letter of a path, folded as the host folds paths' },

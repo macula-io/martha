@@ -10,7 +10,9 @@
 
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { declareCrew, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
-import type { CrewPlace, DocumentStore, HandoverStampStore, TheCrewFilesStores } from '../host_contract/host_contract.ts'
+import type { CrewPlace, DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
+import { theNewestBriefOf, thePackagesABriefNames, thePackagesAMemberHolds, type ABrief } from '../read_a_members_brief/read_a_members_brief.ts'
+import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { keepTheMilestone, whatWasSent } from '../keep_the_ledger/keep_the_ledger.ts'
 import { theContractPartOf } from '../keep_the_package_contract/keep_the_package_contract.ts'
 import { theSpendPartOfTheStart } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
@@ -152,6 +154,11 @@ export interface TheRefreshPlaces {
   readonly began_at: Map<string, number>
   /** The end of a running turn as the launcher holds it at a tool boundary (martha#311, ruling D). */
   readonly ends: TheEndsHold
+  /**
+   * The launcher's own processes, which GitHub is asked through, by the crew's budget, whether the packages a brief
+   * names are still the member's (martha#999 package 1). A launch without them keeps every package its brief names.
+   */
+  readonly processes?: HostContract['processes']
 }
 
 /** The reason a flow the limit started carries, as the owner reads it on the row. */
@@ -312,29 +319,29 @@ async function carryTheHandover(
 ): Promise<TheAct> {
   const answer = question.answer
   if (answer.includes(THE_REFRESH_DECLINED)) return declined(places, place, flow, answer, settings, now)
-  if (answer.includes(THE_HANDOVER_WRITTEN)) return theWrittenHandover(places, place, flow, question, settings, now)
+  if (answer.includes(THE_HANDOVER_WRITTEN)) return await theWrittenHandover(places, place, flow, question, settings, now)
   if (question.turn_running) return await theEndOfTheRunningTurn(withTheFlowsActs(places), place, flow, question, settings, now)
   if (flow.ending === undefined && aFlowStalled(flow, now)) return abandon(places, place, flow, 'no answer to the handover ask', now, settings)
   return NO_ACT
 }
 
 /** A handover the member says it wrote: accepted and cleared, sent back once, or abandoned. */
-function theWrittenHandover(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, question: TheSessionsQuestion, settings: CrewSettings, now: number): TheAct {
-  const judged = theJudgementOf(places, flow)
+async function theWrittenHandover(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, question: TheSessionsQuestion, settings: CrewSettings, now: number): Promise<TheAct> {
+  const judged = theJudgementOf(places, flow, await thePackagesHeld(places, settings))
   if (judged.kind === 'sent_back') return sentBack(places, place, flow, judged.missing, now)
   if (judged.kind === 'not_written') return sentBackOnceOrAbandoned(places, place, flow, judged.why, now, settings)
   return clearTheSession(places, place, flow, question, settings, judged.missing, now)
 }
 
 /** What the handover the member just wrote is: accepted, sent back with what was missing, or cleared anyway. */
-function theJudgementOf(places: TheRefreshPlaces, flow: ARefresh): HandoverVerdict {
+function theJudgementOf(places: TheRefreshPlaces, flow: ARefresh, holds: readonly string[]): HandoverVerdict {
   const newest = theMembersNewestHandover(places)
   const unread = newest === undefined || 'refusal' in newest
   return whatBecameOfTheHandover({
     stamp: unread ? newest : stampOf(places, newest.file),
     text: unread ? '' : newest.content,
     asked_at: flow.asked_at,
-    holds: holdsOf(places),
+    holds,
     sent_back: flow.sent_back,
     at_limit: flow.trigger === 'at_the_limit',
   })
@@ -382,7 +389,8 @@ async function resume(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh
   keepTheFlow(place, places.member, theFlowAbandoned(flow, 'resumed at a new session', now))
   // What a killed run left is in the prompt (#693), read by the slice that keeps it: the clear that this flow ran took no
   // record of its own, so what is told here is the last launch end's.
-  return { act: 'prompt', text: theResumePromptWithItsTelling({ member: places.member, file, acts, contract: held_to === '' ? undefined : held_to, crew: places.stores.crew, now_ms: now }), refresh: { phase: 'resumed', reason: `resumed from ${file}` } }
+  const brief = theBriefOf(places)
+  return { act: 'prompt', text: theResumePromptWithItsTelling({ member: places.member, file, acts, contract: held_to === '' ? undefined : held_to, brief: brief?.path, crew: places.stores.crew, now_ms: now }), refresh: { phase: 'resumed', reason: `resumed from ${file}` } }
 }
 
 /** The acts of `package` that were sent and never concluded, as the ledger's own line names them. */
@@ -489,7 +497,26 @@ function stampOf(places: TheRefreshPlaces, file: string): HandoverStampStore['re
   return places.stamps === undefined ? undefined : places.stamps.read(file)
 }
 
-/** The packages the member's row says it holds: the lines a handover must carry. */
+/** The member's newest brief, or undefined when it has none or the store will not read it: a resume names it when there is one. */
+function theBriefOf(places: TheRefreshPlaces): ABrief | undefined {
+  const brief = theNewestBriefOf(places.stores.crew, places.member)
+  return brief === undefined || 'refusal' in brief ? undefined : brief
+}
+
+/**
+ * The packages a handover must carry a line for (martha#999 package 1, crew-code's heldPackagesOf): those the member's
+ * newest brief names that GitHub does not say are someone else's, asked through the crew's budget; every one the brief
+ * names when this launch cannot ask; and the one the member's row says it holds when it has no brief.
+ */
+async function thePackagesHeld(places: TheRefreshPlaces, settings: CrewSettings): Promise<readonly string[]> {
+  const brief = theBriefOf(places)
+  if (brief === undefined) return holdsOf(places)
+  if (places.processes === undefined) return thePackagesABriefNames(brief.text)
+  const spender = theGithubSpenderOf({ stores: places.stores, root: places.root, processes: places.processes, clock: places.ledger.clock, github: settings.github, clock_zone: settings.clock_zone })
+  return await thePackagesAMemberHolds(spender, brief.text, places.member)
+}
+
+/** The packages the member's row says it holds: the lines a handover must carry when it has no brief. */
 function holdsOf(places: TheRefreshPlaces): readonly string[] {
   const held = places.beats.read(places.member)?.holds ?? ''
   return held === '' ? [] : [held]
