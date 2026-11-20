@@ -8,7 +8,8 @@
 // `main` and a `feature/x` belong to nobody and are not touched by the rule. A call is judged where its line leaves the
 // shell, and where the reader cannot tell, it is judged nowhere rather than somewhere it is not. The last claim is the
 // one that keeps the rule honest: a place is read with a separator after it, so a path that merely starts with the same
-// letters is another place.
+// letters is another place. One push is refused whoever makes it (martha#925): a push whose target is the default branch
+// git names, in every shape a refspec writes it; any other target passes, and so does every push where git names none.
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
