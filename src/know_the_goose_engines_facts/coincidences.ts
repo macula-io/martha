@@ -15,6 +15,9 @@ export const COINCIDENCES: readonly Exception[] = [
   // `crates/goose/src/skills/` is the engine's own skills module, where it reads its built-in skills switch. The
   // constant is the folder Claude Code loads an owner's skills from, which no part of reading the engine touches.
   { value: SKILLS_KIND, file: 'know_the_goose_engines_facts/the_engines_facts_in_its_source.ts', reason: 'the skills folder in ENGINE_PLACES is the Goose engine\'s own skills module, named as its source tree names it; the constant holds the folder Claude Code loads skills from (martha#839)' },
+  // The same module, where the skill-roots reader reads the checkout's skill folders: SKILL_ROOT_PLACES moved there
+  // from ENGINE_PLACES, which spreads it (martha#614).
+  { value: SKILLS_KIND, file: 'know_the_goose_engines_facts/the_checkout_skill_roots_in_its_source.ts', reason: 'the skills folder in SKILL_ROOT_PLACES is the Goose engine\'s own skills module, named as its source tree names it; the constant holds the folder Claude Code loads skills from (martha#614)' },
   // `.agents/skills` under the home is the skill folder the engine's `skills/mod.rs` adds after the checkout's, spelled
   // as that file spells it so the fixture tree reads like the engine's; the checkout's folders come from the recording.
   { value: SKILLS_KIND, file: 'know_the_goose_engines_facts/an_engine_source_from_its_facts.ts', reason: 'the home skill folder in the fixture tree is the Goose engine\'s own, spelled as its skills/mod.rs spells it; the constant holds the folder Claude Code loads skills from (martha#614)' },
