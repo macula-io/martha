@@ -156,6 +156,15 @@ test("a call that spells a place through a link meets the same rule", async (t) 
   assert.match((await refusalOf(fixture, 'git switch -c mine', join(clonesThroughALink, 'acme', 'widget'))) ?? '', /a clone stays on its default branch/)
 })
 
+test("martha#925: a push onto the default branch from a member's worktree is refused as git names that branch, and fails open when git names none", async (t) => {
+  const fixture = aCrew(t)
+  const own = `${MEMBER.toLowerCase()}/562`
+  assert.match((await refusalOf(fixture, 'git push origin HEAD:main', fixture.worktree_of_member)) ?? '', /main is the default branch/)
+  assert.equal(await refusalOf(fixture, `git push origin HEAD:${own}`, fixture.worktree_of_member), undefined)
+  gitIn(fixture.clone, 'remote', 'set-head', 'origin', '--delete')
+  assert.equal(await refusalOf(fixture, 'git push origin HEAD:main', fixture.worktree_of_member), undefined)
+})
+
 test('a call nowhere near a repository is asked nowhere, and refused by nothing it could not look at', async (t) => {
   const fixture = aCrew(t)
   // No directory: no clone to ask for its branches, so the branch rule cannot fire and the call goes through.

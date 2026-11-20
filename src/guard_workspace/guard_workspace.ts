@@ -16,6 +16,16 @@
 // outside the place the crew named, a repository cloned twice — those are tree facts, and the scan
 // (../check_the_workspace_matches_its_layout) reports them.
 //
+// One push is refused, by the owner's ruling of 2026-11-20 on martha#601 ("Yes, list then cut (Recommended)": a push to
+// main without the owner's yes is among what still stops): a push whose target is the default branch, as git names
+// that branch for the origin (martha#925). Main moves through the landing tools only, whose fast-forward waits for the
+// owner's yes. The rule reads the target each refspec names — `main`, `HEAD:main`, `+x:refs/heads/main`, `:main`, a
+// `--delete` of it — on whatever remote the line names, since a URL is the same origin by another spelling. It does not
+// read a target the line leaves to git: a bare `git push`, or `git push origin HEAD`, from a checkout of the default
+// branch, nor `--all` or `--mirror`. Those are where the work does not happen — a clone stays on its default branch and
+// is not committed in — and the speed bump stays one, said plainly. Like the switch rule, it fails open when git cannot
+// name the default branch, and Martha's own git runs, which carry its settings, pass the shim as before.
+//
 // The places come from the declaration's `house_rules`, and the members from its `members`; nothing here restates
 // either. Everything a call is read from is the call's own words, read once by
 // ../read_the_git_calls_in_a_shell_line, and the few tree facts only git can say are handed in: a rule that cannot see
@@ -35,6 +45,7 @@
 
 import { sameMemberName, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
+import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { isAbsolute, join, resolve, sep } from 'node:path'
 
 /** The places a crew declared, and the member names it declares: the declaration's own `house_rules` and `members`. */
@@ -94,6 +105,9 @@ const PRUNE = '--prune'
 
 /** The refspec a push deletes a remote ref with: an empty source, `git push origin :gone`, and nothing before the colon. */
 const A_DELETED_REFSPEC = ':'
+
+/** The mark a refspec forces its update with, `+HEAD:main`, which names the same target as the plain one. */
+const A_FORCED_REFSPEC = '+'
 
 /** The commands whose words this guard reads, each named here rather than spelled at every use. */
 const CHECKOUT = 'checkout'
@@ -279,13 +293,31 @@ function theRefsAPushDeletes(args: readonly string[]): readonly string[] {
   return words.slice(1).map((word) => (word.startsWith(A_DELETED_REFSPEC) ? word.slice(A_DELETED_REFSPEC.length) : word)).filter((ref) => ref !== '')
 }
 
+/** The branch one refspec of a push writes on the remote: the part past its colon, or the whole when it has none. */
+function theTargetOfARefspec(refspec: string): string {
+  const plain = refspec.startsWith(A_FORCED_REFSPEC) ? refspec.slice(A_FORCED_REFSPEC.length) : refspec
+  const colon = plain.indexOf(A_DELETED_REFSPEC)
+  return theBranchOf(colon === -1 ? plain : plain.slice(colon + A_DELETED_REFSPEC.length))
+}
+
+/** The refusal a push onto the default branch is (martha#925): undefined when git names none, or no refspec targets it. */
+function refusalOfAPushOntoTheDefault(args: readonly string[], facts: TheFacts): string | undefined {
+  const theDefault = facts.defaultBranch
+  if (theDefault === null) return undefined
+  const targets = theWordsNotOptions(args).slice(1).map(theTargetOfARefspec)
+  return targets.includes(theDefault)
+    ? `${theDefault} is the default branch, and a push onto it waits for the owner's yes: land the work with ${LAND_BATCH}, then ${FAST_FORWARD_AFTER_THE_OWNERS_YES} once the owner said yes. Nothing was pushed.`
+    : undefined
+}
+
 /**
- * The refusal a push is, when it prunes a remote's refs nobody named, or deletes another member's branch there. A prune
- * takes every remote branch the push does not name, and the line names none of them, so it is refused outright.
+ * The refusal a push is, when it prunes a remote's refs nobody named, deletes another member's branch there, or
+ * targets the default branch. A prune takes every remote branch the push does not name, and the line names none of
+ * them, so it is refused outright.
  */
 function refusalOfAPush(args: readonly string[], request: AGuardedCall): string | undefined {
   if (args.includes(PRUNE)) return `a push that prunes takes every remote branch it does not name, another member's among them: push the one ref you mean, or delete your own by name.`
-  return refusalOfTheBranches(theRefsAPushDeletes(args), request.workspace, request.member)
+  return refusalOfTheBranches(theRefsAPushDeletes(args), request.workspace, request.member) ?? refusalOfAPushOntoTheDefault(args, request.facts)
 }
 
 /** The refusal a `branch` call is when it deletes or moves a branch: none when it only reads or makes one. */
