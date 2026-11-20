@@ -52,8 +52,8 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     owner: 'Raf',
     host: THE_HOST_A_MEMBER_RAN_ON,
     members: [
-      { name: 'builder', role: 'builder', model: null, host: null, parked: false },
-      { name: 'reviewer', role: 'reviewer', model: null, host: null, parked: false },
+      { name: 'builder', role: 'builder', model: null, host: null, parked: false, billing: null },
+      { name: 'reviewer', role: 'reviewer', model: null, host: null, parked: false, billing: null },
     ],
     mode: { name: mode, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER], [HOLD_REVIEWS]: [OWNER] } },
     house_rules: { owner_items: false, workspace_layout: false, member_work: false, practice: overrides.practice ?? false, strict_gate: false, owner_bell: false, dashboard: false, refresh_between_tasks: false, nudges: false, wake: false, stalled_minutes: null, review_minutes: null, person_minutes: null, wake_after_minutes: null, wake_cap_minutes: null, review_model: null, clones: null, worktrees: null },
@@ -241,7 +241,7 @@ test('#306: the files a crew must approve are its roles\' texts, its mode\'s tex
 test('#306: Martha\'s own texts compose for every role it ships, in both modes, with no placeholder left and nothing refused', () => {
   for (const [mode, member] of [[SOLO_MODE, 'builder'], [SOLO_MODE, 'reviewer'], ['team', 'builder'], ['team', 'reviewer'], ['team', 'sup']] as const) {
     const settings = settingsOf({ mode })
-    const texts = sectionFor({ ...settings, members: [...settings.members, { name: 'sup', role: SUPERVISOR, model: null, host: null, parked: false }] }, member, shippedReader())
+    const texts = sectionFor({ ...settings, members: [...settings.members, { name: 'sup', role: SUPERVISOR, model: null, host: null, parked: false, billing: null }] }, member, shippedReader())
     const section = handAMemberItsCrewText({ ...texts, practice: textAt(join(SHIPPED_TEXTS, PRACTICE_TEXT), shipped(PRACTICE_TEXT)) })
     assert.doesNotMatch(section, /\{\{/, `the ${member} text in ${mode} leaves a placeholder: ${section.slice(section.indexOf('## Your role'))}`)
   }

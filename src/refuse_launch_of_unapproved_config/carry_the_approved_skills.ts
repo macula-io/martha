@@ -8,9 +8,9 @@
 // What this file holds is the part of that carry the gate decides:
 //   - which entries are skills of the start folder itself, the only ones carried (one in a folder above the start is
 //     fingerprinted and listed as not carried, never copied);
-//   - that a skill may not take one of the host's or Martha's reserved names (../know_claude_codes_own_facts'
-//     RESERVED_SKILL_NAMES). The launcher keys the carried bytes for the member's config folder
-//     (../launch_a_claude_code_member, theCarriedSkills).
+//   - which of the start folder's skills takes one of the host's or Martha's reserved names
+//     (../know_claude_codes_own_facts' RESERVED_SKILL_NAMES), said in one line and carried on (martha#601). The
+//     launcher keys the carried bytes for the member's config folder (../launch_a_claude_code_member, theCarriedSkills).
 
 import { RESERVED_SKILL_NAMES } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
@@ -18,15 +18,15 @@ import { RESERVED_SKILL_NAMES } from '../know_claude_codes_own_facts/claude_code
 export const isBelowACarriedFolder = (path: string, folders: readonly string[]): boolean => folders.some((folder) => path.startsWith(`${folder}/`))
 
 /**
- * The refusal for the first entry below a carried skills folder whose skill takes a reserved name, or undefined. Only
- * the start folder's own skills are carried, so only they are asked.
+ * The line for each entry below a carried skills folder whose skill takes a reserved name, said and then carried on
+ * (martha#601): a skill hiding under a reserved name is not one of the harms a refusal is kept for. Only the start
+ * folder's own skills are carried, so only they are asked.
  */
-export function aSkillWithAReservedName(paths: readonly string[], folders: readonly string[]): string | undefined {
+export function aSkillWithAReservedName(paths: readonly string[], folders: readonly string[], note: (line: string) => void = () => {}): void {
   for (const folder of folders) {
     const taken = paths.map((path) => (path.startsWith(`${folder}/`) ? path.slice(folder.length + 1).split('/')[0] : undefined)).find((name) => name !== undefined && RESERVED_SKILL_NAMES.includes(name))
     if (taken !== undefined) {
-      return `${folder}/${taken} uses a folder name the host or Martha's own scan of the member's skills treats as its own (${RESERVED_SKILL_NAMES.join(', ')}); rename the skill.`
+      note(`${folder}/${taken} uses a folder name the host or Martha's own scan of the member's skills treats as its own (${RESERVED_SKILL_NAMES.join(', ')}); keeping the skill`)
     }
   }
-  return undefined
 }

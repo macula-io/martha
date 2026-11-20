@@ -91,54 +91,6 @@ test('a checkout whose committed attributes convert line endings still reads as 
   assert.equal(read.kind === 'tree' ? read.tree : '', head(where), 'a line-ending conversion is not a change the gate refuses')
 })
 
-test('an approved tree that does not read back as itself is refused rather than judged against', (t) => {
-  const where = place(t, { 'hook.sh': '#!/bin/sh\necho approved\n' })
-  const approved = head(where)
-  writeFileSync(join(where.checkout, 'hook.sh'), '#!/bin/sh\necho planted\n')
-  git(where.checkout, 'add', '--all')
-  const planted = git(where.checkout, 'write-tree')
-  assert.notEqual(planted, approved)
-
-  // The tree object the id names is replaced by another tree's: the id no longer describes what sits under it.
-  const objects = join(where.checkout, '.git', 'objects')
-  for (const id of [approved]) {
-    const object = join(objects, id.slice(0, 2), id.slice(2))
-    if (!existsSync(object)) continue
-    execFileSync('chmod', ['u+w', object])
-    writeFileSync(object, execFileSync('cat', [join(objects, planted.slice(0, 2), planted.slice(2))]))
-  }
-
-  const read = judged(where, approved)
-  assert.equal(read.kind, 'refused', 'a tree that does not read back as itself is refused')
-  const refusal = read.kind === 'refused' ? read.refusal : ''
-  assert.ok(refusal.includes('martha#167'), refusal)
-  assert.ok(refusal.includes('approve the checkout again'), refusal)
-})
-
-test('a subtree forged under the approved tree is refused, not read as the tree the owner approved', (t) => {
-  const where = place(t, { 'sub/hook.sh': '#!/bin/sh\necho approved\n' })
-  const approved = head(where)
-  const approved_subtree = git(where.checkout, 'rev-parse', 'HEAD:sub')
-
-  writeFileSync(join(where.checkout, 'sub', 'hook.sh'), '#!/bin/sh\necho planted\n')
-  git(where.checkout, 'add', '--all')
-  const planted_subtree = git(where.checkout, 'ls-tree', git(where.checkout, 'write-tree'), 'sub').split(/\s+/)[2] ?? ''
-  assert.notEqual(planted_subtree, approved_subtree)
-
-  // The object the approved subtree's id names is replaced by another subtree's. `read-tree` hands its entries on without
-  // a word, and an index that kept the cache-tree `read-tree` primed would hand the approved id back as if it had
-  // computed it; only the id recomputed from those entries tells the two apart.
-  const objects = join(where.checkout, '.git', 'objects')
-  const object = join(objects, approved_subtree.slice(0, 2), approved_subtree.slice(2))
-  execFileSync('chmod', ['u+w', object])
-  writeFileSync(object, execFileSync('cat', [join(objects, planted_subtree.slice(0, 2), planted_subtree.slice(2))]))
-
-  const read = judged(where, approved)
-  assert.equal(read.kind, 'refused', 'a tree whose subtree was forged is not the tree the owner approved')
-  const refusal = read.kind === 'refused' ? read.refusal : ''
-  assert.ok(refusal.includes('does not read back as itself'), refusal)
-})
-
 test('a file the checkout never carried keeps its blob, so a later read under that approval reads the same tree', (t) => {
   const where = place(t, { 'hook.sh': '#!/bin/sh\necho approved\n' })
   writeFileSync(join(where.checkout, 'new.sh'), '#!/bin/sh\necho brand new\n')

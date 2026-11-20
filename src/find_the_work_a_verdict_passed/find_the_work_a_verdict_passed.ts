@@ -16,10 +16,11 @@
 // request whose head is exactly that sha (#256's design: the head the reviewer passed, not the one the branch has
 // now), and a pull request's number is never taken for its package's issue number.
 //
-// Four answers are refused by name, and each says which: no PASS row; a package of another repository than the one
-// being landed; no open pull request at the passed head; more than one. A row written before this package kept the
-// range, and a verdict on a design (doc=, no range), name no head and are refused in their own words rather than
-// crashing.
+// Three answers are refused by name, and each says which: no PASS row; a package of another repository than the one
+// being landed; a PASS row that names no head. A pull request that cannot be found — none open at the passed head, more
+// than one, or a GitHub that cannot answer — is one notice, and the passed head is what lands either way (martha#601). A
+// row written before the range was kept, and a verdict on a design (doc=, no range), name no head and are refused in
+// their own words rather than crashing.
 
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { readLedger, WORK_PACKAGE, type LedgerHost, type LedgerRow } from '../log_ledger/log_ledger.ts'
@@ -51,10 +52,11 @@ export interface LandedWork {
 export async function findTheWorkTheseVerdictsPassed(
   host: LookUpHost,
   look: { readonly packages: readonly string[]; readonly repo: string; readonly cwd: string },
+  note: (line: string) => void = () => {},
 ): Promise<{ readonly work: readonly LandedWork[] } | { readonly refused: string }> {
   const work: LandedWork[] = []
   for (const work_package of look.packages) {
-    const found = await findTheWorkAVerdictPassed(host, { package: work_package, repo: look.repo, cwd: look.cwd })
+    const found = await findTheWorkAVerdictPassed(host, { package: work_package, repo: look.repo, cwd: look.cwd }, note)
     if ('refused' in found) return found
     work.push({ package: work_package, pr: found.pr, head: found.head })
   }
@@ -73,15 +75,21 @@ interface PullRequest {
 
 const refused = (why: string): PassedWork => ({ refused: why })
 
+/**
+ * The pull request number a landing carries when GitHub named none: the passed head is what lands either way
+ * (martha#601), and nothing here invents a number from the package's issue.
+ */
+export const NO_OPEN_PULL_REQUEST = 0
+
 /** The repository a package belongs to: `owner/repo` of `owner/repo#n`. */
 const repoOf = (work_package: string): string => work_package.slice(0, work_package.indexOf('#'))
 
-export async function findTheWorkAVerdictPassed(host: LookUpHost, look: TheLookUp): Promise<PassedWork> {
+export async function findTheWorkAVerdictPassed(host: LookUpHost, look: TheLookUp, note: (line: string) => void = () => {}): Promise<PassedWork> {
   const wrong = lookUpProblem(look)
   if (wrong !== undefined) return refused(wrong)
-  const note = latestVerdictNote(await readLedger(host, look.package), look.package)
-  if (note === undefined) return refused(`no PASS row for ${look.package}.`)
-  const verdict = readableVerdict(note, look.package)
+  const verdict_note = latestVerdictNote(await readLedger(host, look.package), look.package)
+  if (verdict_note === undefined) return refused(`no PASS row for ${look.package}.`)
+  const verdict = readableVerdict(verdict_note, look.package)
   if ('refused' in verdict) return verdict
   const head = headOf(verdict.line)
   if (head === undefined) {
@@ -92,7 +100,7 @@ export async function findTheWorkAVerdictPassed(host: LookUpHost, look: TheLookU
     args: ['api', `repos/${look.repo}/commits/${head}/pulls`],
     cwd: look.cwd,
   })
-  return theOneOpenPullRequestAt(outcome, look, head)
+  return theOneOpenPullRequestAt(outcome, look, head, note)
 }
 
 /** Why this package cannot be looked up in this repository, or nothing when it can. */
@@ -126,8 +134,8 @@ function startsAsAVerdictOn(note: string, work_package: string): boolean {
 /** The latest verdict's line when it reads and is a PASS, or the refusal that answers for it. */
 function readableVerdict(note: string, work_package: string): { readonly line: CrewLineRead } | { readonly refused: string } {
   const reading = readACrewLine(note)
-  if (!('line' in reading) || reading.line === null) {
-    const why = 'refused' in reading ? reading.refused : 'it does not read as a VERDICT line'
+  if (reading.line === null) {
+    const why = reading.notice ?? 'it does not read as a VERDICT line'
     return { refused: `the latest VERDICT row of ${work_package} names no head to land: ${why}` }
   }
   const line = reading.line
@@ -147,22 +155,29 @@ function headOf(verdict: CrewLineRead): string | undefined {
   return range.split('..')[1] ?? undefined
 }
 
-/** The one open pull request at the passed head; nothing else is a pull request to land. */
-function theOneOpenPullRequestAt(outcome: ProcessOutcome, look: TheLookUp, head: string): PassedWork {
+/**
+ * The passed head, with the one open pull request at it when there is one: nothing GitHub answers stops the head from
+ * landing, and a pull request that cannot be found is one notice (martha#601).
+ */
+function theOneOpenPullRequestAt(outcome: ProcessOutcome, look: TheLookUp, head: string, note: (line: string) => void): PassedWork {
+  const landedAnyway = (why: string): PassedWork => {
+    note(`notice: ${why}, and the passed head is landed as it is.`)
+    return { pr: NO_OPEN_PULL_REQUEST, head }
+  }
   if (outcome.exit_code !== 0) {
-    return refused(`gh could not answer for ${head} in ${look.repo}: ${whatGhSaid(outcome)}.`)
+    return landedAnyway(`gh could not answer for ${head} in ${look.repo}: ${whatGhSaid(outcome)}`)
   }
   const pull_requests = pullRequestsIn(outcome.stdout)
   if (pull_requests === undefined) {
-    return refused(`gh answered for ${head} with something that is not a list of pull requests.`)
+    return landedAnyway(`gh answered for ${head} with something that is not a list of pull requests`)
   }
   const open = pull_requests.filter((pr) => pr.state === 'open' && pr.head.sha === head)
-  if (open.length === 0) return refused(`no open pull request at ${head} for ${look.package}.`)
+  if (open.length === 0) return landedAnyway(`no open pull request at ${head} for ${look.package}`)
   if (open.length > 1) {
-    return refused(`more than one open pull request at ${head} for ${look.package}: ${open.map((pr) => `#${pr.number}`).join(', ')}.`)
+    return landedAnyway(`more than one open pull request at ${head} for ${look.package}: ${open.map((pr) => `#${pr.number}`).join(', ')}`)
   }
   const one = open[0]
-  return one === undefined ? refused(`no open pull request at ${head} for ${look.package}.`) : { pr: one.number, head }
+  return one === undefined ? landedAnyway(`no open pull request at ${head} for ${look.package}`) : { pr: one.number, head }
 }
 
 /** What gh said it could not do, as one line: its own words, or the status it ended with when it said none. */

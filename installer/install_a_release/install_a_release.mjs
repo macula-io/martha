@@ -99,23 +99,25 @@ function refuseUnsigned ({ image, version, digest, named, reasons }) {
 export async function installRelease (request) {
   checkNodeVersion(request.nodeVersion ?? process.versions.node)
   checkRequest(request)
+  const log = request.log ?? console.log
+  /** @type {(line: string) => void} */
+  const note = (line) => log(`martha: ${line}`)
   const image = request.image ?? NAMES.image
   const reg = registry({ image, ...(request.base && { base: request.base }), ...(request.fetch && { fetch: request.fetch }) })
-  const chosen = await chosenRelease(request, reg, image)
-  const held = await machineFloor(request.places)
-  const withdrawal = await withdrawalOf(request, reg, image)
-  checkAgainstTheFloor({ version: chosen.version, floor: held, withdrawal, carrier: request.withdrawalIn })
+  const chosen = await chosenRelease(request, reg, image, note)
+  const held = await machineFloor(request.places, note)
+  const withdrawal = await withdrawalOf(request, reg, image, note)
+  const honoured = checkAgainstTheFloor({ version: chosen.version, floor: held, withdrawal, carrier: request.withdrawalIn, note })
   const signer = await signerOf(request, reg, chosen)
-  const { release, declared } = await placedRelease(request, reg, chosen)
+  const { release, declared } = await placedRelease(request, reg, chosen, note)
   // Written only once current is swapped, so a failed install never leaves the floor moved with nothing installed.
-  const floor = withdrawal ? withdrawal.version : higherFloor(held, declared)
+  const floor = honoured ? honoured.version : higherFloor(held, declared)
   await holdTheFloor(request.places, floor)
   const command = await linkCommand({ release, places: request.places })
-  const log = request.log ?? console.log
   log(`martha: ${chosen.version}, ${image}@${chosen.digest}`)
   log(`martha: signed by attest-image.yml@${signer} for ${NAMES.sourceRepository} ${releaseRef(chosen.version)}`)
   log(`martha: ${request.places.current} -> ${release}`)
-  log(`martha: version floor ${floor}${withdrawal ? `, lowered by the withdrawal in ${request.withdrawalIn}` : ''}`)
+  log(`martha: version floor ${floor ?? 'none'}${honoured ? `, lowered by the withdrawal in ${request.withdrawalIn}` : ''}`)
   log(`martha: ${command}`)
   return { version: chosen.version, digest: chosen.digest, signer, release, command, floor }
 }
@@ -128,8 +130,9 @@ export async function installRelease (request) {
  * @param {InstallRequest} request
  * @param {Registry} reg
  * @param {string} image
+ * @param {(line: string) => void} [note]
  */
-async function withdrawalOf (request, reg, image) {
+async function withdrawalOf (request, reg, image, note = () => {}) {
   const version = request.withdrawalIn
   if (version === undefined) return undefined
   const manifest = await reg.manifest(version)
@@ -140,7 +143,7 @@ async function withdrawalOf (request, reg, image) {
   const stage = await mkdtemp(join(request.places.releases, '.withdrawal-'))
   try {
     await unpackLayer(await reg.blob(layer, `the layer ${layer.digest}`), stage)
-    return await withdrawalIn(stage)
+    return await withdrawalIn(stage, note)
   } finally {
     await removeTree(stage)
   }
@@ -157,16 +160,17 @@ async function withdrawalOf (request, reg, image) {
  * @param {InstallRequest} request
  * @param {Registry} reg
  * @param {string} image
+ * @param {(line: string) => void} [note]
  * @returns {Promise<ChosenRelease>}
  */
-async function chosenRelease (request, reg, image) {
+async function chosenRelease (request, reg, image, note = () => {}) {
   const named = request.version !== undefined
   await reg.authorize()
   const version = request.version ?? await reg.highestVersion()
   const manifest = await reg.manifest(version)
   const digest = manifest.digest
   if (request.digest && request.digest !== digest) refuse(`${image}:${version} is ${digest} now, not the ${request.digest} you verified; refused`)
-  await checkAgainstInstalled({ version, digest, downgrade: request.downgrade ?? false, named, places: request.places })
+  await checkAgainstInstalled({ version, digest, downgrade: request.downgrade ?? false, named, places: request.places, note })
   return { image, version, digest, named, manifest }
 }
 
@@ -206,15 +210,17 @@ async function bundlesOf (reg, chosen) {
  * @param {InstallRequest} request
  * @param {Registry} reg
  * @param {ChosenRelease} chosen
+ * @param {(line: string) => void} [note]
  */
-async function placedRelease (request, reg, { image, version, digest, manifest }) {
+async function placedRelease (request, reg, { image, version, digest, manifest }, note = () => {}) {
   const layer = layerOf(manifest.json, `${image}@${digest}`)
-  let declared = ''
+  /** @type {string | undefined} */
+  let declared
   const release = await placeRelease({
     releases: request.places.releases,
     name: releaseName(version, digest),
     unpack: async (stage) => unpackLayer(await reg.blob(layer, `the layer ${layer.digest}`), stage),
-    accept: async (tree) => { declared = await declaredFloor(tree, version) }
+    accept: async (tree) => { declared = await declaredFloor(tree, version, note) }
   })
   await swapLink(release, request.places.current)
   return { release, declared }

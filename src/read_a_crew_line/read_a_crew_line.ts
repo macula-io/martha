@@ -1,10 +1,10 @@
 // Reading the first line of a message a member sent, when it is a HANDOFF or a VERDICT (martha#253, slice 4).
 //
-// This exists so a hand-off or a verdict that a member sends is checked as it is sent, and a broken one comes back to
-// the sender naming the field that is wrong instead of sitting unnoticed in a channel. A line that reads adds its row
-// to the package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave — a kind log_a_milestone
-// cannot write (martha#350). What this does not do is check the range or the CI against GitHub: that is #256, and it
-// does not check the sender either: under the owner's reset of 2026-11-11 a roster name is enough
+// This exists so a hand-off or a verdict that a member sends is checked as it is sent, and a line that does not read is
+// taken as prose: the message is sent anyway, and the sender is told in one line which field did not read (martha#601).
+// A line that reads adds its row to the package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave —
+// a kind log_a_milestone cannot write (martha#350). What this does not do is check the range or the CI against GitHub:
+// that is #256, and it does not check the sender either: under the owner's reset of 2026-11-11 a roster name is enough
 // (../send_a_crew_message), so a member that sends a VERDICT line writes that row under its own name.
 //
 // The shapes are not written here: they are read from ./crew_lines.ts, the one definition the role cards are
@@ -23,11 +23,16 @@ export interface CrewLineRead {
   readonly verdict?: 'PASS' | 'FAIL'
 }
 
-/** What reading a message's first line came to. */
-export type LineReading =
-  | { readonly line: null }
-  | { readonly line: CrewLineRead }
-  | { readonly refused: string }
+/**
+ * What reading a message's first line came to: the line, when the whole of it read; otherwise prose, with the field that
+ * did not read named in one line for the sender (martha#601). Nothing is refused.
+ */
+export interface LineReading {
+  /** The line, when it read whole; null when the message goes as prose. */
+  readonly line: CrewLineRead | null
+  /** The field that did not read, when the message goes as prose: one line, and the row still records the message. */
+  readonly notice?: string
+}
 
 const isCrewLine = (first_word: string): boolean => CREW_VERBS.includes(first_word)
 
@@ -47,6 +52,9 @@ export function readACrewLine(text: string): LineReading {
   return readTheParts(shape, tokens.slice(1))
 }
 
+/** One line saying which field did not read, and that the message goes as prose (martha#601). */
+const tookItAsProse = (verb: string, what: string): string => `${verb}: ${what}, so the line was read as prose.`
+
 /** The words in the order the shape names them, then the keys, each checked against its own value's shape. */
 function readTheParts(shape: LineShape, tokens: readonly string[]): LineReading {
   const rest = [...tokens]
@@ -57,9 +65,9 @@ function readTheParts(shape: LineShape, tokens: readonly string[]): LineReading 
     // A key that stands in place of this part (a `doc=` where the range would be) is read by the keys below.
     if (Object.values(shape.inPlaceOf).includes(part_index) && isAKeyOf(shape, rest[0])) break
     const token = rest.shift()
-    if (token === undefined) return { refused: `${shape.verb}: ${nameOfPart(part)} is missing.` }
-    const refused = checkPart(shape.verb, part, token)
-    if (refused !== undefined) return { refused }
+    if (token === undefined) return { line: null, notice: tookItAsProse(shape.verb, `${nameOfPart(part)} is missing`) }
+    const notice = checkPart(shape.verb, part, token)
+    if (notice !== undefined) return { line: null, notice }
     words.push(token)
   }
   return readTheKeys(shape, rest, words)
@@ -69,25 +77,25 @@ function readTheParts(shape: LineShape, tokens: readonly string[]): LineReading 
 function readTheKeys(shape: LineShape, tokens: readonly string[], words: readonly string[]): LineReading {
   const keys: Record<string, string> = {}
   for (const token of tokens) {
-    const refused = readAKey(shape, token, keys)
-    if (refused !== undefined) return { refused }
+    const notice = readAKey(shape, token, keys)
+    if (notice !== undefined) return { line: null, notice }
   }
   const missing = shape.required.find((key) => keys[key] === undefined)
-  if (missing !== undefined) return { refused: `${shape.verb}: ${missing} is missing.` }
+  if (missing !== undefined) return { line: null, notice: tookItAsProse(shape.verb, `${missing} is missing`) }
   const package_name = words[0] ?? ''
   const verdict = words.find((word) => word === 'PASS' || word === 'FAIL')
   return { line: { verb: shape.verb, package: package_name, words, keys, ...(verdict === undefined ? {} : { verdict: verdict as 'PASS' | 'FAIL' }) } }
 }
 
-/** One `key=value` token, kept when its key is the shape's and its value the shape of that key; or why not. */
+/** One `key=value` token, kept when its key is the shape's and its value the shape of that key; or the line that did not read. */
 function readAKey(shape: LineShape, token: string, into: Record<string, string>): string | undefined {
   const [key, ...value_parts] = token.split('=')
   const value = value_parts.join('=')
-  if (key === undefined || value === '' || value_parts.length === 0) return `${shape.verb}: ${JSON.stringify(token)} is not key=value.`
+  if (key === undefined || value === '' || value_parts.length === 0) return tookItAsProse(shape.verb, `${JSON.stringify(token)} is not key=value`)
   const named = shape.keys[key]
-  if (named === undefined) return `${shape.verb}: ${key} is not a field of this line (they are ${Object.keys(shape.keys).join(', ')}).`
-  const refused = checkValue(shape.verb, key, named, value)
-  if (refused !== undefined) return refused
+  if (named === undefined) return tookItAsProse(shape.verb, `${key} is not a field of this line (they are ${Object.keys(shape.keys).join(', ')})`)
+  const notice = checkValue(shape.verb, key, named, value)
+  if (notice !== undefined) return notice
   into[key] = value
   return undefined
 }
@@ -97,19 +105,19 @@ const isAKeyOf = (shape: LineShape, token: string | undefined): boolean => token
 /** What a part is called when a line is missing it. */
 const nameOfPart = (part: Part): string => ('word' in part ? part.word : 'oneOf' in part ? part.oneOf.join(' or ') : part.name)
 
-/** Whether a token is the part's word, one of its words, or a value of its shape; or why not, naming the field. */
+/** Whether a token is the part's word, one of its words, or a value of its shape; or the line naming the field that did not read. */
 function checkPart(verb: string, part: Part, token: string): string | undefined {
-  if ('word' in part) return part.word === token ? undefined : `${verb}: expected ${part.word}, read ${JSON.stringify(token)}.`
+  if ('word' in part) return part.word === token ? undefined : tookItAsProse(verb, `expected ${part.word}, read ${JSON.stringify(token)}`)
   if ('oneOf' in part) {
-    return part.oneOf.includes(token) ? undefined : `${verb}: expected ${part.oneOf.join(' or ')}, read ${JSON.stringify(token)}.`
+    return part.oneOf.includes(token) ? undefined : tookItAsProse(verb, `expected ${part.oneOf.join(' or ')}, read ${JSON.stringify(token)}`)
   }
   return checkValue(verb, part.name, part.value, token)
 }
 
-/** Whether a value's text is the shape its name declares; or why not, naming the field and the shape. */
+/** Whether a value's text is the shape its name declares; or the line naming the field and the shape it did not have. */
 function checkValue(verb: string, name: string, value: ValueName, text: string): string | undefined {
   const shape = VALUE_SHAPES[value]
-  return shape.matches.test(text) ? undefined : `${verb}: ${name} is not ${shape.what}; read ${JSON.stringify(text)}.`
+  return shape.matches.test(text) ? undefined : tookItAsProse(verb, `${name} is not ${shape.what}; read ${JSON.stringify(text)}`)
 }
 
 /** Adds the row a line adds to its package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave. */
