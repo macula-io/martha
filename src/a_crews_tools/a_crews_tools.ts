@@ -35,7 +35,7 @@ import { theFastForwardACallNames, theLandingACallNames } from '../land_passed_w
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { finishAWorktree, openAWorktree, type WorktreesRequest } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { WORKTREE_FINISH_TOOL, WORKTREE_OPEN_TOOL, theWorktreeToolOver } from '../open_and_finish_a_worktree/the_worktree_tools.ts'
-import { parkAMember, parkedPlace, theParkOf, unparkAMember } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL, theParkToolOver, type AParkAsked } from '../park_and_wake_a_member/the_park_tools.ts'
 import type { AGuardedSwitch, OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack, type AnOrderAsked } from '../put_the_owners_model_back/the_guarded_switch.ts'
@@ -115,6 +115,21 @@ export const REFRESH_THIS_SESSION = 'refresh_this_session'
 
 /** What the mod asks under to say which model the session now runs on, once the host's command resolved (martha#315). */
 export const THE_MODEL_REPORT_ASK = 'note_the_model_the_session_runs'
+
+/**
+ * What the owner's `/crew-progress on|off` asks (martha#1000, gap 8 of #957): turn this session's progress reporting on
+ * or off. It is the session's own switch, as crew-code's was, so it names no member (register.tsx:6699).
+ */
+export const THE_PROGRESS_SWITCH_ASK = 'switch_progress_reporting'
+
+/** What the owner's `/crew-park` asks: park the session the command was typed in, or `/crew-park off` unpark it. */
+export const THE_OWNERS_PARK_ASK = 'park_this_session'
+
+/**
+ * What a member's own report is answered with while its owner has progress reporting off (martha#1000): crew-code's own
+ * line, so the member is told rather than left guessing why its report changed nothing (register.tsx:6815).
+ */
+export const PROGRESS_REPORTING_IS_OFF = 'Progress reporting is off for this session; no need to call this.'
 
 /** What `refresh_this_session` says it is for: a member told to refresh asks for one, and hands over at its next turn's end. */
 export const CREW_REFRESH_DESCRIPTION =
@@ -416,6 +431,12 @@ interface SessionState {
    * only once the start is taken, and the record is dropped then, or dropped unmarked when the start is refused.
    */
   readonly start_hands: Map<string, AHandedWindow>
+  /**
+   * The sessions whose owner turned progress reporting off from their own tab (martha#1000, gap 8 of #957): the member's
+   * own report answers that it is off and records nothing, and the record already taken is cleared when the switch is
+   * turned. Kept by the session id, because the command is the session's, as crew-code kept it (register.tsx:5272).
+   */
+  readonly progress_off: Set<string>
 }
 
 /**
@@ -455,6 +476,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     guarded: null,
     owner_needs: null,
     start_hands: new Map<string, AHandedWindow>(),
+    progress_off: new Set<string>(),
   }
   const handlers = handlersOver(held, state)
   // One budget over this launch's places (martha#513, slice 3): it reads a package's spend once per session and keeps
@@ -466,6 +488,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     tools: CREW_TOOLS,
     async answer(name: string, args: Readonly<Record<string, unknown>>, from: string): Promise<CoreToolAnswer> {
       state.session = from
+      // A session whose owner turned progress reporting off takes no more of the member's own reports (martha#1000).
+      if (name === REPORT_PROGRESS_TOOL.name && state.progress_off.has(from)) return { answer: PROGRESS_REPORTING_IS_OFF }
       const asked = await answerAnAskOfTheMods(held, state, budget, name, args, from)
       if (asked !== undefined) return asked
       const handle = handlers[name as CrewToolName]
@@ -549,6 +573,8 @@ async function answerAnAskOfTheMods(
   if (channel !== undefined) return channel
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
+  if (name === THE_PROGRESS_SWITCH_ASK) return theProgressSwitched(places, state, args)
+  if (name === THE_OWNERS_PARK_ASK) return theOwnersParkMoved(places, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
   return undefined
 }
@@ -975,6 +1001,47 @@ async function theModelReported(places: CrewToolPlaces, state: SessionState, arg
   const noted = `Noted: this row says ${model}.`
   return { answer: putBack.why === '' ? noted : `${noted} ${putBack.why}` }
 }
+
+/**
+ * The owner's `/crew-progress on|off` (martha#1000, gap 8 of #957): this session's progress reporting, and what the row
+ * says when it is turned off. Off is answered to the member's own reports from here on, and the report already taken is
+ * cleared from the row — a task and a figure that stand after the owner asked for none would be the session's word and
+ * not the member's (crew-code clears the record the same way, register.tsx:6700).
+ */
+function theProgressSwitched(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): CoreToolAnswer {
+  const wanted = textOf(args['wanted'])
+  if (wanted !== 'on' && wanted !== 'off') return { refused: 'progress reporting is turned on or off: /crew-progress on, or /crew-progress off' }
+  if (wanted === 'off') {
+    state.progress_off.add(state.session)
+    writeRow(places, state, (row) => ({ ...row, task: '', progress: { ...row.progress, step: 0 } }))
+  } else {
+    state.progress_off.delete(state.session)
+  }
+  return { answer: `Progress reporting ${wanted} for this session.` }
+}
+
+/**
+ * The owner's `/crew-park` (martha#1000, gap 8 of #957): the park of the session the command was typed in, moved on the
+ * owner's own word. The actor is the member itself, so the declaration's table is not asked — a member may always park
+ * itself — and the reason says who moved it, so the marker reads as the owner's act (crew-code's `/crew-park`,
+ * register.tsx:6684).
+ */
+function theOwnersParkMoved(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): CoreToolAnswer {
+  const parked = args['parked'] !== false && args['parked'] !== 'off'
+  const parking = { actor: places.member, member: places.member, reason: PARKED_BY_THE_OWNER, at: new Date(places.ledger.clock.now()), declaration: THE_DECLARATION_NOT_ASKED }
+  const moved = parked ? parkAMember(places, parking) : unparkAMember(places, parking)
+  if ('refusal' in moved) return { refused: moved.refusal }
+  return { answer: parked ? `${places.member} is parked: wake-on-idle no longer wakes it, and /crew-park off unparks it.` : `${places.member} is unparked: wake-on-idle wakes it again.` }
+}
+
+/** What a park the owner moved from a session's own tab says, so the marker reads as the owner's act and not a member's. */
+const PARKED_BY_THE_OWNER = 'parked by the owner from this session'
+
+/**
+ * The declaration a park is granted by, when there is none to ask: a member moving its own park is always allowed
+ * (`moveThePark`, park_and_wake_a_member.ts:147), so the table this is handed is never read.
+ */
+const THE_DECLARATION_NOT_ASKED: TheDeclaration = { members: [], mode: { may: {} } }
 
 /** The places the refresh flow decides over: the crew's own store, the row, the stamps, and where this session began. */
 function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefreshPlaces {

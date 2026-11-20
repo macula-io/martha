@@ -106,6 +106,31 @@ export const CREW_TOOLS_FIELD = 'served_tools'
 /** What the row says of the member's crew tools: held, lost since a time, or nothing known. */
 export type CrewToolsOnARow = { readonly state: 'held' } | { readonly state: 'unknown' } | { readonly state: 'lost'; readonly since: number }
 
+/**
+ * The row's own field for the task list the host's own task tools keep (martha#1000, gap 8 of #957): a spelling of the
+ * row, and nothing else. What the list is folded from, and which task a reader shows first, are the session's and a
+ * reader's own rules; the row keeps the list the member's session last posted, whole.
+ */
+export const TASKS_FIELD = 'tasks'
+
+/** Where a task the host's task tools keep stands, as the row carries it. */
+export const TASK_STATUSES = ['pending', 'in_progress', 'completed'] as const
+export type TaskStatus = (typeof TASK_STATUSES)[number]
+
+/** One task the host's own task tools keep, as the row carries it: what it is, and where it stands. */
+export interface ATaskOnARow {
+  readonly subject: string
+  readonly status: TaskStatus
+}
+
+/**
+ * The task a reader shows first: the one in progress, else the first still pending, and '' when none is open — the
+ * host's own order, as crew-code read it (register.tsx:3783). A list of finished tasks names nothing.
+ */
+export function theOpenTaskIn(tasks: readonly ATaskOnARow[]): string {
+  return (tasks.find((task) => task.status === 'in_progress') ?? tasks.find((task) => task.status === 'pending'))?.subject ?? ''
+}
+
 /** One unit of a package's budget, as the row carries it: what the package spent, and what its contract allows. */
 export interface AUnitOnARow {
   readonly unit: string
@@ -158,6 +183,12 @@ export interface DashboardRow {
    * reader takes as nothing known, never as held.
    */
   readonly served_tools?: CrewToolsOnARow
+  /**
+   * The tasks the host's own task tools keep for this member's session (martha#1000, gap 8 of #957): absent on a row
+   * written before the field existed, and on a session that has kept no list, so a reader shows nothing rather than an
+   * empty list. The member's own `progress` stays the member's own report: the two are told apart by which wrote them.
+   */
+  readonly tasks?: readonly ATaskOnARow[]
 }
 
 /** The file one member's row is kept in: never a path, and never a dot a person or git could steer with. */
@@ -285,13 +316,23 @@ export function isDashboardRow(value: unknown): value is DashboardRow {
 /**
  * The fields a row carries only when it has something to say, each optional and never demanded of a row written
  * before it existed: the refresh flow the member is in (martha#255), the dialogs the host has open for the owner
- * (martha#313), what the member's package has spent (martha#513, slice 3), and its crew tools (martha#658).
+ * (martha#313), what the member's package has spent (martha#513, slice 3), its crew tools (martha#658), and the tasks its
+ * session kept (martha#1000). One check per field, so a check added later is a line and not a longer condition.
  */
-const isTheOptionalFields = (row: Record<string, unknown>): boolean =>
-  (row[REFRESH_FIELD] === undefined || row[REFRESH_FIELD] === null || isARefreshsPhase(row[REFRESH_FIELD])) &&
-  (row[OWNER_DIALOGS_FIELD] === undefined || isOwnerDialogs(row[OWNER_DIALOGS_FIELD])) &&
-  (row[SPEND_FIELD] === undefined || isBudgetUnits(row[SPEND_FIELD])) &&
-  (row[CREW_TOOLS_FIELD] === undefined || isCrewTools(row[CREW_TOOLS_FIELD]))
+const EACH_OPTIONAL_FIELD: readonly ((row: Record<string, unknown>) => boolean)[] = [
+  (row) => row[REFRESH_FIELD] === undefined || row[REFRESH_FIELD] === null || isARefreshsPhase(row[REFRESH_FIELD]),
+  (row) => row[OWNER_DIALOGS_FIELD] === undefined || isOwnerDialogs(row[OWNER_DIALOGS_FIELD]),
+  (row) => row[SPEND_FIELD] === undefined || isBudgetUnits(row[SPEND_FIELD]),
+  (row) => row[CREW_TOOLS_FIELD] === undefined || isCrewTools(row[CREW_TOOLS_FIELD]),
+  (row) => row[TASKS_FIELD] === undefined || isTasks(row[TASKS_FIELD]),
+]
+
+const isTheOptionalFields = (row: Record<string, unknown>): boolean => EACH_OPTIONAL_FIELD.every((holds) => holds(row))
+
+/** Whether a field is the task list a row carries: one entry per task, each a subject and one of the three standings. */
+const isTasks = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.every((one: unknown) => isRecord(one) && isText(one['subject']) && (TASK_STATUSES as readonly unknown[]).includes(one['status']))
 
 /** Whether a field is what a row says of the crew tools: held, unknown, or lost since a time. */
 const isCrewTools = (value: unknown): boolean =>

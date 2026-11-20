@@ -346,6 +346,24 @@ async function answerTheCrewCommand($: CrewEngine, e: { readonly args?: unknown 
 }
 
 /**
+ * The owner's `/crew-park` (martha#1000, gap 8 of #957): parks the session it is typed in, or `/crew-park off` unparks
+ * it. The ask's name is spelled out here for the reason ./coincidences.ts gives about every name a hooks module holds
+ * by literal: the host installs this folder as a copy, so the constant it restates cannot be imported.
+ */
+async function answerTheParkCommand($: CrewEngine, e: { readonly args?: unknown }): Promise<unknown> {
+  const wanted = typeof e.args === 'string' ? e.args.trim() : ''
+  const heard = await hearTheLauncher($, 'park_this_session', { parked: wanted !== 'off' })
+  return { text: 'said' in heard ? heard.said : `Martha did not answer: ${heard.why}` }
+}
+
+/** The owner's `/crew-progress on|off` (martha#1000): this session's progress reporting, answered by the launcher. */
+async function answerTheProgressCommand($: CrewEngine, e: { readonly args?: unknown }): Promise<unknown> {
+  const wanted = typeof e.args === 'string' ? e.args.trim() : ''
+  const heard = await hearTheLauncher($, 'switch_progress_reporting', { wanted })
+  return { text: 'said' in heard ? heard.said : `Martha did not answer: ${heard.why}` }
+}
+
+/**
  * The pane as the host draws it: the crew's rows, then the owner's list (martha#316). When the read failed it says it
  * could not read the crew, and why: drawing `0/0 online` and "no one has reported" over a broken answer tells the owner
  * a lie about a working crew (martha#254 part 2 r=2 R2).
@@ -372,6 +390,28 @@ async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
       {list === undefined ? null : theOwnersListBlock($, views, list)}
     </Box>
   )
+}
+
+/**
+ * The owner's two overrides (martha#1000, gap 8 of #957), answered without `next`: no command of the host's runs beneath
+ * them, and what they say is the launcher's answer, printed for the owner. It is its own function so the registration
+ * above stays under the structural floor the repository holds every function to.
+ */
+function registerTheOwnersOverrides(on: (event: string, options?: unknown, handler?: unknown) => unknown): void {
+  on('command.run', { command: 'crew-park' }, answerTheParkCommand)
+  on('command.run', { command: 'crew-progress' }, answerTheProgressCommand)
+}
+
+/**
+ * The commands this session registers (martha#927, martha#1000): the pane, `/crew`, and the owner's two overrides. Each
+ * is registered, or the host answers "Unknown command" and never reaches the hook that would answer it. It is its own
+ * function so the start it is called from stays under the structural floor every function here is held to.
+ */
+async function registerTheCommands($: CrewEngine): Promise<void> {
+  await $.command.register({ name: PANE, description: "Open the crew's pane" })
+  await $.command.register({ name: CREW_COMMAND, description: 'See your crew, or say one thing to one member', argumentHint: '[<member> <text>]' })
+  await $.command.register({ name: 'crew-park', description: 'Park this session so wake-on-idle leaves it alone: /crew-park, and /crew-park off unparks it', argumentHint: 'off' })
+  await $.command.register({ name: 'crew-progress', description: 'Turn progress reporting on or off for this session: /crew-progress on|off', argumentHint: 'on|off' })
 }
 
 /** The crew's tools registered with this host, and the pane drawn. */
@@ -420,14 +460,13 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // The owner's `/crew` (martha#927): answered here without `next`, so no command runs beneath it, and shown to the
   // owner alone, so the model takes no turn. What it asks and prints is ./crew_command.ts's.
   on('command.run', { command: CREW_COMMAND }, answerTheCrewCommand)
+  registerTheOwnersOverrides(on)
 
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.
   on('session.start', async ($: CrewEngine, e: unknown, next: CrewNext) => {
     for (const tool of await toolsFromTheLauncher($)) await $.tool.register(tool)
-    // Both commands are registered, or the host answers "Unknown command" and never reaches the hooks below (martha#927).
-    await $.command.register({ name: PANE, description: "Open the crew's pane" })
-    await $.command.register({ name: CREW_COMMAND, description: 'See your crew, or say one thing to one member', argumentHint: '[<member> <text>]' })
+    await registerTheCommands($)
     const first = await askTheLauncher($, 'see_the_crew', {})
     if (paneIn(first)?.open_at_start === true) await openThePane($)
     await startReadingTheChannel($)
