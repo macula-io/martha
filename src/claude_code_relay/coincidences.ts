@@ -7,6 +7,7 @@ import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a
 import { CARRY_THE_END } from '../end_a_running_turn/end_the_running_turn.ts'
 import { THE_NEXT_MESSAGE_ASK, THE_TURN_STARTED_ASK } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { ELICITATION, ELICITATION_RESULT, NOTIFICATION, PERMISSION_REQUEST, TOOL_CHECK } from '../hear_the_hosts_dialogs/hear_the_hosts_dialogs.ts'
+import { THE_CREW_STATE_ASK } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 import { THE_CHANNEL_READ_ASK } from '../keep_the_crew_channel/the_channel_read.ts'
 import { LOG_A_MILESTONE } from '../keep_the_ledger/keep_the_ledger.ts'
 import { KEEP_THE_PACKAGE_CONTRACT } from '../keep_the_package_contract/keep_the_package_contract.ts'
@@ -136,6 +137,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_NEXT_MESSAGE_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   { value: THE_TURN_STARTED_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the turn start this mod reports to the launcher; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   { value: THE_TOOLS_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
+  { value: THE_CREW_STATE_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher on every render of the prompt (martha#984); ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   { value: PANE, file: 'claude_code_relay/hooks/relay_protocol.ts', reason: 'the pane\'s id and the command that opens it are the program\'s own name; the same word names the folder Martha keeps her state under' },
   // The relay's beat, which is a minute too (martha#441): a hooks module imports only its own files, so the relay cannot
   // import the core's MINUTE_MS, and its beat is the same duration under its own name.
