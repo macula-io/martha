@@ -29,7 +29,7 @@ import { installThePinnedInstaller } from '../install_the_pinned_installer/insta
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, OWNER_BELL, sameMemberName, THE_ENGINES_HOST, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
-import { noCrewDeclaredAt, upStarts } from '../bring_up_the_declared_crew/bring_up_the_declared_crew.ts'
+import { guardsLineOf, noCrewDeclaredAt, upStarts } from '../bring_up_the_declared_crew/bring_up_the_declared_crew.ts'
 import { declareTheEnginesEndpoint } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import { theKeyInAFile } from '../start_an_engine_member/start_an_engine_member.ts'
 import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
@@ -422,6 +422,7 @@ async function up(io: CommandIo, places: Places, prompt?: string): Promise<numbe
   if (!existsSync(declaration)) return refused(io, noCrewDeclaredAt(declaration))
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
+  sayWhatTheGuardIs(io, declaration, crew.settings)
   const anEngineMemberStarts = crew.settings.members.some((member) => upStarts(member) && theHostOfMember(crew.settings, member) === THE_ENGINES_HOST)
   if (anEngineMemberStarts && crew.settings.engine_endpoint === null) {
     const endpoint = await declareTheEnginesEndpoint({ root: places.root, home: places.home, documents, env: io.env, ask: io.terminal.ask, whyNotTheOwnersKeyFile: (key_file) => whyNotAKey(theKeyInAFile(key_file)) })
@@ -429,6 +430,12 @@ async function up(io: CommandIo, places: Places, prompt?: string): Promise<numbe
     io.out(endpoint.told)
   }
   return opensInTmux(crew.settings.opens.terminal) ? openTheCrewInTmuxHere(io, places, crew, prompt) : openTheCrewInKittyHere(io, places, crew.settings, prompt)
+}
+
+/** Says the one line `up` owes a crew whose declaration names no places (martha#958), before any member starts. */
+function sayWhatTheGuardIs(io: CommandIo, declaration: string, settings: CrewSettings): void {
+  const guards = guardsLineOf(declaration, settings)
+  if (guards !== undefined) io.out(guards)
 }
 
 /** Why `martha up`'s first prompt cannot be typed in (martha#919), or undefined when it can or none was given. */

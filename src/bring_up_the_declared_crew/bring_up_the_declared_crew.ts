@@ -14,7 +14,8 @@
 
 import { readFileSync } from 'node:fs'
 
-import { DECLARATION_VERSION, type Member } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_VERSION, WORKTREES_BESIDE_CLONES, theWorkspaceTheCrewDeclared, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
+import { THE_WORKSPACES_ROOT } from '../declare_crew/the_crews_workspace.ts'
 
 /** The provider the engine's members reach when the crew declares no endpoint, as data (./the_engines_endpoint.json). */
 export interface TheEnginesEndpoint {
@@ -45,6 +46,16 @@ export const THE_SMALLEST_DECLARATION = {
   members: [{ name: 'Builder', role: 'builder' }],
 }
 
-/** Why `martha up` starts nothing where no crew is declared: where the file goes, and the smallest one. */
+/** Why `martha up` starts nothing where no crew is declared: where the file goes, the smallest one, and the block that guards it. */
 export const noCrewDeclaredAt = (declaration: string): string =>
-  `no crew is declared here: write ${declaration}, the smallest is ${JSON.stringify(THE_SMALLEST_DECLARATION)}`
+  `no crew is declared here: write ${declaration}, the smallest is ${JSON.stringify(THE_SMALLEST_DECLARATION)}; name the folder your clones sit in as "${THE_WORKSPACES_ROOT}" and the git guard is on`
+
+/**
+ * What `martha up` says when the crew it is bringing up names no workspace places (martha#958): the git guard is off,
+ * and the field that places the clones and turns the rules on. One line, and never a refusal — a crew that names no
+ * places is still one the owner may run, since the guard refuses breaks of a layout and there is none to break.
+ */
+export const guardsLineOf = (declaration: string, settings: CrewSettings): string | undefined =>
+  theWorkspaceTheCrewDeclared(settings) === undefined
+    ? `the git guard is off in this crew: ${declaration} names no places for it. Name the folder your clones sit in as "${THE_WORKSPACES_ROOT}" — the ${WORKTREES_BESIDE_CLONES} are made beside it — then start the crew again.`
+    : undefined
