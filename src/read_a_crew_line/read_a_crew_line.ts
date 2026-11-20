@@ -161,11 +161,16 @@ function checkValue(verb: string, name: string, value: ValueName, text: string):
  * Adds the row a line adds to its package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave, and,
  * as crew-code keeps them (martha#980), a LIVE as the release it shipped and a LAND as a checkpoint, once for each
  * package it names, and once (martha#983): said again, or logged by hand too, in the same round, it is the row already
- * kept. The other lines keep no row: crew-code keeps none for them, or Martha keeps that fact elsewhere.
+ * kept. A FAIL VERDICT is kept once too; a PASS always. The other lines keep no row: crew-code keeps none for them, or
+ * Martha keeps that fact elsewhere.
  */
 export async function keepTheLinesRow(host: LedgerHost, member: string, line: CrewLineRead): Promise<void> {
   if (line.verb === 'VERDICT') {
-    await noteMilestone(host, { package: line.package, member, milestone: 'verdict_given', note: saidOf(line) })
+    const row = { package: line.package, member, milestone: 'verdict_given' as const, note: saidOf(line) }
+    // A FAIL is kept once, as crew-code settles its sent_back (martha#983 r=2); a PASS is always kept, so a PASS after a
+    // FAIL at the same tip is never taken for the FAIL.
+    if (line.verdict === 'FAIL') await noteMilestoneOnce(host, row, aFailVerdict)
+    else await noteMilestone(host, row)
     return
   }
   const milestone = MILESTONE_OF_A_LINE[line.verb]
@@ -178,6 +183,9 @@ export async function keepTheLinesRow(host: LedgerHost, member: string, line: Cr
   // read itself, kept here so a refreshed member finds the hand-off it sent already counted.
   await sendOutwardAct(host, { package: line.package, member, act: { kind: 'handoff', what: saidOf(line) } }, async () => 'read as a crew line and added to this package\'s ledger')
 }
+
+/** Whether a verdict row the ledger holds is a FAIL, read back from the line it keeps as its note. */
+const aFailVerdict = (row: { readonly note: string }): boolean => readACrewLine(row.note).line?.verdict === 'FAIL'
 
 /** The milestone a line of crew-code's other verbs keeps, by its verb: only these two keep one. */
 const MILESTONE_OF_A_LINE: Readonly<Record<string, 'release_shipped' | 'checkpoint_reached'>> = { LIVE: 'release_shipped', LAND: 'checkpoint_reached' }
