@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# follow_the_night_as_the_owner.sh <the night's run folder> <ssh-host>
+# follow_the_live_run_as_the_owner.sh <the live run's run folder> <ssh-host>
 #
-# The owner's one script for a live night (macula-io/martha#639, driven by run_the_night_on_main.sh, #696). Whoever
-# starts the night sends the owner its run folder's path. The owner runs this in a terminal of their own, naming the
-# host the night runs on themselves (run.txt is written by whoever started the night, so its host= must agree with the
+# The owner's one script for a live run (macula-io/martha#639, driven by run_the_live_run_on_main.sh, #696). Whoever
+# starts the live run sends the owner its run folder's path. The owner runs this in a terminal of their own, naming the
+# host the live run runs on themselves (run.txt is written by whoever started the live run, so its host= must agree with the
 # owner's, never stand in for it); it only follows that folder:
 #
 #   - when the proof adds an owner's command to its owner-commands file (run.txt names it, owner_commands=), this
@@ -11,10 +11,10 @@
 #     in the terminal. The first: approve each crew place where martha approve asks (nothing where it says Nothing to
 #     approve), sign in to Claude, answer the folder question yes, then /exit. The second, once the builder has queued
 #     the landing: it attaches to the builder's terminal; answer the landing's menu yes, then detach with Ctrl-b, then d.
-#     Before that one it says, in one plain sentence, that the yes is a speed bump on a night (martha#847).
+#     Before that one it says, in one plain sentence, that the yes is a speed bump on a live run (martha#847).
 #     Between them, before the package is typed, the watch (martha#843): it shows the builder's terminal read-only, so
-#     the builder's ring reaches the owner's terminal; keep it open until the night ends.
-#   - when the driver writes proof_exit=, result= or interrupted= to run.txt, the night has ended: this prints
+#     the builder's ring reaches the owner's terminal; keep it open until the live run ends.
+#   - when the driver writes proof_exit=, result= or interrupted= to run.txt, the live run has ended: this prints
 #     run.txt and one last line, PASSED with exit 0 when proof_exit= equals the dry_passed= the driver read from the
 #     proof, and NOT_PASSED naming what ended it, with exit 1, otherwise.
 #
@@ -22,15 +22,15 @@
 # members read stranger text, so no command is ever taken from it. A command comes only from the owner-commands file,
 # which the proof alone writes, and is refused unless it is exactly `ssh -t '<the owner's host>' '<podman exec -it …>'`,
 # one word quoted the way the proof quotes, with no control character in it, and that word is one of the proof's two
-# commands: podman exec -it in the night's own container (the proof's CONTAINER_PREFIX, then its pid and a number, and
-# nothing between -it and that name), running either `sh -lc '<one word>'` (the sign-in), `tmux -L <the night's
-# NIGHT_TMUX_SOCKET> attach -t <the night's builder>` (the attach), or the same attach with exactly the night's NIGHT_WATCH_FLAG
+# commands: podman exec -it in the live run's own container (the proof's CONTAINER_PREFIX, then its pid and a number, and
+# nothing between -it and that name), running either `sh -lc '<one word>'` (the sign-in), `tmux -L <the live run's
+# LIVE_RUN_TMUX_SOCKET> attach -t <the live run's builder>` (the attach), or the same attach with exactly the live run's LIVE_RUN_WATCH_FLAG
 # before -t (the watch, martha#843). The names are read from the proof beside this script, never spelled here
 # (Saturnus, #639 PR 821 r=1). The steps shown under it are
 # read from proof.log under the line that echoes that exact command, their control characters stripped; they are only
 # shown, never run.
 #
-# It runs nothing once the night has ended: the end is read before each command is offered, and again after Enter.
+# It runs nothing once the live run has ended: the end is read before each command is offered, and again after Enter.
 # It refuses to start without a terminal of its own (through Claude Code's `!` there is none, a read meets its end at
 # once and a command would run unconfirmed), and a read that fails runs nothing.
 #
@@ -43,15 +43,15 @@ NO_TERMINAL='no terminal: run this in a terminal of your own, not through !'
 NO_ANSWER='no answer read: owner command not run'
 NOT_THE_PROOFS='refused, not run: this line is not the proof'"'"'s owner command'
 PROMPT='Press Enter to run it here: '
-ENDED='--- the night ended'
-PASSED='the night passed (a dry pass)'
-NOT_PASSED='the night did not pass'
-# Said before the writable attach, where the owner gives the landing yes (martha#847): the night's tmux server runs as
-# the members' own user, so this yes and the night's bounds are speed bumps, said plainly (DECIDED 2026-11-18).
-SPEED_BUMP='Said plainly: on a night, any process a member runs can reach the tmux server of the night, type this yes and undo the read-only watch and the other bounds the night sets, so this yes is a speed bump, not a wall (martha#847).'
+ENDED='--- the live run ended'
+PASSED='the live run passed (a dry pass)'
+NOT_PASSED='the live run did not pass'
+# Said before the writable attach, where the owner gives the landing yes (martha#847): the live run's tmux server runs as
+# the members' own user, so this yes and the live run's bounds are speed bumps, said plainly (DECIDED 2026-11-18).
+SPEED_BUMP='Said plainly: on a live run, any process a member runs can reach the tmux server of the live run, type this yes and undo the read-only watch and the other bounds the live run sets, so this yes is a speed bump, not a wall (martha#847).'
 # What the shape check says of the one command the yes is given in: the attach, writable.
 FOR_THE_YES='the attach for the yes'
-# What every owner command runs on the host, before it is quoted as one word: a terminal in the night's container.
+# What every owner command runs on the host, before it is quoted as one word: a terminal in the live run's container.
 REMOTE_LEAD="'podman' 'exec' '-it' '"
 # A quote inside a quoted word, as the proof writes it: close the quote, an escaped quote, open it again.
 QUOTE_IN_A_WORD="'\\''"
@@ -64,7 +64,7 @@ PROOF_DIR='prove_a_clean_install_in_a_throwaway_container'
 
 RUN="${1:-}"
 HOST="${2:-}"
-[ -n "${RUN}" ] && [ -n "${HOST}" ] || { echo "usage: follow_the_night_as_the_owner.sh <the night's run folder> <ssh-host>" >&2; exit "${REFUSED}"; }
+[ -n "${RUN}" ] && [ -n "${HOST}" ] || { echo "usage: follow_the_live_run_as_the_owner.sh <the live run's run folder> <ssh-host>" >&2; exit "${REFUSED}"; }
 [[ "${HOST}" =~ ${HOST_NAME} ]] || { echo "not a host this script can check a command against: '${HOST}'" >&2; exit "${REFUSED}"; }
 for tool in bash ssh awk grep sed date sleep cat wc head dirname; do
   command -v "${tool}" > /dev/null || { echo "${tool} is not on your PATH" >&2; exit "${REFUSED}"; }
@@ -79,10 +79,10 @@ a_scripts_word() {
 PROOF="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/${PROOF_DIR}"
 CONTAINER_PREFIX="$(a_scripts_word "${PROOF}/${PROOF_DIR}.sh" CONTAINER_PREFIX)" \
   || { echo "the proof at ${PROOF} defines no CONTAINER_PREFIX" >&2; exit "${REFUSED}"; }
-NIGHT_TMUX_SOCKET="$(a_scripts_word "${PROOF}/the_night_in_the_container.sh" NIGHT_TMUX_SOCKET)" \
-  || { echo "the proof at ${PROOF} defines no NIGHT_TMUX_SOCKET" >&2; exit "${REFUSED}"; }
-WATCH_FLAG="$(a_scripts_word "${PROOF}/the_night_in_the_container.sh" NIGHT_WATCH_FLAG)" \
-  || { echo "the proof at ${PROOF} defines no NIGHT_WATCH_FLAG" >&2; exit "${REFUSED}"; }
+LIVE_RUN_TMUX_SOCKET="$(a_scripts_word "${PROOF}/the_live_run_in_the_container.sh" LIVE_RUN_TMUX_SOCKET)" \
+  || { echo "the proof at ${PROOF} defines no LIVE_RUN_TMUX_SOCKET" >&2; exit "${REFUSED}"; }
+WATCH_FLAG="$(a_scripts_word "${PROOF}/the_live_run_in_the_container.sh" LIVE_RUN_WATCH_FLAG)" \
+  || { echo "the proof at ${PROOF} defines no LIVE_RUN_WATCH_FLAG" >&2; exit "${REFUSED}"; }
 BUILDER="$(a_scripts_word "${PROOF}/${PROOF_DIR}.sh" THE_BUILDER)" \
   || { echo "the proof at ${PROOF} defines no THE_BUILDER" >&2; exit "${REFUSED}"; }
 if ! { [ -t 0 ] && [ -t 1 ]; }; then
@@ -92,11 +92,11 @@ fi
 LOG="${RUN}/proof.log"
 RUN_TXT="${RUN}/run.txt"
 
-night_ended() { grep -q '^proof_exit=\|^result=\|^interrupted=' "${RUN_TXT}" 2> /dev/null; }
+live_run_ended() { grep -q '^proof_exit=\|^result=\|^interrupted=' "${RUN_TXT}" 2> /dev/null; }
 from_run_txt() { sed -n "s/^$1=//p" "${RUN_TXT}" 2> /dev/null | head -1; }
 # The end: run.txt, then one line the owner reads without knowing the proof's codes. A pass is only proof_exit= equal
 # to the driver's dry_passed=, with no result= or interrupted= beside it.
-the_night_ended() {
+the_live_run_ended() {
   local proof_exit dry_passed why
   printf '\n%s\n' "${ENDED}"
   cat "${RUN_TXT}"
@@ -114,7 +114,7 @@ the_night_ended() {
 # A command is the proof's only when it has no control character and is exactly ssh -t, the owner's host, and
 # one word quoted as the proof quotes it. That word, unquoted once, is what the host's shell runs, and it must be one of
 # the proof's two commands word for word, each word quoted as the proof's remote_words quotes it: podman exec -it in
-# the night's container, nothing between, then the sign-in or the attach (Saturnus, #639 PR 821 r=1). Nothing else is
+# the live run's container, nothing between, then the sign-in or the attach (Saturnus, #639 PR 821 r=1). Nothing else is
 # a word there, so no ; or other shell text can follow the exec on the host (Mercurius, r=1): the exact shapes hold
 # that, and the check of quoted words r=1 added is theirs now.
 the_proofs_shape() {
@@ -126,19 +126,19 @@ the_proofs_shape() {
   [[ "${rest}" =~ ^\'([^\']|\'\\\'\')*\'$ ]] || { echo 'what it runs on the host is not one quoted word'; return 1; }
   inner="${rest:1:${#rest}-2}"
   inner="${inner//"${QUOTE_IN_A_WORD}"/\'}"
-  [[ "${inner}" =~ ^"${REMOTE_LEAD}${CONTAINER_PREFIX}"-[0-9]+-[0-9]+\'\ (.*)$ ]] || { echo "it does not run podman exec -it in the night's container"; return 1; }
+  [[ "${inner}" =~ ^"${REMOTE_LEAD}${CONTAINER_PREFIX}"-[0-9]+-[0-9]+\'\ (.*)$ ]] || { echo "it does not run podman exec -it in the live run's container"; return 1; }
   rest="${BASH_REMATCH[1]}"
   [[ "${rest}" =~ ^\'sh\'\ \'-lc\'\ \'([^\']|\'\\\'\')*\'$ ]] && return 0
-  # The attach, and the watch (martha#843): the attach with the night's read-only flag before -t and no other option.
-  # Both name the night's builder and no other member: the builder's is the only terminal the night offers the owner.
-  [ "${rest}" = "'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '-t' '${BUILDER}'" ] && { echo "${FOR_THE_YES}"; return 0; }
-  [ "${rest}" = "'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '${WATCH_FLAG}' '-t' '${BUILDER}'" ] && return 0
+  # The attach, and the watch (martha#843): the attach with the live run's read-only flag before -t and no other option.
+  # Both name the live run's builder and no other member: the builder's is the only terminal the live run offers the owner.
+  [ "${rest}" = "'tmux' '-L' '${LIVE_RUN_TMUX_SOCKET}' 'attach' '-t' '${BUILDER}'" ] && { echo "${FOR_THE_YES}"; return 0; }
+  [ "${rest}" = "'tmux' '-L' '${LIVE_RUN_TMUX_SOCKET}' 'attach' '${WATCH_FLAG}' '-t' '${BUILDER}'" ] && return 0
   echo 'what it runs in the container is not the sign-in or the attach'; return 1
 }
 
-echo "waiting for the night's owner commands (Ctrl-C stops following; the run itself goes on)"
+echo "waiting for the live run's owner commands (Ctrl-C stops following; the run itself goes on)"
 until [ -n "$(from_run_txt owner_commands)" ]; do
-  if night_ended; then the_night_ended; fi
+  if live_run_ended; then the_live_run_ended; fi
   sleep 1
 done
 COMMANDS="$(from_run_txt owner_commands)"
@@ -147,8 +147,8 @@ RUN_HOST="$(from_run_txt host)"
 
 done_cmds=0
 while :; do
-  # The end is read before any command: a command from a night that has ended is never offered.
-  if night_ended; then the_night_ended; fi
+  # The end is read before any command: a command from a live run that has ended is never offered.
+  if live_run_ended; then the_live_run_ended; fi
   # Only whole lines: a line the proof is still writing has no newline yet.
   complete="$({ wc -l < "${COMMANDS}"; } 2> /dev/null || echo 0)"
   if [ "${complete}" -gt "${done_cmds}" ]; then
@@ -170,8 +170,8 @@ while :; do
       printf '\n%s (%d)\n' "${NO_ANSWER}" "${done_cmds}" >&2
       exit "${REFUSED}"
     fi
-    # The night may have ended while the prompt waited.
-    if night_ended; then the_night_ended; fi
+    # The live run may have ended while the prompt waited.
+    if live_run_ended; then the_live_run_ended; fi
     bash -c "${line}"
     printf '== owner command %d ended (exit %d)\n' "${done_cmds}" "$?"
     continue

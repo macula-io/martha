@@ -1,14 +1,14 @@
-// The throwaway token's expiry, read each night (martha#639).
+// The throwaway token's expiry, read each live run (martha#639).
 //
 // A lost token reaches only the bot, and a token with an expiry only until then. GitHub
 // says when a token expires in the `github-authentication-token-expiration` header of any call it answers, and says
-// nothing for a token made with no expiry. So the run reads that header every night, before it makes anything, and:
+// nothing for a token made with no expiry. So the run reads that header every live run, before it makes anything, and:
 //
-// - an expired token, or a date it cannot read, refuses the night by name;
-// - no date at all is a note, said once a night, not an alarm: the owner DECIDED on 2026-11-18 ("Keep it, no expiry")
+// - an expired token, or a date it cannot read, refuses the live run by name;
+// - no date at all is a note, said once per live run, not an alarm: the owner DECIDED on 2026-11-18 ("Keep it, no expiry")
 //   to keep the bot's token without one, so the bound left is the bot's isolation (it owns nothing but throwaway
 //   repositories);
-// - a date within NEAR_DAYS is a warning by name, so the owner renews it before a night fails on it.
+// - a date within NEAR_DAYS is a warning by name, so the owner renews it before a live run fails on it.
 
 /** The header GitHub answers a token's expiry in. */
 export const EXPIRY_HEADER = 'github-authentication-token-expiration'
@@ -18,16 +18,16 @@ export const NEAR_DAYS = 7
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** What the night does about the token's expiry, and the words it says. */
+/** What the live run does about the token's expiry, and the words it says. */
 export interface Expiry {
   readonly refuses: boolean
-  /** Information, said once a night. */
+  /** Information, said once per live run. */
   readonly note?: string
   readonly warning?: string
   readonly why?: string
 }
 
-/** What a night says of a token with no expiry: the owner's choice, as information. */
+/** What a live run says of a token with no expiry: the owner's choice, as information. */
 export const NO_EXPIRY_NOTE = "the token has no expiry (owner's choice, 2026-11-18)"
 
 /** GitHub's expiry, written `2026-12-18 03:00:00 UTC`, as milliseconds; undefined when it is not that. */
