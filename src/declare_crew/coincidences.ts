@@ -43,7 +43,6 @@ export const COINCIDENCES: readonly Exception[] = [
   // martha#931: a harness's `config` is the folder that harness keeps its own settings in, not git's config file.
   { value: CONFIG, file: 'declare_crew/the_crews_profiles.ts', reason: 'a harness\'s config field in the declaration, the folder it keeps its settings in, not git\'s config file' },
   // martha#931: `transcripts` is the declaration's block of how much of a launch's transcript is kept, not the state folder they are kept in.
-  { value: TRANSCRIPTS_PLACE, file: 'declare_crew/the_crews_workspace.ts', reason: 'the declaration\'s transcripts block, not the state folder transcripts are kept in' },
   { value: TRANSCRIPTS_PLACE, file: 'declare_crew/the_drafts_declaration.node-test.ts', reason: 'the declaration\'s transcripts block, not the state folder transcripts are kept in' },
   // martha#931: the declaration names its terminal as the owner types it; the kitty opener's own constant sits in an adapter, which a slice may not import.
   { value: KITTY, file: 'declare_crew/the_drafts_declaration.node-test.ts', reason: 'the terminal a declaration names, as the owner types it, and the one a declaration naming none opens in (martha#932); the opener\'s program is another value' },
@@ -51,6 +50,9 @@ export const COINCIDENCES: readonly Exception[] = [
   // martha#307: the switch the owner gives martha crew add for a member's model, which a host's own switch happens to share.
   // martha#541 package A: engine_endpoint's `host` is the server an engine member's model is reached on (the provider's
   // own OPENAI_HOST word), not the host a member runs on that HOST names.
+  // martha#931 B: the declaration's `transcripts` block, the bounds the crew keeps its transcripts to, is not the place
+  // under Martha's state the kept transcripts sit in. One word names both; the block's key is excused here alone.
+  { value: TRANSCRIPTS_PLACE, file: 'declare_crew/the_crews_transcripts.ts', reason: 'the declaration\'s transcripts block, not the place under Martha\'s state the kept transcripts sit in' },
   { value: HOST, file: 'declare_crew/the_engines_endpoint.ts', reason: 'engine_endpoint.host, the server an engine member\'s model is reached on, not the host a member runs on' },
   // martha#511: a member's `parked`, the field of Raf's draft on #931 that keeps a declared member down at `martha up`.
   { value: PARKED_PLACE, file: 'declare_crew/declare_crew.ts', reason: 'a member\'s field in the declaration that keeps it down at martha up; the crew\'s park place is named the same word and is not this' },

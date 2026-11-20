@@ -743,6 +743,19 @@ const declaring =
   }
 
 /**
+ * A tool that reads its call's own words before the crew's declaration, and the place after both: a call that names
+ * nothing it can ask is refused in its own words whatever the launch holds (martha#931 B: wait_for_ci now reads the
+ * declaration's github.budget_floor, and the arguments-first rule still holds).
+ */
+const namedThenDeclaring =
+  <Named>(places: CrewToolPlaces, name: (args: Readonly<Record<string, unknown>>) => AnAsked<Named>, act: (declared: CrewDeclared, named: AnAsked<Named>) => Promise<CoreToolAnswer>): AHandler =>
+  async (args) => {
+    const named = name(args)
+    if ('refused' in named) return { refused: named.refused }
+    return declaring(places, async (declared) => act(declared, named))(args)
+  }
+
+/**
  * What a park or a wake is asked, read once for both (martha#255): the crew's own store, this member, the declaration's
  * table and the call's own words, so the two tools differ only in which of the two acts they run.
  */
@@ -790,7 +803,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [KEEP_THE_CONTRACT_TOOL.name]: async (args) => keepTheContract({ ...ledger, documents: places.documents }, args),
     [SEE_THE_CREW_TOOL.name]: declaring(places, async (declared) => seeTheCrewOver(thePaneAsked(places, declared.settings))),
     [WHO_IS_FREE_TOOL.name]: declaring(places, async (declared, args) => whoIsFreeOver(theWhoIsFreeAsked(places, declared.settings, args))),
-    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn(places) })),
+    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn({ ...places, github: declared.settings.github }) })),
     [SAY_TO_THE_CREW_TOOL.name]: declaring(places, async (declared, args) => sayToTheCrewOver(theSendAsked(places, state, declared.settings, args))),
     [READ_THE_RECEIPTS_TOOL.name]: declaring(places, async (declared) => theReceiptsOver(theReceiptsAsked(places, declared.settings))),
     [PARK_A_MEMBER_TOOL.name]: declaring(places, (declared, args) => parked(declared, args, parkAMember)),
@@ -820,8 +833,9 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [STANDING_ADD_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => recordAStandingItem(places.ledger, args, places.member))),
     [STANDING_CLOSE_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => closeAStandingItem(places.ledger, args, places.member))),
     [STANDING_TOOL.name]: async () => theStandingToolOver({ ledger: places.ledger, now: places.ledger.clock.now() }),
-    [WAIT_FOR_CI_TOOL.name]: (args) =>
-      actingOn(theCiWaitACallNames(args), (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock }), asked)),
+    [WAIT_FOR_CI_TOOL.name]: namedThenDeclaring(places, theCiWaitACallNames, async (declared, named) =>
+      actingOn(named, (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock, github: declared.settings.github }), asked)),
+    ),
   }
 }
 

@@ -6,20 +6,19 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { TOKEN_PREFIXES } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
-import {
-  chooseTheTranscripts,
-  COULD_NOT_KEEP,
-  COULD_NOT_READ,
-  REDACTED,
-  theWithheldLines,
-  TRANSCRIPTS_FILE_BYTES_KEPT,
-  TRANSCRIPTS_LAUNCHES_KEPT,
-  TRANSCRIPTS_LAUNCH_BYTES_KEPT,
-  TRANSCRIPTS_SUFFIX,
-  WITHHELD,
-  WITHHELD_LINE,
-  type WhatTheConfigFolderHolds,
-} from './choose_the_transcripts_to_keep.ts'
+import { chooseTheTranscripts, COULD_NOT_KEEP, COULD_NOT_READ, REDACTED, theWithheldLines, TRANSCRIPTS_SUFFIX, WITHHELD, WITHHELD_LINE, type WhatTheConfigFolderHolds } from './choose_the_transcripts_to_keep.ts'
+import { bytesKeptOf, TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
+/**
+ * The bounds these tests declare (martha#931 B): an eighth of the default megabytes, so a choice that kept to the
+ * default instead of the declared bound keeps a file these tests require refused.
+ */
+const A_DECLARED = Object.freeze({ ...TRANSCRIPTS_WHEN_UNNAMED, megabytes_kept: TRANSCRIPTS_WHEN_UNNAMED.megabytes_kept / 8 })
+
+/** One file's bound, as declared. */
+const TRANSCRIPTS_FILE_BYTES_KEPT = bytesKeptOf(A_DECLARED)
+
+/** One launch's bound, as declared: the same number, as the two bounds are one field. */
+const TRANSCRIPTS_LAUNCH_BYTES_KEPT = bytesKeptOf(A_DECLARED)
 
 // Deliberately no token shape at all: a key that looked like one would be caught by the shape redaction and would say
 // nothing about the exact-value redaction the launch's own key gets.
@@ -44,7 +43,7 @@ const theKeptTextOf = (kept: string): string =>
 const aTranscriptPath = (name: string) => `${THE_HOSTS_PROJECTS_PLACE}/the-project/${name}${TRANSCRIPTS_SUFFIX}`
 
 const choosing = (files: WhatTheConfigFolderHolds['files'], theLaunchKey = THE_LAUNCH_KEY) =>
-  chooseTheTranscripts({ files, theLaunchKey })
+  chooseTheTranscripts({ files, theLaunchKey, bytes_kept: TRANSCRIPTS_FILE_BYTES_KEPT })
 
 test('only the host\'s own transcripts are kept, never the rest of the member\'s config folder (martha#646)', () => {
   const chosen = choosing([
@@ -121,6 +120,7 @@ test('a transcript over the per-file bound is replaced by a line that says so, n
   assert.equal(chosen.kept[0]?.path, path)
   assert.match(chosen.kept[0]?.text ?? '', /too large to keep/, 'a file over the bound was not replaced by its note')
   assert.match(chosen.kept[0]?.text ?? '', /of one file\]$/, 'the note does not name the per-file bound, so the launch bound alone could be what stopped it')
+  assert.ok(chosen.kept[0]?.text.includes(`past the ${String(TRANSCRIPTS_FILE_BYTES_KEPT)} bytes`), 'the note does not name the declared bound (martha#931 B)')
   assert.equal(chosen.kept[0]?.text.includes('never read whole'), false, 'a file over the bound was kept in part')
 })
 
@@ -135,6 +135,7 @@ test('the transcripts of one launch stop at their own bound, and the ones past i
   ])
   assert.equal(chosen.kept.find((one) => one.path === first)?.text, aLineOf('the first transcript'), 'a file inside the launch bound was dropped')
   assert.match(chosen.kept.find((one) => one.path === second)?.text ?? '', /of one launch\]$/, 'the file that passed the launch bound was kept, or the note names another bound')
+  assert.ok(chosen.kept.find((one) => one.path === second)?.text.includes(`past the ${String(TRANSCRIPTS_LAUNCH_BYTES_KEPT)} bytes`), 'the note does not name the declared bound (martha#931 B)')
 })
 
 test('a transcript that could not be read is said so, never kept as an empty file (martha#646 r=1 R4)', () => {
@@ -195,11 +196,12 @@ test('the launch bound stops a file the per-file bound has room for, counted on 
   const chosen = choosing([aFile(first, aLineOf('the first one')), aFile(second, amplified.repeat(enough))])
   assert.equal(chosen.kept.find((one) => one.path === first)?.text, aLineOf('the first one'), 'a file inside the launch bound was dropped')
   assert.match(chosen.kept.find((one) => one.path === second)?.text ?? '', /of one launch\]$/, 'a file whose kept text passes the launch bound was kept, or the note names another bound')
+  assert.ok(chosen.kept.find((one) => one.path === second)?.text.includes(`past the ${String(TRANSCRIPTS_LAUNCH_BYTES_KEPT)} bytes`), 'the note does not name the declared bound (martha#931 B)')
   assert.ok(Buffer.byteLength(amplified.repeat(enough)) < TRANSCRIPTS_LAUNCH_BYTES_KEPT, 'the fixture read more than the launch bound, so it does not say what was counted')
 })
 
 test('the worst case the product states is the two constants\' own product, read from them (martha#646, Mars item 3)', () => {
-  assert.equal(TRANSCRIPTS_LAUNCHES_KEPT * TRANSCRIPTS_LAUNCH_BYTES_KEPT, 1024 * 1024 * 1024, 'the kept launches times the bound per launch is not the stated 1 GiB per project')
+  assert.equal(TRANSCRIPTS_WHEN_UNNAMED.launches_kept * bytesKeptOf(TRANSCRIPTS_WHEN_UNNAMED), 1024 * 1024 * 1024, 'the kept launches times the bound per launch is not the stated 1 GiB per project')
 })
 
 test('a line whose repeated key hides a token is not kept as written, however the token was written (martha#646 r=4 R9)', () => {
