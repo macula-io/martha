@@ -8,6 +8,9 @@ import { aProvidersField, theProviderOfAHost, type Provider, type TheProfiles } 
 /** How a field of the endpoint is refused: the field, and why. */
 export type RefuseAnEndpoint = (field: string, why: string) => never
 
+/** How a field the endpoint does not know is said and read past (martha#601): the field, and why. */
+export type SayOfAnEndpoint = (field: string, why: string) => void
+
 const isObject = (value: unknown): value is Readonly<Record<string, unknown>> => value !== null && typeof value === 'object' && !Array.isArray(value)
 const isText = (value: unknown): value is string => typeof value === 'string' && value.trim() !== ''
 
@@ -59,8 +62,8 @@ export interface EngineEndpoint {
  * engine's profiles name, with a bare host reached on THE_SCHEME_OF_A_BARE_HOST. Both at once is refused: one file never
  * names the endpoint twice.
  */
-export function theEnginesEndpointOf(refuse: RefuseAnEndpoint, value: Readonly<Record<string, unknown>>, read: TheProfiles): EngineEndpoint | null {
-  const declared = engineEndpointOf(refuse, value[ENGINE_ENDPOINT])
+export function theEnginesEndpointOf(refuse: RefuseAnEndpoint, value: Readonly<Record<string, unknown>>, read: TheProfiles, say: SayOfAnEndpoint = () => {}): EngineEndpoint | null {
+  const declared = engineEndpointOf(refuse, value[ENGINE_ENDPOINT], say)
   const engines = theProviderOfAHost(read, value['members'], RECORDED_GOOSE_ENGINE.engine_name, refuse)
   if (engines === null || engines.provider.endpoint === null) return declared
   if (declared !== null) refuse(ENGINE_ENDPOINT, `is named beside ${aProvidersField(engines.name, 'endpoint')}, which the engine's profiles reach`)
@@ -75,13 +78,21 @@ function theProvidersEndpoint(refuse: RefuseAnEndpoint, name: string, provider: 
   return { host: checked.host, base_path: null, key_from: provider.key_from, key_file: provider.key_file }
 }
 
+/**
+ * The fields a key itself is written in (martha#601): a field this reader does not know is one notice and the crew is
+ * read on, but a key written into the declaration is the leaked key the cut keeps, so it is still refused by name.
+ */
+const FIELDS_A_KEY_IS_WRITTEN_IN = ['key', 'token'] as const
+
 /** The declared engine endpoint, or null when there is none: a host reached over http or https, a base path, and a variable's name. */
-function engineEndpointOf(refuse: RefuseAnEndpoint, value: unknown): EngineEndpoint | null {
+function engineEndpointOf(refuse: RefuseAnEndpoint, value: unknown, say: SayOfAnEndpoint): EngineEndpoint | null {
   if (value === undefined) return null
   if (!isObject(value)) return refuse(ENGINE_ENDPOINT, `is not ${shapeOf(ENGINE_ENDPOINT_REQUIRED_KEYS, ENGINE_ENDPOINT_OPTIONAL_KEYS)}`)
+  const writtenKey = FIELDS_A_KEY_IS_WRITTEN_IN.find((field) => field in value)
+  if (writtenKey !== undefined) refuse(`${ENGINE_ENDPOINT}.${writtenKey}`, 'never goes in the declaration: key_from names the environment variable that holds it')
   const known: readonly string[] = [...ENGINE_ENDPOINT_REQUIRED_KEYS, ...ENGINE_ENDPOINT_OPTIONAL_KEYS]
   const unknown = Object.keys(value).find((key) => !known.includes(key))
-  if (unknown !== undefined) refuse(`${ENGINE_ENDPOINT}.${unknown}`, `is not a field here (they are ${known.join(', ')})`)
+  if (unknown !== undefined) say(`${ENGINE_ENDPOINT}.${unknown}`, `is not a field here (they are ${known.join(', ')}); ignoring it`)
   const checked = anEndpointsHost(value['host'])
   if ('why' in checked) return refuse(`${ENGINE_ENDPOINT}.host`, checked.why)
   const { host } = checked

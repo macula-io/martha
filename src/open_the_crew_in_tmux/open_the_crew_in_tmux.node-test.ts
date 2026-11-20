@@ -27,7 +27,7 @@ import {
   type OpeningTheCrewInTmux,
   type TmuxSaid,
 } from './open_the_crew_in_tmux.ts'
-import { theSocketOfThisTmux } from './the_commands_tmux_runs.ts'
+import { THE_ACTS_A_WINDOW_RUNS, theSocketOfThisTmux } from './the_commands_tmux_runs.ts'
 
 interface Seen {
   readonly out: string[]
@@ -243,7 +243,9 @@ test('#932 live: on a tmux server of the test\'s own, one session, a window and 
 
 /**
  * #919 review r=1: the socket a window of the server reads in TMUX is the one the server names as its own; the same name
- * in another folder is not.
+ * in another folder is not. #963: the member's strip runs the same command with its own act, so only the member's pane
+ * (its act the held one) writes what it read, whole (moved into place), and the file is read once both panes have run:
+ * a second writer's `>` could empty it between a poll and a read.
  */
 function theSocketAWindowReadsIsTheServers(
   seen: Seen,
@@ -251,11 +253,18 @@ function theSocketAWindowReadsIsTheServers(
   on: { readonly server: string; readonly env: Readonly<Record<string, string | undefined>>; readonly place: string; readonly said: string },
 ): void {
   const told = join(on.place, 'tmux-told')
-  assert.equal(openTheCrewInTmux(io(seen), live(['/bin/sh', '-c', `printf '%s' "$TMUX" > '${told}'; exec sleep 60`, 'a-martha'], ['Ceres-told'])), 0, seen.err.join('\n'))
-  const written = (): boolean => existsSync(told) && readFileSync(told, 'utf8') !== ''
-  for (let i = 0; i < 50 && !written(); i += 1) spawnSync('sleep', ['0.1'])
-  const inTheWindow = theSocketOfThisTmux({ TMUX: readFileSync(told, 'utf8') })!
+  const acts = join(on.place, 'tmux-acts')
+  const writes = join(on.place, 'tmux-told-writes')
+  const theMembersPaneWrites = `[ "$1" = '${THE_ACTS_A_WINDOW_RUNS.held}' ] && { printf '%s' "$TMUX" > '${told}.part'; mv '${told}.part' '${told}'; printf '%s\\n' "$1" >> '${writes}'; }`
+  const script = `printf '%s\\n' "$1" >> '${acts}'; ${theMembersPaneWrites}; exec sleep 60`
+  assert.equal(openTheCrewInTmux(io(seen), live(['/bin/sh', '-c', script, 'a-martha'], ['Ceres-told'])), 0, seen.err.join('\n'))
+  const linesOf = (file: string): readonly string[] => (existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter((line) => line !== '') : [])
+  const done = (): boolean => linesOf(acts).length === 2 && existsSync(told)
+  for (let i = 0; i < 50 && !done(); i += 1) spawnSync('sleep', ['0.1'])
+  assert.deepEqual([...linesOf(acts)].sort(), [THE_ACTS_A_WINDOW_RUNS.strip, THE_ACTS_A_WINDOW_RUNS.held].sort(), 'the member\'s pane and its strip did not both run')
+  assert.deepEqual(linesOf(writes), [THE_ACTS_A_WINDOW_RUNS.held], 'the socket file was written by more than the member\'s own pane')
+  const inTheWindow = theSocketOfThisTmux({ TMUX: readFileSync(told, 'utf8') })
   const onTheServer = { server: on.server, id: 'live-crew', env: on.env, place: on.place, tmuxSays: () => on.said, write: writeOwnerOnly, tmux: tmuxOnThisMachine }
-  assert.equal(isMarthasOwnSocket(onTheServer, inTheWindow), true, inTheWindow)
+  assert.equal(isMarthasOwnSocket(onTheServer, inTheWindow ?? ''), true, JSON.stringify(inTheWindow))
   assert.equal(isMarthasOwnSocket(onTheServer, join(on.place, 'elsewhere', on.server)), false)
 }

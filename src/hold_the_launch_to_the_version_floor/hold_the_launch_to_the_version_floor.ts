@@ -72,25 +72,33 @@ export function below(a: string, b: string): boolean {
 }
 
 /**
- * The floor `record` holds, from what reading it gave; undefined when there is none yet; or why it cannot be read.
+ * The floor `record` holds, from what reading it gave; undefined when there is none yet. A record that cannot be
+ * read, or is not one X.Y.Z line, is said in one line and read as no floor (martha#601): the launch goes ahead.
  * The installer's machineFloor reads it alike, in the same words (martha#433).
  */
-export function recordedFloor(record: string, read: TheRecordRead): string | undefined | { readonly refusal: string } {
+export function recordedFloor(record: string, read: TheRecordRead, note: (line: string) => void = () => {}): string | undefined {
   if ('code' in read) {
     if (read.code === NO_RECORD) return undefined
-    return { refusal: `${record}, this machine's version floor, could not be read (${read.code}); refused, never read as no floor` }
+    note(`${record}, this machine's version floor, could not be read (${read.code}); no floor is held`)
+    return undefined
   }
   const version = read.text.endsWith('\n') ? read.text.slice(0, -1) : ''
-  return VERSION.test(version) ? version : { refusal: `${record}, this machine's version floor, is not one X.Y.Z line; refused, never read as no floor` }
+  if (VERSION.test(version)) return version
+  note(`${record}, this machine's version floor, is not one X.Y.Z line; no floor is held`)
+  return undefined
 }
 
 /**
- * Why a release of `version` may not launch on a machine whose `record` read as `read`; undefined when it may. It
- * names both versions and the line that puts the highest signed release back.
+ * What a release of `version` on a machine whose `record` read as `read` is told in one line, then launched
+ * (martha#601). It names both versions and the line that puts the highest signed release back.
  */
-export function launchBelowTheFloor(record: string, read: TheRecordRead, version: string): string | undefined {
-  const floor = recordedFloor(record, read)
-  if (typeof floor === 'object') return floor.refusal
+export function launchBelowTheFloor(
+  record: string,
+  read: TheRecordRead,
+  version: string,
+  note: (line: string) => void = () => {},
+): undefined {
+  const floor = recordedFloor(record, read, note)
   if (floor === undefined || !below(version, floor)) return undefined
-  return `this is Martha ${version}, below ${floor}, the version floor this machine holds (${record}); refused. Put the highest signed release back with: martha install`
+  note(`this is Martha ${version}, below ${floor}, the version floor this machine holds (${record}); going ahead, and martha install puts the highest signed release back`)
 }

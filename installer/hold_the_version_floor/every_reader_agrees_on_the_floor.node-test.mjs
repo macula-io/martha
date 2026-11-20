@@ -78,8 +78,7 @@ function aMachineHolding (t, text) {
 /** The launcher's reading of `record`. @param {string} record @returns {AReading} */
 function theLaunchersReading (record) {
   const floor = recordedFloor(record, readTheRecord(record, (path) => readFileSync(path, 'utf8')))
-  if (floor === undefined) return { none: true }
-  return typeof floor === 'string' ? { floor } : { refused: floor.refusal }
+  return floor === undefined ? { none: true } : { floor }
 }
 
 /** The installer's reading of this machine's record. @param {import('../place_the_release/place_the_release.mjs').Places} places @returns {Promise<AReading>} */

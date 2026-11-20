@@ -173,6 +173,11 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    */
   readonly processes?: HostContract['processes']
   /**
+   * The sink a line about an act the tools carried on past is said through (martha#601): the launcher's writer to the
+   * process's own error output. Absent, nothing is said.
+   */
+  readonly note?: ((line: string) => void) | undefined
+  /**
    * Where a restart is asked of a member's launcher (martha#312): the crew's lifecycle requests, the launch records and
    * the ledger. A launch given none refuses `restart_a_member` by name.
    */
@@ -803,7 +808,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [KEEP_THE_CONTRACT_TOOL.name]: async (args) => keepTheContract({ ...ledger, documents: places.documents }, args),
     [SEE_THE_CREW_TOOL.name]: declaring(places, async (declared) => seeTheCrewOver(thePaneAsked(places, declared.settings))),
     [WHO_IS_FREE_TOOL.name]: declaring(places, async (declared, args) => whoIsFreeOver(theWhoIsFreeAsked(places, declared.settings, args))),
-    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn({ ...places, github: declared.settings.github }) })),
+    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn({ ...places, github: declared.settings.github, clock_zone: declared.settings.clock_zone }) })),
     [SAY_TO_THE_CREW_TOOL.name]: declaring(places, async (declared, args) => sayToTheCrewOver(theSendAsked(places, state, declared.settings, args))),
     [READ_THE_RECEIPTS_TOOL.name]: declaring(places, async (declared) => theReceiptsOver(theReceiptsAsked(places, declared.settings))),
     [PARK_A_MEMBER_TOOL.name]: declaring(places, (declared, args) => parked(declared, args, parkAMember)),
@@ -816,9 +821,9 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [REFRESH_THIS_SESSION]: async (args) => theRefreshAskedOf(places, args),
     [VERIFY_RANGE_TOOL.name]: (args) =>
       actingOn(theRangeACallNames(args), async (on, asked) =>
-        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), { member: places.member, declaration: on.settings }, asked)),
+        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), asked, places.note)),
     [LAND_BATCH_TOOL.name]: (args) =>
-      actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry)),
+      actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry, places.note)),
     [FAST_FORWARD_TOOL.name]: (args) =>
       actingOn(theFastForwardACallNames(args), async (on, asked) =>
         on.settings === undefined ? { refused: NO_ACTING_PLACE } : fastForwardOntoTheApprovedTipOver(actingHost(on), places.member, asked, on.settings)),

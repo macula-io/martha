@@ -36,6 +36,7 @@ import { markdownTheHostLoadsIn, type MarkdownTheHostLoads } from '../load_the_h
 import { theSkillsLoaderIn } from '../load_the_hosts_markdown/the_skills_loader.ts'
 import { protectedConfigPlacesIn } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { signInStoreVariableIn } from '../cut_the_rules_from_the_host_binary/the_sign_in_store.ts'
+import { providerSwitchVariablesIn } from '../cut_the_rules_from_the_host_binary/the_provider_switches.ts'
 import { hookExitCallsIn, hookSwitchesSourceIn, managedFolderFunctionIn, managedSettingsPlaceIn } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { failedAgentsReportIn } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 import { CARRIED, MEMORY_OFF, memoryOffHoldsOf, recordingFrom, type Committed, type Derived } from './carry_over_what_is_restated_by_hand.ts'
@@ -66,6 +67,7 @@ const PARTS: ReadonlyArray<{ readonly part: string; readonly read: (text: string
   { part: 'skills loader', read: theSkillsLoaderIn },
   { part: 'protected config places', read: protectedConfigPlacesIn },
   { part: 'sign-in store', read: signInStoreVariableIn },
+  { part: 'provider switches', read: providerSwitchVariablesIn },
   { part: 'file permission rules', read: (text) => ({ file_permission_rules: filePermissionRulesIn(text) }) },
   { part: "a failed agent's report", read: (text) => ({ failed_agents_report: failedAgentsReportIn(text) }) },
   { part: 'file-mode memory guard', read: (text) => ({ file_mode_guard_calls: fileModeGuardCallsIn(text) }) },
