@@ -61,12 +61,13 @@ export const MILESTONES = [
 export type Milestone = (typeof MILESTONES)[number]
 
 /**
- * The milestones a week counts, by name (martha#308): the review round a package closed, the fix it shipped after a
- * release, the landing that ends it, and the verdict that closed a review round (martha#507: the first-pass rate is read
- * from these). A reader outside this slice takes them from here rather than spelling a milestone of its own, the way
- * `PACKAGE_RESUMED` is taken.
+ * The milestones a week counts, by name (martha#308): the review round a package closed, the release it shipped, the fix
+ * it shipped after a release, the landing that ends it, and the verdict that closed a review round (martha#507: the
+ * first-pass rate is read from these). A reader outside this slice takes them from here rather than spelling a milestone
+ * of its own, the way `PACKAGE_RESUMED` is taken.
  */
 export const REVIEW_ROUND_CLOSED: Milestone = 'review_round_closed'
+export const RELEASE_SHIPPED: Milestone = 'release_shipped'
 export const FIX_SHIPPED_AFTER_RELEASE: Milestone = 'fix_shipped_after_release'
 export const PACKAGE_LANDED: Milestone = 'package_landed'
 export const VERDICT_GIVEN: Milestone = 'verdict_given'

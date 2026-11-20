@@ -3,8 +3,8 @@
 // from nothing else.
 //
 // Every figure is read, never guessed. A package's cycle time is its own first row to its landing row; a review round, a
-// fix after a release and a landing are the milestones the ledger writes; an attempt is a recovery that chose to send
-// the act again; and an ask is answered at the first settle whose ticked ids list it — the ask queue's own rule, never
+// release, a fix after a release and a landing are the milestones the ledger writes; an attempt is a recovery that chose
+// to send the act again; and an ask is answered at the first settle whose ticked ids list it — the ask queue's own rule, never
 // "the settle of its batch". A package carried in from before the week says so instead of being given a guessed start.
 //
 // The crew's first-pass rate and its acts per member (martha#507) are read from the same rows: a verdict row keeps the
@@ -26,6 +26,7 @@ import {
   OUTWARD_ACTS,
   PACKAGE_LANDED,
   REFRESH_FORCED,
+  RELEASE_SHIPPED,
   RETRIED_ONCE,
   REVIEW_ROUND_CLOSED,
   VERDICT_GIVEN,
@@ -110,6 +111,7 @@ export interface APackagesWeek {
   readonly landedInTheWeek: boolean
   readonly cycleMs: number | undefined
   readonly reviewRounds: number
+  readonly releases: number
   readonly fixesAfterRelease: number
   readonly recoveries: number
   readonly retriedOnce: number
@@ -141,6 +143,7 @@ export interface TheWeeksCrew {
   /** The owner's wait, or undefined when the ask queue could not be read at all (r=2): the view then says no wait line. */
   readonly ownersWait: TheOwnersWait | undefined
   readonly reviewRounds: number
+  readonly releases: number
   readonly fixesAfterRelease: number
   readonly recoveries: number
   readonly retriedOnce: number
@@ -209,6 +212,7 @@ export function thePackageWeek(
     landedInTheWeek: landed !== undefined && inTheWeek(landed.at, bounds),
     cycleMs: landed === undefined ? undefined : landed.at - first.at,
     reviewRounds: inTheRowList.filter((row) => row.kind === REVIEW_ROUND_CLOSED).length,
+    releases: inTheRowList.filter((row) => row.kind === RELEASE_SHIPPED).length,
     fixesAfterRelease: inTheRowList.filter((row) => row.kind === FIX_SHIPPED_AFTER_RELEASE).length,
     recoveries: recoveries.length,
     retriedOnce: recoveries.filter((row) => row.decision === RETRIED_ONCE).length,
@@ -299,6 +303,7 @@ function theCrewOf(packages: readonly APackagesWeek[], ownersWait: TheOwnersWait
     stillOpen: packages.filter((one) => one.landedAt === undefined).length,
     ownersWait,
     reviewRounds: packages.reduce((sum, one) => sum + one.reviewRounds, 0),
+    releases: packages.reduce((sum, one) => sum + one.releases, 0),
     fixesAfterRelease: packages.reduce((sum, one) => sum + one.fixesAfterRelease, 0),
     recoveries: packages.reduce((sum, one) => sum + one.recoveries, 0),
     retriedOnce: packages.reduce((sum, one) => sum + one.retriedOnce, 0),
@@ -346,7 +351,7 @@ export function theLineOfAPackage(one: APackagesWeek): string {
     ? `still open, last row ${theDayOf(one.lastAt)}`
     : `cycle ${theDurationOf(one.cycleMs)}${one.carriedIn ? ' (carried in)' : ''}, landed ${theDayOf(one.landedAt ?? one.firstAt)}`
   const acts = `${theCount(one.acts.announced, 'act')} announced, ${String(one.acts.concluded)} concluded, ${String(one.acts.attempts)} retried`
-  return `${one.package} — ${cycle} | owner wait not in the rows | ${theCount(one.reviewRounds, 'review round')}, ${theCount(one.fixesAfterRelease, 'fix', 'fixes')} after a release | acts ${acts} | ${theCount(one.rowsWritten, 'row')}`
+  return `${one.package} — ${cycle} | owner wait not in the rows | ${theCount(one.reviewRounds, 'review round')}, ${theCount(one.releases, 'release')}, ${theCount(one.fixesAfterRelease, 'fix', 'fixes')} after a release | acts ${acts} | ${theCount(one.rowsWritten, 'row')}`
 }
 
 /** The week's first-pass rate as the owner reads it: a fraction of the verdicts, or that there were none. */
@@ -376,7 +381,7 @@ export function theLinesOf(week: TheWeek): readonly string[] {
     bounds.printed,
     `packages: ${String(crew.touched)} touched, ${String(crew.landed)} landed, ${String(crew.carriedIn)} carried in, ${String(crew.stillOpen)} still open`,
     ...waits,
-    `work: ${theCount(crew.reviewRounds, 'review round')}, ${theCount(crew.fixesAfterRelease, 'fix', 'fixes')} after a release, ${theCount(crew.recoveries, 'recovery', 'recoveries')} (${String(crew.retriedOnce)} retried), ${theCount(crew.forcedRefreshes, 'forced refresh', 'forced refreshes')}`,
+    `work: ${theCount(crew.reviewRounds, 'review round')}, ${theCount(crew.releases, 'release')}, ${theCount(crew.fixesAfterRelease, 'fix', 'fixes')} after a release, ${theCount(crew.recoveries, 'recovery', 'recoveries')} (${String(crew.retriedOnce)} retried), ${theCount(crew.forcedRefreshes, 'forced refresh', 'forced refreshes')}`,
     `acts: ${theCount(crew.acts.announced, 'act')} announced, ${String(crew.acts.concluded)} concluded (${kinds}); ${theCount(crew.acts.attempts, 'attempt')} after a failure`,
     theFirstPassLine(crew.firstPass),
     theMembersLine(crew.members),

@@ -16,6 +16,7 @@ import {
   concludeAct,
   noteMilestone,
   PACKAGE_RESUMED,
+  RELEASE_SHIPPED,
   type ActAwaitingOutcome,
   type LedgerHost,
   type Milestone,
@@ -29,7 +30,7 @@ export type CrewLogEvent = (typeof CREW_LOG_EVENTS)[number]
 export const MILESTONE_OF_EVENT: Readonly<Record<CrewLogEvent, Milestone>> = {
   checkpoint: 'checkpoint_reached',
   review_round: 'review_round_closed',
-  release: 'release_shipped',
+  release: RELEASE_SHIPPED,
   fix_after_ship: 'fix_shipped_after_release',
   resume: PACKAGE_RESUMED,
 }
