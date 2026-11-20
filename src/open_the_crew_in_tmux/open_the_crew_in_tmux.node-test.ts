@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { THE_FIRST_PROMPT_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -18,6 +18,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   CONFIG_FILE,
   attachToTheCrew,
+  isMarthasOwnSocket,
   openTheCrewInTmux,
   tmuxOnThisMachine,
   tmuxSaysOnThisMachine,
@@ -26,6 +27,7 @@ import {
   type OpeningTheCrewInTmux,
   type TmuxSaid,
 } from './open_the_crew_in_tmux.ts'
+import { theSocketOfThisTmux } from './the_commands_tmux_runs.ts'
 
 interface Seen {
   readonly out: string[]
@@ -236,4 +238,24 @@ test('#932 live: on a tmux server of the test\'s own, one session, a window and 
   const screen = () => tmux(['capture-pane', '-p', '-t', typedPane]).said
   for (let i = 0; i < 50 && !screen().includes(text); i += 1) spawnSync('sleep', ['0.1'])
   assert.equal(screen().split('\n').filter((line) => line !== '').slice(0, 2).join('\n'), `${text}\n${text}`, 'cat echoes the line once Enter ended it')
+  theSocketAWindowReadsIsTheServers(seen, live, { server, env, place, said })
 })
+
+/**
+ * #919 review r=1: the socket a window of the server reads in TMUX is the one the server names as its own; the same name
+ * in another folder is not.
+ */
+function theSocketAWindowReadsIsTheServers(
+  seen: Seen,
+  live: (martha: readonly string[], members: readonly string[]) => OpeningTheCrewInTmux,
+  on: { readonly server: string; readonly env: Readonly<Record<string, string | undefined>>; readonly place: string; readonly said: string },
+): void {
+  const told = join(on.place, 'tmux-told')
+  assert.equal(openTheCrewInTmux(io(seen), live(['/bin/sh', '-c', `printf '%s' "$TMUX" > '${told}'; exec sleep 60`, 'a-martha'], ['Ceres-told'])), 0, seen.err.join('\n'))
+  const written = (): boolean => existsSync(told) && readFileSync(told, 'utf8') !== ''
+  for (let i = 0; i < 50 && !written(); i += 1) spawnSync('sleep', ['0.1'])
+  const inTheWindow = theSocketOfThisTmux({ TMUX: readFileSync(told, 'utf8') })!
+  const onTheServer = { server: on.server, id: 'live-crew', env: on.env, place: on.place, tmuxSays: () => on.said, write: writeOwnerOnly, tmux: tmuxOnThisMachine }
+  assert.equal(isMarthasOwnSocket(onTheServer, inTheWindow), true, inTheWindow)
+  assert.equal(isMarthasOwnSocket(onTheServer, join(on.place, 'elsewhere', on.server)), false)
+}

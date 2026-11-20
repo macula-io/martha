@@ -354,9 +354,17 @@ test('#511: the declaration is the config: martha up opens exactly the members t
   assert.equal(readFileSync(theDeclarationAt(place), 'utf8'), declared, 'up changed the owner\'s declaration')
 })
 
+/** A file whose presence makes the fake tmux fail to name its socket, as a server that has ended does. */
+const SERVER_GONE = 'tmux-server-gone'
+
+/** Where the fake tmux says Martha's server keeps its socket, as `display-message -p '#{socket_path}'` would. */
+function theSocketOfMarthasServer(place: Place): string {
+  return join(place.home, 'tmux-sockets', 'martha')
+}
+
 /**
  * A stand-in tmux on the place's PATH: it says it is tmux 3.8, keeps each command it is run with as one line of words
- * after the server's four, and has the crew's session once a session is opened.
+ * after the server's four, has the crew's session once a session is opened, and names its socket when asked.
  */
 function tmuxThatAnswers(place: Place): { readonly ran: string; readonly bin: string; readonly env: Readonly<Record<string, string>> } {
   const bin = join(place.home, 'tmux-bin')
@@ -369,7 +377,7 @@ function tmuxThatAnswers(place: Place): { readonly ran: string; readonly bin: st
     `[ "$1 $2 $3" = "-L martha -f" ] || exit 9`,
     'shift 4',
     `echo "$*" >> '${ran}'`,
-    `case "$1" in has-session) [ -e '${opened}' ] ;; new-session) : > '${opened}' ;; esac`,
+    `case "$1" in has-session) [ -e '${opened}' ] ;; new-session) : > '${opened}' ;; display-message) [ -e '${join(place.home, SERVER_GONE)}' ] && exit 1; echo '${theSocketOfMarthasServer(place)}' ;; esac`,
     '',
   ].join('\n'), { mode: 0o700 })
   return { ran, bin, env: { PATH: `${bin}:${process.env.PATH}` } }
@@ -415,18 +423,33 @@ test('#932: martha attach takes one member at most and no switch, needs a termin
 })
 
 /** The environment of a window of Martha's own tmux server, pane %3: tmux names the socket in TMUX and the pane in TMUX_PANE. */
-const inMarthasTmux = (place: Place): Readonly<Record<string, string>> => ({ TMUX: `${join(place.home, 'martha')},1,0`, TMUX_PANE: '%3' })
+const inMarthasTmux = (place: Place): Readonly<Record<string, string>> => ({ TMUX: `${theSocketOfMarthasServer(place)},1,0`, TMUX_PANE: '%3' })
 
 test('#919: martha start --prompt outside a window of Martha\'s tmux is refused, saying how to give one, and starts nothing', (t) => {
   const place = aWorkspace(t)
-  theOwnerDeclares(place, [{ name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE }])
+  theOwnerDeclares(place, [{ name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE }], { id: 'a-crew', terminal: 'tmux' })
   const claude = claudeThatEnds(place, t)
-  for (const env of [{}, { TMUX: `${join(place.home, 'default')},1,0`, TMUX_PANE: '%3' }]) {
-    const run = marthaOnATerminal(place, { ...claude.env, ...env }, 'start', 'Lead', THE_FIRST_PROMPT_SWITCH, 'hi')
+  const tmux = tmuxThatAnswers(place)
+  const outside = [
+    {},
+    { TMUX: `${join(place.home, 'default')},1,0`, TMUX_PANE: '%3' },
+    // A server of the owner's own whose socket is also named martha, in another folder (tmux -S): a pane of that server
+    // shares its id with a pane of Martha's, perhaps another member's, so its name alone does not make it Martha's.
+    { TMUX: `${join(place.home, 'elsewhere', 'martha')},1,0`, TMUX_PANE: '%3' },
+  ]
+  for (const env of outside) {
+    const run = marthaOnATerminal(place, { ...claude.env, ...env, PATH: `${tmux.bin}:${claude.env.PATH}` }, 'start', 'Lead', THE_FIRST_PROMPT_SWITCH, 'hi')
     assert.equal(run.status, EXIT_REFUSED, run.said)
     assert.ok(run.said.replaceAll('\n', ' ').includes(aFirstPromptNeedsMarthasTmux()), run.said)
     assert.equal(existsSync(claude.ran), false, run.said)
   }
+  // Martha's server does not answer for its socket: the window cannot be shown to be one of its.
+  writeFileSync(join(place.home, SERVER_GONE), '')
+  const gone = marthaOnATerminal(place, { ...claude.env, ...inMarthasTmux(place), PATH: `${tmux.bin}:${claude.env.PATH}` }, 'start', 'Lead', THE_FIRST_PROMPT_SWITCH, 'hi')
+  assert.equal(gone.status, EXIT_REFUSED, gone.said)
+  assert.ok(gone.said.replaceAll('\n', ' ').includes(aFirstPromptNeedsMarthasTmux()), gone.said)
+  assert.equal(existsSync(claude.ran), false, gone.said)
+  assert.equal(existsSync(tmux.ran) && readFileSync(tmux.ran, 'utf8').includes('send-keys'), false, 'a key was typed outside Martha\'s tmux')
 })
 
 test('#919: a word after -- is no first prompt any more: martha start refuses it, naming --prompt', (t) => {

@@ -104,11 +104,14 @@ test('#919: the first prompt is typed as keys, each as written, into the member\
   assert.deepEqual(theTurnSent('%7'), ['send-keys', '-t', '%7', 'Enter'])
 })
 
-test('#919: a leading - is text; a leading /, a line break, a control character or nothing is refused by name', () => {
+test('#919: a leading - is text; a leading / or !, a line break, a control character or nothing is refused by name', () => {
   assert.equal(whyNotAFirstPrompt('-read the brief'), undefined)
   assert.equal(whyNotAFirstPrompt('read the brief at docs/brief.md'), undefined)
   assert.match(whyNotAFirstPrompt('/hello') ?? '', /starts with \/, which the member would run as a slash command/)
   assert.match(whyNotAFirstPrompt('  /hello') ?? '', /slash command/)
+  assert.match(whyNotAFirstPrompt('!git push origin main') ?? '', /starts with !, which the member would run as a shell command, not read as your words/)
+  assert.match(whyNotAFirstPrompt(' !ls') ?? '', /shell command/)
+  assert.equal(whyNotAFirstPrompt('read the brief!'), undefined)
   assert.match(whyNotAFirstPrompt('read\n/hello') ?? '', /line break/)
   assert.match(whyNotAFirstPrompt('read\u001b[2J') ?? '', /control character/)
   assert.match(whyNotAFirstPrompt('  ') ?? '', /empty/)

@@ -52,8 +52,8 @@ import { keepCommandShapes, pinOwnerKey, SIGNATURE_SUFFIX } from '../keep_what_t
 import { askTheLauncherToRun } from '../run_an_owner_signed_command/ask_the_launcher_to_run.ts'
 import { drawTheCrewStrip, holdOnThisTerminal, isRunning, restartTheMember, stopTheCrew, theCrewListed, type TheCrewsPlaces } from '../list_stop_and_restart_the_crew/list_stop_and_restart_the_crew.ts'
 import { KITTY_PLACE, kittySaysOnThisMachine, openTheCrewInKitty, startKittyDetached, writeOwnerOnly } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
-import { THE_COMPOSER_SETTLES_MS, TMUX_PLACE, attachOnThisTerminal, attachToTheCrew, openTheCrewInTmux, tmuxOnThisMachine, tmuxSaysOnThisMachine, typeTheFirstPrompt } from '../open_the_crew_in_tmux/open_the_crew_in_tmux.ts'
-import { opensInTmux, thePaneOnMarthasServer, whyNotAFirstPrompt } from '../open_the_crew_in_tmux/the_commands_tmux_runs.ts'
+import { THE_COMPOSER_SETTLES_MS, TMUX_PLACE, attachOnThisTerminal, attachToTheCrew, isMarthasOwnSocket, openTheCrewInTmux, tmuxOnThisMachine, tmuxSaysOnThisMachine, typeTheFirstPrompt } from '../open_the_crew_in_tmux/open_the_crew_in_tmux.ts'
+import { opensInTmux, thePaneOnMarthasServer, theSocketOfThisTmux, whyNotAFirstPrompt } from '../open_the_crew_in_tmux/the_commands_tmux_runs.ts'
 import { THE_FIRST_PROMPT_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { TAB_OF } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { kittenOnThisMachine, theStripsKitten } from '../open_the_crew_in_kitty/the_strips_kitten.ts'
@@ -208,6 +208,7 @@ async function theFirstPromptTyped(io: CommandIo, places: Places, member: string
   if (declared !== undefined && theHostOfMember(crew.settings, declared) !== CLAUDE_CODE) return `${member} runs on ${theHostOfMember(crew.settings, declared)}, and ${THE_FIRST_PROMPT_SWITCH} types into a Claude Code member's composer only.`
   const tmux = marthasTmuxFor(io, places, crew.settings)
   if ('refusal' in tmux) return tmux.refusal
+  if (!isMarthasOwnSocket(tmux, theSocketOfThisTmux(io.env)!)) return aFirstPromptNeedsMarthasTmux()
   let typed = false
   return () => {
     if (typed) return

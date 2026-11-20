@@ -26,6 +26,7 @@ import {
   theWindowClosed,
   theWindowOpened,
   theWindowsIn,
+  theServersSocketAsked,
   theTextTyped,
   theTmuxProgram,
   theTurnSent,
@@ -148,6 +149,12 @@ export function attachToTheCrew(io: LinesShownToTheOwner, attaching: AttachingTo
  * is typed: the host reports the start as its screen is drawn, before its composer reads keys.
  */
 export const THE_COMPOSER_SETTLES_MS = 1500
+
+/** Whether `socket` is the socket of Martha's own server, as that server names it: so a pane id read beside it is one of Martha's. */
+export function isMarthasOwnSocket(tmux: MarthasTmux, socket: string): boolean {
+  const said = onTheServer(tmux)(theServersSocketAsked)
+  return said.status === 0 && said.said.trim() === socket
+}
 
 /**
  * The owner's first prompt typed into the member's own pane on Martha's server, as the owner's keys, then Enter

@@ -162,24 +162,37 @@ export function whyTmuxCannotOpen(tmuxSays: string | undefined, id: string | nul
  * in TMUX (`<socket path>,<pid>,<session>`) and the pane in TMUX_PANE (martha#919). Undefined anywhere else.
  */
 export function thePaneOnMarthasServer(env: Readonly<Record<string, string | undefined>>): string | undefined {
-  const socket = env[THE_TMUX_VARIABLE]?.split(',')[0]
+  const socket = theSocketOfThisTmux(env)
   const pane = env[`${THE_TMUX_VARIABLE}_PANE`]
   return socket !== undefined && socket.split('/').at(-1) === MARTHAS_SERVER && pane !== undefined && /^%\d+$/.test(pane) ? pane : undefined
 }
 
-/** What opens a slash command when it starts a turn typed into the host's composer. */
-const A_SLASH_COMMAND = '/'
+/** The socket of the tmux server this process runs in, as TMUX names it (`<socket path>,<pid>,<session>`); undefined outside tmux. */
+export const theSocketOfThisTmux = (env: Readonly<Record<string, string | undefined>>): string | undefined => env[THE_TMUX_VARIABLE]?.split(',')[0]
+
+/**
+ * The command that asks a tmux server for the path of its own socket: a socket's name alone does not make a server
+ * Martha's, since the owner may start one with `tmux -S <folder>/martha` (martha#919, review r=1).
+ */
+export const theServersSocketAsked: readonly string[] = ['display-message', '-p', '#{socket_path}']
+
+/**
+ * What each leading character a host's composer reads as a command, not as words, would run: `/` a slash command, `!`
+ * a shell command (Claude Code's shell mode, seen typed through `send-keys -l` on 2.1.329; martha#919 review r=1).
+ */
+const THE_COMPOSERS_COMMAND_MARKS: Readonly<Record<string, string>> = { '/': 'a slash command', '!': 'a shell command' }
 
 /**
  * Why `text` cannot be typed in as a member's first prompt, or undefined when it can (martha#919). It is typed into the
- * host's composer as the owner's own keys, so a leading `-` is only text; a leading `/` would open a slash command, and a
- * line break would end the turn early and start another, so each is refused by name, as is any other control character.
+ * host's composer as the owner's own keys, so a leading `-` is only text; a leading `/` or `!` would run a command, and
+ * a line break would end the turn early and start another, so each is refused by name, as is any other control character.
  */
 export function whyNotAFirstPrompt(text: string): string | undefined {
   if (text.trim() === '') return 'a first prompt is empty'
   if ([...text].some((character) => character.charCodeAt(0) < 0x20 || character.charCodeAt(0) === 0x7f)) return `the first prompt ${JSON.stringify(text)} holds a line break or another control character, which would end the turn it is typed as and start another`
-  if (text.trimStart().startsWith(A_SLASH_COMMAND)) return `the first prompt ${JSON.stringify(text)} starts with ${A_SLASH_COMMAND}, which the member would run as a slash command, not read as your words`
-  return undefined
+  const mark = text.trimStart()[0]!
+  const runs = THE_COMPOSERS_COMMAND_MARKS[mark]
+  return runs === undefined ? undefined : `the first prompt ${JSON.stringify(text)} starts with ${mark}, which the member would run as ${runs}, not read as your words`
 }
 
 /** The command that types `text` into `pane` as keys, each as written: `-l` reads no key name, `--` ends tmux's switches. */
