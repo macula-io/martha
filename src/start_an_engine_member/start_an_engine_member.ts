@@ -97,30 +97,24 @@ const NOTHING_REPORTED: TheServedToolsWatch = {
 
 /**
  * What the launch is given before anything is made: the member's model at the crew's endpoint, and the owner's Claude Code
- * user settings file when this environment tells it. The owner's Claude Code settings watch is not run here (martha#601 row
- * 174): those are Claude Code's own files, which an engine member never reads, so a setting that turns hooks off, or a
- * CLAUDE_CONFIG_DIR that cannot be resolved, neither refuses an engine start nor stops it while it works. Or why not.
+ * user settings file. The owner's Claude Code settings watch is not run here (martha#601 row 174): those are Claude Code's
+ * own files, which an engine member never reads, so a setting that turns hooks off neither refuses an engine start nor
+ * stops it while it works. A CLAUDE_CONFIG_DIR that cannot be resolved is still refused: the owner's user settings file is
+ * not one file, it places the owner's whole Claude config folder (`ownerMemoryPlaces` builds that folder's settings,
+ * CLAUDE.md, rules and output styles from it), and an unresolvable value would leave all of it unguarded for a member's
+ * writes — a leak, which is one of the three a refusal stays for. Or why the launch cannot start at all.
  */
 function whatTheLaunchIsGiven(start: AStartOnItsHost) {
   const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited, readTheKeyFile: (key_file) => theKeyInTheOwnersFile(key_file, start.home) })
   if ('refusal' in model) return model
-  return { model, managed: RECORDED_HOST.managed_settings, owners_settings_file: theOwnersSettingsFileIn(start.inherited) }
+  const user = userSettingsPath(start.inherited)
+  if ('refusal' in user) return user
+  return { model, managed: RECORDED_HOST.managed_settings, owners_settings_file: user.path }
 }
 
-/**
- * The owner's Claude Code user settings file, when this environment tells it: the same file a member's call may not touch.
- * An engine member reads nothing from it, so an environment that cannot name it names no file to guard here rather than
- * refusing the start (martha#601 row 174).
- */
-function theOwnersSettingsFileIn(environment: Readonly<Record<string, string | undefined>>): string | undefined {
-  const user = userSettingsPath(environment)
-  return 'refusal' in user ? undefined : user.path
-}
-
-/** The owner's settings files a member's writes are held away from: the host's managed ones, and the user's own file when it can be told. */
-function theOwnersSettingsFiles(managed: ManagedSettingsPlace, owners_settings_file: string | undefined): readonly string[] {
-  const files = [join(managed.dir, managed.file), ...dropInFiles(join(managed.dir, managed.drop_in))]
-  return owners_settings_file === undefined ? files : [...files, owners_settings_file]
+/** The owner's settings files a member's writes are held away from: the host's managed ones, and the user's own file. */
+function theOwnersSettingsFiles(managed: ManagedSettingsPlace, owners_settings_file: string): readonly string[] {
+  return [join(managed.dir, managed.file), ...dropInFiles(join(managed.dir, managed.drop_in)), owners_settings_file]
 }
 
 /**

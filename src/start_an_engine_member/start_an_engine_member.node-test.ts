@@ -207,12 +207,13 @@ test("#601 row 174: an owner's Claude Code settings that turn hooks off do not r
   await untilTheEngineHeard(engine.heard, 'session/prompt')
 })
 
-test("#601 row 174: an owner's CLAUDE_CONFIG_DIR that cannot be told does not refuse an engine member's start either, since the engine reads that file nowhere (mutant: the settings file's refusal put back in the start)", async (t) => {
+test("#601 row 174: the watch is gone but a CLAUDE_CONFIG_DIR that cannot be resolved still refuses an engine member's start, since it places the owner's whole Claude config folder (mutant: that refusal dropped with the watch)", async (t) => {
   const place = aPlace(t)
   const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
   const start = await started(place, engine, [], { CLAUDE_CONFIG_DIR: 'a-folder-not-absolute' })
-  assert.ok(start.started, start.started ? '' : start.refusal)
-  await untilTheEngineHeard(engine.heard, 'session/prompt')
+  assert.equal(start.started, false, 'an engine member was started with a CLAUDE_CONFIG_DIR that cannot be resolved')
+  assert.match(start.started ? '' : start.refusal, /CLAUDE_CONFIG_DIR is "a-folder-not-absolute", not an absolute directory/)
+  assert.equal(existsSync(engine.heard), false, 'no engine was started')
 })
 
 for (const [mode, says] of [['auto', 'auto'], [undefined, 'undefined']] as const) {
