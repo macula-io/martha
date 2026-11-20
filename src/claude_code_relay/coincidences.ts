@@ -19,6 +19,7 @@ import { PARK_A_MEMBER, WAKE_A_MEMBER } from '../park_and_wake_a_member/the_park
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
+import { THE_BUDGET_ASK } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { UNHELD_WORK } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
@@ -46,6 +47,7 @@ export const COINCIDENCES: readonly Exception[] = [
   // value, so the value is written as the constant that holds it: a literal here
   // would be the same copy the rule exists to catch, in the very file that excuses it.
   { value: THE_REFRESH_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
+  { value: THE_BUDGET_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher when the owner types /crew-budget (martha#990); ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   { value: WRITE_MY_HANDOVER_TOOL, file: 'claude_code_relay/hooks/crew.tsx', reason: `the name of a tool this mod answers and registers; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   // The five landing tools' hooks (martha#256): a hooks module runs with no Node and may import only its own files,
   // so the slice's own constant is not reachable there, and the host's plugin validator refuses a tool named by
@@ -66,6 +68,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: SAY_TO_THE_CREW, file: 'claude_code_relay/hooks/crew_command.ts', reason: `the tool /crew sends through; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   // The command's name is the crew's own word, which the channel also uses for "every member": the same spelling, and
   // not the same thing. A send from /crew names one member, never the whole crew.
+  { value: THE_WHOLE_CREW, file: 'claude_code_relay/hooks/crew_command.ts', reason: 'the /crew command the owner types (martha#927), not the channel\'s word for every member' },
   { value: THE_WHOLE_CREW, file: 'claude_code_relay/hooks/crew.tsx', reason: 'the name of the /crew command the owner types (martha#927), not the channel\'s word for every member' },
   // The release act (#693 r=2): the refusal names it and the mod answers it, each by a literal.
   { value: THE_RELEASE_ACT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },

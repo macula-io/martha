@@ -10,17 +10,19 @@ import { isAbsolute, join } from 'node:path'
 import process from 'node:process'
 import { randomUUID } from 'node:crypto'
 import { lstatSync, readFileSync, type Stats } from 'node:fs'
+import { createInterface } from 'node:readline'
 
 import { THE_HOMES_PREFIX, writtenOut } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
+import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS, THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
-import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import { crewTextToHand, noCrewTextFor } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { theOwnersAsks, type TheOwnersAsks } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -39,10 +41,10 @@ import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reachi
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { ownerMemoryPlaces, userScopeUnder } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import type { SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { dropInFiles, hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { dropInFiles } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
+import { theOwnersScreenOfALaunch, type TheScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { theEngineMembersTurns, type ATurnToSend, type TheEngineMembersTurns, type WhatATurnDid } from '../send_an_engine_member_its_turns/the_engine_members_turns.ts'
 import { theCrewsMessagesAsTurns, type TheCrewsMessagesAsTurns } from '../send_an_engine_member_its_turns/the_crews_messages_as_turns.ts'
 import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
@@ -53,6 +55,8 @@ import { mintALaunchToken } from '../serve_the_relay_to_a_launch/the_launchs_tok
 import { serveTheRelay, type RelayServer } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
+import { whatTheOwnersLineGets } from './the_owners_lines_at_the_tab.ts'
+import type { HearTheLauncher } from '../claude_code_relay/hooks/crew_command.ts'
 import type { AStartOnItsHost, TheCrewToolsOfAHost } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { theMembersTelling } from '../tell_the_member_a_line/tell_the_member_a_line.ts'
 import { theModelOfAnEngineMember, whyAKeyFileIsNotTheOwners, whyTheConfigRunsAnotherModel } from './the_engines_model.ts'
@@ -95,20 +99,25 @@ const NOTHING_REPORTED: TheServedToolsWatch = {
 }
 
 /**
- * What the launch is given before anything is made: the member's model at the crew's endpoint, the owner's settings
- * file, and the owner's Claude Code settings watch, the same one a Claude Code launch runs (design r=4 R2): a setting
- * that turns hooks off already refuses the start, and the launch runs it first in every re-check. Or why not.
+ * What the launch is given before anything is made: the member's model at the crew's endpoint, and the owner's Claude Code
+ * user settings file. The owner's Claude Code settings watch is not run here (martha#601 row 174): those are Claude Code's
+ * own files, which an engine member never reads, so a setting that turns hooks off neither refuses an engine start nor
+ * stops it while it works. A CLAUDE_CONFIG_DIR that cannot be resolved is still refused: the owner's user settings file is
+ * not one file, it places the owner's whole Claude config folder (`ownerMemoryPlaces` builds that folder's settings,
+ * CLAUDE.md, rules and output styles from it), and an unresolvable value would leave all of it unguarded for a member's
+ * writes — a leak, which is one of the three a refusal stays for. Or why the launch cannot start at all.
  */
 function whatTheLaunchIsGiven(start: AStartOnItsHost) {
   const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited, readTheKeyFile: (key_file) => theKeyInTheOwnersFile(key_file, start.home) })
   if ('refusal' in model) return model
   const user = userSettingsPath(start.inherited)
   if ('refusal' in user) return user
-  const managed = RECORDED_HOST.managed_settings
-  const owners = hookSettingsWatch({ user: user.path, home: start.home, approved: undefined, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
-  const already = owners.check()
-  if (already !== undefined) return { refusal: already }
-  return { model, user, managed, owners }
+  return { model, managed: RECORDED_HOST.managed_settings, owners_settings_file: user.path }
+}
+
+/** The owner's settings files a member's writes are held away from: the host's managed ones, and the user's own file. */
+function theOwnersSettingsFiles(managed: ManagedSettingsPlace, owners_settings_file: string): readonly string[] {
+  return [join(managed.dir, managed.file), ...dropInFiles(join(managed.dir, managed.drop_in)), owners_settings_file]
 }
 
 /**
@@ -141,7 +150,7 @@ function theCrewTextOfALaunchHeldToItsModel(start: AStartOnItsHost, launch: AGoo
   const another = whyTheConfigRunsAnotherModel(readFileSync(launch.config_at, 'utf8'), launch.config_at, model)
   if (another !== undefined) return { refusal: another }
   const crew = crewTextToHand(start.settings, start.member, launch.carried_files, thisMachine.stores.files)
-  return 'refusal' in crew ? { refusal: `${crew.refusal}, so ${start.member} is handed no crew text` } : crew
+  return 'refusal' in crew ? { refusal: noCrewTextFor(start.member, crew.refusal) } : crew
 }
 
 /** The engine's entry in the start table: one engine member started, or why not. */
@@ -150,10 +159,10 @@ export async function startOnTheEngine(start: AStartOnItsHost, shared: TheShared
   const notStarted = (why: string): MemberStarted => ({ started: false, refusal: `${NOT_STARTED}: ${why}` })
   const before = whatTheLaunchIsGiven(start)
   if ('refusal' in before) return notStarted(before.refusal)
-  const { model, user, managed, owners } = before
+  const { model, managed, owners_settings_file } = before
 
   const token = mintALaunchToken()
-  const launch = await launchTheGooseEngine({ facts, binary: start.command, place: shared.place, relay_root: start.places.relay_root, model, tool_server: { token }, owners_settings: () => owners.check() })
+  const launch = await launchTheGooseEngine({ facts, binary: start.command, place: shared.place, relay_root: start.places.relay_root, model, tool_server: { token } })
   if ('refusal' in launch) return { started: false, refusal: launch.refusal }
   const ending = async (why: string): Promise<MemberStarted> => {
     await launch.end()
@@ -168,14 +177,14 @@ export async function startOnTheEngine(start: AStartOnItsHost, shared: TheShared
     facts,
     root: launch.places.root,
     home: start.home,
-    owners_settings_file: user.path,
+    owners_settings_file,
     owner_memory: ownerMemoryPlaces({
       launcher_env: start.inherited,
       member_env: start.inherited,
       home: start.home,
       launch_dir: start.root,
       martha_state_root: start.state.state_root,
-      settings_files: [join(managed.dir, managed.file), ...dropInFiles(join(managed.dir, managed.drop_in)), user.path],
+      settings_files: theOwnersSettingsFiles(managed, owners_settings_file),
       user_scope: userScopeUnder(start.home),
     }),
     launcher_env: start.inherited,
@@ -235,6 +244,18 @@ function theSharedPlacesOf(start: AStartOnItsHost, shared: TheSharedOfAStart, la
   }
 }
 
+/** What an engine member's owner's screen is made from: its row, its bells, its terminal, and the notices its crew shows. */
+export const theScreenAnEngineStartSees = (start: Pick<AStartOnItsHost, 'member' | 'places' | 'settings' | 'stdio'>, muted: () => boolean): TheScreenOfALaunch => ({
+  member: start.member,
+  beats: dashboardRowsIn(start.places.dashboard),
+  declared_bells: start.settings.house_rules.owner_bell,
+  muted,
+  on_the_owners_terminal: isOnTheOwnersTerminal(start.stdio),
+  environment: process.env,
+  write: (bytes) => void process.stdout.write(bytes),
+  shown_notices: start.settings.owner_notices.show,
+})
+
 /** The owner's asks of this launch, served on a route `martha answer` finds by the member's name; or why not. */
 async function theAsksServed(start: AStartOnItsHost, launch: AGooseLaunch): Promise<{ readonly asks: TheOwnersAsks; readonly route: TheRouteServed; readonly routes: string } | { readonly refusal: string }> {
   const routes = crewSubdirectory(start.state.state_root, start.root, THE_ANSWER_ROUTES_PLACE)
@@ -243,7 +264,7 @@ async function theAsksServed(start: AStartOnItsHost, launch: AGooseLaunch): Prom
   const mute = (): TheMute => (start.places.bells === undefined ? NOTHING_IS_MUTED : theMuteOf({ directory: start.places.bells, lines: { append: appendStateLine, read: readStateFile } }, start.member))
   if (mute().muted) start.tellOwner(theMutedStartLine(start.member))
   const asks = theOwnersAsks({
-    screen: theOwnersScreenOfALaunch({ member: start.member, beats: dashboardRowsIn(start.places.dashboard), declared_bells: start.settings.house_rules.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(start.stdio), environment: process.env, write: (bytes) => void process.stdout.write(bytes) }),
+    screen: theOwnersScreenOfALaunch(theScreenAnEngineStartSees(start, () => mute().muted)),
     now: Date.now,
     anOwnerActStandsBehind: (heard) => {
       const read = readStateFile(answers_typed)
@@ -325,8 +346,55 @@ async function theStartRuns(start: AStartOnItsHost, seams: TheEnginesStartSeams,
     void turns.take(turn).then((did) => seams.heard_a_turn?.(turn, did))
   }
   const crew = theCrewsTurnsOf(start, turns, seams)
-  const stopped = launch.engine.exited.then(() => crew.stop()).then(theEnd)
+  const owners = theOwnersLinesOf(start, theCrewToolsHeardBy(answers, driven.session_id))
+  const stopped = launch.engine.exited.then(() => theReadersStopped(owners, crew)).then(theEnd)
   return { started: true, pid: launch.engine.pid, stopped, stop: stopMember }
+}
+
+/**
+ * The launch's crew tools, asked as this member's session asks them (martha#927 part 2): what the owner's `/crew` at the
+ * tab hears, in the launch's own order, so a send is attributed, checked and kept as the model's own call would be.
+ */
+export const theCrewToolsHeardBy = (answers: Pick<TheAnswersOfOneLaunch, 'inOrder' | 'aCrewToolAsked'>, session_id: string): HearTheLauncher =>
+  async (tool, args) => {
+    const answered = await answers.inOrder(async () => answers.aCrewToolAsked({ session_id, tool, args }))
+    return 'answer' in answered ? { said: answered.answer } : { why: answered.refused }
+  }
+
+/** The owner's lines as this launch hears them: until stopped. */
+export interface TheOwnersLines {
+  stop(): void
+}
+
+/**
+ * The owner's lines at this member's tab (martha#927 part 2), each told what it gets, one line at a time and in the
+ * order typed. None reaches the engine. A line whose answer throws is told so, and the next line is still heard.
+ */
+export function hearTheOwnersLines(input: NodeJS.ReadableStream, hear: HearTheLauncher, tell: (line: string) => void): TheOwnersLines {
+  const lines = createInterface({ input, terminal: false })
+  let heard: Promise<void> = Promise.resolve()
+  lines.on('line', (line) => {
+    heard = heard
+      .then(async () => {
+        const told = await whatTheOwnersLineGets(line, hear)
+        if (told !== null) tell(told)
+      })
+      .catch((error: unknown) => tell(`Martha could not answer that line: ${String(error)}`))
+  })
+  return { stop: () => lines.close() }
+}
+
+/** Where this start hears the owner: the lines a start is handed, else this process's input when it is the owner's terminal. */
+function theOwnersLinesOf(start: AStartOnItsHost, hear: HearTheLauncher): TheOwnersLines {
+  const input = start.owners_lines ?? (isOnTheOwnersTerminal(start.stdio) ? process.stdin : undefined)
+  if (input === undefined) return { stop: () => {} }
+  return hearTheOwnersLines(input, hear, (line) => start.tellOwner(line))
+}
+
+/** The owner's lines and the crew's messages, no longer heard once the engine has exited. */
+const theReadersStopped = (owners: TheOwnersLines, crew: TheCrewsMessagesAsTurns): ReturnType<TheCrewsMessagesAsTurns['stop']> => {
+  owners.stop()
+  return crew.stop()
 }
 
 /** Milliseconds in a second: the crew's read interval is declared in seconds. */

@@ -26,7 +26,7 @@ import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_too
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { OWNER_BELL, THE_ENGINES_HOST, type CrewSettings, type Member, type TheVocabulariesOfHost } from '../declare_crew/declare_crew.ts'
+import { BILLED_BY_SUBSCRIPTION, OWNER_BELL, THE_ENGINES_HOST, type CrewSettings, type Member, type TheVocabulariesOfHost } from '../declare_crew/declare_crew.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
@@ -96,6 +96,11 @@ export interface AStartOnItsHost {  readonly member: string
   readonly command: string
   /** A test's ear on what the member's relay is handed; a real start gives none. */
   readonly hear_relay_place?: (place: MemberRelayPlace) => void
+  /** The owner's lines at the member's tab (martha#927 part 2): a test's own; a real start gives none, and the tab's
+   * terminal is read when it is the owner's. */
+  readonly owners_lines?: NodeJS.ReadableStream
+  /** Called each time the member's relay reports its session started (martha#919): where a first prompt is typed in. */
+  readonly hear_session_start?: () => void
   tellOwner(line: string): void
 }
 
@@ -225,7 +230,8 @@ function settingsPlaceOf(env: Readonly<Record<string, string | undefined>>, star
  * the owner's file is read only at launch, to finish a switch a launch from before martha#602 left open.
  */
 const theMembersSwitchPlace = (start: AStartOnItsHost, config_dir: string): OwnersDefaultPlace | Refused =>
-  settingsPlaceOf(theMembersConfigEnvironment(config_dir), start)
+  // The config folder is the same under either billing (martha#916); only where the folder is is read here.
+  settingsPlaceOf(theMembersConfigEnvironment(config_dir, BILLED_BY_SUBSCRIPTION), start)
 
 /**
  * What the member is started on: the approval's fingerprint, and what its own writes are checked against while it
@@ -303,6 +309,7 @@ export function theCrewToolsOfAStart(start: AStartOnItsHost, sessions: NonNullab
     // The five tools that act run git and gh through the launcher's own processes, over the declaration's
     // workspace places: nothing that acts runs inside the member's session (martha#256).
     processes: thisMachine.processes,
+    note: (line) => void process.stderr.write(`${line}\n`),
     settings: start.settings,
     // What a reboot deletes on this machine, read here and ruled on by ../tell_a_citer_of_a_volatile_path (martha#314).
     volatile_roots: machineRootsFrom(tmpdir(), process.env['XDG_RUNTIME_DIR']),
@@ -347,6 +354,7 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeM
     stdio: start.stdio,
     tellOwner: (line) => start.tellOwner(line),
     ...(start.hear_relay_place === undefined ? {} : { hearRelayPlace: start.hear_relay_place }),
+    ...(start.hear_session_start === undefined ? {} : { hearSessionStart: start.hear_session_start }),
     turns: turnsRaised(),
     crew_tools: (sessions, member) =>
       crewToolsOver(theCrewToolsOfAStart(start, sessions, member.served_tools, {

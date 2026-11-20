@@ -9,6 +9,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
@@ -73,15 +74,29 @@ async function refusalOf(fixture: Fixture, tool: string, input: Readonly<Record<
   return refuseAGitCallInAMembersShell({ host: aHostThatRunsGit(), workspace: workspaceOf(fixture), member: MEMBER, tool, input })
 }
 
-test('a shell line that names its directory and moves a clone off its branch is refused', async (t) => {
+/** The answer, and everything written to the process's own error output while the line is judged (martha#601). */
+async function theNoticeWhile(act: () => Promise<string | undefined>): Promise<{ readonly answer: string | undefined; readonly notice: string }> {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: await act(), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
+}
+
+test('a shell line that names its directory and moves a clone off its branch is noticed and runs as asked', async (t) => {
   const fixture = aWorkspace(t)
   // A branch the clone has that is not the one it starts on: the switch the rule is about.
   gitIn(fixture.clone, 'branch', 'feature/widget')
-  assert.match(
-    (await refusalOf(fixture, CLAUDE_CODE_SHELL_TOOL, { command: `cd ${fixture.clone} && git checkout feature/widget` })) ?? '',
-    /a clone stays on its default branch/,
-  )
-  // A switch back to the branch the clone starts on is the call that puts a drifted clone right, and passes (martha#584).
+  const noticed = await theNoticeWhile(() => refusalOf(fixture, CLAUDE_CODE_SHELL_TOOL, { command: `cd ${fixture.clone} && git checkout feature/widget` }))
+  assert.equal(noticed.answer, undefined, 'a switch off the default branch was refused')
+  assert.match(noticed.notice, /a clone stays on its default branch/, 'the switch ran without a notice')
+  // A switch back to the branch the clone starts on is the call that puts a drifted clone right, and says nothing (martha#584).
   assert.equal(await refusalOf(fixture, CLAUDE_CODE_SHELL_TOOL, { command: `cd ${fixture.clone} && git checkout main` }), undefined)
   // The same line, with no directory named, is asked nowhere and passes: the relay does not know where the shell runs.
   assert.equal(await refusalOf(fixture, CLAUDE_CODE_SHELL_TOOL, { command: 'git checkout main' }), undefined)

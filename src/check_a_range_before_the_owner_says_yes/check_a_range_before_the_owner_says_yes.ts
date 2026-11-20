@@ -2,10 +2,13 @@
 //
 // This exists so the owner says yes to a range Martha has read and not to one a member typed. `verify_range` reads one
 // clone and answers with the commits it holds, their diffstat, and one menu line — the line the owner reads. What it
-// checks: that the base is the tip of the origin's default branch, that the tip descends from it, that the tip's tree
-// carries no committed conflict marker, and, when the range names packages, that it is exactly one `--no-ff` merge per
-// package, each at the head that package's reviewer passed and carrying no change of its own. It reads; it writes
-// nothing, merges nothing, pushes nothing and registers a tool that does nothing but read.
+// checks: that the base is the tip of the origin's default branch, that the tip descends from it, and, when the range
+// names packages, that it is exactly one `--no-ff` merge per package, each at the head that package's reviewer passed
+// and carrying no change of its own. It reads; it writes nothing, merges nothing, pushes nothing and registers a tool
+// that does nothing but read.
+//
+// Two things the owner should see do not stop it (martha#601): a conflict marker committed at the tip and a GitHub that
+// cannot answer for the CI. Each is one notice line beside the owner's question, and the question is asked anyway.
 //
 // The CI runs on the tip are read from GitHub, one page of them with their jobs, and named on the line: a job that did
 // not succeed, a run with no jobs, or no run at all is what the owner has to see before saying yes; a run that had to be
@@ -22,6 +25,7 @@
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import {
   findTheWorkTheseVerdictsPassed,
+  NO_OPEN_PULL_REQUEST,
   type LandedWork,
 } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
 import { theAcceptanceOf } from '../keep_the_package_contract/the_acceptance_of_a_package.ts'
@@ -32,6 +36,7 @@ import { QUEUE_ASK } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { theAsksTheOwnerSaidYesTo } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { readTheOriginACloneHas } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { aConflictMarkerNotice, theMarkersAt } from '../find_a_committed_conflict_marker/find_a_committed_conflict_marker.ts'
 import { GIT, GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 /** The tool this slice registers. */
@@ -39,9 +44,6 @@ export const VERIFY_RANGE = 'verify_range'
 
 /** GitHub answers a page of runs or jobs at a time; more than this on one tip is said on the line rather than hidden. */
 const PER_PAGE = 100
-
-/** A line that begins with one of these is a committed conflict marker, whatever the file holds it in. */
-const CONFLICT_MARKER = '^(<<<<<<<|>>>>>>>) '
 
 /** A change under one of these is not covered by any job of this repository, so the owner reads it by eye. */
 const BY_EYE_PREFIXES: readonly string[] = ['.github/workflows/', '.github/actions/']
@@ -65,13 +67,15 @@ type Refusal = { readonly refused: string }
 type Step<T> = { readonly ok: T } | Refusal
 const no = (why: string): Refusal => ({ refused: why })
 
-/** The range as it was read: the repository, the branch it is against, and its two ends as full shas. */
+/** The range as it was read: the repository, the branch it is against, its two ends as full shas, and what was noticed. */
 interface SettledRange {
   readonly repo: string
   readonly path: string
   readonly default_branch: string
   readonly base: string
   readonly tip: string
+  /** One line each about what the range holds that the owner should read, and that did not stop the check (martha#601). */
+  readonly notices: readonly string[]
 }
 
 /** The commits and the diffstat the answer opens with, and the subjects that make the owner read it by eye. */
@@ -96,11 +100,16 @@ interface ACIJob {
   readonly conclusion: string | null
 }
 
-/** Every run GitHub answered for on the tip, with each run's jobs. */
+/** Every run GitHub answered for on the tip, with each run's jobs, and what could not be read. */
 interface TheRuns {
   readonly runs: readonly ACIRun[]
   readonly jobs: ReadonlyMap<number, readonly ACIJob[]>
   readonly more_than_a_page: boolean
+  /**
+   * What GitHub could not answer, in one line, when it could not be read (martha#601): the owner's question is asked
+   * without the CI state, and the line says so.
+   */
+  readonly unread?: string
 }
 
 /** One commit of the range, as `git log` names it: its sha and its parents. */
@@ -110,22 +119,22 @@ interface ACommit {
 }
 
 /**
- * Checks one range and answers with the commits, their diffstat and the menu line. Nothing is written: a refusal is
- * the whole answer, and it names what failed and why.
+ * Checks one range and answers with the commits, their diffstat and the menu line. Nothing is written. What the owner
+ * should read without its stopping the check — a committed conflict marker, CI that could not be read — is one notice
+ * line beside the owner's question (martha#601); every other refusal is the whole answer, and it names what failed.
  */
-export async function verifyRange(host: RangeCheckHost, range: TheRange): Promise<CheckedRange> {
+export async function verifyRange(host: RangeCheckHost, range: TheRange, note: (line: string) => void = () => {}): Promise<CheckedRange> {
   const settled = await theRangeSettled(host, range)
   if ('refused' in settled) return settled
-  const work = await thePackagesInTheRange(host, settled.ok, range.packages)
+  const work = await thePackagesInTheRange(host, settled.ok, range.packages, note)
   if ('refused' in work) return work
   const shape = await theShapeOf(host, settled.ok)
   if ('refused' in shape) return shape
   const ci = await theRunsAtTip(host, settled.ok)
-  if ('refused' in ci) return ci
-  const acceptance = await theAcceptanceAtTheTip(host, settled.ok, work.ok, ci.ok)
-  if ('refused' in acceptance) return acceptance
-  const line = theLine(settled.ok, shape.ok, work.ok, ci.ok, acceptance.ok)
-  return { told: [shape.ok.commits, shape.ok.stat, ...theOwnersQuestion(settled.ok, range.packages), '', line].join('\n') }
+  const acceptance = await theAcceptanceAtTheTip(host, settled.ok, work.ok, ci)
+  const line = theLine(settled.ok, shape.ok, work.ok, ci, acceptance)
+  const notices = settled.ok.notices.map((one) => `notice: ${one}`)
+  return { told: [shape.ok.commits, shape.ok.stat, ...notices, ...theOwnersQuestion(settled.ok, range.packages), '', line].join('\n') }
 }
 
 /** The line verify_range writes right before the owner's question, so a reader finds the question by it (martha#639). */
@@ -179,7 +188,7 @@ async function theRangeSettled(host: RangeCheckHost, range: TheRange): Promise<S
   if ('refused' in ends) return ends
   const marked = await theTreeCarriesNoConflictMarker(host, range.path, ends.ok.tip)
   if ('refused' in marked) return marked
-  return { ok: { repo: origin.origin.repo, path: range.path, default_branch: origin.origin.default_branch, ...ends.ok } }
+  return { ok: { repo: origin.origin.repo, path: range.path, default_branch: origin.origin.default_branch, ...ends.ok, notices: marked.ok } }
 }
 
 /** The two ends of the range, once the base is the origin's default tip and the tip descends from it. */
@@ -196,27 +205,22 @@ async function theEndsOfTheRange(host: RangeCheckHost, range: TheRange, default_
   return { ok: { base, tip } }
 }
 
-/** Nothing at the tip's tree begins as a conflict marker, or the files that do. */
-async function theTreeCarriesNoConflictMarker(host: RangeCheckHost, path: string, tip: string): Promise<Step<true>> {
-  const found = await git(host, path, ['grep', '-I', '-l', '-E', CONFLICT_MARKER, tip])
-  if (found.exit_code === 1) return { ok: true }
-  if (found.exit_code !== 0) return no(`${path} could not be searched for a conflict marker at ${tip}: ${saidBy(found)}.`)
-  return no(`the tree at ${tip} holds a committed conflict marker: ${theFilesIn(found.stdout, tip).join(', ')}.`)
-}
-
-/** The files a `git grep -l` answer names, with the tree it searched taken off each line. */
-function theFilesIn(said: string, tip: string): readonly string[] {
-  return said
-    .split('\n')
-    .filter((line) => line !== '')
-    .map((line) => (line.startsWith(`${tip}:`) ? line.slice(tip.length + 1) : line))
+/**
+ * Nothing at the tip's tree begins as a conflict marker, or one notice naming the files that do (martha#601). A git
+ * that could not search is still refused: nothing can be said about the tree.
+ */
+async function theTreeCarriesNoConflictMarker(host: RangeCheckHost, path: string, tip: string): Promise<Step<readonly string[]>> {
+  const found = await theMarkersAt(host, path, tip)
+  if ('refused' in found) return found
+  const notice = aConflictMarkerNotice(tip, found.ok)
+  return { ok: notice === undefined ? [] : [notice] }
 }
 
 /** The work the range's packages passed, once the range is exactly one `--no-ff` merge per package. */
-async function thePackagesInTheRange(host: RangeCheckHost, settled: SettledRange, packages: readonly string[] | undefined): Promise<Step<readonly LandedWork[] | undefined>> {
+async function thePackagesInTheRange(host: RangeCheckHost, settled: SettledRange, packages: readonly string[] | undefined, note: (line: string) => void): Promise<Step<readonly LandedWork[] | undefined>> {
   if (packages === undefined) return { ok: undefined }
   if (packages.length === 0) return no('the range names no package to check its merges against.')
-  const work = await findTheWorkTheseVerdictsPassed(host, { packages, repo: settled.repo, cwd: settled.path })
+  const work = await findTheWorkTheseVerdictsPassed(host, { packages, repo: settled.repo, cwd: settled.path }, note)
   if ('refused' in work) return work
   const merges = await theMergesIn(host, settled.path, settled.base, settled.tip)
   if ('refused' in merges) return merges
@@ -253,12 +257,15 @@ async function theMergesMatch(host: RangeCheckHost, path: string, work: readonly
     if (seen.has(one.package)) return no(`${one.package} is merged twice: a batch is one merge per package.`)
     seen.add(one.package)
     const own = await carriesAChangeOfItsOwn(host, path, merge)
-    if ('refused' in own) return no(`the merge ${short(merge.sha)} of ${one.package} (PR ${one.pr}): ${own.refused}`)
+    if ('refused' in own) return no(`the merge ${short(merge.sha)} of ${one.package} (${asTheLineNamesAPullRequest(one.pr)}): ${own.refused}`)
   }
   const missing = work.filter((one) => !seen.has(one.package))
-  if (missing.length > 0) return no(`no merge lands ${missing.map((one) => `${one.package} (PR ${one.pr})`).join(', ')}.`)
+  if (missing.length > 0) return no(`no merge lands ${missing.map((one) => `${one.package} (${asTheLineNamesAPullRequest(one.pr)})`).join(', ')}.`)
   return { ok: true }
 }
+
+/** A pull request's number, or that GitHub named none, so a notice's number is never read as a real one (martha#601). */
+const asTheLineNamesAPullRequest = (pr: number): string => (pr === NO_OPEN_PULL_REQUEST ? 'no pull request read' : `PR ${String(pr)}`)
 
 /**
  * Whether the merge's tree is the one merging its two parents writes: when it is not, the merge carries a change nobody
@@ -295,19 +302,28 @@ function thePrefixesTouched(changed: string): readonly string[] {
   return BY_EYE_PREFIXES.filter((prefix) => paths.some((one) => one.startsWith(prefix)))
 }
 
-/** Every run GitHub holds on the tip, with the jobs of each. */
-async function theRunsAtTip(host: RangeCheckHost, settled: SettledRange): Promise<Step<TheRuns>> {
+/**
+ * Every run GitHub holds on the tip, with the jobs of each, or the one line saying what could not be read (martha#601).
+ * A GitHub that cannot be read no longer stops the check: the owner's question is asked without the CI state.
+ */
+async function theRunsAtTip(host: RangeCheckHost, settled: SettledRange): Promise<TheRuns> {
+  const unreadAt = (why: string): TheRuns => ({ runs: [], jobs: new Map(), more_than_a_page: false, unread: why })
   const answer = await gh(host, settled.path, ['api', `repos/${settled.repo}/actions/runs?head_sha=${settled.tip}&per_page=${PER_PAGE}`])
-  if (answer.exit_code !== 0) return no(`gh could not read the runs on ${settled.tip}: ${saidBy(answer)}.`)
+  if (answer.exit_code !== 0) return unreadAt(`gh could not read the runs on ${settled.tip}: ${saidBy(answer)}.`)
   const page = runsIn(answer.stdout)
-  if (page === undefined) return no(`gh answered for the runs on ${settled.tip} with something that is not a list of runs.`)
+  if (page === undefined) return unreadAt(`gh answered for the runs on ${settled.tip} with something that is not a list of runs.`)
   const jobs = new Map<number, readonly ACIJob[]>()
+  let unread: string | undefined
   for (const run of page.runs) {
     const read = await theJobsOf(host, settled, run)
-    if ('refused' in read) return read
+    if ('refused' in read) {
+      unread ??= read.refused
+      jobs.set(run.id, [])
+      continue
+    }
     jobs.set(run.id, read.ok)
   }
-  return { ok: { ...page, jobs } }
+  return { ...page, jobs, ...(unread === undefined ? {} : { unread }) }
 }
 
 /** The jobs of one run, as GitHub holds them. */
@@ -375,7 +391,7 @@ function theLine(settled: SettledRange, shape: TheShape, work: readonly LandedWo
 }
 
 /** One package of a batch, as the line names it: which package, which pull request, and that its verdict passed. */
-const landedWord = (one: LandedWork): string => `${one.package} (PR ${String(one.pr)}, PASS)`
+const landedWord = (one: LandedWork): string => `${one.package} (${asTheLineNamesAPullRequest(one.pr)}, PASS)`
 
 /**
  * What each package's contract says about the tip (martha#513): one clause per package, each criterion looked for at the
@@ -387,8 +403,8 @@ async function theAcceptanceAtTheTip(
   settled: SettledRange,
   work: readonly LandedWork[] | undefined,
   ci: TheRuns,
-): Promise<Step<readonly string[]>> {
-  if (work === undefined) return { ok: [] }
+): Promise<readonly string[]> {
+  if (work === undefined) return []
   const said_yes = await theAsksTheOwnerSaidYesTo(host)
   const at = {
     revision: settled.tip,
@@ -400,11 +416,11 @@ async function theAcceptanceAtTheTip(
   for (const one of work) {
     try {
       clauses.push(await theAcceptanceOf(host, one.package, at))
-    } catch (error) {
-      return no(`the acceptance of ${one.package} could not be read from its ledger: ${error instanceof Error ? error.message : String(error)}.`)
+    } catch {
+      // A package whose acceptance cannot be read names no clause; the range is still checked.
     }
   }
-  return { ok: clauses }
+  return clauses
 }
 
 /** Whether `path` is in the tree at `tip`: git answers by its exit alone, and its own words when it cannot look. */
@@ -429,8 +445,9 @@ function theCISucceeded(what: string, ci: TheRuns): boolean {
   )
 }
 
-/** What GitHub holds on the tip, said in one clause: no run at all, every job green, or each job that is not. */
+/** What GitHub holds on the tip, said in one clause: what could not be read, no run at all, every job green, or each job that is not. */
 function theCILine(tip: string, ci: TheRuns): string {
+  if (ci.unread !== undefined) return `CI on ${short(tip)}: ${ci.unread}`
   if (ci.runs.length === 0) return `CI on ${short(tip)}: no run found`
   const jobs = [...ci.jobs.values()].reduce((count, listed) => count + listed.length, 0)
   const more = ci.more_than_a_page ? ` (more than the ${String(PER_PAGE)} read here)` : ''

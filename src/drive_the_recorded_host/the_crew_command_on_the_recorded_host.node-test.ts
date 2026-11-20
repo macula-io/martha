@@ -21,6 +21,7 @@ import { RECORDED_HOST_SKIP, recordedHost } from '../check_every_recorded_host_t
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { driveTheRecordedHost, firstRunDone, marthaOnATerminal, plainTextOf, type ModelRequest, type RecordedHostRan, type TheOwnersHands } from './drive_the_recorded_host.ts'
 import { HOST_SILENCE_MS } from './wait_while_the_host_keeps_showing.ts'
+import { THE_CREW_COMMAND } from '../claude_code_relay/hooks/crew_command.ts'
 
 /** The member whose tab the owner types in, and the other member of the solo crew `martha init` declares. */
 const MEMBER = 'builder'
@@ -89,7 +90,7 @@ async function theOwnerTypesTheCommand(project: Project, owner_turn: string, dra
 test('#927 DW1 DW6: /crew at a member\'s tab draws every member\'s line, and the model is sent nothing', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t)
   // The pane's header says how many members are online; each member's line starts with its name.
-  const ran = await theOwnerTypesTheCommand(project, '/crew', `${THE_OTHER_MEMBER}:`)
+  const ran = await theOwnerTypesTheCommand(project, THE_CREW_COMMAND, `${THE_OTHER_MEMBER}:`)
   assert.equal(ran.exit_code, 0, plainTextOf(ran.shown).slice(-3000))
   const drawn = drawnWithoutGaps(ran.shown)
   assert.match(drawn, /\d+\/\d+online·/, `the crew's header was not drawn:\n${plainTextOf(ran.shown).slice(-3000)}`)
@@ -100,7 +101,7 @@ test('#927 DW1 DW6: /crew at a member\'s tab draws every member\'s line, and the
 test('#927 DW2 DW6: /crew <member> <text> sends it as this member and draws the receipt, and the model is sent nothing', { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t)
   const receipt = `to${THE_OTHER_MEMBER}.`
-  const ran = await theOwnerTypesTheCommand(project, `/crew ${THE_OTHER_MEMBER} ${SAID}`, receipt)
+  const ran = await theOwnerTypesTheCommand(project, `${THE_CREW_COMMAND} ${THE_OTHER_MEMBER} ${SAID}`, receipt)
   assert.equal(ran.exit_code, 0, plainTextOf(ran.shown).slice(-3000))
   assert.match(drawnWithoutGaps(ran.shown), new RegExp(`sentasmessage\\d+to${THE_OTHER_MEMBER}\\.`), `the launcher's receipt was not drawn:\n${plainTextOf(ran.shown).slice(-3000)}`)
   assert.equal(ran.requests.length, 0, `the model was sent ${ran.requests.length} request(s) for a /crew: ${JSON.stringify(ran.requests.map((request) => request.body['messages'])).slice(-2000)}`)
@@ -127,7 +128,7 @@ test('#927 DW6: what /crew printed is not in the request of the owner\'s next tu
     claude: recordedHost(),
     ...project,
     member: MEMBER,
-    owner_turn: '/crew',
+    owner_turn: THE_CREW_COMMAND,
     script: () => ({ text: 'Done.' }),
     requests: 1,
     completesWhen: (requests) => requests.some(carriesTheNextTurn),

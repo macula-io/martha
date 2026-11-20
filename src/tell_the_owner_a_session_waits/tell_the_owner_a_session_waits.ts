@@ -172,9 +172,13 @@ export const WHAT_EACH_NOTIFICATION_SAYS: Readonly<Record<string, typeof SHOWN_A
   plugin_notification: SHOWN_AS_A_DIALOG,
 }
 
-/** Whether a notification the host sent is the owner's news, or one that only repeats what another event says. */
-export function theOwnerIsToldOf(notification_type: string): boolean {
-  return WHAT_EACH_NOTIFICATION_SAYS[notification_type] === SHOWN_AS_A_DIALOG
+/**
+ * Whether a notification the host sent is one the owner is told of: a name the crew's declared owner_notices.show
+ * holds (martha#931 C). Its default is this table's SHOWN_AS_A_DIALOG rows (../declare_crew/the_crews_owner_notices), so
+ * an owner who declares nothing is told of exactly what the table says; a name not shown is shown to nobody.
+ */
+export function theOwnerIsToldOf(notification_type: string, shown: readonly string[]): boolean {
+  return shown.includes(notification_type)
 }
 
 /**

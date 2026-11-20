@@ -9,8 +9,11 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { GATE_ENFORCES } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { OPEN_VOCABULARY } from './a_hosts_model_vocabulary.ts'
+import { CLOCK_ZONE } from './the_crews_clock_zone.ts'
 import {
   ACTS,
+  BILLED_BY_API_KEY,
+  BILLED_BY_SUBSCRIPTION,
   DECLARATION_DIRECTORY,
   DECLARATION_FILE,
   DeclarationRefused,
@@ -48,7 +51,7 @@ const draft = {
   harnesses: { [CLAUDE]: { config: '~/a-config-folder' }, [THE_ENGINES_HOST]: {} },
   providers: {
     an_engine_provider: { endpoint: 'api.a-provider.test', key_file: '~/keys/a-key-file' },
-    an_account: { account: 'ann@example.org', key_file: '~/keys/another-key-file', billing: 'subscription' },
+    an_account: { account: 'ann@example.org', key_file: '~/keys/another-key-file', billing: BILLED_BY_SUBSCRIPTION },
   },
   profiles: {
     big: { model: 'model-big', harness: CLAUDE, provider: 'an_account', context_limit: 300000 },
@@ -65,7 +68,7 @@ const draft = {
   thresholds: { offline_after_seconds: 31, progress_stale_minutes: 29, handover_percent: 71 },
   github: { budget_floor: 501 },
   transcripts: { launches_kept: 63, megabytes_kept: 15 },
-  owner_notices: { show: ['a-notice', 'another-notice'] },
+  owner_notices: { show: ['agent_needs_input', 'agent_completed'] },
 }
 
 const declare = (declaration: unknown, also: Readonly<Record<string, string>> = {}) => {
@@ -158,6 +161,25 @@ test('#931: a profile names a model, a harness and a provider the declaration na
   await refusedWith({ ...draft, profiles: [] }, 'profiles')
 })
 
+test('martha#916: a member is billed as its profile\'s provider declares, and by the launch\'s pick when the provider or the member names none', async () => {
+  const billingOf = async (declaration: unknown) => Object.fromEntries((await declare(declaration)).members.map((member) => [member.name, member.billing]))
+  const withAccount = (billing: unknown) => ({ ...draft, providers: { ...draft.providers, an_account: { ...draft.providers.an_account, billing } } })
+  for (const billing of [BILLED_BY_SUBSCRIPTION, BILLED_BY_API_KEY]) {
+    assert.deepEqual(await billingOf(withAccount(billing)), { Lead: billing, Checker: billing, Maker: null, Sleeper: null }, billing)
+  }
+  const { billing: _named, ...unbilled } = draft.providers.an_account
+  assert.deepEqual(await billingOf({ ...draft, providers: { ...draft.providers, an_account: unbilled } }), { Lead: null, Checker: null, Maker: null, Sleeper: null })
+  const onItsOwn = { ...draft, members: [{ name: 'Lead', role: 'supervisor', model: 'model-big', host: CLAUDE_CODE }] }
+  assert.deepEqual(await billingOf(onItsOwn), { Lead: null }, 'a member that names no profile names no billing')
+})
+
+test('martha#916: a provider\'s billing is the subscription or the key, refused by field otherwise: how the host says a session was billed is not a choice', async () => {
+  const withAccount = (billing: unknown) => ({ ...draft, providers: { ...draft.providers, an_account: { ...draft.providers.an_account, billing } } })
+  for (const billing of ['metered', 'unknown', 'Subscription', 'key', '', null, true, [BILLED_BY_API_KEY]]) {
+    await refusedWith(withAccount(billing), 'providers.an_account.billing', new RegExp(`is not one of ${BILLED_BY_SUBSCRIPTION}, ${BILLED_BY_API_KEY}$`))
+  }
+})
+
 test('#931: a provider names where its key is, never the key: a variable\'s name or a path with no `..` and no space', async () => {
   const provider = (fields: Record<string, unknown>) => ({ ...draft, providers: { ...draft.providers, an_account: fields } })
   await refusedWith(provider({ key_file: '~/keys/../a-file' }), 'providers.an_account.key_file')
@@ -236,7 +258,7 @@ test('#931: a declaration that names no conventions reads the crew\'s convention
 })
 
 test('#931: the blocks the later packages read are checked for their shape, so a misspelt field is refused by name', async () => {
-  await refusedWith({ ...draft, clock_zone: 7 }, 'clock_zone')
+  await refusedWith({ ...draft, [CLOCK_ZONE]: 7 }, CLOCK_ZONE)
   await refusedWith({ ...draft, github: { budget_floor: -1 } }, 'github.budget_floor')
   await refusedWith({ ...draft, github: { budget: 1 } }, 'github.budget')
   await refusedWith({ ...draft, transcripts: { launches_kept: 0 } }, 'transcripts.launches_kept')

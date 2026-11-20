@@ -8,7 +8,6 @@
 
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
-import { BILLINGS } from '../keep_what_a_session_spent/the_hosts_usage.ts'
 import { TOKEN_PREFIXES } from '../keep_the_owners_todo_list/token_prefixes.ts'
 
 /** The declaration's keys for the three blocks, read through the lists at the end of this file, and the member key that names a profile. */
@@ -16,6 +15,19 @@ const HARNESSES = 'harnesses'
 const PROVIDERS = 'providers'
 const PROFILES = 'profiles'
 export const PROFILE = 'profile'
+
+/**
+ * Which credential a Claude Code member on a provider is billed through (martha#916, DECIDED 2026-11-20 "Crew setting
+ * (Recommended)", placed under `providers.<name>.billing` by the Supervisor's ruling on #931): the owner's subscription
+ * sign-in, or the API key. Only the chosen credential reaches a member; the other is left out of its environment and its
+ * config. A provider that names none reads as null, and the launch then picks the subscription when the owner is signed
+ * in, else the key when the launcher carries one (../give_a_member_its_own_config). Any other value is refused by name.
+ * These are the declaration's words, not the host's own account of how a session was billed (../keep_what_a_session_spent).
+ */
+export const BILLED_BY_SUBSCRIPTION = 'subscription'
+export const BILLED_BY_API_KEY = 'api_key'
+export const BILLINGS = [BILLED_BY_SUBSCRIPTION, BILLED_BY_API_KEY] as const
+export type Billing = (typeof BILLINGS)[number]
 
 /** The fields a harness may name: where its own configuration sits. Read by no part of Martha today. */
 export const HARNESS_KEYS = ['config'] as const
@@ -45,6 +57,8 @@ export interface Provider {
   readonly endpoint: string | null
   readonly key_from: string | null
   readonly key_file: string | null
+  /** The credential a Claude Code member on this provider is billed through, or null when the provider names none. */
+  readonly billing: Billing | null
 }
 
 /** A profile as read: the model, the host its harness starts, its provider's name, and the context in tokens or null. */
@@ -126,10 +140,16 @@ function aProviderOf(entry: Block, at: string, refuse: RefuseAProfile): Provider
   for (const key of ['endpoint', 'account'] as const) {
     if (entry[key] !== undefined && !isText(entry[key])) refuse(`${at}.${key}`, 'is not text')
   }
-  if (entry['billing'] !== undefined && !(BILLINGS as readonly unknown[]).includes(entry['billing'])) refuse(`${at}.billing`, `is not one of ${BILLINGS.join(', ')}`)
   if (isText(entry['account']) && looksLikeAKey(entry['account'])) refuse(`${at}.account`, 'reads as a key, not an account name: the key itself never goes in the declaration')
   refuseTheKeysPlace(entry, at, refuse)
-  return { endpoint: textOrNull(entry['endpoint']), key_from: textOrNull(entry['key_from']), key_file: textOrNull(entry['key_file']) }
+  return { endpoint: textOrNull(entry['endpoint']), key_from: textOrNull(entry['key_from']), key_file: textOrNull(entry['key_file']), billing: aBillingOf(entry['billing'], at, refuse) }
+}
+
+/** A provider's billing, or null when it names none; any other value is refused by name, never read as the default. */
+function aBillingOf(value: unknown, at: string, refuse: RefuseAProfile): Billing | null {
+  if (value === undefined) return null
+  const billing = BILLINGS.find((known) => known === value)
+  return billing ?? refuse(`${at}.billing`, `is not one of ${BILLINGS.join(', ')}`)
 }
 
 /** Where a provider's key is read from: a variable's name or a file's path, never both, and never the key. */
@@ -198,17 +218,18 @@ function aProfileOf(entry: Block, at: string, declared: TheNamesDeclared, refuse
 const isAWholeNumberOfTokens = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1
 
 /**
- * A member's model and host from the profile it names (martha#931), or null when it names none. A member that names a
+ * A member's model and host from the profile it names (martha#931), and the billing of that profile's provider
+ * (martha#916), or null when it names none. A member that names a
  * profile and one of `own` (its own model or host) is refused, so the two never disagree.
  */
-export function theProfileOfAMember(member: Block, at: string, read: TheProfiles, own: readonly string[], refuse: RefuseAProfile): Pick<Profile, 'model' | 'host'> | null {
+export function theProfileOfAMember(member: Block, at: string, read: TheProfiles, own: readonly string[], refuse: RefuseAProfile): (Pick<Profile, 'model' | 'host'> & Pick<Provider, 'billing'>) | null {
   const profile = member[PROFILE]
   if (profile === undefined) return null
   const declared = typeof profile === 'string' ? read.profiles.get(profile) : undefined
   if (declared === undefined) return refuse(`${at}.${PROFILE}`, `is not a profile this declaration names (it names ${theNamesIn(read.profiles)})`)
   const named = own.find((key) => member[key] !== undefined)
   if (named !== undefined) refuse(`${at}.${named}`, `is named beside ${PROFILE}, which names it`)
-  return { model: declared.model, host: declared.host }
+  return { model: declared.model, host: declared.host, billing: read.providers.get(declared.provider)!.billing }
 }
 
 /**

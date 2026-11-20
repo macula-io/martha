@@ -37,6 +37,7 @@
 // the owner's screen, the signed runs' `run` and the guard's two git judgements.
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import process from 'node:process'
 import type { ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { agentRunsKept, answersOver, NO_CREW_TOOLS, type TheAnswersOfOneLaunch, type ThePlacesAHostReportsOver } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 /** What a session is handed as it starts: the entry's since martha#541, and named here still for the tests that import it. */
@@ -46,12 +47,14 @@ import {
   CLAUDE_CODE_READ_ATTACHES_NOTHING,
   CLAUDE_CODE_TOOL_RESULT_ROWS,
   isMcpToolCall,
+  readingArgumentOf,
   sessionStartOf,
   type SessionStartHookInput,
 } from '../claude_code_host/claude_code_host.ts'
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { ACalledTool, AnAgentOfASession, AResultOfACall, AStartingSession, TheAnswerToAnAgent, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE_FILE_TOOLS } from '../claude_code_host/claude_code_file_tools.ts'
+import type { TheStaleReads } from '../ask_git_how_far_a_clone_is_behind/ask_git_how_far_a_clone_is_behind.ts'
 import { reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { resolvedModelIn } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
 import { agentIdOf, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
@@ -127,6 +130,11 @@ export interface MemberRelayPlace {
   readonly handed_at_start: readonly TurnSource[]
   /** The settings files the host reads, watched for a key that turns the relay off (martha#122). */
   readonly hookSettings: HookSettingsWatch
+  /**
+   * The note a read in a clone behind its origin carries (martha#969), when the crew declared a workspace layout: the
+   * launch builds it from the declaration. Absent, no read carries a note.
+   */
+  readonly stale_reads?: TheStaleReads
   /**
    * What the gate does to this member (martha#321): the launcher reads it from the declaration once and hands it here,
    * and every answer this relay gives follows it. Absent means enforced, so a place built by a caller that has not
@@ -361,7 +369,11 @@ async function answerACoreTool(state: RelayState, body: unknown): Promise<Answer
 async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrder: (work: () => Promise<void>) => Promise<void>): Promise<Answered | Refused> {
   const answer = await answerACoreTool(state, body)
   const start = state.everyTurn.startIn(body, answer)
-  if (start !== undefined) await inOrder(async () => state.everyTurn.recorded(start))
+  if (start !== undefined) {
+    // A new main turn: a clone a read was told about in the last one is told again (martha#969).
+    state.place.stale_reads?.aTurnStarted(start.session_id)
+    await inOrder(async () => state.everyTurn.recorded(start))
+  }
   return answer
 }
 
@@ -392,6 +404,7 @@ const placesOfTheEntry = (place: MemberRelayPlace, reviews: TheReviewSpawns, age
   reviews,
   failed_review_report: THE_HOSTS_FAILED_REVIEW,
   told: place.telling,
+  note: (line) => void process.stderr.write(`${line}\n`),
   agents,
   policy: place.policy,
   names: place.names,
@@ -547,7 +560,22 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   closeTheDialogsTheCallAnswered(place, session.id, body, call)
   const answer = await state.answers.aResultCame(aResultOfACallOf(body, call))
   if ('stop' in answer) return stopMember(place, answer.stop)
-  return answered(answer.end_turn === undefined ? TAKEN : { ...TAKEN, end_turn: answer.end_turn })
+  const taken = answer.end_turn === undefined ? TAKEN : { ...TAKEN, end_turn: answer.end_turn }
+  const note = await theNoteOfARead(place, session.id, call)
+  return answered(note === '' ? taken : { ...taken, note })
+}
+
+/**
+ * The note a ran read carries (martha#969): the clone it read in is behind its origin. '' for a call that is not a read,
+ * a crew that declared no workspace layout, or a note that could not be made: a read is never refused for it. The path
+ * is the one the call names, resolved as the host resolves it from where the member was launched, as own writes are.
+ */
+async function theNoteOfARead(place: MemberRelayPlace, session_id: string, call: { readonly tool: string; readonly input: Body }): Promise<string> {
+  const argument = readingArgumentOf(call.tool)
+  if (place.stale_reads === undefined || argument === undefined) return ''
+  const named = call.input[argument]
+  const path = CLAUDE_CODE_FILE_TOOLS.resolve(typeof named === 'string' ? named : '', place.launch.launch_dir, place.hookSettings.home)
+  return place.stale_reads.theNoteForARead(session_id, path).catch(() => '')
 }
 
 /**

@@ -1,8 +1,9 @@
 // Reading the HANDOFF and VERDICT lines a member sends (martha#253, slice 4).
 //
-// These cases pin the two things the design demands of this slice: a line that does not read is answered with the
-// field that is wrong (a tip of thirty-nine hex digits, PASS|FAIL after the range), and every line the generated card
-// text teaches does read and adds its row to that package's ledger — the join that stops a card and a reader drifting.
+// These cases pin the two things the design demands of this slice: a line that does not read goes as prose with one
+// line naming the field that is wrong (a tip of thirty-nine hex digits, PASS|FAIL after the range), and every line the
+// generated card text teaches does read and adds its row to that package's ledger — the join that stops a card and a
+// reader drifting.
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -43,32 +44,45 @@ test('#256: a PASS that required no change reads, because req=0 is what the crew
   assert.equal(reading.line.keys['req'], '0')
 })
 
-test('#256: the round is still one or more, and req is still a whole number', () => {
+test('#256: a round of zero or a negative count is no line, and the field that did not read is named', () => {
   const round_zero = readACrewLine(`VERDICT ${PACKAGE} PASS ${BASE}..${TIP} r=0 ci=41700170944 req=0`)
-  assert.ok('refused' in round_zero, `a round of zero read: ${JSON.stringify(round_zero)}`)
-  assert.match(round_zero.refused, /r is not/, 'the answer did not name the round that is wrong')
+  assert.equal(round_zero.line, null, `a round of zero read: ${JSON.stringify(round_zero)}`)
+  assert.match(round_zero.notice ?? '', /r is not/, 'the notice did not name the round that is wrong')
 
   const negative = readACrewLine(`VERDICT ${PACKAGE} PASS ${BASE}..${TIP} r=1 ci=41700170944 req=-1`)
-  assert.ok('refused' in negative, `a negative count read: ${JSON.stringify(negative)}`)
-  assert.match(negative.refused, /req is not/, 'the answer did not name the count that is wrong')
+  assert.equal(negative.line, null, `a negative count read: ${JSON.stringify(negative)}`)
+  assert.match(negative.notice ?? '', /req is not/, 'the notice did not name the count that is wrong')
 })
 
-test('#253: a tip of thirty-nine hex digits is answered with the field, and nothing reaches a ledger', () => {
+test('#253: a tip of thirty-nine hex digits goes as prose, with the field named, and nothing reaches a ledger', () => {
   const reading = readACrewLine(`HANDOFF ${PACKAGE} ${BASE}..${TIP.slice(1)} r=1 ci=41700170944`)
-  assert.ok('refused' in reading)
-  assert.match(reading.refused, /range/, 'the answer did not name the field that is wrong')
+  assert.equal(reading.line, null)
+  assert.match(reading.notice ?? '', /range/, 'the notice did not name the field that is wrong')
 })
 
-test('#253: a VERDICT with PASS|FAIL after the range is answered with the word out of place', () => {
+test('#253: a VERDICT with PASS|FAIL after the range goes as prose, with the word out of place named', () => {
   const reading = readACrewLine(`VERDICT ${PACKAGE} ${BASE}..${TIP} PASS r=2 ci=41700170944`)
-  assert.ok('refused' in reading)
-  assert.match(reading.refused, /PASS or FAIL/, 'the answer did not say which word was out of place')
+  assert.equal(reading.line, null)
+  assert.match(reading.notice ?? '', /PASS or FAIL/, 'the notice did not say which word was out of place')
 })
 
-test('#253: a key the verb does not name is answered by its name', () => {
+test('#253: a key the verb does not name goes as prose, with its name in the notice', () => {
   const reading = readACrewLine(`HANDOFF ${PACKAGE} ${BASE}..${TIP} r=1 ci=1 round=2`)
-  assert.ok('refused' in reading)
-  assert.match(reading.refused, /round/)
+  assert.equal(reading.line, null)
+  assert.match(reading.notice ?? '', /round/)
+})
+
+test('#601: every line that does not read says so in one line and is never refused', () => {
+  for (const written of [
+    `HANDOFF ${PACKAGE} ${BASE}..${TIP.slice(1)} r=1 ci=41700170944`,
+    `VERDICT ${PACKAGE} ${BASE}..${TIP} PASS r=2 ci=41700170944`,
+    `HANDOFF ${PACKAGE} ${BASE}..${TIP} r=1 ci=1 round=2`,
+    `HANDOFF ${PACKAGE} not-a-range r=1`,
+  ]) {
+    const reading = readACrewLine(written)
+    assert.equal(reading.line, null, `a line that does not read was taken as one: ${written}`)
+    assert.match(reading.notice ?? '', /read as prose/, `the notice did not say the line goes as prose: ${written}`)
+  }
 })
 
 test('#253: a message that is not a crew line is left alone', () => {

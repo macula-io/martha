@@ -23,7 +23,7 @@
 // (martha#646 r=4 R9).
 //
 // The bounds are the product's own, and they are counted on the bytes actually KEPT: one file past
-// TRANSCRIPTS_FILE_BYTES_KEPT and the files of one launch past TRANSCRIPTS_LAUNCH_BYTES_KEPT are replaced by a line
+// the crew's declared transcripts.megabytes_kept and the files of one launch past the same bound are replaced by a line
 // saying so. On what was read, the bound would not be a bound: redaction can make a file longer than it was, and a run
 // of lines that do not parse is kept as one line naming how many rather than one withheld line each, so a small file of
 // them would otherwise be kept tens of times its own size — enough for a joined string to throw and take the launch's
@@ -51,12 +51,6 @@ export const theHostsTranscriptPath = (key: string, name: string): string => [HO
 /** What ends one transcript's name. */
 export const TRANSCRIPTS_SUFFIX = '.jsonl'
 
-/** How many launches' transcripts are kept: one directory per launch, pruned newest-first by the adapter. */
-export const TRANSCRIPTS_LAUNCHES_KEPT = 64
-
-/** One transcript's bound, and one launch's whole bound: what the product promises to keep of a single launch. */
-export const TRANSCRIPTS_FILE_BYTES_KEPT = 16 * 1024 * 1024
-export const TRANSCRIPTS_LAUNCH_BYTES_KEPT = 16 * 1024 * 1024
 
 /** What stands where a token was. */
 export const REDACTED = '[the token, redacted]'
@@ -129,6 +123,11 @@ export interface AConfigFile {
 export interface WhatTheConfigFolderHolds {
   readonly files: readonly AConfigFile[]
   readonly theLaunchKey: string
+  /**
+   * One transcript's bound, and one launch's whole bound, in bytes: the crew's declared transcripts.megabytes_kept
+   * (martha#931 B, ../declare_crew/the_crews_transcripts's bytesKeptOf). The two bounds are one number, as they were.
+   */
+  readonly bytes_kept: number
 }
 
 /** One kept transcript: the host's path under the config folder, and what is written there. */
@@ -313,16 +312,16 @@ export function redactTheTranscriptWithin(text: string, theLaunchKey: string, ca
 }
 
 /**
- * What one transcript is kept as, given the room left of the launch's bound: its redacted text when both bounds have
- * room for it, and otherwise the note naming the bound it passed. A redaction that throws is this file's note and no
- * other file's business, since one transcript never costs a launch the rest.
+ * What one transcript is kept as, given the room left of the launch's bound: its redacted text when the room holds it,
+ * and otherwise the note naming the launch's bound. The file's bound is the same number (martha#931 B), so the room left
+ * is never more than it and the launch's is the bound a kept text passes. A redaction that throws is this file's note
+ * and no other file's business, since one transcript never costs a launch the rest.
  */
-function theKeptTextOf(transcript: AConfigFile, theLaunchKey: string, room: number): { readonly text: string; readonly found: boolean } {
+function theKeptTextOf(transcript: AConfigFile, theLaunchKey: string, room: number, bytes_kept: number): { readonly text: string; readonly found: boolean } {
   try {
-    const redacted = redactTheTranscriptWithin(transcript.text ?? '', theLaunchKey, Math.min(TRANSCRIPTS_FILE_BYTES_KEPT, room))
+    const redacted = redactTheTranscriptWithin(transcript.text ?? '', theLaunchKey, room)
     if (redacted.over === null) return { text: redacted.text, found: redacted.found }
-    const of: TheBound = room <= TRANSCRIPTS_FILE_BYTES_KEPT ? 'launch' : 'file'
-    return { text: tooLargeToKeep(redacted.over, of === 'file' ? TRANSCRIPTS_FILE_BYTES_KEPT : TRANSCRIPTS_LAUNCH_BYTES_KEPT, of), found: false }
+    return { text: tooLargeToKeep(redacted.over, bytes_kept, 'launch'), found: false }
   } catch {
     return { text: COULD_NOT_KEEP, found: false }
   }
@@ -349,19 +348,19 @@ export function chooseTheTranscripts(holds: WhatTheConfigFolderHolds): TheTransc
   }
   const transcripts = holds.files.filter((one) => isTheHostsTranscript(one.path)).sort((one, other) => one.path.localeCompare(other.path))
   for (const transcript of transcripts) {
-    if (transcript.unread === 'file' || transcript.bytes > TRANSCRIPTS_FILE_BYTES_KEPT) {
-      noteKept(transcript.path, tooLargeToKeep(transcript.bytes, TRANSCRIPTS_FILE_BYTES_KEPT, 'file'))
+    if (transcript.unread === 'file' || transcript.bytes > holds.bytes_kept) {
+      noteKept(transcript.path, tooLargeToKeep(transcript.bytes, holds.bytes_kept, 'file'))
       continue
     }
     if (transcript.unread === 'launch') {
-      noteKept(transcript.path, tooLargeToKeep(transcript.bytes, TRANSCRIPTS_LAUNCH_BYTES_KEPT, 'launch'))
+      noteKept(transcript.path, tooLargeToKeep(transcript.bytes, holds.bytes_kept, 'launch'))
       continue
     }
     if (transcript.unread === 'could-not-read') {
       noteKept(transcript.path, COULD_NOT_READ)
       continue
     }
-    const keptText = theKeptTextOf(transcript, holds.theLaunchKey, TRANSCRIPTS_LAUNCH_BYTES_KEPT - theLaunchesBytes)
+    const keptText = theKeptTextOf(transcript, holds.theLaunchKey, holds.bytes_kept - theLaunchesBytes, holds.bytes_kept)
     noteKept(transcript.path, keptText.text)
     if (keptText.found) marked.push(transcript.path)
   }

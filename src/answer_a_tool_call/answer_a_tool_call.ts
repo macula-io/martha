@@ -18,6 +18,9 @@
 // A raw mesh read is refused next, tainted or not
 // (../read_a_room_through_its_gate): the room is read through its gate instead.
 //
+// A call that widens a member's reach is the owner's decision, not this gate's (martha#601): the call is answered as
+// asked, and one line on the process's own error output says what the owner's decision is made in.
+//
 // Two of the refusals below stand on text the session took in rather than on
 // the call itself: a record that cannot be read, and an agent the host started
 // that has not stopped. The owner's switch (`house_rules.strict_gate`, martha#259)
@@ -87,9 +90,9 @@ const refusedBecauseTheAuditCouldNotBeKept = (refusal: string, why: string): Too
   deny: `${refusal} (this member is audited, and its audit line could not be kept: ${why}, so the call is refused.)`,
 })
 
-/** Refuse the tool call, or let it run. */
-export function answerToolCall(asked: ToolCall): ToolCallAnswer {
-  const refusedBeforeTheGate = theRefusalBeforeTheGate(asked)
+/** Refuse the tool call, or let it run. The note sink is the composition root's, for the one line a cut refusal says (martha#601). */
+export function answerToolCall(asked: ToolCall, note: (line: string) => void = () => {}): ToolCallAnswer {
+  const refusedBeforeTheGate = theRefusalBeforeTheGate(asked, note)
   if (refusedBeforeTheGate !== undefined) return refusedBeforeTheGate
 
   const refusedByTheGate = theGatesAnswer({ tool: asked.tool, session: asked.session, policy: asked.policy, gate: asked.gate ?? 'enforced', audit: asked.audit })
@@ -99,10 +102,10 @@ export function answerToolCall(asked: ToolCall): ToolCallAnswer {
 }
 
 /**
- * The refusals that come before the gate, each of which stands on the call, the launch or the session: the launch
- * rechecked, the reach rule, the raw mesh read, and the two that stand on text the session took in.
+ * What stands before the gate, each of which reads the call, the launch or the session: the launch rechecked, the raw
+ * mesh read, and the two that stand on text the session took in. The reach rule is read here too, as a notice.
  */
-function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, agents_running = [], gate = 'enforced', audit }: ToolCall): ToolCallAnswer {
+function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, agents_running = [], gate = 'enforced', audit }: ToolCall, note: (line: string) => void): ToolCallAnswer {
   const launched = recheckLaunchPassingOwnWrites(launch, host)
   if (!launched.allow) {
     return {
@@ -113,7 +116,9 @@ function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, ag
   }
 
   if (widensMemberReach(tool, names)) {
-    return { deny: `${tool} is not called in a member's session: ${WHO_DECIDES_REACH}.` }
+    // The owner ruled the reach rule a notice (martha#601): the call is answered as asked, and one line says who decides
+    // who can reach a member.
+    note(`notice: ${tool} is not called in a member's session, and the call was answered as asked: ${WHO_DECIDES_REACH}.`)
   }
 
   if (isRawMeshRead(tool, input, names)) {

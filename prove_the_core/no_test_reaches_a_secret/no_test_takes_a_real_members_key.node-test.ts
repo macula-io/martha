@@ -23,6 +23,7 @@ import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.
 import { STATE_HOME_VARIABLE } from '../../src/refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
 import { theEnvironmentAMemberIsGiven } from '../../src/launch_a_claude_code_member/the_environment_a_member_is_given.ts'
 import { CLAUDE_CODE } from '../../src/know_claude_codes_own_facts/claude_code_facts.ts'
+import { BILLED_BY_SUBSCRIPTION } from '../../src/declare_crew/declare_crew.ts'
 import { STATE_ROOT_NAME, CREWS_PLACE } from '../../src/keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { streamDirectoryNameOf } from '../../src/row_streams_directory/row_streams_directory.ts'
 import { sessionRecordStreamOf } from '../../src/session_records_in_rows/session_records_in_rows.ts'
@@ -187,6 +188,7 @@ test("a launched member is handed neither the crew state a test planted in its o
     crew: { state_root: crewStateRoot, rows },
     member_config: join(home, 'a-member-config-folder'),
     host: CLAUDE_CODE,
+    billing: BILLED_BY_SUBSCRIPTION,
   })
   const member = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { env: given, stdio: 'ignore' })
   t.after(() => {

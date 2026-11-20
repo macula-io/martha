@@ -6,8 +6,9 @@
 // force, and a window whose member ended kept, then opened again in its place.
 
 import assert from 'node:assert/strict'
+import { THE_FIRST_PROMPT_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -17,13 +18,16 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   CONFIG_FILE,
   attachToTheCrew,
+  isMarthasOwnSocket,
   openTheCrewInTmux,
   tmuxOnThisMachine,
   tmuxSaysOnThisMachine,
+  typeTheFirstPrompt,
   type AttachingToTheCrew,
   type OpeningTheCrewInTmux,
   type TmuxSaid,
 } from './open_the_crew_in_tmux.ts'
+import { THE_ACTS_A_WINDOW_RUNS, theSocketOfThisTmux } from './the_commands_tmux_runs.ts'
 
 interface Seen {
   readonly out: string[]
@@ -42,6 +46,7 @@ const VERBS: Readonly<Record<string, (sessions: Sessions, words: readonly string
   'new-session': (sessions, words) => (sessions.set(words[words.indexOf('-s') + 1]!, [{ name: words[words.indexOf('-n') + 1]!, ended: false }]), DONE),
   'new-window': (sessions, words, session) => (sessions.get(session.replace(/:$/, ''))!.push({ name: words[words.indexOf('-n') + 1]!, ended: false }), DONE),
   'split-window': () => DONE,
+  'send-keys': () => DONE,
   'kill-window': (sessions, _words, session, window) => {
     const left = sessions.get(session)!.filter((one) => one.name !== window)
     if (left.length === 0) sessions.delete(session)
@@ -130,6 +135,21 @@ test('#932: a window or strip tmux does not open is refused with what tmux said,
   }
 })
 
+test('#919: a member up gives a first prompt is started with it; one given none is started without', () => {
+  const { seen, asking } = opening(undefined, { promptFor: (member) => (member === 'Ceres' ? 'read the brief' : undefined) })
+  assert.equal(openTheCrewInTmux(io(seen), asking), 0)
+  const starts = seen.ran.filter(([verb]) => verb === 'new-session' || verb === 'new-window').map((words) => words.slice(words.indexOf('start')))
+  assert.deepEqual(starts, [['start', 'Vesta'], ['start', 'Ceres', THE_FIRST_PROMPT_SWITCH, 'read the brief']])
+})
+
+test('#919: the first prompt is typed into the pane named, on Martha\'s server, then Enter; a refusal from tmux is said', () => {
+  const { seen, asking } = opening()
+  assert.equal(typeTheFirstPrompt(asking, '%3', '-read the brief'), undefined)
+  assert.deepEqual(seen.ran, [['send-keys', '-t', '%3', '-l', '--', '-read the brief'], ['send-keys', '-t', '%3', 'Enter']])
+  const refusing = { ...asking, tmux: () => ({ status: 1, said: "can't find pane: %3\n" }) }
+  assert.equal(typeTheFirstPrompt(refusing, '%3', 'go'), "can't find pane: %3")
+})
+
 test('#932: with every member running nothing is opened, and it says so', () => {
   const { seen, asking } = opening(undefined, { isRunning: () => true })
   assert.equal(openTheCrewInTmux(io(seen), asking), 0)
@@ -210,4 +230,41 @@ test('#932 live: on a tmux server of the test\'s own, one session, a window and 
   assert.equal(pallas(), '0 1\n1 0\n')
   assert.equal(openTheCrewInTmux(io(seen), live(['/bin/sh', '-c', 'sleep 60', 'a-martha'], ['Pallas'])), 0, seen.err.join('\n'))
   assert.equal(pallas(), '0 0\n1 0\n', 'the ended member was left in its window, read as running by its strip')
+  // #919: what is typed in arrives as written: a leading -, a format and a variable are text, never read as keys or expanded.
+  assert.equal(openTheCrewInTmux(io(seen), live(['/bin/sh', '-c', '[ "$0" = crew ] && exec sleep 60; exec cat', 'a-martha'], ['Ceres-typed'])), 0, seen.err.join('\n'))
+  const typedPane = tmux(['display-message', '-p', '-t', '=live-crew:=Ceres-typed.0', '#{pane_id}']).said.trim()
+  const text = '-v #{pid} $HOME Enter'
+  assert.equal(typeTheFirstPrompt({ server, id: 'live-crew', env, place, tmuxSays: () => said, write: writeOwnerOnly, tmux: tmuxOnThisMachine }, typedPane, text), undefined)
+  const screen = () => tmux(['capture-pane', '-p', '-t', typedPane]).said
+  for (let i = 0; i < 50 && !screen().includes(text); i += 1) spawnSync('sleep', ['0.1'])
+  assert.equal(screen().split('\n').filter((line) => line !== '').slice(0, 2).join('\n'), `${text}\n${text}`, 'cat echoes the line once Enter ended it')
+  theSocketAWindowReadsIsTheServers(seen, live, { server, env, place, said })
 })
+
+/**
+ * #919 review r=1: the socket a window of the server reads in TMUX is the one the server names as its own; the same name
+ * in another folder is not. #963: the member's strip runs the same command with its own act, so only the member's pane
+ * (its act the held one) writes what it read, whole (moved into place), and the file is read once both panes have run:
+ * a second writer's `>` could empty it between a poll and a read.
+ */
+function theSocketAWindowReadsIsTheServers(
+  seen: Seen,
+  live: (martha: readonly string[], members: readonly string[]) => OpeningTheCrewInTmux,
+  on: { readonly server: string; readonly env: Readonly<Record<string, string | undefined>>; readonly place: string; readonly said: string },
+): void {
+  const told = join(on.place, 'tmux-told')
+  const acts = join(on.place, 'tmux-acts')
+  const writes = join(on.place, 'tmux-told-writes')
+  const theMembersPaneWrites = `[ "$1" = '${THE_ACTS_A_WINDOW_RUNS.held}' ] && { printf '%s' "$TMUX" > '${told}.part'; mv '${told}.part' '${told}'; printf '%s\\n' "$1" >> '${writes}'; }`
+  const script = `printf '%s\\n' "$1" >> '${acts}'; ${theMembersPaneWrites}; exec sleep 60`
+  assert.equal(openTheCrewInTmux(io(seen), live(['/bin/sh', '-c', script, 'a-martha'], ['Ceres-told'])), 0, seen.err.join('\n'))
+  const linesOf = (file: string): readonly string[] => (existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter((line) => line !== '') : [])
+  const done = (): boolean => linesOf(acts).length === 2 && existsSync(told)
+  for (let i = 0; i < 50 && !done(); i += 1) spawnSync('sleep', ['0.1'])
+  assert.deepEqual([...linesOf(acts)].sort(), [THE_ACTS_A_WINDOW_RUNS.strip, THE_ACTS_A_WINDOW_RUNS.held].sort(), 'the member\'s pane and its strip did not both run')
+  assert.deepEqual(linesOf(writes), [THE_ACTS_A_WINDOW_RUNS.held], 'the socket file was written by more than the member\'s own pane')
+  const inTheWindow = theSocketOfThisTmux({ TMUX: readFileSync(told, 'utf8') })
+  const onTheServer = { server: on.server, id: 'live-crew', env: on.env, place: on.place, tmuxSays: () => on.said, write: writeOwnerOnly, tmux: tmuxOnThisMachine }
+  assert.equal(isMarthasOwnSocket(onTheServer, inTheWindow ?? ''), true, JSON.stringify(inTheWindow))
+  assert.equal(isMarthasOwnSocket(onTheServer, join(on.place, 'elsewhere', on.server)), false)
+}

@@ -399,6 +399,102 @@ test('a path is read as well as its text, in the tree and in every commit, empty
   }
 })
 
+// A merge of main into a branch (martha#933): main once held a line, the branch merged that main, and main has since
+// removed the line, so the range's base no longer holds it. The merge brought the line from main; the branch never
+// wrote it. Each token is drawn at run time, so this file holds none.
+const tokenLine = () => `token: ${drawnToken(GITHUB_TOKEN_PREFIXES[0] ?? '')}\n`
+
+/** start → the branch's own commit → a merge of main's commit that adds `main.txt`'s line → main removes it again. */
+function aBranchThatMergedMain(root: string, mainsLine: string): { readonly base: string; readonly mainsCommit: string } {
+  gitIn(root, 'init', '-q', '-b', 'main')
+  writeFileSync(join(root, 'main.txt'), 'clean\n')
+  gitIn(root, 'add', '.')
+  gitIn(root, 'commit', '-q', '-m', 'start')
+  gitIn(root, 'checkout', '-q', '-b', 'branch')
+  writeFileSync(join(root, 'branch.txt'), 'the branch\'s own work\n')
+  gitIn(root, 'add', '.')
+  gitIn(root, 'commit', '-q', '-m', 'the branch')
+  gitIn(root, 'checkout', '-q', 'main')
+  writeFileSync(join(root, 'main.txt'), `clean\n${mainsLine}`)
+  gitIn(root, 'commit', '-q', '-am', 'main adds a line')
+  const mainsCommit = gitIn(root, 'rev-parse', 'HEAD')
+  writeFileSync(join(root, 'main.txt'), 'clean\n')
+  gitIn(root, 'commit', '-q', '-am', 'main removes it')
+  const base = gitIn(root, 'rev-parse', 'HEAD')
+  gitIn(root, 'checkout', '-q', 'branch')
+  return { base, mainsCommit }
+}
+
+const hitsOver = async (root: string, base: string) => {
+  const commits = commitsOf(root, `${base}..${gitIn(root, 'rev-parse', 'HEAD')}`)
+  return { commits, hits: await privateHitsIn(commits.flatMap((sha) => commitSources(root, sha)), strict, resolveFixed) }
+}
+
+test('martha#933: a line main carried, brought into a branch by a merge of main, is not the branch\'s, though main has since removed it', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'nothing-private-'))
+  try {
+    const { base, mainsCommit } = aBranchThatMergedMain(root, tokenLine())
+    gitIn(root, 'merge', '-q', '--no-edit', mainsCommit)
+    const { commits, hits } = await hitsOver(root, base)
+    assert.equal(commits.length, 2, 'the range is the branch\'s commit and its merge')
+    assert.deepEqual(hits, [])
+  } finally {
+    removeTheTree(root)
+  }
+})
+
+test('martha#933: what a merge writes itself is still the branch\'s, in a resolved conflict and in a file neither side held', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'nothing-private-'))
+  try {
+    const { base, mainsCommit } = aBranchThatMergedMain(root, 'main\'s line\n')
+    // The branch writes the same line differently, so the merge conflicts there.
+    writeFileSync(join(root, 'main.txt'), 'clean\nthe branch\'s line\n')
+    gitIn(root, 'commit', '-q', '-am', 'the branch changes the line')
+    assert.throws(() => gitIn(root, 'merge', '-q', '--no-edit', mainsCommit), 'the merge conflicts')
+    writeFileSync(join(root, 'main.txt'), `clean\n${tokenLine()}`)
+    writeFileSync(join(root, 'evil.txt'), tokenLine())
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '--no-edit')
+    const merge = gitIn(root, 'rev-parse', 'HEAD').slice(0, 12)
+    const { hits } = await hitsOver(root, base)
+    assert.deepEqual(hits.map((hit) => hit.where).sort(), [`commit ${merge} evil.txt:1`, `commit ${merge} main.txt:2`])
+    assert.ok(hits.every((hit) => hit.what === `${TOKEN_CLASS} (value withheld)`), JSON.stringify(hits))
+  } finally {
+    removeTheTree(root)
+  }
+})
+
+test('martha#933 review r=1: an octopus merge, which git will not remerge, is still read for what it writes itself', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'nothing-private-'))
+  try {
+    gitIn(root, 'init', '-q', '-b', 'main')
+    writeFileSync(join(root, 'start.txt'), 'clean\n')
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '-m', 'start')
+    const base = gitIn(root, 'rev-parse', 'HEAD')
+    for (const side of ['one', 'two', 'three']) {
+      gitIn(root, 'switch', '-q', '-c', side, 'main')
+      writeFileSync(join(root, `${side}.txt`), `${side}\n`)
+      gitIn(root, 'add', '.')
+      gitIn(root, 'commit', '-q', '-m', side)
+    }
+    gitIn(root, 'switch', '-q', 'one')
+    gitIn(root, 'merge', '-q', '--no-edit', 'two', 'three')
+    writeFileSync(join(root, 'evil.txt'), tokenLine())
+    // A path is published too: an empty file whose name is a token carries no line, only its path.
+    const named = `${drawnToken(GITHUB_TOKEN_PREFIXES[0] ?? '')}.txt`
+    writeFileSync(join(root, named), '')
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '--amend', '--no-edit')
+    assert.equal(gitIn(root, 'log', '-1', '--format=%P').split(' ').length, 3, 'the merge is an octopus')
+    const merge = gitIn(root, 'rev-parse', 'HEAD').slice(0, 12)
+    const { hits } = await hitsOver(root, base)
+    assert.deepEqual(hits.map((hit) => hit.where).sort(), [`commit ${merge} evil.txt:1`, `commit ${merge} path ${named}`].sort())
+  } finally {
+    removeTheTree(root)
+  }
+})
+
 test('a declared public address passes as that exact string, and its domain does not', async () => {
   assert.deepEqual(await hitsOf('the key type ada@synthetic.invalid'), [])
   assert.deepEqual(await refusedIn('the key type xada@synthetic.invalid'), ['an email address (xada@synthetic.invalid)'])

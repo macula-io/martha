@@ -19,12 +19,13 @@ import {
   type WhatTheHostIsAsking,
   type WhatTheHostSaid,
 } from './say_what_the_host_is_asking.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 
 const AT = 1000
 
 /** The state and the events one thing the host said leaves. */
-function said(held: WhatTheHostIsAsking, it: WhatTheHostSaid, at = AT): { readonly state: WhatTheHostIsAsking; readonly keys: readonly string[] } {
-  const left = theAsksAfter(held, it, at)
+function said(held: WhatTheHostIsAsking, it: WhatTheHostSaid, at = AT, shown: readonly string[] = OWNER_NOTICES_WHEN_UNNAMED.show): { readonly state: WhatTheHostIsAsking; readonly keys: readonly string[] } {
+  const left = theAsksAfter(held, it, at, shown)
   return {
     state: left.state,
     keys: left.events.flatMap((event) => (event.change === 'closed' ? [event.key] : event.change === 'opened' ? [theKeyOf(event.raised)] : ['turn-started'])),
@@ -179,4 +180,13 @@ test('the same ask twice is one dialog, and the same words twice are one notific
   const twice = said(one.state, { said: 'elicitation', server: 'a-server', question: 'which file?', id: 'e-7' }, AT + 1)
   assert.deepEqual(twice.keys, [], 'nothing new is opened')
   assert.equal(twice.state.dialogs.length, 1)
+})
+
+test('#931 C: a notification opens a dialog when the crew\'s declared owner_notices.show names it, and only then', () => {
+  // A declared list unlike the default: one name the table keeps from the owner, and none of the table's own.
+  const shown = ['idle_prompt']
+  const theNotification = (type: string, list: readonly string[]): readonly string[] => said(NOTHING_IS_ASKED, { said: 'notification', message: 'the host says', type }, AT, list).keys
+  assert.equal(theNotification('idle_prompt', shown).length, 1, 'a declared name the table keeps from the owner did not open a dialog')
+  assert.deepEqual(theNotification('agent_needs_input', shown), [], 'a name the declared list leaves out opened a dialog')
+  assert.equal(theNotification('agent_needs_input', OWNER_NOTICES_WHEN_UNNAMED.show).length, 1, 'by default, the table\'s own name did not open a dialog')
 })

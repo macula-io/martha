@@ -29,10 +29,10 @@ page does not name.
 | `harnesses` | no | The harnesses a profile may name (below). | none |
 | `providers` | no | The providers a profile may name (below). | none |
 | `profiles` | no | Named model, harness and provider sets a member may name (below). | none |
-| `clock_zone` | no | The time zone the crew's clock reads in. Checked as text; read by no part of Martha today. | none |
-| `github` | no | GitHub limits (below). Read by no part of Martha today. | none |
-| `transcripts` | no | How much of each launch's transcript is kept (below). Read by no part of Martha today. | none |
-| `owner_notices` | no | Which of the host's notices reach the owner (below). Read by no part of Martha today. | none |
+| `clock_zone` | no | The time zone every clock time Martha prints for the crew reads in, by its IANA name (`Europe/Brussels`): the nudge lines, the CI wait and budget answers, the backlog and the crew-tools flag. A name this machine's time zone data does not know is refused. | `UTC` |
+| `github` | no | How the crew spends its GitHub allowance (below). | the values below |
+| `transcripts` | no | How many launches' transcripts are kept, and how large (below). | the values below |
+| `owner_notices` | no | Which of the host's notices reach the owner (below). | the notices shown as a dialog before |
 
 ## `members[]`
 
@@ -151,7 +151,7 @@ One entry per provider, by a name the crew picks.
 | `key_from` | no | The name of the environment variable that holds the key. |
 | `key_file` | no | The file the key is in: absolute, or under `~/`. Never beside `key_from`, and never the key. |
 | `account` | no | The account it bills: an e-mail address or a short name. One that reads as a key is refused: white space, a known key prefix (`sk-ant-`, `ghp_`, …), or an unbroken run of more than 31 letters, digits, `-` and `_`. |
-| `billing` | no | `subscription`, `metered` or `unknown`. |
+| `billing` | no | How a Claude Code member on a profile of this provider is billed: `subscription` (the owner's sign-in) or `api_key` (the key the launcher carries). Only that credential reaches the member. Left out, the launch asks the host whether you are signed in: the key only when you are not and the launcher carries one; otherwise the subscription, also when the host cannot say. |
 
 ## `profiles`
 
@@ -166,19 +166,21 @@ One entry per profile, by a name the crew picks.
 
 ## `github`
 
-| Field | Required | What it holds |
+| Field | What it holds | When left out |
 |---|---|---|
-| `budget_floor` | no | A whole number, 0 or more. |
+| `budget_floor` | The calls GitHub says are left at or below which the crew makes no more until the window resets: a whole number, 0 or more. | 500 |
 
 ## `transcripts`
 
-| Field | Required | What it holds |
+Martha keeps each ended launch's transcripts, redacted, so the owner can read what a member's session did.
+
+| Field | What it holds | When left out |
 |---|---|---|
-| `launches_kept` | no | A whole number, at least 1. |
-| `megabytes_kept` | no | A whole number, at least 1. |
+| `launches_kept` | How many launches' transcripts are kept, newest first; older launches are removed. A whole number, at least 1. | 64 |
+| `megabytes_kept` | The most one transcript, and one launch's transcripts together, may hold, in whole megabytes (at least 1). A file past it is kept as one line naming the bound. | 16 |
 
 ## `owner_notices`
 
 | Field | Required | What it holds |
 |---|---|---|
-| `show` | no | The notices that reach the owner, by name. |
+| `show` | no | The notices that reach the owner, by the host's own names (`agent_needs_input`, `worker_permission_prompt`, ...). A name the host does not send is refused; an empty list tells the owner of nothing. Left out, the owner is told of every notice Martha showed as a dialog before. |
