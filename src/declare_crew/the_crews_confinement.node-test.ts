@@ -115,6 +115,9 @@ test('#989: what martha init writes is crew-code\'s own ceiling, the bus unit ho
     member_cpu_weight: 50,
     systemd_only_bus: { unit: 'ci-systemd-bus', socket: 'ci-systemd-bus' },
   })
-  const written = soloDeclaration('the-owner')
-  assert.deepEqual(written[CONFINEMENT as keyof typeof written], CONFINEMENT_THAT_INIT_WRITES, 'martha init writes no confinement, so every crew runs uncapped')
+  // The declaration carries the block it is given, and none when given none: whether this host can hold one is
+  // init's to read (../declare_a_solo_crew, Supervisor ruling on martha#989).
+  const written = soloDeclaration('the-owner', null, undefined, CONFINEMENT_THAT_INIT_WRITES)
+  assert.deepEqual(written[CONFINEMENT as keyof typeof written], CONFINEMENT_THAT_INIT_WRITES, 'a declaration given the confinement does not write it')
+  assert.equal(CONFINEMENT in soloDeclaration('the-owner'), false, 'a declaration given no confinement writes one')
 })

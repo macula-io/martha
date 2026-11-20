@@ -65,7 +65,7 @@ async function aCrewOfTools(more: { readonly usage_host?: AUsageHost } = {}): Pr
   mkdirSync(join(home, CREW_ROWS_PLACE), { recursive: true })
   const state = openState(join(home, 'state'), root)
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
-  const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
+  const declared = await declareSoloCrew({ runtime_dir: undefined, root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
   const declaration = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   const held = JSON.parse(readFileSync(declaration, 'utf8')) as { members: { name: string; model?: string }[]; house_rules?: Record<string, unknown> }

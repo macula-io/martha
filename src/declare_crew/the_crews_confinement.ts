@@ -90,6 +90,14 @@ export const CONFINEMENT_THAT_INIT_WRITES: AConfinement = {
   systemd_only_bus: { unit: 'ci-systemd-bus', socket: 'ci-systemd-bus' },
 }
 
+/**
+ * The one line `martha init` says when this host has no user manager to hold a ceiling, so it declared none (Supervisor
+ * ruling on martha#989): a declared block fails closed at a member's start, and a crew refused right after init is
+ * harm to its owner. The line names the block to add once a user manager runs, and the file to add it to.
+ */
+export const theConfinementInitLeftOut = (declaration: string): string =>
+  `no systemd user manager listens on this host, so martha init declared no confinement (martha#989): members run under no CPU ceiling. Once one runs, add this to ${declaration}: "${CONFINEMENT}": ${JSON.stringify(CONFINEMENT_THAT_INIT_WRITES)}`
+
 const isObject = (value: unknown): value is Readonly<Record<string, unknown>> => value !== null && typeof value === 'object' && !Array.isArray(value)
 
 /** A weight as systemd reads one, or why the value is not one. */

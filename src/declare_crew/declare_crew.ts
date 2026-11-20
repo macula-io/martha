@@ -45,7 +45,7 @@ export {
   type EngineEndpoint,
 } from './the_engines_endpoint.ts'
 import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theWorkspacesClonesOf, whereTheCrewOpens, type WhereTheCrewOpens } from './the_crews_workspace.ts'
-import { CONFINEMENT, CONFINEMENT_REQUIRED_KEYS, CONFINEMENT_THAT_INIT_WRITES, theConfinementOf, type AConfinement } from './the_crews_confinement.ts'
+import { CONFINEMENT, CONFINEMENT_REQUIRED_KEYS, theConfinementOf, type AConfinement } from './the_crews_confinement.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -309,7 +309,7 @@ export const SOLO_MEMBERS = [
  * other act is the owner's alone. A declaration written before the act existed names it nowhere, which reads as the
  * owner's alone, so an older crew is unchanged.
  */
-export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = null, host: string = THE_HOST_A_MEMBER_RAN_ON) {
+export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = null, host: string = THE_HOST_A_MEMBER_RAN_ON, confinement: AConfinement | null = null) {
   return {
     version: DECLARATION_VERSION,
     owner,
@@ -321,9 +321,10 @@ export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = 
       may: { ...Object.fromEntries(ACTS.map((act) => [act, [OWNER]])), [HOLD_REVIEWS]: [OWNER, SOLO_REVIEWER_ROLE] },
     },
     ...(layout === null ? {} : { house_rules: { [WORKSPACE_LAYOUT]: true, [CLONES]: layout.clones, [WORKTREES]: layout.worktrees } }),
-    // Every member, and everything it starts, runs under this ceiling, and reaches systemd alone (martha#989): crew-code's
-    // own values, written into the file so the numbers live in the declaration and never in code.
-    [CONFINEMENT]: CONFINEMENT_THAT_INIT_WRITES,
+    // Every member, and everything it starts, runs under this ceiling, and reaches systemd alone (martha#989): written
+    // into the file so the numbers live in the declaration and never in code. `martha init` names crew-code's own
+    // values only on a host whose user manager can hold them (../declare_a_solo_crew), so a fresh crew is never refused.
+    ...(confinement === null ? {} : { [CONFINEMENT]: confinement }),
     channel_read_seconds: CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   }
 }

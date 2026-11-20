@@ -266,7 +266,7 @@ function requestFor(place: Place, command: string, member: string, lines: string
 }
 
 const declared = async (place: Place): Promise<void> => {
-  const outcome = await declareSoloCrew({ root: place.root, owner: 'Ada Owner', origin: null, state: place.state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
+  const outcome = await declareSoloCrew({ runtime_dir: undefined, root: place.root, owner: 'Ada Owner', origin: null, state: place.state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(outcome.declared, outcome.declared ? '' : outcome.refusal)
 }
 

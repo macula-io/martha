@@ -40,7 +40,7 @@ export const PROXY = 'xdg-dbus-proxy'
 
 /** The runtime dir's variable, and the two sockets under it a member's bus depends on. */
 export const RUNTIME_DIR_KEY = 'XDG_RUNTIME_DIR'
-const USER_MANAGER_SOCKET = ['systemd', 'private'] as const
+export const USER_MANAGER_SOCKET = ['systemd', 'private'] as const
 const SESSION_BUS_SOCKET = 'bus'
 
 /** The systemd-only bus a member gets: its address, and the unit, socket and command that serve it. */
