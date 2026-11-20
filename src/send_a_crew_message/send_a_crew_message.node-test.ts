@@ -296,6 +296,23 @@ test('#1010: a verdict at a round the package already took is a notice naming th
   assert.match(sent.told, new RegExp(`this is round ${String(most + 1)}; the crew's most is ${String(most)}\\.`), 'the sender was not told the round it sent')
 })
 
+test('#1010: a hand-off on a message\'s second line is the round the notice reads, and the line count is the message\'s', async () => {
+  const channel = channelHost()
+  const base = 'a'.repeat(40)
+  const tip = 'b'.repeat(40)
+  const most = REVIEW_ROUNDS_MOST_WHEN_UNNAMED
+  // The package is at the crew's most already: without the second line being read, no round notice could come.
+  const no_round_notice = { ...TRIMS_WHEN_UNNAMED, [REVIEW_ROUNDS_MOST]: 0 } as TheCrewsTrims
+  await sendACrewMessage(channel, sending({ package: 'macula-io/martha#253', text: `HANDOFF macula-io/martha#253 ${base}..${tip} r=${String(most)} ci=41700170944`, trims: no_round_notice }))
+
+  const sent = await sendACrewMessage(channel, sending({ package: 'macula-io/martha#253', text: `a line of prose first\nHANDOFF macula-io/martha#253 ${base}..${tip} r=${String(most + 1)} ci=41700170944` }))
+  assert.ok('sent' in sent, `a message whose second line is a hand-off was refused: ${JSON.stringify(sent)}`)
+  assert.match(sent.told, new RegExp(`this is round ${String(most + 1)}; the crew's most is ${String(most)}\\.`), 'the round on the second line was not read')
+  const announced = (await readLedger(channel, 'macula-io/martha#253')).filter(isActAnnouncedRow).find((row) => row.act.kind === 'handoff' && row.act.what.includes(`r=${String(most + 1)}`))
+  assert.ok(announced !== undefined, 'the second line\'s hand-off kept no announced row')
+  assert.equal(announced.lines, 2, 'the row kept one line\'s count, not the message\'s')
+})
+
 test('#253: the description a member reads teaches every line a card teaches', () => {
   const taught = linesACardTeaches()
   assert.equal(taught.length, 4, 'the cards teach two verbs, each on a range and on a design')

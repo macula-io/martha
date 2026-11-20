@@ -11,6 +11,11 @@
 // finishing removes the worktree, its local branch and, once the default branch holds what origin has, its branch
 // on origin too; and that the deletion of that branch is an outward act kept in the package's ledger before it
 // runs, so a successor knows whether it was sent (martha#25).
+//
+// Two more are pinned on top of those (martha#915): ignored entries are refused by name unless the call names each in
+// `discard_ignored`, so nothing a member never committed is thrown away unnamed; and "the default branch holds the
+// work" counts an ancestor and counts every file the branch changed being on the default branch as the branch left
+// it, which is what a squash or a rebase landing leaves behind.
 
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import assert from 'node:assert/strict'
@@ -626,4 +631,178 @@ test('worktree_finish on a paused package tells the member the pause, and leaves
   assert.doesNotMatch(answer, /stays on origin \(/, 'the pause is told in its own words, not as a failure of the deletion')
   assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'the branch is where it was: nothing was sent')
   assert.deepEqual(await rowKinds(tools.host), ['recovery_decided'], 'nothing was announced')
+})
+
+/** The worktree's branch landed on main as one squashed commit: its tip is then an ancestor of nothing. */
+const landTheBranchSquashed = (fixture: Fixture): void => {
+  gitIn(fixture.seed, 'fetch', '--quiet', 'origin')
+  gitIn(fixture.seed, 'merge', '--squash', '--quiet', `origin/${MEMBER}/${SLUG}`)
+  commitIn(fixture.seed, 'the landed work')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
+}
+
+/** The worktree's branch replayed onto main: main holds the work under another commit, and the tip is no ancestor. */
+const landTheBranchRebased = (fixture: Fixture): void => {
+  gitIn(fixture.seed, 'fetch', '--quiet', 'origin')
+  gitIn(fixture.seed, '-c', 'user.name=Ann', '-c', 'user.email=ann@example.invalid', 'cherry-pick', '--quiet', `origin/${MEMBER}/${SLUG}`)
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
+}
+
+/** A pushed worktree with `ignored` entries standing in it, each ignored by a committed `.gitignore`. */
+const aWorktreeHoldingIgnored = async (fixture: Fixture, tools: Tools, ignored: readonly string[]): Promise<string> => {
+  const path = await aPushedWorktree(fixture, tools)
+  const names = ignored.map((name) => name.replace(/\/$/, ''))
+  writeFileSync(join(path, '.gitignore'), `${names.join('\n')}\n`)
+  for (const name of names) {
+    mkdirSync(join(path, name))
+    writeFileSync(join(path, name, 'output.bin'), 'the build output\n')
+  }
+  commitIn(path, 'the ignores')
+  gitIn(path, 'push', '--quiet', 'origin', `${MEMBER}/${SLUG}`)
+  return path
+}
+
+test('worktree_finish refuses a worktree holding an ignored entry, naming it, and removes nothing (martha#915)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const path = await aWorktreeHoldingIgnored(fixture, tools, ['build/'])
+  assert.match(refusedOf(await tools.finish.answer(finished('acme/widget', SLUG))), /holds ignored entries Martha will not throw away unnamed \(build\/\)/)
+  assert.ok(existsSync(join(path, 'build', 'output.bin')), 'an ignored file went with a finish that refused, so it was thrown away unnamed')
+  assert.ok(existsSync(path), 'the worktree is still there')
+})
+
+test('worktree_finish throws away the ignored entries the call names, and says which (martha#915)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const path = await aWorktreeHoldingIgnored(fixture, tools, ['build/'])
+  landTheBranch(fixture)
+  const answer = toldOf(await tools.finish.answer({ ...finished('acme/widget', SLUG), discard_ignored: ['build/'] }))
+  assert.match(answer, /discarding build\//, 'the answer does not say which ignored entry it threw away')
+  assert.equal(existsSync(path), false, 'the worktree is gone')
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), false, 'the branch on origin is gone, since the default holds the work')
+})
+
+test('a discard_ignored that misses a standing entry, or names one that is not there, refuses and names it (martha#915)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const path = await aWorktreeHoldingIgnored(fixture, tools, ['build/', 'recordings/'])
+  assert.match(
+    refusedOf(await tools.finish.answer({ ...finished('acme/widget', SLUG), discard_ignored: ['build/'] })),
+    /holds ignored entries Martha will not throw away unnamed \(recordings\/\)/,
+  )
+  assert.match(
+    refusedOf(await tools.finish.answer({ ...finished('acme/widget', SLUG), discard_ignored: ['build/', 'recordings/', 'notes/'] })),
+    /holds no ignored entry notes\//,
+  )
+  assert.ok(existsSync(join(path, 'recordings', 'output.bin')), 'a refused finish threw away the entries it did not name')
+  assert.ok(existsSync(path), 'the worktree is still there')
+})
+
+test('worktree_finish names every untracked file it refuses for (martha#915)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await tools.open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  writeFileSync(join(path, 'one.txt'), 'one\n')
+  writeFileSync(join(path, 'two.txt'), 'two\n')
+  const answer = refusedOf(await tools.finish.answer(finished('acme/widget', SLUG)))
+  assert.match(answer, /one\.txt/)
+  assert.match(answer, /two\.txt/, 'a second untracked file was not named, so it would have gone with the worktree unnamed')
+})
+
+test('worktree_finish removes the branch on origin after a squash landing, when the default holds the work (martha#915)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await aPushedWorktree(fixture, tools)
+  landTheBranchSquashed(fixture)
+  assert.match(toldOf(await tools.finish.answer(finished('acme/widget', SLUG))), /removed Ceres\/261-the-refusals on origin/)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), false, 'the branch stayed on origin although the default branch holds its work')
+})
+
+test('worktree_finish leaves the branch on origin when the default holds a rename only by its new name, naming the old one (martha#915 review r=1)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const path = await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  // The branch renames a file the default holds; the default then takes the new name and keeps the old one too.
+  gitIn(path, 'mv', 'work.txt', 'renamed.txt')
+  commitIn(path, 'the rename')
+  gitIn(path, 'push', '--quiet', 'origin', `${MEMBER}/${SLUG}`)
+  gitIn(fixture.seed, 'pull', '--quiet', '--ff-only', 'origin', 'main')
+  writeFileSync(join(fixture.seed, 'renamed.txt'), 'the work\n')
+  commitIn(fixture.seed, 'only the new name')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
+  assert.match(toldOf(await tools.finish.answer(finished('acme/widget', SLUG))), /stays on origin, which its tip is not on yet \(.*work\.txt.* is not what origin\/main holds\)/)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'a rename the default holds only half of was taken as landed')
+})
+
+test('worktree_finish leaves the branch on origin when a file git would quote by name differs on the default (martha#915 review r=1)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await tools.open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  // A name outside plain ASCII: git quotes it in a name list, and a quoted name used as a path matches nothing.
+  const name = 'caf\u00e9.txt'
+  writeFileSync(join(path, name), 'the work\n')
+  commitIn(path, 'the work')
+  gitIn(path, 'push', '--quiet', '-u', 'origin', `${MEMBER}/${SLUG}`)
+  writeFileSync(join(fixture.seed, name), 'other work\n')
+  commitIn(fixture.seed, 'other content under the same name')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
+  assert.match(toldOf(await tools.finish.answer(finished('acme/widget', SLUG))), /stays on origin, which its tip is not on yet/)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'a file whose quoted name matched nothing was taken as held')
+})
+
+test('worktree_finish leaves the branch on origin when a name with a space at its edge differs on the default (martha#915 review r=1)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await tools.open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  // A name with a space at its edge: a name list trimmed on the way in hands its entry without the space, so the path
+  // matches nothing and a file that differs on the default passes as held (review r=1).
+  const name = ' spaced.txt'
+  writeFileSync(join(path, name), 'the work\n')
+  commitIn(path, 'the work')
+  gitIn(path, 'push', '--quiet', '-u', 'origin', `${MEMBER}/${SLUG}`)
+  writeFileSync(join(fixture.seed, name), 'other work\n')
+  commitIn(fixture.seed, 'other content under a name with a space')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
+  assert.match(toldOf(await tools.finish.answer(finished('acme/widget', SLUG))), /stays on origin, which its tip is not on yet/)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'a name trimmed out of the list matched nothing and was taken as held')
+})
+
+test('worktree_finish leaves the branch on origin when a name git reads as pathspec magic differs on the default (martha#915 review r=2)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await tools.open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  // A name that starts with a colon: handed to git as a pathspec it is read as magic, names another path, and a file
+  // that differs on the default passes as held (review r=2).
+  const name = ':colon.txt'
+  writeFileSync(join(path, name), 'the work\n')
+  commitIn(path, 'the work')
+  gitIn(path, 'push', '--quiet', '-u', 'origin', `${MEMBER}/${SLUG}`)
+  writeFileSync(join(fixture.seed, name), 'other work\n')
+  commitIn(fixture.seed, 'other content under a name git reads as magic')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
+  assert.match(toldOf(await tools.finish.answer(finished('acme/widget', SLUG))), /stays on origin, which its tip is not on yet/)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'a name read as pathspec magic matched another path and was taken as held')
+})
+
+test('worktree_finish removes the branch on origin after a rebase landing, when the default holds the work (martha#915)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await aPushedWorktree(fixture, tools)
+  landTheBranchRebased(fixture)
+  assert.match(toldOf(await tools.finish.answer(finished('acme/widget', SLUG))), /removed Ceres\/261-the-refusals on origin/)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), false, 'the branch stayed on origin although the default branch holds its work')
+})
+
+test('worktree_finish stays the branch on origin and names the file the default does not hold (martha#915)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await aPushedWorktree(fixture, tools)
+  const answer = toldOf(await tools.finish.answer(finished('acme/widget', SLUG)))
+  assert.match(answer, /stays on origin, which its tip is not on yet \(work\.txt is not what origin\/main holds\)/)
+  assert.ok(onOrigin(fixture, `${MEMBER}/${SLUG}`), 'the branch on origin went although the default branch does not hold its work')
 })

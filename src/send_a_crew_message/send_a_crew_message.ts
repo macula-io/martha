@@ -23,7 +23,7 @@ import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { type Addressee, type ChannelHost, appendToTheChannel, readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
-import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import { keepTheLinesRow, readEveryCrewLine, type CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
 import { lineCountOf, theDriftNotices, theDriftOf, theRoundOf } from '../read_a_crew_line/the_drift_on_a_package.ts'
 
 /** The name the crew registers this tool under (martha#343): the one tool that speaks, and it speaks to the crew. */
@@ -88,11 +88,11 @@ const toldOf = (sent: number, to: Addressee): string =>
 /** Whether an address is the refusal of one: an array is a list of names, and 'crew' is the crew. */
 const isRefusal = (value: Addressee | { readonly refused: string }): value is { readonly refused: string } => !Array.isArray(value) && value !== THE_WHOLE_CREW
 
-/** A message that reads: who it is for, its text, the crew line its first line is if any, and what was noticed about it. */
+/** A message that reads: who it is for, its text, every crew line it carries (martha#980), and what was noticed about it. */
 interface AMessageRead {
   readonly to: Addressee
   readonly text: string
-  readonly line: Parameters<typeof keepTheLinesRow>[2] | null
+  readonly lines: readonly CrewLineRead[]
   /** One line about what Martha carried on past (martha#601): an over-long message, or a line read as prose. */
   readonly notice?: string
 }
@@ -102,16 +102,41 @@ function theMessageRead(input: Saying): AMessageRead | { readonly refused: strin
   if (typeof input.text !== 'string' || input.text.trim() === '') return { refused: 'a message needs its text. Nothing was sent.' }
   const to = addresseesOf(input.to, input.roster)
   if (isRefusal(to)) return { refused: to.refused }
-  // A hand-off or verdict line is read before the message goes out: one that does not read goes as prose, with one line
-  // naming the field, so the message still reaches the crew (martha#601).
-  const reading = readACrewLine(input.text)
+  // Every crew line is read before the message goes out (martha#980): one that does not read goes as prose, with one
+  // line naming the field, so the message still reaches the crew (martha#601).
+  const reading = readEveryCrewLine(input.text)
   const notices = [
     ...(input.text.length > LONGEST_MESSAGE
       ? [`a message is at most ${LONGEST_MESSAGE} characters, and this one is ${input.text.length}: it was sent as it is.`]
       : []),
-    ...(reading.notice === undefined ? [] : [reading.notice]),
+    ...reading.notices,
   ]
-  return { to, text: input.text, line: reading.line, ...(notices.length === 0 ? {} : { notice: notices.join(' ') }) }
+  return { to, text: input.text, lines: reading.lines, ...(notices.length === 0 ? {} : { notice: notices.join(' ') }) }
+}
+
+/** Keeps each crew line's row, in the order the message carries them, each with the message's own line count. */
+async function keepEveryLinesRow(host: LedgerHost, member: string, lines: readonly CrewLineRead[], text_lines: number): Promise<void> {
+  for (const line of lines) await keepTheLinesRow(host, member, line, text_lines)
+}
+
+/**
+ * What the crew's mosts say about the lines this send carries (martha#1010), read from the package's own ledger before
+ * the rows are kept: a round past the crew's most, and a message past its length, are notices and nothing more. A
+ * message may carry several crew lines (martha#980), so the round read is the highest any of its hand-offs or verdicts
+ * named, and the length is the message's own.
+ */
+async function theDriftAboutToBeSent(host: LedgerHost, read: AMessageRead, package_name: string | null, trims: TheCrewsTrims): Promise<readonly string[]> {
+  const said = read.lines.filter((line) => line.verb === 'HANDOFF' || line.verb === 'VERDICT')
+  if (said.length === 0 || package_name === null) return []
+  const drift = await theDriftOf(host, package_name)
+  const highest = said.reduce((one, two) => ((theRoundOf(two) ?? 0) > (theRoundOf(one) ?? 0) ? two : one))
+  return theDriftNotices({ verb: highest.verb, round: theRoundOf(highest), lines: lineCountOf(read.text) }, drift, trims)
+}
+
+/** The one line about what this send carried on past: the message's own, and then the drift's. */
+const theNoticeOf = (read: AMessageRead, drift: readonly string[]): string | undefined => {
+  const said = [...(read.notice === undefined ? [] : [read.notice]), ...drift]
+  return said.length === 0 ? undefined : said.join(' ')
 }
 
 /** The one line a send adds about what it carried on past, or nothing. */
@@ -133,7 +158,7 @@ export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Sa
   // either: the message is still sent, and the answer says that nothing was announced to a package.
   if (input.package === null) {
     const told = await send()
-    if (read.line !== null) await keepTheLinesRow(host, input.member, read.line, lineCountOf(read.text))
+    await keepEveryLinesRow(host, input.member, read.lines, lineCountOf(read.text))
     return { sent, told: `${told} No package was held, so nothing was announced to a package's ledger.${theNoticeSaid(notice)}` }
   }
 
@@ -146,24 +171,8 @@ export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Sa
   }
   const sending = await sentThroughTheRecovery(host, { ...input, package: input.package }, read, { send, look })
   if ('refused' in sending) return sending
-  if (read.line !== null) await keepTheLinesRow(host, input.member, read.line, lineCountOf(read.text))
+  await keepEveryLinesRow(host, input.member, read.lines, lineCountOf(read.text))
   return { sent, told: `${sending.told}${theNoticeSaid(notice)}` }
-}
-
-/**
- * What the crew's mosts say about the line this send carries (martha#1010), read from the package's own ledger before
- * the line's row is kept: a round past the crew's most, and a message past its length, are notices and nothing more.
- */
-async function theDriftAboutToBeSent(host: LedgerHost, read: AMessageRead, package_name: string | null, trims: TheCrewsTrims): Promise<readonly string[]> {
-  if (read.line === null || package_name === null) return []
-  const drift = await theDriftOf(host, package_name)
-  return theDriftNotices({ verb: read.line.verb, round: theRoundOf(read.line), lines: lineCountOf(read.text) }, drift, trims)
-}
-
-/** The one line about what this send carried on past: the message's own, and then the drift's. */
-const theNoticeOf = (read: AMessageRead, drift: readonly string[]): string | undefined => {
-  const said = [...(read.notice === undefined ? [] : [read.notice]), ...drift]
-  return said.length === 0 ? undefined : said.join(' ')
 }
 
 /** The send of a message on a package, through the recovery: what it said, or the recovery's own words for why not. */
