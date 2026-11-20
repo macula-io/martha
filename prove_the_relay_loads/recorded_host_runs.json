@@ -61,5 +61,10 @@
     "file": "src/drive_the_recorded_host/a_menu_answer_on_the_recorded_host.node-test.ts",
     "cases": 1,
     "proves": "the owner's answer to the host's menu is still the one the ask queue's reader was recorded from (martha#608)"
+  },
+  {
+    "file": "src/drive_the_recorded_host/the_crew_command_on_the_recorded_host.node-test.ts",
+    "cases": 4,
+    "proves": "the owner's /crew at a member's tab draws the crew or sends one message, /martha opens the pane, and the model is sent nothing, then or on the next turn (martha#927)"
   }
 ]

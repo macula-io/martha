@@ -40,6 +40,8 @@ import {
   LAYOUT_TO_ADD,
   HOLD_REVIEWS,
   THE_HOST_A_MEMBER_RAN_ON,
+  PARKED,
+  MESH_KEY,
   declareCrew,
   declareCrewOnHosts,
   holdsReviews,
@@ -50,6 +52,7 @@ import {
   type WorkspaceLayout,
 } from './declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
+import { PROFILE } from './the_crews_profiles.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -128,7 +131,7 @@ const without = (key: string, from: Record<string, unknown>) =>
 test('a solo declaration gives typed settings', async () => {
   const settings = await declare(solo).settings
   assert.equal(settings.owner, 'Ann')
-  assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null, host: null }])
+  assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null, host: null, parked: false }])
   assert.equal(settings.mode.name, SOLO_MODE)
   for (const act of ACTS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
   assert.deepEqual(settings.paths, {
@@ -308,8 +311,7 @@ test('every act a table does not name is the owner\'s alone, so a crew file writ
 
 test('a field that is not an object is refused with its shape, naming every key it takes', async () => {
   const shapes: [unknown, string, readonly string[]][] = [
-    [{ ...team, members: ['Lead'] }, 'members[0]', ['name', 'role', 'model?', 'host?']],
-    [{ ...team, mode: 'team' }, 'mode', Object.keys(team.mode)],
+    [{ ...team, members: ['Lead'] }, 'members[0]', ['name', 'role', 'model?', 'host?', `${PARKED}?`, `${PROFILE}?`, `${MESH_KEY}?`]],
     [{ ...team, mode: { ...team.mode, may: [] } }, 'mode.may', Object.keys(team.mode.may)],
   ]
   for (const [declaration, field, keys] of shapes) {
@@ -317,6 +319,15 @@ test('a field that is not an object is refused with its shape, naming every key 
       assert.ok(error instanceof DeclarationRefused)
       assert.equal(error.field, field)
       assert.ok(error.message.endsWith(`is not { ${keys.join(', ')} }`), error.message)
+      return true
+    })
+  }
+  // A mode may be named by its name alone (martha#931), so a mode that is neither says both.
+  for (const mode of [7, ['team'], null]) {
+    await assert.rejects(declare({ ...team, mode }).settings, (error: unknown) => {
+      assert.ok(error instanceof DeclarationRefused)
+      assert.equal(error.field, 'mode')
+      assert.ok(error.message.endsWith(`is not a mode's name, or { ${Object.keys(team.mode).join(', ')} }`), error.message)
       return true
     })
   }
@@ -384,7 +395,7 @@ test('two members whose names differ only in case are one name twice', async () 
 
 test('a model of null is the host\'s own model, the same as leaving the key out', async () => {
   const settings = await declare({ ...team, members: [{ name: 'Lead', role: 'builder', model: null }] }).settings
-  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null, host: null }])
+  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null, host: null, parked: false }])
 })
 
 test('the owner\'s name is trimmed', async () => {
@@ -718,11 +729,24 @@ test('#319 B: a declaration without a backlog has none, and one with it reads it
 
 test('#541 package A: a declaration without an engine endpoint has none, and one with it reads its host, base path and key variable', async () => {
   assert.equal((await declare(solo).settings).engine_endpoint, null)
-  assert.deepEqual((await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test:8080' } }).settings).engine_endpoint, { host: 'http://a-host.test:8080', base_path: null, key_from: null })
+  assert.deepEqual((await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test:8080' } }).settings).engine_endpoint, { host: 'http://a-host.test:8080', base_path: null, key_from: null, key_file: null })
   assert.deepEqual(
     (await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', base_path: 'a/path', key_from: 'A_KEY_VARIABLE' } }).settings).engine_endpoint,
-    { host: 'https://a-host.test', base_path: 'a/path', key_from: 'A_KEY_VARIABLE' },
+    { host: 'https://a-host.test', base_path: 'a/path', key_from: 'A_KEY_VARIABLE', key_file: null },
   )
+})
+
+test('#511 part B: an engine endpoint may name the file its key is in, by an absolute path, and never beside a key variable', async () => {
+  for (const key_file of ['/an/absolute/key-file']) {
+    assert.deepEqual((await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file } }).settings).engine_endpoint, { host: 'https://a-host.test', base_path: null, key_from: null, key_file })
+  }
+  // A path under the home is written out by `martha up` before it reaches the declaration: the reader takes none.
+  for (const key_file of ['a/relative/key-file', '~a-user/key-file', '~/a/key-file', '/a/../key-file', 7]) {
+    await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file } }, `${ENGINE_ENDPOINT}.key_file`)
+  }
+  await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file: 'sk-a-key' } }).settings, /the key itself never goes in the declaration/)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_from: 'A_KEY_VARIABLE', key_file: '/a/key-file' } }, `${ENGINE_ENDPOINT}.key_file`)
+  await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_from: 'A_KEY_VARIABLE', key_file: '/a/key-file' } }).settings, /the key is read from one place/)
 })
 
 test('#541 package A: an engine endpoint is a URL on http or https, a path, and a variable name: a key written there is refused by name', async () => {

@@ -8,7 +8,8 @@
 // `main` and a `feature/x` belong to nobody and are not touched by the rule. A call is judged where its line leaves the
 // shell, and where the reader cannot tell, it is judged nowhere rather than somewhere it is not. The last claim is the
 // one that keeps the rule honest: a place is read with a separator after it, so a path that merely starts with the same
-// letters is another place.
+// letters is another place. One push is refused whoever makes it (martha#925): a push whose target is the default branch
+// git names, in every shape a refspec writes it; any other target passes, and so does every push where git names none.
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -164,6 +165,37 @@ test("a member's own push is never refused: the rule is about whose branch, not 
   for (const line of ['git push origin hygiea/562', 'git push -u origin hygiea/562', 'git push --force-with-lease origin hygiea/562', 'git push --tags']) {
     assert.equal(refused(line, null), undefined, line)
   }
+})
+
+test("martha#925: a push onto the origin's default branch is refused in every shape a call names it, the Supervisor's too", () => {
+  const inAWorktree = `${WORKTREES}/repo-562`
+  const lines = [
+    'git push origin main',
+    'git push origin HEAD:main',
+    'git push origin hygiea/562:refs/heads/main',
+    'git push --force origin +HEAD:main',
+    'git push -o ci.skip origin HEAD:main',
+    'git push origin :main',
+    'git push --delete origin main',
+    `cd ${inAWorktree} && git push origin HEAD:main`,
+    `git -C ${inAWorktree} push origin main`,
+  ]
+  for (const line of lines) {
+    for (const member of ['Hygiea', 'Supervisor']) refusedWith(line, inAWorktree, member, /main is the default branch.*fast_forward_after_the_owners_yes.*Nothing was pushed/)
+  }
+})
+
+test("martha#925: a push onto any other branch is not refused, and one whose target the line does not name is not either", () => {
+  for (const line of ['git push origin hygiea/562', 'git push origin HEAD:hygiea/562', 'git push origin main:hygiea/562', 'git push origin mainline', 'git push origin HEAD', 'git push', 'git push origin feature/main']) {
+    assert.equal(refused(line, `${WORKTREES}/repo-562`), undefined, line)
+  }
+})
+
+test("martha#925: the default branch is the one git names, and a push where git names none is let through", () => {
+  const onTrunk: TheFacts = { ...FACTS, branches: ['trunk', 'hygiea/562'], defaultBranch: 'trunk' }
+  assert.match(refused('git push origin HEAD:trunk', null, 'Hygiea', onTrunk) ?? '', /trunk is the default branch/)
+  assert.equal(refused('git push origin HEAD:main', null, 'Hygiea', onTrunk), undefined)
+  assert.equal(refused('git push origin HEAD:main', null, 'Hygiea', { ...FACTS, defaultBranch: null }), undefined)
 })
 
 // --- where a call runs, as the guard reads it ---------------------------------------

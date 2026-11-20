@@ -47,6 +47,7 @@ import { crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
 import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
+import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-ask-queue-tools-'))
 after(() => removeTheTree(home))
@@ -185,8 +186,8 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
   owner: 'Ann',
   host: THE_HOST_A_MEMBER_RAN_ON,
   members: [
-    { name: LEAD, role: SUPERVISOR, model: null, host: null },
-    { name: BUILDER, role: 'builder', model: null, host: null },
+    { name: LEAD, role: SUPERVISOR, model: null, host: null, parked: false },
+    { name: BUILDER, role: 'builder', model: null, host: null, parked: false },
   ],
   mode: {
     name: 'team',
@@ -227,6 +228,7 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
     thresholds: THRESHOLDS_WHEN_UNNAMED,
     github: GITHUB_WHEN_UNNAMED,
     transcripts: TRANSCRIPTS_WHEN_UNNAMED,
+    opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
 })
 
 /** A place of the test's own, over `rows`, with the git and declaration it is handed: either may be left out. */

@@ -12,9 +12,9 @@ page does not name.
 | `version` | yes | The declaration's format: `1`. | refused |
 | `owner` | yes | The owner's name: a person, never a member. | refused |
 | `members` | yes | The crew's members, one object each (below). | refused |
-| `mode` | yes | Who may do what (below). | refused |
+| `mode` | yes | Who may do what: a mode's name, as `"team"`, or the table below. A name alone has the roles its members hold, and every act is the owner's. | refused |
 | `house_rules` | no | Switches, places and windows (below). | every switch off |
-| `conventions` | no | A file under `.martha/` that every member reads. | none |
+| `conventions` | no | A file under `.martha/` that every member reads. | `.martha/conventions.md` when it exists, else none |
 | `channel_read_seconds` | no | How often a session reads the crew's channel, in whole seconds, at least 1. | the value `martha init` writes |
 | `handover_ceiling_minutes` | no | How long a handover waits behind a running turn before that turn is ended, in whole minutes. | 10 |
 | `backlog` | no | Where to look for work nobody holds (below). | no backlog view, no idle nudge |
@@ -22,8 +22,17 @@ page does not name.
 | `host` | no | The host a member runs on when the member names none. | `claude-code` |
 | `engine_endpoint` | no | Where an engine member's model is reached (below). | none; an engine member is refused at its start |
 | `thresholds` | no | When a row reads offline, when a member hands over, when a report is stale (below). | the values below |
+| `id` | no | The crew's name: the name of its tmux session when `terminal` is `tmux` (martha#932). | none |
+| `terminal` | no | The terminal `martha up` opens members in: `kitty`, or `tmux`, where each member gets a window in one session named by `id` on Martha's own tmux server, shown with `martha attach [<member>]` (martha#932). `tmux` needs `id`. | `kitty` |
+| `workspace` | no | Where the crew's clones sit (below). | no places from it |
+| `mesh` | no | The crew's mesh realm, key folder and services (below). Read by no part of Martha today. | none |
+| `harnesses` | no | The harnesses a profile may name (below). | none |
+| `providers` | no | The providers a profile may name (below). | none |
+| `profiles` | no | Named model, harness and provider sets a member may name (below). | none |
+| `clock_zone` | no | The time zone the crew's clock reads in. Checked as text; read by no part of Martha today. | none |
 | `github` | no | How the crew spends its GitHub allowance (below). | the values below |
 | `transcripts` | no | How many launches' transcripts are kept, and how large (below). | the values below |
+| `owner_notices` | no | Which of the host's notices reach the owner (below). Read by no part of Martha today. | none |
 
 ## `members[]`
 
@@ -33,6 +42,9 @@ page does not name.
 | `role` | yes | One of `mode.roles`. |
 | `model` | no | The model this member runs; left out, the host's own. |
 | `host` | no | The host this member runs on; left out, the crew's `host`. |
+| `parked` | no | `true` keeps the member down: `martha up` does not start it, and `martha ls` shows it parked. |
+| `profile` | no | A profile under `profiles`: the member runs on its harness's host and its model. Never beside `model` or `host`. |
+| `mesh_key` | no | The file the member's mesh key is in; left out, `<mesh.keys>/agent-<lowercased name>.key`. Read by no part of Martha today. |
 
 ## `mode`
 
@@ -65,6 +77,7 @@ Each switch is off unless the file says `true`.
 | `person_minutes` | How long a wait on a person may last before a nudge; 0 turns it off. |
 | `gate_enforces` | Who the shell gate enforces for: `all`, `nobody`, or members' names. |
 | `gate_audits` | Who the shell gate audits: members' names. |
+| `gate_enforce` | `gate_enforces`, as the draft of martha#931 spells it; never beside it. |
 
 ## `backlog`
 
@@ -80,6 +93,10 @@ Each switch is off unless the file says `true`.
 | `host` | yes | The endpoint's URL, `http:` or `https:`. |
 | `base_path` | no | The path under the host. |
 | `key_from` | no | The name of the environment variable that holds the key. The key itself never goes in the file. |
+| `key_file` | no | The absolute path of the file the key is in; never beside `key_from`. |
+
+Left out, and an engine member's profile names a provider with an `endpoint`, the endpoint is that provider's. Both at
+once is refused.
 
 ## `thresholds`
 
@@ -97,6 +114,56 @@ Each field is optional. A field left out reads the value Martha used before it w
 }
 ```
 
+## `workspace`
+
+| Field | Required | What it holds |
+|---|---|---|
+| `root` | no | The folder the crew's clones sit in, relative to the project root. With `house_rules.workspace_layout` on, the clones are there and the worktrees in `worktrees` beside it; `house_rules.clones` and `worktrees` are then left out. |
+| `root_allowed` | no | Folder names allowed beside the clones. Read by no part of Martha today. |
+| `own_orgs` | no | The crew's own GitHub organisations. Read by no part of Martha today. |
+
+## `mesh`
+
+| Field | Required | What it holds |
+|---|---|---|
+| `realm` | no | The realm, 64 hex characters. |
+| `keys` | no | The folder members' mesh keys sit in. |
+| `mail` | no | `{ "service": <name>, "on": true or false }`. |
+| `memory` | no | The same shape. |
+| `graph` | no | The same shape. |
+| `kanban` | no | The same shape. |
+
+## `harnesses`
+
+One entry per harness, by its name: `claude` (Claude Code; `claude-code` also) or `martha-engine`.
+
+| Field | Required | What it holds |
+|---|---|---|
+| `config` | no | Where the harness keeps its own configuration. Read by no part of Martha today. |
+
+## `providers`
+
+One entry per provider, by a name the crew picks.
+
+| Field | Required | What it holds |
+|---|---|---|
+| `endpoint` | no | Where its model is reached: a URL, or a bare host reached on `https:`. |
+| `key_from` | no | The name of the environment variable that holds the key. |
+| `key_file` | no | The file the key is in: absolute, or under `~/`. Never beside `key_from`, and never the key. |
+| `account` | no | The account it bills. |
+| `billing` | no | `subscription`, `metered` or `unknown`. |
+
+## `profiles`
+
+One entry per profile, by a name the crew picks.
+
+| Field | Required | What it holds |
+|---|---|---|
+| `model` | yes | The model. |
+| `harness` | yes | A harness under `harnesses`. |
+| `provider` | yes | A provider under `providers`. Every `martha-engine` profile the members name names the same one. |
+| `context_limit` | no | The model's context, in tokens. |
+
 ## `github`
 
 | Field | What it holds | When left out |
@@ -111,3 +178,9 @@ Martha keeps each ended launch's transcripts, redacted, so the owner can read wh
 |---|---|---|
 | `launches_kept` | How many launches' transcripts are kept, newest first; older launches are removed. A whole number, at least 1. | 64 |
 | `megabytes_kept` | The most one transcript, and one launch's transcripts together, may hold, in whole megabytes (at least 1). A file past it is kept as one line naming the bound. | 16 |
+
+## `owner_notices`
+
+| Field | Required | What it holds |
+|---|---|---|
+| `show` | no | The notices that reach the owner, by name. |

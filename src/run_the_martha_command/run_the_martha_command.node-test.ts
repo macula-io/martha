@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -18,7 +18,11 @@ import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/sta
 import { KITTEN, KITTY, NO_DESKTOP_SESSION } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { CLEAR_THE_TERMINAL, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, USAGE } from './run_the_martha_command.ts'
+import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, UP, USAGE } from './run_the_martha_command.ts'
+import { NOT_A_KEY_FILES_PATH } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
+import { noCrewDeclaredAt, THE_ENGINES_ENDPOINT, THE_KEY_FILE_QUESTION, THE_SMALLEST_DECLARATION } from '../bring_up_the_declared_crew/bring_up_the_declared_crew.ts'
+import { SESSION_FILE, KITTY_PLACE } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
+import { ENGINE_ENDPOINT, HOST, PARKED, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, SAID_BY } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { MEMBER_SWITCH } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { A_MUTE_NEEDS_THE_OWNERS_TERMINAL, BELLS_HEARD, BELLS_MUTED, THE_BELLS_FILE, THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
@@ -26,7 +30,8 @@ import { NOT_IN_A_MEMBER } from '../run_an_owner_signed_command/ask_the_launcher
 import { RELAY_SOCKET_VARIABLE, RUN_PATH } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
 import { hostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
-import { CLAUDE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { CLAUDE_CODE_SESSION_EVENTS, startSession } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREWS_PLACE, CREW_ROWS_PLACE, crewStateDirectory, crewSubdirectory, openState, STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -101,10 +106,13 @@ test('martha with no act shows how it is used, and ends as a usage error', (t) =
   assert.ok(run.said.includes(USAGE), run.said)
 })
 
-test('martha outside any git checkout refuses, saying so', (t) => {
-  const run = martha(placeFor(t, { checkout: false }), 'init')
-  assert.equal(run.status, EXIT_REFUSED)
-  assert.match(run.said, /git checkout/)
+test('#511: a folder outside any git checkout is its own crew\'s root: martha init declares there instead of refusing', (t) => {
+  const place = placeFor(t, { checkout: false })
+  writeFileSync(join(place.home, '.gitconfig'), '[user]\n\tname = Ada Owner\n')
+  const run = martha(place, 'init')
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.ok(existsSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)))
+  assert.ok(!run.said.includes('git checkout'), run.said)
 })
 
 test('martha init writes the declaration once and refuses the second time', (t) => {
@@ -202,6 +210,271 @@ test('bare martha start on a terminal, with a crew declared and no desktop sessi
   assert.ok(run.said.includes(NO_DESKTOP_SESSION), run.said)
   assert.ok(!run.said.includes(USAGE), run.said)
   assert.equal(existsSync(kitty.started), false, 'kitty was started with no desktop session')
+})
+
+// --- martha help and martha version (martha#511) -------------------------------
+
+test('#511: martha help, -h and --help each print one line per act and end done', (t) => {
+  const place = placeFor(t)
+  for (const word of HELP_WORDS) {
+    const run = martha(place, word)
+    assert.equal(run.status, EXIT_DONE, `${word}: ${run.said}`)
+    assert.equal(run.out, `${HELP.join('\n')}\n`, word)
+  }
+})
+
+test('#511: every act the command takes has its own line in the help', () => {
+  const acts = [...ACTS_ALONE, ...ACTS_OF_ONE, ...Object.keys(ACTS_OF_THEIR_OWN)].filter((act) => act !== '--version')
+  for (const act of acts) assert.ok(HELP.some((line) => line.startsWith(`martha ${act} `)), act)
+})
+
+test('#511: martha version prints exactly what martha --version prints', (t) => {
+  const place = placeFor(t)
+  const word = martha(place, 'version')
+  const flag = martha(place, '--version')
+  assert.equal(word.status, EXIT_DONE, word.said)
+  assert.equal(word.out, flag.out)
+  assert.match(word.out, /^\d+\.\d+\.\d+/)
+})
+
+test('#511: a word that is no act says so first, then prints the help, and ends as a usage error', (t) => {
+  const run = martha(placeFor(t), 'frobnicate')
+  assert.equal(run.status, EXIT_USAGE, run.said)
+  const lines = run.err.split('\n').filter((line) => line !== '')
+  assert.ok(lines[0]!.endsWith(`${UNKNOWN_COMMAND} frobnicate`), lines[0]!)
+  assert.deepEqual(lines.slice(1).map((line) => line.replace(/^martha: /, '')), HELP)
+})
+
+// --- martha up (martha#511) -------------------------------
+
+/** A workspace as the owner keeps one: no git checkout, and the owner's name in their git config. */
+function aWorkspace(t: TestContext): Place {
+  const place = placeFor(t, { checkout: false })
+  writeFileSync(join(place.home, '.gitconfig'), '[user]\n\tname = Ada Owner\n')
+  return place
+}
+
+/** The workspace's declaration file. */
+const theDeclarationAt = (place: Place): string => join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+
+/** One engine member, on a model of this test's own. */
+const anEngineMember = (name: string): Record<string, unknown> => ({ name, role: 'builder', model: 'a-model-a-test-names', [HOST]: THE_ENGINES_HOST })
+
+/** The declaration the owner writes at the workspace: the smallest one's mode, with these members and fields; its text. */
+function theOwnerDeclares(place: Place, members: readonly Record<string, unknown>[], fields: Readonly<Record<string, unknown>> = {}): string {
+  const text = `${JSON.stringify({ ...THE_SMALLEST_DECLARATION, mode: { ...THE_SMALLEST_DECLARATION.mode, roles: [SUPERVISOR, 'builder'] }, members, ...fields }, null, 2)}\n`
+  mkdirSync(join(place.root, DECLARATION_DIRECTORY), { recursive: true })
+  writeFileSync(theDeclarationAt(place), text)
+  return text
+}
+
+/** An engine endpoint of this test's own: a made-up host and key file, never real. */
+const AN_ENDPOINT = { [ENGINE_ENDPOINT]: { host: 'https://provider.invalid', key_file: '/a-key-file-a-test-names' } }
+
+/** The tabs a kitty session file opens, by the member each one starts. */
+const theTabsIn = (session: string): string[] => session.split('\n').filter((line) => line.startsWith('new_tab ')).map((line) => line.slice('new_tab '.length))
+
+/** The tabs the last kitty session at `place` opened. */
+function theTabsOpenedAt(place: Place): string[] {
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok('directory' in state)
+  return theTabsIn(readFileSync(join(state.directory, KITTY_PLACE, SESSION_FILE), 'utf8'))
+}
+
+/** The engine endpoint the declaration at `place` holds now, or undefined when it holds none. */
+const theEndpointDeclared = (place: Place): unknown => (JSON.parse(readFileSync(theDeclarationAt(place), 'utf8')) as Record<string, unknown>)[ENGINE_ENDPOINT]
+
+/** A key file under the place's home, with `mode`: its path as the owner types it, under `~/`, and in full. */
+function aKeyFile(place: Place, mode: number): { readonly typed: string; readonly at: string } {
+  const typed = '~/keys-a-test-made/the-key'
+  const at = join(place.home, 'keys-a-test-made', 'the-key')
+  mkdirSync(join(place.home, 'keys-a-test-made'), { mode: 0o700 })
+  writeFileSync(at, 'a-key-a-test-made\n', { mode })
+  chmodSync(at, mode)
+  return { typed, at }
+}
+
+const ON_A_DESKTOP = { WAYLAND_DISPLAY: 'wayland-511' }
+
+/** A process that runs until the test ends: no ancestor of the `martha` a test runs, so it can stand for a running member. */
+function aProcessThatRuns(t: TestContext): number {
+  const child = spawn('sleep', ['600'], { stdio: 'ignore' })
+  t.after(() => child.kill())
+  assert.ok(child.pid !== undefined)
+  return child.pid
+}
+
+test('#511: martha up takes no word; up --claude and any other word are usage errors', (t) => {
+  const place = aWorkspace(t)
+  for (const words of [[UP, '--claude'], [UP, 'extra']]) {
+    const run = martha(place, ...words)
+    assert.equal(run.status, EXIT_USAGE, `${words.join(' ')}: ${run.said}`)
+  }
+  assert.ok(USAGE.includes(`martha ${UP} |`), USAGE)
+  assert.ok(HELP.some((line) => line.startsWith(`martha ${UP} `)), HELP.join('\n'))
+  assert.equal(HELP.some((line) => line.includes('--claude')), false, HELP.join('\n'))
+})
+
+test('#511: martha up whose input is no terminal refuses, and writes nothing', (t) => {
+  const place = aWorkspace(t)
+  const run = martha(place, UP)
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.equal(existsSync(theDeclarationAt(place)), false)
+})
+
+test('#511: martha up with no declaration starts nothing, writes nothing, and says where the file goes and the smallest one', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const run = marthaOnATerminal(place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.said.includes(noCrewDeclaredAt(theDeclarationAt(place))), run.said)
+  assert.equal(existsSync(theDeclarationAt(place)), false, 'up wrote a declaration of its own')
+  assert.equal(existsSync(kitty.started), false, 'kitty was started with no crew declared')
+})
+
+test('#511: the declaration is the config: martha up opens exactly the members the owner declares, on both hosts, none parked and none running, and leaves the file as it was', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const declared = theOwnerDeclares(place, [
+    { name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE },
+    { name: 'Kept-down', role: 'builder', [HOST]: CLAUDE_CODE, [PARKED]: true },
+    { name: 'Already-up', role: 'builder', [HOST]: CLAUDE_CODE },
+    anEngineMember('flash-a'),
+    { ...anEngineMember('flash-down'), [PARKED]: true },
+    anEngineMember('flash-b'),
+  ], AN_ENDPOINT)
+  aMemberLaunchedAs(place, 'Already-up', aProcessThatRuns(t))
+
+  const run = marthaOnATerminal(place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.deepEqual(theTabsOpenedAt(place), ['Lead', 'flash-a', 'flash-b'])
+  assert.ok(run.said.includes('Already-up is already running'), run.said)
+  assert.equal(readFileSync(theDeclarationAt(place), 'utf8'), declared, 'up changed the owner\'s declaration')
+})
+
+/**
+ * A stand-in tmux on the place's PATH: it says it is tmux 3.8, keeps each command it is run with as one line of words
+ * after the server's four, and has the crew's session once a session is opened.
+ */
+function tmuxThatAnswers(place: Place): { readonly ran: string; readonly bin: string; readonly env: Readonly<Record<string, string>> } {
+  const bin = join(place.home, 'tmux-bin')
+  mkdirSync(bin)
+  const ran = join(place.home, 'tmux-ran')
+  const opened = join(place.home, 'tmux-session-opened')
+  writeFileSync(join(bin, 'tmux'), [
+    '#!/bin/sh',
+    'if [ "$1" = -V ]; then echo "tmux 3.8"; exit 0; fi',
+    `[ "$1 $2 $3" = "-L martha -f" ] || exit 9`,
+    'shift 4',
+    `echo "$*" >> '${ran}'`,
+    `case "$1" in has-session) [ -e '${opened}' ] ;; new-session) : > '${opened}' ;; esac`,
+    '',
+  ].join('\n'), { mode: 0o700 })
+  return { ran, bin, env: { PATH: `${bin}:${process.env.PATH}` } }
+}
+
+test('#932: a crew declared "terminal": "tmux" is opened by martha up in Martha\'s own tmux, a window per member up starts, and kitty is not started', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const tmux = tmuxThatAnswers(place)
+  theOwnerDeclares(place, [
+    { name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE },
+    { name: 'Kept-down', role: 'builder', [HOST]: CLAUDE_CODE, [PARKED]: true },
+    anEngineMember('flash-a'),
+  ], { ...AN_ENDPOINT, id: 'a-crew', terminal: 'tmux' })
+  const run = marthaOnATerminal(place, { PATH: `${tmux.bin}:${kitty.env.PATH}` }, UP)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  const opened = readFileSync(tmux.ran, 'utf8').split('\n').filter((line) => /^(new-session|new-window|split-window) /.test(line))
+  const verbAndAct = (line: string): string => `${line.split(' ')[0]} ${line.split(' -- ')[1]!.split(' ').slice(-2).join(' ')}`
+  assert.deepEqual(opened.map(verbAndAct), [
+    `new-session start Lead`,
+    `split-window ${opened[1]!.split(' ').at(-2)} crew`,
+    `new-window start flash-a`,
+    `split-window ${opened[3]!.split(' ').at(-2)} crew`,
+  ])
+  assert.ok(opened[0]!.includes('-s a-crew -n Lead'), opened.join('\n'))
+  assert.ok(opened[2]!.includes('-t =a-crew: -n flash-a'), opened.join('\n'))
+  assert.equal(existsSync(kitty.started), false, 'kitty was started for a tmux crew')
+  assert.ok(run.said.includes('martha attach shows it'), run.said)
+})
+
+test('#932: martha attach takes one member at most and no switch, needs a terminal, and refuses a crew that opens in kitty', (t) => {
+  const place = aWorkspace(t)
+  for (const words of [['attach', 'a', 'b'], ['attach', '--all'], ['attach', '']]) assert.equal(martha(place, ...words).status, EXIT_USAGE, words.join(' '))
+  assert.ok(USAGE.includes('martha attach [<member>]'), USAGE)
+  assert.ok(HELP.some((line) => line.startsWith('martha attach ')), HELP.join('\n'))
+  theOwnerDeclares(place, [{ name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE }])
+  assert.equal(martha(place, 'attach').status, EXIT_REFUSED)
+  const tmux = tmuxThatAnswers(place)
+  const kittyCrew = marthaOnATerminal(place, tmux.env, 'attach')
+  assert.equal(kittyCrew.status, EXIT_REFUSED, kittyCrew.said)
+  assert.ok(kittyCrew.said.includes('this crew opens in kitty'), kittyCrew.said)
+  assert.equal(existsSync(tmux.ran), false, 'tmux was run for a crew that opens in kitty')
+})
+
+test('#511 part B: with an engine member to start and no key variable, martha up asks once for the key file; an answer that is no path is refused unechoed, and nothing is written', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  theOwnerDeclares(place, [anEngineMember('flash-a')])
+  const pasted = 'sk-a-key-the-owner-pasted-by-mistake'
+  const run = marthaOnATerminalTyping(`${pasted}\n`, place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.said.includes(THE_KEY_FILE_QUESTION.trim()), run.said)
+  // The terminal shows what the owner types; no line of Martha's own says it back.
+  assert.equal(run.said.split('\n').filter((line) => line.startsWith(SAID_BY) && line.includes(pasted)).length, 0, `the answer was said back: ${run.said}`)
+  assert.ok(run.said.includes(NOT_A_KEY_FILES_PATH), run.said)
+  assert.equal(theEndpointDeclared(place), undefined)
+  assert.equal(existsSync(kitty.started), false, 'kitty was started for members with no model to reach')
+})
+
+test('#511 part B: martha up writes the key file the owner names, when only the owner may read it, says so, and never asks again', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  theOwnerDeclares(place, [anEngineMember('flash-a')])
+  const env = { ...kitty.env, ...ON_A_DESKTOP }
+  const key = aKeyFile(place, 0o600)
+  const run = marthaOnATerminalTyping(`${key.typed}\n`, place, env, UP)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.deepEqual(theEndpointDeclared(place), { host: THE_ENGINES_ENDPOINT.host, key_file: key.at })
+  assert.ok(run.said.includes(`${ENGINE_ENDPOINT} written`), run.said)
+  assert.equal(run.said.includes('a-key-a-test-made'), false, run.said)
+  assert.ok(existsSync(kitty.started), 'kitty was not started')
+  const again = marthaOnATerminal(place, env, UP)
+  assert.equal(again.status, EXIT_DONE, again.said)
+  assert.equal(again.said.includes(THE_KEY_FILE_QUESTION.trim()), false, again.said)
+})
+
+test('#511 part B: a key file the group or others may read is refused by martha up, and nothing is written', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  theOwnerDeclares(place, [anEngineMember('flash-a')])
+  const run = marthaOnATerminalTyping(`${aKeyFile(place, 0o644).typed}\n`, place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.equal(theEndpointDeclared(place), undefined)
+  assert.equal(existsSync(kitty.started), false, 'kitty was started for members with no model to reach')
+})
+
+test('#511 part B: with the provider\'s key variable set, martha up writes key_from and asks nothing', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  theOwnerDeclares(place, [anEngineMember('flash-a')])
+  // An answer typed in case it is asked anyway: one that is no path, so a question asked fails here instead of waiting.
+  const run = marthaOnATerminalTyping('an-answer-never-asked-for\n', place, { ...kitty.env, ...ON_A_DESKTOP, [THE_ENGINES_ENDPOINT.key_variable]: 'a-key-a-test-names' }, UP)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.deepEqual(theEndpointDeclared(place), { host: THE_ENGINES_ENDPOINT.host, key_from: THE_ENGINES_ENDPOINT.key_variable })
+  assert.equal(run.said.includes(THE_KEY_FILE_QUESTION.trim()), false, run.said)
+  assert.equal(run.said.includes('a-key-a-test-names'), false, run.said)
+})
+
+test('#511 part B: with every engine member parked, martha up asks nothing and writes no endpoint', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const declared = theOwnerDeclares(place, [{ name: 'Lead', role: SUPERVISOR, [HOST]: CLAUDE_CODE }, { ...anEngineMember('flash-down'), [PARKED]: true }])
+  const run = marthaOnATerminalTyping('an-answer-never-asked-for\n', place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.equal(run.said.includes(THE_KEY_FILE_QUESTION.trim()), false, run.said)
+  assert.equal(readFileSync(theDeclarationAt(place), 'utf8'), declared)
+  assert.deepEqual(theTabsOpenedAt(place), ['Lead'])
 })
 
 // --- the owner's release and the gate (martha#321) -------------------------------
@@ -477,6 +750,10 @@ test('what martha shows the owner carries no terminal control: it is written out
   t.after(() => removeTheTree(home))
   const root = join(home, EVERY_CONTROL_CLASS)
   mkdirSync(root)
+  // A folder outside any checkout is its own crew's root (martha#511): a declaration folder that is a file is refused
+  // naming its path, so the folder's name is shown to the owner.
+  writeFileSync(join(home, '.gitconfig'), '[user]\n\tname = Ada Owner\n')
+  writeFileSync(join(root, DECLARATION_DIRECTORY), '')
   const run = martha({ home, root }, 'init')
   assert.equal(run.status, EXIT_REFUSED, run.said)
   assert.doesNotMatch(run.said, SHOWN_CONTROLS)

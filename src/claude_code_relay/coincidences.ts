@@ -22,6 +22,7 @@ import { CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '.
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { UNHELD_WORK } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import { RESTART_A_MEMBER } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
@@ -61,6 +62,11 @@ export const COINCIDENCES: readonly Exception[] = [
   // by a literal for the same reason as the entries above.
   { value: KEEP_THE_PACKAGE_CONTRACT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: SAY_TO_THE_CREW, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  // The owner's `/crew` (martha#927) asks the launcher under the tool's own name, as the model's call of it does.
+  { value: SAY_TO_THE_CREW, file: 'claude_code_relay/hooks/crew_command.ts', reason: `the tool /crew sends through; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
+  // The command's name is the crew's own word, which the channel also uses for "every member": the same spelling, and
+  // not the same thing. A send from /crew names one member, never the whole crew.
+  { value: THE_WHOLE_CREW, file: 'claude_code_relay/hooks/crew.tsx', reason: 'the name of the /crew command the owner types (martha#927), not the channel\'s word for every member' },
   // The release act (#693 r=2): the refusal names it and the mod answers it, each by a literal.
   { value: THE_RELEASE_ACT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: READ_THE_RECEIPTS, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
