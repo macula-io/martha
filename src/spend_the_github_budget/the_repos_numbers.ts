@@ -153,10 +153,7 @@ function theRecordIn(text: string): TheDriftRecord | undefined {
     const held: unknown = JSON.parse(text)
     if (typeof held !== 'object' || held === null || Array.isArray(held)) return undefined
     const record = held as Record<string, unknown>
-    for (const rows of Object.values(record)) {
-      if (!isAReposRows(rows)) return undefined
-    }
-    return record as TheDriftRecord
+    return Object.values(record).every((rows) => isAReposRows(rows)) ? (record as TheDriftRecord) : undefined
   } catch {
     return undefined
   }

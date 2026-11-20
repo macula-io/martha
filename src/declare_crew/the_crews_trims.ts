@@ -83,24 +83,30 @@ export interface ATrimRefusal {
  * or false; a switch that is not true or false. A field named against its own name, so the owner sees which one.
  */
 export function theTrimsRefused(value: Readonly<Record<string, unknown>>): ATrimRefusal | null {
-  for (const most of HOUSE_RULE_MOSTS) {
-    const why = aMostRefused(value[most])
-    if (why !== undefined) return { field: most, why }
-  }
-  for (const most of HOUSE_RULE_REPO_MOSTS) {
-    const why = aMostRefused(value[most]) ?? aPercentRefused(most, value[most])
-    if (why !== undefined) return { field: most, why }
-  }
-  const days = value[ISSUE_UNTOUCHED_DAYS]
-  if (days !== undefined && !(typeof days === 'number' && Number.isInteger(days) && days >= 1)) {
-    return { field: ISSUE_UNTOUCHED_DAYS, why: 'is not a whole number of days, one or more' }
-  }
-  for (const trim of HOUSE_RULE_TRIM_SWITCHES) {
-    const why = aSwitchRefused(value[trim])
-    if (why !== undefined) return { field: trim, why }
+  return (
+    theFirstRefusal(value, HOUSE_RULE_MOSTS, (_field, named) => aMostRefused(named)) ??
+    theFirstRefusal(value, HOUSE_RULE_REPO_MOSTS, (field, named) => aMostRefused(named) ?? aPercentRefused(field, named)) ??
+    theFirstRefusal(value, [ISSUE_UNTOUCHED_DAYS], (_field, named) => aDaysRefused(named)) ??
+    theFirstRefusal(value, HOUSE_RULE_TRIM_SWITCHES, (_field, named) => aSwitchRefused(named))
+  )
+}
+
+/** The first field a judge refuses, with what the judge says about it, or null when every field reads. */
+function theFirstRefusal<Field extends string>(
+  value: Readonly<Record<string, unknown>>,
+  fields: readonly Field[],
+  refused: (field: Field, named: unknown) => string | undefined,
+): ATrimRefusal | null {
+  for (const field of fields) {
+    const why = refused(field, value[field])
+    if (why !== undefined) return { field, why }
   }
   return null
 }
+
+/** Why the days an issue may go untouched are not one, or undefined when they are: a whole number of days, one or more. */
+const aDaysRefused = (named: unknown): string | undefined =>
+  named === undefined || (typeof named === 'number' && Number.isInteger(named) && named >= 1) ? undefined : 'is not a whole number of days, one or more'
 
 /** Why a share of pull requests is not one, or undefined when it is: a share is out of a hundred. */
 const aPercentRefused = (most: HouseRuleRepoMost, named: unknown): string | undefined =>

@@ -14,6 +14,7 @@ import { MENU } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session
 import {
   BUSY,
   driftNudges,
+  repoDriftNudges,
   lastSaidAt,
   LINES,
   nudgesOf,
@@ -28,7 +29,8 @@ import {
   type NudgeInput,
   type SentMessage,
 } from './nudge_the_supervisor.ts'
-import { HANDOFF_LINES_MOST, REVIEW_ROUNDS_MOST, TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { A_PERCENT, HANDOFF_LINES_MOST, OPEN_ISSUES_MOST, REVIEW_ROUNDS_MOST, TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { A_DAY_MS, A_WEEK_DAYS, ABANDONED_PRS, dayOf, OPEN_ISSUES } from '../spend_the_github_budget/the_repos_numbers.ts'
 import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 /** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
@@ -434,4 +436,49 @@ test('#1010: a drift line names the number, its value and the crew\'s most, and 
     theNudgeLine(rounds, CREW),
     `- drift: Vesta on macula-io/martha#1010, ${String(DRIFT.rounds)} ${ROUNDS} (the crew's most is ${String(TRIMS.review_rounds_most)}), since ${theClockOf(DRIFT.rounds_at, CLOCK_ZONE_WHEN_UNNAMED)}`,
   )
+})
+
+// --- 10. the repo's drift (martha#1010's addendum) ---------------------------
+
+/** A repo's record as the daily read keeps it: today's row, and the row a week earlier. */
+const REPO = 'macula-io/martha'
+const REPOS_TODAY = { open_issues: 12, untouched_issues: 4, abandoned_prs: 2, all_prs: 10 }
+const REPOS_A_WEEK_EARLIER = { open_issues: 9, untouched_issues: 4, abandoned_prs: 0, all_prs: 10 }
+const RECORD = { [REPO]: { [dayOf(NOW - A_WEEK_DAYS * A_DAY_MS)]: REPOS_A_WEEK_EARLIER, [dayOf(NOW)]: REPOS_TODAY } }
+/** The moment the day began, which is when a repo's drift is counted from. */
+const THE_DAY_BEGAN = Date.parse(`${dayOf(NOW)}T00:00:00Z`)
+
+test('#1010 B: a repo number higher than the same number a week earlier is the nudge, and one unchanged is not', () => {
+  const nudges = repoDriftNudges(RECORD, NOW, TRIMS_WHEN_UNNAMED)
+  assert.deepEqual(
+    nudges.map((nudge) => [nudge.kind, nudge.repo, nudge.number, nudge.value, nudge.was, nudge.most]),
+    [
+      ['drift', REPO, OPEN_ISSUES, REPOS_TODAY.open_issues, REPOS_A_WEEK_EARLIER.open_issues, undefined],
+      ['drift', REPO, ABANDONED_PRS, A_PERCENT / 5, REPOS_A_WEEK_EARLIER.abandoned_prs, undefined],
+    ],
+    'the numbers that rose are not exactly the two that did, or an untouched one was counted',
+  )
+  assert.deepEqual(nudges.map((nudge) => nudge.since), [THE_DAY_BEGAN, THE_DAY_BEGAN], 'a repo drift is counted from the day it read, not the moment it was kept')
+})
+
+test('#1010 B: a repo number with no row a week earlier raises no trend, and false turns the number off', () => {
+  const only_today = { [REPO]: { [dayOf(NOW)]: REPOS_TODAY } }
+  assert.deepEqual(repoDriftNudges(only_today, NOW, TRIMS_WHEN_UNNAMED), [], 'a trend with no history is no trend')
+  const off: TheCrewsTrims = { ...TRIMS_WHEN_UNNAMED, [OPEN_ISSUES_MOST]: false }
+  assert.deepEqual(repoDriftNudges(RECORD, NOW, off).filter((nudge) => nudge.number === OPEN_ISSUES), [], 'false is notices off, even for a number that rose')
+})
+
+test('#1010 B: a fixed line is the most the owner set, and a rise past it is one line carrying both facts', () => {
+  const past: TheCrewsTrims = { ...TRIMS_WHEN_UNNAMED, [OPEN_ISSUES_MOST]: REPOS_A_WEEK_EARLIER.open_issues }
+  const [crossed, ...rest] = repoDriftNudges(RECORD, NOW, past)
+  assert.ok(crossed !== undefined)
+  assert.deepEqual([crossed.number, crossed.value, crossed.was, crossed.most], [OPEN_ISSUES, REPOS_TODAY.open_issues, REPOS_A_WEEK_EARLIER.open_issues, REPOS_A_WEEK_EARLIER.open_issues], 'one number is one nudge, carrying the rise and the most it went past')
+  assert.deepEqual(rest.map((nudge) => nudge.number), [ABANDONED_PRS], 'the number past no most is no nudge')
+})
+
+test('#1010 B: a repo drift line names the repo and the number, and a repo name that is not one GitHub writes never prints', () => {
+  const [risen] = repoDriftNudges(RECORD, NOW, TRIMS_WHEN_UNNAMED)
+  assert.ok(risen !== undefined)
+  assert.equal(theNudgeLine(risen, CREW), `- drift: ${REPO}, ${String(REPOS_TODAY.open_issues)} ${OPEN_ISSUES} (was ${String(REPOS_A_WEEK_EARLIER.open_issues)} a week ago), since ${theClockOf(THE_DAY_BEGAN, CLOCK_ZONE_WHEN_UNNAMED)}`)
+  assert.equal(theNudgeLine({ ...risen, repo: 'martha and the owner' }, CREW), null, 'a repo name a store held reached a prompt')
 })

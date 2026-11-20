@@ -13,7 +13,7 @@ import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
-import { driftNudges, headNudges, nudgesOf, packagesNamedIn, theNudgesGoTo, theNudgesPartLines, theWaitsTheClosesLeave, windowsOf, type SentMessage, type WhatEndsAWait } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { driftNudges, headNudges, nudgesOf, packagesNamedIn, repoDriftNudges, theNudgesGoTo, theNudgesPartLines, theWaitsTheClosesLeave, windowsOf, type Nudge, type SentMessage, type WhatEndsAWait } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { theDriftOf, type APackagesDrift } from '../read_a_crew_line/the_drift_on_a_package.ts'
 import { theParkedMembers } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theBacklogReaderIn } from '../find_the_unheld_work/the_backlog_reader_of_a_launch.ts'
@@ -21,6 +21,7 @@ import { theUnheldNudgesFor } from '../nudge_an_idle_crew/nudge_an_idle_crew.ts'
 import { thePausedNudges } from '../recover_a_failed_act/resume_a_paused_package.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { GITHUB_BUDGET_PLACE, theClosesOfTheWaits, theClosesRecorded, theGithubSpenderOf, theHeadsOfTheWaits, type AHead } from '../spend_the_github_budget/spend_the_github_budget.ts'
+import { theDriftReadToday } from '../spend_the_github_budget/the_repos_numbers.ts'
 import { deadlockNudges } from '../watch_waits/watch_waits.ts'
 import { READER_BEAT_MS, seeTheCrew, thePaneAnsweredBy } from './see_the_crew.ts'
 
@@ -81,9 +82,11 @@ async function theNudgesFor(asked: SeeTheCrewAsked): Promise<readonly string[]> 
   const input = { rows: Object.values(asked.rows), waits, parked: theParkedMembers({ stores: asked.stores }, settings.members.map((member) => member.name)), windows: windowsOf(settings.house_rules, settings.thresholds), now: asked.now, owner: settings.owner, receivers }
   const heads = await theHeadsOfTheWaiters(asked, waits)
   const unheld = await theUnheldNudgesFor({ backlog: settings.backlog, members: settings.members.map((member) => member.name), reader: theBacklogReaderIn({ ...asked, github: settings.github, clock_zone: settings.clock_zone }), rows: input.rows, parked: input.parked, receivers, offline_ms: input.windows.offline_ms })
-  const paused = await thePausedNudges(asked.ledger, [...input.rows.map((row) => row.holds), ...packagesNamedIn(messages)])
-  const drifts = await theDriftsIn(asked, [...input.rows.map((row) => row.holds), ...packagesNamedIn(messages)])
-  return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads), ...unheld, ...paused, ...driftNudges(drifts, settings.house_rules)]), settings)
+  const packages = [...input.rows.map((row) => row.holds), ...packagesNamedIn(messages)]
+  const paused = await thePausedNudges(asked.ledger, packages)
+  const drifts = await theDriftsIn(asked, packages)
+  const repos = await theReposDriftIn(asked, packages)
+  return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads), ...unheld, ...paused, ...driftNudges(drifts, settings.house_rules), ...repos]), settings)
 }
 
 /**
@@ -92,6 +95,23 @@ async function theNudgesFor(asked: SeeTheCrewAsked): Promise<readonly string[]> 
  */
 async function theDriftsIn(asked: SeeTheCrewAsked, packages: readonly string[]): Promise<readonly APackagesDrift[]> {
   return Promise.all([...new Set(packages.filter((package_name) => WORK_PACKAGE.test(package_name)))].map((package_name) => theDriftOf(asked.ledger, package_name)))
+}
+
+/** The repo a package names: `org/repo#n`, read as `org/repo`. */
+const theRepoNamedIn = (package_name: string): string => package_name.slice(0, package_name.indexOf('#'))
+
+/**
+ * The drift each repo the week's packages name shows (martha#1010's addendum): the three numbers their daily record
+ * keeps, read once a day through the crew's budget, nudged as a rise against the same number a week earlier or against
+ * a fixed line the owner set. A launch holding no processes to ask with, and a crew naming no package, ask GitHub
+ * nothing and read no repo drift.
+ */
+async function theReposDriftIn(asked: SeeTheCrewAsked, packages: readonly string[]): Promise<readonly Nudge[]> {
+  const repos = [...new Set(packages.filter((package_name) => WORK_PACKAGE.test(package_name)).map(theRepoNamedIn))]
+  if (asked.processes === undefined || repos.length === 0) return []
+  const spender = theGithubSpenderOf({ stores: asked.stores, root: asked.root, processes: asked.processes, clock: asked.ledger.clock, github: asked.settings.github, clock_zone: asked.settings.clock_zone })
+  const record = await theDriftReadToday(spender, repos, asked.now, asked.settings.house_rules.issue_untouched_days)
+  return repoDriftNudges(record, asked.now, asked.settings.house_rules)
 }
 
 /** What ends a wait besides the channel's lines, for nudge_the_supervisor to apply (martha#415): the landings the ledgers
