@@ -26,7 +26,26 @@ export interface AnEngineMembersModelAsked {
   readonly model: string | null
   readonly endpoint: EngineEndpoint | null
   readonly environment: Readonly<Record<string, string | undefined>>
+  /**
+   * The key in the file `key_file` names (martha#511 part B), read by the start under the home it runs with; or why it
+   * may not be read. Asked only when the endpoint names a key file.
+   */
+  readonly readTheKeyFile: (key_file: string) => { readonly key: string } | { readonly refusal: string }
 }
+
+/**
+ * Why a key file may not be read, from what the start found there (martha#511 part B): not a plain file, someone else's,
+ * or open to the group or to others. Undefined when it is the owner's own file, closed to everyone else.
+ */
+export function whyAKeyFileIsNotTheOwners(at: string, found: { readonly plain_file: boolean; readonly owner_is_this_user: boolean; readonly mode: number }): string | undefined {
+  if (!found.plain_file) return `${ENGINE_ENDPOINT}.key_file ${at} is not a plain file`
+  if (!found.owner_is_this_user) return `${ENGINE_ENDPOINT}.key_file ${at} is not this user's own file`
+  if ((found.mode & THE_MODE_BITS_OF_GROUP_AND_OTHERS) !== 0) return `${ENGINE_ENDPOINT}.key_file ${at} is open to the group or to others: close it to its owner`
+  return undefined
+}
+
+/** The mode bits a key file must have clear: every right of its group and of others. */
+export const THE_MODE_BITS_OF_GROUP_AND_OTHERS = 0o077
 
 /**
  * The model one engine member's launch runs, or why it may not start: no model declared, no endpoint declared, a key
@@ -46,12 +65,26 @@ export function theModelOfAnEngineMember(asked: AnEngineMembersModelAsked): TheM
     [THE_ENDPOINTS_HOST_SETTING]: endpoint.host,
     ...(endpoint.base_path === null ? {} : { [THE_ENDPOINTS_BASE_PATH_SETTING]: endpoint.base_path }),
   }
-  if (endpoint.key_from === null) return { provider: facts.openai_provider.name, model, settings, secrets: {} }
+  const key = theSecretsOfAnEndpoint(asked, endpoint, model)
+  return 'refusal' in key ? key : { provider: facts.openai_provider.name, model, settings, secrets: key.secrets }
+}
+
+/**
+ * The secrets the launch writes for the endpoint's key: the key in the file it names (martha#511 part B), or in the
+ * variable it names, or none when it names neither; or why the key cannot be had. The key is never in a refusal.
+ */
+function theSecretsOfAnEndpoint(asked: AnEngineMembersModelAsked, endpoint: EngineEndpoint, model: string): { readonly secrets: Readonly<Record<string, string>> } | { readonly refusal: string } {
+  const { member } = asked
+  if (endpoint.key_file !== null) {
+    const read = asked.readTheKeyFile(endpoint.key_file)
+    return 'refusal' in read ? { refusal: `${member} cannot reach ${model}: ${read.refusal}` } : { secrets: { [THE_ENDPOINTS_KEY_SECRET]: read.key } }
+  }
+  if (endpoint.key_from === null) return { secrets: {} }
   const key = asked.environment[endpoint.key_from]
   if (key === undefined || key === '') {
     return { refusal: `${ENGINE_ENDPOINT}.key_from names ${endpoint.key_from}, and the environment ${member} is started from holds no value for it` }
   }
-  return { provider: facts.openai_provider.name, model, settings, secrets: { [THE_ENDPOINTS_KEY_SECRET]: key } }
+  return { secrets: { [THE_ENDPOINTS_KEY_SECRET]: key } }
 }
 
 /**

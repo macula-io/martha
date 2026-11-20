@@ -17,12 +17,12 @@ import { test } from 'node:test'
 import { floorRecordOf, launchBelowTheFloor, RELEASES } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { EXIT_DONE, EXIT_REFUSED, SAID_BY } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
-import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, actOf } from './run_the_martha_command.ts'
+import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, actOf, VERSION_WORDS } from './run_the_martha_command.ts'
 
 const REPOSITORY = join(import.meta.dirname, '..', '..')
 
 /** The two acts a release below the floor still answers: it says what it is, and it puts the highest release back. */
-const ANSWERED_BELOW_THE_FLOOR: readonly string[] = ['--version', 'install']
+const ANSWERED_BELOW_THE_FLOOR: readonly string[] = [...VERSION_WORDS, 'install']
 
 /** How long one act may take; an act the floor does not hold may go on to start a member, and must still end. */
 const ONE_ACT_MS = 30_000
@@ -61,7 +61,7 @@ test('below this machine\'s record every act but --version and install is refuse
   const version = asked.stdout.trim()
   const above = `${Number(version.split('.')[0]) + 1}.0.0\n`
   writeFileSync(record, above)
-  assert.equal(run(['--version']).stdout, asked.stdout, 'below the floor the release still says what it is')
+  for (const word of VERSION_WORDS) assert.equal(run([word]).stdout, asked.stdout, `below the floor the release still says what it is to ${word}`)
   const refusal = `${SAID_BY} ${launchBelowTheFloor(record, { text: above }, version)}\n`
 
   const acts = [...ACTS_ALONE, ...ACTS_OF_ONE, ...Object.keys(ACTS_OF_THEIR_OWN)].filter((act) => !ANSWERED_BELOW_THE_FLOOR.includes(act))

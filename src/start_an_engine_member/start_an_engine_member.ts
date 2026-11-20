@@ -9,7 +9,7 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { lstatSync, readFileSync, type Stats } from 'node:fs'
 
 import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
@@ -42,7 +42,9 @@ import { dropInFiles, hookSettingsWatch } from '../refuse_settings_that_turn_hoo
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
-import { theEngineMembersTurns, type ATurnToSend, type WhatATurnDid } from '../send_an_engine_member_its_turns/the_engine_members_turns.ts'
+import { theEngineMembersTurns, type ATurnToSend, type TheEngineMembersTurns, type WhatATurnDid } from '../send_an_engine_member_its_turns/the_engine_members_turns.ts'
+import { theCrewsMessagesAsTurns, type TheCrewsMessagesAsTurns } from '../send_an_engine_member_its_turns/the_crews_messages_as_turns.ts'
+import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { anOwnerActStandsBehind, forgetTheRoute, keepTheRoute, serveTheOwnersAnswers, THE_ANSWER_ROUTES_PLACE, THE_OWNERS_ANSWERS_FILE, type TheRouteServed } from '../serve_the_owners_answers/the_owners_answer_route.ts'
 import { reviewSpawnsRemembered } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
@@ -52,7 +54,8 @@ import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_
 import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
 import type { AStartOnItsHost, TheCrewToolsOfAHost } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { theMembersTelling } from '../tell_the_member_a_line/tell_the_member_a_line.ts'
-import { theModelOfAnEngineMember, whyTheConfigRunsAnotherModel } from './the_engines_model.ts'
+import { theModelOfAnEngineMember, whyAKeyFileIsNotTheOwners, whyTheConfigRunsAnotherModel } from './the_engines_model.ts'
+import { ENGINE_ENDPOINT } from '../declare_crew/declare_crew.ts'
 
 /** What every host's start builds alike from the start, handed in by the start table so this slice imports none of it. */
 export interface TheSharedOfAStart {
@@ -96,7 +99,7 @@ const NOTHING_REPORTED: TheServedToolsWatch = {
  * that turns hooks off already refuses the start, and the launch runs it first in every re-check. Or why not.
  */
 function whatTheLaunchIsGiven(start: AStartOnItsHost) {
-  const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited })
+  const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited, readTheKeyFile: (key_file) => theKeyInAFile(key_file) })
   if ('refusal' in model) return model
   const user = userSettingsPath(start.inherited)
   if ('refusal' in user) return user
@@ -105,6 +108,23 @@ function whatTheLaunchIsGiven(start: AStartOnItsHost) {
   const already = owners.check()
   if (already !== undefined) return { refusal: already }
   return { model, user, managed, owners }
+}
+
+/**
+ * The key in the file the crew's endpoint names by its absolute path (martha#511 part B): only this user's own plain file, closed to the group and to others, and never a link, since a link's own mode says nothing of
+ * its target. The key is trimmed of the line end a file ends with and never named in a refusal.
+ */
+export function theKeyInAFile(at: string): { readonly key: string } | { readonly refusal: string } {
+  let found: Stats
+  try {
+    found = lstatSync(at)
+  } catch (error) {
+    return { refusal: `${ENGINE_ENDPOINT}.key_file ${at} cannot be read (${(error as NodeJS.ErrnoException).code ?? String(error)})` }
+  }
+  const why = whyAKeyFileIsNotTheOwners(at, { plain_file: found.isFile(), owner_is_this_user: found.uid === process.getuid?.(), mode: found.mode })
+  if (why !== undefined) return { refusal: why }
+  const key = readFileSync(at, 'utf8').trim()
+  return key === '' ? { refusal: `${ENGINE_ENDPOINT}.key_file ${at} is empty` } : { key }
 }
 
 /** The launch's config read back to the declared model, then the crew text composed from what the launch carried; or why not. */
@@ -295,5 +315,23 @@ async function theStartRuns(start: AStartOnItsHost, seams: TheEnginesStartSeams,
     const turn: ATurnToSend = { text: start.prompt, arrival: { source: THE_START_PROMPTS_SOURCE } }
     void turns.take(turn).then((did) => seams.heard_a_turn?.(turn, did))
   }
-  return { started: true, pid: launch.engine.pid, stopped: theEnd(), stop: stopMember }
+  const crew = theCrewsTurnsOf(start, turns, seams)
+  const stopped = launch.engine.exited.then(() => crew.stop()).then(theEnd)
+  return { started: true, pid: launch.engine.pid, stopped, stop: stopMember }
+}
+
+/** Milliseconds in a second: the crew's read interval is declared in seconds. */
+const THE_MS_IN_A_SECOND = 1000
+
+/**
+ * The crew's messages for this member, become its turns (martha#511 part B): read by the launch at the crew's own read
+ * interval, through the same carrier a Claude Code member's mod asks, until the start stops the reader.
+ */
+function theCrewsTurnsOf(start: AStartOnItsHost, turns: TheEngineMembersTurns, seams: TheEnginesStartSeams): TheCrewsMessagesAsTurns {
+  return theCrewsMessagesAsTurns({
+    carrierOf: () => carryingTo({ member: start.member, host: start.channel }),
+    turns,
+    every_ms: start.settings.channel_read_seconds * THE_MS_IN_A_SECOND,
+    ...(seams.heard_a_turn === undefined ? {} : { heard: seams.heard_a_turn }),
+  })
 }
