@@ -10,6 +10,7 @@ import { OFFLINE, type DashboardRow } from '../show_dashboard_beat/show_dashboar
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS, seeTheCrew, theCrewToolsFlag, thePaneAnsweredBy, thePaneHeader, thePaneLine, theRowsThePaneAsksFor } from './see_the_crew.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
 /** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
 const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
 
@@ -137,12 +138,12 @@ test('a lost window is carried and flagged beside the state; a row that says not
   const since = Date.parse('2026-11-18T05:48:30.000Z')
   const seen = seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - 1_000, { served_tools: { state: 'lost', since } }), Uranus: beat('Uranus', NOW - 1_000) }, NOW)
   assert.deepEqual(seen.rows[0]!.served_tools, { state: 'lost', since })
-  assert.equal(theCrewToolsFlag(seen.rows[0]!), 'crew tools lost since 05:48Z')
-  assert.ok(thePaneLine(seen.rows[0]!).startsWith('Vesta: working, crew tools lost since 05:48Z · '), thePaneLine(seen.rows[0]!))
+  assert.equal(theCrewToolsFlag(seen.rows[0]!, CLOCK_ZONE_WHEN_UNNAMED), 'crew tools lost since 05:48 UTC', 'one clock spelling since martha#931 C, no longer 05:48Z')
+  assert.ok(thePaneLine(seen.rows[0]!).startsWith('Vesta: working, crew tools lost since 05:48 UTC · '), thePaneLine(seen.rows[0]!))
   assert.deepEqual(seen.rows[1]!.served_tools, { state: 'unknown' }, 'a row written before the field existed')
   assert.deepEqual(seen.rows[2]!.served_tools, { state: 'unknown' }, 'a member that never beat')
-  assert.equal(theCrewToolsFlag(seen.rows[1]!), null)
-  assert.equal(theCrewToolsFlag({ served_tools: { state: 'held' } }), null)
+  assert.equal(theCrewToolsFlag(seen.rows[1]!, CLOCK_ZONE_WHEN_UNNAMED), null)
+  assert.equal(theCrewToolsFlag({ served_tools: { state: 'held' } }, CLOCK_ZONE_WHEN_UNNAMED), null)
   assert.ok(!thePaneLine(seen.rows[1]!).includes('crew tools'))
 })
 
@@ -152,4 +153,12 @@ test('#931 A: a row reads offline past the crew\'s declared thresholds.offline_a
   assert.equal(seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - quietFor) }, NOW).rows[0]!.state, OFFLINE, 'a crew that declares none reads the default')
   assert.equal(seeTheCrew({ ...CREW, thresholds: declared }, { Vesta: beat('Vesta', NOW - quietFor) }, NOW).rows[0]!.state, 'working', 'a row inside the declared time is the member\'s own state')
   assert.equal(seeTheCrew({ ...CREW, thresholds: declared }, { Vesta: beat('Vesta', NOW - offlineAfterMsOf(declared) - 1) }, NOW).rows[0]!.state, OFFLINE, 'and past it, offline')
+})
+
+test('#931 C: the crew-tools flag names its time in the crew\'s declared clock_zone, on the row and in the pane', () => {
+  // 05:48 UTC; Asia/Kolkata is UTC+05:30 all year.
+  const since = Date.parse('2026-11-18T05:48:30.000Z')
+  const seen = seeTheCrew({ ...CREW, clock_zone: 'Asia/Kolkata' }, { Vesta: beat('Vesta', NOW - 1_000, { served_tools: { state: 'lost', since } }) }, NOW)
+  assert.equal(seen.rows[0]!.tools_flag, 'crew tools lost since 11:18 Asia/Kolkata')
+  assert.ok(thePaneLine(seen.rows[0]!).startsWith('Vesta: working, crew tools lost since 11:18 Asia/Kolkata · '), thePaneLine(seen.rows[0]!))
 })

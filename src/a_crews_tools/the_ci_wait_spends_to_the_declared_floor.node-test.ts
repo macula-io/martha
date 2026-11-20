@@ -12,6 +12,7 @@ import { test, type TestContext } from 'node:test'
 
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OWNER, SOLO_MODE, ACTS } from '../declare_crew/declare_crew.ts'
 import { GITHUB, GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
+import { CLOCK_ZONE } from '../declare_crew/the_crews_clock_zone.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
@@ -40,8 +41,8 @@ function aGithub(remaining: number): { readonly reads: () => number; readonly ru
   }
 }
 
-/** Asks the CI wait once, through the crew's tools, for a solo crew with whatever github block the test declares. */
-async function theWaitAsked(t: TestContext, remaining: number, github?: Readonly<Record<string, number>>): Promise<{ readonly answer: unknown; readonly reads: number }> {
+/** Asks the CI wait once, through the crew's tools, for a solo crew with whatever top-level fields the test declares. */
+async function theWaitAsked(t: TestContext, remaining: number, declared: Readonly<Record<string, unknown>> = {}): Promise<{ readonly answer: unknown; readonly reads: number }> {
   const home = mkdtempSync(join(tmpdir(), 'martha-931-floor-'))
   t.after(() => removeTheTree(home))
   const root = join(home, 'checkout')
@@ -53,7 +54,7 @@ async function theWaitAsked(t: TestContext, remaining: number, github?: Readonly
       owner: 'Ann',
       members: [{ name: MEMBER, role: 'builder' }],
       mode: { name: SOLO_MODE, roles: ['builder'], may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])) },
-      ...(github === undefined ? {} : { [GITHUB]: github }),
+      ...declared,
     }),
   )
   for (const place of ['crew-store', 'row-streams', 'row']) mkdirSync(join(home, place), { recursive: true, mode: 0o700 })
@@ -78,7 +79,15 @@ test('#931 B: the CI wait spends to the declared github.budget_floor, not the de
   const byDefault = await theWaitAsked(t, between)
   assert.equal(byDefault.reads, 0, `a crew declaring no floor spent a call with ${between} left: ${JSON.stringify(byDefault.answer)}`)
   assert.match(JSON.stringify(byDefault.answer), /at its floor/, 'and the refusal does not say it is the floor')
-  const lowered = await theWaitAsked(t, between, { budget_floor: declared })
+  const lowered = await theWaitAsked(t, between, { [GITHUB]: { budget_floor: declared } })
   assert.ok(lowered.reads > 0, `a crew declaring a floor of ${declared} did not spend a call with ${between} left: ${JSON.stringify(lowered.answer)}`)
   assert.doesNotMatch(JSON.stringify(lowered.answer), /at its floor/)
+})
+
+test('#931 C: the CI wait\'s refusal names its time in the crew\'s declared clock_zone', async (t) => {
+  // GitHub's window resets an hour after NOW, 13:00 UTC; Asia/Kolkata is UTC+05:30 all year.
+  const atTheFloor = await theWaitAsked(t, GITHUB_WHEN_UNNAMED.budget_floor, { [CLOCK_ZONE]: 'Asia/Kolkata' })
+  assert.match(JSON.stringify(atTheFloor.answer), /which resets at 18:30 Asia\/Kolkata\./, `the refusal's time is not in the declared zone: ${JSON.stringify(atTheFloor.answer)}`)
+  const byDefault = await theWaitAsked(t, GITHUB_WHEN_UNNAMED.budget_floor)
+  assert.match(JSON.stringify(byDefault.answer), /which resets at 13:00 UTC\./, 'a crew that declares no zone does not read UTC')
 })

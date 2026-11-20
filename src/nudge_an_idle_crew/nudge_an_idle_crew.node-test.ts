@@ -9,6 +9,7 @@ import { theNudgeLine } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { UNHELD_IDLE_FILE, theIdleClockAfter, theUnheldNudgesFor, unheldNudges, type UnheldNudgesAsked } from './nudge_an_idle_crew.ts'
 import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
 /** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
 const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
 
@@ -71,7 +72,7 @@ test('#319 B: a window of 0 turns the nudge off, and its line carries a declared
   assert.deepEqual(unheldNudges({ Vesta: NOW - 10 * WINDOW }, 0, 2, NOW), [])
   const [nudge] = unheldNudges({ Vesta: NOW - WINDOW }, IDLE_MINUTES, 3, NOW)
   assert.ok(nudge !== undefined)
-  assert.equal(theNudgeLine(nudge, { owner: 'Owner', members: [{ name: 'Vesta' }] }), '- unheld: Vesta idle beside 3 issues nobody holds, since 11:30 UTC')
+  assert.equal(theNudgeLine(nudge, { owner: 'Owner', members: [{ name: 'Vesta' }], clock_zone: CLOCK_ZONE_WHEN_UNNAMED }), '- unheld: Vesta idle beside 3 issues nobody holds, since 11:30 UTC')
 })
 
 /** A crew place held in memory. */

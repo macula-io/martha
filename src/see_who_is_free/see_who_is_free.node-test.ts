@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { seeTheCrew, theCrewToolsFlag } from '../see_the_crew/see_the_crew.ts'
+import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { IDLE, OFFLINE, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { NOBODY_FITS, NOT_RUNNING, PARK_UNREADABLE_FLAG, mayTakeAPackage, seeWhoIsFree, theAnswerToMayTake, type WhatTheCrewSays } from './see_who_is_free.ts'
@@ -173,7 +173,7 @@ test('a member working without its crew tools is flagged with the time they went
   const since = Date.parse('2026-11-18T05:48:00.000Z')
   const crew = theCrewWith({ ...everyoneFree(), Vesta: freeBeat('Vesta', { served_tools: { state: 'lost', since } }), Uranus: freeBeat('Uranus', { served_tools: { state: 'held' } }) })
   const rows = seeWhoIsFree(crew)
-  assert.deepEqual(rows.find((row) => row.member === 'Vesta')?.flags, [theCrewToolsFlag({ served_tools: { state: 'lost', since } })])
+  assert.deepEqual(rows.find((row) => row.member === 'Vesta')?.flags, ['crew tools lost since 05:48 UTC'])
   assert.deepEqual(rows.find((row) => row.member === 'Uranus')?.flags, [])
   assert.deepEqual(rows.find((row) => row.member === 'Terra')?.flags, [])
 })

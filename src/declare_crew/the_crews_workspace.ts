@@ -47,15 +47,6 @@ export const A_REALM = /^[0-9a-f]{64}$/
 /** An organisation's name, as GitHub spells one. */
 export const AN_ORG = /^[A-Za-z0-9][A-Za-z0-9-]*$/
 
-/**
- * The blocks Raf's file holds that #931 C reads (owner_notices and clock_zone): each checked for its shape here, so the
- * file declares, and read by no part of Martha until then. #931 B's github and transcripts are read by
- * ./the_crews_github and ./the_crews_transcripts, through declare_crew.
- */
-const CLOCK_ZONE = 'clock_zone'
-const OWNER_NOTICES = 'owner_notices'
-export const OWNER_NOTICES_KEYS = ['show'] as const
-
 /** How a field of these blocks is refused: the field, dotted under its block, and why. */
 export type RefuseAWorkspaceField = (field: string, why: string) => never
 
@@ -79,7 +70,6 @@ export function theWorkspacesClonesOf(declaration: Block, root: string, refuse: 
   const terminal = declaration[TERMINAL]
   if (terminal !== undefined && (typeof terminal !== 'string' || !TERMINALS.includes(terminal))) refuse(TERMINAL, `is not a terminal Martha knows (they are ${TERMINALS.join(', ')})`)
   refuseTheMesh(declaration[MESH], refuse)
-  refuseTheLaterBlocks(declaration, refuse)
   return clonesOf(declaration[WORKSPACE], root, refuse)
 }
 
@@ -125,26 +115,14 @@ function refuseAService(service: unknown, at: string, refuse: RefuseAWorkspaceFi
   if (service['on'] !== undefined && typeof service['on'] !== 'boolean') refuse(`${at}.on`, 'is not true or false')
 }
 
-/** The blocks #931 C reads, each by its shape: a zone's name and a list of notices. */
-function refuseTheLaterBlocks(declaration: Block, refuse: RefuseAWorkspaceField): void {
-  const zone = declaration[CLOCK_ZONE]
-  if (zone !== undefined && !isText(zone)) refuse(CLOCK_ZONE, 'is not a time zone\'s name')
-  const notices = declaration[OWNER_NOTICES]
-  if (notices === undefined) return
-  if (!isBlock(notices)) return refuse(OWNER_NOTICES, `is not an object of ${OWNER_NOTICES_KEYS.join(', ')}`)
-  refuseUnknownKeys(notices, OWNER_NOTICES_KEYS, OWNER_NOTICES, refuse)
-  refuseAList(notices['show'], `${OWNER_NOTICES}.show`, isText, 'a notice', refuse)
-}
-
 /** The workspace's root as a refusal names it: the field a clones or worktrees place in house_rules is refused beside. */
 export const THE_WORKSPACES_ROOT = `${WORKSPACE}.root`
 
 /** The top-level keys this file checks, for declare_crew's list of the keys a declaration may hold. */
-export const WORKSPACE_TOP_LEVEL_KEYS: readonly string[] = [CREW_ID, TERMINAL, WORKSPACE, MESH, CLOCK_ZONE, OWNER_NOTICES]
+export const WORKSPACE_TOP_LEVEL_KEYS: readonly string[] = [CREW_ID, TERMINAL, WORKSPACE, MESH]
 
 /** The fields of each block this file checks, by the block's key, for the declaration's page (docs/the-declaration.md). */
 export const WORKSPACE_BLOCK_FIELDS: Readonly<Record<string, readonly string[]>> = {
   [WORKSPACE]: WORKSPACE_KEYS,
   [MESH]: [...MESH_KEYS, ...MESH_SERVICES],
-  [OWNER_NOTICES]: OWNER_NOTICES_KEYS,
 }
