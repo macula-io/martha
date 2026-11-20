@@ -7,8 +7,10 @@
 // token, is replaced, and the run fails the night by name when anything was. The private scan before a post stays as a
 // second line, not the first.
 
+import { FINE_GRAINED_TOKEN_PREFIX } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+
 /** What a fine-grained personal access token looks like, so one the run was not given is caught too. */
-export const FINE_GRAINED_TOKEN = /github_pat_[A-Za-z0-9_]+/g
+export const FINE_GRAINED_TOKEN = new RegExp(`${FINE_GRAINED_TOKEN_PREFIX}[A-Za-z0-9_]+`, 'g')
 
 /** What stands where a token was. */
 export const REDACTED = '[the token, redacted]'

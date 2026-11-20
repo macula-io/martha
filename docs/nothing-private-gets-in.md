@@ -55,6 +55,14 @@ Out of reach of this check, and said here so nobody assumes otherwise:
   does not read them. A second check, `check_posted_text_carries_nothing_private`,
   does: every surface this repository posts on GitHub is read for the same
   classes, and a daily run fails by name when one is in it (see below).
+- **A GitHub token broken across lines.** The check reads one line at a time.
+  A token whose prefix sits on one line and its body on the next, or one cut
+  before `TOKEN_BODY` body characters, matches no line and passes. Joining
+  lines would change every class, so it stays a residual. It is bounded only
+  by the owner revoking the token and by the throwaway repository's deletion
+  each run (#888). The kept record's redactor takes line breaks out of a text
+  before it looks, so it catches a token wrapped in the text as written; #888
+  names where it still does not.
 - **A private fact said in plain words** ("the box in the cupboard") matches no
   shape. The check guards shapes; the rewrite rule below guards the rest.
 
