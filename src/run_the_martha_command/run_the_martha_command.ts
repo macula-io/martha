@@ -23,6 +23,7 @@ import process from 'node:process'
 import { createInterface } from 'node:readline/promises'
 import { isatty } from 'node:tty'
 
+import { aWorkDirectoryOnThisMachine } from '../a_work_directory_on_this_machine/a_work_directory_on_this_machine.ts'
 import { digestOf } from '../digest_a_work_directory/digest_a_work_directory.ts'
 import { ROSTER_FILE, whereLinesOf } from '../say_where_the_crew_keeps_things/say_where_the_crew_keeps_things.ts'
 import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
@@ -893,7 +894,7 @@ function theMemberThisRunsInside(io: CommandIo, places: Places, act: string): st
  * refusal that says why there is none. The crew's runtime place is left out when it lies inside the directory named.
  */
 async function theDigest(io: CommandIo, places: Places, directory: string): Promise<number> {
-  const answered = await digestOf({ directory, runtime_place: places.state.state_root })
+  const answered = await digestOf({ directory, runtime_place: places.state.state_root, read: aWorkDirectoryOnThisMachine })
   if ('refusal' in answered) return refused(io, answered.refusal)
   io.out(answered.line)
   return EXIT_DONE

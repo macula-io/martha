@@ -14,6 +14,7 @@ import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { EXIT_DONE, EXIT_USAGE } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
+import { aWorkDirectoryOnThisMachine } from '../a_work_directory_on_this_machine/a_work_directory_on_this_machine.ts'
 import { digestOf, THE_MANIFEST_SEPARATOR } from './digest_a_work_directory.ts'
 
 const MARTHA = join(import.meta.dirname, '..', '..', 'bin', 'martha')
@@ -61,14 +62,14 @@ function asCrewCodeDigests(directory: string): string {
 
 /** The line the slice answers for `directory`, or a failure naming the refusal. */
 async function lineOf(directory: string, runtime_place?: string): Promise<string> {
-  const answered = await digestOf({ directory, ...(runtime_place === undefined ? {} : { runtime_place }) })
+  const answered = await digestOf({ directory, ...(runtime_place === undefined ? {} : { runtime_place }), read: aWorkDirectoryOnThisMachine })
   assert.ok('line' in answered, 'refusal' in answered ? answered.refusal : '')
   return answered.line
 }
 
 /** The refusal the slice answers for `directory`. */
 async function refusalOf(directory: string, runtime_place?: string): Promise<string> {
-  const answered = await digestOf({ directory, ...(runtime_place === undefined ? {} : { runtime_place }) })
+  const answered = await digestOf({ directory, ...(runtime_place === undefined ? {} : { runtime_place }), read: aWorkDirectoryOnThisMachine })
   assert.ok('refusal' in answered, 'line' in answered ? answered.line : '')
   return answered.refusal
 }
