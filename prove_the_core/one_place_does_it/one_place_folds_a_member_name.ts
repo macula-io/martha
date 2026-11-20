@@ -38,6 +38,7 @@ export const FOLDS_THAT_ARE_NOT_NAMES: readonly AFoldThatIsNotAName[] = [
   { path: 'keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts', folds: 1, reason: A_NODE_ID },
   { path: 'keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts', folds: 2, reason: 'a package, owner/repo#n, which GitHub names ignoring case' },
   { path: 'launch_a_goose_member/the_engines_decisions.ts', folds: 1, reason: "the engine's name, spelled as its folder-layout crate names a folder after it (etcetera unixy_name)" },
+  { path: 'log_ledger/log_ledger.ts', folds: 1, reason: "the tip of a range a milestone's note names, compared as crew-code's one-entry rule compares it" },
   { path: 'name_a_node_by_its_petname/name_a_node_by_its_petname.ts', folds: 1, reason: A_NODE_ID },
   { path: 'prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts', folds: 4, reason: A_NODE_ID },
   { path: 'read_a_crew_line/the_other_crew_verbs.ts', folds: 3, reason: "a crew line's kind or ARTIFACT action, which crew-code's shorthand reads ignoring case" },
