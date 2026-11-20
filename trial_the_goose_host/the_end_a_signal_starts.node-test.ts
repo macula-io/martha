@@ -18,6 +18,8 @@ import { THE_KILL_WAIT_MS, THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS, THE_RUNNERS_KI
 import { THE_LAUNCH_BOUND_KEY } from './the_cap_a_line_gets/the_cap_a_line_gets.ts'
 import { THE_ENGINE_LOGS, THE_TRANSCRIPT } from './the_evidence_it_keeps/the_evidence_says_why.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { skillsSwitchFilesSaying } from '../src/know_the_goose_engines_facts/an_engine_source_from_its_facts.ts'
+import { RECORDED_GOOSE_ENGINE } from '../src/know_the_goose_engines_facts/recorded_goose_engine.ts'
 
 const ROOT = dirname(dirname(new URL(import.meta.url).pathname))
 const DRIVER = join(ROOT, 'trial_the_goose_host', 'drive_the_trial.ts')
@@ -119,7 +121,8 @@ const anEngineThatAnswersThenKeepsStill = (lingerMs: number): string => [
 /**
  * A fork checkout carrying the launch's bound where the runner's pins.env carries it, and the source the launch reads
  * its extension map from. The map declares the engine's skills extension, which is what the launch insists an engine
- * say before it will start one: these cases are about the end of a launch, so nothing else is declared.
+ * say before it will start one, and the two skills switch files the launch reads its skills lines from (martha#614):
+ * these cases are about the end of a launch, so nothing else is declared.
  */
 function aForkSaying(minutes: string): string {
   const fork = aFreshDirectory()
@@ -145,6 +148,10 @@ function aForkSaying(minutes: string): string {
   const skills = join(source, 'skills', 'client.rs')
   mkdirSync(dirname(skills), { recursive: true })
   writeFileSync(skills, 'pub static EXTENSION_NAME: &str = "skills";\n')
+  for (const [path, text] of Object.entries(skillsSwitchFilesSaying(RECORDED_GOOSE_ENGINE))) {
+    mkdirSync(dirname(join(fork, path)), { recursive: true })
+    writeFileSync(join(fork, path), text)
+  }
   return fork
 }
 

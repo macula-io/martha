@@ -31,16 +31,8 @@ interface Planted {
 }
 const planted = JSON.parse(readFileSync(join(import.meta.dirname, 'planted_launch_record_writes.json'), 'utf8')) as Planted
 
-test('package.json declares the host glue and the host adapter, so the check knows what is not a slice', () => {
-  assert.deepEqual(declaredHostGlue(repository), [
-    'keep_the_crews_files_as_directories',
-    'empty_directory_of_a_launch',
-    'linux_process_identity',
-    'owners_settings_directory',
-    'row_streams_directory',
-    'read_one_file_held_by_its_descriptor',
-  ])
-  assert.deepEqual(declaredHostGlue(repository, 'hostAdapters'), [
+/** The host adapters package.json declares, in its order: directories under src/ that are not slices. */
+const THE_HOST_ADAPTERS = [
     'answer_the_relay',
     'approve_a_checkouts_config',
     'ask_git_what_a_member_is_about_to_change',
@@ -69,6 +61,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'launch_a_goose_member',
     'list_stop_and_restart_the_crew',
     'load_the_hosts_markdown',
+    'open_the_crew_in_kitty',
     'place_the_hosts_settings',
     'read_a_kernel_and_a_home',
     'refuse_a_git_call_in_a_members_shell',
@@ -89,7 +82,18 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'read_what_claude_code_records_of_its_tools',
     'a_launch_end_on_this_machine',
     'watch_the_crew_tools_a_launch_served',
+]
+
+test('package.json declares the host glue and the host adapter, so the check knows what is not a slice', () => {
+  assert.deepEqual(declaredHostGlue(repository), [
+    'keep_the_crews_files_as_directories',
+    'empty_directory_of_a_launch',
+    'linux_process_identity',
+    'owners_settings_directory',
+    'row_streams_directory',
+    'read_one_file_held_by_its_descriptor',
   ])
+  assert.deepEqual(declaredHostGlue(repository, 'hostAdapters'), THE_HOST_ADAPTERS)
 })
 
 test('a hostGlue entry that is not exactly src/<one directory> is refused, with the entry it names', () => {

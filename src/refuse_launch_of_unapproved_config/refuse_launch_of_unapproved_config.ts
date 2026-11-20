@@ -140,12 +140,14 @@ export const ENGINE_HINTS_FILE: string = RECORDED_GOOSE_ENGINE.hint_files.goose_
  * review file it reads. Both a checkout's and a launch's root move these, so `.claude`'s skills and agents are listed
  * beside `.goose`'s: the engine reads all three names (the trial above planted one marker in each, on the checkout and on
  * the home). A family is one inbound row of its own (C3 to C9), and each row names its family through this table rather
- * than typing the files again.
+ * than typing the files again. The skills, plugins and settings families are the places the engine's own source reads a
+ * checkout's skills and plugins from, as recorded at the pin (martha#614), so the gate stands in front of every skill the
+ * model is offered.
  */
 export const ENGINE_FAMILIES = {
-  plugins: ['.agents/plugins'],
-  settings: [`${ENGINE_FOLDER}/settings.json`, `${ENGINE_FOLDER}/settings.local.json`],
-  skills: ['.agents/skills', '.goose/skills', `${CLAUDE_FOLDER}/skills`],
+  plugins: [RECORDED_GOOSE_ENGINE.checkout_skill_roots.plugin_folder],
+  settings: RECORDED_GOOSE_ENGINE.checkout_skill_roots.plugin_settings,
+  skills: RECORDED_GOOSE_ENGINE.checkout_skill_roots.skill_folders,
   agents: ['.agents/agents', `${CLAUDE_FOLDER}/agents`, '.goose/agents'],
   recipes: ['.goose/recipes', '.agents/recipes'],
   checks: ['.agents/checks'],

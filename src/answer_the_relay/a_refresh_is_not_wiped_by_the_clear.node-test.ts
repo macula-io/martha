@@ -68,6 +68,7 @@ function aCrewClearingFrom(predecessor: string | null): CrewTools {
     theContractInForce: async () => undefined,
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    noteTheStart: () => undefined,
     ends: holdingTheEnds(),
     thePredecessorOf: async (session_id) => (session_id === SUCCESSOR ? predecessor : null),
     theSpendInForce: async () => undefined,

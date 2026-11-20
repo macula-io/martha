@@ -190,5 +190,17 @@
     "separator": "__",
     "split_at": "first"
   },
-  "shell_tool": "shell"
+  "shell_tool": "shell",
+  "checkout_skill_roots": {
+    "skill_folders": [
+      ".agents/skills",
+      ".goose/skills",
+      ".claude/skills"
+    ],
+    "plugin_folder": ".agents/plugins",
+    "plugin_settings": [
+      ".config/goose/settings.json",
+      ".config/goose/settings.local.json"
+    ]
+  }
 }

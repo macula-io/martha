@@ -15,6 +15,7 @@ import { test, type TestContext } from 'node:test'
 import { NOT_A_TERMINAL } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
+import { KITTEN, KITTY, NO_DESKTOP_SESSION } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { CLEAR_THE_TERMINAL, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, USAGE } from './run_the_martha_command.ts'
@@ -166,10 +167,41 @@ test('martha start on a terminal with no declaration refuses, naming martha init
   allSaidByMartha(run.said)
 })
 
-test('martha start with no member named shows how it is used', (t) => {
-  const run = martha(placeFor(t), 'start')
-  assert.equal(run.status, EXIT_USAGE)
-  assert.ok(run.said.includes(USAGE), run.said)
+/** A kitty and a kitten on the place's PATH that only answer --version, above any floor, and note it if kitty is ever started. */
+function kittyThatAnswers(place: Place): { readonly started: string; readonly env: Readonly<Record<string, string>> } {
+  const bin = join(place.home, 'kitty-bin')
+  mkdirSync(bin)
+  const started = join(place.home, 'kitty-started')
+  const answer = (name: string, started: string): string => ['#!/bin/sh', 'if [ "$1" = --version ]; then', `  echo '${name} 99.0.0 created by a stand-in'`, '  exit 0', 'fi', `: > '${started}'`, ''].join('\n')
+  writeFileSync(join(bin, KITTY), answer(KITTY, started), { mode: 0o700 })
+  writeFileSync(join(bin, KITTEN), answer(KITTEN, started), { mode: 0o700 })
+  return { started, env: { PATH: `${bin}:${process.env.PATH}` } }
+}
+
+test('bare martha start whose input is no terminal refuses in the words martha start <member> uses, before any crew or kitty is read (#547 S6 r=1 R1)', (t) => {
+  const place = placeFor(t)
+  const kitty = kittyThatAnswers(place)
+  // No crew declared yet: the terminal is asked for before the crew is read, so this is the terminal refusal too.
+  const undeclared = marthaWith(place, kitty.env, 'start')
+  assert.equal(undeclared.status, EXIT_REFUSED, undeclared.said)
+  assert.ok(undeclared.err.includes(START_NOT_ON_A_TERMINAL), undeclared.err)
+  assert.equal(marthaWith(place, kitty.env, 'init').status, EXIT_DONE)
+  const run = marthaWith(place, kitty.env, 'start')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.err.includes(START_NOT_ON_A_TERMINAL), run.err)
+  allSaidByMartha(run.err)
+  assert.equal(existsSync(kitty.started), false, 'kitty was started with no terminal')
+})
+
+test('bare martha start on a terminal, with a crew declared and no desktop session, reaches the kitty opener and is refused there, opening nothing (#547 S6 r=1 R3)', (t) => {
+  const place = placeFor(t)
+  const kitty = kittyThatAnswers(place)
+  assert.equal(marthaWith(place, kitty.env, 'init').status, EXIT_DONE)
+  const run = marthaOnATerminal(place, kitty.env, 'start')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.said.includes(NO_DESKTOP_SESSION), run.said)
+  assert.ok(!run.said.includes(USAGE), run.said)
+  assert.equal(existsSync(kitty.started), false, 'kitty was started with no desktop session')
 })
 
 // --- the owner's release and the gate (martha#321) -------------------------------

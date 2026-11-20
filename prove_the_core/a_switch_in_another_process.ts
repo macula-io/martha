@@ -102,7 +102,7 @@ const tools = await theCrewTools()
 const switched = await tools.answer(SWITCH_YOUR_MODEL, { model: its.review_model, package: its.package, reason: 'the other process is switching too' }, 'a-session')
 if (!('answer' in switched)) throw new Error(switched.refused)
 // The order is where the owner's settings file is guarded: this is the step that waits for the other process's lock.
-const order = await tools.answer(THE_REFRESH_ASK, { usage: { context: { percent: 5 }, cost: { usd: 0.1 } }, turn_id: `t-${its.tag}`, answer: '' }, 'a-session')
+const order = await tools.answer(THE_REFRESH_ASK, { usage: { startedAt: 0, context: { percent: 5 }, cost: { usd: 0.1 } }, turn_id: `t-${its.tag}`, answer: '' }, 'a-session')
 if (!('answer' in order)) throw new Error(order.refused)
 signal('ordered')
 theHostSaved(its.review_model)

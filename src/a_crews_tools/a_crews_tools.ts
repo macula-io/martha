@@ -99,7 +99,7 @@ import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
-import { theBeatOverTheCrewTools, withTheOwedLine, withTheOwedLineOnAReturn, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
+import { theBeatOverTheCrewTools, theBeatsMarkedOn, withTheOwedLine, withTheTimesLineOnAReturn, type AHandedWindow, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
@@ -261,9 +261,16 @@ export interface CrewTools extends TheReviewRule {
    * The line a session is handed, once, at its start: the Supervisor's standing items, when the table lets this member
    * assign work (martha#317), then every act of the package this member holds that was sent with no outcome recorded,
    * oldest first (martha#254 design, test 10). Null when there is neither. `taken_in` names the sources the line
-   * carries that the session's record must take in, so the shell gate stands behind what the line handed.
+   * carries that the session's record must take in, so the shell gate stands behind what the line handed. The starting
+   * session's id is the host's own start event's, never the id of the last session that answered a tool (martha#658).
    */
-  theLineToHandAtStart(): Promise<TheStartLine | null>
+  theLineToHandAtStart(session_id: string): Promise<TheStartLine | null>
+  /**
+   * The start whose line that call built has been answered (martha#658 Done-when 4): a taken start marks the window
+   * that hand read as handed to a successor, and a refused one drops the record unmarked, so the next start is handed
+   * the beats. Either way nothing is kept for that session afterwards.
+   */
+  noteTheStart(session_id: string, taken: boolean): void
   /**
    * The session a clear was told in, when the crew's flow is waiting for its successor and this id is it (martha#255):
    * the launcher starts that session as a `martha_refresh` with this predecessor, whichever of the host's two events
@@ -399,6 +406,11 @@ interface SessionState {
   owner_needs: TheOwnersDefaultTold | null
   /** The one hold on the end of a running turn this launch keeps (martha#311). */
   readonly ends: TheEndsHold
+  /**
+   * The window each start's hand read, by the starting session's id (martha#658 Done-when 4): the beats are marked handed
+   * only once the start is taken, and the record is dropped then, or dropped unmarked when the start is refused.
+   */
+  readonly start_hands: Map<string, AHandedWindow>
 }
 
 /**
@@ -437,6 +449,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     ends: holdingTheEnds(),
     guarded: null,
     owner_needs: null,
+    start_hands: new Map<string, AHandedWindow>(),
   }
   const handlers = handlersOver(held, state)
   // One budget over this launch's places (martha#513, slice 3): it reads a package's spend once per session and keeps
@@ -470,7 +483,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
       return () => clearInterval(timer)
     },
     startSweeping: () => sweepTheOwnersList(held),
-    theLineToHandAtStart: () => theStartLineOf(held, state),
+    theLineToHandAtStart: (session_id) => theStartLineOf(held, state, session_id),
+    noteTheStart: (session_id, taken) => noteTheStartIn(held, state, session_id, taken),
     thePredecessorOf: (session_id) => thePredecessorOf(held, session_id),
     theSpendInForce: (session_id) => budget.theSpendInForce(session_id),
     noteTheCallCounted: (session_id, own_name) => budget.noteTheCallCounted(session_id, own_name),
@@ -614,15 +628,30 @@ function theNeedsAfter(state: SessionState, row: DashboardRow): string {
  * The line this member's session starts on: what the member's own row says it holds, and every act of that package
  * that was sent with no outcome recorded (martha#254 design line 53, test 10). Null when nothing is handed.
  */
-async function theStartLineOf(places: CrewToolPlaces, state: SessionState): Promise<TheStartLine | null> {
-  // What a successor owes for its member's open window follows the line (martha#658).
-  return withTheOwedLine(places, await theLineToHandAtStart({
+async function theStartLineOf(places: CrewToolPlaces, state: SessionState, session_id: string): Promise<TheStartLine | null> {
+  // What a successor owes for its member's window follows the line (martha#658): the window this hand read is kept until
+  // the start is answered, because the beats are marked only once it is taken.
+  const handed = withTheOwedLine(places, session_id, await theLineToHandAtStart({
     ledger: places.ledger,
     member: places.member,
     settings: await theSettingsOrRefusal(places),
     held: state.held ?? places.beats.read(places.member),
     now: places.ledger.clock.now(),
   }))
+  if (handed.beats_read === undefined) state.start_hands.delete(session_id)
+  else state.start_hands.set(session_id, handed.beats_read)
+  return handed.line
+}
+
+/**
+ * The answer to a start whose line was built (martha#658 Done-when 4): a taken start marks the window that hand read as
+ * handed, and a refused one marks nothing. The record is dropped either way, so no later start's note can carry it.
+ */
+function noteTheStartIn(places: CrewToolPlaces, state: SessionState, session_id: string, taken: boolean): void {
+  const read = state.start_hands.get(session_id)
+  state.start_hands.delete(session_id)
+  if (read === undefined || !taken) return
+  theBeatsMarkedOn(places, read)
 }
 
 /**
@@ -758,7 +787,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
   }
   return {
     [REPORT_PROGRESS_TOOL.name]: declaring(places, async (declared, args) =>
-      withTheOwedLineOnAReturn(places, await reportProgressOver(theProgressAsked(places, state, declared), args))),
+      withTheTimesLineOnAReturn(places, state.session, await reportProgressOver(theProgressAsked(places, state, declared), args))),
     [RELEASE_THE_FILES_TOOL.name]: async (args) => releaseTheFilesAKilledRunLeft({ crew: places.stores.crew, member: places.member, paths: thePathsOf(args['paths']) }),
     [LOG_A_MILESTONE_TOOL.name]: async (args) => logTheMilestone(ledger, { package: textOf(args['package']), event: args['event'], note: args['note'] }, async () => whoMayResume(places)),
     [WHAT_WAS_SENT_TOOL.name]: async (args) => whatTheMemberSent(ledger, textOf(args['package'])),
@@ -944,6 +973,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     documents: places.documents,
     models: places.models ?? NO_MODEL_NAMED,
     ledger: places.ledger,
+    row_model: state.row_model,
     began_at: state.began_at,
     ends: state.ends,
   }

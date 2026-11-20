@@ -28,7 +28,10 @@
 # And main's installer is packed as an artifact of its own, from the sha itself by `git archive`, BEFORE that restore,
 # so the tarball can only ever hold main's bytes: `npm pack --ignore-scripts` of it, renamed main-installer-<sha7>.tgz
 # and written beside <out>, with its sha256 on this script's own line. A dry run installs that tarball by that digest;
-# the published installer is still what the layer's pin names.
+# the published installer is still what the layer's pin names. Before it is packed, it is installed by the release
+# workflow's own step, the `npm ci` just before `npm publish` in that tree's installer.yml: npm packs only the
+# bundleDependencies it finds in node_modules/, and an install of the tarball never fetches what the tarball says it
+# bundles, so without that step the dry step cannot load the installer's own sigstore (martha#898, live run 2).
 #
 # Nothing is signed and nothing is pushed: this layer is placed by the dry harness, never installed as a release, and
 # the clone this script makes is of the local repository, so nothing it commits can be pushed anywhere.
@@ -38,6 +41,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+# The release workflow that publishes the installer: its step before `npm publish` is what main's installer gets too.
+INSTALLER_WORKFLOW='.github/workflows/installer.yml'
 REPO="$(git -C "${HERE}" rev-parse --show-toplevel)"
 SHA="${1:-}"
 OUT="${2:-}"
@@ -67,6 +72,16 @@ SUBJECT="$(node --input-type=module -e 'const { DRY_RESTORE_SUBJECT } = await im
   "${HERE}/dry_restore.mjs")" \
   || { echo "dry: ${HERE}/dry_restore.mjs names no DRY_RESTORE_SUBJECT" >&2; exit 2; }
 
+# The release workflow's install step in the tree at SHA, without its `- run: `: the last run: line before the one that
+# runs `npm publish`. Only an `npm ci` with long options is taken, so nothing else that line could hold is ever run.
+theReleasesInstallStep() {
+  local step
+  step="$(awk '$1 == "-" && $2 == "run:" { if ($3 == "npm" && $4 == "publish") { print previous; exit } previous = $0 }' "${TREE}/${INSTALLER_WORKFLOW}" 2> /dev/null)"
+  step="${step#*- run: }"
+  [[ "${step}" =~ ^npm\ ci(\ --[a-z][a-z=-]*)*$ ]] || return 1
+  printf '%s\n' "${step}"
+}
+
 # Main's own installer, packed from the sha itself and before anything is restored, so it can only ever hold main's
 # bytes. It is packed only for a tree whose installer/ has moved past its tag: a tree that is its tag's has the same
 # bytes published, and a dry run of it exercises the published installer as it always did (martha#695, T6).
@@ -78,6 +93,13 @@ packMainInstaller() {
   # carries the files, and an archive of it holds them with no `installer/` above them (martha#695, Venus r=1 R1).
   git -C "${REPO}" archive "${SHA}:installer" | tar -x -C "${WORK}/main-installer/installer" \
     || { echo "dry: main's installer/ at ${SHA} could not be taken from the repository" >&2; exit 2; }
+  local step step_words
+  step="$(theReleasesInstallStep)" \
+    || { echo "dry: the release's install step in ${INSTALLER_WORKFLOW} at ${SHA} is not an npm ci, so main's installer is not packed" >&2; exit 2; }
+  # The step's words, split here and run as they are: the check above admits only npm ci and its long options.
+  read -r -a step_words <<< "${step}"
+  (cd "${WORK}/main-installer/installer" && "${step_words[@]}" > /dev/null) \
+    || { echo "dry: main's installer/ at ${SHA} could not be installed by the release's own step (${step})" >&2; exit 2; }
   (cd "${WORK}/main-installer/installer" && npm pack --ignore-scripts --pack-destination "${WORK}/main-installer/tarball" > /dev/null) \
     || { echo "dry: main's installer/ at ${SHA} could not be packed" >&2; exit 2; }
   mv "${WORK}"/main-installer/tarball/*.tgz "${MAIN_TARBALL}" \

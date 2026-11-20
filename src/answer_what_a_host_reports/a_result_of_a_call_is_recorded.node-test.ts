@@ -72,6 +72,7 @@ function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
     theContractInForce: async () => undefined,
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    noteTheStart: () => undefined,
     ends,
     thePredecessorOf: async (session_id) => (session_id === does.refreshed ? THE_PREDECESSOR : null),
     theSpendInForce: async () => undefined,
