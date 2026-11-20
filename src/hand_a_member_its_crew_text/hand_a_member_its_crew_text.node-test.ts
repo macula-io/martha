@@ -13,6 +13,7 @@ import { test } from 'node:test'
 import { CREW_CODE_DECLARATION_DIRECTORY, DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, HOLD_REVIEWS, THE_HOST_A_MEMBER_RAN_ON, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import { ARTIFACT_LINES } from '../read_a_crew_line/crew_lines.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -229,6 +230,14 @@ test('#306: every line the section teaches parses with the reader the crew accep
     const reading = readACrewLine(withValues(line))
     assert.ok('line' in reading && reading.line !== null, `the section teaches a line the crew refuses: ${line}`)
   }
+})
+
+test('#957 gap 13: the Supervisor\'s role text names both lines that hand it an Artifact, filled in, and no placeholder is left (mutant: a line left unfilled)', () => {
+  const role_text = textAt(join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, `${SUPERVISOR}.md`), shipped(join(ROLE_TEXTS_DIRECTORY, `${SUPERVISOR}.md`)))
+  const section = handAMemberItsCrewText(textsOf({ member: SUPERVISOR, role: SUPERVISOR, role_text }))
+  assert.ok(section.includes(`\`${ARTIFACT_LINES.read}\``), 'the read line is not in the Supervisor\'s text')
+  assert.ok(section.includes(`\`${ARTIFACT_LINES.publish}\``), 'the publish line is not in the Supervisor\'s text')
+  assert.ok(!section.includes('{{'), 'a placeholder is left in the Supervisor\'s text')
 })
 
 test('#306: the files a crew must approve are its roles\' texts, its mode\'s text and the conventions it names', () => {
