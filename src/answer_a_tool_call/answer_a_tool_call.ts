@@ -17,6 +17,8 @@
 //
 // A raw mesh read is refused next, tainted or not
 // (../read_a_room_through_its_gate): the room is read through its gate instead.
+// Then a crew line sent by the host's own messaging, a mesh say or a mesh ring is turned back to say_to_the_crew, the
+// one path that reads it and keeps it (./a_crew_line_goes_through_say_to_the_crew.ts, martha#980).
 //
 // A call that widens a member's reach is the owner's decision, not this gate's (martha#601): the call is answered as
 // asked, and one line on the process's own error output says what the owner's decision is made in.
@@ -42,6 +44,7 @@ import type { ToolNames } from '../host_contract/host_contract.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { isRawMeshRead } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
+import { theCrewLineTurnedBack } from './a_crew_line_goes_through_say_to_the_crew.ts'
 import { WHO_DECIDES_REACH, widensMemberReach } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
 import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_config/pass_a_members_own_writes.ts'
 import { keepAWouldRefusal, type AWouldRefusal, type GateAuditPlace } from '../audit_the_gate_for_a_member/audit_the_gate_for_a_member.ts'
@@ -121,13 +124,8 @@ function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, ag
     note(`notice: ${tool} is not called in a member's session, and the call was answered as asked: ${WHO_DECIDES_REACH}.`)
   }
 
-  if (isRawMeshRead(tool, input, names)) {
-    return {
-      deny:
-        `${tool} hands this session other agents' text that no gate has seen, so it is not called at all. ` +
-        'Read a room through its gate instead: it returns only what the room admits.',
-    }
-  }
+  const refusedForWhatItCarries = theRefusalOfWhatTheCallCarries(tool, input, names)
+  if (refusedForWhatItCarries !== undefined) return refusedForWhatItCarries
 
   // The refusals that stand on the session rather than on the call: a record that cannot be read, and an agent the host
   // started that has not stopped. An audited member's call runs on them too, and each leaves its line (martha#321 r=2);
@@ -137,6 +135,22 @@ function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, ag
   return gate === 'enforced'
     ? { deny: offTheRecord.refusal }
     : auditedOrRefused(audit, { tool, arrival: { path: null, from_node_id: null, why: offTheRecord.why }, refusal: offTheRecord.refusal })
+}
+
+/**
+ * The two refusals that read what the call itself carries, whatever the session took in: a raw mesh read, and a crew line
+ * sent by a path that is not the crew's own (martha#980).
+ */
+function theRefusalOfWhatTheCallCarries(tool: string, input: ToolCall['input'], names: ToolNames): ToolCallAnswer {
+  if (isRawMeshRead(tool, input, names)) {
+    return {
+      deny:
+        `${tool} hands this session other agents' text that no gate has seen, so it is not called at all. ` +
+        'Read a room through its gate instead: it returns only what the room admits.',
+    }
+  }
+  const turnedBack = theCrewLineTurnedBack(tool, input, names)
+  return turnedBack === undefined ? undefined : { deny: turnedBack }
 }
 
 /**
