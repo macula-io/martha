@@ -69,10 +69,18 @@ export function theRunOutOf(weekly: TheWeekly, now: number): number | null {
 export const theGaugesName = (review_model: string): string => review_model.charAt(0).toUpperCase() + review_model.slice(1)
 
 /**
+ * The kept reading while its window still runs, or null. The crew keeps its newest reading and never forgets it, and
+ * nothing here reads a live window as crew-code falls back to: a reading whose window has reset since holds the week
+ * before's share, so it is shown as none (review r=1).
+ */
+const theWindowStillRunning = (kept: TheWeekly | null, now: number): TheWeekly | null => (kept !== null && kept.resets_at > now ? kept : null)
+
+/**
  * The budget line: the weekly window and its reset, the run-out when it falls before the reset, and the reviewer gauge
  * with how long ago it was set. Empty when there is nothing to show.
  */
-export function theBudgetLine(weekly: TheWeekly | null, gauge: TheReviewerGauge | null, review_model: string | null, now: number): string {
+export function theBudgetLine(kept: TheWeekly | null, gauge: TheReviewerGauge | null, review_model: string | null, now: number): string {
+  const weekly = theWindowStillRunning(kept, now)
   const run_out = weekly === null ? null : theRunOutOf(weekly, now)
   const parts = [
     ...(weekly === null ? [] : [`weekly ${String(weekly.percent)}% · resets in ${theSpanOf(weekly.resets_at - now)}`]),

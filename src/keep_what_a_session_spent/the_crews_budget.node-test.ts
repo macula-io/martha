@@ -82,6 +82,16 @@ test('#990: the run-out is said only when it falls before the reset, on both sid
   assert.equal(theRunOutOf({ percent: 0, resets_at }, NOW), null, 'nothing spent yet has no run-out')
 })
 
+test('#990 review r=1: a kept reading whose window has reset since is shown as none, never as this week\'s share', () => {
+  // The crew keeps the newest reading and never forgets it: with no turn read since the reset, the share it holds is the
+  // week before's. crew-code reads the session's own live window when no beat holds one; nothing here is live.
+  const gauge = { percent: 37, at: NOW - 3 * HOUR_MS }
+  assert.equal(theBudgetLine({ percent: 63, resets_at: NOW - DAY_MS }, null, null, NOW), '', 'last week\'s share was shown as this week\'s')
+  assert.equal(theBudgetLine({ percent: 63, resets_at: NOW }, null, null, NOW), '', 'a window that resets now was shown as still running')
+  assert.equal(theBudgetLine({ percent: 63, resets_at: NOW - DAY_MS }, gauge, REVIEWER, NOW), `${REVIEWER.charAt(0).toUpperCase()}${REVIEWER.slice(1)} 37% (set 3h ago)`)
+  assert.equal(theBudgetLine({ percent: 63, resets_at: NOW + HOUR_MS }, null, null, NOW), 'weekly 63% · resets in 1h', 'a window still running was not shown')
+})
+
 test('#990: the reviewer gauge is named after the declared reviewer model and says how long ago it was set', () => {
   assert.equal(theBudgetLine(null, { percent: 56, at: NOW - 3 * HOUR_MS }, REVIEWER, NOW), 'Sonnet 56% (set 3h ago)')
   assert.equal(theBudgetLine(null, { percent: 56, at: NOW }, null, NOW), '', 'a crew with no reviewer model showed a gauge')
