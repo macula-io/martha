@@ -86,13 +86,35 @@ test("an engine write reaching the owner's settings by a ../../ path from the ch
   assert.match(whyAWriteIsRefused(machine, climbing) ?? '', /settings/)
 })
 
-test("an engine write into the owner's own engine config folder is refused (#541 package A, Proof for G1)", (t) => {
+/** Everything written to the process's own error output while `act` runs (martha#601). */
+const theNoticeWhile = (act: () => void): string => {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    act()
+  } finally {
+    process.stderr.write = original
+  }
+  return written.join('')
+}
+
+test("an engine write into the owner's own engine config folder is noticed with one line, and goes ahead (#541 package A, Proof for G1)", (t) => {
   const machine = aMachine(t)
   const folders = theOwnersEngineFolders(FACTS, { HOME: machine.home }, machine.home)
   assert.ok('folders' in folders)
   const config = folders.folders.find((folder) => folder.what.startsWith(join(machine.home, '.config')))
   assert.ok(config !== undefined, JSON.stringify(folders.folders))
-  assert.ok(whyAWriteIsRefused(machine, join(config.what, THE_CONFIG_FILE)) !== undefined)
+  const file = join(config.what, THE_CONFIG_FILE)
+  let refusal: string | undefined
+  const notice = theNoticeWhile(() => {
+    refusal = whyAWriteIsRefused(machine, file)
+  })
+  assert.equal(refusal, undefined, `the write was refused: ${refusal}`)
+  assert.ok(notice.includes(config.what) && notice.includes('the write went ahead'), `the write went ahead without a notice naming ${config.what} (notice: ${notice || 'none'})`)
 })
 
 test("an engine write of the launch's secrets.yaml is refused (#541 package A, Proof for G1)", (t) => {
