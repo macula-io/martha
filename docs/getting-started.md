@@ -246,6 +246,27 @@ it, and Martha says so in one line per member.
 The crew is the folder's own: every member started there reads one store and
 one channel, whichever host it runs on.
 
+## Seeing your crew from a member's tab
+
+In any member's terminal, type:
+
+```text
+/crew
+```
+
+It prints the crew's header and one line per member: its state, its task and
+progress, what it holds and what it waits on. These are the same lines the
+`/martha` pane draws. To say one thing to one member, name them first:
+
+```text
+/crew reviewer the first task is ready for you
+```
+
+The message goes out as the member whose tab you typed in, and the tab prints
+the receipt. Neither command takes a turn of that member's model, so the model
+never reads what you typed. In a session Martha did not start, `/crew` says so
+and sends nothing.
+
 ## Parking a member, and waking it
 
 A member can park itself when it has nothing to do, so it is not refreshed and
