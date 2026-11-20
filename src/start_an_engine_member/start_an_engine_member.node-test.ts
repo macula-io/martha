@@ -31,6 +31,9 @@ import { ALLOW_ONCE } from '../speak_acp_to_an_agent/answer_a_permission_once.ts
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { launcherPlacesOf, startMember, type MemberStartRequest } from '../start_a_member/start_a_member.ts'
+import { appendToTheChannel, takenInBy, type ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
+import { framed } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { AnAgentScript, AStandInsSessionRow, AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
@@ -415,4 +418,56 @@ test('#541 package A: a permission store the launch ends with a saved rule in is
   start.stop('the test is over')
   await theEndOf(start)
   assert.ok(lines.some((line) => line.includes(`permission store that holds a saved permission at ${store}`)), lines.join('\n'))
+})
+
+/** The member that writes to the engine member on the crew's channel: the other member of the solo crew. */
+const A_CREW_MATE = SOLO_MEMBERS.find((member) => member.name !== MEMBER)?.name ?? ''
+const A_CREW_MESSAGE = 'a crew message a test names'
+
+/** The place's crew reads its channel every second, so a test waits seconds rather than the default interval. */
+function readingEverySecond(place: Place): void {
+  const path = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  writeFileSync(path, JSON.stringify({ ...(JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>), channel_read_seconds: 1 }))
+  git(place.root, 'commit', '-q', '-am', 'the channel read every second')
+}
+
+/** The crew's channel of the place, through the rows a launch of this place reads. */
+function theChannelOf(place: Place): ChannelHost {
+  const places = launcherPlacesOf(place.state, place.relay_root, place.root)
+  assert.ok('rows' in places, 'refusal' in places ? places.refusal : '')
+  return { clock: { now: () => Date.now() }, stores: { rows: rowStreamsDirectory(places.rows) } }
+}
+
+/** Waits, bounded, until the engine heard `count` prompts, and gives them. */
+async function untilTheEngineHeardPrompts(heard: string, count: number): Promise<ReadonlyArray<{ readonly params: Record<string, unknown> }>> {
+  const deadline = Date.now() + THE_WAIT_MS
+  for (;;) {
+    const prompts = theRequests(heard).filter((request) => request.method === 'session/prompt')
+    if (prompts.length >= count) return prompts
+    assert.ok(Date.now() < deadline, `the engine heard ${prompts.length} prompts within ${THE_WAIT_MS} ms, not ${count}`)
+    await new Promise((settle) => setTimeout(settle, POLL_MS))
+  }
+}
+
+test('#511 part B: a crew message for the engine member reaches its engine as a turn of its own, framed, and is counted taken in once (mutant: the crew reader not started)', async (t) => {
+  const place = aPlace(t)
+  readingEverySecond(place)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }], [{ echo: 1 }], [{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  await untilTheEngineHeardPrompts(engine.heard, 1)
+  const channel = theChannelOf(place)
+  const position = await appendToTheChannel(channel, { from: A_CREW_MATE, to: [MEMBER], text: A_CREW_MESSAGE, sent_at: Date.now() })
+  const prompts = await untilTheEngineHeardPrompts(engine.heard, 2)
+  assert.equal(theTextOf(prompts[1]?.params ?? {}), framed(position, A_CREW_MATE, A_CREW_MESSAGE))
+  const deadline = Date.now() + THE_WAIT_MS
+  while (!(await takenInBy(channel, MEMBER)).has(position)) {
+    assert.ok(Date.now() < deadline, `the message at ${position} was never counted taken in`)
+    await new Promise((settle) => setTimeout(settle, POLL_MS))
+  }
+  // Two more read intervals: the message counted taken in is not handed again.
+  await new Promise((settle) => setTimeout(settle, 2_500))
+  assert.equal(theRequests(engine.heard).filter((request) => request.method === 'session/prompt').length, 2, lines.join('\n'))
+  assert.deepEqual([...(await takenInBy(channel, MEMBER))], [position])
 })

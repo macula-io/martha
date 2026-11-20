@@ -42,7 +42,9 @@ import { dropInFiles, hookSettingsWatch } from '../refuse_settings_that_turn_hoo
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
-import { theEngineMembersTurns, type ATurnToSend, type WhatATurnDid } from '../send_an_engine_member_its_turns/the_engine_members_turns.ts'
+import { theEngineMembersTurns, type ATurnToSend, type TheEngineMembersTurns, type WhatATurnDid } from '../send_an_engine_member_its_turns/the_engine_members_turns.ts'
+import { theCrewsMessagesAsTurns, type TheCrewsMessagesAsTurns } from '../send_an_engine_member_its_turns/the_crews_messages_as_turns.ts'
+import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { anOwnerActStandsBehind, forgetTheRoute, keepTheRoute, serveTheOwnersAnswers, THE_ANSWER_ROUTES_PLACE, THE_OWNERS_ANSWERS_FILE, type TheRouteServed } from '../serve_the_owners_answers/the_owners_answer_route.ts'
 import { reviewSpawnsRemembered } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
@@ -315,5 +317,23 @@ async function theStartRuns(start: AStartOnItsHost, seams: TheEnginesStartSeams,
     const turn: ATurnToSend = { text: start.prompt, arrival: { source: THE_START_PROMPTS_SOURCE } }
     void turns.take(turn).then((did) => seams.heard_a_turn?.(turn, did))
   }
-  return { started: true, pid: launch.engine.pid, stopped: theEnd(), stop: stopMember }
+  const crew = theCrewsTurnsOf(start, turns, seams)
+  const stopped = launch.engine.exited.then(() => crew.stop()).then(theEnd)
+  return { started: true, pid: launch.engine.pid, stopped, stop: stopMember }
+}
+
+/** Milliseconds in a second: the crew's read interval is declared in seconds. */
+const THE_MS_IN_A_SECOND = 1000
+
+/**
+ * The crew's messages for this member, become its turns (martha#511 part B): read by the launch at the crew's own read
+ * interval, through the same carrier a Claude Code member's mod asks, until the start stops the reader.
+ */
+function theCrewsTurnsOf(start: AStartOnItsHost, turns: TheEngineMembersTurns, seams: TheEnginesStartSeams): TheCrewsMessagesAsTurns {
+  return theCrewsMessagesAsTurns({
+    carrierOf: () => carryingTo({ member: start.member, host: start.channel }),
+    turns,
+    every_ms: start.settings.channel_read_seconds * THE_MS_IN_A_SECOND,
+    ...(seams.heard_a_turn === undefined ? {} : { heard: seams.heard_a_turn }),
+  })
 }
