@@ -663,12 +663,10 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
 }
 
 /**
- * The house rules as the reader judges them (martha#931): `gate_enforce`, as Raf's draft spells it, read as
- * `gate_enforces`; and, when the declaration names a workspace root, the clones in that root and the worktrees beside
- * it, as a checkout's own path proves them (workspaceLayoutOf). A place named beside the root is refused, so the two
- * can never disagree. The places are filled whether or not the declaration has a `house_rules` block at all, so a crew
- * declared the way `martha up` teaches it is guarded from its first run; the `workspace_layout` switch is not read for
- * this, beside a root or beside the places, since the places are the fact (martha#958).
+ * The house rules as the reader judges them (martha#931): `gate_enforce`, as Raf's draft spells it, read as `gate_enforces`;
+ * and the root's clones and the worktrees beside them, as a checkout's own path proves them (workspaceLayoutOf), filled
+ * whether or not the file has a `house_rules` block: the places are the fact, so a crew declared as `martha up` teaches is
+ * guarded from its first run, a place beside the root is refused, and the `workspace_layout` switch is not read (martha#958).
  */
 function houseRulesAsRead(refuse: Refuse, value: unknown, clones: string | null): unknown {
   const block = isObject(value) ? value : undefined
