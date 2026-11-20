@@ -16,6 +16,7 @@
 // refusal, answered `reject_once`, and the call does not run.
 
 import type { ACalledTool, TheAnswerToACall, ToolNames } from '../host_contract/host_contract.ts'
+import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import type { TheGate, WhatTheGateSaid } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
 import type { EngineFacts, ToolNaming } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
@@ -42,6 +43,8 @@ export function gooseToolNames(naming: ToolNaming): ToolNames {
       const own = called.slice(at + naming.separator.length)
       return own === '' ? called : own
     },
+    // Martha's own crew tools are served under the extension key the launch writes (martha#987 slice 4).
+    marthasOwnToolCalled: (own) => `${THE_CREWS_TOOL_SERVER}${naming.separator}${own}`,
   }
 }
 

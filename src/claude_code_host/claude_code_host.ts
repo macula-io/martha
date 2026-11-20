@@ -150,6 +150,7 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
     },
     tools: {
       ownNameOf: ownNameOfCalledTool,
+      marthasOwnToolCalled,
       register: (tool) => {
         if (tools.has(tool.name)) throw new Error(`a tool is already registered: ${tool.name}`)
         tools.set(tool.name, tool)
@@ -188,6 +189,15 @@ export const MCP_NAME_PREFIX = `mcp${MCP_NAME_SEPARATOR}`
  * misses. A built-in tool, or an `mcp__` name with nothing after its last `__`,
  * is its own name.
  */
+/**
+ * The server name Claude Code gives Martha's own crew tools: the plugin's name in its manifest
+ * (../claude_code_relay/.claude-plugin/plugin.json), which a test holds this to.
+ */
+export const MARTHAS_PLUGIN = 'martha'
+
+/** The exact name Claude Code calls Martha's own crew tool by (martha#987 slice 4): `mcp__martha__<own>`. */
+export const marthasOwnToolCalled = (own: string): string => `${MCP_NAME_PREFIX}${MARTHAS_PLUGIN}${MCP_NAME_SEPARATOR}${own}`
+
 export function ownNameOfCalledTool(called: string): string {
   if (!called.startsWith(MCP_NAME_PREFIX)) return called
   const own = called.slice(called.lastIndexOf(MCP_NAME_SEPARATOR) + MCP_NAME_SEPARATOR.length)

@@ -603,6 +603,11 @@ export interface Tool {
 export interface ToolNames {
   /** The name a called tool's own server gave it; a tool built into the host is its own name. */
   ownNameOf(called: string): string
+  /**
+   * The exact name this host calls Martha's own crew tool `own` by (martha#987 slice 4): only Martha's server, never
+   * another server's tool of the same own name. A host that cannot say gives none, and the gate makes no exception.
+   */
+  marthasOwnToolCalled?(own: string): string
 }
 
 export interface Tools extends ToolNames {

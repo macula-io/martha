@@ -28,7 +28,6 @@
 // that has not heard of it cannot lose the guard.
 
 import { INBOUND_PATHS, type InboundPath } from '../inbound_paths/inbound_paths.ts'
-import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 
 /** Text that reached this session, and who it came from. */
@@ -116,6 +115,11 @@ export interface GateInput {
    * (../declare_crew) through the launcher, never from here.
    */
   readonly strict_gate?: boolean
+  /**
+   * The exact name this host calls Martha's own `say_to_the_crew` by (martha#987 slice 4, T12): the one call a tainted
+   * session still makes, with its prose held. Absent, the gate makes no exception.
+   */
+  readonly crew_send?: string
 }
 
 /**
@@ -148,7 +152,7 @@ export function recordIngestion(session: Session, arrived: readonly Ingestion[])
  * turn is the one ingestion admitted without the policy: the owner's mark on
  * the row the host's engine attests, and that mark nowhere else.
  */
-export function refuseExecutionAfterUngatedText({ tool, session, policy, strict_gate = true }: GateInput): Decision {
+export function refuseExecutionAfterUngatedText({ tool, session, policy, strict_gate = true, crew_send }: GateInput): Decision {
   if (!isShellTool(tool)) return { allow: true }
   // The gate is off unless the owner asked for it (martha#259): the record is still kept, and nothing reads it.
   if (!strict_gate) return { allow: true }
@@ -158,7 +162,7 @@ export function refuseExecutionAfterUngatedText({ tool, session, policy, strict_
     if (refusal === undefined) continue
     // Crew lines pass, prose is held (DECIDED 2026-11-06 "Crew lines pass, prose taints"): the send is let through by its exact
     // name and nothing else, never as an entry in READ_ONLY_TOOLS, so a namespaced copy and every other send stay refused.
-    if (tool === SAY_TO_THE_CREW) return { allow: true, holds_prose: true }
+    if (crew_send !== undefined && tool === crew_send) return { allow: true, holds_prose: true }
     return { allow: false, refusal, arrival: ingest }
   }
 

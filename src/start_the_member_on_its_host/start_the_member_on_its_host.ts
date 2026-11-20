@@ -293,7 +293,7 @@ export const THE_POLICY_OF_A_START: Policy = { may_send_executable_text: [] }
 export function sendHoldsProseIn(session: HostSession | undefined, mode: GateMode): boolean {
   if (mode !== 'enforced') return false
   if (session === undefined || session.record_missing) return true
-  const decision = refuseExecutionAfterUngatedText({ tool: SAY_TO_THE_CREW, session: session.gate, policy: THE_POLICY_OF_A_START })
+  const decision = refuseExecutionAfterUngatedText({ tool: SAY_TO_THE_CREW, crew_send: SAY_TO_THE_CREW, session: session.gate, policy: THE_POLICY_OF_A_START })
   return decision.allow && decision.holds_prose === true
 }
 

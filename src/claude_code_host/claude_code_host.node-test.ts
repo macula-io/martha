@@ -19,7 +19,8 @@ import { CLAUDE_CODE_PROMPT_ORIGINS, type HostPromptOrigins } from '../name_the_
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 import { GATE_GENERATION, OWNER_AT_THE_TERMINAL, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { RECORDED_BASH_RESULTS } from './claude_code_bash_results.ts'
-import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN, claudeCodeHost, ownNameOfCalledTool, RECORDED_MODELS, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
+import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN, claudeCodeHost, MARTHAS_PLUGIN, marthasOwnToolCalled, ownNameOfCalledTool, RECORDED_MODELS, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { promptOriginKindsOf, promptOriginRemapsOf, promptOriginsIn, type RecordedPromptOrigins } from './claude_code_prompt_origins.ts'
 import { sessionStartSchemaIn, sessionStartSourcesOf } from './claude_code_session_events.ts'
 import {
@@ -547,4 +548,13 @@ test('a SessionStart the host sends maps to its own event and its session id, no
   for (const source of sessionStartSourcesOf(RECORDED_HOST.session_start_schema)) {
     assert.deepEqual(sessionStartOf({ hook_event_name: 'SessionStart', session_id: 's-9', source, model: 'x' }), { event: source, session_id: 's-9' })
   }
+})
+
+test('#987: Claude Code calls Martha\'s own crew tool under the plugin\'s manifest name, as the crew hooks spell it', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../claude_code_relay/.claude-plugin/plugin.json', import.meta.url), 'utf8')) as { name: string }
+  assert.equal(MARTHAS_PLUGIN, manifest.name)
+  const called = marthasOwnToolCalled(SAY_TO_THE_CREW)
+  const hooks = readFileSync(new URL('../claude_code_relay/hooks/crew.tsx', import.meta.url), 'utf8')
+  assert.ok(hooks.includes(`{ tool: '${called}' }`), `the crew hooks do not answer ${called}`)
+  assert.equal(ownNameOfCalledTool(called), SAY_TO_THE_CREW)
 })

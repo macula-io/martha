@@ -40,6 +40,7 @@ import {
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { ToolNames } from '../host_contract/host_contract.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { isRawMeshRead } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { WHO_DECIDES_REACH, widensMemberReach } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
@@ -95,7 +96,8 @@ export function answerToolCall(asked: ToolCall, note: (line: string) => void = (
   const refusedBeforeTheGate = theRefusalBeforeTheGate(asked, note)
   if (refusedBeforeTheGate !== undefined) return refusedBeforeTheGate
 
-  const refusedByTheGate = theGatesAnswer({ tool: asked.tool, session: asked.session, policy: asked.policy, gate: asked.gate ?? 'enforced', audit: asked.audit })
+  const crew_send = asked.names.marthasOwnToolCalled?.(SAY_TO_THE_CREW)
+  const refusedByTheGate = theGatesAnswer({ tool: asked.tool, session: asked.session, policy: asked.policy, gate: asked.gate ?? 'enforced', audit: asked.audit, ...(crew_send === undefined ? {} : { crew_send }) })
   // The package's contract and budget refuse nothing here (martha#601, rows 109-116): a call outside them runs, and
   // its member is told so in a notice after the gate has let it through (../answer_what_a_host_reports).
   return refusedByTheGate
@@ -150,9 +152,9 @@ function auditedOrRefused(audit: GateAuditPlace | undefined, wouldRefusal: AWoul
 }
 
 /** What the gate answers this call, in the member's mode: refuse, run, or run with the refusal written down first. */
-function theGatesAnswer(asked: Pick<ToolCall, 'tool' | 'session' | 'policy'> & { readonly gate: GateMode; readonly audit: GateAuditPlace | undefined }): ToolCallAnswer {
-  const { tool, session, policy, gate, audit } = asked
-  const decision = refuseExecutionAfterUngatedText({ tool, session: session.gate, policy, strict_gate: gate !== 'off' })
+function theGatesAnswer(asked: Pick<ToolCall, 'tool' | 'session' | 'policy'> & { readonly gate: GateMode; readonly audit: GateAuditPlace | undefined; readonly crew_send?: string }): ToolCallAnswer {
+  const { tool, session, policy, gate, audit, crew_send } = asked
+  const decision = refuseExecutionAfterUngatedText({ tool, session: session.gate, policy, strict_gate: gate !== 'off', ...(crew_send === undefined ? {} : { crew_send }) })
   if (decision.allow) return undefined
   return gate === 'audited' ? auditedOrRefused(audit, { tool, arrival: decision.arrival, refusal: decision.refusal }) : { deny: decision.refusal }
 }

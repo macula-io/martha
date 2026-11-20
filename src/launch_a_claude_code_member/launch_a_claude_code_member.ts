@@ -99,7 +99,7 @@ import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, marthasOwnToolCalled, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
@@ -637,7 +637,7 @@ async function servedRelay(
     // What the gate does to this member, read from the declaration once (martha#321): absent means enforced, never off.
     gate: launch.crew_settings === undefined ? 'enforced' : gateModeFor(launch.crew_settings.gate, launch.member_name),
     audit: launch.places.gate_audit === undefined ? undefined : { directory: launch.places.gate_audit, member: launch.member_name, lines: { append: appendStateLine, read: readStateFile } },
-    names: { ownNameOf: ownNameOfCalledTool },
+    names: { ownNameOf: ownNameOfCalledTool, marthasOwnToolCalled },
     started_with: startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, starting.args, starting.env),
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel(ready.prepared.carried_files),
