@@ -9,7 +9,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { NO_PODMAN, THE_CGROUP_FLAG, THE_SHIM_NAME, putThePodmanShimIn, thePodmanShimFor, theRealPodmanOnThisMachine } from './the_podman_shim.ts'
+import { JOB_SHELL } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
+import { NO_PODMAN, THE_CGROUP_FLAG, THE_SHIM_DIRECTORY_NAME, THE_SHIM_NAME, putThePodmanShimIn, thePodmanShimFor, theRealPodmanOnThisMachine } from './the_podman_shim.ts'
 
 /** A stand-in podman that prints each word it was handed, one per line. */
 const A_STAND_IN_PODMAN = ['#!/bin/sh', `printf '%s\\n' "$@"`, ''].join('\n')
@@ -35,7 +36,7 @@ function handed(shim: string, place: string, args: readonly string[]): { readonl
   const runtime = join(place, 'runtime')
   mkdirSync(runtime, { recursive: true })
   try {
-    const out = execFileSync('/bin/bash', [shim, ...args], { encoding: 'utf8', env: { PATH: join(place, 'usr-bin'), XDG_RUNTIME_DIR: runtime } })
+    const out = execFileSync(JOB_SHELL, [shim, ...args], { encoding: 'utf8', env: { PATH: join(place, 'usr-bin'), XDG_RUNTIME_DIR: runtime } })
     return { words: out.split('\n').filter((line) => line !== ''), status: 0 }
   } catch (failure) {
     const ended = failure as { readonly status?: number; readonly stderr?: string }
@@ -53,7 +54,7 @@ test('#989 C3: a bare run and create are given the member\'s own scope, and a co
   assert.deepEqual(handed(shim, place, ['run', 'alpine']).words, ['run', THE_CGROUP_FLAG, 'alpine'])
   assert.deepEqual(handed(shim, place, ['create', 'alpine']).words, ['create', THE_CGROUP_FLAG, 'alpine'])
   assert.deepEqual(handed(shim, place, ['container', 'run', 'alpine']).words, ['container', 'run', THE_CGROUP_FLAG, 'alpine'])
-  assert.equal(theRealPodmanOnThisMachine(path, join(place, 'podman-shim')), stand_in, 'the stand-in on the PATH was not the real podman')
+  assert.equal(theRealPodmanOnThisMachine(path, join(place, THE_SHIM_DIRECTORY_NAME)), stand_in, 'the stand-in on the PATH was not the real podman')
 })
 
 test('#989 C3: a call that places its own container, and a call that starts nothing, pass through as they came', (t) => {
@@ -61,7 +62,7 @@ test('#989 C3: a call that places its own container, and a call that starts noth
   const shim = theShimIn(place)
   for (const args of [
     ['--cgroup-parent=ci-runners.slice', 'run', 'alpine'],
-    ['--cgroups=split', 'run', 'alpine'],
+    [THE_CGROUP_FLAG, 'run', 'alpine'],
     ['--cgroup-parent', 'ci-runners.slice', 'create', 'alpine'],
     ['ps'],
     ['--log-level', 'debug', 'run', 'alpine'],
@@ -93,7 +94,7 @@ test('#989 C3: a launch that found no podman still places the shim, which names 
 
 test('#989 C3: the shim the launch writes names the real podman by its own path, never one a member\'s PATH leads to', (t) => {
   const { place, stand_in } = aPlace(t)
-  const text = thePodmanShimFor(stand_in, join(place, 'podman-shim'))
+  const text = thePodmanShimFor(stand_in, join(place, THE_SHIM_DIRECTORY_NAME))
   assert.match(text, new RegExp(`^real='${stand_in.replaceAll('/', '\\/')}'$`, 'm'))
   assert.doesNotMatch(text, /which podman/, 'the shim looks podman up again at run time, where a member\'s PATH could lead it elsewhere')
 })
