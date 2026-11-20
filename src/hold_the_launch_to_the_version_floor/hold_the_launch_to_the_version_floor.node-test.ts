@@ -24,21 +24,38 @@ test('a tree that is not inside a placed release has no record: a checkout runs 
   assert.equal(floorRecordOf(join(KEPT, 'elsewhere', PLACED, TREE)), undefined)
 })
 
-test('below the record the launch refuses, naming both versions and `martha install`; at or above it, it runs', () => {
-  assert.equal(launchBelowTheFloor(RECORD, { code: 'ENOENT' }, '0.9.0'), undefined, 'no record yet: it runs')
-  assert.equal(
-    launchBelowTheFloor(RECORD, { text: '0.10.0\n' }, '0.9.0'),
-    `this is Martha 0.9.0, below 0.10.0, the version floor this machine holds (${RECORD}); refused. Put the highest signed release back with: martha install`,
-  )
-  assert.equal(launchBelowTheFloor(RECORD, { text: '0.9.0\n' }, '0.9.0'), undefined, 'at the record it runs')
-  assert.equal(launchBelowTheFloor(RECORD, { text: '0.8.10\n' }, '0.9.0'), undefined, 'above the record it runs, compared as numbers')
+/** The lines a launch is told, collected instead of shown. */
+function saidByLaunch(): { readonly note: (line: string) => void; readonly said: readonly string[] } {
+  const said: string[] = []
+  return { note: (line) => said.push(line), said }
+}
+
+test('below the record the launch says so in one line, naming both versions and `martha install`, and goes ahead; at or above it, it says nothing', () => {
+  const noRecord = saidByLaunch()
+  assert.equal(launchBelowTheFloor(RECORD, { code: 'ENOENT' }, '0.9.0', noRecord.note), undefined, 'no record yet: it runs')
+  assert.deepEqual(noRecord.said, [])
+  const below = saidByLaunch()
+  assert.equal(launchBelowTheFloor(RECORD, { text: '0.10.0\n' }, '0.9.0', below.note), undefined, 'below the record it still launches')
+  assert.deepEqual(below.said, [
+    `this is Martha 0.9.0, below 0.10.0, the version floor this machine holds (${RECORD}); going ahead, and martha install puts the highest signed release back`,
+  ])
+  const at = saidByLaunch()
+  assert.equal(launchBelowTheFloor(RECORD, { text: '0.9.0\n' }, '0.9.0', at.note), undefined, 'at the record it runs')
+  assert.deepEqual(at.said, [])
+  const above = saidByLaunch()
+  assert.equal(launchBelowTheFloor(RECORD, { text: '0.8.10\n' }, '0.9.0', above.note), undefined, 'above the record it runs, compared as numbers')
+  assert.deepEqual(above.said, [])
 })
 
-test('a malformed or unreadable record refuses the launch, never read as no floor', () => {
+test('a malformed or unreadable record is said in one line and read as no floor, so the launch goes ahead', () => {
   for (const text of ['0.2.0', 'x.y.z\n', '0.2.0\n0.3.0\n']) {
-    assert.equal(launchBelowTheFloor(RECORD, { text }, '0.2.0'), `${RECORD}, this machine's version floor, is not one X.Y.Z line; refused, never read as no floor`, JSON.stringify(text))
+    const read = saidByLaunch()
+    assert.equal(launchBelowTheFloor(RECORD, { text }, '0.2.0', read.note), undefined, JSON.stringify(text))
+    assert.deepEqual(read.said, [`${RECORD}, this machine's version floor, is not one X.Y.Z line; no floor is held`], JSON.stringify(text))
   }
-  assert.equal(launchBelowTheFloor(RECORD, { code: 'EISDIR' }, '0.2.0'), `${RECORD}, this machine's version floor, could not be read (EISDIR); refused, never read as no floor`)
+  const unreadable = saidByLaunch()
+  assert.equal(launchBelowTheFloor(RECORD, { code: 'EISDIR' }, '0.2.0', unreadable.note), undefined)
+  assert.deepEqual(unreadable.said, [`${RECORD}, this machine's version floor, could not be read (EISDIR); no floor is held`])
 })
 
 test('reading the record gives its text, or the code the read failed with, never a throw', () => {
