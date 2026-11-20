@@ -139,13 +139,33 @@ const theNoticeOf = (read: AMessageRead, drift: readonly string[]): string | und
   return said.length === 0 ? undefined : said.join(' ')
 }
 
+/**
+ * What a send's lines are checked against before it goes (martha#980 package 3): each line comes to the lines it adds,
+ * a notice for what failed and a mark for what could not be checked; nothing, when it holds.
+ */
+export type CheckTheLines = (line: CrewLineRead) => Promise<readonly string[]>
+
+/**
+ * The message with what its lines came to: carried under its text, so the receiver reads it, and said to the sender
+ * beside the send. Nothing is refused (the Supervisor's ruling 4, under DECIDED 2026-11-20 "Yes, list then cut").
+ */
+async function withWhatTheLinesCameTo(read: AMessageRead, checkTheLines: CheckTheLines | undefined): Promise<AMessageRead> {
+  if (checkTheLines === undefined) return read
+  const found: string[] = []
+  for (const line of read.lines) found.push(...(await checkTheLines(line)))
+  if (found.length === 0) return read
+  const notice = [read.notice, ...found].filter((said) => said !== undefined).join(' ')
+  return { ...read, text: `${read.text}\n\n${found.join('\n')}`, notice }
+}
+
 /** The one line a send adds about what it carried on past, or nothing. */
 const theNoticeSaid = (notice: string | undefined): string => (notice === undefined ? '' : ` notice: ${notice}`)
 
 /** Says one thing, keeps the row first, and concludes the act: what the member is told, or why nothing was sent. */
-export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Saying): Promise<SendOutcome> {
-  const read = theMessageRead(input)
-  if ('refused' in read) return read
+export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Saying, checkTheLines?: CheckTheLines): Promise<SendOutcome> {
+  const asRead = theMessageRead(input)
+  if ('refused' in asRead) return asRead
+  const read = await withWhatTheLinesCameTo(asRead, checkTheLines)
   const { to, text } = read
   const notice = theNoticeOf(read, await theDriftAboutToBeSent(host, read, input.package, input.trims))
   let sent = 0

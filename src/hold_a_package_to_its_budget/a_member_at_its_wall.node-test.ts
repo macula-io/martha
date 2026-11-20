@@ -103,6 +103,7 @@ function aCrewWithABudget(ledger: LedgerHost): CrewTools {
     startBeating: () => () => {},
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    theCrewStateOfATurn: async () => null,
     noteTheStart: () => undefined,
     ends: holdingTheEnds(),
     thePredecessorOf: async () => null,

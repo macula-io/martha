@@ -62,6 +62,18 @@ export const MILESTONES = [
 export type Milestone = (typeof MILESTONES)[number]
 
 /**
+ * The milestones a week counts, by name (martha#308): the review round a package closed, the release it shipped, the fix
+ * it shipped after a release, the landing that ends it, and the verdict that closed a review round (martha#507: the
+ * first-pass rate is read from these). A reader outside this slice takes them from here rather than spelling a milestone
+ * of its own, the way `PACKAGE_RESUMED` is taken.
+ */
+export const REVIEW_ROUND_CLOSED: Milestone = 'review_round_closed'
+export const RELEASE_SHIPPED: Milestone = 'release_shipped'
+export const FIX_SHIPPED_AFTER_RELEASE: Milestone = 'fix_shipped_after_release'
+export const PACKAGE_LANDED: Milestone = 'package_landed'
+export const VERDICT_GIVEN: Milestone = 'verdict_given'
+
+/**
  * The acts that leave the member's own session, or are done to it, and so are announced first. `refresh_forced` is the
  * second kind (martha#311): the launcher ends the member's running turn so its handover can run, which throws away
  * whatever that turn was doing, so a successor must see it among the acts left open.
@@ -147,6 +159,9 @@ export type ActConcludedRow = RowCommon & {
 export const RECOVERY_DECISIONS = ['retried_once', 'concluded_from_the_inspection', 'replanned', 'paused'] as const
 export type RecoveryDecision = (typeof RECOVERY_DECISIONS)[number]
 
+/** The decision a recovery takes when the act is sent a second time; the attempts a package paid for are these. */
+export const RETRIED_ONCE: RecoveryDecision = RECOVERY_DECISIONS[0]
+
 /**
  * The decision a package made about an act that failed, with what it was read from: the class the failure was given
  * and the evidence for it, and what the inspection read and found. The class is a diagnosis, so its words belong to the
@@ -174,6 +189,12 @@ export type ContractKeptRow = RowCommon & {
 
 export type LedgerRow = MilestoneRow | ActAnnouncedRow | ActConcludedRow | RecoveryRow | ContractKeptRow
 
+/** Whether a row of a package's ledger announced an outward act (martha#308): the week counts these by kind. */
+export const isAnActAnnouncedRow = (row: LedgerRow): row is ActAnnouncedRow => row.kind === ACT_ANNOUNCED
+
+/** Whether a row of a package's ledger is the conclusion of an outward act (martha#308). */
+export const isAnActConcludedRow = (row: LedgerRow): row is ActConcludedRow => row.kind === ACT_CONCLUDED
+
 /** Whether a row of a package's ledger is a recovery it decided. */
 export const isRecoveryRow = (row: LedgerRow): row is RecoveryRow => row.kind === RECOVERY_DECIDED
 
@@ -194,9 +215,6 @@ export const theAttemptsOn = (rows: readonly LedgerRow[], act: OutwardAct): numb
 
 /** The milestone a lifted pause is kept as (martha#512). */
 export const PACKAGE_RESUMED: Milestone = 'package_resumed'
-
-/** The milestone a VERDICT line keeps (martha#350): the row a package's review rounds are read from (martha#1010). */
-export const VERDICT_GIVEN: Milestone = 'verdict_given'
 
 /**
  * The pause a package stands under, or undefined when it stands under none (martha#512): the latest recovery that
@@ -233,10 +251,24 @@ interface Work {
 // where its stream lives.
 export const WORK_PACKAGE = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.+#)[A-Za-z0-9._-]+#[1-9][0-9]*$/
 
+/** The prefix every package's ledger stream is kept under, before the package's own name. */
+export const LEDGER_STREAM_PREFIX = 'ledger/'
+
 /** The stream a package's ledger lives in; refuses a name that is not owner/repo#n. */
 export const ledgerStreamOf = (work_package: string): string => {
   if (!WORK_PACKAGE.test(work_package)) throw new Error(`${JSON.stringify(work_package)} is not a work package (owner/repo#n)`)
-  return `ledger/${work_package}`
+  return `${LEDGER_STREAM_PREFIX}${work_package}`
+}
+
+/**
+ * The package a stream name is a ledger of, or undefined for a stream that is no package's ledger: the name under the
+ * prefix is held to the same rule `ledgerStreamOf` writes by, so a directory named like a ledger is not read as one
+ * (martha#308).
+ */
+export const thePackageOfLedgerStream = (stream: string): string | undefined => {
+  if (!stream.startsWith(LEDGER_STREAM_PREFIX)) return undefined
+  const work_package = stream.slice(LEDGER_STREAM_PREFIX.length)
+  return WORK_PACKAGE.test(work_package) ? work_package : undefined
 }
 
 // --- reading --------------------------------------------------------------------
