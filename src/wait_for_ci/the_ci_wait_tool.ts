@@ -47,6 +47,12 @@ function theNamedValue(args: Readonly<Record<string, unknown>>, name: string): s
   return ''
 }
 
+/**
+ * Whether a run id is digits that a number holds exactly: past the largest such number two ids round to one, and the
+ * wait would read, and keep a green for, a run nobody named (review r=1).
+ */
+const aRunIdHeldExactly = (run_id: string): boolean => A_RUN_ID.test(run_id) && Number.isSafeInteger(Number(run_id))
+
 /** The wait a call names, or why it names none: a repository as owner/name, and one of its two forms. */
 export function theCiWaitACallNames(args: Readonly<Record<string, unknown>>): { readonly ok: TheCiWait } | { readonly refused: string } {
   const repo = theNamedValue(args, 'repo')
@@ -56,7 +62,7 @@ export function theCiWaitACallNames(args: Readonly<Record<string, unknown>>): { 
   if (sha !== '' && run_id !== '') return { refused: `${NAME_A_FORM}, not both.` }
   if (sha === '' && run_id === '') return { refused: `${NAME_A_FORM}.` }
   if (run_id !== '') {
-    if (!A_RUN_ID.test(run_id)) return { refused: `a run id is a whole number, as GitHub gave it; read ${JSON.stringify(run_id)}.` }
+    if (!aRunIdHeldExactly(run_id)) return { refused: `a run id is a whole number, as GitHub gave it; read ${JSON.stringify(run_id)}.` }
     return { ok: { repo, run_id: Number(run_id) } }
   }
   if (!A_COMMIT.test(sha)) return { refused: `a CI wait names the commit whose runs count, as forty hex digits; read ${JSON.stringify(sha)}.` }

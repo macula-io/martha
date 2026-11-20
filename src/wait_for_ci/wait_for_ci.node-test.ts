@@ -314,6 +314,15 @@ test('#976: a call that names both forms, and one that names neither, are each r
   assert.ok('ok' in named && named.ok.run_id === A_RUN, `a run id was not read as one: ${JSON.stringify(named)}`)
 })
 
+test('#976 review r=1: a run id too long to be held exactly is refused, never read as the run it rounds to', async () => {
+  // Past the largest whole number a JavaScript number holds exactly, two ids round to one: the wait would read, and keep
+  // a green for, a run nobody named.
+  const tooLong = (BigInt(Number.MAX_SAFE_INTEGER) + 2n).toString()
+  assert.notEqual(String(Number(tooLong)), tooLong, 'the planted id is held exactly, so it proves nothing')
+  const asked = theCiWaitACallNames({ repo: A_REPO, run_id: tooLong })
+  assert.ok('refused' in asked && /a run id is a whole number/.test(asked.refused), `a run id that rounds was read as another: ${JSON.stringify(asked)}`)
+})
+
 test('#976: a run GitHub does not answer for is cannot tell, never green', async () => {
   for (const answer of [{ exit_code: 1, stdout: '', stderr: 'gh: Not Found (HTTP 404)' }, { exit_code: 0, stdout: '{"no_run": true}', stderr: '' }]) {
     const place = aPlace()
