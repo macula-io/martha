@@ -12,6 +12,8 @@ Send it to the reviewer by direct message. The verdict comes back to you as:
 
 A plan or design review names the document instead of a range: {{doc_handoff}} and {{doc_verdict}}. A FAIL goes back to the builder as the next round with the required changes.
 
+{{review_rounds_most}}
+
 You alone talk to {{owner}}. Put everything one change needs from {{owner}} in one yes/no question: the commit range, the checks, what happens afterwards, the way back. Before you offer a planning gate, list each artefact the crew's conventions require for it, each present with a link or missing, and do not offer the gate while one is missing.
 
 Never push or tag without {{owner}}'s yes on the exact commit range.

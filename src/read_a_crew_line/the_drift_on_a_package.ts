@@ -15,6 +15,12 @@ import { isActAnnouncedRow, readLedger, VERDICT_GIVEN, type LedgerHost, type Led
 import { readACrewLine } from './read_a_crew_line.ts'
 import type { CrewLineRead } from './read_a_crew_line.ts'
 
+/** The two numbers a package's drift is read as, in the words a notice and a nudge line print them (martha#1010). */
+export const ROUNDS = 'rounds'
+export const LINES = 'lines'
+export const DRIFT_NUMBERS = [ROUNDS, LINES] as const
+export type DriftNumber = (typeof DRIFT_NUMBERS)[number]
+
 /** One package's drift, as its ledger shows it: the highest round a line named, and the longest line, each with who wrote it. */
 export interface APackagesDrift {
   readonly package: string
@@ -112,4 +118,4 @@ export function theDriftNotices(about: ALineAboutToBeSent, drift: APackagesDrift
 export const lineCountOf = (text: string): number => text.split('\n').length
 
 /** A count of lines in the words a notice says it: one line is not one lines. */
-const lineCountOfWords = (count: number): string => `${String(count)} ${count === 1 ? 'line' : 'lines'}`
+const lineCountOfWords = (count: number): string => `${String(count)} ${count === 1 ? 'line' : LINES}`

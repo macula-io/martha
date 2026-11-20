@@ -21,10 +21,13 @@
 // the same rule and the tests hold it.
 
 import { memberNameKey, sameMemberName, MEMBER_NAME, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
+import { aMostIsSet, CREW_LINE_LINES_MOST, REVIEW_ROUNDS_MOST, type AMost, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { LandedPackage } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import type { CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
+import type { APackagesDrift, DriftNumber } from '../read_a_crew_line/the_drift_on_a_package.ts'
+import { DRIFT_NUMBERS, LINES, ROUNDS } from '../read_a_crew_line/the_drift_on_a_package.ts'
 import type { AHead } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
 import { offlineAfterMsOf, type CrewThresholds } from '../declare_crew/the_crews_thresholds.ts'
@@ -32,9 +35,13 @@ import { theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 import { type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The kinds of stall a nudge names, as the Supervisor reads them. A wait on the owner is that person's nudge, and a
- * `paused` one is a package a failed act paused until it is resumed (../recover_a_failed_act, martha#512). */
-export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock', 'head', 'unheld', 'paused'] as const
+ * `paused` one is a package a failed act paused until it is resumed (../recover_a_failed_act, martha#512). A `drift` one
+ * is a package whose rounds or lines went past the crew's most (martha#1010). */
+export const NUDGE_KINDS = ['stalled', 'review', 'person', OWNER, 'deadlock', 'head', 'unheld', 'paused', 'drift'] as const
 export type NudgeKind = (typeof NUDGE_KINDS)[number]
+
+/** The two numbers a package's drift is read as, in the words a nudge line prints (../the_drift_on_a_package). */
+export { DRIFT_NUMBERS, LINES, ROUNDS, type DriftNumber } from '../read_a_crew_line/the_drift_on_a_package.ts'
 
 /**
  * One stall, in the few things a prompt may carry: what kind of stall it is, the member it is about, the package it is
@@ -51,6 +58,10 @@ export interface Nudge {
   readonly said?: string
   /** For an `unheld` nudge (../nudge_an_idle_crew): how many issues nobody in the crew holds. A count, never their text. */
   readonly unheld?: number
+  /** For a `drift` nudge (martha#1010): which number, what it came to, and the crew's most. Counts and a name of ours. */
+  readonly number?: DriftNumber
+  readonly value?: number
+  readonly most?: number
 }
 
 /** The windows a crew declared, in milliseconds. Zero turns that kind of nudge off. */
@@ -300,6 +311,24 @@ export function headNudges(waits: readonly ReviewWait[], heads: Readonly<Record<
 }
 
 /**
+ * The drift a package's own rows show, as nudges (martha#1010): one for the rounds past the crew's most, and one for
+ * the lines, each naming the member whose row crossed it and the moment that row was kept. A number the declaration sets
+ * to 0 has no fixed line, and one it turns off with false raises no notice, so neither is a nudge.
+ */
+export function driftNudges(drifts: readonly APackagesDrift[], trims: TheCrewsTrims): Nudge[] {
+  return drifts.flatMap((drift) => [
+    ...aCrossing(drift, ROUNDS, drift.rounds, drift.rounds_member, drift.rounds_at, trims[REVIEW_ROUNDS_MOST]),
+    ...aCrossing(drift, LINES, drift.longest, drift.longest_member, drift.longest_at, trims[CREW_LINE_LINES_MOST]),
+  ])
+}
+
+/** The nudge one number raises when it is past the crew's most, or none when the most is no fixed line. */
+function aCrossing(drift: APackagesDrift, number: DriftNumber, value: number, member: string, since: number, most: AMost): Nudge[] {
+  if (!aMostIsSet(most) || value <= most) return []
+  return [{ kind: 'drift', member, package: drift.package, since, number, value, most }]
+}
+
+/**
  * One member, one line: a member that waits on a person past the window has usually stopped
  * reporting too, so the same wait was drawn twice — "last progress 8/9" beside "waits on Supervisor". The line that
  * names the wait is the one kept; a stalled line only says the row has not moved.
@@ -369,7 +398,15 @@ export function theNudgeLine(nudge: Nudge, crew: TheNudgeLinesCrew): string | nu
   if (nudge.package !== '' && package_name === '') return null
   const on = package_name === '' ? '' : ` on ${package_name}`
   const beside = nudge.unheld === undefined ? '' : ` idle beside ${String(nudge.unheld)} issues nobody holds`
-  return `- ${nudge.kind}: ${member}${on}${beside}, since ${theClockOf(nudge.since, crew.clock_zone)}`
+  return `- ${nudge.kind}: ${member}${on}${beside}${theDriftWords(nudge)}, since ${theClockOf(nudge.since, crew.clock_zone)}`
+}
+
+/** The drift a nudge names: which number, what it came to, and the crew's most. A count and one of our own names. */
+function theDriftWords(nudge: Nudge): string {
+  const { number, value, most } = nudge
+  if (number === undefined || value === undefined || most === undefined) return ''
+  if (!(DRIFT_NUMBERS as readonly string[]).includes(number)) return ''
+  return `, ${String(value)} ${number} (the crew's most is ${String(most)})`
 }
 
 /**

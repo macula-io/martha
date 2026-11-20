@@ -23,6 +23,9 @@ import { appendToTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { noteMilestone, noteRecovery, readLedger } from '../log_ledger/log_ledger.ts'
+import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import { CREW_LINE_LINES_MOST_WHEN_UNNAMED, REVIEW_ROUNDS_MOST_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 import { LOG_A_MILESTONE, RESUME_EVENT } from '../keep_the_ledger/keep_the_ledger.ts'
 import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
@@ -374,4 +377,37 @@ test('#512 r=2: a paused package that only a crew line names reaches the receive
 
   const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
   assert.equal(drawn.filter((line) => line.startsWith(`- paused: ${MEMBER} on macula-io/martha#512, since `)).length, 1, `a pause named only by a line did not reach the pane: ${JSON.stringify(drawn)}`)
+})
+
+// martha#1010: the crew's drift reaches the same pane, read from the package's own ledger.
+
+/** One crew line, kept in the package's ledger as a member's send keeps it, with the lines its message had. */
+async function keepALine(crew: ACrew, member: string, line: string, lines: number): Promise<void> {
+  const reading = readACrewLine(line)
+  if (reading.line === null) throw new Error(`the test's own line does not read: ${line}`)
+  await keepTheLinesRow(crew.ledger, member, reading.line, lines)
+}
+
+test('#1010: a package whose rounds went past the crew\'s most is drawn as drift, from its own ledger', async (t) => {
+  const crew = aCrew(t)
+  crew.beat(row(MEMBER))
+  const round = REVIEW_ROUNDS_MOST_WHEN_UNNAMED + 1
+  await keepALine(crew, MEMBER, `VERDICT macula-io/martha#320 PASS ${'a'.repeat(40)}..${'b'.repeat(40)} r=${String(round)} ci=none:paths req=0`, 1)
+
+  const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
+  const drift = drawn.filter((line) => line.startsWith('- drift: '))
+  assert.deepEqual(
+    drift,
+    [`- drift: ${MEMBER} on macula-io/martha#320, ${String(round)} rounds (the crew's most is ${String(REVIEW_ROUNDS_MOST_WHEN_UNNAMED)}), since ${theClockOf(NOW, CLOCK_ZONE_WHEN_UNNAMED)}`],
+    `the drift did not reach the pane: ${JSON.stringify(drawn)}`,
+  )
+})
+
+test('#1010: a package inside the crew\'s mosts is drawn with no drift line at all', async (t) => {
+  const crew = aCrew(t)
+  crew.beat(row(MEMBER))
+  await keepALine(crew, MEMBER, `HANDOFF macula-io/martha#320 ${'a'.repeat(40)}..${'b'.repeat(40)} r=${String(REVIEW_ROUNDS_MOST_WHEN_UNNAMED)} ci=none:paths`, CREW_LINE_LINES_MOST_WHEN_UNNAMED)
+
+  const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
+  assert.deepEqual(drawn.filter((line) => line.startsWith('- drift: ')), [], `a package at the crew's mosts was drawn as drifting: ${JSON.stringify(drawn)}`)
 })

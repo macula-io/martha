@@ -12,4 +12,10 @@ A review of a plan or a design (an issue comment, no commits, no CI run) names t
 
 {{doc_verdict}}
 
-A range no CI workflow covers (its paths are filtered out) carries `ci=none:paths`, never a run of another workflow. Every required change is required: the bar never drops to end a round.
+A range no CI workflow covers (its paths are filtered out) carries `ci=none:paths`, never a run of another workflow. Every required change is required.
+
+{{fail_only_on_harm}}
+
+{{mutants_on_guards_only}}
+
+{{crew_line_lines_most}}
