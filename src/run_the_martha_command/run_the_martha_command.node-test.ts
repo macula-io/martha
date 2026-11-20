@@ -255,6 +255,10 @@ function aWorkspace(t: TestContext): Place {
   return place
 }
 
+/** What the first `martha up` of either kind says: the declaration seeded with both teams, Claude Code's and the engine's. */
+const theSeededLine = (place: Place): string =>
+  `Declared a team in ${join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)}: ${[...CLAUDE_CODE_TEAM, ...ENGINE_TEAM].map((member) => member.name).join(', ')}. Change it with martha crew, or edit the file.`
+
 test('#511: martha up takes --claude or nothing; any other word is a usage error', (t) => {
   const place = aWorkspace(t)
   for (const words of [[UP, '--engine'], [UP, CLAUDE_SWITCH, 'extra']]) {
@@ -277,7 +281,7 @@ test('#511: martha up --claude in a workspace that is no checkout declares the t
   const kitty = kittyThatAnswers(place)
   const run = marthaOnATerminal(place, kitty.env, UP, CLAUDE_SWITCH)
   assert.equal(run.status, EXIT_REFUSED, run.said)
-  assert.ok(run.said.includes(`Declared a team in ${join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)}: ${CLAUDE_CODE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
+  assert.ok(run.said.includes(theSeededLine(place)), run.said)
   assert.ok(run.said.includes(NO_DESKTOP_SESSION), run.said)
   assert.equal(existsSync(kitty.started), false, 'kitty was started with no desktop session')
   const again = marthaOnATerminal(place, kitty.env, UP, CLAUDE_SWITCH)
@@ -292,11 +296,10 @@ test('#511: on a desktop, martha up --claude opens kitty with a tab for each Cla
   const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
   assert.ok('directory' in state)
   const documents = { read: (path: string) => import('node:fs/promises').then((fs) => fs.readFile(path, 'utf8')) }
-  const first = await declareTheTeam({ root: place.root, owner: 'Ada Owner', state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: THE_ENGINES_HOST, members: [engine] })
+  const first = await declareTheTeam({ root: place.root, owner: 'Ada Owner', state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: THE_ENGINES_HOST, seed: [...CLAUDE_CODE_TEAM, engine] })
   assert.ok(first.declared, first.declared ? '' : first.refusal)
   const run = marthaOnATerminal(place, { ...kitty.env, WAYLAND_DISPLAY: 'wayland-511' }, UP, CLAUDE_SWITCH)
   assert.equal(run.status, EXIT_DONE, run.said)
-  assert.ok(run.said.includes(`Added to the team in ${join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)}: ${CLAUDE_CODE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
   assert.ok(existsSync(kitty.started), 'kitty was not started')
   const session = readFileSync(join(state.directory, KITTY_PLACE, SESSION_FILE), 'utf8')
   const tabs = session.split('\n').filter((line) => line.startsWith('new_tab ')).map((line) => line.slice('new_tab '.length))
@@ -335,9 +338,8 @@ test('#511 part B: plain martha up adds the engine\'s workers, and with no key v
   const kitty = kittyThatAnswers(place)
   const pasted = 'sk-a-key-the-owner-pasted-by-mistake'
   const run = marthaOnATerminalTyping(`${pasted}\n`, place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
-  const declaration = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   assert.equal(run.status, EXIT_REFUSED, run.said)
-  assert.ok(run.said.includes(`Declared a team in ${declaration}: ${ENGINE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
+  assert.ok(run.said.includes(theSeededLine(place)), run.said)
   assert.ok(run.said.includes(THE_KEY_FILE_QUESTION.trim()), run.said)
   // The terminal shows what the owner types; no line of Martha's own says it back.
   assert.equal(run.said.split('\n').filter((line) => line.startsWith(SAID_BY) && line.includes(pasted)).length, 0, `the answer was said back: ${run.said}`)
@@ -391,7 +393,7 @@ test('#511 part B: martha up --claude then martha up is one crew of seven, and p
 
   const run = marthaOnATerminal(place, env, UP)
   assert.equal(run.status, EXIT_DONE, run.said)
-  assert.ok(run.said.includes(`Added to the team in ${join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)}: ${ENGINE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
+  assert.ok(!run.said.includes('Declared') && !run.said.includes('Added'), run.said)
   const written = JSON.parse(readFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as { members: { name: string; [HOST]: string; model: string }[] }
   assert.deepEqual(
     written.members.map((member) => [member.name, member[HOST], member.model]),
@@ -401,6 +403,49 @@ test('#511 part B: martha up --claude then martha up is one crew of seven, and p
   const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
   assert.ok('directory' in state)
   assert.deepEqual(theTabsIn(readFileSync(join(state.directory, KITTY_PLACE, SESSION_FILE), 'utf8')), ENGINE_TEAM.map((member) => member.name))
+})
+
+test('#511: the declaration is the config: after the first run, up --claude opens exactly the members it declares, on their own models, and adds no default back', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const file = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  assert.equal(marthaOnATerminal(place, kitty.env, UP, CLAUDE_SWITCH).status, EXIT_REFUSED, 'the first run seeds the declaration and stops at kitty')
+  // The owner's edit: two workers instead of three, both on another model the host runs.
+  const declared = JSON.parse(readFileSync(file, 'utf8')) as { members: { name: string; model: string }[] }
+  const kept = declared.members.filter((member) => member.name !== 'opus-3').map((member) => (member.name === 'supervisor' ? member : { ...member, model: 'sonnet' }))
+  const edited = `${JSON.stringify({ ...declared, members: kept }, null, 2)}\n`
+  writeFileSync(file, edited)
+
+  const run = marthaOnATerminal(place, { ...kitty.env, WAYLAND_DISPLAY: 'wayland-511' }, UP, CLAUDE_SWITCH)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.equal(readFileSync(file, 'utf8'), edited, 'up --claude changed the owner\'s declaration')
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok('directory' in state)
+  const session = readFileSync(join(state.directory, KITTY_PLACE, SESSION_FILE), 'utf8')
+  const tabs = session.split('\n').filter((line) => line.startsWith('new_tab ')).map((line) => line.slice('new_tab '.length))
+  assert.deepEqual(tabs, ['supervisor', 'opus-1', 'opus-2'])
+})
+
+test('#511 part B: the declaration is the config: plain martha up opens exactly the engine members it declares, on their own models, and adds no default back', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const file = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  assert.equal(marthaOnATerminal(place, kitty.env, UP, CLAUDE_SWITCH).status, EXIT_REFUSED, 'the first run seeds the declaration and stops at kitty')
+  withAnEngineEndpoint(place)
+  // The owner's edit: two engine workers instead of three, both on another model.
+  const anotherModel = `${ENGINE_TEAM[0]!.model}-another`
+  const declared = JSON.parse(readFileSync(file, 'utf8')) as { members: { name: string; model: string; [HOST]: string }[] }
+  const [first, second, third] = ENGINE_TEAM.map((member) => member.name)
+  const kept = declared.members.filter((member) => member.name !== third).map((member) => (member[HOST] === THE_ENGINES_HOST ? { ...member, model: anotherModel } : member))
+  const edited = `${JSON.stringify({ ...declared, members: kept }, null, 2)}\n`
+  writeFileSync(file, edited)
+
+  const run = marthaOnATerminal(place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.equal(readFileSync(file, 'utf8'), edited, 'plain up changed the owner\'s declaration')
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok('directory' in state)
+  assert.deepEqual(theTabsIn(readFileSync(join(state.directory, KITTY_PLACE, SESSION_FILE), 'utf8')), [first, second])
 })
 
 // --- the owner's release and the gate (martha#321) -------------------------------

@@ -29,7 +29,7 @@ import { installThePinnedInstaller } from '../install_the_pinned_installer/insta
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
 import { declareCrew, OWNER_BELL, sameMemberName, THE_ENGINES_HOST, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
-import { CLAUDE_CODE_TEAM, declareTheTeam, ENGINE_TEAM, type TeamMember } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
+import { CLAUDE_CODE_TEAM, declareTheTeam, ENGINE_TEAM } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
 import { declareTheEnginesEndpoint } from '../declare_a_team_at_a_workspace/declare_the_engines_endpoint.ts'
 import { theKeyInAFile } from '../start_an_engine_member/start_an_engine_member.ts'
 import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
@@ -333,17 +333,18 @@ export const CLAUDE_SWITCH = '--claude'
 const whyNotAKey = (read: { readonly key: string } | { readonly refusal: string }): string | undefined => ('refusal' in read ? read.refusal : undefined)
 
 /**
- * `martha up --claude` and plain `martha up` (martha#511): the team declared at this folder, or this host's missing
- * members added, then every member of this host that is not running opened in a kitty tab of its own. `--claude` is
- * Claude Code's Supervisor and workers; plain `up` is the engine's workers, which need the crew's engine endpoint.
+ * `martha up --claude` and plain `martha up` (martha#511): the team seeded at this folder when it has no declaration,
+ * with both teams, Claude Code's and the engine's; then every member of this command's host the declaration names that
+ * is not running opened in a kitty tab of its own, on its own model. The declaration is the config (DECIDED 2026-11-20,
+ * Raf: "are the members hardcoded or via config?"): no member is added back. Plain `up` first declares the engine's
+ * endpoint when the crew names none (../declare_a_team_at_a_workspace/declare_the_engines_endpoint.ts).
  */
 async function up(io: CommandIo, places: Places, claude: boolean): Promise<number> {
   if (!io.terminal.is_terminal) return refused(io, START_NEEDS_A_TERMINAL)
-  const [host, members]: readonly [string, readonly TeamMember[]] = claude ? [CLAUDE_CODE, CLAUDE_CODE_TEAM] : [THE_ENGINES_HOST, ENGINE_TEAM]
-  const declared = await declareTheTeam({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, state: places.state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host, members })
+  const host = claude ? CLAUDE_CODE : THE_ENGINES_HOST
+  const declared = await declareTheTeam({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, state: places.state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host, seed: [...CLAUDE_CODE_TEAM, ...ENGINE_TEAM] })
   if (!declared.declared) return refused(io, declared.refusal)
-  if (declared.wrote) io.out(`Declared a team in ${declared.declaration}: ${declared.added.join(', ')}.`)
-  else if (declared.added.length > 0) io.out(`Added to the team in ${declared.declaration}: ${declared.added.join(', ')}.`)
+  if (declared.wrote) io.out(`Declared a team in ${declared.declaration}: ${declared.settings.members.map((member) => member.name).join(', ')}. Change it with martha crew, or edit the file.`)
   if (!claude && declared.settings.engine_endpoint === null) {
     const endpoint = await declareTheEnginesEndpoint({ root: places.root, documents, env: io.env, ask: io.terminal.ask, whyNotTheOwnersKeyFile: (key_file) => whyNotAKey(theKeyInAFile(key_file, places.home)) })
     if ('refusal' in endpoint) return refused(io, endpoint.refusal)
