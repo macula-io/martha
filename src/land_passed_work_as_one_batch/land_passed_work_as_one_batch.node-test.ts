@@ -632,9 +632,9 @@ test('#605: verify_range hands over the question, the owner says yes to it, and 
   const checked = await verifyRange(tests.host, { path: fixture.clone, base, tip, packages: [work_package] })
   const question = theLandingQuestion({ repo: fixture.repo, default_branch: 'origin/main', tip, packages: [work_package] })
   assert.ok('told' in checked && checked.told.split('\n').includes(question), `verify_range did not hand over the landing's question: ${wordsOf(checked)}`)
-  // The line right after the lead-in is the question: the night's reader finds it by that lead-in (martha#639).
+  // The line right after the lead-in is the question: the live run's reader finds it by that lead-in (martha#639).
   const told = 'told' in checked ? checked.told.split('\n') : []
-  assert.equal(told[told.indexOf(OWNERS_QUESTION_LEAD_IN) + 1], question, 'the question does not follow the lead-in the night reads it by')
+  assert.equal(told[told.indexOf(OWNERS_QUESTION_LEAD_IN) + 1], question, 'the question does not follow the lead-in the live run reads it by')
 
   const ask = await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question, asked_by: MEMBER, since: 0 })
   await tests.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [ask] })

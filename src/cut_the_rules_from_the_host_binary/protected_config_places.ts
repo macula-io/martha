@@ -114,12 +114,18 @@ function namesOfEntry(text: string, entry: string, at: number): string[] {
   return spreadNames(text, spread[1] ?? '', at)
 }
 
-/** The source of the one array `name` is given inside the module that holds `at`. */
+/**
+ * The source of the array `name` is given in the declaration that builds the Set at `at`: `let name=[...],other=new
+ * Set([...name])`. The minifier reuses short names inside one module (2.1.329 also names an empty sandbox array `zn`,
+ * martha#908), so only the array declared beside the Set is the one it spreads; a spread declared anywhere else is
+ * not read.
+ */
 function spreadSource(text: string, name: string, at: number): string {
-  const module = moduleHolding(text, at)
-  const found = new Set([...module.matchAll(new RegExp(`[,;{ ]${escaped(name)}=\\[([^\\]]*)\\]`, 'g'))].map((match) => match[1] ?? ''))
-  if (found.size !== 1) throw new Error(`The host gives ${name} ${String(found.size)} arrays inside its module, not one, so the places it spreads cannot be told.`)
-  return [...found][0] ?? ''
+  const opening = `${name}=[`
+  const start = text.lastIndexOf(opening, at) - 1
+  const declared = start < 0 ? null : new RegExp(`^[,;{ ]${escaped(name)}=\\[([^\\]]*)\\],[\\w$]+=$`).exec(text.slice(start, at))
+  if (declared === null) throw new Error(`The host declares ${name} nowhere beside the Set it walks, so the places it spreads cannot be told.`)
+  return declared[1] ?? ''
 }
 
 /** The names the array a spread brings in holds: one level, which is all the host's arrays need. */

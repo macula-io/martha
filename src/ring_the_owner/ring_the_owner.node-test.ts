@@ -231,7 +231,7 @@ test('inside tmux the close goes through the passthrough too, and outside it not
 })
 
 test('a launcher is inside tmux when tmux set its variable to something, and only then (martha#843)', () => {
-  assert.equal(isInsideTmux({ TMUX: '/tmp/tmux-1000/night,4242,0' }), true, 'a pane of the night\'s server')
+  assert.equal(isInsideTmux({ TMUX: '/tmp/tmux-1000/live_run,4242,0' }), true, 'a pane of the live run\'s server')
   assert.equal(isInsideTmux({}), false, 'no tmux')
   assert.equal(isInsideTmux({ TMUX: '' }), false, 'a variable emptied is no tmux')
 })

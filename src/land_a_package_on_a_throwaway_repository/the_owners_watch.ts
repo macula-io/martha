@@ -1,4 +1,4 @@
-// The night's watch claims (martha#843, #601 Done when 4): the owner watched the builder's terminal read-only, the
+// The live run's watch claims (martha#843, #601 Done when 4): the owner watched the builder's terminal read-only, the
 // builder's ring was sent to a client attached there, and the VERDICT line was drawn on that screen.
 //
 // What tmux sends a client is read from the proof's own read-only client on the builder's session, which records every
@@ -11,7 +11,7 @@
 // words by moving the cursor and wraps a long line wherever its width falls.
 
 import { notificationIdOf, NOTIFICATION_ESCAPE } from '../ring_the_owner/ring_the_owner.ts'
-import { THE_VERDICT, type TheNight } from './the_nights_claims.ts'
+import { THE_VERDICT, type TheLiveRun } from './the_live_runs_claims.ts'
 
 /** The rows this module proves, by the name a failure is reported under. */
 export const THE_OWNER_WATCHED = 'the owner watched read-only'
@@ -49,15 +49,15 @@ export const drawnPlain = (text: string): string => text.replace(ESCAPES, '').re
  * `watched` is every byte the proof's own read-only client was sent, `clients` the session's listing at the ring, and
  * `recorder` the pid of the proof's own client in that listing, which is never the owner's.
  */
-export function whichWatchClaimFails(night: Pick<TheNight, 'builder' | 'package'>, watched: string, clients: string, recorder: string): string | undefined {
+export function whichWatchClaimFails(liveRun: Pick<TheLiveRun, 'builder' | 'package'>, watched: string, clients: string, recorder: string): string | undefined {
   const listed = theClients(clients)
   if (!listed.some((one) => one.pid === recorder)) return `${THE_OWNER_WATCHED}: the proof's own client (pid ${recorder}) is not in the listing, so it cannot be told from the owner's`
   const owners = listed.filter((one) => one.pid !== recorder)
-  if (owners.length === 0) return `${THE_OWNER_WATCHED}: no client but the proof's own was attached to ${night.builder}'s session at the ring`
-  if (!owners.some((one) => one.flags.includes(READ_ONLY_FLAG))) return `${THE_OWNER_WATCHED}: no client of the owner's on ${night.builder}'s session is ${READ_ONLY_FLAG}`
-  const ring = `${NOTIFICATION_ESCAPE}i=${notificationIdOf(night.builder)}`
-  if (!watched.includes(ring)) return `${THE_RING_REACHED}: no notification for ${night.builder} in what ${night.builder}'s session sent its clients`
-  const verdict = `VERDICT ${night.package} ${THE_VERDICT}`
-  if (!drawnPlain(watched).includes(drawnPlain(verdict))) return `${THE_VERDICT_WAS_SHOWN}: '${verdict}' was never drawn on ${night.builder}'s session`
+  if (owners.length === 0) return `${THE_OWNER_WATCHED}: no client but the proof's own was attached to ${liveRun.builder}'s session at the ring`
+  if (!owners.some((one) => one.flags.includes(READ_ONLY_FLAG))) return `${THE_OWNER_WATCHED}: no client of the owner's on ${liveRun.builder}'s session is ${READ_ONLY_FLAG}`
+  const ring = `${NOTIFICATION_ESCAPE}i=${notificationIdOf(liveRun.builder)}`
+  if (!watched.includes(ring)) return `${THE_RING_REACHED}: no notification for ${liveRun.builder} in what ${liveRun.builder}'s session sent its clients`
+  const verdict = `VERDICT ${liveRun.package} ${THE_VERDICT}`
+  if (!drawnPlain(watched).includes(drawnPlain(verdict))) return `${THE_VERDICT_WAS_SHOWN}: '${verdict}' was never drawn on ${liveRun.builder}'s session`
   return undefined
 }
