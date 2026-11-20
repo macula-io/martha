@@ -808,7 +808,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [REFRESH_THIS_SESSION]: async (args) => theRefreshAskedOf(places, args),
     [VERIFY_RANGE_TOOL.name]: (args) =>
       actingOn(theRangeACallNames(args), async (on, asked) =>
-        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), { member: places.member, declaration: on.settings }, asked)),
+        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), asked)),
     [LAND_BATCH_TOOL.name]: (args) =>
       actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry)),
     [FAST_FORWARD_TOOL.name]: (args) =>
