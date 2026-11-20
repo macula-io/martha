@@ -13,6 +13,11 @@
 
 import { dirname, join } from 'node:path'
 
+import { captured, fileOf, type EngineSource } from './read_an_engines_source.ts'
+import { checkoutSkillRootsIn, SKILL_ROOT_PLACES, type CheckoutSkillRoots } from './the_checkout_skill_roots_in_its_source.ts'
+export type { EngineSource } from './read_an_engines_source.ts'
+export { CHECKOUT_ROOT_CARRIERS, SKILL_ROOT_READERS, WORKING_DIRECTORY_AS_THE_ROOT, type CheckoutSkillRoots } from './the_checkout_skill_roots_in_its_source.ts'
+
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, vocabularyOf, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
 /** One platform extension the engine declares, by the key its config switches it with (martha#541 trial, finding 4). */
@@ -45,8 +50,16 @@ export interface EngineFacts {
   readonly platform_extensions: readonly PlatformExtension[]
   /** The answers the engine's ACP server offers a client for a tool call, as their wire ids, in its order. */
   readonly permission_options: readonly string[]
-  /** The OpenAI provider: its name, the settings it reads, and the path it posts to under a host. */
-  readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string }
+  /**
+   * The OpenAI provider: its name, the settings it reads, the path it posts to under a host, and the settings it reads
+   * as secrets (#541 package A): those come from the environment or the secret storage, never from the config file.
+   */
+  readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string; readonly secrets: readonly string[] }
+  /**
+   * Where the engine keeps secrets when its keyring is off (#541 package A): the config setting that switches the
+   * system keyring off, and the file beside the config file the secrets are then read from.
+   */
+  readonly secret_storage: SecretStorage
   /** The model names the delegate tool takes: closed when its schema lists them, open when it takes any text (#541 package 6). */
   readonly subagent_models: ModelVocabulary
   /**
@@ -80,6 +93,39 @@ export interface EngineFacts {
    */
   readonly shell_tool: string
   /**
+   * Every tool the Developer extension lists, in its order (#541 package A, design G1): the tool's name, the parameters
+   * it is parsed into, and the argument that names what it reads, writes or runs, which is the first text field of those
+   * parameters. The launch's decisions over a member's calls take their names from here, never from a list in the code.
+   */
+  readonly developer_tools: readonly DeveloperTool[]
+  /**
+   * How the Developer extension's file tools turn the path they are given into the file they touch (#541 package A,
+   * design r=4 R3): the launch's guards resolve a member's path the same way, so a path that reaches the owner's file
+   * for the engine reaches it for the guard too.
+   */
+  readonly path_resolution: PathResolution
+  /**
+   * The store the engine keeps a session's row in and loads again before every step (#541 package A, design r=5 R1'):
+   * the file under its data folder, the journal mode it opens the file in, the columns of the sessions table, and the
+   * keys its extension states are stored under in `extension_data`. The launch reads the gate fields of its row back
+   * by these names, so a column the engine renames turns the drift check red rather than a read-back that reads nothing.
+   */
+  readonly session_store: SessionStore
+  /**
+   * The calls the engine's approve mode runs without asking the client (#541 package A, design r=6 R1''): the user
+   * permission levels its approve arm turns into an allow, and the function whose `false` keeps a call out of the
+   * inspection, which the approval then allows unasked. The launch stops a member on any call it was not asked about,
+   * so these are what that stop catches; a new way to go unasked turns the drift check red.
+   */
+  readonly approve_mode_unasked: ApproveModeUnasked
+  /**
+   * The folders the engine keeps for itself (#541 package A, design G1 and r=4 R1), by the kind its paths module names
+   * them with: under a path root, the folders it joins to the root; without one, where the platform layout puts them,
+   * as the layout's own function or a folder under the home. The launch refuses a member's write into either, so a
+   * folder the engine moves turns the drift check red rather than a guard that watches the old place.
+   */
+  readonly engine_folders: EngineFolders
+  /**
    * The places in the checkout it starts in that the engine reads skills and plugins from (martha#614): its skill
    * folders, its project plugin folder (every child of it is a plugin, enabled unless a settings file says otherwise),
    * and the two project settings files that switch plugins. The gate reads its families from these, so a folder the
@@ -87,6 +133,64 @@ export interface EngineFacts {
    */
   readonly checkout_skill_roots: CheckoutSkillRoots
 }
+
+/** Each folder kind of the engine: the folders joined to a path root, and the place it takes without one. */
+export interface EngineFolders {
+  readonly under_root: Readonly<Record<string, readonly string[]>>
+  readonly without_root: Readonly<Record<string, EngineFolderWithoutRoot>>
+}
+
+/** A folder the engine takes without a path root: the platform layout's own folder of a kind, or a folder under the home. */
+export type EngineFolderWithoutRoot = { readonly layout: string } | { readonly home: readonly string[] }
+
+/** What approve mode runs unasked: the user permission levels that allow, and the filter that lets an uninspected call run. */
+export interface ApproveModeUnasked {
+  readonly user_permissions: readonly string[]
+  readonly unadvertised: string
+}
+
+/** The engine's session store: its file, its journal mode, its sessions table's columns, and its extension state keys. */
+export interface SessionStore {
+  readonly file: string
+  readonly journal_mode: string
+  readonly table: string
+  readonly columns: readonly string[]
+  readonly extension_states: readonly string[]
+}
+
+/**
+ * The engine's `resolve_path`: an absolute path used as given; a relative one joined to the first of `bases` there is
+ * (the session's working directory, the process's, then `.`); whether the text is trimmed first, and whether a `~` is
+ * read as the home folder.
+ */
+export interface PathResolution {
+  readonly absolute: 'as_given'
+  readonly bases: readonly string[]
+  readonly trims: boolean
+  readonly expands_home: boolean
+}
+
+/** One tool of the Developer extension: its name, its parameters, the argument that names its file, command or source, and the hints it is annotated with. */
+export interface DeveloperTool {
+  readonly name: string
+  readonly params: string
+  readonly argument: string
+  readonly hints: DeveloperToolHints
+}
+
+/**
+ * What the engine annotates one of its tools with (#541 package A, design G1): whether it only reads, whether it may
+ * change what it touches, and whether it reaches past the machine. The launch places a tool's result by these, the
+ * engine's own words, so no tool's name is typed in the code.
+ */
+export interface DeveloperToolHints {
+  readonly read_only: boolean
+  readonly destructive: boolean
+  readonly open_world: boolean
+}
+
+/** The hints `ToolAnnotations::from_raw` takes after the title, in its order; the idempotent one is not read. */
+export const ANNOTATION_HINTS = ['read_only', 'destructive', 'idempotent', 'open_world'] as const
 
 /** The engine's naming of a called tool: where a client reads it, and how it splits into an extension's and a tool's own name. */
 export interface ToolNaming {
@@ -107,11 +211,10 @@ export interface StdioExtension {
   readonly disallowed_env: readonly string[]
 }
 
-/** Where a checkout gives the engine skills, each path relative to the checkout (martha#614). */
-export interface CheckoutSkillRoots {
-  readonly skill_folders: readonly string[]
-  readonly plugin_folder: string
-  readonly plugin_settings: readonly string[]
+/** The engine's secret storage with its keyring off: the switch a config file turns it off with, and the file it reads instead. */
+export interface SecretStorage {
+  readonly keyring_switch: string
+  readonly file: string
 }
 
 /** A switch the engine reads with `get_param::<bool>` through a constant: the setting it names, and what an unset one means. */
@@ -126,12 +229,6 @@ export interface ATelemetrySwitch {
   readonly when_unset: boolean
 }
 
-/** Reads one checkout of the engine: a file's text, or undefined when there is none; a directory's entries, or []. */
-export interface EngineSource {
-  readonly read: (path: string) => string | undefined
-  readonly list: (directory: string) => readonly string[]
-}
-
 /** Where in the engine each fact is decided, relative to the checkout. A file that moves makes its part unreadable. */
 export const ENGINE_PLACES = {
   workspace: 'Cargo.toml',
@@ -144,6 +241,8 @@ export const ENGINE_PLACES = {
   platform_extensions: 'crates/goose/src/agents/platform_extensions/mod.rs',
   acp_server: 'crates/goose/src/acp/server.rs',
   openai_provider: 'crates/goose-providers/src/openai.rs',
+  openai_secrets: 'crates/goose/src/providers/openai_def.rs',
+  secret_storage: 'crates/goose/src/config/base.rs',
   delegate_tool: 'crates/goose/src/agents/platform_extensions/summon.rs',
   hint_files: 'crates/goose/src/hints/load_hints.rs',
   stdio_extension: 'crates/goose-agent/src/extension.rs',
@@ -154,27 +253,20 @@ export const ENGINE_PLACES = {
   tool_call_meta: 'crates/goose/src/acp/server/tool_calls/conversion.rs',
   tool_name_parts: 'crates/goose-provider-types/src/conversation/tool_request.rs',
   shell_tool: 'crates/goose/src/agents/platform_extensions/developer/mod.rs',
-  skill_folders: 'crates/goose/src/skills/mod.rs',
-  plugin_discovery: 'crates/goose/src/plugins/discovery.rs',
-  plugin_skill_dirs: 'crates/goose/src/plugins/mod.rs',
-} as const
-
-/** The function that decides each of a checkout's skill roots, in the file ENGINE_PLACES names for it (martha#614). */
-export const SKILL_ROOT_READERS = {
-  skill_folders: 'all_skill_dirs_with_config',
-  plugin_folder: 'project_plugin_dir',
-  plugin_settings: 'project_settings_path',
+  ...SKILL_ROOT_PLACES,
+  path_resolution: 'crates/goose/src/agents/platform_extensions/developer/edit.rs',
+  session_store: 'crates/goose/src/session/session_manager.rs',
+  extension_states: 'crates/goose/src/session/extension_data.rs',
+  context_relevance: 'crates/goose/src/agents/state_machine/ops_context_relevance.rs',
+  permission_inspector: 'crates/goose/src/permission/permission_inspector.rs',
+  tool_approval: 'crates/goose/src/agents/state_machine/tool_approval.rs',
 } as const
 
 /**
- * The functions a checkout's root is passed through on its way to the plugin skills (martha#614): the plugin skill
- * folders in ENGINE_PLACES.plugin_skill_dirs, and the discovery and the settings loader in ENGINE_PLACES.plugin_discovery.
+ * The folder the Developer extension's files sit in (#541 package A): its tools' parameters are declared across them,
+ * one struct per file or several, so the reader looks in every file there rather than a file of its own.
  */
-export const CHECKOUT_ROOT_CARRIERS = {
-  plugin_skill_dirs: 'enabled_plugin_skill_dirs_with_config',
-  plugin_discovery: 'discover_enabled_plugins_with_config',
-  plugin_settings: 'load_all_settings',
-} as const
+export const DEVELOPER_DIR = 'crates/goose/src/agents/platform_extensions/developer'
 
 /** The function that reads each skills switch, in the file ENGINE_PLACES names for it (martha#839). */
 export const SKILLS_SWITCH_READERS = { skills_advertised: 'skills_advertised', builtin_skills_advertised: 'builtin_skills_advertised' } as const
@@ -212,6 +304,12 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'built-in skills switch', read: (source) => ({ builtin_skills_advertised: skillsSwitchIn(source, 'builtin_skills_advertised') }) },
   { part: 'tool naming', read: (source) => ({ tool_naming: toolNamingIn(source) }) },
   { part: 'shell tool', read: (source) => ({ shell_tool: shellToolIn(source) }) },
+  { part: 'developer tools', read: (source) => ({ developer_tools: developerToolsIn(source) }) },
+  { part: 'path resolution', read: (source) => ({ path_resolution: pathResolutionIn(source) }) },
+  { part: 'session store', read: (source) => ({ session_store: sessionStoreIn(source) }) },
+  { part: 'approve mode unasked', read: (source) => ({ approve_mode_unasked: approveModeUnaskedIn(source) }) },
+  { part: 'engine folders', read: (source) => ({ engine_folders: engineFoldersIn(source) }) },
+  { part: 'secret storage', read: (source) => ({ secret_storage: secretStorageIn(source) }) },
   { part: 'checkout skill roots', read: (source) => ({ checkout_skill_roots: checkoutSkillRootsIn(source) }) },
 ]
 
@@ -221,22 +319,14 @@ export const TOOL_CALL_META = { builder: 'goose_tool_call_meta', maps: ['meta', 
 /** Where the Developer extension names its shell tool: the function that lists its tools, and the parameters the shell's are. */
 export const SHELL_TOOL = { lister: 'get_tools', params: 'ShellParams' } as const
 
+/** The functions of the engine's config module that decide its secret storage with the keyring off (#541 package A). */
+export const SECRET_STORAGE = { switch_in_config: 'keyring_disabled_in_config', switch_value: 'keyring_disabled_value', file: 'secrets_file_path_in' } as const
+
+/** How the engine reads a switched-off keyring's value: a YAML `true` counts, which is what a launch writes. */
+export const A_TRUE_SWITCH_COUNTS = 'value.as_bool().unwrap_or(false)'
+
 /** The two ways Rust's `str` splits once, by the end it splits at. */
 export const SPLITS_ONCE = { first: 'split_once', last: 'rsplit_once' } as const
-
-/** A file the part needs, or a throw that names it. */
-function fileOf(source: EngineSource, path: string): string {
-  const text = source.read(path)
-  if (text === undefined) throw new Error(`no ${path}`)
-  return text
-}
-
-/** The first group `pattern` captures in `text`, or a throw naming what was looked for and where. */
-function captured(text: string, pattern: RegExp, what: string, path: string): string {
-  const found = pattern.exec(text)?.[1]
-  if (found === undefined) throw new Error(`${path} says nothing of ${what}`)
-  return found
-}
 
 function engineNameIn(source: EngineSource): string {
   const path = ENGINE_PLACES.engine_name
@@ -338,7 +428,51 @@ function openaiProviderIn(source: EngineSource): EngineFacts['openai_provider'] 
     name: captured(text, /pub const OPEN_AI_PROVIDER_NAME: &str = "([^"]+)"/, 'the provider name', path),
     settings,
     default_base_path: captured(text, /pub const OPEN_AI_DEFAULT_BASE_PATH: &str = "([^"]+)"/, 'the default base path', path),
+    secrets: openaiSecretsIn(source, settings),
   }
+}
+
+/**
+ * The settings the OpenAI provider reads as secrets (#541 package A), from its one `get_secrets` call: the first named
+ * and the list after it. A second call, a call in another shape, or a secret that is none of the provider's settings
+ * is unreadable, never a shorter list: a secret missed here would be admitted into the config file, where the engine
+ * never reads it.
+ */
+function openaiSecretsIn(source: EngineSource, settings: readonly string[]): readonly string[] {
+  const path = ENGINE_PLACES.openai_secrets
+  const text = fileOf(source, path)
+  const calls = [...text.matchAll(/\.get_secrets\(\s*"([^"]+)",\s*&\[([^\]]*)\]\s*,?\s*\)/g)]
+  const written = text.split('.get_secrets(').length - 1
+  const [call] = calls
+  if (written !== 1 || calls.length !== 1 || call?.[1] === undefined || call[2] === undefined) {
+    throw new Error(`${path} reads secrets ${String(written)} times and ${String(calls.length)} are in a shape this reader knows, not once`)
+  }
+  const others = [...call[2].matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? '')
+  if (call[2].split(',').filter((entry) => entry.trim() !== '').length !== others.length) throw new Error(`${path} lists secrets in a shape this reader does not know`)
+  const secrets = [call[1], ...others]
+  const unknown = secrets.find((secret) => !settings.includes(secret))
+  if (unknown !== undefined) throw new Error(`${path} reads a secret ${unknown} that is none of the provider's settings in ${ENGINE_PLACES.openai_provider}`)
+  return secrets
+}
+
+/** The body of the function `name` in `text`, from its opening brace to the brace that closes it at the start of a line. */
+function bodyOf(text: string, name: string, path: string): string {
+  return captured(text, new RegExp(`fn ${name}\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`), `the function ${name}`, path)
+}
+
+/**
+ * The engine's secret storage with its keyring off (#541 package A): the setting a config file switches the keyring off
+ * with, which must be read through the value function that takes a YAML `true`, and the file the secrets are then read
+ * from beside the config file. A switch read another way is unreadable, never a name a launch writes and the engine ignores.
+ */
+function secretStorageIn(source: EngineSource): SecretStorage {
+  const path = ENGINE_PLACES.secret_storage
+  const text = fileOf(source, path)
+  const inConfig = bodyOf(text, SECRET_STORAGE.switch_in_config, path)
+  const keyring_switch = captured(inConfig, new RegExp(`\\.get\\("([^"]+)"\\)\\.map\\(${SECRET_STORAGE.switch_value}\\)`), 'the setting that switches the keyring off', path)
+  if (!bodyOf(text, SECRET_STORAGE.switch_value, path).includes(A_TRUE_SWITCH_COUNTS)) throw new Error(`${path} no longer reads a true ${keyring_switch} as off in ${SECRET_STORAGE.switch_value}`)
+  const file = captured(bodyOf(text, SECRET_STORAGE.file, path), /^\s*config_dir\.join\("([^"]+)"\)\s*$/, 'the secrets file beside the config file', path)
+  return { keyring_switch, file }
 }
 
 /**
@@ -482,130 +616,172 @@ function shellToolIn(source: EngineSource): string {
   return name
 }
 
-/** The body of `fn <name>(`, up to the first line that closes a top-level item, or a throw naming the function. */
-function functionBody(text: string, name: string, path: string): string {
-  return captured(text, new RegExp(`fn ${name}\\([\\s\\S]*?\\{([\\s\\S]*?)\\n\\}`), `the function ${name}`, path)
+/**
+ * Every tool the Developer extension lists (#541 package A, design G1), in the order its lister gives them: each one's
+ * name and the parameters its schema is built on, which the call dispatch must parse for that same name, and the first
+ * text field of those parameters, found in the one file of the extension's folder that declares them. A tool the
+ * dispatch runs on other parameters, parameters declared in no file or in two, or parameters with no text field are
+ * unreadable, never a tool with a guessed argument: a wrong argument would let a write pass the owner's guards unread.
+ */
+function developerToolsIn(source: EngineSource): readonly DeveloperTool[] {
+  const path = ENGINE_PLACES.shell_tool
+  const text = fileOf(source, path)
+  const listing = captured(text, new RegExp(`fn ${SHELL_TOOL.lister}\\(\\)[^{]*\\{([\\s\\S]*?)\\n {4}\\}`), `the function ${SHELL_TOOL.lister}`, path)
+  const segments = listing.split('Tool::new(').slice(1)
+  const listed = segments.map((segment) => {
+    const found = /^\s*"([^"]+)"\.to_string\(\),[\s\S]*?schema::<(\w+)>/.exec(segment)
+    if (found === null) throw new Error(`${path} lists a tool in ${SHELL_TOOL.lister} in a shape this reader does not know`)
+    return { name: found[1] ?? '', params: found[2] ?? '', hints: hintsOf(segment, found[1] ?? '', path) }
+  })
+  if (listed.length === 0) throw new Error(`${path} lists no tool in ${SHELL_TOOL.lister}`)
+  const files = source.list(DEVELOPER_DIR).filter((name) => name.endsWith('.rs')).map((name) => `${DEVELOPER_DIR}/${name}`)
+  return listed.map(({ name, params, hints }) => {
+    const dispatched = [...text.matchAll(new RegExp(`"${name}"\\s*=>\\s*match\\s+Self::parse_args::<(\\w+)>`, 'g'))].map((found) => found[1] ?? '')
+    if (dispatched.length !== 1 || dispatched[0] !== params) throw new Error(`${path} lists the tool ${name} on ${params} but runs it on ${JSON.stringify(dispatched)}`)
+    return { name, params, argument: firstTextFieldOf(source, files, params), hints }
+  })
 }
 
-/** The path a chain `<base>.join("a").join("b")` builds, as "a/b", or undefined when the text holds no such chain. */
-function joinedFrom(text: string, base: string): string | undefined {
-  const chain = new RegExp(`\\b${base}((?:\\.join\\("[^"]+"\\))+)`).exec(text)?.[1]
-  return chain === undefined ? undefined : [...chain.matchAll(/\.join\("([^"]+)"\)/g)].map((found) => found[1] ?? '').join('/')
+/** The hints one listed tool is annotated with: each one `Some(true)` or `Some(false)`, or the tool is unreadable by name. */
+function hintsOf(segment: string, name: string, path: string): DeveloperToolHints {
+  const raw = /\.annotate\(ToolAnnotations::from_raw\(\s*Some\("[^"]*"\.to_string\(\)\),((?:\s*Some\((?:true|false)\),){4})\s*\)\)/.exec(segment)?.[1]
+  if (raw === undefined) throw new Error(`${path} lists the tool ${name} without the hints this reader knows`)
+  const said = [...raw.matchAll(/Some\((true|false)\)/g)].map((found) => found[1] === 'true')
+  const hint = (which: (typeof ANNOTATION_HINTS)[number]): boolean => said[ANNOTATION_HINTS.indexOf(which)] === true
+  return { read_only: hint('read_only'), destructive: hint('destructive'), open_world: hint('open_world') }
 }
+
+/** The first `pub <field>: String` of the struct `params`, in the one file of `files` that declares it. */
+function firstTextFieldOf(source: EngineSource, files: readonly string[], params: string): string {
+  const declaring = files.filter((file) => new RegExp(`pub struct ${params}\\s*\\{`).test(source.read(file) ?? ''))
+  const [file] = declaring
+  if (declaring.length !== 1 || file === undefined) throw new Error(`${DEVELOPER_DIR} declares ${params} in ${String(declaring.length)} files, not one`)
+  const body = captured(fileOf(source, file), new RegExp(`pub struct ${params}\\s*\\{([^}]*)\\}`), `the struct ${params}`, file)
+  return captured(body, /pub (\w+): String,/, `the first text field of ${params}`, file)
+}
+
+/** The function the Developer extension's file tools resolve a path with (#541 package A). */
+export const PATH_RESOLVER = 'resolve_path'
+
+/** The places a relative path may be joined to, by the words the engine's resolver names them with, in no order. */
+export const RESOLUTION_BASES = { 'working_dir': 'working_dir', 'std::env::current_dir()': 'current_dir', 'PathBuf::from(".")': '.' } as const
 
 /**
- * A checkout's skill roots (martha#614), each from the function that decides it: the folders
- * `all_skill_dirs_with_config` joins onto the working directory, the folder `project_plugin_dir` joins onto the project
- * root, and the two files `project_settings_path` builds there. A shape this reader does not know is a throw that names
- * the function, never a shorter list.
+ * The engine's path resolution (#541 package A, design r=4 R3), from the body of `resolve_path`: an absolute path must be
+ * returned as given, the relative one is joined to the places the chain after `else` names, in its order, and the
+ * body is searched for a trim and a `~`. A body in any other shape is unreadable, never a resolution the guard assumes.
  */
-function checkoutSkillRootsIn(source: EngineSource): CheckoutSkillRoots {
-  pluginRootsCarriedIn(source)
-  return { skill_folders: skillFoldersIn(source), ...pluginRootsIn(source) }
-}
-
-/** A use of a name that a reader accounts for: its shape, and whether it stands exactly once or any number of times. */
-interface AKnownUse {
-  readonly shape: string
-  readonly once: boolean
-}
-
-const once = (shape: string): AKnownUse => ({ shape, once: true })
-const anyNumberOf = (shape: string): AKnownUse => ({ shape, once: false })
-
-/** How often `name` stands in `text` as a name of its own: never as part of a longer name, nor as a field after a dot. */
-const usesOf = (text: string, name: string): number => [...text.matchAll(new RegExp(`(?<![.\\w])${name}\\b`, 'g'))].length
-
-/**
- * Every use of the checkout's root `name` in the body of `fn`, accounted for by `known`, each `once` shape standing
- * exactly once. A use anywhere else is a throw naming the function: a folder built from the root there is a skill root
- * this reader would never list, so the gate would never ask for it (martha#614).
- */
-function everyUseKnown(body: string, name: string, known: readonly AKnownUse[], fn: string, path: string): void {
-  let rest = body
-  for (const { shape, once: standsOnce } of known) {
-    const found = [...rest.matchAll(new RegExp(shape, 'g'))].length
-    if (standsOnce && found !== 1) throw new Error(`${path} uses ${name} in ${fn} ${String(found)} times as /${shape}/, and this reader knows it once`)
-    rest = rest.replace(new RegExp(shape, 'g'), '')
+function pathResolutionIn(source: EngineSource): PathResolution {
+  const path = ENGINE_PLACES.path_resolution
+  const body = bodyOf(fileOf(source, path), PATH_RESOLVER, path)
+  const flat = body.replace(/\s+/g, ' ').trim()
+  if (!/if path\.is_absolute\(\) \{ path \} else \{/.test(flat)) throw new Error(`${path} ${PATH_RESOLVER} does not return an absolute path as given`)
+  const chain = captured(flat, /\} else \{ (.*)\.join\(path\) \}$/, `the places ${PATH_RESOLVER} joins a relative path to`, path)
+  const named = Object.keys(RESOLUTION_BASES).map((words) => ({ words, at: chain.indexOf(words) })).filter(({ at }) => at >= 0).sort((a, b) => a.at - b.at)
+  if (named.length === 0 || !chain.startsWith(named[0]?.words ?? '')) throw new Error(`${path} ${PATH_RESOLVER} joins a relative path to ${chain}, which names no place this reader knows first`)
+  return {
+    absolute: 'as_given',
+    bases: named.map(({ words }) => RESOLUTION_BASES[words as keyof typeof RESOLUTION_BASES]),
+    trims: /\.trim/.test(body),
+    expands_home: /"~|'~'|home_dir/.test(body),
   }
-  const left = usesOf(rest, name)
-  if (left > 0) throw new Error(`${path} uses ${name} in ${fn} ${String(left)} more times than this reader knows, so a skill root built from it there would never be listed`)
-}
-
-/** The parameter `fn` takes the checkout's root in: its first, an `Option<&Path>`. */
-const rootParameterOf = (text: string, fn: string, path: string): string => captured(text, new RegExp(`fn ${fn}\\(\\s*(\\w+): Option<&Path>`), `the root ${fn} takes`, path)
-
-/** The name `if let Some(<name>) = <root> {` binds the root to in the body of `fn`. */
-const boundFrom = (body: string, root: string, fn: string, path: string): string => captured(body, new RegExp(`if let Some\\((\\w+)\\) = ${root} \\{`), `the name ${fn} binds ${root} to`, path)
-
-/**
- * The checkout's root on its way to the plugin skills, every use accounted for (martha#614): the plugin skill folders
- * pass it only to the discovery; the discovery only to the settings loader and, bound, to project_plugin_dir; the loader
- * only, bound, to the two settings files. Any other use is a throw, never a root left unlisted. A closure the discovery
- * gives a plugin's own folder under the same name rebinds it, and is no use of the root.
- */
-function pluginRootsCarriedIn(source: EngineSource): void {
-  const carriers = ENGINE_PLACES.plugin_skill_dirs
-  const carrierText = fileOf(source, carriers)
-  const carrier = CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs
-  const finder = CHECKOUT_ROOT_CARRIERS.plugin_discovery
-  const loader = CHECKOUT_ROOT_CARRIERS.plugin_settings
-  const carried = rootParameterOf(carrierText, carrier, carriers)
-  everyUseKnown(functionBody(carrierText, carrier, carriers), carried, [once(`\\b${finder}\\(${carried}, config\\)`)], carrier, carriers)
-
-  const plugins = ENGINE_PLACES.plugin_discovery
-  const discovery = fileOf(source, plugins)
-  const found = rootParameterOf(discovery, finder, plugins)
-  const finderBody = functionBody(discovery, finder, plugins)
-  const root = boundFrom(finderBody, found, finder, plugins)
-  everyUseKnown(finderBody, found, [once(`\\b${loader}\\(${found}\\)`), once(`if let Some\\(${root}\\) = ${found} \\{`)], finder, plugins)
-  const rebound = `\\|\\((\\w+), ${root}\\)\\|\\s*DiscoveredPlugin \\{\\s*\\1,\\s*${root},`
-  everyUseKnown(finderBody, root, [once(`if let Some\\(${root}\\)`), once(`\\b${SKILL_ROOT_READERS.plugin_folder}\\(${root}\\)`), anyNumberOf(rebound)], finder, plugins)
-
-  const loaded = rootParameterOf(discovery, loader, plugins)
-  const loaderBody = functionBody(discovery, loader, plugins)
-  const settingsRoot = boundFrom(loaderBody, loaded, loader, plugins)
-  everyUseKnown(loaderBody, loaded, [once(`if let Some\\(${settingsRoot}\\) = ${loaded} \\{`)], loader, plugins)
-  const settingsFile = (local: boolean): AKnownUse => once(`\\b${SKILL_ROOT_READERS.plugin_settings}\\(${settingsRoot}, ${String(local)}\\)`)
-  everyUseKnown(loaderBody, settingsRoot, [once(`if let Some\\(${settingsRoot}\\)`), settingsFile(false), settingsFile(true)], loader, plugins)
 }
 
 /**
- * The folders `all_skill_dirs_with_config` joins onto the working directory, or a throw naming the function. Every use
- * of the working directory is accounted for: the one `if let` that binds it, and the call that hands it to the plugin
- * skill folders; and every use of its binding is the binding itself or an entry of the list. A folder pushed from it
- * anywhere else is a throw, never a list that leaves it out.
+ * The engine's session store (#541 package A, design r=5 R1''), read from its session manager: the file named by
+ * `DB_NAME`, the one journal mode its pool is opened in, and the columns the schema creates the sessions table with; and
+ * the keys its extension states are stored under, each `name.version`, from every `ExtensionState` the session module
+ * declares and the turn notes the context relevance step keeps. A second journal mode, no sessions table, or a state
+ * declared in another shape is unreadable, never a store the read-back half reads.
  */
-function skillFoldersIn(source: EngineSource): readonly string[] {
-  const skills = ENGINE_PLACES.skill_folders
-  const reader = SKILL_ROOT_READERS.skill_folders
-  const text = fileOf(source, skills)
-  const dirs = functionBody(text, reader, skills)
-  const root = rootParameterOf(text, reader, skills)
-  const workingDir = boundFrom(dirs, root, reader, skills)
-  const list = `for path in \\[\\s*${workingDir}\\b[^\\]]*\\]`
-  const listed = captured(dirs, new RegExp(`if let Some\\(${workingDir}\\) = ${root} \\{\\s*(${list})`), `the skill folders ${reader} reads from ${root}`, skills)
-  everyUseKnown(dirs, root, [once(`if let Some\\(${workingDir}\\) = ${root} \\{`), once(`\\b${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}\\(${root}, config\\)`)], reader, skills)
-  everyUseKnown(dirs, workingDir, [once(`if let Some\\(${workingDir}\\)`), once(list)], reader, skills)
-  const entries = listed.slice(listed.indexOf('[') + 1, listed.lastIndexOf(']')).split(',').filter((entry) => entry.trim() !== '')
-  const skill_folders = entries.map((entry) => joinedFrom(entry, workingDir)).filter((folder) => folder !== undefined)
-  if (skill_folders.length !== entries.length) throw new Error(`${skills} lists ${String(entries.length)} skill folders and ${String(skill_folders.length)} are in a shape this reader knows`)
-  return skill_folders
+function sessionStoreIn(source: EngineSource): SessionStore {
+  const path = ENGINE_PLACES.session_store
+  const text = fileOf(source, path)
+  const modes = [...text.matchAll(/\.journal_mode\(sqlx::sqlite::SqliteJournalMode::(\w+)\)/g)].map((found) => found[1] ?? '')
+  const [journal_mode] = modes
+  if (modes.length !== 1 || journal_mode === undefined) throw new Error(`${path} opens its store in ${String(modes.length)} journal modes, not one`)
+  // The one table the engine keeps a row per session in, by the name its schema creates it under: said here only.
+  const found = /CREATE TABLE IF NOT EXISTS (sessions) \(([^;]*?)\n\s*\)\n/.exec(text)
+  const [, table, schema] = found ?? []
+  if (table === undefined || schema === undefined) throw new Error(`no sessions table in ${path}`)
+  const columns = schema.split(',').map((line) => line.trim().split(/\s+/)[0] ?? '').filter((column) => column !== '')
+  return {
+    file: captured(text, /pub const DB_NAME: &str = "([^"]+)";/, 'the store file', path),
+    journal_mode,
+    table,
+    columns,
+    extension_states: [...extensionStatesIn(source), contextRelevanceIn(source)],
+  }
 }
 
-/** The folder `project_plugin_dir` joins onto the project root and the two files `project_settings_path` builds there. */
-function pluginRootsIn(source: EngineSource): Pick<CheckoutSkillRoots, 'plugin_folder' | 'plugin_settings'> {
-  const plugins = ENGINE_PLACES.plugin_discovery
-  const discovery = fileOf(source, plugins)
-  const pluginBody = functionBody(discovery, SKILL_ROOT_READERS.plugin_folder, plugins)
-  const plugin_folder = joinedFrom(pluginBody, 'project_root')
-  if (plugin_folder === undefined) throw new Error(`${plugins} says nothing of the folder ${SKILL_ROOT_READERS.plugin_folder} joins`)
-  const settingsBody = functionBody(discovery, SKILL_ROOT_READERS.plugin_settings, plugins)
-  const [, local, shared] = /let file = if local \{\s*"([^"]+)"\s*\} else \{\s*"([^"]+)"\s*\};/.exec(settingsBody) ?? []
-  const folder = /project_root((?:\.join\("[^"]+"\))+)\.join\(file\)/.exec(settingsBody)?.[1]
-  if (local === undefined || shared === undefined || folder === undefined) throw new Error(`${plugins} says nothing of the files ${SKILL_ROOT_READERS.plugin_settings} builds`)
-  const settingsFolder = joinedFrom(`project_root${folder}`, 'project_root') ?? ''
-  return { plugin_folder, plugin_settings: [`${settingsFolder}/${shared}`, `${settingsFolder}/${local}`] }
+/** Every `ExtensionState` the session module declares, as the key it is stored under. */
+function extensionStatesIn(source: EngineSource): readonly string[] {
+  const path = ENGINE_PLACES.extension_states
+  const text = fileOf(source, path)
+  const declared = text.split('impl ExtensionState for ').length - 1
+  const read = [...text.matchAll(/impl ExtensionState for \w+ \{\s*const EXTENSION_NAME: &'static str = "([^"]+)";\s*const VERSION: &'static str = "([^"]+)";/g)].map((found) => `${found[1] ?? ''}.${found[2] ?? ''}`)
+  if (declared === 0 || read.length !== declared) throw new Error(`${path} declares ${String(declared)} extension states and ${String(read.length)} are in a shape this reader knows`)
+  return read
+}
+
+/** The key the context relevance step stores its turn notes under. */
+function contextRelevanceIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.context_relevance
+  const text = fileOf(source, path)
+  const name = captured(text, /pub\(super\) const NAME: &str = "([^"]+)";/, 'the context relevance state name', path)
+  return `${name}.${captured(text, /pub\(super\) const VERSION: &str = "([^"]+)";/, 'the context relevance state version', path)}`
+}
+
+/**
+ * What the engine's approve mode runs unasked (#541 package A, design r=6 R1''), read from the arm of the permission
+ * check that approve mode shares with smart approve, and from the approval that filters calls before the check. The arm
+ * allows a call where a user permission level says so, or where the condition names smart approve alone; any other
+ * allow there is a way to go unasked this reader does not know, so the part is unreadable. The approval must still
+ * allow every call it filtered out, or the filter is not a way to go unasked and the part is unreadable too.
+ */
+function approveModeUnaskedIn(source: EngineSource): ApproveModeUnasked {
+  const inspector = ENGINE_PLACES.permission_inspector
+  const arm = captured(fileOf(source, inspector), /GooseMode::Approve \| GooseMode::SmartApprove => \{([\s\S]*?)\n\s*let reason/, 'the arm approve mode runs', inspector)
+  const user_permissions = [...arm.matchAll(/PermissionLevel::(\w+) => InspectionAction::Allow\b/g)].map((found) => snakeCase(found[1] ?? ''))
+  const smartOnly = [...arm.matchAll(/else if goose_mode == GooseMode::SmartApprove\b[^{]*\{\s*InspectionAction::Allow\b/g)].length
+  const unknown = [...arm.matchAll(/InspectionAction::Allow\b/g)].length - user_permissions.length - smartOnly
+  if (unknown !== 0) throw new Error(`${inspector} allows calls in approve mode ${String(unknown)} ways this reader does not know`)
+  const approval = ENGINE_PLACES.tool_approval
+  const text = fileOf(source, approval)
+  const unadvertised = captured(text, /\.filter\(\|request\| (\w+)\(messages, request\)\)/, 'the filter before the check', approval)
+  if (!/if to_inspect\.is_empty\(\) \{\s*return Ok\(requests\.iter\(\)\.map\(\|_\| ApprovalDecision::Allow\)/.test(text)) throw new Error(`${approval} no longer allows the calls ${unadvertised} keeps out of the check`)
+  return { user_permissions, unadvertised }
+}
+
+/** The function of the paths module that picks each folder, and the arm a path root takes. */
+export const FOLDER_PICKER = { function: 'get_dir', with_root: 'if let Some(base) = Self::path_root()' } as const
+
+/**
+ * The engine's own folders (#541 package A), read from the paths module's `get_dir`: the arm a path root takes joins
+ * each kind to the root, and the arm after its `else` takes the platform layout's folder or one under the home. A kind
+ * the two arms do not both name, or a line in another shape, is unreadable, never a folder the guard leaves out.
+ */
+function engineFoldersIn(source: EngineSource): EngineFolders {
+  const path = ENGINE_PLACES.paths
+  const body = bodyOf(fileOf(source, path), FOLDER_PICKER.function, path)
+  const at = body.indexOf(FOLDER_PICKER.with_root)
+  const otherwise = body.indexOf('} else {', at)
+  if (at < 0 || otherwise < 0) throw new Error(`${path} ${FOLDER_PICKER.function} takes no path root arm and another`)
+  const kinds = (arm: string): ReadonlyArray<readonly [string, string]> => [...arm.matchAll(/DirType::(\w+) => ([^,]+),/g)].map((found) => [snakeCase(found[1] ?? ''), (found[2] ?? '').replace(/\s+/g, '')])
+  const joined = (chain: string): readonly string[] => [...chain.matchAll(/\.join\("([^"]+)"\)/g)].map((found) => found[1] ?? '')
+  const under_root = Object.fromEntries(kinds(body.slice(at, otherwise)).map(([kind, chain]) => {
+    if (!new RegExp(`^base(\\.join\\("[^"]+"\\))+$`).test(chain)) throw new Error(`${path} puts ${kind} under a path root as ${chain}, in a shape this reader does not know`)
+    return [kind, joined(chain)]
+  }))
+  const without_root = Object.fromEntries(kinds(body.slice(otherwise)).map(([kind, chain]): readonly [string, EngineFolderWithoutRoot] => {
+    const layout = /^strategy\.(\w+)\(\)(\.unwrap_or\(strategy\.\w+\(\)\))?$/.exec(chain)?.[1]
+    if (layout !== undefined && layout !== 'home_dir') return [kind, { layout }]
+    if (/^strategy\.home_dir\(\)(\.join\("[^"]+"\))+$/.test(chain)) return [kind, { home: joined(chain) }]
+    throw new Error(`${path} puts ${kind} without a path root as ${chain}, in a shape this reader does not know`)
+  }))
+  const named = (folders: object): string => Object.keys(folders).sort().join(' ')
+  if (Object.keys(under_root).length === 0 || named(under_root) !== named(without_root)) throw new Error(`${path} names ${named(under_root)} under a path root and ${named(without_root)} without one`)
+  return { under_root, without_root }
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */

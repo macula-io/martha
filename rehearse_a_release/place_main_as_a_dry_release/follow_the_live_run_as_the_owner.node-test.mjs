@@ -1,6 +1,6 @@
-// The owner's follow script, run for real (macula-io/martha#639): follow_the_night_as_the_owner.cases.sh gives it a
-// run folder and a terminal of its own, and proves whether a command ran. Night 1 found two ways it ran one it must
-// not: from a night that had already ended, and unconfirmed, with no terminal to read Enter from. Review found a third
+// The owner's follow script, run for real (macula-io/martha#639): follow_the_live_run_as_the_owner.cases.sh gives it a
+// run folder and a terminal of its own, and proves whether a command ran. Live run 1 found two ways it ran one it must
+// not: from a live run that had already ended, and unconfirmed, with no terminal to read Enter from. Review found a third
 // (the threat model on #639): proof.log carries the members' text, so a member could print a line the script took for
 // the owner's command. Each fix has its cases, and each case here is also run against a copy of the script with that
 // fix taken out: the copy must fail exactly that case, so a case that could pass without its fix goes red.
@@ -20,8 +20,8 @@ import { fileURLToPath } from 'node:url'
 import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const SCRIPT = join(HERE, 'follow_the_night_as_the_owner.sh')
-const CASES = join(HERE, 'follow_the_night_as_the_owner.cases.sh')
+const SCRIPT = join(HERE, 'follow_the_live_run_as_the_owner.sh')
+const CASES = join(HERE, 'follow_the_live_run_as_the_owner.cases.sh')
 const SCRIPT_TEXT = readFileSync(SCRIPT, 'utf8')
 /** The proof the script reads its words from, two folders up from it, as a mutant's copy must find it too. */
 const PROOF_DIR = join(HERE, '..', '..', 'prove_a_clean_install_in_a_throwaway_container')
@@ -44,10 +44,10 @@ test('every case holds on the owner\'s follow script', { timeout: RUN_WITHIN_MS 
  * `killedBy` is the case that must then fail.
  */
 const MUTANTS = [
-  { name: 'the end is not read before a command is offered', line: 'a command from a night that has ended is never offered', next: true, to: '', killedBy: 'ended_offers_no_command' },
+  { name: 'the end is not read before a command is offered', line: 'a command from a live run that has ended is never offered', next: true, to: '', killedBy: 'ended_offers_no_command' },
   { name: 'no terminal is not refused', line: 'if ! { [ -t 0 ] && [ -t 1 ]; }; then', to: 'if false; then', killedBy: 'no_terminal' },
   { name: 'a failed read still runs the command', line: 'if ! read -r -p "${PROMPT}" _; then', to: '    read -r -p "${PROMPT}" _; if false; then', killedBy: 'read_fails_runs_nothing' },
-  { name: 'the end is not read again after Enter', line: 'The night may have ended while the prompt waited.', next: true, to: '', killedBy: 'ended_while_the_prompt_waited' },
+  { name: 'the end is not read again after Enter', line: 'The live run may have ended while the prompt waited.', next: true, to: '', killedBy: 'ended_while_the_prompt_waited' },
   {
     name: 'the commands are taken from proof.log, as the script before the threat model took them',
     line: 'COMMANDS="$(from_run_txt owner_commands)"',
@@ -58,21 +58,21 @@ const MUTANTS = [
   { name: 'what runs on the host is not held to one quoted word', line: "echo 'what it runs on the host is not one quoted word'", to: '', killedBy: 'more_than_one_word_is_refused' },
   { name: 'the host is taken from run.txt, not from the owner', line: '[ "${RUN_HOST}" = "${HOST}" ]', to: 'HOST="${RUN_HOST}"', killedBy: 'run_txt_names_another_host' },
   { name: 'a host may start with -, as the pattern before r=2 let it', line: 'HOST_NAME=$', to: "HOST_NAME=$'^[A-Za-z0-9._@-]+$'", killedBy: 'a_host_starting_with_a_dash_is_refused' },
-  { name: 'any command of four words is taken for podman exec -it in the night\'s container', line: "in the night's container\"; return 1; }", to: '  [[ "${inner}" =~ ^[^\\ ]*\\ [^\\ ]*\\ [^\\ ]*\\ [^\\ ]*\\ (.*)$ ]] || return 1', killedBy: 'another_container_is_refused' },
+  { name: 'any command of four words is taken for podman exec -it in the live run\'s container', line: "in the live run's container\"; return 1; }", to: '  [[ "${inner}" =~ ^[^\\ ]*\\ [^\\ ]*\\ [^\\ ]*\\ [^\\ ]*\\ (.*)$ ]] || return 1', killedBy: 'another_container_is_refused' },
   { name: 'anything is run in the container', line: 'is not the sign-in or the attach', to: '  return 0', killedBy: 'not_the_sign_in_or_the_attach_is_refused' },
-  { name: 'the sign-in is not one of the shapes', line: "=~ ^\\'sh\\'", to: '', killedBy: 'live_night_runs_the_command' },
+  { name: 'the sign-in is not one of the shapes', line: "=~ ^\\'sh\\'", to: '', killedBy: 'the_live_run_runs_the_command' },
   { name: "the attach is not one of the shapes", line: "'attach' '-t' '${BUILDER}'\" ] && { echo", to: "", killedBy: "the_attach_runs" },
   { name: "the watch is not one of the shapes", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "", killedBy: "the_watch_runs" },
-  { name: "the watch takes any member", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '${WATCH_FLAG}' '-t' '\"*\"'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
-  { name: "the attach takes any member", line: "'attach' '-t' '${BUILDER}'\" ] && { echo", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '-t' '\"*\"'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
-  { name: "the watch flag may carry more letters", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' '${WATCH_FLAG}\"*\"' '-t' '${BUILDER}'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
-  { name: "any option of the attach is taken for the watch", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${NIGHT_TMUX_SOCKET}' 'attach' \"*\"'-t' '${BUILDER}'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
+  { name: "the watch takes any member", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${LIVE_RUN_TMUX_SOCKET}' 'attach' '${WATCH_FLAG}' '-t' '\"*\"'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
+  { name: "the attach takes any member", line: "'attach' '-t' '${BUILDER}'\" ] && { echo", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${LIVE_RUN_TMUX_SOCKET}' 'attach' '-t' '\"*\"'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
+  { name: "the watch flag may carry more letters", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${LIVE_RUN_TMUX_SOCKET}' 'attach' '${WATCH_FLAG}\"*\"' '-t' '${BUILDER}'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
+  { name: "any option of the attach is taken for the watch", line: "'${WATCH_FLAG}' '-t' '${BUILDER}'\" ] && return 0", to: "  [[ \"${rest}\" == \"'tmux' '-L' '${LIVE_RUN_TMUX_SOCKET}' 'attach' \"*\"'-t' '${BUILDER}'\" ]] && return 0", killedBy: "an_attach_option_is_refused" },
   { name: 'the yes is not said to be a speed bump', line: 'printf \'   %s\\n\' "${SPEED_BUMP}"', to: '', killedBy: 'the_yes_says_it_is_a_speed_bump' },
   { name: 'the speed bump is said before every command', line: 'printf \'   %s\\n\' "${SPEED_BUMP}"', to: '    printf \'   %s\\n\' "${SPEED_BUMP}"', killedBy: 'the_yes_says_it_is_a_speed_bump' },
   { name: 'the count of whole lines says a missing file aloud, as before r=2', line: 'complete="$(', to: '  complete="$(wc -l < "${COMMANDS}" 2> /dev/null || echo 0)"', killedBy: 'the_commands_file_not_there_yet' },
-  { name: 'every ended night says it passed', line: 'if [ -z "${why}" ]', to: '  if true; then', killedBy: 'a_failed_night_says_it_did_not_pass' },
-  { name: 'no ended night says it passed', line: 'if [ -z "${why}" ]', to: '  if false; then', killedBy: 'a_dry_pass_says_it_passed' },
-  { name: 'an interrupted night with a dry pass code passes', line: 'if [ -z "${why}" ]', to: '  if [ "${proof_exit}" = "${dry_passed}" ]; then', killedBy: 'an_interrupted_night_did_not_pass' },
+  { name: 'every ended live run says it passed', line: 'if [ -z "${why}" ]', to: '  if true; then', killedBy: 'a_failed_live_run_says_it_did_not_pass' },
+  { name: 'no ended live run says it passed', line: 'if [ -z "${why}" ]', to: '  if false; then', killedBy: 'a_dry_pass_says_it_passed' },
+  { name: 'an interrupted live run with a dry pass code passes', line: 'if [ -z "${why}" ]', to: '  if [ "${proof_exit}" = "${dry_passed}" ]; then', killedBy: 'an_interrupted_live_run_did_not_pass' },
 ]
 
 /**
@@ -96,7 +96,7 @@ for (const mutant of MUTANTS) {
       const folder = join(dir, basename(dirname(HERE)), basename(HERE))
       mkdirSync(folder, { recursive: true })
       symlinkSync(PROOF_DIR, join(dir, basename(PROOF_DIR)))
-      const copy = join(folder, 'follow_the_night_as_the_owner.sh')
+      const copy = join(folder, 'follow_the_live_run_as_the_owner.sh')
       writeFileSync(copy, mutated(mutant))
       const run = runTheCases(copy, [mutant.killedBy])
       assert.equal(run.status, 1, `${run.stdout}${run.stderr}`)

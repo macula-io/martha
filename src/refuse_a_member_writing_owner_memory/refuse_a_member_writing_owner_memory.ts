@@ -96,8 +96,8 @@ import { basename, dirname, join, normalize, relative, resolve, sep } from 'node
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { USER_SETTINGS_FILE, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
-import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
-import { FILE_ARGUMENTS } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { CLAUDE_CODE_FILE_TOOLS, WHOLE_FILE_TOOL, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
+import type { HostFileTools } from '../host_contract/host_contract.ts'
 import { HOST_TRUST_RECORD_FILE } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import type { ProtectedConfigPlaces } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
@@ -105,9 +105,6 @@ import { CONFIG, whatALaterGitRunReads, type WhatALaterGitRunReads } from '../fi
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import type { PathProbe } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-
-/** The file tools a member writes a file with. */
-export const FILE_WRITING_TOOLS = [WHOLE_FILE_TOOL, EDIT_TOOL, 'MultiEdit', NOTEBOOK_EDIT_TOOL] as const
 
 /** The settings key that names the folder memory lives in. */
 export const MEMORY_DIRECTORY_KEY = 'autoMemoryDirectory'
@@ -123,6 +120,8 @@ const OWNER_RULES = 'rules'
 export interface DeniedPlace {
   readonly what: string
   readonly issue: string
+  /** Whose sessions load the place as their own, when not the owner's own Claude Code sessions (#541 package A: the owner's own engine). */
+  readonly loaded_by?: string
 }
 
 /**
@@ -936,8 +935,9 @@ export function writesTheOwnersMemory(
   cwd: string,
   home: string,
   host: LaunchHost,
+  tools: HostFileTools,
 ): string | undefined {
-  if (!(FILE_WRITING_TOOLS as readonly string[]).includes(tool)) return undefined
+  if (!tools.writing_tools.includes(tool)) return undefined
   // Read at each call, not at launch: a checkout or a git directory that appears
   // during the session is covered from the next call (martha#168).
   const git = checkoutGitOf(cwd, host)
@@ -947,17 +947,17 @@ export function writesTheOwnersMemory(
   const later = git === undefined ? undefined : whatALaterGitRunReads(git.top, git.dirs, places.git_config_files, home, LINK_HOPS, host)
   const unfollowable = unfollowablePlace(places, git)
   if (unfollowable !== undefined) return unfollowable
-  for (const argument of FILE_ARGUMENTS) {
-    const why = whyTheArgumentIsRefused(input[argument], places, git, later, host, cwd, home)
+  for (const argument of tools.file_arguments) {
+    const why = whyTheArgumentIsRefused(input[argument], places, git, later, host, { cwd, home, resolve: tools.resolve })
     if (why !== undefined) return why
   }
   return undefined
 }
 
 /** Why one argument a file tool is given names a place a member does not write, or undefined when it names none. */
-function whyTheArgumentIsRefused(argument: unknown, places: OwnerMemoryPlaces, git: CheckoutGit | undefined, later: WhatALaterGitRunReads | undefined, host: LaunchHost, cwd: string, home: string): string | undefined {
+function whyTheArgumentIsRefused(argument: unknown, places: OwnerMemoryPlaces, git: CheckoutGit | undefined, later: WhatALaterGitRunReads | undefined, host: LaunchHost, from: { readonly cwd: string; readonly home: string; readonly resolve: HostFileTools['resolve'] }): string | undefined {
   if (typeof argument !== 'string' || argument.trim() === '') return undefined
-  const spelled = asTheHostResolves(argument, cwd, home)
+  const spelled = from.resolve(argument, from.cwd, from.home)
   const end = pathToItsEnd(spelled)
   if (end === undefined) {
     return `${argument} is behind a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder it lands in cannot be told: a member does not write there (martha#136)`
@@ -968,7 +968,7 @@ function whyTheArgumentIsRefused(argument: unknown, places: OwnerMemoryPlaces, g
   if (gitDenial !== undefined) return gitDenial
   const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
   if (place === undefined) return undefined
-  return `${argument} is in ${place.what}, which the owner's own Claude Code sessions load as their own: a member does not write there, so neither its text nor its code reaches a later session unrecorded (${place.issue})`
+  return `${argument} is in ${place.what}, which ${place.loaded_by ?? "the owner's own Claude Code sessions"} load as their own: a member does not write there, so neither its text nor its code reaches a later session unrecorded (${place.issue})`
 }
 
 /**
@@ -1045,7 +1045,7 @@ export function userScopeUnder(home: string): OwnerUserScope {
 export function admitsAWriteNoLaterGitRunReads(probe: PathProbe): boolean {
   const env: Readonly<Record<string, string | undefined>> = { HOME: probe.home }
   const places = ownerMemoryPlaces({ launcher_env: env, member_env: env, home: probe.home, launch_dir: probe.cwd, settings_files: [], user_scope: userScopeUnder(probe.home) })
-  return writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine) === undefined
+  return writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine, CLAUDE_CODE_FILE_TOOLS) === undefined
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)

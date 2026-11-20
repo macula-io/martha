@@ -135,6 +135,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
     backlog: null,
     volatile_paths: [],
+    engine_endpoint: null,
     billing: null,
   }
 }

@@ -51,6 +51,7 @@ import {
 } from '../claude_code_host/claude_code_host.ts'
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { ACalledTool, AnAgentOfASession, AResultOfACall, AStartingSession, TheAnswerToAnAgent, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
+import { CLAUDE_CODE_FILE_TOOLS } from '../claude_code_host/claude_code_file_tools.ts'
 import { reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { resolvedModelIn } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
 import { agentIdOf, type TheRunTable } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
@@ -349,7 +350,7 @@ export { NO_CREW_TOOLS } from '../answer_what_a_host_reports/answer_what_a_host_
 async function answerACoreTool(state: RelayState, body: unknown): Promise<Answered | Refused> {
   if (state.place.crew === undefined) return { refused: NO_CREW_TOOLS }
   const call = bodyOfAToolCall(body)
-  if (call === undefined) return { refused: 'the tool call is not one this launcher reads: it wants a session, a tool and its arguments' }
+  if (call === undefined) return { refused: A_CREW_CALL_UNREAD }
   return state.answers.aCrewToolAsked(call)
 }
 
@@ -364,8 +365,11 @@ async function answerAToolAndHearItsTurn(state: RelayState, body: unknown, inOrd
   return answer
 }
 
+/** Why a crew tool call is refused when its body is not a session, a tool and its arguments. */
+export const A_CREW_CALL_UNREAD = 'the tool call is not one this launcher reads: it wants a session, a tool and its arguments'
+
 /** A tool call's three fields, or undefined when the body is not one. */
-function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>> } | undefined {
+export function bodyOfAToolCall(body: unknown): { readonly session_id: string; readonly tool: string; readonly args: Readonly<Record<string, unknown>> } | undefined {
   if (typeof body !== 'object' || body === null) return undefined
   const { session_id, tool, args } = body as Record<string, unknown>
   if (typeof session_id !== 'string' || typeof tool !== 'string') return undefined
@@ -396,8 +400,8 @@ const placesOfTheEntry = (place: MemberRelayPlace, reviews: TheReviewSpawns, age
   signed_runs: place.signed_runs,
   // This host's own two decisions, closed over the files it reads, the launch's directory, the owner's home and the
   // machine (packages 2-4's design, row "2"): they stay here until each host has its own recorded fact set (#257 row 5).
-  refusesAWriteToTheOwnersSettings: (input) => namesTheOwnersSettings(input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home),
-  refusesAWriteToTheOwnersMemory: (tool, input) => writesTheOwnersMemory(tool, input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine),
+  refusesAWriteToTheOwnersSettings: (input) => namesTheOwnersSettings(input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home, CLAUDE_CODE_FILE_TOOLS),
+  refusesAWriteToTheOwnersMemory: (tool, input) => writesTheOwnersMemory(tool, input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine, CLAUDE_CODE_FILE_TOOLS),
   // What recording a result needs (PR 3): this host's own table and switches as values, and its two decisions over its
   // own files closed here, so the entry reads no Claude Code table and holds no path.
   results: {
@@ -405,7 +409,7 @@ const placesOfTheEntry = (place: MemberRelayPlace, reviews: TheReviewSpawns, age
     read_attaches_nothing: CLAUDE_CODE_READ_ATTACHES_NOTHING,
     started_with: place.started_with,
     wordless_answers: place.wordless_answers,
-    noteWhatThisCallWrote: (call) => rememberOwnWriteOfCall(place.launch, { ...call, home: place.hookSettings.home }, thisMachine),
+    noteWhatThisCallWrote: (call) => rememberOwnWriteOfCall(place.launch, { ...call, home: place.hookSettings.home }, thisMachine, CLAUDE_CODE_FILE_TOOLS),
     checkTheSettingsStillHold: () => place.hookSettings.check(),
   },
   journal: place.journal,

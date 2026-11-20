@@ -11,6 +11,7 @@
 import { join, resolve } from 'node:path'
 
 import type { DefinesItsValues } from '../host_contract/defines_its_values.ts'
+import type { HostFileTools } from '../host_contract/host_contract.ts'
 
 /**
  * Each file-writing tool, by the argument of its call that names the file. Marked, so a literal anywhere that
@@ -52,3 +53,22 @@ export function asTheHostResolves(value: string, cwd: string, home: string): str
   if (trimmed.startsWith('~/')) return join(home, trimmed.slice(2))
   return resolve(cwd, trimmed)
 }
+
+/** The tool call arguments that name the file a file tool reads or writes. */
+export const FILE_ARGUMENTS = [FILE_PATH_ARGUMENT, NOTEBOOK_PATH_ARGUMENT] as const
+
+/** The file tools a member writes a file with. */
+export const FILE_WRITING_TOOLS = [WHOLE_FILE_TOOL, EDIT_TOOL, 'MultiEdit', NOTEBOOK_EDIT_TOOL] as const
+
+/**
+ * Claude Code's file tools as the decisions over a member's calls take them (#541 package A, design G1): the same
+ * names, arguments and resolution those decisions used before they took a host's, so a Claude Code member is judged
+ * exactly as it was.
+ */
+export const CLAUDE_CODE_FILE_TOOLS: HostFileTools = Object.freeze({
+  writing_tools: FILE_WRITING_TOOLS,
+  file_arguments: FILE_ARGUMENTS,
+  own_writes: CLAUDE_CODE_FILE_WRITING_TOOLS,
+  whole_file: Object.freeze({ tool: WHOLE_FILE_TOOL, content: WHOLE_FILE_CONTENT }),
+  resolve: asTheHostResolves,
+})

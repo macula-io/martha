@@ -45,6 +45,11 @@ import {
   type AStartOnItsHost,
   type TheLaunchersOfHost,
 } from './start_the_member_on_its_host.ts'
+import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { THE_ENGINES_INSTALL } from '../start_an_engine_member/start_an_engine_member.ts'
+
+/** A host no release has a launcher for: this test's own name. */
+const A_HOST_NO_RELEASE_HAS = 'a-host-no-release-has'
 
 const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 
@@ -109,9 +114,9 @@ test('each member reaches the entry for the host its declaration names, and the 
 })
 
 test('a host this release has no launcher for is refused by name, and no other host is tried (martha#541, #547 line 39)', () => {
-  const refusal = theStartOfAHost(THE_ENGINES_HOST, { PATH: '/nowhere' })
-  assert.equal(refusal, noLauncherFor(THE_ENGINES_HOST))
-  assert.ok(String(refusal).includes(THE_ENGINES_HOST), String(refusal))
+  const refusal = theStartOfAHost(A_HOST_NO_RELEASE_HAS, { PATH: '/nowhere' })
+  assert.equal(refusal, noLauncherFor(A_HOST_NO_RELEASE_HAS))
+  assert.ok(String(refusal).includes(A_HOST_NO_RELEASE_HAS), String(refusal))
   assert.ok(String(refusal).includes(Object.keys(THE_LAUNCHERS_OF_HOST).join(', ')), String(refusal))
 })
 
@@ -133,8 +138,14 @@ test('the command a start runs is the host\'s own fact, found on the path and ha
   assert.equal(THE_LAUNCHERS_OF_HOST[CLAUDE_CODE]!.command, CLAUDE)
 })
 
-test('the engine has no launcher in this release, so a declaration may name it and a start of it is refused by name (martha#541)', () => {
-  assert.equal(Object.hasOwn(THE_LAUNCHERS_OF_HOST, THE_ENGINES_HOST), false)
+test('#541 package A: the engine\'s entry starts the recorded engine\'s command, its install names the recorded version and commit, and a refusal names both hosts', () => {
+  const entry = THE_LAUNCHERS_OF_HOST[THE_ENGINES_HOST]
+  assert.ok(entry !== undefined, 'the start table has no entry for the engine')
+  assert.equal(entry.command, RECORDED_GOOSE_ENGINE.engine_name)
+  assert.equal(entry.install, THE_ENGINES_INSTALL)
+  for (const fact of [RECORDED_GOOSE_ENGINE.engine_name, RECORDED_GOOSE_ENGINE.engine_version, RECORDED_GOOSE_ENGINE.engine_commit]) assert.ok(entry.install.includes(fact), entry.install)
+  const refusal = noLauncherFor(A_HOST_NO_RELEASE_HAS)
+  for (const host of [CLAUDE_CODE, THE_ENGINES_HOST]) assert.ok(refusal.includes(host), refusal)
 })
 
 /** A one-host crew whose reviewer holds reviews, and whose reviewer runs on `reviewer_model` (martha#541 package 6b). */
@@ -176,17 +187,20 @@ test('#541 6b: a start asks the crew\'s reviewer rule over the host it found (mu
   )
 })
 
-test('#541 6b r=3: a reviewer member on the engine is refused to start by name, until its launcher reads the model back', async () => {
-  // This is the pin on the engine's read-back (package 6b design r=3, item B): when a launcher for `martha-engine`
-  // arrives it must read the model its own config root names back, and this test is updated with it. A launcher that
-  // lifts this refusal without that read-back turns this test red rather than passing quietly.
+test('#541 6b r=3: a reviewer member on the engine reaches the engine\'s launcher, which reads its model back from the written root (package A)', async (t) => {
+  // The pin on the engine's read-back (package 6b design r=3, item B) moved with the launcher that arrived (martha#541
+  // package A): the start reads the model its config root names back and refuses another
+  // (../start_an_engine_member/the_engines_model.node-test.ts, and the launch-level mutant in start_an_engine_member's
+  // own test). Here: the crew's reviewer rule still holds the reviewer to the review model, and a reviewer on that model
+  // reaches the engine's entry rather than a refusal.
+  const path = aPathHolding(t, RECORDED_GOOSE_ENGINE.engine_name)
   const settings = await settingsOf(aCrewWhoseReviewerRuns('fable'))
   const reviewer = settings.members[1]!
-  assert.equal(
-    theStartOfAMember(THE_ENGINES_HOST, { PATH: '/nowhere' }, reviewer, settings),
-    noLauncherFor(THE_ENGINES_HOST),
-    'a reviewer member on martha-engine is no longer refused by the missing launcher, and nothing in this release reads its model back yet',
-  )
+  const started = theStartOfAMember(THE_ENGINES_HOST, { PATH: path }, reviewer, settings)
+  assert.ok(typeof started !== 'string', String(started))
+  assert.equal(started.launcher, THE_LAUNCHERS_OF_HOST[THE_ENGINES_HOST])
+  const offItsModel = await settingsOf(aCrewWhoseReviewerRuns('opus'))
+  assert.match(String(theStartOfAMember(THE_ENGINES_HOST, { PATH: path }, offItsModel.members[1]!, offItsModel)), /holds reviews to fable; its model is opus\./)
 })
 
 /** The crew's layout places, as a declaration names them: no constant in the tree carries these path segments. */

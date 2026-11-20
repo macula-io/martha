@@ -11,5 +11,5 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: TMUX_PASSTHROUGH_OPENING, file: 'ring_the_owner/ring_the_owner.node-test.ts', reason: "tmux's passthrough opening spelled from tmux's manual, the expected bytes the slice's constant is held to" },
   // The real-tmux cases attach a client as a terminal does (martha#843). The recorded host's terminal is the same common
   // name and is not this client.
-  { value: HOST_TERMINAL, file: 'ring_the_owner/the_ring_on_the_nights_tmux.node-test.ts', reason: "the TERM of a recorded tmux client the test attaches; the recorded host's own terminal shares the common name and is not this client" },
+  { value: HOST_TERMINAL, file: 'ring_the_owner/the_ring_on_the_live_runs_tmux.node-test.ts', reason: "the TERM of a recorded tmux client the test attaches; the recorded host's own terminal shares the common name and is not this client" },
 ]

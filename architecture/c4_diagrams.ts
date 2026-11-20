@@ -183,7 +183,7 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
   },
   {
     name: 'land_a_package_on_a_throwaway_repository',
-    why: "the nightly live run's guards for its throwaway repository (martha#639); the command never loads them",
+    why: "the live run's guards for its throwaway repository (martha#639); the command never loads them",
   },
   {
     name: 'declare_a_launch_probe',
@@ -236,18 +236,6 @@ export const LEFT_OUT: readonly { readonly name: string; readonly why: string }[
   {
     name: 'stand_in_for_an_openai_model',
     why: 'a model behind an OpenAI-compatible URL, answered from a script, for runs of the Goose engine with no model (martha#541); tests and npm run stand-in:openai-model load it, and no member ever does',
-  },
-  {
-    name: 'launch_a_goose_member',
-    why: "one Goose member's launch: its own root and home, the config root it writes, the engine in a process group of its own, and the permission store checked empty when the launch ends (martha#541 packages 7-8); nothing loads it until the one start call picks a member's host, and its tests do today",
-  },
-  {
-    name: 'derive_the_config_of_a_goose_launch',
-    why: "the config text one Goose launch writes into its own root, read from the recorded engine's facts: the provider and the model, the mode that asks the client, slash commands off, one switch per platform extension, and the crew's tool server switched on (martha#541); nothing loads it until the one start call picks a member's host, and launch_a_goose_member's tests do today",
-  },
-  {
-    name: 'serve_the_crews_tools_to_an_engine',
-    why: "the crew's tool server for a Goose member: an MCP server on stdio over the crew's tools, each call answered by the launcher on the launch's relay socket with the launch's own token (martha#541 packages 7-8, part C); a Goose launch writes its entry, the engine starts it, and nothing loads it until the one start call picks a member's host",
   },
   {
     name: 'stand_in_for_an_acp_agent',
@@ -394,12 +382,16 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
   [
     { col: 0, kind: 'b-cmp', name: 'guard_workspace, read_the_git_calls_in_a_shell_line', names: ['guard_workspace', 'read_the_git_calls_in_a_shell_line', 'ask_git_what_a_member_is_about_to_change', 'check_the_workspace_matches_its_layout', 'refuse_a_git_call_in_a_members_shell', 'guard_the_git_a_member_runs', 'judge_the_commit_a_member_is_about_to_make', 'refuse_a_handoff_with_a_leftover'], type: '[the workspace guard]', code: true,
       desc: ['What the workspace\'s layout refuses of', 'a git call: read_the_git_calls_in_a_', 'shell_line reads each call and the', 'directory it runs in, ask_git_what_a_', 'member_is_about_to_change asks git what', 'a call is about to move, and guard_', 'workspace refuses a call that leaves a', 'clone\'s branch or touches another', 'member\'s worktree or branch; check_the_', 'workspace_matches_its_layout names the', 'drift in a workspace, and refuse_a_git_', 'call_in_a_members_shell and guard_the_', 'git_a_member_runs are the seams that ask', 'it: the shell line a tool call carries,', 'the git first on the member\'s PATH, and', 'the clone\'s ref transaction, each read', 'and judged before it runs; judge_the_', 'commit_a_member_is_about_to_make', 'judges a commit on the bytes it would', 'carry, the index and what a staging', 'line adds (#693 r=2), and refuse_a_', 'handoff_with_a_leftover refuses a', 'HANDOFF that would carry them while', 'they still stand (#719). A crew that', 'declared no layout is judged by none', 'of it (martha#562)'] },
-    { col: 1, kind: 'b-cmp', name: 'speak_acp_to_an_agent, hear_an_acp_agents_asks', names: ['speak_acp_to_an_agent', 'hear_an_acp_agents_asks', 'serve_the_owners_answers'], type: '[an ACP agent, as its client]', code: true,
-      desc: ['Martha as the client of an engine it', 'drives over ACP on stdio (martha#541):', 'sessions, prompts, each tool call\'s', 'updates and the turn\'s end; a call is', 'answered allow_once or reject_once', 'from the gate\'s decision, else', 'cancelled. hear_an_acp_agents_asks', 'holds a call the gate allows and the', 'owner\'s list does not name until', 'martha answer answers it, over the', 'socket serve_the_owners_answers', 'serves for a launch. Not yet', 'wired to a launch'] },
+    { col: 1, kind: 'b-cmp', name: 'speak_acp_to_an_agent, hear_an_acp_agents_asks', names: ['speak_acp_to_an_agent', 'hear_an_acp_agents_asks', 'serve_the_owners_answers', 'start_an_engine_member', 'launch_a_goose_member', 'derive_the_config_of_a_goose_launch', 'serve_the_crews_tools_to_an_engine', 'send_an_engine_member_its_turns'], type: '[an ACP agent, as its client]', code: true,
+      desc: ['Martha as the client of an engine it', 'drives over ACP on stdio (martha#541):', 'sessions, prompts, each tool call\'s', 'updates and the turn\'s end; a call is', 'answered allow_once or reject_once', 'from the gate\'s decision, else', 'cancelled. hear_an_acp_agents_asks', 'holds a call the gate allows and the', 'owner\'s list does not name until', 'martha answer answers it, over the', 'socket serve_the_owners_answers', 'serves for a launch. start_an_engine_', 'member is the engine\'s start: launch_', 'a_goose_member writes its root (derive_', 'the_config_of_a_goose_launch) and', 'serve_the_crews_tools_to_an_engine', 'serves it the crew\'s tools;', 'send_an_engine_member_its_turns sends', 'its turns one at a time (#541 A)'] },
   ],
   [
     { col: 0, kind: 'b-cmp', name: 'read_the_body_a_request_carries', names: ['read_the_body_a_request_carries'], type: '[a request to the launcher]', code: true,
       desc: ['The body a request to the', 'launcher\'s socket carries: read', 'whole, up to the largest the', 'launcher reads, as JSON, and no', 'body at all when it is larger', 'or not JSON. Every endpoint of', 'the socket reads one this way', '(martha#41)'] },
+  ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'keep_the_transcripts_of_a_launch, choose_the_transcripts_to_keep', names: ['keep_the_transcripts_of_a_launch', 'choose_the_transcripts_to_keep'], type: '[a session, after it ends]', code: true,
+      desc: ['choose_the_transcripts_to_keep reads', 'no file and writes none: from what', 'the member\'s config folder holds', 'it takes the host\'s own transcripts', 'alone, redacts every token shape', 'and the key the launch handed it,', 'withholds whole a text a line break', 'split a token across, and replaces', 'a file the bounds leave no room for', 'with the line that says so;', 'keep_the_transcripts_of_a_launch is', 'the folder work the launch does', 'before it removes the snapshot at', 'every end: 0700 and 0600, written', 'whole and renamed, the mark of a', 'token found beside them, and the', 'launches past the newest 64 pruned', '(martha#646)'] },
   ],
 ]
 

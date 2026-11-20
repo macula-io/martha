@@ -56,6 +56,7 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
     backlog: null,
     volatile_paths: [],
+    engine_endpoint: null,
     billing: null,
   }
 }

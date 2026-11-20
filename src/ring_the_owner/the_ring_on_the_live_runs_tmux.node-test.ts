@@ -1,6 +1,6 @@
-// The ring on the night's own tmux, run for real (martha#843): a pane rings as a launcher inside tmux does, a client is
-// attached the way the owner attaches, and what that client is sent is read byte for byte. The night's bounds are read
-// from the night script itself (NIGHT_TMUX_BOUNDS, NIGHT_PASSTHROUGH_OFF, NIGHT_WATCH_ATTACH), so a change there is a
+// The ring on the live run's own tmux, run for real (martha#843): a pane rings as a launcher inside tmux does, a client is
+// attached the way the owner attaches, and what that client is sent is read byte for byte. The live run's bounds are read
+// from the live run script itself (LIVE_RUN_TMUX_BOUNDS, LIVE_RUN_PASSTHROUGH_OFF, LIVE_RUN_WATCH_ATTACH), so a change there is a
 // change here.
 //
 // Each case serves its own tmux server on a socket in a short directory of its own, and kills it when it ends. A case
@@ -8,7 +8,7 @@
 // pane's bytes in order, so once that line is drawn, anything sent before it would have arrived.
 //
 // A runner with no tmux or no `script` skips these, except where MARTHA_TESTS_TMUX_REQUIRED is set: there a missing
-// tool fails by name, and MARTHA_TESTS_TMUX_VERSION, when set, must be the tmux that answers (the night's pinned 3.3a,
+// tool fails by name, and MARTHA_TESTS_TMUX_VERSION, when set, must be the tmux that answers (the live run's pinned 3.3a,
 // in CI's job for it).
 
 import assert from 'node:assert/strict'
@@ -33,10 +33,10 @@ const WAIT_MS = 15_000
 const POLL_MS = 50
 const SIZE = ['-x', '80', '-y', '24']
 
-/** One array of the night script, as the night itself reads it. */
-function theNights(name: string): string[] {
+/** One array of the live run script, as the live run itself reads it. */
+function theLiveRuns(name: string): string[] {
   const read = spawnSync('bash', ['-c', `. "$1" && printf '%s\\0' "\${${name}[@]}"`, 'read', PROOF], { encoding: 'utf8' })
-  assert.equal(read.status, 0, `the night script could not be read for ${name}: ${read.stderr}`)
+  assert.equal(read.status, 0, `the live run script could not be read for ${name}: ${read.stderr}`)
   return read.stdout.split('\0').slice(0, -1)
 }
 
@@ -71,19 +71,19 @@ process.stdout.write(r.theBellsFor(row, asking, { bell: false, notify: true }, t
   return `while [ ! -e ${place}/go ]; do sleep 0.05; done; ${send}; printf '\\n%s\\n' '${after}'; exec cat > ${place}/keys`
 }
 
-/** A tmux server on its own socket in `place`, with the night's bounds, one session running `pane`. */
-function aNightServer(t: TestContext, place: string, pane: string): string[] {
+/** A tmux server on its own socket in `place`, with the live run's bounds, one session running `pane`. */
+function aLiveRunServer(t: TestContext, place: string, pane: string): string[] {
   const tmux = ['-S', join(place, 's'), '-f', '/dev/null']
-  const started = spawnSync('tmux', [...tmux, 'start-server', ';', ...theNights('NIGHT_TMUX_BOUNDS'), ';', 'new-session', '-d', '-s', MEMBER, ...SIZE, pane], { encoding: 'utf8' })
-  assert.equal(started.status, 0, `tmux would not start with the night's bounds: ${started.stderr}`)
+  const started = spawnSync('tmux', [...tmux, 'start-server', ';', ...theLiveRuns('LIVE_RUN_TMUX_BOUNDS'), ';', 'new-session', '-d', '-s', MEMBER, ...SIZE, pane], { encoding: 'utf8' })
+  assert.equal(started.status, 0, `tmux would not start with the live run's bounds: ${started.stderr}`)
   const pid = Number(spawnSync('tmux', [...tmux, 'display-message', '-p', '#{pid}'], { encoding: 'utf8' }).stdout.trim())
-  assert.ok(Number.isInteger(pid) && pid > 0, 'the night server names its pid')
+  assert.ok(Number.isInteger(pid) && pid > 0, 'the live run server names its pid')
   // Stopped by its pid, not its socket: the case's place, socket and all, may already be removed by the time this
   // runs, and a server that daemonized is in no process group a test runner reaps.
   t.after(async () => {
     spawnSync('tmux', [...tmux, 'kill-server'], { stdio: 'ignore' })
     if (isAlive(pid)) process.kill(pid, 'SIGTERM')
-    await until(() => !isAlive(pid), `the night server ${pid} outlived its case`)
+    await until(() => !isAlive(pid), `the live run server ${pid} outlived its case`)
   })
   return tmux
 }
@@ -133,7 +133,7 @@ const bytesOf = (file: string): string => (existsSync(file) ? readFileSync(file,
 async function aCase(t: TestContext, what: 'ring' | 'clipboard', clients: string[][], before: (tmux: string[]) => void = () => undefined): Promise<string> {
   const place = shortRelayRoot(t)
   const after = `after-${what}-${place.slice(-6)}`
-  const tmux = aNightServer(t, place, thePane(place, what, after))
+  const tmux = aLiveRunServer(t, place, thePane(place, what, after))
   before(tmux)
   clients.forEach((attach, index) => aClient(t, tmux, attach, join(place, `client-${index}`)))
   await until(() => clientsOf(tmux) === clients.length, `${clients.length} client(s) never attached`)
@@ -143,13 +143,13 @@ async function aCase(t: TestContext, what: 'ring' | 'clipboard', clients: string
   return bytesOf(record)
 }
 
-test('a pane of the night rings, and the owner\'s read-only client is sent the notification (martha#843)', async (t) => {
+test('a pane of the live run rings, and the owner\'s read-only client is sent the notification (martha#843)', async (t) => {
   if (!needsTmux(t)) return
-  const record = await aCase(t, 'ring', [theNights('NIGHT_WATCH_ATTACH')])
+  const record = await aCase(t, 'ring', [theLiveRuns('LIVE_RUN_WATCH_ATTACH')])
   assert.ok(record.includes(`${NOTIFICATION_ESCAPE}i=${notificationIdOf(MEMBER)}`), 'the OSC 99 with the member\'s id, as a terminal reads it')
 })
 
-test('no pane of the night sets the owner\'s clipboard with a bare OSC 52 (martha#843)', async (t) => {
+test('no pane of the live run sets the owner\'s clipboard with a bare OSC 52 (martha#843)', async (t) => {
   if (!needsTmux(t)) return
   const record = await aCase(t, 'clipboard', [['attach']])
   assert.equal(record.includes(CLIPBOARD_ESCAPE), false, 'no OSC 52 reached the client')
@@ -158,7 +158,7 @@ test('no pane of the night sets the owner\'s clipboard with a bare OSC 52 (marth
 test('once the builder\'s pane is shut, a client attached writable is sent no notification (martha#843)', async (t) => {
   if (!needsTmux(t)) return
   const record = await aCase(t, 'ring', [['attach']], (tmux) => {
-    const shut = spawnSync('tmux', [...tmux, 'set-option', '-p', '-t', MEMBER, ...theNights('NIGHT_PASSTHROUGH_OFF')], { encoding: 'utf8' })
+    const shut = spawnSync('tmux', [...tmux, 'set-option', '-p', '-t', MEMBER, ...theLiveRuns('LIVE_RUN_PASSTHROUGH_OFF')], { encoding: 'utf8' })
     assert.equal(shut.status, 0, `the pane could not be shut: ${shut.stderr}`)
   })
   assert.equal(record.includes(NOTIFICATION_ESCAPE), false, 'no OSC 99 reached the writable client')
@@ -167,8 +167,8 @@ test('once the builder\'s pane is shut, a client attached writable is sent no no
 test('what the owner types while watching read-only reaches no pane, and a writable client\'s keys do (martha#843)', async (t) => {
   if (!needsTmux(t)) return
   const place = shortRelayRoot(t)
-  const tmux = aNightServer(t, place, thePane(place, 'clipboard', 'ready'))
-  const watching = aClient(t, tmux, theNights('NIGHT_WATCH_ATTACH'), join(place, 'watching'))
+  const tmux = aLiveRunServer(t, place, thePane(place, 'clipboard', 'ready'))
+  const watching = aClient(t, tmux, theLiveRuns('LIVE_RUN_WATCH_ATTACH'), join(place, 'watching'))
   const writing = aClient(t, tmux, ['attach'], join(place, 'writing'))
   await until(() => clientsOf(tmux) === 2, 'the two clients never attached')
   writeFileSync(join(place, 'go'), '')
