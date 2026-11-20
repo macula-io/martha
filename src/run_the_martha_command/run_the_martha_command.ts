@@ -618,7 +618,7 @@ export const HELP: readonly string[] = [
   'martha ls                    list the members and whether each runs',
   'martha stop [<member>]       stop one member, or every running one',
   'martha restart <member>      stop a member and start it again',
-  'martha week [<YYYY-Www>]    the crew ledger for a week: cost in work, cycle time, owner wait, rework and releases',
+  'martha week [<YYYY-Www>]     the crew ledger for a week: cost in work, cycle time, owner wait, rework and releases',
   'martha crew [<verb> ...]     show the crew strip, or add, remove or change a member',
   'martha run <shape>           run a command shape the owner signed, from inside a member',
   'martha install [<version>]   install or upgrade Martha',
