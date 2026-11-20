@@ -12,6 +12,9 @@ import type { ProcessOutcome, ProcessRequest } from '../host_contract/host_contr
 import { runAProcessOnThisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { readACrewLine, type CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { hostForTests } from '../host_contract/host_for_tests.ts'
+import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
+import { sayToTheCrewOver } from './say_to_the_crew_tool.ts'
 import { theCommitsAHandoffNames } from './the_commits_a_handoff_names.ts'
 
 const PACKAGE = 'synthetic-acme/widget#7'
@@ -154,6 +157,36 @@ test('#980 p3 T5: a git that does not answer in time, or cannot run, is marked w
   assert.deepEqual(await theCommitsAHandoffNames({ processes: late, clones: '/nowhere' }, line), [`range not verified (git did not answer): ${range}`])
   assert.deepEqual(await theCommitsAHandoffNames({ processes: absent, clones: '/nowhere' }, line), [`range not verified (git could not run): ${range}`])
   assert.deepEqual(await theCommitsAHandoffNames({ processes: odd, clones: '/nowhere' }, line), [`range not verified (git merge-base exited 129): ${range}`])
+})
+
+test('#980 p3 Done-when 3: a HANDOFF naming a commit the clone does not hold is sent, the sender told by name and the receiver\'s copy carrying the line', async (t) => {
+  const at = aClone(t)
+  const { host } = hostForTests({ now: 9_800 })
+  const ledger = { clock: host.clock, stores: { rows: host.stores.rows } }
+  const text = `HANDOFF ${PACKAGE} ${at.base}..${NO_COMMIT} r=1 ci=41700170944`
+  const notice = `HANDOFF ${PACKAGE} names ${NO_COMMIT}, which is not a commit in synthetic-acme/widget (after a fetch).`
+  const answer = await sayToTheCrewOver({
+    ledger,
+    member: 'Builder',
+    roster: ['Builder', 'Reviewer'],
+    receivers: [],
+    held: null,
+    to: ['Reviewer'],
+    text,
+    volatile_roots: [],
+    commits: { processes: recording(), clones: at.clones },
+  })
+  assert.ok('answer' in answer, `the send was refused: ${JSON.stringify(answer)}`)
+  assert.ok(answer.answer.includes(notice), `the sender was not told: ${answer.answer}`)
+  assert.deepEqual((await readTheChannel(ledger)).map(({ message }) => message.text), [`${text}\n\n${notice}`])
+})
+
+test('#980 p3: a send given no clone check runs nothing and sends the text as it is', async () => {
+  const { host } = hostForTests({ now: 9_800 })
+  const ledger = { clock: host.clock, stores: { rows: host.stores.rows } }
+  const text = `HANDOFF ${PACKAGE} ${'a'.repeat(40)}..${NO_COMMIT} r=1 ci=41700170944`
+  await sayToTheCrewOver({ ledger, member: 'Builder', roster: ['Builder', 'Reviewer'], receivers: [], held: null, to: ['Reviewer'], text, volatile_roots: [] })
+  assert.deepEqual((await readTheChannel(ledger)).map(({ message }) => message.text), [text])
 })
 
 test('#980 p3: a HANDOFF of a design (doc=) names no range, and nothing runs', async () => {
