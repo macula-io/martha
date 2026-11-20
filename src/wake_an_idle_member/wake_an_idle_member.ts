@@ -20,7 +20,8 @@
 //
 // Core: no disk and no clock of its own. The row, the parks, the count and the time are handed in.
 
-import { MINUTE_MS, WAKE, sameMemberName, type CrewSettings, type HouseRules } from '../declare_crew/declare_crew.ts'
+import { MINUTE_MS, sameMemberName, type CrewSettings, type HouseRules } from '../declare_crew/declare_crew.ts'
+import { WAKE } from '../declare_crew/the_crews_wake.ts'
 import { offlineAfterMsOf } from '../declare_crew/the_crews_thresholds.ts'
 import { theSplitOf } from '../find_the_unheld_work/find_the_unheld_work.ts'
 import { theBacklogNow, type TheBacklogReader } from '../find_the_unheld_work/keep_the_backlog_read.ts'

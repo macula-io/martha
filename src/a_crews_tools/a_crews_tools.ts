@@ -599,7 +599,7 @@ async function theWakeOfThisSession(places: CrewToolPlaces, args: Readonly<Recor
     rows: beatsOf(places.beats, settings),
     place: places.stores.crew.place(WAKE_PLACE),
     parked: theParkedMembers({ stores: places.stores }, settings.members.map((member) => member.name)),
-    reader: theBacklogReaderIn({ ...places, github: settings.github }),
+    reader: theBacklogReaderIn({ ...places, github: settings.github, clock_zone: settings.clock_zone }),
     now: places.ledger.clock.now(),
     context_percent: usage.percent,
   })

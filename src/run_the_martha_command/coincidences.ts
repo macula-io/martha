@@ -3,7 +3,7 @@
 
 import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { THE_TAG_OF_NOTHING_TO_APPROVE } from '../approve_a_checkouts_config/coincidences.ts'
-import { WAKE } from '../declare_crew/declare_crew.ts'
+import { WAKE } from '../declare_crew/the_crews_wake.ts'
 import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_checkout/coincidences.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { EMPTY_DIRECTORY_NAME } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'

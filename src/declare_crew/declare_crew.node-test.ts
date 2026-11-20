@@ -23,9 +23,6 @@ import {
   REVIEW_MINUTES,
   REVIEW_MODEL,
   STALLED_MINUTES,
-  WAKE,
-  WAKE_AFTER_MINUTES,
-  WAKE_CAP_MINUTES,
   DECLARATION_FILE,
   DECLARATION_VERSION,
   DeclarationRefused,
@@ -56,6 +53,7 @@ import {
 } from './declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import { PROFILE } from './the_crews_profiles.ts'
+import { WAKE, WAKE_AFTER_MINUTES, WAKE_CAP_MINUTES } from './the_crews_wake.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'

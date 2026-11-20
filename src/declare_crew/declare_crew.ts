@@ -45,6 +45,7 @@ export {
   type EngineEndpoint,
 } from './the_engines_endpoint.ts'
 import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theWorkspacesClonesOf, whereTheCrewOpens, type WhereTheCrewOpens } from './the_crews_workspace.ts'
+import { WAKE, WAKE_MINUTES, refuseTheWakeWindows } from './the_crews_wake.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -189,17 +190,7 @@ export const REVIEW_MINUTES = 'review_minutes'
 export const PERSON_MINUTES = 'person_minutes'
 export const NUDGE_MINUTES = [STALLED_MINUTES, REVIEW_MINUTES, PERSON_MINUTES] as const
 
-/**
- * The house rule that wakes a member which is idle with work nobody holds (martha#959): off unless the declaration names
- * it, and it names two windows with it — the first wait, and the cap the doubling stops at — so no member is woken on a
- * window the code made up. `after_minutes: 0` is a crew that keeps the rule and turns it off.
- */
-export const WAKE = 'wake'
-export const WAKE_AFTER_MINUTES = 'wake_after_minutes'
-export const WAKE_CAP_MINUTES = 'wake_cap_minutes'
-export const WAKE_MINUTES = [WAKE_AFTER_MINUTES, WAKE_CAP_MINUTES] as const
-
-/** Every window a house rule names, in whole minutes: the nudge windows, and the wake's two. */
+/** Every window a house rule names, in whole minutes: the nudge windows, and the wake's two (./the_crews_wake). */
 export const HOUSE_RULE_MINUTES = [...NUDGE_MINUTES, ...WAKE_MINUTES] as const
 export type HouseRuleMinutes = (typeof HOUSE_RULE_MINUTES)[number]
 
@@ -1050,7 +1041,7 @@ function refuseMinutes(refuse: Refuse, value: Json): void {
     }
   }
   refuseTheWindowsOf(refuse, value, NUDGES, NUDGE_MINUTES)
-  refuseTheWindowsOf(refuse, value, WAKE, WAKE_MINUTES)
+  refuseTheWakeWindows((field, why) => refuse.at(field, why), value)
 }
 
 /** A window a rule needs, refused by name when the rule is on and the window is missing: never one the code made up. */
