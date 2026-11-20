@@ -7,16 +7,21 @@
 export const GITHUB = 'github'
 
 /** The fields the block may name; each is optional. */
-export const GITHUB_KEYS = ['budget_floor'] as const
+export const GITHUB_KEYS = ['budget_floor', 'author_probe_ms'] as const
 
 /** The crew's GitHub settings. */
 export interface CrewGithub {
   /** The calls GitHub says are left at or below which the crew spends nothing more, until the window resets. */
   readonly budget_floor: number
+  /**
+   * How long, in milliseconds, one gh call of the stranger-text gate's vouch may take (martha#987): the login, a
+   * thread's authors, a fork listing. One that takes longer is no answer, and the call it judged stays a stranger's.
+   */
+  readonly author_probe_ms: number
 }
 
-/** What the crew reads when the declaration names no GitHub block: the floor crew-code spent by before #931. */
-export const GITHUB_WHEN_UNNAMED: CrewGithub = Object.freeze({ budget_floor: 500 })
+/** What the crew reads when the declaration names no GitHub block: the floor crew-code spent by before #931, and crew-code's GH_AUTHORS_MS (martha#987). */
+export const GITHUB_WHEN_UNNAMED: CrewGithub = Object.freeze({ budget_floor: 500, author_probe_ms: 20_000 })
 
 /** How a field of the block is refused: the field, dotted under the block, and why. */
 export type RefuseAGithubField = (field: string, why: string) => never
@@ -31,7 +36,7 @@ export function githubOf(value: unknown, refuse: RefuseAGithubField): CrewGithub
   const block = value as Readonly<Record<string, unknown>>
   const unknown = Object.keys(block).find((key) => !(GITHUB_KEYS as readonly string[]).includes(key))
   if (unknown !== undefined) return refuse(`${GITHUB}.${unknown}`, `is not a field here (they are ${GITHUB_KEYS.join(', ')})`)
-  return Object.freeze({ budget_floor: floorOf(block['budget_floor'], refuse) })
+  return Object.freeze({ budget_floor: floorOf(block['budget_floor'], refuse), author_probe_ms: probeOf(block['author_probe_ms'], refuse) })
 }
 
 /** The block's floor as named, or GITHUB_WHEN_UNNAMED's when it names none. */
@@ -39,4 +44,11 @@ function floorOf(floor: unknown, refuse: RefuseAGithubField): number {
   if (floor === undefined) return GITHUB_WHEN_UNNAMED.budget_floor
   if (typeof floor !== 'number' || !Number.isSafeInteger(floor) || floor < 0) return refuse(`${GITHUB}.budget_floor`, 'is not a whole number of calls, 0 or more')
   return floor
+}
+
+/** The block's probe bound as named, or GITHUB_WHEN_UNNAMED's when it names none: a whole number of milliseconds, 1 or more. */
+function probeOf(bound: unknown, refuse: RefuseAGithubField): number {
+  if (bound === undefined) return GITHUB_WHEN_UNNAMED.author_probe_ms
+  if (typeof bound !== 'number' || !Number.isSafeInteger(bound) || bound < 1) return refuse(`${GITHUB}.author_probe_ms`, 'is not a whole number of milliseconds, 1 or more')
+  return bound
 }

@@ -95,7 +95,13 @@ function codeOf(error: unknown): string | undefined {
  */
 export const runAProcessOnThisMachine: Processes['run'] = (request) =>
   new Promise((resolve, reject) => {
-    const child = spawn(request.command, [...request.args], { cwd: request.cwd, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(request.command, [...request.args], {
+      cwd: request.cwd,
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: environmentWith(request.environment),
+      ...(request.timeout_ms === undefined ? {} : { timeout: request.timeout_ms, killSignal: 'SIGKILL' as const }),
+    })
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
     child.stdout.on('data', (chunk: Buffer) => void stdout.push(chunk))

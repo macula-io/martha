@@ -278,8 +278,8 @@ function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: C
  */
 export const leftoversOfALaunch = (settings: CrewSettings, crew: CrewStore) => ({ crew, workspace: theWorkspaceTheCrewDeclared(settings) })
 
-/** The crew tools' places a host's start does not choose itself: the models it names, how it spawns a subagent, and the settings file its model command saves a switch into. */
-export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings'>
+/** The crew tools' places a host's start does not choose itself: the models it names, how it spawns a subagent, the settings file its model command saves a switch into, and the member's own environment (martha#987). */
+export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings' | 'member_env'>
 
 /**
  * The crew tools' places every host's start shares (martha#541 package A): built here once, with the host's own
@@ -362,6 +362,8 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeM
         // The settings file the host's model command saves a switch into, and the lock that guards it (martha#359): the
         // member's own since martha#602. The owner's file was finished above, before the host started.
         owners_settings: theMembersSwitchPlace(start, member.config_dir),
+        // The member's own environment, so the stranger-text gate's vouch asks gh as the member would (martha#987).
+        member_env: member.env,
       })),
     signed_runs: signedRunsOf(
       receiptsInMemory(),

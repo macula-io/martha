@@ -190,6 +190,11 @@ test('#931: the workspace root places the clones under the project and the workt
   await refusedWith({ ...draft, workspace: { ...draft.workspace, roots: [] } }, 'workspace.roots')
 })
 
+test('#987: the crew\'s own orgs are read as the workspace names them, and a declaration naming none owns none', async () => {
+  assert.deepEqual((await declare(draft)).own_orgs, draft.workspace.own_orgs)
+  assert.deepEqual((await declare({ ...draft, workspace: { root: draft.workspace.root } })).own_orgs, [])
+})
+
 test('#932: the crew\'s id and terminal are read as declared, and a declaration naming neither opens in kitty with no id', async () => {
   assert.deepEqual((await declare(draft)).opens, { id: 'a-crew', terminal: 'tmux' })
   assert.deepEqual((await declare({ ...draft, id: '  a-crew ', terminal: 'kitty' })).opens, { id: 'a-crew', terminal: 'kitty' })

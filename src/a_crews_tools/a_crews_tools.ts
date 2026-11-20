@@ -76,6 +76,7 @@ import { theBudgetOver, theSpendOnARow, type TheBudgetAsACrewHoldsIt } from '../
 import type { ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
 import type { TheCrew } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { type ASpawnedAgent, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
+import { theVouchOfALaunch, type TheVouch } from '../vouch_for_own_github_and_git_lines/the_vouch_of_a_launch.ts'
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { SEE_THE_CREW_TOOL, seeTheCrewOver } from '../see_the_crew/the_see_the_crew_tool.ts'
@@ -248,10 +249,15 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * and a crew that declared no workspace layout hands none.
    */
   readonly refusesTheHandOff?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
+  /**
+   * The member's own environment, as its host was started with it (martha#987): the stranger-text gate's vouch asks gh
+   * as the member would. A place given none vouches for no line.
+   */
+  readonly member_env?: Readonly<Record<string, string | undefined>>
 }
 
 /** The tools a crew's member can call. */
-export interface CrewTools extends TheReviewRule {
+export interface CrewTools extends TheReviewRule, TheVouch {
   readonly tools: readonly CrewTool[]
   /** Answers a tool call: the member's name is this launch's, the session's is the one the call came from. */
   answer(name: string, args: Readonly<Record<string, unknown>>, session: string): Promise<CoreToolAnswer>
@@ -494,6 +500,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     theSpendInForce: (session_id) => budget.theSpendInForce(session_id),
     noteTheCallCounted: (session_id, own_name) => budget.noteTheCallCounted(session_id, own_name),
     ...theReviewRuleOver({ declared: () => crewOrRefusal(held), spawn: held.spawn }),
+    ...theVouchOfALaunch(held),
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
     ends: state.ends,
     theContractInForce: (call, names) => theContractTheMemberHolds(held, call, names),

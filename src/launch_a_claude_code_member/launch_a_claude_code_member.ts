@@ -224,7 +224,10 @@ export interface LauncherPlaces {
  * How a launch builds its crew's tools: over its sessions, its member's own config folder and the crew tools it watches
  * (martha#658). The tools it returns hold that watch (martha#710), so a builder that leaves it out cannot compile.
  */
-export type CrewToolsOfALaunch = (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch }) => HoldingTheWatch<CrewTools>
+export type CrewToolsOfALaunch = (
+  sessions: { readonly of: (session_id: string) => HostSession | undefined },
+  member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch; readonly env: Readonly<Record<string, string | undefined>> },
+) => HoldingTheWatch<CrewTools>
 
 /**
  * The transcript bounds a launch keeps its member's session to (martha#931 B): its crew's declared `transcripts`, or the
@@ -575,7 +578,7 @@ function wordlessAnswersOf(
 function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSession>, ready: ReadyLaunch, served_tools: TheServedToolsWatch): { readonly crew?: CrewTools } {
   return launch.crew_tools === undefined
     ? {}
-    : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared), served_tools }) }
+    : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared), served_tools, env: ready.hostEnv }) }
 }
 
 /** What this launch raises turns to, or nothing: a launch given none raises nothing (martha#253). */

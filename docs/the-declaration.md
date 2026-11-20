@@ -169,6 +169,7 @@ One entry per profile, by a name the crew picks.
 | Field | What it holds | When left out |
 |---|---|---|
 | `budget_floor` | The calls GitHub says are left at or below which the crew makes no more until the window resets: a whole number, 0 or more. | 500 |
+| `author_probe_ms` | How long one `gh` call of the stranger-text gate may take, in milliseconds: the login, a thread's authors, a fork listing. A call that takes longer is no answer, and the command it judged still counts as a stranger's text. A whole number, 1 or more. | 20000 |
 
 ## `transcripts`
 

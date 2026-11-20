@@ -349,6 +349,13 @@ export interface ProcessRequest {
   readonly command: string
   readonly args: readonly string[]
   readonly cwd: string
+  /** How its environment differs from the host's own; left out, it runs with the host's own (martha#987). */
+  readonly environment?: EnvironmentChange
+  /**
+   * How long it may run, in milliseconds, before it is ended (martha#987): one that is ended so ends with `exit_code`
+   * null, as a signal ends it. Left out, it runs until it ends by itself.
+   */
+  readonly timeout_ms?: number
 }
 
 /** How a process ended. `exit_code` is null when a signal ended it. */
@@ -371,7 +378,6 @@ export interface EnvironmentChange {
 
 /** A process to run now, and how its environment differs from the host's. */
 export interface ProcessRequestNow extends ProcessRequest {
-  readonly environment?: EnvironmentChange
   /**
    * The text handed to the process on its standard input, which ends after it. Left out, the process reads an input
    * that is empty, as one with no standard input written to it does.

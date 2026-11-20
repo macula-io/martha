@@ -10,6 +10,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   environmentWith,
   filesOnThisMachine as files,
+  runAProcessOnThisMachine as run,
   runNowOnThisMachine as runNow,
   scratchOnThisMachine as scratch,
   signalAGroupOnThisMachine as signalGroup,
@@ -162,6 +163,25 @@ test('the environment drops every variable with a named prefix, then sets what i
 // --- signalling a group (martha#312) ------------------------------------------------
 
 const onLinux = linuxProcessIdentities.identityOf(process.pid) !== null
+
+test('#987: a process waited for by a promise runs with the environment asked, and the host\'s own when none is asked', async (t) => {
+  const dir = place(t)
+  // env prints the environment it was handed, and nothing a shell would add on its own.
+  const asked = await run({ command: '/usr/bin/env', args: [], cwd: dir, environment: { drop_prefixes: [''], set: { MARTHA_987_ASKED: 'set' } } })
+  assert.deepEqual(asked, { exit_code: 0, stdout: 'MARTHA_987_ASKED=set\n', stderr: '' })
+  const own = await run({ command: '/usr/bin/env', args: [], cwd: dir })
+  assert.equal(own.stdout.split('\n').some((line) => line.startsWith('PATH=')), true)
+  assert.equal(own.stdout.includes('MARTHA_987_ASKED'), false)
+})
+
+test('#987: a process that outlives its time limit is ended, with exit code null; one within it ends as it ends', async (t) => {
+  const dir = place(t)
+  const started = Date.now()
+  const ended = await run({ command: 'sleep', args: ['30'], cwd: dir, timeout_ms: 100 })
+  assert.equal(ended.exit_code, null)
+  assert.ok(Date.now() - started < 9_500, 'the process was not ended at its limit')
+  assert.equal((await run({ command: 'true', args: [], cwd: dir, timeout_ms: 9_500 })).exit_code, 0)
+})
 
 test('#312: a group is signalled only while its leader is the process recorded, and the check is in the same call', { skip: !onLinux }, async (t) => {
   const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' })
