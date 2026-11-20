@@ -181,6 +181,29 @@ test('#980 p3 Done-when 3: a HANDOFF naming a commit the clone does not hold is 
   assert.deepEqual((await readTheChannel(ledger)).map(({ message }) => message.text), [`${text}\n\n${notice}`])
 })
 
+test('#980 p3 T1: a range shaped as a git option is read as prose, and no git runs', async () => {
+  const { host } = hostForTests({ now: 9_800 })
+  const ledger = { clock: host.clock, stores: { rows: host.stores.rows } }
+  // A runner that records and answers yes: a fake that throws would be swallowed as git that could not run.
+  const started: ProcessRequest[] = []
+  const yes = { run: async (request: ProcessRequest): Promise<ProcessOutcome> => (started.push(request), { exit_code: 0, stdout: '', stderr: '' }) }
+  for (const range of [`--upload-pack=touch..${'b'.repeat(40)}`, `-c${'a'.repeat(38)}..${'b'.repeat(40)}`]) {
+    const answer = await sayToTheCrewOver({
+      ledger,
+      member: 'Builder',
+      roster: ['Builder', 'Reviewer'],
+      receivers: [],
+      held: null,
+      to: ['Reviewer'],
+      text: `HANDOFF ${PACKAGE} ${range} r=1`,
+      volatile_roots: [],
+      commits: { processes: yes, clones: '/nowhere' },
+    })
+    assert.ok('answer' in answer, `the send was refused: ${JSON.stringify(answer)}`)
+  }
+  assert.deepEqual(started, [], 'git was started on a range that is not the line\'s shape')
+})
+
 test('#980 p3: a send given no clone check runs nothing and sends the text as it is', async () => {
   const { host } = hostForTests({ now: 9_800 })
   const ledger = { clock: host.clock, stores: { rows: host.stores.rows } }
