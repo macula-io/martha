@@ -14,8 +14,9 @@ export interface ATurnToSend {
 /** What one turn came to: sent and ended, refused by the entry and never sent, or sent and failed. */
 export type WhatATurnDid = { readonly sent: 1 } | { readonly refused: string } | { readonly failed: string }
 
-/** Where the turns of one session go. */
+/** Where the turns of one member go. */
 export interface WhereTheTurnsGo {
+  /** The session a turn is sent on, read at each turn: a clear moves the member to a new one (martha#999 package 5). */
   readonly session_id: string
   /** The entry's answer for a turn, run in the entry's own order by the caller. */
   readonly aTurnArrived: (session_id: string, turn: ArrivingTurn) => Promise<TheAnswerToATurn>
@@ -23,39 +24,75 @@ export interface WhereTheTurnsGo {
   readonly send: (session_id: string, text: string) => Promise<unknown>
   /** Tells the owner a turn did not run, and why. */
   readonly tell: (line: string) => void
+  /**
+   * After a turn was sent and ended (martha#999 package 5): the turn the launch sends next on its own account, given what
+   * `send` ended with, or none. It goes ahead of every turn taken meanwhile, as a hook's act goes ahead of the next
+   * prompt, and its own `after` is asked in turn.
+   */
+  readonly after?: (ended: unknown) => Promise<ATurnToSend | undefined>
 }
 
 /** One session's queue: a turn taken is sent after every turn taken before it has ended. */
 export interface TheEngineMembersTurns {
   take(turn: ATurnToSend): Promise<WhatATurnDid>
+  /** Settles once every turn taken so far, and what the launch asked after it, is done: a launch ends after it (martha#999 package 5). */
+  settled(): Promise<void>
 }
 
 /** The line the owner is told when a turn is refused or fails. */
 export const theLineOfATurnNotRun = (member: string, did: Exclude<WhatATurnDid, { readonly sent: 1 }>): string =>
   'refused' in did ? `A turn for ${member} was refused and never sent: ${did.refused}` : `A turn for ${member} failed: ${did.failed}`
 
-/** The queue of one session of `member`. */
+/** The line the owner is told when the launch could not say what follows a turn. */
+export const theLineOfNoAct = (member: string, why: string): string => `Martha could not say what follows ${member}'s turn: ${why}`
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+
+/** The queue of `member`'s turns. */
 export function theEngineMembersTurns(member: string, where: WhereTheTurnsGo): TheEngineMembersTurns {
   let last: Promise<unknown> = Promise.resolve()
-  const one = async (turn: ATurnToSend): Promise<WhatATurnDid> => {
-    const answer = await where.aTurnArrived(where.session_id, { text: turn.text, arrival: turn.arrival })
-    if ('refused' in answer) return { refused: answer.refused }
+  /** One turn recorded and sent, and what `send` ended with; or what it came to instead. */
+  const one = async (turn: ATurnToSend): Promise<{ readonly did: WhatATurnDid; readonly ended?: unknown }> => {
+    const session_id = where.session_id
+    const answer = await where.aTurnArrived(session_id, { text: turn.text, arrival: turn.arrival })
+    if ('refused' in answer) return { did: { refused: answer.refused } }
     try {
-      await where.send(where.session_id, turn.text)
-      return { sent: 1 }
+      return { did: { sent: 1 }, ended: await where.send(session_id, turn.text) }
     } catch (error) {
-      return { failed: error instanceof Error ? error.message : String(error) }
+      return { did: { failed: messageOf(error) } }
     }
+  }
+  const told = async (turn: ATurnToSend): Promise<{ readonly did: WhatATurnDid; readonly ended?: unknown }> => {
+    const done = await one(turn).catch((error: unknown) => ({ did: { refused: `the entry did not answer for the turn (${messageOf(error)})` } }))
+    if (!('sent' in done.did)) where.tell(theLineOfATurnNotRun(member, done.did))
+    return done
+  }
+  /** The launch's own next turn after one that ended, if any, and the one after that, before the queue moves on. */
+  const followUps = async (ended: unknown): Promise<void> => {
+    if (where.after === undefined) return
+    let next: ATurnToSend | undefined
+    try {
+      next = await where.after(ended)
+    } catch (error) {
+      where.tell(theLineOfNoAct(member, messageOf(error)))
+      return
+    }
+    if (next === undefined) return
+    const done = await told(next)
+    if ('sent' in done.did) await followUps(done.ended)
   }
   return {
     take: (turn) => {
       const did = last.then(async () => {
-        const done = await one(turn).catch((error: unknown): WhatATurnDid => ({ refused: `the entry did not answer for the turn (${error instanceof Error ? error.message : String(error)})` }))
-        if (!('sent' in done)) where.tell(theLineOfATurnNotRun(member, done))
-        return done
+        const done = await told(turn)
+        if ('sent' in done.did) await followUps(done.ended)
+        return done.did
       })
       last = did
       return did
+    },
+    settled: async () => {
+      await last
     },
   }
 }

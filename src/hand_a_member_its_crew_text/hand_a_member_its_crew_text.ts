@@ -25,7 +25,7 @@ import { crewTextFilesOf, DeclarationRefused, declareCrew, DECLARATION_DIRECTORY
 export { crewTextFilesOf }
 import { aMostIsSet, HANDOFF_LINES_MOST, FAIL_ONLY_ON_HARM, HOUSE_RULE_TRIMS, MUTANTS_ON_GUARDS_ONLY, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { DocumentStore, FileTree } from '../host_contract/host_contract.ts'
-import { CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
+import { ARTIFACT_LINES, CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { OFFER_OWNER_ASKS, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
 import { thePortedRules, type WhatThePortedRulesRead } from './the_ported_rules.ts'
@@ -164,9 +164,8 @@ export async function crewTextFilesToApprove(documents: DocumentStore, root: str
   }
 }
 
-/** The placeholders that stand for a line a member sends. */
-export const LINE_PLACEHOLDERS = ['handoff', 'doc_handoff', 'verdict', 'doc_verdict'] as const
-export type LinePlaceholder = (typeof LINE_PLACEHOLDERS)[number]
+/** The placeholders that stand for a line that hands an Artifact to the Supervisor (martha#957 gap 13), which the line reader does not read. */
+export type ArtifactPlaceholder = 'artifact_read' | 'artifact_publish'
 
 /** The placeholders one of the crew's trims fills, named as the house rule is (martha#1010). */
 export const TRIM_PLACEHOLDERS = HOUSE_RULE_TRIMS
@@ -175,8 +174,11 @@ export type TrimPlaceholder = (typeof HOUSE_RULE_TRIMS)[number]
 /** The placeholders a text may carry, in the words the crew's own texts use. The owner's is the word the declaration
  * names the owner by, so a text and a declaration cannot come to spell the same person two ways. The crew's four trims
  * are placeholders too (martha#1010): each fills with a sentence, or with nothing when the owner turned its notice off. */
-export const PLACEHOLDERS = [OWNER, ...LINE_PLACEHOLDERS, ...TRIM_PLACEHOLDERS] as const
+export const PLACEHOLDERS = [OWNER, 'handoff', 'doc_handoff', 'verdict', 'doc_verdict', 'artifact_read', 'artifact_publish', ...TRIM_PLACEHOLDERS] as const
 export type Placeholder = (typeof PLACEHOLDERS)[number]
+
+/** The placeholders that stand for a line a member sends. */
+export type LinePlaceholder = Exclude<Placeholder, typeof OWNER | ArtifactPlaceholder | TrimPlaceholder>
 
 /**
  * The lines the section teaches, keyed by the placeholder a text names them with, generated from the same definitions
@@ -300,7 +302,13 @@ function theLinesTaughtText(): string {
 
 /** What each placeholder stands for, from the declaration and the lines the reader accepts. */
 function placeholdersFor(texts: TheTextsAMemberReads): Readonly<Record<Placeholder, string>> {
-  return { [OWNER]: texts.owner, ...theLinesTaught(), ...theTrimSentences(texts.trims) }
+  return {
+    [OWNER]: texts.owner,
+    ...theLinesTaught(),
+    ...theTrimSentences(texts.trims),
+    artifact_read: ARTIFACT_LINES.read,
+    artifact_publish: ARTIFACT_LINES.publish,
+  }
 }
 
 /**
