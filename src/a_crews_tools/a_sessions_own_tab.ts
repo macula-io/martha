@@ -76,6 +76,25 @@ export interface AnOwnTabAsked {
   readonly writeTheRow: WriteTheRow
 }
 
+/** What the three asks a session's own tab makes are answered over: the row's writer, the session's own state, and the park. */
+export interface TheOwnTabAsksPlace {
+  readonly asked: AnOwnTabAsked
+  readonly own: TheSessionsOwnState
+  readonly session: string
+  readonly park: ThePlaceAParkIsMovedIn
+}
+
+/**
+ * The three asks a session's own tab makes (martha#1000, gap 8 of #957): the owner's two overrides, and the host's task
+ * list posted by the mod. Undefined when the ask is another's, which the asking file's own questions answer.
+ */
+export function anAskTheSessionsOwnTabMakes(at: TheOwnTabAsksPlace, name: string, args: Readonly<Record<string, unknown>>): AnOwnTabAnswer | undefined {
+  if (name === THE_PROGRESS_SWITCH_ASK) return theProgressSwitched(at.asked, at.own, at.session, args)
+  if (name === THE_TASKS_ASK) return theTasksNoted(at.asked, args)
+  if (name === THE_OWNERS_PARK_ASK) return theOwnersParkMoved(at.park, args)
+  return undefined
+}
+
 /**
  * The owner's `/crew-progress on|off` (martha#1000, gap 8 of #957): this session's progress reporting, and what the row
  * says when it is turned off. Off is answered to the member's own reports from here on, and the report already taken is
@@ -92,6 +111,19 @@ export function theProgressSwitched(asked: AnOwnTabAsked, own: TheSessionsOwnSta
     own.progress_off.delete(session)
   }
   return { answer: `Progress reporting ${wanted} for this session.` }
+}
+
+/**
+ * Whether this member may put a closing question to the owner (martha#1000, gap 8 of #957): crew-code's rule that a
+ * member of a team crew asks its Supervisor, not the owner (register.tsx:3927 #472). The cheap reading comes first, so
+ * the crew's routing table is read only at a turn's end and only when that turn's answer ends in a question.
+ */
+export async function mayPutAQuestionToTheOwner(
+  turn: { readonly at_start: boolean; readonly turn_running: boolean; readonly answer: string },
+  theNudgesGoToTheOwner: () => Promise<boolean>,
+): Promise<boolean> {
+  if (turn.at_start || turn.turn_running || !turn.answer.trimEnd().endsWith('?')) return false
+  return await theNudgesGoToTheOwner()
 }
 
 /** What a park is moved over: this member's name, the crew's own store, and the moment the owner typed it. */

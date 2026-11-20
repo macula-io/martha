@@ -33,6 +33,8 @@ import { memberRelay, type MemberRelay, type RelayReply } from './answer_the_rel
 import { THE_GUARD_ASK_UNREADABLE } from '../guard_the_git_a_member_runs/judge_a_guards_question.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { BILLED_BY_API_KEY } from '../declare_crew/declare_crew.ts'
+import { ARTIFACT_TOOLS, theArtifactRefusal } from '../launch_a_claude_code_member/the_artifacts_a_key_cannot_open.ts'
 
 interface Places {
   readonly home: string
@@ -125,8 +127,9 @@ function theReceiptsTaken(allowed: string[]): SignedRuns {
 }
 
 /** The relay for one member, over a crew's own tools and the receipts a call would take. */
-function relayFor(places: Places, crew: CrewTools | undefined, signed_runs: SignedRuns): MemberRelay {
+function relayFor(places: Places, crew: CrewTools | undefined, signed_runs: SignedRuns, refusesACallItsBillingCannotRun?: (tool: string) => string | undefined): MemberRelay {
   return memberRelay({
+    ...(refusesACallItsBillingCannotRun === undefined ? {} : { refusesACallItsBillingCannotRun }),
     records: sessionRecordsIn(rowStreamsDirectory(places.rows)),
     launch: { host: CLAUDE_CODE, launch_dir: places.checkout, stop_dir: places.home, approved_fingerprints: [] },
     policy: { may_send_executable_text: [] },
@@ -266,4 +269,17 @@ test('#562: the clone\'s ref transaction is answered with the crew\'s verdict, a
   assert.deepEqual(await relay.judgeARefTransaction({ updates: [{ ref: 'refs/heads/hygiea/562', deletes: true }] }), { verdict: { allow: 1 } })
   assert.deepEqual(await relay.judgeARefTransaction({ updates: [{ ref: 'refs/heads/uranus/9' }] }), { refused: THE_GUARD_ASK_UNREADABLE })
   assert.deepEqual(await relay.judgeARefTransaction({}), { refused: THE_GUARD_ASK_UNREADABLE })
+})
+
+test('#957 gap 13: the relay denies an Artifact call its member\'s billing cannot run, with the launch\'s words, before the crew is asked, and takes no receipt (mutant: the relay not handing the place on)', async (t) => {
+  const places = placesOf(t)
+  const asked: string[] = []
+  const allowed: string[] = []
+  const relay = relayFor(places, aCrewRefusingEverything(asked), theReceiptsTaken(allowed), (tool) => theArtifactRefusal(BILLED_BY_API_KEY, tool))
+  await startedOn(relay)
+
+  const tool = ARTIFACT_TOOLS[0]!
+  assert.deepEqual(await relay.answer('tool_called', call(tool)), denied(theArtifactRefusal(BILLED_BY_API_KEY, tool)!), 'the Artifact call was not denied with the launch\'s words')
+  assert.deepEqual(asked, [], 'the crew was asked about a call the billing refuses first')
+  assert.deepEqual(allowed, [], 'a receipt was taken for a call that never ran')
 })

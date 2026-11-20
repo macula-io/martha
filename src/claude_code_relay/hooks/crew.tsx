@@ -54,6 +54,12 @@ type CrewNext = (event: unknown) => Promise<unknown>
 /** The command the owner types at a member's tab to see the crew or say one thing to a member (martha#927). */
 const CREW_COMMAND = 'crew'
 
+/** The command the owner types to see the crew's budget, or set the reviewer model's gauge (martha#990). */
+const BUDGET_COMMAND = 'crew-budget'
+
+/** What the mod asks the launcher when the owner types `/crew-budget`: never a model's tool (martha#990). */
+const THE_BUDGET_QUESTION = 'the_crews_budget'
+
 /** The event whose view the pane asks the host to draw again, as the host names it. */
 const THE_PANES_RENDER = 'ui.render'
 
@@ -427,6 +433,15 @@ const afterAToDoListIsWritten = async ($: CrewEngine, e: Record<string, unknown>
 }
 
 /**
+ * The owner's `/crew-budget` (martha#990): what the owner typed goes to the launcher as it was typed, and its answer is
+ * shown to the owner alone, as `/crew`'s is, so the model takes no turn and never reads it.
+ */
+async function answerTheBudgetCommand($: CrewEngine, e: { readonly args?: unknown }): Promise<unknown> {
+  const heard = await hearTheLauncher($, THE_BUDGET_QUESTION, { typed: typeof e.args === 'string' ? e.args : '' })
+  return theCrewCommandResult('said' in heard ? heard.said : heard.why)
+}
+
+/**
  * The pane as the host draws it: the crew's rows, then the owner's list (martha#316). When the read failed it says it
  * could not read the crew, and why: drawing `0/0 online` and "no one has reported" over a broken answer tells the owner
  * a lie about a working crew (martha#254 part 2 r=2 R2).
@@ -477,6 +492,15 @@ async function registerTheCommands($: CrewEngine): Promise<void> {
   await $.command.register({ name: CREW_COMMAND, description: 'See your crew, or say one thing to one member', argumentHint: '[<member> <text>]' })
   await $.command.register({ name: 'crew-park', description: 'Park this session so wake-on-idle leaves it alone: /crew-park, and /crew-park off unparks it', argumentHint: 'off' })
   await $.command.register({ name: 'crew-progress', description: 'Turn progress reporting on or off for this session: /crew-progress on|off', argumentHint: 'on|off' })
+  await $.command.register({ name: BUDGET_COMMAND, description: "Show the crew's budget, or set the reviewer model's gauge", argumentHint: '[<reviewer model> <percent>|off]' })
+}
+
+/** The owner's own commands (martha#927, #990), each answered by the launcher and shown to the owner alone. */
+function registerTheOwnersCommands(on: (event: string, options?: unknown, handler?: unknown) => unknown): void {
+  // `/crew` is answered without `next`, so no command runs beneath it; what it asks and prints is ./crew_command.ts's.
+  on('command.run', { command: CREW_COMMAND }, answerTheCrewCommand)
+  // `/crew-budget` is shown to the owner alone, as `/crew` is.
+  on('command.run', { command: BUDGET_COMMAND }, answerTheBudgetCommand)
 }
 
 /** The crew's tools registered with this host, and the pane drawn. */
@@ -522,9 +546,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
 
   on('ui.render', { component: 'Pane', requestId: PANE }, drawThePane)
 
-  // The owner's `/crew` (martha#927): answered here without `next`, so no command runs beneath it, and shown to the
-  // owner alone, so the model takes no turn. What it asks and prints is ./crew_command.ts's.
-  on('command.run', { command: CREW_COMMAND }, answerTheCrewCommand)
+  registerTheOwnersCommands(on)
   registerTheSessionsOwnTab(on)
 
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens

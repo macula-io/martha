@@ -38,6 +38,7 @@ const ITS_SHELL = 'run-a-command'
 const THE_REVIEWER_MODEL = 'the-reviewer'
 const THE_SETTINGS_REFUSAL = 'that call writes the owner’s settings'
 const THE_MEMORY_REFUSAL = 'that call writes the owner’s memory'
+const THE_BILLING_REFUSAL = 'that call needs a login this member is not billed by'
 const WHY_THE_SPEND_ROW_WAS_NOT_KEPT = 'the spend row could not be kept'
 
 /** What each step the entry may take left behind, in the order it was taken. */
@@ -49,6 +50,7 @@ interface Seen {
 interface TheLaunchDoes {
   readonly settings_refuse?: boolean
   readonly memory_refuse?: boolean
+  readonly billing_refuse?: boolean
   readonly spend_unkept?: boolean
   readonly review_model_of_the_call?: string | null
   readonly end_held_for?: string
@@ -155,6 +157,10 @@ function anEntry(t: TestContext, does: TheLaunchDoes = {}): AnEntry {
     policy: { may_send_executable_text: [] },
     names: A_MADE_UP_HOSTS_NAMES,
     signed_runs: aSignedRuns(seen),
+    refusesACallItsBillingCannotRun: () => {
+      seen.steps.push('billing asked')
+      return does.billing_refuse === true ? THE_BILLING_REFUSAL : undefined
+    },
     refusesAWriteToTheOwnersSettings: () => {
       seen.steps.push('settings asked')
       return does.settings_refuse === true ? THE_SETTINGS_REFUSAL : undefined
@@ -182,7 +188,17 @@ test('#541 2: a call in a session the entry holds is allowed in the contract’s
   const answer = await answers.aToolCalled(aCall())
 
   assert.deepEqual(answer, { allowed: 1 })
-  assert.deepEqual(seen.steps, ['settings asked', 'memory asked', 'the contract read', 'counted', `signed run noted ${ITS_SHELL}`, 'a call allowed call-1'])
+  assert.deepEqual(seen.steps, ['billing asked', 'settings asked', 'memory asked', 'the contract read', 'counted', `signed run noted ${ITS_SHELL}`, 'a call allowed call-1'])
+})
+
+test('#957 gap 13: a call the member\'s billing cannot run is denied first, with the launch\'s words, before anything else is asked (mutant: the billing not asked)', async (t) => {
+  const { answers, seen } = anEntry(t, { billing_refuse: true, settings_refuse: true })
+  await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+
+  const answer = await answers.aToolCalled(aCall())
+
+  assert.equal(deniedBecause(answer), THE_BILLING_REFUSAL)
+  assert.deepEqual(seen.steps, ['billing asked'])
 })
 
 test('#541 2: a call in a session never started is denied by name, and nothing is asked', async (t) => {
@@ -214,7 +230,7 @@ test('#541 2: a write to the owner’s settings is denied first, before their me
   const answer = await answers.aToolCalled(aCall())
 
   assert.equal(deniedBecause(answer), THE_SETTINGS_REFUSAL)
-  assert.deepEqual(seen.steps, ['settings asked'])
+  assert.deepEqual(seen.steps, ['billing asked', 'settings asked'])
 })
 
 test('#541 2: a write to the owner’s memory is denied before the gate is asked', async (t) => {
@@ -224,7 +240,7 @@ test('#541 2: a write to the owner’s memory is denied before the gate is asked
   const answer = await answers.aToolCalled(aCall())
 
   assert.equal(deniedBecause(answer), THE_MEMORY_REFUSAL)
-  assert.deepEqual(seen.steps, ['settings asked', 'memory asked'])
+  assert.deepEqual(seen.steps, ['billing asked', 'settings asked', 'memory asked'])
 })
 
 test('#541 2: the member’s shell is held while an agent of its session runs, and the agent’s own call is not, and is noted on its run', async (t) => {
@@ -277,6 +293,7 @@ test('#601 row 113: a call whose spend row cannot be kept runs, and why it was n
 
   assert.deepEqual(answer, { allowed: 1 })
   assert.deepEqual(seen.steps, [
+    'billing asked',
     'settings asked',
     'memory asked',
     'the contract read',
@@ -299,6 +316,7 @@ test('#601 rows 110 and 112: a call past its package\'s budget and outside its c
   assert.deepEqual(answer, { allowed: 1 })
   const own = A_MADE_UP_HOSTS_NAMES.ownNameOf
   assert.deepEqual(seen.steps, [
+    'billing asked',
     'settings asked',
     'memory asked',
     'the contract read',
@@ -345,5 +363,5 @@ test('#541 2: a held end of the turn denies the call last, after the gate, and t
   const answer = await answers.aToolCalled(aCall())
 
   assert.equal(deniedBecause(answer), A_TOOL_WHILE_THE_END_IS_HELD)
-  assert.deepEqual(seen.steps, ['settings asked', 'memory asked'])
+  assert.deepEqual(seen.steps, ['billing asked', 'settings asked', 'memory asked'])
 })

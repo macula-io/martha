@@ -61,6 +61,7 @@ import {
   type AReadableCall,
 } from '../refuse_calls_outside_the_package_contract/the_acts_of_a_call.ts'
 import type { TheContractHanded } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
+import { THE_BUDGET_ASK, keepTheWeekly, theBudgetCommandAnswer, theBudgetCommandIn } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import {
   THE_REFRESH_ASK,
   aSwitchMayFollow,
@@ -108,19 +109,17 @@ import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_hando
 import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import {
   PROGRESS_REPORTING_IS_OFF,
-  THE_OWNERS_PARK_ASK,
-  THE_PROGRESS_SWITCH_ASK,
-  THE_TASKS_ASK,
-  theOwnersParkMoved,
-  theProgressSwitched,
+  anAskTheSessionsOwnTabMakes,
+  mayPutAQuestionToTheOwner,
   theRowSettledBetweenTurns,
   theSessionsOwnState,
   theStateThisSessionSettlesTo,
-  theTasksNoted,
   theWorkInHandHeld,
   type AnOwnTabAsked,
+  type TheOwnTabAsksPlace,
   type TheSessionsOwnState,
 } from './a_sessions_own_tab.ts'
+import type { AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
@@ -209,6 +208,8 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * declaration naming one is then refused — nothing here invents a model list.
    */
   readonly models?: ModelVocabulary
+  /** The host a session's usage is kept under (martha#999 package 5): an engine launch names its own; Claude Code when none. */
+  readonly usage_host?: AUsageHost
   /** The model this member was launched on (martha#315): what its row says until a switch is confirmed. */
   readonly launched_on?: string
   /**
@@ -531,7 +532,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     ...theReviewRuleOver({ declared: () => crewOrRefusal(held), spawn: held.spawn }),
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
     noteTheWorkInHand: (session_id, work) =>
-      theWorkInHandHeld(ownTabAsked(held, state), state.own, session_id, work, held.ledger.clock.now(), carriesAReviewWord),
+      theWorkInHandHeld(ownTabAsksPlace(held, state).asked, state.own, session_id, work, held.ledger.clock.now(), carriesAReviewWord),
     ends: state.ends,
     theContractInForce: (call, names) => theContractTheMemberHolds(held, call, names),
     refusesTheGitIn: async (call) => (held.refusesTheGitCall === undefined ? undefined : held.refusesTheGitCall(call)),
@@ -586,29 +587,30 @@ async function answerAnAskOfTheMods(
   if (channel !== undefined) return channel
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
-  const fromTheTab = anAskTheSessionsOwnTabMakes(places, state, name, args)
+  const fromTheTab = anAskTheSessionsOwnTabMakes(ownTabAsksPlace(places, state), name, args)
   if (fromTheTab !== undefined) return fromTheTab
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
+  if (name === THE_BUDGET_ASK) return await theBudgetAsked(places, args)
   return undefined
 }
 
 /**
- * The three asks a session's own tab makes (martha#1000, gap 8 of #957): the owner's two overrides, and the host's task
- * list posted by the mod. Undefined when the ask is another's, which the questions above and below it answer.
+ * What a session's own tab is answered over (martha#1000, gap 8 of #957): this member's name, the one writer of its row
+ * — the writer that owns the row's `at`, so a change this file makes never lands older than the row held — and the state
+ * the session keeps of itself.
  */
-function anAskTheSessionsOwnTabMakes(places: CrewToolPlaces, state: SessionState, name: string, args: Readonly<Record<string, unknown>>): CoreToolAnswer | undefined {
-  if (name === THE_PROGRESS_SWITCH_ASK) return theProgressSwitched(ownTabAsked(places, state), state.own, state.session, args)
-  if (name === THE_TASKS_ASK) return theTasksNoted(ownTabAsked(places, state), args)
-  if (name === THE_OWNERS_PARK_ASK) return theOwnersParkMoved({ member: places.member, stores: places.stores, now: places.ledger.clock.now() }, args)
-  return undefined
+function ownTabAsksPlace(places: CrewToolPlaces, state: SessionState): TheOwnTabAsksPlace {
+  const asked: AnOwnTabAsked = { member: places.member, writeTheRow: (change) => writeRow(places, state, change) }
+  return { asked, own: state.own, session: state.session, park: { member: places.member, stores: places.stores, now: places.ledger.clock.now() } }
 }
 
-/**
- * What a session's own tab is answered over (martha#1000, gap 8 of #957): this member's name, and the one writer of its
- * row — the writer that owns the row's `at`, so a change this file makes never lands older than the row held.
- */
-function ownTabAsked(places: CrewToolPlaces, state: SessionState): AnOwnTabAsked {
-  return { member: places.member, writeTheRow: (change) => writeRow(places, state, change) }
+/** `/crew-budget` as the owner typed it at this session's tab (martha#990): the line shown, or the reviewer gauge set. */
+async function theBudgetAsked(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const command = theBudgetCommandIn(args)
+  if (typeof command === 'string') return { refused: command }
+  const settings = await theSettingsOrRefusal(places)
+  if ('refused' in settings) return settings
+  return { answer: theBudgetCommandAnswer(places.stores.crew, command, settings.house_rules.review_model, places.ledger.clock.now()) }
 }
 
 /** The owner's list as the pane draws it (martha#316), with `focus` the row the owner's keyboard is on. */
@@ -645,6 +647,9 @@ async function theSessionsAct(
 ): Promise<CoreToolAnswer> {
   const question = theQuestionIn(args, from)
   if (typeof question === 'string') return { refused: question }
+  // The crew's newest weekly reading (martha#990): kept whatever the flow orders; a store that will not keep it leaves
+  // the reading before it, which the next turn's end replaces.
+  if (question.weekly !== null) keepTheWeekly(places.stores.crew, question.weekly)
   // A switch whose report never came (martha#359): the mod reports the host's command before it asks this question
   // again, so a guard still open here is one no session is coming back for. It is closed without waiting — the host's
   // save may still land, and the record it leaves is what the next launch finishes.
@@ -660,18 +665,13 @@ async function theSessionsAct(
   // read happens, so the row costs nothing a call would not have cost anyway (martha#513, slice 3).
   const spend = theSpendOnARow(await budget.theSpendInForce(from))
   state.own.turn_running = question.turn_running
-  const may_ask = await mayPutAQuestionToTheOwner(places, question)
+  const may_ask = await mayPutAQuestionToTheOwner(question, () => theNudgesGoToTheOwner(places))
   writeRow(places, state, (row) => theRowAfterTheTurn(state, row, question, act, spend, may_ask))
   return { answer: JSON.stringify(switching ?? ordered) }
 }
 
-/**
- * Whether this member may put a closing question to the owner (martha#1000, gap 8 of #957): crew-code's rule that a
- * member of a team crew asks its Supervisor, not the owner (register.tsx:3927 #472). It is the declaration's own routing
- * table — who this crew's nudges go to — read only at a turn's end, and only when the turn's answer ends in a question.
- */
-async function mayPutAQuestionToTheOwner(places: CrewToolPlaces, question: TheSessionsQuestion): Promise<boolean> {
-  if (question.at_start || question.turn_running || !question.answer.trimEnd().endsWith('?')) return false
+/** Whether this crew's nudges go to its owner at all: the declaration's routing table, read at a turn's end (martha#1000). */
+async function theNudgesGoToTheOwner(places: CrewToolPlaces): Promise<boolean> {
   const declared = await crewOrRefusal(places)
   return !('refused' in declared) && theNudgesGoTo(declared.settings).some((name) => sameMemberName(name, declared.crew.owner))
 }
@@ -1077,6 +1077,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     root: places.root,
     documents: places.documents,
     models: places.models ?? NO_MODEL_NAMED,
+    ...(places.usage_host === undefined ? {} : { usage_host: places.usage_host }),
     ledger: places.ledger,
     row_model: state.row_model,
     began_at: state.began_at,

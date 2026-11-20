@@ -95,6 +95,11 @@ export interface ThePlacesAHostReportsOver {
   readonly handed_at_start: readonly TurnSource[]
   /** The crew's tools (martha#254): a launch with none starts no refresh, hands no start line and names no review. */
   readonly crew?: CrewTools | undefined
+  /**
+   * Why a call this member's billing cannot run is refused before anything else asks of it (martha#957 gap 13): an
+   * Artifact call by a member billed by the key, which carries no claude.ai login. Absent, no call is refused for it.
+   */
+  readonly refusesACallItsBillingCannotRun?: ((tool: string) => string | undefined) | undefined
   /** The crew text this launch hands every session it starts (martha#306); absent, only the start line is handed. */
   readonly crew_text?: string | undefined
   /**
@@ -499,8 +504,10 @@ function noteTheAgentsCall(agents: TheRunTable, session: HostSession, call: ACal
   if (call.call_id !== undefined) run.calls_seen.add(call.call_id)
 }
 
-/** Why this call is refused before it runs, or undefined: the owner's settings, their memory, the gate, then what the crew refuses beside it (the reviewer-model rule, the workspace guard's first seam, a held end). */
+/** Why this call is refused before it runs, or undefined: a call its billing cannot run, the owner's settings, their memory, the gate, then what the crew refuses beside it (the reviewer-model rule, the workspace guard's first seam, a held end). */
 async function theDenialOfACall(places: ThePlacesAHostReportsOver, session: HostSession, call: ACalledTool): Promise<string | undefined> {
+  const unbilled = places.refusesACallItsBillingCannotRun?.(call.tool)
+  if (unbilled !== undefined) return unbilled
   const settings = places.refusesAWriteToTheOwnersSettings(call.input)
   if (settings !== undefined) return settings
   const memory = places.refusesAWriteToTheOwnersMemory(call.tool, call.input)
