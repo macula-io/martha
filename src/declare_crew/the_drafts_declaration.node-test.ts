@@ -189,6 +189,13 @@ test('#931: the workspace root places the clones under the project and the workt
   await refusedWith({ ...draft, workspace: { ...draft.workspace, roots: [] } }, 'workspace.roots')
 })
 
+test('#932: the crew\'s id and terminal are read as declared, and a declaration naming neither opens in kitty with no id', async () => {
+  assert.deepEqual((await declare(draft)).opens, { id: 'a-crew', terminal: 'tmux' })
+  assert.deepEqual((await declare({ ...draft, id: '  a-crew ', terminal: 'kitty' })).opens, { id: 'a-crew', terminal: 'kitty' })
+  const { id: _id, terminal: _terminal, ...unnamed } = draft
+  assert.deepEqual((await declare(unnamed)).opens, { id: null, terminal: 'kitty' })
+})
+
 test('#931: the mesh, the terminal and the id are checked field by field', async () => {
   await refusedWith({ ...draft, terminal: 'a-terminal' }, 'terminal')
   await refusedWith({ ...draft, id: '' }, 'id')

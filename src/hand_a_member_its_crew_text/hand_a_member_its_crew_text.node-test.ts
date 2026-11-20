@@ -32,6 +32,7 @@ import {
   type TheTextsAMemberReads,
 } from './hand_a_member_its_crew_text.ts'
 import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 
 const ROOT = `/${CREWS_PLACE}/site`
 const CREW = join(ROOT, DECLARATION_DIRECTORY)
@@ -59,6 +60,7 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     volatile_paths: [],
     engine_endpoint: null,
     thresholds: THRESHOLDS_WHEN_UNNAMED,
+    opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
   }
 }
 

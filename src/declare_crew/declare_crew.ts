@@ -38,7 +38,7 @@ export {
   isAKeyFilesPath,
   type EngineEndpoint,
 } from './the_engines_endpoint.ts'
-import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theWorkspacesClonesOf } from './the_crews_workspace.ts'
+import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theWorkspacesClonesOf, whereTheCrewOpens, type WhereTheCrewOpens } from './the_crews_workspace.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -408,6 +408,8 @@ export interface CrewSettings {
   readonly engine_endpoint: EngineEndpoint | null
   /** The crew's thresholds (martha#931 A): see ./the_crews_thresholds; each field the declaration leaves out reads today's value. */
   readonly thresholds: CrewThresholds
+  /** The crew's name and the terminal its members open in (martha#932): see ./the_crews_workspace's whereTheCrewOpens. */
+  readonly opens: WhereTheCrewOpens
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -611,6 +613,7 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
     backlog: backlogOf(refuse, value[BACKLOG]),
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
     engine_endpoint: theEnginesEndpointOf(said, value, profiles),
+    opens: whereTheCrewOpens(value),
   }
 }
 

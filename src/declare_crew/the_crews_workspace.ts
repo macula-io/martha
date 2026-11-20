@@ -14,8 +14,24 @@ const TERMINAL = 'terminal'
 const WORKSPACE = 'workspace'
 const MESH = 'mesh'
 
-/** The terminals a crew's members may be opened in. Only kitty opens today; tmux is martha#932. */
+/** The terminals a crew's members may be opened in; the first is the one a declaration that names none opens in. */
 export const TERMINALS: readonly string[] = ['kitty', 'tmux']
+
+/** The crew's name, when the declaration names one, and the terminal its members open in (martha#932). */
+export interface WhereTheCrewOpens {
+  readonly id: string | null
+  readonly terminal: string
+}
+
+/** Where a crew opens when its declaration names neither an id nor a terminal. */
+export const WHERE_A_CREW_OPENS_WHEN_UNNAMED: WhereTheCrewOpens = { id: null, terminal: TERMINALS[0]! }
+
+/** Where the crew opens, from a declaration theWorkspacesClonesOf has already checked. */
+export function whereTheCrewOpens(declaration: Block): WhereTheCrewOpens {
+  const id = declaration[CREW_ID]
+  const terminal = declaration[TERMINAL]
+  return { id: typeof id === 'string' ? id.trim() : WHERE_A_CREW_OPENS_WHEN_UNNAMED.id, terminal: typeof terminal === 'string' ? terminal : WHERE_A_CREW_OPENS_WHEN_UNNAMED.terminal }
+}
 
 /** The fields a workspace may name: the folder its clones sit in, the folders allowed beside them, and its own orgs. */
 export const WORKSPACE_KEYS = ['root', 'root_allowed', 'own_orgs'] as const

@@ -159,6 +159,16 @@ jobs:
           version="$(node --input-type=module -e "import { KITTY_FLOOR } from './src/open_the_crew_in_kitty/the_session_kitty_reads.ts'; console.log(KITTY_FLOOR)")"
           bin="$(fetch_the_kitty/fetch_the_kitty.sh --to "${{ runner.temp }}/kitty" --version "$version" --sha256 "$(<fetch_the_kitty/kitty_release.sha256)")"
           echo "$bin" >> "$GITHUB_PATH"
+      # tmux for the live test of martha up on tmux (macula-io/martha#932): it opens a crew on a tmux server of the
+      # test's own, and is skipped by name where tmux is missing, so the gate installs one when the image has none
+      # and fails here if what it has is below TMUX_FLOOR.
+      - name: tmux at or above Martha's floor
+        run: |
+          command -v tmux >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q tmux; }
+          floor="$(node --input-type=module -e "import { TMUX_FLOOR } from './src/open_the_crew_in_tmux/the_commands_tmux_runs.ts'; console.log(TMUX_FLOOR)")"
+          found="$(tmux -V | sed -E 's/^tmux (next-)?([0-9]+[.][0-9]+).*/\2/')"
+          echo "tmux $found, floor $floor"
+          [ "$(printf '%s\n%s\n' "$floor" "$found" | sort -V | head -1)" = "$floor" ]
       - run: npm ci
       # npm test runs the installer job's own steps too (martha#496), so a suite green here is green there: the
       # installer's dependencies go in first, as that job installs them.

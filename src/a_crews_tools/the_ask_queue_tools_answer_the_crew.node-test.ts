@@ -45,6 +45,7 @@ import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_direc
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-ask-queue-tools-'))
 after(() => removeTheTree(home))
@@ -223,6 +224,7 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
   volatile_paths: [],
   engine_endpoint: null,
     thresholds: THRESHOLDS_WHEN_UNNAMED,
+    opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
 })
 
 /** A place of the test's own, over `rows`, with the git and declaration it is handed: either may be left out. */
