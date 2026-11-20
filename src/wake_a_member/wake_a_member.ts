@@ -25,7 +25,8 @@ import {
   type TheDeclaration,
   type ThePark,
 } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
+import { HANDOVERS_PLACE, theBriefLine } from '../write_my_handover/write_my_handover.ts'
+import { theNewestBriefOf } from '../read_a_members_brief/read_a_members_brief.ts'
 import { theTellingOnTheNextStart } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 
 /** What this slice asks of a host: the crew's own store, and the stamps the host keeps its handovers' times in. */
@@ -77,10 +78,17 @@ export const THE_WAKE_CLEARS_THE_PARK = 'woken from its handover by the owner'
  * quotes the handover, so the only handover a successor reads is the one the host wrote and stamped. `telling` is what a
  * killed run left, from the one function both resume prompts read it from (#693).
  */
-export const theResumePrompt = (handover: AHandover, member: string, telling?: string): string =>
+export const theResumePrompt = (handover: AHandover, member: string, telling?: string, brief?: string): string =>
   `${member}, you are resuming from your handover at ${handover.file}. Read it first: it is what your predecessor left you. ` +
+  (brief === undefined ? '' : `${theBriefLine(brief)} `) +
   'Then carry on with the packages it names, and check what became of anything it says was sent and never concluded before you send it again.' +
   (telling === undefined ? '' : ` ${telling}`)
+
+/** The path of `member`'s newest brief, which the wake names as crew-code's unpark does (martha#999 package 1); undefined when none can be read. */
+function theBriefPathOf(host: { readonly stores: TheCrewFilesStores }, member: string): string | undefined {
+  const brief = theNewestBriefOf(host.stores.crew, member)
+  return brief === undefined || 'refusal' in brief ? undefined : brief.path
+}
 
 /**
  * Wakes `member`: reads its park and its newest handover, starts it on the resume prompt, then clears its park — or says
@@ -98,7 +106,7 @@ export async function wakeAMember(host: WakeHost, waking: Waking, start: TheStar
   const telling = theTellingOnTheNextStart({ crew: host.stores.crew, member: waking.member, now_ms: Date.now() })
   const asked = await start({
     member: waking.member,
-    prompt: theResumePrompt(handover, waking.member, telling.telling),
+    prompt: theResumePrompt(handover, waking.member, telling.telling, theBriefPathOf(host, waking.member)),
   })
   if (!asked.started) return { refusal: asked.refusal ?? `${waking.member} was not started, and nothing says why.`, told_by_the_start: true }
   return { member: waking.member, handover, park: clearedThePark(host, waking, park) }
