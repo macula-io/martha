@@ -76,7 +76,7 @@ const teamFor = (act: Act) => ({
   ],
   mode: { name: 'team', roles: [SUPERVISOR, BUILDER_ROLE], may: Object.fromEntries(ACTS.map((one) => [one, [one === act ? SUPERVISOR : BUILDER_ROLE]])) },
   // A crew with a workspace, so the worktree row reaches its grant instead of refusing a place nobody declared.
-  house_rules: { [WORKSPACE_LAYOUT]: true, [CLONES]: join(root, 'clones'), [WORKTREES]: join(root, 'worktrees') },
+  house_rules: { [WORKSPACE_LAYOUT]: true, [CLONES]: join(root, CLONES), [WORKTREES]: join(root, WORKTREES) },
   channel_read_seconds: 30,
 })
 const documentsFor = (act: Act) => ({
