@@ -532,7 +532,9 @@ async function aResultCameIn(held: TheSessionsHeld, result: AResultOfACall): Pro
   const stop = await theStopAfterARanTool(held, result)
   if (stop !== undefined) return { stop }
   const end = held.places.crew?.ends.aCallAnswered(result.session_id, result.call_id ?? '', held.places.journal)
-  return end === undefined ? { taken: 1 } : { taken: 1, end_turn: end }
+  // A brief the call wrote that breaks the owner-items rule is said back with the result (martha#999 package 2b).
+  const note = (await held.places.crew?.theNoteAfterACall?.({ tool: result.tool, input: result.input })) ?? ''
+  return { taken: 1, ...(end === undefined ? {} : { end_turn: end }), ...(note === '' ? {} : { note }) }
 }
 
 /**

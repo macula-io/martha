@@ -14,11 +14,13 @@
 // tool, the state one place's tools hold between calls, the handler table and the answers the mod asks for by name —
 // the refresh flow's question among them, which reads the launch's every place and so cannot leave this file.
 
-import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { declareCrew, OWNER_ITEMS, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { briefsPlace } from '../read_a_members_brief/read_a_members_brief.ts'
+import { theNoteAfterABriefWrite } from '../read_a_members_brief/note_a_brief_write.ts'
 import { holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { theLineToHandAtStart, type TheStartLine } from '../hand_a_member_its_crew_text/the_start_line.ts'
-import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores, ToolNames } from '../host_contract/host_contract.ts'
+import type { DocumentStore, HandoverStampStore, HostContract, HostFileTools, Refused, TheCrewFilesStores, ToolNames } from '../host_contract/host_contract.ts'
 import { VERIFY_RANGE_TOOL, verifyTheRangeOver } from '../check_a_range_before_the_owner_says_yes/the_verify_range_tool.ts'
 import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { THE_CHANNEL_READ_ASK, theChannelReadAsk } from '../keep_the_crew_channel/the_channel_read.ts'
@@ -248,6 +250,12 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * and a crew that declared no workspace layout hands none.
    */
   readonly refusesTheHandOff?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
+  /**
+   * The host's own names for what writes a file and what runs a shell line (martha#999 package 2b): a call of either
+   * that wrote one of the crew's briefs, breaking the owner-items rule, is answered with a note. A host whose member
+   * cannot be handed a line after a tool hands none, and no call is noted.
+   */
+  readonly brief_writes?: { readonly file_tools: HostFileTools; readonly shell_tool: string }
 }
 
 /** The tools a crew's member can call. */
@@ -336,6 +344,11 @@ export interface CrewTools extends TheReviewRule {
    * crew declared no layout, or when a launch handed no guard of this place at all.
    */
   refusesTheHandOff?(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string | undefined>
+  /**
+   * The note a ran call is answered with (martha#999 package 2b): '' unless it wrote one of the crew's briefs and the
+   * brief now breaks the owner-items rule, as crew-code notes a shell write after it ran.
+   */
+  theNoteAfterACall?(call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string>
 }
 
 /** The tools, in the order the mod registers them, each as the slice that owns it defines it. */
@@ -501,6 +514,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     refusesTheGitOnThePath: async (call) => held.refusesTheGitOnThePath?.(call),
     refusesTheRefUpdate: (updates) => held.refusesTheRefUpdate?.(updates),
     refusesTheHandOff: async (call) => held.refusesTheHandOff?.(call),
+    theNoteAfterACall: async (call) => theNoteAfterACallIn(held, call),
   }
 }
 
@@ -1002,6 +1016,22 @@ async function crewOrRefusal(places: CrewToolPlaces): Promise<CrewDeclared | { r
   } catch (error) {
     return { refused: `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}` }
   }
+}
+
+/** The note after a ran call that wrote a brief (martha#999 package 2b): none on a host that handed no names for it. */
+async function theNoteAfterACallIn(places: CrewToolPlaces, call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }): Promise<string> {
+  const names = places.brief_writes
+  if (names === undefined) return ''
+  return theNoteAfterABriefWrite({
+    ...call,
+    ...names,
+    briefs: () => briefsPlace(places.stores.crew),
+    owner_items: async () => {
+      const settings = await theSettingsOrRefusal(places)
+      return 'refused' in settings || !settings.house_rules[OWNER_ITEMS] ? undefined : settings.owner
+    },
+    now: places.ledger.clock.now(),
+  })
 }
 
 /** The declaration's settings alone, or why it could not be read: what a slice that reads no crew names needs. */

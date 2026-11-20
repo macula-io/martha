@@ -31,6 +31,8 @@ import { crewToolsOver, CREW_TOOL_NAMES, REFRESH_THIS_SESSION, type CrewTools } 
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_FILE_TOOLS, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 /** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
 const HANDOVER_LIMIT_PERCENT = THRESHOLDS_WHEN_UNNAMED.handover_percent
 
@@ -78,6 +80,8 @@ interface ACrewOptions {
   readonly thresholds?: Readonly<Record<string, number>>
   /** Whether the declaration switches `owner_items` on (martha#999 package 2). */
   readonly owner_items?: boolean
+  /** Whether the launch hands Claude Code's names for a file write and a shell line (martha#999 package 2b). */
+  readonly brief_writes?: boolean
 }
 
 /** One crew the test made: its member's tools, where its own store is, and the session that member's launcher holds. */
@@ -127,6 +131,7 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
     stamps: handoverStampsIn(crew),
     sessions: { of: (id) => held.get(id) },
     ...(options.volatile_roots === undefined ? {} : { volatile_roots: options.volatile_roots }),
+    ...(options.brief_writes === true ? { brief_writes: { file_tools: CLAUDE_CODE_FILE_TOOLS, shell_tool: CLAUDE_CODE_SHELL_TOOL } } : {}),
   })
   /** The act of the next question, one turn later than the last write: a beat the row store takes as the newest. */
   const answerWith = async (session: string, percent: number, answer: string, at_start: boolean): Promise<string> => {
@@ -447,11 +452,14 @@ test('#255: a decline at the limit is said once, and a later decline at the limi
   assert.equal((await crew.saidInTheChannel()).length, 1, 'the second decline at the limit sent another line')
 })
 
+/** The day every brief these cases keep is dated on. */
+const BRIEF_DAY = '2026-11-20'
+
 /** Keeps a brief for `member` in the crew's briefs place, as the Supervisor writes one (martha#999 package 1). */
 function keepABriefIn(crew: string, member: string, text: string): string {
   const place = keepTheCrewsFilesAsDirectories(crew).place(BRIEFS_PLACE)
   assert.ok(!('refusal' in place), 'the crew store refused its briefs place')
-  const file = theBriefFile(member, '2026-11-20')
+  const file = theBriefFile(member, BRIEF_DAY)
   assert.equal(place.keep(file, text), undefined)
   return join(place.path, file)
 }
@@ -516,4 +524,26 @@ test('martha#999 package 2: with owner_items on, a handover carrying the owner\'
 test('martha#999 package 2: with owner_items off, the owner\'s words are not read', async () => {
   const off = await theAnswerToAHandover({}, `${A_FULL_LINE}\n- an owner wants the register flipped.`)
   assert.equal(off.carry, CARRY_THE_CLEAR, 'a crew that does not switch owner_items on had a handover sent back for it')
+})
+
+test('martha#999 package 2b: with owner_items on, a brief a shell line or a file write left unmarked is noted after the call, read from the crew\'s briefs place', async () => {
+  const { tools, crew, clock } = await aCrewOfTools('builder', { owner_items: true, brief_writes: true })
+  const path = keepABriefIn(crew, 'builder', '- an owner wants the register flipped.')
+  // A shell write counts the briefs dated near the call's own day, so the clock stands on the brief's day.
+  clock.at = Date.parse(`${BRIEF_DAY}T12:00:00Z`)
+  const shell = await tools.theNoteAfterACall?.({ tool: CLAUDE_CODE_SHELL_TOOL, input: { command: `echo x >> ${path}` } })
+  assert.match(shell ?? '', /^Crew: the brief this command wrote breaks the owner-item rule/)
+  assert.match(shell ?? '', /"line 1: an owner wants the register flipped\."/)
+  const written = await tools.theNoteAfterACall?.({ tool: WHOLE_FILE_TOOL, input: { file_path: path, content: '' } })
+  assert.equal(written, shell, 'a file write of the same brief was not noted as the shell write was')
+  assert.equal(await tools.theNoteAfterACall?.({ tool: CLAUDE_CODE_SHELL_TOOL, input: { command: `cat ${path}` } }), '', 'a line that only reads the brief was noted')
+})
+
+test('martha#999 package 2b: with owner_items off, or on a host that hands no names, a brief write is not noted', async () => {
+  const off = await aCrewOfTools('builder', { brief_writes: true })
+  const offPath = keepABriefIn(off.crew, 'builder', '- an owner wants the register flipped.')
+  assert.equal(await off.tools.theNoteAfterACall?.({ tool: WHOLE_FILE_TOOL, input: { file_path: offPath, content: '' } }), '')
+  const unnamed = await aCrewOfTools('builder', { owner_items: true })
+  const unnamedPath = keepABriefIn(unnamed.crew, 'builder', '- an owner wants the register flipped.')
+  assert.equal(await unnamed.tools.theNoteAfterACall?.({ tool: WHOLE_FILE_TOOL, input: { file_path: unnamedPath, content: '' } }), '')
 })

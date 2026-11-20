@@ -111,6 +111,8 @@ export interface Ran {
 export interface Taken {
   readonly taken: 1
   readonly end_turn?: string
+  /** On a ran tool's report, the line the member reads after the tool's result (martha#999 package 2b). */
+  readonly note?: string
 }
 
 /**
@@ -136,7 +138,7 @@ export const ALLOW: Verdict = { allow: 1 }
 
 /** What the relay acts on: the launcher's yes, or why not. A yes may carry the one line a session is handed as it
  * starts (martha#254 test 10), or the turn a ran tool's report ends (martha#311): nothing else but its verdict. */
-export type Heard = { readonly yes: true; readonly handed?: string; readonly end_turn?: string } | { readonly yes: false; readonly why: string }
+export type Heard = { readonly yes: true; readonly handed?: string; readonly end_turn?: string; readonly note?: string } | { readonly yes: false; readonly why: string }
 
 const NO = (why: string): Heard => ({ yes: false, why })
 const YES: Heard = { yes: true }
@@ -204,7 +206,18 @@ export function heardTaken(status: number, text: string): Heard {
   if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
   if (value.taken !== 1) return NO(MALFORMED)
   if (exactKeys(value, ['taken'])) return YES
-  return exactKeys(value, ['taken', 'end_turn']) && isReason(value.end_turn) ? { yes: true, end_turn: value.end_turn } : NO(MALFORMED)
+  return theYesOfARanToolsReport(value)
+}
+
+/** The extras a ran tool's report may carry on its yes (martha#311, martha#999): the end of the turn, a note, or both. */
+const A_REPORTS_EXTRAS = ['end_turn', 'note'] as const
+
+/** A taken answer with extras, read as a yes only when each is one of a report's and says something. */
+function theYesOfARanToolsReport(value: Readonly<Record<string, unknown>>): Heard {
+  const extras = Object.keys(value).filter((key) => key !== 'taken')
+  if (!extras.every((key) => (A_REPORTS_EXTRAS as readonly string[]).includes(key) && isReason(value[key]))) return NO(MALFORMED)
+  const said = Object.fromEntries(extras.map((key) => [key, value[key] as string]))
+  return { yes: true, ...said }
 }
 
 /**

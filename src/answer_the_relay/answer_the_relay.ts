@@ -549,7 +549,7 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   closeTheDialogsTheCallAnswered(place, session.id, body, call)
   const answer = await state.answers.aResultCame(aResultOfACallOf(body, call))
   if ('stop' in answer) return stopMember(place, answer.stop)
-  return answered(answer.end_turn === undefined ? TAKEN : { ...TAKEN, end_turn: answer.end_turn })
+  return answered({ ...TAKEN, ...(answer.end_turn === undefined ? {} : { end_turn: answer.end_turn }), ...(answer.note === undefined ? {} : { note: answer.note }) })
 }
 
 /**

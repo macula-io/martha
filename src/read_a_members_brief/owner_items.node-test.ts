@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { briefRefusal, bundledPackages, isBriefPath, unmarkedOwnerItems } from './owner_items.ts'
+import { briefProblems, bundledPackages, isBriefPath, unmarkedOwnerItems } from './owner_items.ts'
 
 /** crew-code's matchers, over node:assert, so each case reads as it did there. */
 const expect = (actual: unknown) => ({
@@ -42,8 +42,8 @@ const INCIDENT = [
 test('every line of the 10-27/28 incident needs a marker', () => {
   for (const line of INCIDENT) expect(unmarkedOwnerItems(line, 'Sam')).toHaveLength(1)
   const brief = `## Assignment\n${INCIDENT[4]}\n${INCIDENT[3]}\n`
-  expect(briefRefusal(brief, 'Sam')).toContain('line 2:')
-  expect(briefRefusal(brief, 'Sam')).toContain('line 3:')
+  expect(briefProblems(brief, 'Sam')).toContain('line 2:')
+  expect(briefProblems(brief, 'Sam')).toContain('line 3:')
 })
 
 test('a line that waits on an act of the owner\'s needs a marker', () => {
@@ -164,7 +164,7 @@ test('a brief whose fence is never closed still shows the IDEA and the DECIDED i
   ].join('\n')
 
   expect(bundledPackages(brief)).toEqual(['synthetic-owner/macula-architecture#31'])
-  expect(briefRefusal(brief, 'Sam')).not.toBe('')
+  expect(briefProblems(brief, 'Sam')).not.toBe('')
 })
 
 test('a brief that drops one closing fence before another fence still shows what it holds', () => {
@@ -180,7 +180,7 @@ test('a brief that drops one closing fence before another fence still shows what
   ].join('\n')
 
   expect(bundledPackages(brief)).toEqual(['synthetic-owner/macula-architecture#31'])
-  expect(briefRefusal(brief, 'Sam')).not.toBe('')
+  expect(briefProblems(brief, 'Sam')).not.toBe('')
 })
 
 // crew-code: the marker's name at the end of a sentence is a word in that sentence, not a marker. Terra's
@@ -276,14 +276,13 @@ test('an IDEA in its own section, with no package in it, bundles nothing', () =>
   ].join('\n')
 
   expect(bundledPackages(brief)).toEqual([])
-  expect(briefRefusal(brief, 'Sam')).toBe('')
+  expect(briefProblems(brief, 'Sam')).toBe('')
 })
 
 test('the refusal names each reason and what to do about it', () => {
   const brief = ['- synthetic-owner/repo#1: DECIDED 2026-11-04 "go".', '- IDEA: something else.', '- Sam wants it fast.'].join('\n')
-  const refusal = briefRefusal(brief, 'Sam')
+  const refusal = briefProblems(brief, 'Sam')
 
-  expect(refusal).toContain('brief not written')
   expect(refusal).toContain('Sam wants it fast')
   expect(refusal).toContain('synthetic-owner/repo#1')
   expect(refusal).toContain('own section')

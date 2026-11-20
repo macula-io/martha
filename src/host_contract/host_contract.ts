@@ -553,8 +553,11 @@ export interface AResultOfACall extends ACalledTool {
   readonly resolved_model?: string
 }
 
-/** What a result is answered with: taken, with the end of the turn it carries when it carries one, or the member stops and why. */
-export type TheAnswerToAResult = { readonly taken: 1; readonly end_turn?: string } | { readonly stop: string }
+/**
+ * What a result is answered with: taken, with the end of the turn it carries when it carries one and the note the
+ * member reads after the tool's result when there is one (martha#999 package 2b), or the member stops and why.
+ */
+export type TheAnswerToAResult = { readonly taken: 1; readonly end_turn?: string; readonly note?: string } | { readonly stop: string }
 
 /** An agent the host says started or stopped under a session (martha#170). */
 export interface AnAgentOfASession {
