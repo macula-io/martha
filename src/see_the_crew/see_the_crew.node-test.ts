@@ -6,9 +6,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { OFFLINE, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { NO_MEMBER_HAS_REPORTED, PANE_CHROME_ROWS, seeTheCrew, theCrewToolsFlag, thePaneAnsweredBy, thePaneHeader, thePaneLine, theRowsThePaneAsksFor } from './see_the_crew.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
 
 const CREW = { members: [{ name: 'Vesta' }, { name: 'Uranus' }, { name: 'Terra' }] }
 const NOW = 1_762_900_000_000
@@ -141,4 +144,12 @@ test('a lost window is carried and flagged beside the state; a row that says not
   assert.equal(theCrewToolsFlag(seen.rows[1]!), null)
   assert.equal(theCrewToolsFlag({ served_tools: { state: 'held' } }), null)
   assert.ok(!thePaneLine(seen.rows[1]!).includes('crew tools'))
+})
+
+test('#931 A: a row reads offline past the crew\'s declared thresholds.offline_after_seconds, not past the default', () => {
+  const declared = { ...THRESHOLDS_WHEN_UNNAMED, offline_after_seconds: THRESHOLDS_WHEN_UNNAMED.offline_after_seconds * 3 }
+  const quietFor = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED) * 2
+  assert.equal(seeTheCrew(CREW, { Vesta: beat('Vesta', NOW - quietFor) }, NOW).rows[0]!.state, OFFLINE, 'a crew that declares none reads the default')
+  assert.equal(seeTheCrew({ ...CREW, thresholds: declared }, { Vesta: beat('Vesta', NOW - quietFor) }, NOW).rows[0]!.state, 'working', 'a row inside the declared time is the member\'s own state')
+  assert.equal(seeTheCrew({ ...CREW, thresholds: declared }, { Vesta: beat('Vesta', NOW - offlineAfterMsOf(declared) - 1) }, NOW).rows[0]!.state, OFFLINE, 'and past it, offline')
 })

@@ -10,8 +10,8 @@ import { theFlowAbandoned, type ARefresh } from '../refresh_a_member/refresh_a_m
 
 /**
  * The share of its limit at which a member's running turn is ended at once, whatever the crew's ceiling says
- * (martha#311): a member past its whole limit is handed over now. A constant like HANDOVER_LIMIT_PERCENT, never a
- * setting.
+ * (martha#311): a member past its whole limit is handed over now. A constant, never a setting: unlike the handover share
+ * the crew declares (thresholds.handover_percent, martha#931 A), past the whole context there is nothing left to choose.
  */
 export const CONTEXT_FULL_PERCENT = 100
 

@@ -363,6 +363,66 @@ test('#511: the declaration is the config: martha up opens exactly the members t
   assert.equal(readFileSync(theDeclarationAt(place), 'utf8'), declared, 'up changed the owner\'s declaration')
 })
 
+/**
+ * A stand-in tmux on the place's PATH: it says it is tmux 3.8, keeps each command it is run with as one line of words
+ * after the server's four, and has the crew's session once a session is opened.
+ */
+function tmuxThatAnswers(place: Place): { readonly ran: string; readonly bin: string; readonly env: Readonly<Record<string, string>> } {
+  const bin = join(place.home, 'tmux-bin')
+  mkdirSync(bin)
+  const ran = join(place.home, 'tmux-ran')
+  const opened = join(place.home, 'tmux-session-opened')
+  writeFileSync(join(bin, 'tmux'), [
+    '#!/bin/sh',
+    'if [ "$1" = -V ]; then echo "tmux 3.8"; exit 0; fi',
+    `[ "$1 $2 $3" = "-L martha -f" ] || exit 9`,
+    'shift 4',
+    `echo "$*" >> '${ran}'`,
+    `case "$1" in has-session) [ -e '${opened}' ] ;; new-session) : > '${opened}' ;; esac`,
+    '',
+  ].join('\n'), { mode: 0o700 })
+  return { ran, bin, env: { PATH: `${bin}:${process.env.PATH}` } }
+}
+
+test('#932: a crew declared "terminal": "tmux" is opened by martha up in Martha\'s own tmux, a window per member up starts, and kitty is not started', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const tmux = tmuxThatAnswers(place)
+  theOwnerDeclares(place, [
+    { name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE },
+    { name: 'Kept-down', role: 'builder', [HOST]: CLAUDE_CODE, [PARKED]: true },
+    anEngineMember('flash-a'),
+  ], { ...AN_ENDPOINT, id: 'a-crew', terminal: 'tmux' })
+  const run = marthaOnATerminal(place, { PATH: `${tmux.bin}:${kitty.env.PATH}` }, UP)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  const opened = readFileSync(tmux.ran, 'utf8').split('\n').filter((line) => /^(new-session|new-window|split-window) /.test(line))
+  const verbAndAct = (line: string): string => `${line.split(' ')[0]} ${line.split(' -- ')[1]!.split(' ').slice(-2).join(' ')}`
+  assert.deepEqual(opened.map(verbAndAct), [
+    `new-session start Lead`,
+    `split-window ${opened[1]!.split(' ').at(-2)} crew`,
+    `new-window start flash-a`,
+    `split-window ${opened[3]!.split(' ').at(-2)} crew`,
+  ])
+  assert.ok(opened[0]!.includes('-s a-crew -n Lead'), opened.join('\n'))
+  assert.ok(opened[2]!.includes('-t =a-crew: -n flash-a'), opened.join('\n'))
+  assert.equal(existsSync(kitty.started), false, 'kitty was started for a tmux crew')
+  assert.ok(run.said.includes('martha attach shows it'), run.said)
+})
+
+test('#932: martha attach takes one member at most and no switch, needs a terminal, and refuses a crew that opens in kitty', (t) => {
+  const place = aWorkspace(t)
+  for (const words of [['attach', 'a', 'b'], ['attach', '--all'], ['attach', '']]) assert.equal(martha(place, ...words).status, EXIT_USAGE, words.join(' '))
+  assert.ok(USAGE.includes('martha attach [<member>]'), USAGE)
+  assert.ok(HELP.some((line) => line.startsWith('martha attach ')), HELP.join('\n'))
+  theOwnerDeclares(place, [{ name: 'Lead', role: SUPERVISOR, model: 'sonnet', [HOST]: CLAUDE_CODE }])
+  assert.equal(martha(place, 'attach').status, EXIT_REFUSED)
+  const tmux = tmuxThatAnswers(place)
+  const kittyCrew = marthaOnATerminal(place, tmux.env, 'attach')
+  assert.equal(kittyCrew.status, EXIT_REFUSED, kittyCrew.said)
+  assert.ok(kittyCrew.said.includes('this crew opens in kitty'), kittyCrew.said)
+  assert.equal(existsSync(tmux.ran), false, 'tmux was run for a crew that opens in kitty')
+})
+
 test('#511 part B: with an engine member to start and no key variable, martha up asks once for the key file; an answer that is no path is refused unechoed, and nothing is written', (t) => {
   const place = aWorkspace(t)
   const kitty = kittyThatAnswers(place)

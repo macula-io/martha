@@ -24,6 +24,7 @@ import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts
 import { UNHELD_WORK } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
 import { crewToolsOver, type CoreToolAnswer, type CrewTools } from './a_crews_tools.ts'
+import { offlineAfterMsOf, THRESHOLDS, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 
 const NOW = Date.parse('2026-11-16T12:00:00Z')
 const IDLE_MINUTES = 30
@@ -55,7 +56,7 @@ function aGithub(): { readonly calls: () => number; readonly run: (request: Proc
 }
 
 /** A crew a test owns, declared with a backlog and nudges on; `crew` is the store a refreshed launcher reads again. */
-function aCrewHome(t: TestContext): { readonly root: string; readonly crew: string; readonly rows: string; readonly beats: string } {
+function aCrewHome(t: TestContext, thresholds?: Readonly<Record<string, number>>): { readonly root: string; readonly crew: string; readonly rows: string; readonly beats: string } {
   const home = mkdtempSync(join(tmpdir(), 'martha-319-unheld-'))
   t.after(() => removeTheTree(home))
   const root = join(home, 'checkout')
@@ -73,6 +74,7 @@ function aCrewHome(t: TestContext): { readonly root: string; readonly crew: stri
       mode: { name: 'team', roles: [SUPERVISOR, 'builder'], may: { assign_work: [SUPERVISOR], approve_landing: [OWNER], resume_parked_work: [SUPERVISOR] } },
       house_rules: { nudges: true, stalled_minutes: 600, review_minutes: 600, person_minutes: 600 },
       [BACKLOG]: { places: ['macula-io'], idle_minutes: IDLE_MINUTES },
+      ...(thresholds === undefined ? {} : { [THRESHOLDS]: thresholds }),
     }),
   )
   const paths = { root, crew: join(home, 'crew-store'), rows: join(home, 'row-streams'), beats: join(home, 'row') }
@@ -149,4 +151,19 @@ test('#319 B: the unheld_work tool answers the Supervisor from GitHub, and a bui
   assert.ok('answer' in answer, `the Supervisor was refused: ${'refused' in answer ? answer.refused : ''}`)
   assert.match(answer.answer, /- macula-io\/martha#2, 6 d old: Issue 2\n {2}Purpose \(capability\): issue 2\.\n {2}labelled crew:Stranger, which names nobody in this crew/)
   assert.match(answer.answer, /Held:\n- Vesta: macula-io\/martha#1/)
+})
+
+test('#931 A: the see_the_crew tool reads the declared offline time: a row quiet past the default but inside it is still idle beside the work', async (t) => {
+  const quiet = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED) * 2
+  const drawnFor = async (thresholds?: Readonly<Record<string, number>>): Promise<readonly string[]> => {
+    const paths = aCrewHome(t, thresholds)
+    const github = aGithub()
+    beatIdle(paths, MEMBER, NOW)
+    await aLauncher(paths, NOW, RECEIVER, github).answer('see_the_crew', {}, 's')
+    beatIdle(paths, MEMBER, NOW + WINDOW - quiet)
+    return theUnheldDrawn(await aLauncher(paths, NOW + WINDOW, RECEIVER, github).answer('see_the_crew', {}, 's'))
+  }
+  assert.deepEqual(await drawnFor(), [], 'under the default offline time the quiet member is offline, and no nudge names it')
+  const declared = { offline_after_seconds: THRESHOLDS_WHEN_UNNAMED.offline_after_seconds * 3 }
+  assert.deepEqual(await drawnFor(declared), ['- unheld: Vesta idle beside 1 issues nobody holds, since 12:00 UTC'], 'the declared offline time was not read')
 })

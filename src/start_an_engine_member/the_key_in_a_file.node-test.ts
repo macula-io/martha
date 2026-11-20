@@ -9,7 +9,7 @@ import { after, test } from 'node:test'
 
 import { ENGINE_ENDPOINT } from '../declare_crew/declare_crew.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { theKeyInAFile } from './start_an_engine_member.ts'
+import { theKeyInAFile, theKeyInTheOwnersFile } from './start_an_engine_member.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-key-file-'))
 after(() => removeTheTree(home))
@@ -46,4 +46,12 @@ test('#511 part B: a file open to the group or others, a link, a missing file or
     assert.ok(read.refusal.startsWith(`${ENGINE_ENDPOINT}.key_file ${at}`), read.refusal)
     assert.ok(!read.refusal.includes(A_KEY), read.refusal)
   }
+})
+
+test('#931: a provider\'s key file under ~/ is read from the owner\'s home, and a path still not absolute gives no key', () => {
+  aFile('under-the-home', `${A_KEY}\n`, 0o600)
+  assert.deepEqual(theKeyInTheOwnersFile('~/under-the-home', home), { key: A_KEY })
+  assert.deepEqual(theKeyInTheOwnersFile(join(home, 'under-the-home'), '/no-such-home'), { key: A_KEY }, 'an absolute path is read as it is')
+  const relative = theKeyInTheOwnersFile('under-the-home', home)
+  assert.ok('refusal' in relative && /is not an absolute path or one under ~\//.test(relative.refusal), JSON.stringify(relative))
 })

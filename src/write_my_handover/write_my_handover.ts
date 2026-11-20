@@ -18,7 +18,6 @@ import { stampHandover } from '../carry_taint_across_a_refresh/carry_taint_acros
 import { MEMBER_NAME } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, CrewStore, HandoverStamp, HandoverStampStore, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { theTellingOnTheNextStart } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
-import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** The word a member reads once its handover is written, and the only answer a written handover gives. */
@@ -131,10 +130,10 @@ export const THE_LIMIT_GROUND = 'it cannot reach a safe point at all'
  * The prompt a member is asked to hand over with. The file is the host's and the member is told no path: the tool
  * writes it where the launcher decided, and a path in a prompt would be a second place a handover could come from.
  */
-export function theHandoverPrompt(asking: { readonly at_limit: boolean; readonly percent: number }): string {
+export function theHandoverPrompt(asking: { readonly at_limit: boolean; readonly percent: number; readonly limit_percent: number }): string {
   const first = asking.at_limit
     ? [
-        `Your context is at ${asking.percent}%, past the ${HANDOVER_LIMIT_PERCENT}% handover limit, so this session hands over to a fresh one.`,
+        `Your context is at ${asking.percent}%, past the ${asking.limit_percent}% handover limit, so this session hands over to a fresh one.`,
         'First reach a safe point: finish the edit you are in, then commit or stash the work so the working tree is clean.',
         'If an approved push has not been made yet, make it first: the yes is for that exact sha.',
       ]
@@ -243,9 +242,9 @@ export function theResumePromptWithItsTelling(
  * The line a decline at the limit sends the Supervisor, once: the member is past the limit, has not handed over, and
  * says why it cannot. Sent as the storm's is, so the Supervisor hears it without watching the dashboard.
  */
-export function theLimitLine(refusal: { readonly member: string; readonly percent: number; readonly said: string }): string {
+export function theLimitLine(refusal: { readonly member: string; readonly percent: number; readonly limit_percent: number; readonly said: string }): string {
   return (
-    `${refusal.member} is at ${refusal.percent}% of its context, past the ${HANDOVER_LIMIT_PERCENT}% handover limit, and has not handed over: ` +
+    `${refusal.member} is at ${refusal.percent}% of its context, past the ${refusal.limit_percent}% handover limit, and has not handed over: ` +
     `it declined at the limit, saying ${refusal.said}. It is asked again when it finishes a task.`
   )
 }

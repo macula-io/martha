@@ -6,11 +6,12 @@
 // turn are recorded before the engine sees anything; and the end stops the engine, reads its permission store, closes
 // what was served and removes the launch's directory.
 
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import process from 'node:process'
 import { randomUUID } from 'node:crypto'
 import { lstatSync, readFileSync, type Stats } from 'node:fs'
 
+import { THE_HOMES_PREFIX, writtenOut } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
@@ -99,7 +100,7 @@ const NOTHING_REPORTED: TheServedToolsWatch = {
  * that turns hooks off already refuses the start, and the launch runs it first in every re-check. Or why not.
  */
 function whatTheLaunchIsGiven(start: AStartOnItsHost) {
-  const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited, readTheKeyFile: (key_file) => theKeyInAFile(key_file) })
+  const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited, readTheKeyFile: (key_file) => theKeyInTheOwnersFile(key_file, start.home) })
   if ('refusal' in model) return model
   const user = userSettingsPath(start.inherited)
   if ('refusal' in user) return user
@@ -111,10 +112,18 @@ function whatTheLaunchIsGiven(start: AStartOnItsHost) {
 }
 
 /**
+ * The key in the file the crew's endpoint names, as the declaration writes it (martha#931): a provider's `~/` path written
+ * out against the owner's home first, then read as theKeyInAFile reads one.
+ */
+export const theKeyInTheOwnersFile = (key_file: string, home: string): ReturnType<typeof theKeyInAFile> => theKeyInAFile(writtenOut(key_file, home))
+
+/**
  * The key in the file the crew's endpoint names by its absolute path (martha#511 part B): only this user's own plain file, closed to the group and to others, and never a link, since a link's own mode says nothing of
  * its target. The key is trimmed of the line end a file ends with and never named in a refusal.
  */
 export function theKeyInAFile(at: string): { readonly key: string } | { readonly refusal: string } {
+  // A provider's key file is kept as the owner wrote it (martha#931); written out, it must be absolute, or it would be read against wherever the start runs.
+  if (!isAbsolute(at)) return { refusal: `the key file ${at} is not an absolute path or one under ${THE_HOMES_PREFIX}` }
   let found: Stats
   try {
     found = lstatSync(at)

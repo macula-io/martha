@@ -32,6 +32,8 @@ import {
   type WorktreeAnswer,
   type WorktreesRequest,
 } from './open_and_finish_a_worktree.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 
 /** The member these tools answer for, and the branch prefix its worktrees carry. */
 const MEMBER = 'Ceres'
@@ -109,6 +111,8 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
   backlog: null,
   volatile_paths: [],
   engine_endpoint: null,
+    thresholds: THRESHOLDS_WHEN_UNNAMED,
+    opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
 })
 
 /** A real git, so a test sees what git does rather than what a stand-in is told to say. */
