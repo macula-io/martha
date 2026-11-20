@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import { CLAUDE_CODE_FILE_TOOLS } from '../claude_code_host/claude_code_file_tools.ts'
+import { OTHER_HOSTS_FILE_TOOLS } from '../host_contract/tool_names_for_tests.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN } from '../claude_code_host/recorded_claude_code_host.ts'
 import type { HookSwitches } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -105,15 +107,15 @@ test("a file tool call naming the owner's user settings file is named, directly,
   symlinkSync(config, join(root, 'linked'))
   const cwd = join(root, 'checkout')
   mkdirSync(cwd)
-  assert.ok(namesTheOwnersSettings({ file_path: owners }, owners, cwd, root))
-  assert.ok(namesTheOwnersSettings({ file_path: join(root, 'linked', USER_SETTINGS_FILE) }, owners, cwd, root))
-  assert.ok(namesTheOwnersSettings({ notebook_path: join(root, 'linked', USER_SETTINGS_FILE) }, owners, cwd, root))
-  assert.ok(namesTheOwnersSettings({ file_path: `../conf-dir/${USER_SETTINGS_FILE}` }, owners, cwd, root))
+  assert.ok(namesTheOwnersSettings({ file_path: owners }, owners, cwd, root, CLAUDE_CODE_FILE_TOOLS))
+  assert.ok(namesTheOwnersSettings({ file_path: join(root, 'linked', USER_SETTINGS_FILE) }, owners, cwd, root, CLAUDE_CODE_FILE_TOOLS))
+  assert.ok(namesTheOwnersSettings({ notebook_path: join(root, 'linked', USER_SETTINGS_FILE) }, owners, cwd, root, CLAUDE_CODE_FILE_TOOLS))
+  assert.ok(namesTheOwnersSettings({ file_path: `../conf-dir/${USER_SETTINGS_FILE}` }, owners, cwd, root, CLAUDE_CODE_FILE_TOOLS))
   writeFileSync(owners, '{}')
   symlinkSync(owners, join(cwd, 'innocent.json'))
-  assert.ok(namesTheOwnersSettings({ file_path: join(cwd, 'innocent.json') }, owners, cwd, root))
-  assert.equal(namesTheOwnersSettings({ file_path: join(config, 'other.json') }, owners, cwd, root), undefined)
-  assert.equal(namesTheOwnersSettings({ command: `echo > ${owners}` }, owners, cwd, root), undefined)
+  assert.ok(namesTheOwnersSettings({ file_path: join(cwd, 'innocent.json') }, owners, cwd, root, CLAUDE_CODE_FILE_TOOLS))
+  assert.equal(namesTheOwnersSettings({ file_path: join(config, 'other.json') }, owners, cwd, root, CLAUDE_CODE_FILE_TOOLS), undefined)
+  assert.equal(namesTheOwnersSettings({ command: `echo > ${owners}` }, owners, cwd, root, CLAUDE_CODE_FILE_TOOLS), undefined)
 })
 
 test("a file tool call naming the owner's file the way the host spells it is named: ~/ against the host's home, and white space around the path", (t) => {
@@ -124,7 +126,25 @@ test("a file tool call naming the owner's file the way the host spells it is nam
   const cwd = join(root, 'checkout')
   mkdirSync(cwd)
   for (const spelling of [`~/${CLAUDE_FOLDER}/${USER_SETTINGS_FILE}`, ` ${owners}`, `${owners} `, ` ~/${CLAUDE_FOLDER}/${USER_SETTINGS_FILE}\n`]) {
-    assert.ok(namesTheOwnersSettings({ file_path: spelling }, owners, cwd, home), JSON.stringify(spelling))
+    assert.ok(namesTheOwnersSettings({ file_path: spelling }, owners, cwd, home, CLAUDE_CODE_FILE_TOOLS), JSON.stringify(spelling))
   }
-  assert.equal(namesTheOwnersSettings({ file_path: `~/${CLAUDE_FOLDER}/other.json` }, owners, cwd, home), undefined)
+  assert.equal(namesTheOwnersSettings({ file_path: `~/${CLAUDE_FOLDER}/other.json` }, owners, cwd, home, CLAUDE_CODE_FILE_TOOLS), undefined)
+})
+
+test("the owner's settings file is named by the host's own file arguments, resolved as that host resolves them, never by Claude Code's (#541 package A, design G1; mutants: Claude Code's arguments or resolver used)", (t) => {
+  const root = scratch(t)
+  const home = join(root, 'home')
+  const owners = join(home, CLAUDE_FOLDER, USER_SETTINGS_FILE)
+  mkdirSync(dirname(owners), { recursive: true })
+  const cwd = join(root, 'checkout')
+  mkdirSync(cwd)
+  const [argument] = OTHER_HOSTS_FILE_TOOLS.file_arguments
+  assert.ok(argument !== undefined)
+  assert.ok(namesTheOwnersSettings({ [argument]: owners }, owners, cwd, home, OTHER_HOSTS_FILE_TOOLS), 'the host names the file by its own argument')
+  assert.ok(namesTheOwnersSettings({ [argument]: `../home/${CLAUDE_FOLDER}/${USER_SETTINGS_FILE}` }, owners, cwd, home, OTHER_HOSTS_FILE_TOOLS), 'relative to where the member works')
+  assert.equal(namesTheOwnersSettings({ file_path: owners }, owners, cwd, home, OTHER_HOSTS_FILE_TOOLS), undefined, "Claude Code's argument is not this host's")
+  for (const spelling of [`~/${CLAUDE_FOLDER}/${USER_SETTINGS_FILE}`, ` ${owners}`]) {
+    assert.ok(namesTheOwnersSettings({ file_path: spelling }, owners, cwd, home, CLAUDE_CODE_FILE_TOOLS), `Claude Code resolves ${JSON.stringify(spelling)} to the file`)
+    assert.equal(namesTheOwnersSettings({ [argument]: spelling }, owners, cwd, home, OTHER_HOSTS_FILE_TOOLS), undefined, `this host resolves ${JSON.stringify(spelling)} inside the checkout`)
+  }
 })
