@@ -13,7 +13,7 @@
 export const REVIEW_ROUNDS_MOST = 'review_rounds_most'
 
 /** The most lines a HANDOFF or a VERDICT may be. */
-export const CREW_LINE_LINES_MOST = 'crew_line_lines_most'
+export const HANDOFF_LINES_MOST = 'handoff_lines_most'
 
 /** Whether a reviewer FAILs only for harm a user or the owner would hit. Read by the role cards alone. */
 export const FAIL_ONLY_ON_HARM = 'fail_only_on_harm'
@@ -22,7 +22,7 @@ export const FAIL_ONLY_ON_HARM = 'fail_only_on_harm'
 export const MUTANTS_ON_GUARDS_ONLY = 'mutants_on_guards_only'
 
 /** The trims that are a number: each a fixed line, 0 for none, or `false` for its notices off. */
-export const HOUSE_RULE_MOSTS = [REVIEW_ROUNDS_MOST, CREW_LINE_LINES_MOST] as const
+export const HOUSE_RULE_MOSTS = [REVIEW_ROUNDS_MOST, HANDOFF_LINES_MOST] as const
 export type HouseRuleMost = (typeof HOUSE_RULE_MOSTS)[number]
 
 /** The trims that are a switch: on unless the declaration says false. */
@@ -36,7 +36,7 @@ export const HOUSE_RULE_TRIMS = [...HOUSE_RULE_MOSTS, ...HOUSE_RULE_TRIM_SWITCHE
 export const REVIEW_ROUNDS_MOST_WHEN_UNNAMED = 2
 
 /** The longest HANDOFF or VERDICT when the declaration names none: the crew's own practice (DECIDED 2026-11-20). */
-export const CREW_LINE_LINES_MOST_WHEN_UNNAMED = 10
+export const HANDOFF_LINES_MOST_WHEN_UNNAMED = 10
 
 /** Whether a trim's switch is on when the declaration names it nowhere: a trim is a bar, so it stands unless turned off. */
 export const A_TRIM_SWITCH_WHEN_UNNAMED = true
@@ -96,7 +96,7 @@ export const TRIMS_WHEN_UNNAMED: TheCrewsTrims = trimsFrom({})
 function mostOf(most: HouseRuleMost, named: unknown): AMost {
   if (typeof named === 'number') return named
   if (named === false) return false
-  return most === REVIEW_ROUNDS_MOST ? REVIEW_ROUNDS_MOST_WHEN_UNNAMED : CREW_LINE_LINES_MOST_WHEN_UNNAMED
+  return most === REVIEW_ROUNDS_MOST ? REVIEW_ROUNDS_MOST_WHEN_UNNAMED : HANDOFF_LINES_MOST_WHEN_UNNAMED
 }
 
 /** A switch's value as it is kept: what the declaration says, or the crew's own when it names none. */

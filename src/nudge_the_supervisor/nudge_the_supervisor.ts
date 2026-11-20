@@ -21,7 +21,7 @@
 // the same rule and the tests hold it.
 
 import { memberNameKey, sameMemberName, MEMBER_NAME, MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
-import { aMostIsSet, CREW_LINE_LINES_MOST, REVIEW_ROUNDS_MOST, type AMost, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { aMostIsSet, HANDOFF_LINES_MOST, REVIEW_ROUNDS_MOST, type AMost, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { LandedPackage } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
@@ -318,7 +318,7 @@ export function headNudges(waits: readonly ReviewWait[], heads: Readonly<Record<
 export function driftNudges(drifts: readonly APackagesDrift[], trims: TheCrewsTrims): Nudge[] {
   return drifts.flatMap((drift) => [
     ...aCrossing(drift, ROUNDS, drift.rounds, drift.rounds_member, drift.rounds_at, trims[REVIEW_ROUNDS_MOST]),
-    ...aCrossing(drift, LINES, drift.longest, drift.longest_member, drift.longest_at, trims[CREW_LINE_LINES_MOST]),
+    ...aCrossing(drift, LINES, drift.longest, drift.longest_member, drift.longest_at, trims[HANDOFF_LINES_MOST]),
   ])
 }
 
