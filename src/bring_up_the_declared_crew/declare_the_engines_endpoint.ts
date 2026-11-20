@@ -41,8 +41,8 @@ type TheKeysPlace = { readonly key_from: string } | { readonly key_file: string 
  */
 export const THE_HOMES_PREFIX = '~/'
 
-/** An owner's typed path, with a leading `~/` written out against `home`. */
-const writtenOut = (typed: string, home: string): string => (typed.startsWith(THE_HOMES_PREFIX) ? join(home, typed.slice(THE_HOMES_PREFIX.length)) : typed)
+/** An owner's typed path, with a leading `~/` written out against `home`; the engine's start writes a provider's key file out the same way (martha#931). */
+export const writtenOut = (typed: string, home: string): string => (typed.startsWith(THE_HOMES_PREFIX) ? join(home, typed.slice(THE_HOMES_PREFIX.length)) : typed)
 
 /** An answer refused before it is checked as a file: it is not repeated, since it may be the key itself. */
 export const NOT_A_KEY_FILES_PATH = `that is not an absolute path or one under ${THE_HOMES_PREFIX}, so nothing was written. Name the file your key is in, never the key.`
