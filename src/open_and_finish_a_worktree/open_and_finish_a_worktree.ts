@@ -115,6 +115,16 @@ async function gitSaid(host: WorktreesRequest['host'], cwd: string, args: readon
   return outcome.exit_code === 0 ? outcome.stdout.trim() : undefined
 }
 
+/**
+ * What git said byte for byte, when it ended well; undefined when it did not. A NUL-separated name list is read
+ * through this: `trim()` would take a space off the first or last name, and a name that does not match itself passes
+ * as held (review r=1).
+ */
+async function gitSaidAsIs(host: WorktreesRequest['host'], cwd: string, args: readonly string[]): Promise<string | undefined> {
+  const outcome = await git(host, cwd, args)
+  return outcome.exit_code === 0 ? outcome.stdout : undefined
+}
+
 /** What git said it could not do, as one line: its own words, or the status it ended with when it said none. */
 function saidBy(outcome: ProcessOutcome): string {
   const words = outcome.stderr.trim() === '' ? outcome.stdout.trim() : outcome.stderr.trim()
@@ -256,9 +266,9 @@ async function theDefaultBranchHolds(
   const base = await gitSaid(host, clone, ['merge-base', commit, default_branch])
   if (base === undefined) return { holds: false, differs: [] }
   // Every path, as git holds it: `--no-renames` names both sides of a rename, so a default that took only the new name
-  // is not taken as holding the old one gone; `-z` hands each path unquoted, so a name git would quote still matches
-  // itself below rather than matching nothing (review r=1).
-  const changed = await gitSaid(host, clone, ['diff', '--no-renames', '-z', '--name-only', base, commit])
+  // is not taken as holding the old one gone; `-z` hands each path unquoted and untrimmed, so a name git would quote,
+  // or one with a space at its edge, still matches itself below rather than matching nothing (review r=1).
+  const changed = await gitSaidAsIs(host, clone, ['diff', '--no-renames', '-z', '--name-only', base, commit])
   if (changed === undefined) return { holds: false, differs: [] }
   const files = changed.split('\0').filter((file) => file !== '')
   // A commit that changed no file of its own has nothing left to prove, and nothing that could be lost with it.

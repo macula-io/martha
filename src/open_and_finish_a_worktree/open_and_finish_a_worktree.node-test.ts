@@ -738,6 +738,24 @@ test('worktree_finish leaves the branch on origin when a file git would quote by
   assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'a file whose quoted name matched nothing was taken as held')
 })
 
+test('worktree_finish leaves the branch on origin when a name with a space at its edge differs on the default (martha#915 review r=1)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await tools.open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  // A name with a space at its edge: a name list trimmed on the way in hands its entry without the space, so the path
+  // matches nothing and a file that differs on the default passes as held (review r=1).
+  const name = ' spaced.txt'
+  writeFileSync(join(path, name), 'the work\n')
+  commitIn(path, 'the work')
+  gitIn(path, 'push', '--quiet', '-u', 'origin', `${MEMBER}/${SLUG}`)
+  writeFileSync(join(fixture.seed, name), 'other work\n')
+  commitIn(fixture.seed, 'other content under a name with a space')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
+  assert.match(toldOf(await tools.finish.answer(finished('acme/widget', SLUG))), /stays on origin, which its tip is not on yet/)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'a name trimmed out of the list matched nothing and was taken as held')
+})
+
 test('worktree_finish removes the branch on origin after a rebase landing, when the default holds the work (martha#915)', async (t) => {
   const fixture = aCrew(t)
   const tools = toolsOf(settingsFor(fixture, fixture))
