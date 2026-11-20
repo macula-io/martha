@@ -200,4 +200,14 @@ test('#932 live: on a tmux server of the test\'s own, one session, a window and 
   assert.ok(ended().includes('Juno 1'), ended())
   assert.equal(openTheCrewInTmux(io(seen), live(['/bin/sh', '-c', 'sleep 60', 'a-martha'], ['Juno'])), 0, seen.err.join('\n'))
   assert.equal(ended(), 'Vesta 0\nCeres 0\nJuno 0\n')
+  // r=1: a member that ended while its strip runs on, the strip the pane the owner last looked at, is still told ended:
+  // tmux's window flags are its active pane's, so the member's own pane, the first, is the one read.
+  const theStripRunsOn = ['/bin/sh', '-c', '[ "$0" = crew ] && exec sleep 60; exit 0']
+  assert.equal(openTheCrewInTmux(io(seen), live(theStripRunsOn, ['Pallas'])), 0, seen.err.join('\n'))
+  assert.equal(tmux(['select-pane', '-t', '=live-crew:=Pallas.1']).status, 0)
+  const pallas = () => tmux(['list-panes', '-t', '=live-crew:=Pallas', '-F', '#{pane_index} #{pane_dead}']).said
+  for (let i = 0; i < 50 && !pallas().includes('0 1'); i += 1) spawnSync('sleep', ['0.1'])
+  assert.equal(pallas(), '0 1\n1 0\n')
+  assert.equal(openTheCrewInTmux(io(seen), live(['/bin/sh', '-c', 'sleep 60', 'a-martha'], ['Pallas'])), 0, seen.err.join('\n'))
+  assert.equal(pallas(), '0 0\n1 0\n', 'the ended member was left in its window, read as running by its strip')
 })

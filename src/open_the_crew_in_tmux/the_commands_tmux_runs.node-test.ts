@@ -49,7 +49,7 @@ test('#932: a member\'s window and its strip are opened detached, at the root, w
 
 test('#932: the session and its windows are asked for, closed and attached by their whole names', () => {
   assert.deepEqual(theSessionAsked('widget-crew'), ['has-session', '-t', '=widget-crew'])
-  assert.deepEqual(theWindowsListed('widget-crew'), ['list-windows', '-t', '=widget-crew', '-F', '#{pane_dead} #{window_name}'])
+  assert.deepEqual(theWindowsListed('widget-crew'), ['list-windows', '-t', '=widget-crew', '-F', '#{P:#{?#{==:#{pane_index},0},#{pane_dead},}} #{window_name}'])
   assert.deepEqual(theWindowClosed('widget-crew', 'Vesta'), ['kill-window', '-t', '=widget-crew:=Vesta'])
   assert.deepEqual(theAttach('widget-crew', undefined), ['attach-session', '-t', '=widget-crew'])
   assert.deepEqual(theAttach('widget-crew', 'Ceres'), ['attach-session', '-t', '=widget-crew:=Ceres'])
@@ -63,6 +63,8 @@ test('#932: the windows listed are read by name, and a member that ended is told
 test('#932: a name tmux would read as a pane or a window, or cannot hold, is refused; a plain one is not', () => {
   assert.equal(whyNotATarget('opus-1'), undefined)
   for (const name of ['a.b', 'a:b', 'a\nb', 'a\tb', ' a', 'a ', '']) assert.notEqual(whyNotATarget(name), undefined, name)
+  // r=1: tmux expands a format in a session's and a window's name, and #(...) runs a shell: a # is refused.
+  for (const name of ['crew#{pid}', 'crew#(true)', '#']) assert.match(whyNotATarget(name) ?? '', /#/, name)
 })
 
 test('#932: tmux\'s version is read from what tmux -V says, and 3.3 is the floor', () => {

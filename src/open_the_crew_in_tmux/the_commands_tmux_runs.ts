@@ -8,7 +8,8 @@
 // owner's tmux and their ~/.tmux.conf are never read, written or stopped.
 //
 // tmux runs a command given as more than one word without a shell, word for word, so no value is quoted here. A name
-// tmux cannot take as a target (`.` and `:` part one; a control byte or white space at either end) is refused by name.
+// tmux cannot take as a target (`.` and `:` part one; a control byte or white space at either end) is refused by name,
+// and so is a `#`: tmux expands a format in a name, and `#(...)` there runs a shell command.
 //
 // A member can reach this server's socket: it runs as the owner's own user, as every member does, and could type into
 // another member's window. That is a speed bump, not a boundary, as kitty's files are (martha#1 decision 2). Other
@@ -60,11 +61,16 @@ export const onMarthasServer = (config: string, server: string = MARTHAS_SERVER)
 export const theSession = (id: string): string => `=${id}`
 export const theWindow = (id: string, member: string): string => `=${id}:=${member}`
 
+/** What opens a format in tmux: in a name it is expanded, never kept as written. */
+const A_FORMAT = '#'
+
 /** Why `name` cannot be a tmux session's or window's name, or undefined when it can. */
 export function whyNotATarget(name: string): string | undefined {
   if ([...name].some((character) => character.charCodeAt(0) < 0x20 || character.charCodeAt(0) === 0x7f)) return `${JSON.stringify(name)} holds a control character, which tmux cannot take in a name`
   if (name !== name.trim() || name === '') return `${JSON.stringify(name)} is empty or starts or ends with white space`
   if (/[.:]/.test(name)) return `${JSON.stringify(name)} holds a . or a :, which tmux reads as a pane or a window`
+  // tmux expands a format in a session's and a window's name, and #(...) in one runs a shell command (r=1).
+  if (name.includes(A_FORMAT)) return `${JSON.stringify(name)} holds a #, which tmux expands in a name, running a command for #(...)`
   return undefined
 }
 
@@ -103,8 +109,10 @@ export const theSessionAsked = (id: string): readonly string[] => ['has-session'
 /**
  * The session's windows, one line each: 1 when its member's pane has ended, else 0, a space, and the window's name. The
  * flag comes first, since tmux writes a tab out as `_` when its output is no terminal, and a name may hold a space.
+ * The flag is read from the member's own pane, the window's first (r=1): a window's `pane_dead` is its active pane's,
+ * and once the owner has looked at the strip under a member, that would be the strip's.
  */
-export const theWindowsListed = (id: string): readonly string[] => ['list-windows', '-t', theSession(id), '-F', '#{pane_dead} #{window_name}']
+export const theWindowsListed = (id: string): readonly string[] => ['list-windows', '-t', theSession(id), '-F', '#{P:#{?#{==:#{pane_index},0},#{pane_dead},}} #{window_name}']
 
 /** A window as listed: its name, and whether the member in it has ended. */
 export interface AWindow {
