@@ -25,9 +25,6 @@ import { isAbsolute, join, relative, sep } from 'node:path'
 
 import type { ATreeEntry, Refused, WorkDirectory } from '../host_contract/host_contract.ts'
 
-/** The bits of a mode the manifest carries: permissions, and the setuid, setgid and sticky bits find's %m prints. */
-export const THE_MODE_BITS_KEPT = 0o7777
-
 /** What stands between the manifest's two halves. */
 export const THE_MANIFEST_SEPARATOR = '--'
 
