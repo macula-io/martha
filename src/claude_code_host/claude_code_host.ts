@@ -181,6 +181,17 @@ export const MCP_NAME_SEPARATOR = '__'
 export const MCP_NAME_PREFIX = `mcp${MCP_NAME_SEPARATOR}`
 
 /**
+ * The server name Claude Code gives Martha's own crew tools: the plugin's name, read from the manifest the host reads
+ * it from, so it is said once there and never restated here.
+ */
+export const MARTHAS_PLUGIN: string = (
+  JSON.parse(readFileSync(new URL('../claude_code_relay/.claude-plugin/plugin.json', import.meta.url), 'utf8')) as { readonly name: string }
+).name
+
+/** The exact name Claude Code calls Martha's own crew tool by (martha#987 slice 4): `mcp__<plugin>__<own>`. */
+export const marthasOwnToolCalled = (own: string): string => `${MCP_NAME_PREFIX}${MARTHAS_PLUGIN}${MCP_NAME_SEPARATOR}${own}`
+
+/**
  * The name a called tool's own server gave it: what follows the last `__` of an
  * `mcp__` tool. The host only replaces characters outside [A-Za-z0-9_-] in a
  * server's name, so the server part may itself hold `__`; splitting at the last
@@ -189,15 +200,6 @@ export const MCP_NAME_PREFIX = `mcp${MCP_NAME_SEPARATOR}`
  * misses. A built-in tool, or an `mcp__` name with nothing after its last `__`,
  * is its own name.
  */
-/**
- * The server name Claude Code gives Martha's own crew tools: the plugin's name in its manifest
- * (../claude_code_relay/.claude-plugin/plugin.json), which a test holds this to.
- */
-export const MARTHAS_PLUGIN = 'martha'
-
-/** The exact name Claude Code calls Martha's own crew tool by (martha#987 slice 4): `mcp__martha__<own>`. */
-export const marthasOwnToolCalled = (own: string): string => `${MCP_NAME_PREFIX}${MARTHAS_PLUGIN}${MCP_NAME_SEPARATOR}${own}`
-
 export function ownNameOfCalledTool(called: string): string {
   if (!called.startsWith(MCP_NAME_PREFIX)) return called
   const own = called.slice(called.lastIndexOf(MCP_NAME_SEPARATOR) + MCP_NAME_SEPARATOR.length)
