@@ -43,6 +43,7 @@ import type { ACrewToolAsked } from '../host_contract/host_contract.ts'
 import { SAY_TO_THE_CREW_TOOL } from '../send_a_crew_message/say_to_the_crew_tool.ts'
 import { SEE_THE_CREW_TOOL } from '../see_the_crew/the_see_the_crew_tool.ts'
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
+import { THE_HANDOVER_WRITTEN } from '../write_my_handover/write_my_handover.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
@@ -554,4 +555,17 @@ test('#931 C: an engine member\'s owner\'s screen is told of the notices its cre
   assert.notDeepEqual(declared, OWNER_NOTICES_WHEN_UNNAMED.show)
   const start = { member: MEMBER, places: { dashboard: '/the-rows' }, settings: { house_rules: { owner_bell: undefined }, owner_notices: { show: declared } }, stdio: 'pipe' } as unknown as Parameters<typeof theScreenAnEngineStartSees>[0]
   assert.deepEqual(theScreenAnEngineStartSees(start, () => false).shown_notices, declared, 'the owner\'s screen is not told of the crew\'s declared notices')
+})
+
+test('#999 package 5: a turn whose usage the engine reports past the handover limit is followed by the handover prompt, sent as the member\'s next turn (mutant: the refresh question never asked after a turn)', async (t) => {
+  const place = aPlace(t)
+  // The engine's own usage at the turn's end: 199 of 200, past any handover limit a crew can declare.
+  const pastTheLimit: AStep = { update: { sessionUpdate: 'usage_update', used: 199, size: 200 } }
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ say: 'the first turn' }, pastTheLimit], [{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  const prompts = await untilTheEngineHeardPrompts(engine.heard, 2)
+  assert.ok(theTextOf(prompts[0]?.params ?? {}).endsWith(THE_START_PROMPT))
+  assert.match(theTextOf(prompts[1]?.params ?? {}), new RegExp(THE_HANDOVER_WRITTEN), 'the second turn is not the handover prompt')
 })

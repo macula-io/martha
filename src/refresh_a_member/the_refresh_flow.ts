@@ -52,7 +52,7 @@ import {
 } from './refresh_a_member.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { keepWhatTheSessionSpent, USAGE_PLACE, withWhatWasNotKept } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
+import { keepWhatTheSessionSpent, USAGE_PLACE, withWhatWasNotKept, type AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 import { theHostsReadingIn, type Billing } from '../keep_what_a_session_spent/the_hosts_usage.ts'
 import {
   CARRY_THE_END,
@@ -141,6 +141,8 @@ export interface TheRefreshPlaces {
   readonly documents: DocumentStore
   /** The models the host runs (martha#315), which the declaration is read back against. */
   readonly models: ModelVocabulary
+  /** The host a session's usage is kept under (martha#999 package 5); Claude Code when none is given. */
+  readonly usage_host?: AUsageHost
   readonly ledger: LedgerHost
   /** The model that ran the turn just ended (martha#315): what the reading of its cost is kept under (martha#860 R1). */
   readonly row_model: string
@@ -170,7 +172,7 @@ const A_STORM_PARK = 'two refreshes inside the window: parked so it cannot loop'
 export async function theRefreshAct(places: TheRefreshPlaces, question: TheSessionsQuestion): Promise<TheAct> {
   // What the session spent, kept before anything is ordered, so its model is the one that ran the turn (martha#860 R1).
   // A reading the store could not keep is taken again at the next question: it never holds the flow up, and it is said.
-  const unkept = await keepWhatTheSessionSpent({ ...places, host: CLAUDE_CODE, kept: places.stores.crew.place(USAGE_PLACE) }, question)
+  const unkept = await keepWhatTheSessionSpent({ ...places, host: places.usage_host ?? CLAUDE_CODE, kept: places.stores.crew.place(USAGE_PLACE) }, question)
   return withWhatWasNotKept(await theFlowsAct(places, question), unkept, places.beats.read(places.member)?.refresh, question.turn_running)
 }
 

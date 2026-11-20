@@ -28,7 +28,7 @@ import { SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import type { RowStore } from '../host_contract/host_contract.ts'
-import { SPEND_NOT_KEPT, USAGE_PLACE, usageStreamOf } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
+import { SPEND_NOT_KEPT, THE_ENGINES_USAGE_HOST, USAGE_PLACE, usageStreamOf, type AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 import { theSpendBetween } from '../keep_what_a_session_spent/the_spend_between.ts'
 import { crewToolsOver, THE_MODEL_REPORT_ASK, type CrewTools } from './a_crews_tools.ts'
 
@@ -55,7 +55,7 @@ interface ACrew {
 }
 
 /** A solo crew whose member runs on its own model and may switch to the crew's reviewer model. */
-async function aCrewOfTools(): Promise<ACrew> {
+async function aCrewOfTools(more: { readonly usage_host?: AUsageHost } = {}): Promise<ACrew> {
   const home = join(homeOfAll, `crew-${String(Math.random()).slice(2)}`)
   const root = join(home, 'checkout')
   const clock = { at: STARTED_AT }
@@ -84,6 +84,7 @@ async function aCrewOfTools(): Promise<ACrew> {
     stores: { crew: keepTheCrewsFilesAsDirectories(join(home, THE_CREW_FILES)) },
     models: HOST_MODELS,
     launched_on: OWN_MODEL,
+    ...more,
     owners_settings: { config_dir, file: join(config_dir, USER_SETTINGS_FILE), store: ownersSettingsIn(join(config_dir, USER_SETTINGS_FILE), state.state_root) },
   })
   return { tools, rows, home, beats, aTurnLater: () => (clock.at += MINUTE_MS) }
@@ -195,4 +196,15 @@ test('#860 R4: a refusal while the flow waits on the phase it wrote earlier is s
   answerAgain()
   await aTurnEnds(crew, 't-4', 0.625)
   assert.deepEqual(theRowPhaseOf(crew), flows, 'once a reading was kept, the row does not say the flow\'s own phase as the flow wrote it')
+})
+
+test('#999 package 5: an engine launch\'s readings are kept under the engine\'s name, and a launch that names no host keeps Claude Code\'s (mutant: the host left hard-coded)', async () => {
+  for (const [more, host] of [[{ usage_host: THE_ENGINES_USAGE_HOST }, THE_ENGINES_USAGE_HOST], [{}, CLAUDE_CODE]] as const) {
+    const crew = await aCrewOfTools(more)
+    await aTurnEnds(crew, '', 0)
+    await aTurnEnds(crew, 't-1', 0.25)
+    const hosts = (await crew.rows.read(usageStreamOf(null))).map((stored) => stored.row['host'])
+    assert.ok(hosts.length > 0, 'no reading was kept')
+    assert.deepEqual([...new Set(hosts)], [host])
+  }
 })

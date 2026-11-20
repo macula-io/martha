@@ -279,7 +279,7 @@ function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: C
 export const leftoversOfALaunch = (settings: CrewSettings, crew: CrewStore) => ({ crew, workspace: theWorkspaceTheCrewDeclared(settings) })
 
 /** The crew tools' places a host's start does not choose itself: the models it names, how it spawns a subagent, and the settings file its model command saves a switch into. */
-export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings'>
+export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings' | 'usage_host'>
 
 /**
  * The crew tools' places every host's start shares (martha#541 package A): built here once, with the host's own
