@@ -476,7 +476,10 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   // Kept and raised, so the entry may name a review the host reports failed in it (martha#390): the origin is the one
   // the engine stamped, never read from the text.
   await state.answers.aReviewTheHostSawFail({ session_id, text: body.text, origin_kind: origin.kind })
-  return answered(TAKEN)
+  // The crew's state rides the turn (martha#984): the host composes the system prompt once per session, so a state
+  // that changes reaches the member with its next prompt. It is in the record before this answer leaves.
+  const handed = await state.answers.theCrewStateToHand(session_id)
+  return answered(handed === undefined ? TAKEN : { taken: 1, handed })
 }
 
 function callOf(body: Body): { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined; readonly id: string | undefined } | undefined {
