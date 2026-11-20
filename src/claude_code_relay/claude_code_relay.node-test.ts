@@ -392,12 +392,14 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   // same way. It decides nothing of its own (martha#255): the pane's lines, how it opens and the order a session is
   // given all come from the launcher's answer, and the reading of those answers is the one file below (r=2 R1, R2),
   // so the mod itself holds no parser and no rule.
-  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_command.ts', './crew_channel_reading.ts', './crew_turn_beat.ts', './crew_answers.ts'])
+  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_command.ts', './crew_channel_reading.ts', './crew_waking_an_idle_member.ts', './crew_turn_beat.ts', './crew_answers.ts'])
   // The owner's `/crew` (martha#927): what it asks and prints, read with the pane's own reader and nothing else, so a
   // test drives it with the launcher's own answers.
   assert.deepEqual(specifiers('crew_command.ts'), ['./crew_answers.ts'])
   // The beat a running main turn is asked about on (martha#311): a plain file with no imports, as the channel's rule is.
   assert.deepEqual(specifiers('crew_turn_beat.ts'), [])
+  // The wake an idle session is asked for on (martha#959): a plain file with no imports, as the channel's rule is.
+  assert.deepEqual(specifiers('crew_waking_an_idle_member.ts'), [])
   // The rule for when a session reads its crew's channel (martha#253 r=2): also a plain file with no imports, so a
   // fake engine can drive it.
   assert.deepEqual(specifiers('crew_channel_reading.ts'), [])

@@ -185,7 +185,20 @@ export const NUDGES = 'nudges'
 export const STALLED_MINUTES = 'stalled_minutes'
 export const REVIEW_MINUTES = 'review_minutes'
 export const PERSON_MINUTES = 'person_minutes'
-export const HOUSE_RULE_MINUTES = [STALLED_MINUTES, REVIEW_MINUTES, PERSON_MINUTES] as const
+export const NUDGE_MINUTES = [STALLED_MINUTES, REVIEW_MINUTES, PERSON_MINUTES] as const
+
+/**
+ * The house rule that wakes a member which is idle with work nobody holds (martha#959): off unless the declaration names
+ * it, and it names two windows with it — the first wait, and the cap the doubling stops at — so no member is woken on a
+ * window the code made up. `after_minutes: 0` is a crew that keeps the rule and turns it off.
+ */
+export const WAKE = 'wake'
+export const WAKE_AFTER_MINUTES = 'wake_after_minutes'
+export const WAKE_CAP_MINUTES = 'wake_cap_minutes'
+export const WAKE_MINUTES = [WAKE_AFTER_MINUTES, WAKE_CAP_MINUTES] as const
+
+/** Every window a house rule names, in whole minutes: the nudge windows, and the wake's two. */
+export const HOUSE_RULE_MINUTES = [...NUDGE_MINUTES, ...WAKE_MINUTES] as const
 export type HouseRuleMinutes = (typeof HOUSE_RULE_MINUTES)[number]
 
 /** How many milliseconds a minute is: the unit these windows are named in, and the one the rules read them as. */
@@ -221,7 +234,7 @@ export interface Backlog {
 export const WORKSPACE_LAYOUT = 'workspace_layout'
 
 /** The house rules a crew can switch on. Each is off unless the declaration says true. */
-export const HOUSE_RULE_SWITCHES = ['owner_items', WORKSPACE_LAYOUT, 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES] as const
+export const HOUSE_RULE_SWITCHES = ['owner_items', WORKSPACE_LAYOUT, 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES, WAKE] as const
 export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
 
 /** The house rule that names a model rather than switching a rule on. */
@@ -1009,10 +1022,16 @@ function refuseMinutes(refuse: Refuse, value: Json): void {
       refuse.at(`house_rules.${minutes}`, 'is not a whole number of minutes, zero or more')
     }
   }
-  if (value[NUDGES] !== true) return
-  const missing = HOUSE_RULE_MINUTES.find((minutes) => value[minutes] === undefined)
+  refuseTheWindowsOf(refuse, value, NUDGES, NUDGE_MINUTES)
+  refuseTheWindowsOf(refuse, value, WAKE, WAKE_MINUTES)
+}
+
+/** A window a rule needs, refused by name when the rule is on and the window is missing: never one the code made up. */
+function refuseTheWindowsOf(refuse: Refuse, value: Json, rule: HouseRuleSwitch, windows: readonly string[]): void {
+  if (value[rule] !== true) return
+  const missing = windows.find((minutes) => value[minutes] === undefined)
   if (missing !== undefined) {
-    refuse.at(`house_rules.${missing}`, `is missing, and house_rules.${NUDGES} is on in this declaration`)
+    refuse.at(`house_rules.${missing}`, `is missing, and house_rules.${rule} is on in this declaration`)
   }
 }
 
