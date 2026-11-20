@@ -51,11 +51,11 @@ const said = (order: unknown): Heard => ({ said: JSON.stringify(order) })
 
 test('#999 package 5: the engine\'s usage reads as a host\'s usage: the share of its context, its cost in dollars, and the session\'s start (mutant: the share not times 100, or the cost dropped)', () => {
   const reading = theHostsReadingIn(theEnginesUsageAsAHostsUsage(A_USAGE, STARTED_AT))
-  assert.deepEqual(reading, { percent: A_SHARE, cost_usd: 0.42, started_at: STARTED_AT, unknown_price: 0, billing: 'unknown' })
+  assert.deepEqual(reading, { percent: A_SHARE, cost_usd: 0.42, started_at: STARTED_AT, unknown_price: 0, billing: 'unknown', weekly: null })
 })
 
 test('#999 package 5: a session the engine said nothing of has no share, and a cost in another currency is not read as dollars (mutant: the currency not checked)', () => {
-  assert.deepEqual(theHostsReadingIn(theEnginesUsageAsAHostsUsage(undefined, STARTED_AT)), { percent: 0, cost_usd: null, started_at: STARTED_AT, unknown_price: 0, billing: 'unknown' })
+  assert.deepEqual(theHostsReadingIn(theEnginesUsageAsAHostsUsage(undefined, STARTED_AT)), { percent: 0, cost_usd: null, started_at: STARTED_AT, unknown_price: 0, billing: 'unknown', weekly: null })
   const euros = theHostsReadingIn(theEnginesUsageAsAHostsUsage({ ...A_USAGE, cost: { amount: 0.42, currency: 'EUR' } }, STARTED_AT))
   assert.ok(typeof euros !== 'string')
   assert.equal(euros.cost_usd, null)
