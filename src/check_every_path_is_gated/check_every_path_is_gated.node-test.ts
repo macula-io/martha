@@ -64,7 +64,7 @@ const coverageOf = (
 
 test('every inbound path the table names is in the registry, exactly once', () => {
   const expected = [
-    ...Array.from({ length: 27 }, (_, index) => `A${index + 1}`),
+    ...Array.from({ length: 28 }, (_, index) => `A${index + 1}`),
     ...Array.from({ length: 10 }, (_, index) => `B${index + 1}`),
     ...Array.from({ length: 9 }, (_, index) => `C${index + 1}`),
   ]

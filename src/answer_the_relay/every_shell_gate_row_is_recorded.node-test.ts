@@ -190,6 +190,7 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
     await relay.answer('tool_answered', { session_id: id, call, answer })
   }
 
+
   const lasts = await Promise.all(sessions.map(async (id) => (await rows.read(sessionRecordStreamOf(id))).at(-1)))
   const recorded = lasts.flatMap((last) => (last === undefined ? [] : recordOf(last.row).ingested.map((ingest) => ingest.path)))
   return [...new Set(recorded)]
@@ -216,6 +217,12 @@ test('the drive is not vacuous: without the package contract the crew hands at s
   const recorded = await pathsTheLauncherRecords(t)
   const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.package_contract)).map((gap) => gap.path)
   assert.ok(named.includes(PATH_OF_SOURCE.package_contract), named.join(', '))
+})
+
+test('the drive is not vacuous: without the crew state a prompted turn is handed, A28 is named', async (t) => {
+  const recorded = await pathsTheLauncherRecords(t)
+  const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.state_of_the_crew)).map((gap) => gap.path)
+  assert.ok(named.includes(PATH_OF_SOURCE.state_of_the_crew), named.join(', '))
 })
 
 /** What these launches started the host with: the arguments and environment the adapter's declaration names (martha#135). */
