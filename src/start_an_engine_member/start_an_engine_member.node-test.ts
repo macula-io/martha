@@ -15,6 +15,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { test, type TestContext } from 'node:test'
 
 import { approveConfig } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
+import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, ENGINE_ENDPOINT, HOST, SOLO_MEMBERS, soloDeclaration, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS, THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
@@ -203,6 +204,36 @@ test('#541 package A: a member with no model is refused by name before anything 
   assert.equal(start.started, false)
   assert.match(start.started ? '' : start.refusal, /names no model/)
   assert.equal(existsSync(engine.heard), false, 'an engine was started for a member that names no model')
+})
+
+/**
+ * A model the derive writes as it is declared, so the launch's read-back holds the bytes it wrote, and that the start's
+ * reader cannot read back: a tab sits raw inside the quoted value, which JSON does not parse. Only the start's own check
+ * stands between this config and a session.
+ */
+const A_MODEL_THE_START_CANNOT_READ = 'a\tmodel'
+/** Where the launch's random directory name sits in the expected line. */
+const A_LAUNCH_DIRECTORY = 'a-launch-directory'
+
+test("#541 package A: a config root the start does not read back to the declared model is refused by the start's line, and no session is opened (mutant: the start's model check dropped)", async (t) => {
+  const place = aPlace(t)
+  const path = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  const declared = JSON.parse(readFileSync(path, 'utf8')) as { members: Record<string, unknown>[] }
+  declared.members = declared.members.map((member) => (member['name'] === MEMBER ? { ...member, model: A_MODEL_THE_START_CANNOT_READ } : member))
+  writeFileSync(path, JSON.stringify(declared))
+  git(place.root, 'commit', '-q', '-am', 'a model the start cannot read back')
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const start = await started(place, engine, [])
+  assert.equal(start.started, false, 'an engine member was started on a config root the start could not read back to its model')
+  const configAt = theConfigFileOf(join(place.relay_root, A_LAUNCH_DIRECTORY, THE_ROOT_OF_A_LAUNCH))
+  const line = `${NOT_STARTED}: the config root at ${configAt} names the model nowhere, and the member declares "a\\tmodel"`
+  const [before = '', after = ''] = line.split(A_LAUNCH_DIRECTORY)
+  const refusal = start.started ? '' : start.refusal
+  assert.ok(refusal.startsWith(before) && refusal.endsWith(after), `${refusal}\nis not\n${line}`)
+  const directory = refusal.slice(before.length, refusal.length - after.length)
+  assert.match(directory, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, refusal)
+  assert.equal(refusal, line.replace(A_LAUNCH_DIRECTORY, directory))
+  assert.deepEqual(theRequests(engine.heard).filter((request) => request.method === 'session/new'), [])
 })
 
 /** The shell call the stand-in makes, named the engine's way in its `tool_call` update's `_meta`, never in the request. */
