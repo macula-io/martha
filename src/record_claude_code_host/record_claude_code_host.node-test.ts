@@ -192,6 +192,10 @@ const signInParts = (variable: string): string =>
   ].join(';')
 
 
+/** The host's one provider choice (martha#916 r=4), in the shape 2.1.329 spells it, testing `variables`. */
+const providerChoiceParts = (variables: readonly string[]): string =>
+  `function ve(){if(Po()||v7e()||Sre())return"gateway";return ${variables.map((name) => `s.${name}?"${name.toLowerCase()}":`).join('')}"firstParty"}`
+
 /** What the recording says a code field's texts call (martha#811). */
 const recordedCallees = (field: string): GuardCalls => (COMMITTED as unknown as Record<string, GuardCalls>)[calleesFieldOf(field)] ?? { guard_calls: {}, functions: [] }
 
@@ -237,6 +241,7 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   ...DIALOG_PARTS,
   ...REPORT_PARTS,
   sign_in_store_variable: signInParts(RECORDED_HOST.sign_in_store_variable),
+  cloud_provider_variables: providerChoiceParts(RECORDED_HOST.cloud_provider_variables),
   // Last, so the import of what the managed-folder guard calls is in the loader's module, before the first module of
   // its own; the memory guard restated by hand sits in a module of its own among them (martha#438).
   guards: guardModules(GUARD),
@@ -467,6 +472,15 @@ test('a host that picks its sign-in store by another variable fails the check na
   const run = check(hostHolding(t, { ...RECORDED_PARTS, sign_in_store_variable: disagreeing }), RECORDED_HOST.host_version)
   assert.equal(run.status, 1)
   assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: sign-in store\n`)
+})
+
+test('martha#916 r=4: a host that adds a cloud provider fails the check naming the field, and one with no provider choice cannot be read', (t) => {
+  const added = check(hostHolding(t, { ...RECORDED_PARTS, cloud_provider_variables: providerChoiceParts([...RECORDED_HOST.cloud_provider_variables, 'A_PROVIDER_THIS_TEST_MADE_UP']) }), RECORDED_HOST.host_version)
+  assertDiffers(added, 'cloud_provider_variables')
+  const { cloud_provider_variables: _choice, ...withoutChoice } = RECORDED_PARTS
+  const run = check(hostHolding(t, withoutChoice), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: cloud providers\n`)
 })
 
 /**

@@ -62,7 +62,7 @@ export const GUARD_FIELDS: readonly string[] = ['managed_folder_guard_calls', 'f
 /** The fields that hold the host's own words or values, not code: compared as written. */
 export const KEPT_FIELDS: readonly string[] = [
   'classic_hook_events', 'notification_types', 'managed_settings', 'frontmatter_pattern', 'markdown_kinds', 'protected_config_names',
-  'config_code_places', 'legacy_global_config_names', 'sign_in_store_variable', 'failed_agents_report',
+  'config_code_places', 'legacy_global_config_names', 'sign_in_store_variable', 'cloud_provider_variables', 'failed_agents_report',
 ]
 
 /** Every text a code field's value holds, in order: the value itself, each element of a list, or each value of an object. */

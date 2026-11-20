@@ -48,6 +48,11 @@ export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlace
    */
   readonly sign_in_store_variable: string
   /**
+   * The variables any one of which moves the host off its own API onto a cloud provider, cut from the binary
+   * (martha#916 r=4): no billed member is given any of them, nor is the sign-in question asked with them.
+   */
+  readonly cloud_provider_variables: readonly string[]
+  /**
    * Which of a file tool's rules the host's file permission checks match, cut from the binary (martha#226). It is a
    * field of its own rather than a mix-in: what is recorded is the host's statement, and the mapping is derived.
    */
@@ -111,6 +116,9 @@ function signInStoreVariableOf(recording: RecordedHost): string {
 
 export function recordedHostFrom(text: string): RecordedHost {
   const recording = JSON.parse(text) as RecordedHost
+  if (!Array.isArray(recording.cloud_provider_variables) || recording.cloud_provider_variables.length === 0 || recording.cloud_provider_variables.some((name) => typeof name !== 'string' || name === '')) {
+    throw new Error('The recording does not hold the variables that move the host onto a cloud provider, so which of them a member must not be given cannot be told (martha#916).')
+  }
   if (!Array.isArray(recording.classic_hook_events) || recording.classic_hook_events.length === 0) {
     throw new Error("The recording does not hold the hook events the host offers a module, so which dialogs reach the owner's row cannot be told (martha#313).")
   }
@@ -216,3 +224,9 @@ export const CLAUDE_CODE_FILE_RULE_TOOL: string = theToolItsChecksMatch(
  * the store is the owner's default one, so a member with a config folder of its own is signed in without a copy.
  */
 export const CLAUDE_CODE_SIGN_IN_STORE_VARIABLE: string = RECORDED_HOST.sign_in_store_variable
+
+/**
+ * The variables the recorded host moves onto a cloud provider by, any one of them set (martha#916 r=4): a member given
+ * one is billed by that provider, off the owner's sign-in and off the launcher's key alike.
+ */
+export const CLAUDE_CODE_CLOUD_PROVIDER_VARIABLES: readonly string[] = RECORDED_HOST.cloud_provider_variables
