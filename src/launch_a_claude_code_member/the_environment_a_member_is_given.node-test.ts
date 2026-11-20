@@ -38,7 +38,7 @@ test("martha#916: a member handed the owner's sign-in starts with no API key tho
   const started = giveAMemberItsStart({
     inherited: { HOME: '/srv/owner', [API_KEY_VARIABLE]: 'a-key-the-owners-shell-carries-916' },
     switches: { args: [], env: {}, env_dropped: [] },
-    crew: { state_root: join(dir, 'state'), rows: join(dir, 'state', 'rows') },
+    crew: { state_root: join(dir, 'state'), rows: join(dir, 'state', 'its-rows') },
     member_config,
     host: CLAUDE_CODE,
     checkout,
