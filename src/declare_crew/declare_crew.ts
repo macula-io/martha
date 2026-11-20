@@ -202,7 +202,7 @@ export const VOLATILE_PATHS = 'volatile_paths'
  */
 export const ENGINE_ENDPOINT = 'engine_endpoint'
 export const ENGINE_ENDPOINT_REQUIRED_KEYS = ['host'] as const
-export const ENGINE_ENDPOINT_OPTIONAL_KEYS = ['base_path', 'key_from'] as const
+export const ENGINE_ENDPOINT_OPTIONAL_KEYS = ['base_path', 'key_from', 'key_file'] as const
 
 /** A name `key_from` may hold: an environment variable's, as a shell spells one. */
 export const AN_ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -210,11 +210,19 @@ export const AN_ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 /** The schemes an endpoint's host may be reached on. */
 export const ENDPOINT_SCHEMES: readonly string[] = ['http:', 'https:']
 
-/** A declared engine endpoint: the host as a URL, the base path when one is named, and the variable the key is read from when one is named. */
+/**
+ * A declared engine endpoint: the host as a URL, the base path when one is named, and where the key is read from when
+ * one is named: the variable it is in, or the file it is in (martha#511 part B), never both.
+ */
 export interface EngineEndpoint {
   readonly host: string
   readonly base_path: string | null
   readonly key_from: string | null
+  /**
+   * The file the key is in, by its absolute path: a `~/…` the owner types at `martha up` is written out against their
+   * home before it lands here, and the reader refuses any other. The start reads it, and only the start.
+   */
+  readonly key_file: string | null
 }
 
 /** A declared backlog: the places to look in, and how long a member may sit idle beside unheld work before a nudge. */
@@ -349,6 +357,11 @@ export interface Member {
   readonly model: string | null
   /** The host this member is started on, when the declaration names one for it; null when the crew's own applies. */
   readonly host: string | null
+  /**
+   * Declared but kept down (martha#511, the `parked` of Raf's draft on #931): `martha up` starts every member that is
+   * not parked; false when the declaration does not say. Not the park a running member's work is put in.
+   */
+  readonly parked: boolean
 }
 
 export interface Mode {
@@ -428,7 +441,9 @@ export class DeclarationRefused extends Error {
 
 const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
-const OPTIONAL_MEMBER_KEYS = ['model', HOST] as const
+/** The member key `martha up` reads to leave a declared member down (martha#511). */
+export const PARKED = 'parked'
+const OPTIONAL_MEMBER_KEYS = ['model', HOST, PARKED] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
 const MODE_KEYS = ['name', 'roles', 'may'] as const
 
@@ -579,9 +594,31 @@ function engineEndpointOf(refuse: Refuse, value: unknown): EngineEndpoint | null
   const { host } = checked
   const base_path = value['base_path']
   if (!isAbsentOrText(base_path)) return refuse.at(`${ENGINE_ENDPOINT}.base_path`, 'is not a path')
+  return { host, base_path: base_path ?? null, ...theKeysPlaceOf(refuse, value) }
+}
+
+/** Where an endpoint's key is read from: the variable it is in, the file it is in (martha#511 part B), or neither; never both. */
+function theKeysPlaceOf(refuse: Refuse, value: Readonly<Record<string, unknown>>): Pick<EngineEndpoint, 'key_from' | 'key_file'> {
   const key_from = value['key_from']
   if (!isAbsentOrAVariablesName(key_from)) return refuse.at(`${ENGINE_ENDPOINT}.key_from`, 'is not the name of an environment variable: the key itself never goes in the declaration')
-  return { host, base_path: base_path ?? null, key_from: key_from ?? null }
+  const key_file = value['key_file']
+  if (!isAbsentOrAKeyFilesPath(key_file)) return refuse.at(`${ENGINE_ENDPOINT}.key_file`, 'is not an absolute path: the key itself never goes in the declaration')
+  if (key_from !== undefined && key_file !== undefined) return refuse.at(`${ENGINE_ENDPOINT}.key_file`, 'is named beside key_from: the key is read from one place')
+  return { key_from: key_from ?? null, key_file: key_file ?? null }
+}
+
+/** Whether a value is absent or a key file's path: absolute, with no `..` part. */
+function isAbsentOrAKeyFilesPath(value: unknown): value is string | undefined {
+  return value === undefined || isAKeyFilesPath(value)
+}
+
+/**
+ * Whether a value is a key file's path (martha#511 part B): absolute, with no `..` part. The declaration is this
+ * machine's own, so a path the owner typed under their home is written out in full by `martha up` before it lands here.
+ */
+export function isAKeyFilesPath(value: unknown): value is string {
+  if (!isText(value) || !value.startsWith('/')) return false
+  return !value.split('/').includes('..')
 }
 
 /**
@@ -738,11 +775,17 @@ function membersOf(refuse: Refuse, value: unknown, roles: readonly string[]): Me
 function memberOf(refuse: Refuse, member: unknown, at: string, roles: readonly string[], seen: Set<string>): Member {
   if (!isObject(member)) return refuse.at(at, `is not ${shapeOf(REQUIRED_MEMBER_KEYS, OPTIONAL_MEMBER_KEYS)}`)
   refuse.unknownKeys(member, MEMBER_KEYS, `${at}.`)
-  const { role, model, host } = member
+  const { role, model, host, parked } = member
   const name = memberNameOf(refuse, member.name, at, seen)
   if (typeof role !== 'string' || !roles.includes(role)) refuse.at(`${at}.role`, `is not a role of this mode (${roles.join(', ')})`)
   if (model !== undefined && model !== null && !isText(model)) refuse.at(`${at}.model`, 'is not a model name, or null for the host\'s own')
-  return { name, role, model: model ?? null, host: host === undefined ? null : hostNamed(refuse, host, `${at}.${HOST}`) }
+  return { name, role, model: model ?? null, host: host === undefined ? null : hostNamed(refuse, host, `${at}.${HOST}`), parked: parkedOf(refuse, parked, `${at}.${PARKED}`) }
+}
+
+/** A member's `parked` (martha#511): false when the declaration does not say, and refused by its field when it is not true or false. */
+function parkedOf(refuse: Refuse, value: unknown, at: string): boolean {
+  if (value === undefined) return false
+  return typeof value === 'boolean' ? value : refuse.at(at, 'is not true or false')
 }
 
 /**

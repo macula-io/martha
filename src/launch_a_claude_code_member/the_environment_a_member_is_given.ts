@@ -11,6 +11,10 @@
 // It is handed no variable kitty sets for the programs it starts either (#572 T6, #547 S6): a member run in a kitty tab
 // must not find that kitty's remote-control line or window.
 //
+// Nor the folders of plugins the launcher's own host loads (martha#511, #601 row 72): a crew-code session or the
+// owner's shell may set CLAUDE_CODE_PLUGIN_DIRS, and a member started with it would run those plugins' hooks with
+// nothing recorded (martha#121). The launch drops it and tells the owner so, instead of refusing the start.
+//
 // The environment is built in this order: what it inherits without the crew's state or kitty's, the gate's switches, the member's
 // own config folder, and the launcher's own state home last, so neither an inherited value nor a switch can point a
 // member at another state root.
@@ -20,6 +24,7 @@ import { join } from 'node:path'
 
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { withoutKittysVariables } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
+import { loadsPlugins, PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { streamOfDirectoryName } from '../row_streams_directory/row_streams_directory.ts'
@@ -60,6 +65,18 @@ function theCrewsStateKnownTo(state_root: string, rows: string, named_root: stri
   return [state_root, rows, named_root, join(named_root, CREWS_PLACE)]
 }
 
+/** The environment without the plugin folders the launcher's own host loads, as the header says. */
+export function withoutThePluginFolders(env: Readonly<Record<string, string | undefined>>): Record<string, string | undefined> {
+  const { [PLUGIN_DIRS_VARIABLE]: _dropped, ...kept } = env
+  return kept
+}
+
+/** The line the owner is told when a member is not handed the launcher's plugin folders; none when none was set. */
+export function theDroppedPluginsLines(member: string, inherited: Readonly<Record<string, string | undefined>>): readonly string[] {
+  if (!loadsPlugins(inherited[PLUGIN_DIRS_VARIABLE])) return []
+  return [`${member} is not handed ${PLUGIN_DIRS_VARIABLE} from this shell, so the plugins it names do not load in the member (martha#121).`]
+}
+
 /** Everything the environment of a member is built from: what it inherits, the gate's switches, the crew's state, its config folder. */
 export interface AMembersEnvironment {
   readonly inherited: Readonly<Record<string, string | undefined>>
@@ -77,7 +94,7 @@ export function theEnvironmentAMemberIsGiven(asking: AMembersEnvironment): Recor
     session_ids: sessionIdsRecordedIn(asking.crew.rows),
   })
   return {
-    ...launchEnvironment(withoutKittysVariables(kept), asking.switches, asking.host),
+    ...launchEnvironment(withoutThePluginFolders(withoutKittysVariables(kept)), asking.switches, asking.host),
     ...theMembersConfigEnvironment(asking.member_config),
     ...theCrewsStateAMemberIsGiven(asking.crew.state_root),
   }

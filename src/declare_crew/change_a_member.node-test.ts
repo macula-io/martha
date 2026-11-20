@@ -37,7 +37,7 @@ test('#307: add puts a member on the crew in a role of the mode, with its model 
   assert.ok('after' in outcome, 'refusal' in outcome ? outcome.refusal : '')
   assert.deepEqual(membersIn(outcome.after).at(-1), { name: 'scout', role: REVIEWER.role, model: 'other-model', [HOST]: THE_ENGINES_HOST })
   const scout = outcome.settings.members.find((member) => member.name === 'scout')
-  assert.deepEqual(scout, { name: 'scout', role: REVIEWER.role, model: 'other-model', host: THE_ENGINES_HOST })
+  assert.deepEqual(scout, { name: 'scout', role: REVIEWER.role, model: 'other-model', host: THE_ENGINES_HOST, parked: false })
   assert.equal(outcome.before, solo())
 })
 
