@@ -29,6 +29,7 @@ import { memberNameKey } from './member_names.ts'
 import { GITHUB, GITHUB_KEYS, githubOf, type CrewGithub } from './the_crews_github.ts'
 import { TRANSCRIPTS, TRANSCRIPTS_KEYS, transcriptsOf, type CrewTranscripts } from './the_crews_transcripts.ts'
 import { THRESHOLDS, THRESHOLDS_KEYS, thresholdsOf, type CrewThresholds } from './the_crews_thresholds.ts'
+import { FRICTION_REPOS, PUBLIC_EMAILS, theFrictionNotesOf } from './the_crews_friction.ts'
 import { OWNER_NOTICES, OWNER_NOTICES_KEYS, ownerNoticesOf, type CrewOwnerNotices } from './the_crews_owner_notices.ts'
 import { CLOCK_ZONE, clockZoneOf } from './the_crews_clock_zone.ts'
 import { PROFILE, PROFILE_BLOCK_FIELDS, PROFILE_TOP_LEVEL_KEYS, profilesOf, theProfileOfAMember, type TheProfiles } from './the_crews_profiles.ts'
@@ -423,6 +424,10 @@ export interface CrewSettings {
   readonly clock_zone: string
   /** The crew's name and the terminal its members open in (martha#932): see ./the_crews_workspace's whereTheCrewOpens. */
   readonly opens: WhereTheCrewOpens
+  /** The repositories a friction note may be filed in (martha#318): empty when the declaration names none, and then no note is filed. */
+  readonly friction_repos: readonly string[]
+  /** The email domains a friction note may name besides the ones every note may (martha#318). */
+  readonly public_emails: readonly string[]
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -438,7 +443,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS, GITHUB, TRANSCRIPTS, OWNER_NOTICES, CLOCK_ZONE, ...WORKSPACE_TOP_LEVEL_KEYS, ...PROFILE_TOP_LEVEL_KEYS] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS, GITHUB, TRANSCRIPTS, OWNER_NOTICES, CLOCK_ZONE, FRICTION_REPOS, PUBLIC_EMAILS, ...WORKSPACE_TOP_LEVEL_KEYS, ...PROFILE_TOP_LEVEL_KEYS] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 /** The member key `martha up` reads to leave a declared member down (martha#511). */
 export const PARKED = 'parked'
@@ -631,6 +636,7 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
   const mode = modeOf(refuse, value['mode'], value['members'])
   const members = membersOf(refuse, value['members'], mode.roles, profiles)
   const host = crewHostOf(refuse, value[HOST])
+  const friction = theFrictionNotesOf(value, said)
   const rules = houseRulesAsRead(refuse, value['house_rules'], theWorkspacesClonesOf(value, paths.root, said))
   return {
     paths: { ...paths, conventions: conventionsOf(refuse, value['conventions'], paths.crew) ?? conventions_when_unnamed },
@@ -651,6 +657,8 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
     engine_endpoint: theEnginesEndpointOf(said, value, profiles, (field, why) => refuse.say(field, why)),
     opens: whereTheCrewOpens(value),
+    friction_repos: friction.repos,
+    public_emails: friction.public_emails,
   }
 }
 

@@ -105,6 +105,8 @@ import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_pat
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
 import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { FILE_A_FRICTION_NOTE_TOOL, fileAFrictionNote } from '../file_a_friction_note/the_friction_tool.ts'
+import { startSweepingTheNotes } from '../file_a_friction_note/the_friction_sweep.ts'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
@@ -258,8 +260,9 @@ export interface CrewTools extends TheReviewRule {
   /** Starts the heartbeat, which keeps this member's row fresh; returns the stop. */
   startBeating(): () => void
   /**
-   * Starts the sweep of the owner's list (martha#316): once every SWEEP_INTERVAL_MS, while this member may keep the
-   * list, every open row's check is asked whether its act is done. Returns the stop.
+   * Starts the sweeps this launch keeps (martha#316, #318): once every interval, the owner's list while this member may
+   * keep it, and the crew's index of friction notes while this member is the one the crew's work is routed to. Returns
+   * the stop of both.
    */
   startSweeping(): () => void
   /**
@@ -373,6 +376,7 @@ const THE_TOOLS = [
   STANDING_CLOSE_TOOL,
   STANDING_TOOL,
   WAIT_FOR_CI_TOOL,
+  FILE_A_FRICTION_NOTE_TOOL,
 ] as const
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
@@ -487,7 +491,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
       timer.unref()
       return () => clearInterval(timer)
     },
-    startSweeping: () => sweepTheOwnersList(held),
+    startSweeping: () => startTheSweeps(held),
     theLineToHandAtStart: (session_id) => theStartLineOf(held, state, session_id),
     noteTheStart: (session_id, taken) => noteTheStartIn(held, state, session_id, taken),
     thePredecessorOf: (session_id) => thePredecessorOf(held, session_id),
@@ -566,6 +570,26 @@ function sweepTheOwnersList(places: CrewToolPlaces): () => void {
   if (places.processes === undefined) return () => undefined
   // The declaration is read again at each sweep, so an edited table takes effect without a relaunch.
   return startSweeping({ ledger: places.ledger, root: places.root, member: places.member, processes: places.processes, settings: () => theSettingsOrRefusal(places) })
+}
+
+/**
+ * The sweeps this launch keeps (martha#316, #318): the owner's list, and the crew's index of friction notes. Each is
+ * gated by its own rule inside its slice — the list by the declaration's table, the notes by the member the crew's work
+ * is routed to — so a launch that keeps neither still starts nothing that acts.
+ */
+function startTheSweeps(places: CrewToolPlaces): () => void {
+  const stopTheList = sweepTheOwnersList(places)
+  const stopTheNotes = startSweepingTheNotes({
+    crew: places.stores.crew,
+    root: places.root,
+    member: places.member,
+    ...(places.processes === undefined ? {} : { processes: places.processes }),
+    settings: () => theSettingsOrRefusal(places),
+  })
+  return () => {
+    stopTheList()
+    stopTheNotes()
+  }
 }
 
 /** How often the mod is to read the crew channel, as the declaration gives it. */
@@ -781,6 +805,22 @@ const whoMayResume = async (places: CrewToolPlaces) => {
 }
 
 /** What each tool answers, over one place: every tool is one slice's answer, told to the member. */
+/** The friction note's handler (martha#318): the note is judged before gh runs, and filed through this launch's processes. */
+const filingAFrictionNote = (places: CrewToolPlaces): AHandler =>
+  declaring(places, async (declared, args) =>
+    fileAFrictionNote(
+      {
+        member: places.member,
+        settings: declared.settings,
+        root: places.root,
+        crew: places.stores.crew,
+        ...(places.processes === undefined ? {} : { processes: places.processes }),
+        now: places.ledger.clock.now(),
+      },
+      args,
+    ),
+  )
+
 function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Record<CrewToolName, AHandler>> {
   const ledger = { ledger: places.ledger, member: places.member }
   const parked = (declared: CrewDeclared, args: Readonly<Record<string, unknown>>, act: typeof parkAMember): Promise<CoreToolAnswer> =>
@@ -841,6 +881,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [WAIT_FOR_CI_TOOL.name]: namedThenDeclaring(places, theCiWaitACallNames, async (declared, named) =>
       actingOn(named, (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock, github: declared.settings.github, clock_zone: declared.settings.clock_zone }), asked)),
     ),
+    [FILE_A_FRICTION_NOTE_TOOL.name]: filingAFrictionNote(places),
   }
 }
 
