@@ -251,26 +251,7 @@ export const WORKTREES_BESIDE_CLONES = 'worktrees'
 /** What a checkout that proves no layout is told to add, in the words of this declaration's own keys (martha#611). */
 export const LAYOUT_TO_ADD = 'Add "workspace_layout": true with "clones" and "worktrees" to house_rules to declare one.'
 
-/** The places a crew's declaration names, and the names of its members (martha#958). */
-export interface ThePlacesTheCrewNamed {
-  readonly clones: string
-  readonly worktrees: string
-  readonly members: readonly string[]
-}
-
-/**
- * The places the crew declared for its clones and worktrees, with its members' names; undefined when it named no
- * places (martha#958). The places are the fact: a crew that names them is guarded, whichever block named them, since
- * the reader fills both from `workspace.root` when `house_rules` names neither (houseRulesAsRead). The switch that used
- * to gate this is no longer read, so a crew declared in the draft's own shape — a workspace root and no house rules —
- * has its rules on from its first `martha up`. This is their one reading: the guard, the scan and a worktree are all
- * answered from it, so a worktree and the rules that keep it in its place cannot come from two different facts.
- */
-export function theWorkspaceTheCrewDeclared(settings: CrewSettings): ThePlacesTheCrewNamed | undefined {
-  const { clones, worktrees } = settings.house_rules
-  if (clones === null || worktrees === null) return undefined
-  return { clones, worktrees, members: settings.members.map((member) => member.name) }
-}
+export { theWorkspaceTheCrewDeclared, type ThePlacesTheCrewNamed } from './the_crews_workspace.ts'
 
 /** What a checkout's own path proves about its workspace (martha#611): the layout to declare, and the line `martha init` says of it. */
 export interface WhatACheckoutProves {

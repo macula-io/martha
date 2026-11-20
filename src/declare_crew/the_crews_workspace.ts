@@ -8,6 +8,8 @@
 
 import { isAbsolute, join, normalize, sep } from 'node:path'
 
+import type { CrewSettings } from './declare_crew.ts'
+
 /** The declaration's keys for the four blocks, kept here: declare_crew reads them through the lists below. */
 const CREW_ID = 'id'
 const TERMINAL = 'terminal'
@@ -125,4 +127,25 @@ export const WORKSPACE_TOP_LEVEL_KEYS: readonly string[] = [CREW_ID, TERMINAL, W
 export const WORKSPACE_BLOCK_FIELDS: Readonly<Record<string, readonly string[]>> = {
   [WORKSPACE]: WORKSPACE_KEYS,
   [MESH]: [...MESH_KEYS, ...MESH_SERVICES],
+}
+
+/** The places a crew's declaration names, and the names of its members (martha#958). */
+export interface ThePlacesTheCrewNamed {
+  readonly clones: string
+  readonly worktrees: string
+  readonly members: readonly string[]
+}
+
+/**
+ * The places the crew declared for its clones and worktrees, with its members' names; undefined when it named no
+ * places (martha#958). The places are the fact: a crew that names them is guarded, whichever block named them, since
+ * the reader fills both from `workspace.root` when `house_rules` names neither (houseRulesAsRead). The switch that used
+ * to gate this is no longer read, so a crew declared in the draft's own shape — a workspace root and no house rules —
+ * has its rules on from its first `martha up`. This is their one reading: the guard, the scan and a worktree are all
+ * answered from it, so a worktree and the rules that keep it in its place cannot come from two different facts.
+ */
+export function theWorkspaceTheCrewDeclared(settings: CrewSettings): ThePlacesTheCrewNamed | undefined {
+  const { clones, worktrees } = settings.house_rules
+  if (clones === null || worktrees === null) return undefined
+  return { clones, worktrees, members: settings.members.map((member) => member.name) }
 }
