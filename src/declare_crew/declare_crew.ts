@@ -44,7 +44,7 @@ export {
   isAKeyFilesPath,
   type EngineEndpoint,
 } from './the_engines_endpoint.ts'
-import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theMeshKeysFolderOf, theWorkspacesClonesOf, whereTheCrewOpens, type TheCrewsMeshKeys, type WhereTheCrewOpens } from './the_crews_workspace.ts'
+import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theMeshKeysFolderOf, theNamedMeshKeysOf, theWorkspacesClonesOf, whereTheCrewOpens, type TheCrewsMeshKeys, type WhereTheCrewOpens } from './the_crews_workspace.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -662,17 +662,8 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
     engine_endpoint: theEnginesEndpointOf(said, value, profiles, (field, why) => refuse.say(field, why)),
     opens: whereTheCrewOpens(value),
-    mesh_keys: { folder: theMeshKeysFolderOf(value), named: theNamedMeshKeysOf(members, value['members']) },
+    mesh_keys: { folder: theMeshKeysFolderOf(value), named: theNamedMeshKeysOf(members.map((member) => member.name), value['members'], MESH_KEY) },
   }
-}
-
-/** Each member's own `mesh_key` as written, by its name key; a member that names none is not in it (martha#1016). */
-function theNamedMeshKeysOf(members: readonly Member[], declared: unknown): Record<string, string> {
-  if (!Array.isArray(declared)) return {}
-  return Object.fromEntries(members.flatMap((member, i) => {
-    const named: unknown = isObject(declared[i]) ? (declared[i] as Json)[MESH_KEY] : undefined
-    return isText(named) ? [[memberNameKey(member.name), named.trim()]] : []
-  }))
 }
 
 /**

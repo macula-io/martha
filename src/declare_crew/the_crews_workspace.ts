@@ -8,6 +8,8 @@
 
 import { isAbsolute, join, normalize, sep } from 'node:path'
 
+import { memberNameKey } from './member_names.ts'
+
 /** The declaration's keys for the four blocks, kept here: declare_crew reads them through the lists below. */
 const CREW_ID = 'id'
 const TERMINAL = 'terminal'
@@ -60,6 +62,16 @@ export function theMeshKeysFolderOf(declaration: Block): string | null {
   if (!isBlock(mesh)) return null
   const keys = mesh['keys']
   return isText(keys) ? keys.trim() : null
+}
+
+/** Each member's own key file as written under `field`, by its name key, from members the reader has checked in order; a member that names none is not in it (martha#1016). */
+export function theNamedMeshKeysOf(names: readonly string[], declared: unknown, field: string): Record<string, string> {
+  if (!Array.isArray(declared)) return {}
+  return Object.fromEntries(names.flatMap((name, i) => {
+    const entry: unknown = declared[i]
+    const named = isBlock(entry) ? entry[field] : undefined
+    return isText(named) ? [[memberNameKey(name), named.trim()]] : []
+  }))
 }
 
 /** A realm, as the mesh names one: 64 hex characters. */
