@@ -184,8 +184,8 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
   owner: 'Ann',
   host: THE_HOST_A_MEMBER_RAN_ON,
   members: [
-    { name: LEAD, role: SUPERVISOR, model: null, host: null, parked: false },
-    { name: BUILDER, role: 'builder', model: null, host: null, parked: false },
+    { name: LEAD, role: SUPERVISOR, model: null, host: null, parked: false, billing: null },
+    { name: BUILDER, role: 'builder', model: null, host: null, parked: false, billing: null },
   ],
   mode: {
     name: 'team',
