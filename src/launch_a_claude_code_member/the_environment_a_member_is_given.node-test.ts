@@ -10,7 +10,7 @@ import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { API_KEY_ANSWERS_KEY, API_KEY_VARIABLE, apiKeyAnsweredYes, AUTH_TOKEN_VARIABLE, HOST_TRUST_RECORD_FILE, SIGN_IN_QUESTION_ARGS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
-import { CLAUDE_CODE_CLOUD_PROVIDER_VARIABLES, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_PROVIDER_SWITCH_VARIABLES, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 import { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, type Billing } from '../declare_crew/declare_crew.ts'
 import { SIGNED_IN_ANSWER } from '../drive_the_recorded_host/host_stand_in.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -95,16 +95,16 @@ test("martha#916 r=3: a member billed by the subscription is not handed the laun
   assert.equal((byKey.started as Record<string, string>)[AUTH_TOKEN_VARIABLE], A_LAUNCHERS_TOKEN, "the key's member lost the launcher's token")
 })
 
-/** Every variable that moves the host onto a cloud provider, set as the launcher's shell might carry them. */
-const EVERY_CLOUD_PROVIDER = Object.fromEntries(CLAUDE_CODE_CLOUD_PROVIDER_VARIABLES.map((name) => [name, '1']))
+/** Every variable that switches the host off its own API, set as the launcher's shell might carry them. */
+const EVERY_PROVIDER_SWITCH = Object.fromEntries(CLAUDE_CODE_PROVIDER_SWITCH_VARIABLES.map((name) => [name, '1']))
 
-test('martha#916 r=4: no billed member is handed a variable that moves the host onto a cloud provider, whichever billing it has', (t) => {
+test('martha#916 r=4: no billed member is handed a variable that switches the host off its own API, whichever billing it has', (t) => {
   // Seen live on 2.1.329: a planted CLAUDE_CODE_USE_BEDROCK turned a subscription member's banner to "Amazon Bedrock".
   for (const [billing, inherited] of [[BILLED_BY_SUBSCRIPTION, {}], [BILLED_BY_API_KEY, { [API_KEY_VARIABLE]: A_LAUNCHERS_KEY }]] as const) {
-    const start = aStart(t, billing, { ...inherited, ...EVERY_CLOUD_PROVIDER })
+    const start = aStart(t, billing, { ...inherited, ...EVERY_PROVIDER_SWITCH })
     assert.notEqual(typeof start.started, 'string', `the start was refused: ${String(start.started)}`)
-    const given = CLAUDE_CODE_CLOUD_PROVIDER_VARIABLES.filter((name) => name in (start.started as Record<string, string>))
-    assert.deepEqual(given, [], `a member billed by ${billing} is handed a cloud provider's variable`)
+    const given = CLAUDE_CODE_PROVIDER_SWITCH_VARIABLES.filter((name) => name in (start.started as Record<string, string>))
+    assert.deepEqual(given, [], `a member billed by ${billing} is handed a provider switch`)
   }
 })
 
@@ -161,11 +161,11 @@ test("martha#916 r=3: the sign-in question is asked without the launcher's auth 
   assert.deepEqual(asked.billed, { billing: BILLED_BY_SUBSCRIPTION, told: undefined }, 'the token reached the sign-in question')
 })
 
-test('martha#916 r=4: the sign-in question is asked without any variable that moves the host onto a cloud provider', async (t) => {
+test('martha#916 r=4: the sign-in question is asked without any variable that switches the host off its own API', async (t) => {
   // A stand-in that, as the host does, answers by the provider when any one of them is set.
-  const byAProvider = CLAUDE_CODE_CLOUD_PROVIDER_VARIABLES.map((name) => `[ -n "\${${name}+set}" ] && { printf '%s' '${A_SIGN_IN_BY_ANOTHER_METHOD}'; exit 0; }`)
-  const asked = await billedBy(t, [...byAProvider, `printf '%s' '${SIGNED_IN_ANSWER}'`], EVERY_CLOUD_PROVIDER)
-  assert.deepEqual(asked.billed, { billing: BILLED_BY_SUBSCRIPTION, told: undefined }, "a cloud provider's variable reached the sign-in question")
+  const byAProvider = CLAUDE_CODE_PROVIDER_SWITCH_VARIABLES.map((name) => `[ -n "\${${name}+set}" ] && { printf '%s' '${A_SIGN_IN_BY_ANOTHER_METHOD}'; exit 0; }`)
+  const asked = await billedBy(t, [...byAProvider, `printf '%s' '${SIGNED_IN_ANSWER}'`], EVERY_PROVIDER_SWITCH)
+  assert.deepEqual(asked.billed, { billing: BILLED_BY_SUBSCRIPTION, told: undefined }, 'a provider switch reached the sign-in question')
 })
 
 test("martha#916: with no billing and no sign-in, the member is billed by the launcher's key, and by the subscription when it carries none", async (t) => {

@@ -192,9 +192,12 @@ const signInParts = (variable: string): string =>
   ].join(';')
 
 
-/** The host's one provider choice (martha#916 r=4), in the shape 2.1.329 spells it, testing `variables`. */
-const providerChoiceParts = (variables: readonly string[]): string =>
-  `function ve(){if(Po()||v7e()||Sre())return"gateway";return ${variables.map((name) => `s.${name}?"${name.toLowerCase()}":`).join('')}"firstParty"}`
+/** The gateway's gate and the host's one provider choice (martha#916 r=4), in the shapes 2.1.329 spells them. */
+const providerChoiceParts = ([gateway, ...chain]: readonly string[]): string =>
+  [
+    `function Iws(){{if(!s.${gateway ?? ''})return!1;let e=s.ANTHROPIC_BASE_URL,n=s.ANTHROPIC_AUTH_TOKEN||JWt();return n}}`,
+    `function ve(){if(Po()||v7e()||Sre())return"gateway";return ${chain.map((name) => `s.${name}?"${name.toLowerCase()}":`).join('')}"firstParty"}`,
+  ].join(';')
 
 /** What the recording says a code field's texts call (martha#811). */
 const recordedCallees = (field: string): GuardCalls => (COMMITTED as unknown as Record<string, GuardCalls>)[calleesFieldOf(field)] ?? { guard_calls: {}, functions: [] }
@@ -241,7 +244,7 @@ const RECORDED_PARTS: Readonly<Record<string, string>> = {
   ...DIALOG_PARTS,
   ...REPORT_PARTS,
   sign_in_store_variable: signInParts(RECORDED_HOST.sign_in_store_variable),
-  cloud_provider_variables: providerChoiceParts(RECORDED_HOST.cloud_provider_variables),
+  provider_switch_variables: providerChoiceParts(RECORDED_HOST.provider_switch_variables),
   // Last, so the import of what the managed-folder guard calls is in the loader's module, before the first module of
   // its own; the memory guard restated by hand sits in a module of its own among them (martha#438).
   guards: guardModules(GUARD),
@@ -475,12 +478,12 @@ test('a host that picks its sign-in store by another variable fails the check na
 })
 
 test('martha#916 r=4: a host that adds a cloud provider fails the check naming the field, and one with no provider choice cannot be read', (t) => {
-  const added = check(hostHolding(t, { ...RECORDED_PARTS, cloud_provider_variables: providerChoiceParts([...RECORDED_HOST.cloud_provider_variables, 'A_PROVIDER_THIS_TEST_MADE_UP']) }), RECORDED_HOST.host_version)
-  assertDiffers(added, 'cloud_provider_variables')
-  const { cloud_provider_variables: _choice, ...withoutChoice } = RECORDED_PARTS
+  const added = check(hostHolding(t, { ...RECORDED_PARTS, provider_switch_variables: providerChoiceParts([...RECORDED_HOST.provider_switch_variables, 'A_PROVIDER_THIS_TEST_MADE_UP']) }), RECORDED_HOST.host_version)
+  assertDiffers(added, 'provider_switch_variables')
+  const { provider_switch_variables: _choice, ...withoutChoice } = RECORDED_PARTS
   const run = check(hostHolding(t, withoutChoice), RECORDED_HOST.host_version)
   assert.equal(run.status, 1)
-  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: cloud providers\n`)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: provider switches\n`)
 })
 
 /**

@@ -1996,7 +1996,8 @@
     ".config.json"
   ],
   "sign_in_store_variable": "CLAUDE_SECURESTORAGE_CONFIG_DIR",
-  "cloud_provider_variables": [
+  "provider_switch_variables": [
+    "CLAUDE_CODE_USE_GATEWAY",
     "CLAUDE_CODE_USE_BEDROCK",
     "CLAUDE_CODE_USE_FOUNDRY",
     "CLAUDE_CODE_USE_ANTHROPIC_AWS",

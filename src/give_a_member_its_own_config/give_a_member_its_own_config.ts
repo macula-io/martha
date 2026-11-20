@@ -48,7 +48,7 @@ import { dirname, join } from 'node:path'
 
 import { API_KEY_VARIABLE, apiKeyAnsweredYes, AUTH_TOKEN_VARIABLE, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, API_KEY_ANSWERS_KEY, TRUST_ACCEPTED_KEY, type TheSignIn } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, type Billing } from '../declare_crew/declare_crew.ts'
-import { CLAUDE_CODE_CLOUD_PROVIDER_VARIABLES, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
+import { CLAUDE_CODE_PROVIDER_SWITCH_VARIABLES, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, SKILLS_KIND, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 
@@ -91,7 +91,7 @@ const THE_CREDENTIALS_OF: Readonly<Record<Billing, readonly string[]>> = {
  * The variables no billed member is given, whichever its billing (martha#916 r=4): each moves the host onto a cloud
  * provider, off the owner's sign-in and off the launcher's key alike. Read from the recorded host, never typed.
  */
-const NEVER_GIVEN: readonly string[] = CLAUDE_CODE_CLOUD_PROVIDER_VARIABLES
+const NEVER_GIVEN: readonly string[] = CLAUDE_CODE_PROVIDER_SWITCH_VARIABLES
 
 /** The variables a member billed by `billing` is never given, whatever it inherits: the other billing's credentials, and NEVER_GIVEN. */
 export function notGivenUnder(billing: Billing): readonly string[] {
