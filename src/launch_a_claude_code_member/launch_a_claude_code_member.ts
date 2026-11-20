@@ -649,13 +649,8 @@ function aTickOfWorkFor(launch: ClaudeCodeMemberLaunch, misses: string): () => v
   return aTickOfTheRowsWork(aFolderOfTheMisses(misses, launch.member_name, beats), aFolderOfTheScan(launch.leftovers?.workspace, launch.member_name, beats, scan))
 }
 
-/** The launch itself, on a run that has said whether it is still there. */
-async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeline): Promise<MemberStarted> {
-  const refuse = (refusal: string): MemberStarted => {
-    launch.tellOwner(refusal)
-    return { started: false, refusal }
-  }
-  // Before anything of the member is made: which credential it is billed by (martha#916).
+/** Before anything of the member is made: the credential it is billed by, and the owner told when it is not the usual one (martha#916). */
+async function billingOf(launch: ClaudeCodeMemberLaunch): Promise<Billing> {
   const billed = await theBillingOfALaunch({
     declared: launch.crew_settings?.billing ?? null,
     inherited: launch.inherited,
@@ -663,7 +658,16 @@ async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeli
     cwd: launch.place.launch_dir,
   })
   if (billed.told !== undefined) launch.tellOwner(billed.told)
-  const ready = readyLaunch(launch, billed.billing)
+  return billed.billing
+}
+
+/** The launch itself, on a run that has said whether it is still there. */
+async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeline): Promise<MemberStarted> {
+  const refuse = (refusal: string): MemberStarted => {
+    launch.tellOwner(refusal)
+    return { started: false, refusal }
+  }
+  const ready = readyLaunch(launch, await billingOf(launch))
   if (typeof ready === 'string') return refuse(ready)
   const directories = launchDirectories(launch, ready)
   if (typeof directories === 'string') return refuse(directories)

@@ -123,6 +123,10 @@ const anOwnersDeadRule = (answers: HostAnswers): string => (answers.namesAnOwner
 /** The answer of a host signed in on a subscription to the sign-in question (martha#916), in the shape 2.1.329 prints. */
 export const SIGNED_IN_ANSWER = JSON.stringify({ loggedIn: true, authMethod: SIGNED_IN_BY_SUBSCRIPTION })
 
+/** The line that answers the sign-in question (martha#916): SIGNED_IN_ANSWER unless the test gives another. */
+const signInLine = (answers: HostAnswers): string =>
+  `if [ "$1" = ${SIGN_IN_QUESTION_ARGS[0]} ]; then printf '%s\\n' ${quoted(answers.signInAnswer ?? SIGNED_IN_ANSWER)}; exit 0; fi`
+
 /** The shell lines a stand-in `claude` starts with, right after its #! line. */
 export function hostAnswers(answers: HostAnswers = {}): string[] {
   const report = answers.report ?? LOADS_THE_RELAY
@@ -136,7 +140,7 @@ export function hostAnswers(answers: HostAnswers = {}): string[] {
   return [
     // The sign-in question comes before the calls are kept (martha#916), so a test that counts the host's runs counts
     // the ones it counted before a launch asked it.
-    `if [ "$1" = ${SIGN_IN_QUESTION_ARGS[0]} ]; then printf '%s\\n' ${quoted(answers.signInAnswer ?? SIGNED_IN_ANSWER)}; exit 0; fi`,
+    signInLine(answers),
     ...(answers.callsFile === undefined ? [] : [`printf '%s %s\\n' "$0" "$1" >> ${quoted(answers.callsFile)}`]),
     ...(answers.validatedFile === undefined
       ? []
