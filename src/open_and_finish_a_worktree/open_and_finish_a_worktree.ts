@@ -412,15 +412,33 @@ async function theLiveWorktreeHolding(host: WorktreesRequest['host'], clone: str
  * side is never deleted from the other, because half a finish is not what the caller asked for.
  */
 async function finishTheBranch(request: WorktreesRequest, form: Extract<FinishForm, { readonly form: 'branch' }>, work: TheAct, args: Readonly<Record<string, unknown>>): Promise<WorktreeAnswer> {
+  const guarded = await theBranchGuards(request, form, args)
+  if ('refused' in guarded) return guarded
   const { host } = request
   const { clone, branch } = form
-  // Who may call is judged before anything is read, as crew-code's own finish does: a member's branch is closed by that
-  // member, or on their word by a role the table grants (martha#962).
+  // Read afresh, and pruned, before either side is judged: the package may have landed since this clone last heard from
+  // origin, and a branch deleted on origin by someone else would still be remembered here.
+  const fetched = await git(host, clone, ['fetch', '--quiet', '--prune', 'origin'])
+  if (fetched.exit_code !== 0) return no(`origin could not be read (${saidBy(fetched)}), so nothing of ${branch} was removed.`)
+  const on_origin = await bothSidesJudged(host, clone, branch, guarded.default_branch)
+  if ('refused' in on_origin) return on_origin
+  const remote = on_origin.state === 'held' ? await theOriginSide(host, clone, branch, on_origin.tip, work) : on_origin
+  if (remote.state === 'kept') return no(`the origin still holds origin/${branch}, ${remote.why}; the clone's copy is untouched.`)
+  const local = await theCloneSide(host, clone, branch, guarded.default_branch)
+  return { told: branchFinishLine(branch, remote, local) }
+}
+
+/**
+ * The branch form's guards, the live form's own: who may call, judged before anything is read as crew-code's finish does
+ * (a member's branch is closed by that member, or on their word by a role the table grants), then never the default
+ * branch, never a branch no member owns, and never one a live worktree still holds (martha#962).
+ */
+async function theBranchGuards(request: WorktreesRequest, form: Extract<FinishForm, { readonly form: 'branch' }>, args: Readonly<Record<string, unknown>>): Promise<{ readonly default_branch: string } | Refused> {
+  const { host } = request
+  const { clone, branch } = form
   const owner = theOwnerOfBranch(branch, request.settings.members)
-  if (owner !== undefined) {
-    const allowed = whoseItIs(request, owner, branch, args)
-    if (allowed !== undefined) return allowed
-  }
+  const allowed = owner === undefined ? undefined : whoseItIs(request, owner, branch, args)
+  if (allowed !== undefined) return allowed
   const default_branch = await defaultBranchIn(host, clone)
   if (default_branch === undefined) return no(`${clone} cannot say which branch its origin's default is: run git remote set-head origin -a there, then try again.`)
   if (branch === default_branch.replace(/^origin\//, '')) return no(`${branch} is the origin's default branch, and that is never removed.`)
@@ -430,28 +448,53 @@ async function finishTheBranch(request: WorktreesRequest, form: Extract<FinishFo
   if (holding.path !== '') {
     return no(`the worktree at ${holding.path} holds branch "${branch}"; finish it with its repo, its slug and the package, so its directory goes with the branch.`)
   }
-  const remote = await theOriginSide(host, clone, branch, default_branch, work)
-  if (remote.state === 'kept') return no(`the origin still holds origin/${branch}, ${remote.why}; the clone's copy is untouched.`)
-  const local = await theCloneSide(host, clone, branch, default_branch)
-  return { told: branchFinishLine(branch, remote, local) }
+  return { default_branch }
 }
 
-/** The origin's copy of a finished branch, read afresh: gone when the default branch holds its tip, or kept with why. */
-async function theOriginSide(host: WorktreesRequest['host'], clone: string, branch: string, default_branch: string, work: TheAct): Promise<ASideOfABranch> {
-  // Read afresh, and pruned: the package may have landed since this clone last heard from origin, and a branch deleted
-  // on origin by someone else would still be remembered here, so the answer would read as a delete that failed.
-  const fetched = await git(host, clone, ['fetch', '--quiet', '--prune', 'origin'])
-  if (fetched.exit_code !== 0) return { state: 'kept', why: `since origin could not be read (${saidBy(fetched)})` }
+/**
+ * Both sides judged before either is touched: a copy the default branch does not hold keeps the other one too, since a
+ * branch kept on one side is never deleted from the other (martha#962 review r=1). Answers the origin's copy, absent or
+ * held, or why nothing is removed.
+ */
+async function bothSidesJudged(host: WorktreesRequest['host'], clone: string, branch: string, default_branch: string): Promise<{ readonly state: 'absent' } | { readonly state: 'held'; readonly tip: string } | Refused> {
+  const on_origin = await theOriginCopy(host, clone, branch, default_branch)
+  if (on_origin.state === 'kept') return no(`the origin still holds origin/${branch}, ${on_origin.why}; the clone's copy is untouched.`)
+  const unheld = await whatTheDefaultLacksIn(host, clone, branch, default_branch)
+  if (unheld !== undefined) return no(`the clone still holds ${branch}, ${unheld}; origin/${branch} is untouched.`)
+  return on_origin
+}
+
+/** Why the clone's copy of `branch` must stay (its tip, which the default branch does not hold), or undefined. */
+async function whatTheDefaultLacksIn(host: WorktreesRequest['host'], clone: string, branch: string, default_branch: string): Promise<string | undefined> {
+  const tip = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
+  if (tip === undefined) return undefined
+  const held = await git(host, clone, ['merge-base', '--is-ancestor', tip, default_branch])
+  return held.exit_code === 0 ? undefined : `where it is at ${tip}, which the default branch does not hold`
+}
+
+/** The origin's copy of `branch` as the fetch left it: absent, held by the default branch at its tip, or kept with why. */
+async function theOriginCopy(
+  host: WorktreesRequest['host'],
+  clone: string,
+  branch: string,
+  default_branch: string,
+): Promise<{ readonly state: 'absent' } | { readonly state: 'held'; readonly tip: string } | { readonly state: 'kept'; readonly why: string }> {
   const on_origin = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
   if (on_origin === undefined) return { state: 'absent' }
   const held = await git(host, clone, ['merge-base', '--is-ancestor', on_origin, default_branch])
-  if (held.exit_code !== 0) return { state: 'kept', why: `where it is at ${on_origin}, which the default branch does not hold` }
+  return held.exit_code === 0 ? { state: 'held', tip: on_origin } : { state: 'kept', why: `where it is at ${on_origin}, which the default branch does not hold` }
+}
+
+/** Deletes the origin's copy, held by the default branch at `on_origin`: gone, or kept with why. */
+async function theOriginSide(host: WorktreesRequest['host'], clone: string, branch: string, on_origin: string, work: TheAct): Promise<ASideOfABranch> {
   try {
     await sendAnActAndRecover(
       host,
       { package: work.package, member: work.member, act: { kind: 'push', what: `origin ${branch}` } },
       async () => {
-        const pushed = await git(host, clone, ['push', '--quiet', 'origin', '--delete', branch])
+        // Leased on the tip the default branch was found to hold: a push that lands on origin after that check makes
+        // the delete fail rather than take commits nothing holds (martha#962 review r=1).
+        const pushed = await git(host, clone, ['push', '--quiet', `--force-with-lease=refs/heads/${branch}:${on_origin}`, 'origin', '--delete', branch])
         if (pushed.exit_code !== 0) throw new Error(saidBy(pushed))
         return `removed ${branch} on origin`
       },

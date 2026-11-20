@@ -736,3 +736,46 @@ test("worktree_finish refuses the branch form for the origin's default branch, a
   assert.match(refusedOf(await finish.answer(finishedBranch('nobody/261-the-refusals'))), /names no member of this crew, so it is not this tool's to remove/)
   assert.match(refusedOf(await finish.answer(finishedBranch('Ceres/not a branch'))), /is not a branch name of a member/)
 })
+
+test("worktree_finish keeps both copies while the clone's copy holds work the default branch does not (#962 review r=1; mutant: the origin's copy deleted before the clone's is judged)", async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const path = await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  writeFileSync(join(path, 'later.txt'), 'work after the landing\n')
+  commitIn(path, 'work after the landing')
+  const tip = gitIn(path, 'rev-parse', 'HEAD')
+  gitIn(fixture.clone, 'worktree', 'remove', '--force', path)
+  const refusal = refusedOf(await tools.finish.answer(finishedBranch(`${MEMBER}/${SLUG}`)))
+  assert.equal(refusal, `the clone still holds ${MEMBER}/${SLUG}, where it is at ${tip}, which the default branch does not hold; origin/${MEMBER}/${SLUG} is untouched.`)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, "the origin's copy stays")
+  assert.equal(gitIn(fixture.clone, 'rev-parse', `refs/heads/${MEMBER}/${SLUG}`), tip, "the clone's copy stays where it was")
+  assert.deepEqual(await rowKinds(tools.host), [], 'the guard refused before any act was sent')
+})
+
+test('worktree_finish leaves the branch on origin when a push lands between its check and its delete (#962 review r=1; mutant: the delete unleased)', async (t) => {
+  const fixture = aCrew(t)
+  const branch = `${MEMBER}/${SLUG}`
+  let landed = ''
+  // A push from another checkout, landing on origin after the finish found the default branch holding the tip and
+  // before its delete is sent.
+  const aPushInBetween = async (request: ProcessRequest): Promise<ProcessOutcome> => {
+    if (landed === '' && request.args.includes('--delete')) {
+      gitIn(fixture.seed, 'fetch', '--quiet', 'origin')
+      gitIn(fixture.seed, 'checkout', '--quiet', '-B', 'late', `origin/${branch}`)
+      writeFileSync(join(fixture.seed, 'late.txt'), 'a late push\n')
+      commitIn(fixture.seed, 'a late push')
+      gitIn(fixture.seed, 'push', '--quiet', 'origin', `late:${branch}`)
+      landed = gitIn(fixture.seed, 'rev-parse', 'HEAD')
+    }
+    return runReal(request)
+  }
+  const tools = toolsOf(settingsFor(fixture, fixture), MEMBER, aPushInBetween)
+  const path = await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  gitIn(fixture.clone, 'worktree', 'remove', '--force', path)
+  await tools.finish.answer(finishedBranch(branch))
+  assert.notEqual(landed, '', 'the late push ran before the delete')
+  assert.equal(onOrigin(fixture, branch), true, 'the branch holding the late commit is still on origin')
+  assert.equal(execFileSync('git', ['--git-dir', fixture.origin, 'rev-parse', `refs/heads/${branch}`], { encoding: 'utf8' }).trim(), landed, 'at the late commit')
+})
