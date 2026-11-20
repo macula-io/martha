@@ -311,7 +311,7 @@ test('#511: on a desktop, martha up --claude opens kitty with a tab for each Cla
 function withAnEngineEndpoint(place: Place): void {
   const at = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   const declared = JSON.parse(readFileSync(at, 'utf8')) as Record<string, unknown>
-  writeFileSync(at, `${JSON.stringify({ ...declared, [ENGINE_ENDPOINT]: { host: 'https://provider.invalid', key_file: '~/a-key-file' } }, null, 2)}\n`)
+  writeFileSync(at, `${JSON.stringify({ ...declared, [ENGINE_ENDPOINT]: { host: 'https://provider.invalid', key_file: '/a-key-file-a-test-names' } }, null, 2)}\n`)
 }
 
 /** The tabs a kitty session file opens, by the member each one starts. */
