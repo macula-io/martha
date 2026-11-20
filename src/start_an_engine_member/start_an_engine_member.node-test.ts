@@ -19,7 +19,7 @@ import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, ENGINE_ENDPOINT, HOST, SOLO_MEMBERS, soloDeclaration, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS, THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { crewSubdirectory, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { crewStateDirectory, crewSubdirectory, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -45,7 +45,9 @@ import type { ACrewToolAsked } from '../host_contract/host_contract.ts'
 import { SAY_TO_THE_CREW_TOOL } from '../send_a_crew_message/say_to_the_crew_tool.ts'
 import { SEE_THE_CREW_TOOL } from '../see_the_crew/the_see_the_crew_tool.ts'
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
-import { THE_HANDOVER_WRITTEN } from '../write_my_handover/write_my_handover.ts'
+import { THE_HANDOVER_WRITTEN, theResumePrompt } from '../write_my_handover/write_my_handover.ts'
+import { aFlowStarting, keepTheFlow, refreshesPlace, theFlowClearing } from '../refresh_a_member/refresh_a_member.ts'
+import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
@@ -619,4 +621,36 @@ test('#999 package 5: a turn whose usage the engine reports past the handover li
   const prompts = await untilTheEngineHeardPrompts(engine.heard, 2)
   assert.ok(theTextOf(prompts[0]?.params ?? {}).endsWith(THE_START_PROMPT))
   assert.match(theTextOf(prompts[1]?.params ?? {}), new RegExp(THE_HANDOVER_WRITTEN), 'the second turn is not the handover prompt')
+})
+
+/** A clear told and never carried: the member's flow still clears from the session before, so a new launch's first question is a successor's. */
+function aClearNeverCarried(place: Place): void {
+  const crew = crewStateDirectory(place.state.state_root, place.root)
+  assert.ok('path' in crew, 'refusal' in crew ? crew.refusal : '')
+  const flows = refreshesPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew.path) } })
+  assert.ok(!('refusal' in flows), 'refusal' in flows ? flows.refusal : '')
+  const now = Date.now()
+  const handingOver = aFlowStarting({ trigger: 'asked', reason: 'a test asks', at: now, started_at_percent: 0, percent: 0, asked_on: 'the-session-before', refreshed_at: [] })
+  assert.equal(keepTheFlow(flows, MEMBER, theFlowClearing(handingOver, 'the-session-before', [], now)), undefined)
+}
+
+/** The resume's own opening, read from the prompt's maker up to the file it names, so no word of it is restated here. */
+function theResumesOpening(): string {
+  const mark = '\u0000'
+  const opening = theResumePrompt({ member: MEMBER, file: mark, acts: [] }).split(mark)[0] ?? ''
+  assert.notEqual(opening, '')
+  return opening
+}
+
+test('#999 package 5 r=2: a member whose flow is clearing from another session starts on the resume, and its start prompt comes after it (mutant: the start prompt queued before the start\'s refresh question is answered)', async (t) => {
+  const place = aPlace(t)
+  aClearNeverCarried(place)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }], [{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  const [first, second] = (await untilTheEngineHeardPrompts(engine.heard, 2)).map((prompt) => theTextOf(prompt.params))
+  assert.ok(first?.includes(theResumesOpening()), `the first prompt is not the resume: ${String(first)}`)
+  assert.ok(first !== undefined && !first.includes(THE_START_PROMPT), 'the start prompt went with or before the resume')
+  assert.ok(second?.endsWith(THE_START_PROMPT), `the second prompt is not the start prompt: ${String(second)}`)
 })
