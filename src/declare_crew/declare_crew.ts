@@ -660,9 +660,9 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
  * The house rules as the reader judges them (martha#931): `gate_enforce`, as Raf's draft spells it, read as
  * `gate_enforces`; and, when the declaration names a workspace root, the clones in that root and the worktrees beside
  * it, as a checkout's own path proves them (workspaceLayoutOf). A place named beside the root is refused, so the two
- * can never disagree, and so is an explicit `workspace_layout: false`, since the root then places the guard's rules
- * where the switch says they are off (martha#958). The places are filled whether or not the declaration has a
- * `house_rules` block at all, so a crew declared the way `martha up` teaches it is guarded from its first run.
+ * can never disagree. The places are filled whether or not the declaration has a `house_rules` block at all, so a crew
+ * declared the way `martha up` teaches it is guarded from its first run; the `workspace_layout` switch is not read for
+ * this, beside a root or beside the places, since the places are the fact (martha#958).
  */
 function houseRulesAsRead(refuse: Refuse, value: unknown, clones: string | null): unknown {
   const block = isObject(value) ? value : undefined
@@ -683,7 +683,6 @@ function theDraftsGateName(refuse: Refuse, block: Readonly<Record<string, unknow
 function withTheWorkspacesPlaces(refuse: Refuse, rules: Json, clones: string): Json {
   const named = HOUSE_RULE_PLACES.find((place) => rules[place] !== undefined)
   if (named !== undefined) refuse.at(`house_rules.${named}`, `is named beside ${THE_WORKSPACES_ROOT}, which places the clones and the worktrees`)
-  if (rules[WORKSPACE_LAYOUT] === false) refuse.at(`house_rules.${WORKSPACE_LAYOUT}`, `is false beside ${THE_WORKSPACES_ROOT}, which places the clones and the worktrees`)
   return { ...rules, [CLONES]: clones, [WORKTREES]: join(dirname(clones), WORKTREES_BESIDE_CLONES) }
 }
 

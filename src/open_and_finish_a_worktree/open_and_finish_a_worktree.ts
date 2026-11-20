@@ -22,7 +22,8 @@
 
 import { join } from 'node:path'
 
-import { theWorkspaceTheCrewDeclared, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { CLONES, WORKTREES, theWorkspaceTheCrewDeclared, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { THE_WORKSPACES_ROOT } from '../declare_crew/the_crews_workspace.ts'
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
@@ -40,7 +41,7 @@ export const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 /** What a crew that named no workspace places is told, instead of a worktree in a place nobody named (martha#958). */
 export const NO_LAYOUT =
-  'this crew names no workspace places: name the folder its clones sit in as "workspace.root" in its declaration, or put "clones" and "worktrees" in its house rules, then start the member again.'
+  `this crew names no workspace places: name the folder its clones sit in as "${THE_WORKSPACES_ROOT}" in its declaration, or put "${CLONES}" and "${WORKTREES}" in its house rules, then start the member again.`
 
 /** What the two tools need: the host's own git, the ledger's store, the crew's declaration, and the member they answer for. */
 export interface WorktreesRequest {

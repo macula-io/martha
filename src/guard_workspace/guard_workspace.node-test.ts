@@ -299,3 +299,14 @@ test('a ref update the shell never saw is judged on the ref it deletes, and only
   // A create is not a delete: a push of a new branch past the shell is not this rule's.
   assert.equal(refuseARefUpdate({ ref: 'refs/heads/uranus/9', deletes: false }, WORKSPACE, 'Hygiea'), undefined)
 })
+
+test('a workspace_layout switch beside a root is not read: false there is accepted and the crew is still guarded (#958 review r=1)', async () => {
+  // The places are the fact, beside a root as beside house_rules' own places: a switch the reader no longer reads
+  // neither refuses the declaration nor turns the guard off.
+  const workspace = theWorkspaceTheCrewDeclared(await declared({ workspace: { root: 'projects' }, house_rules: { workspace_layout: false } }))
+  assert.deepEqual(workspace, {
+    clones: join(A_PROJECT_ROOT, 'projects'),
+    worktrees: join(A_PROJECT_ROOT, WORKTREES_BESIDE_CLONES),
+    members: ['Hygiea', 'Uranus', 'Lead'],
+  })
+})
