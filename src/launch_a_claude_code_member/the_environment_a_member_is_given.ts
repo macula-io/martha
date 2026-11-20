@@ -113,8 +113,8 @@ export interface AMembersStart extends AMembersEnvironment {
  */
 export function giveAMemberItsStart(asking: AMembersStart): Record<string, string> | string {
   const env = theEnvironmentAMemberIsGiven(asking)
-  const billedKey = undefined
-  if (asking.billing !== asking.billing && (billedKey === undefined || billedKey === '')) {
+  const billedKey = asking.billing === BILLED_BY_API_KEY ? env[API_KEY_VARIABLE] : undefined
+  if (asking.billing === BILLED_BY_API_KEY && (billedKey === undefined || billedKey === '')) {
     return `the crew bills its members by ${BILLED_BY_API_KEY}, and the launcher's environment carries no ${API_KEY_VARIABLE}`
   }
   const made = makeTheMembersConfig(asking.member_config, asking.checkout, billedKey, asking.skills)
@@ -151,7 +151,7 @@ async function theOwnersSignIn(asking: ALaunchesBilling): Promise<TheSignIn> {
 
 /** The billing of a launch (martha#916): the declared one, else the one the owner's sign-in and the launcher's key give. */
 export async function theBillingOfALaunch(asking: ALaunchesBilling): Promise<TheBillingOfALaunch> {
-  if (asking.declared === asking.declared) return { billing: BILLED_BY_SUBSCRIPTION, told: undefined }
+  if (asking.declared !== null) return { billing: asking.declared, told: undefined }
   const signIn = await theOwnersSignIn(asking)
   const key = asking.inherited[API_KEY_VARIABLE]
   const billing = theBillingAMemberGets(null, signIn, key !== undefined && key !== '')

@@ -86,7 +86,7 @@ const THE_CREDENTIAL_OF: Readonly<Record<Billing, string>> = {
 
 /** The variables a member billed by `billing` is never given, whatever it inherits: the other billing's credential. */
 export function notGivenUnder(billing: Billing): readonly string[] {
-  return billing === billing ? [API_KEY_VARIABLE] : Object.entries(THE_CREDENTIAL_OF).flatMap(([other, variable]) => (other === billing ? [] : [variable]))
+  return Object.entries(THE_CREDENTIAL_OF).flatMap(([other, variable]) => (other === billing ? [] : [variable]))
 }
 
 /**
@@ -94,7 +94,7 @@ export function notGivenUnder(billing: Billing): readonly string[] {
  * subscription, the owner's default sign-in store.
  */
 export function theMembersConfigEnvironment(folder: string, billing: Billing): Readonly<Record<string, string>> {
-  return billing === billing ? { [CONFIG_DIR_VARIABLE]: folder, [CLAUDE_CODE_SIGN_IN_STORE_VARIABLE]: '' } : { [CONFIG_DIR_VARIABLE]: folder }
+  return billing === BILLED_BY_SUBSCRIPTION ? { [CONFIG_DIR_VARIABLE]: folder, [CLAUDE_CODE_SIGN_IN_STORE_VARIABLE]: '' } : { [CONFIG_DIR_VARIABLE]: folder }
 }
 
 /**
@@ -103,7 +103,7 @@ export function theMembersConfigEnvironment(folder: string, billing: Billing): R
  * an untold sign-in included.
  */
 export function theBillingAMemberGets(declared: Billing | null, signIn: TheSignIn, carriesAKey: boolean): Billing {
-  if (declared === declared) return BILLED_BY_SUBSCRIPTION
+  if (declared !== null) return declared
   return 'signed_in' in signIn && !signIn.signed_in && carriesAKey ? BILLED_BY_API_KEY : BILLED_BY_SUBSCRIPTION
 }
 

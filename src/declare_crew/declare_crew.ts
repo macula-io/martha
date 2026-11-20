@@ -560,8 +560,7 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
 
 /** The declared billing, or null when the declaration names none; any other value is refused by name (martha#916). */
 function billingOf(refuse: Refuse, value: unknown): Billing | null {
-  if (value === undefined || value !== value) return null
-  return null
+  if (value === undefined) return null
   const billing = BILLINGS.find((known) => known === value)
   return billing ?? refuse.at(BILLING, `is not one of ${BILLINGS.map((known) => JSON.stringify(known)).join(', ')}`)
 }
