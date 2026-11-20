@@ -402,6 +402,17 @@ test('a crew whose workspace layout is on must name where its clones and worktre
   await refusedWith({ ...solo, house_rules: { workspace_layout: true, clones: `/crew-place/${CLONES}` } }, 'house_rules.worktrees')
 })
 
+test('#995: a workspace root written with a trailing slash places the same clones folder as the same root without one', async () => {
+  const placesOf = async (root: string) => (await declare({ ...solo, house_rules: {}, workspace: { root } }).settings).house_rules
+  const plain = placesOf('projects')
+  const slashed = placesOf('projects/')
+  const withoutOne = await plain
+  const withOne = await slashed
+  assert.match(String(withoutOne.clones), /projects$/, `the root's own folder is named: ${String(withoutOne.clones)}`)
+  assert.equal(withOne.clones, withoutOne.clones)
+  assert.equal(withOne.worktrees, withoutOne.worktrees)
+})
+
 test('a place that is not an absolute path is refused by name, and a crew with the layout off needs none', async () => {
   await refusedWith({ ...solo, house_rules: { clones: 'some-clones' } }, 'house_rules.clones')
   await refusedWith({ ...solo, house_rules: { worktrees: '' } }, 'house_rules.worktrees')

@@ -10,8 +10,9 @@
 // The shapes are not written here: they are read from ./crew_lines.ts, the one definition the role cards are
 // generated from, so what a member is taught and what this accepts cannot drift apart.
 
-import { noteMilestone, sendOutwardAct, type LedgerHost } from '../log_ledger/log_ledger.ts'
+import { noteMilestone, noteMilestoneOnce, sendOutwardAct, WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { CREW_VERBS, VALUE_SHAPES, shapeOf, type LineShape, type Part, type ValueName } from './crew_lines.ts'
+import { crewVerbOf, readAShorthandLine } from './the_other_crew_verbs.ts'
 
 /** A line that read: its verb, the package it names, and the words and keys it carried. */
 export interface CrewLineRead {
@@ -21,6 +22,8 @@ export interface CrewLineRead {
   readonly keys: Readonly<Record<string, string>>
   /** The judgement a VERDICT carries, and nothing for a HANDOFF. */
   readonly verdict?: 'PASS' | 'FAIL'
+  /** Every package or name a line of crew-code's other verbs is about, one per issue of a list (martha#980). */
+  readonly targets?: readonly string[]
 }
 
 /**
@@ -50,6 +53,40 @@ export function readACrewLine(text: string): LineReading {
   const shape = shapeOf(verb)
   if (shape === undefined) return { line: null }
   return readTheParts(shape, tokens.slice(1))
+}
+
+/** Every crew line of a message, read, and one notice for each that did not read (martha#980). */
+export interface EveryLineRead {
+  readonly lines: readonly CrewLineRead[]
+  readonly notices: readonly string[]
+}
+
+/**
+ * Reads every line of `text` that counts as a crew line, as crew-code's shorthand reads a message: a line whose first
+ * word is one of its fourteen verbs, ASK, YES and NO only when they carry a kind, a key or a package. A HANDOFF or a
+ * VERDICT is read as readACrewLine reads it; the other verbs by crew-code's grammar (./the_other_crew_verbs.ts). A line
+ * that does not read goes as prose with one notice, which names its line number when the message has more than one.
+ */
+export function readEveryCrewLine(text: string): EveryLineRead {
+  const all = text.split('\n')
+  const lines: CrewLineRead[] = []
+  const notices: string[] = []
+  all.forEach((line, index) => {
+    const verb = crewVerbOf(line)
+    if (verb === undefined) return
+    const read = isCrewLine(verb) ? readACrewLine(line) : theOtherLineRead(verb, line)
+    if (read.line !== null) lines.push(read.line)
+    if (read.notice !== undefined) notices.push(all.length > 1 ? `line ${String(index + 1)}: ${read.notice}` : read.notice)
+  })
+  return { lines, notices }
+}
+
+/** A line of crew-code's other verbs, as a CrewLineRead: the target as written, then its words, its keys and its targets. */
+function theOtherLineRead(verb: string, line: string): LineReading {
+  const read = readAShorthandLine(line)
+  if ('problem' in read) return { line: null, notice: tookItAsProse(verb, read.problem) }
+  const written = (line.split('|')[0] ?? '').trim().split(/\s+/)[1] ?? ''
+  return { line: { verb, package: read.line.targets[0] ?? written, words: [written, ...read.line.words], keys: read.line.keys, targets: read.line.targets } }
 }
 
 /** One line saying which field did not read, and that the message goes as prose (martha#601). */
@@ -120,17 +157,39 @@ function checkValue(verb: string, name: string, value: ValueName, text: string):
   return shape.matches.test(text) ? undefined : tookItAsProse(verb, `${name} is not ${shape.what}; read ${JSON.stringify(text)}`)
 }
 
-/** Adds the row a line adds to its package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave.
- * `lines` is how many lines the message that carried the line had, which the drift is read from (martha#1010). */
+/**
+ * Adds the row a line adds to its package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave, and,
+ * as crew-code keeps them (martha#980), a LIVE as the release it shipped and a LAND as a checkpoint, once for each
+ * package it names, and once (martha#983): said again, or logged by hand too, in the same round, it is the row already
+ * kept. A FAIL VERDICT is kept once too; a PASS always. The other lines keep no row: crew-code keeps none for them, or
+ * Martha keeps that fact elsewhere. `lines` is how many lines the message that carried the line had, which the drift is
+ * read from (martha#1010).
+ */
 export async function keepTheLinesRow(host: LedgerHost, member: string, line: CrewLineRead, lines: number): Promise<void> {
   if (line.verb === 'VERDICT') {
-    await noteMilestone(host, { package: line.package, member, milestone: 'verdict_given', note: saidOf(line), lines })
+    const row = { package: line.package, member, milestone: 'verdict_given' as const, note: saidOf(line), lines }
+    // A FAIL is kept once, as crew-code settles its sent_back (martha#983 r=2); a PASS is always kept, so a PASS after a
+    // FAIL at the same tip is never taken for the FAIL.
+    if (line.verdict === 'FAIL') await noteMilestoneOnce(host, row, aFailVerdict)
+    else await noteMilestone(host, row)
     return
   }
+  const milestone = MILESTONE_OF_A_LINE[line.verb]
+  if (milestone !== undefined) {
+    for (const named of (line.targets ?? []).filter((target) => WORK_PACKAGE.test(target))) await noteMilestoneOnce(host, { package: named, member, milestone, note: saidOf(line) })
+    return
+  }
+  if (line.verb !== 'HANDOFF') return
   // The line is one a member sent on the crew channel: the act it announces is that line, and its conclusion is the
   // read itself, kept here so a refreshed member finds the hand-off it sent already counted.
   await sendOutwardAct(host, { package: line.package, member, act: { kind: 'handoff', what: saidOf(line) }, lines }, async () => 'read as a crew line and added to this package\'s ledger')
 }
+
+/** Whether a verdict row the ledger holds is a FAIL, read back from the line it keeps as its note. */
+const aFailVerdict = (row: { readonly note: string }): boolean => readACrewLine(row.note).line?.verdict === 'FAIL'
+
+/** The milestone a line of crew-code's other verbs keeps, by its verb: only these two keep one. */
+const MILESTONE_OF_A_LINE: Readonly<Record<string, 'release_shipped' | 'checkpoint_reached'>> = { LIVE: 'release_shipped', LAND: 'checkpoint_reached' }
 
 /**
  * The line as it was written: its verb, the words in their order (the package, a verdict's PASS or FAIL, and the
