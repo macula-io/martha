@@ -709,9 +709,9 @@ test('worktree_finish refuses the branch form while a live worktree holds the br
   const tools = toolsOf(settingsFor(fixture, fixture))
   const path = await aPushedWorktree(fixture, tools)
   landTheBranch(fixture)
-  // Git names the worktree by the path it resolved, which differs from the one this test made wherever the temporary
-  // directory is a link to another (macOS's /var to /private/var): both name the same directory, and git's is the one
-  // the refusal carries.
+  // Git names the worktree by the path it resolved, and the suite runs once under a TMPDIR reached through a link
+  // (ci.yml's "the suite under a long TMPDIR reached through a link", martha#79): there the path this test made and the
+  // one git answers with differ. Both name the same directory, and git's is the one the refusal carries.
   assert.match(refusedOf(await tools.finish.answer(finishedBranch(`${MEMBER}/${SLUG}`))), new RegExp(`the worktree at ${realpathSync(path)} holds branch "${MEMBER}/${SLUG}"; finish it with its repo, its slug and the package`))
   assert.ok(existsSync(path), 'the worktree is still there')
   assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'nothing was deleted')
