@@ -18,7 +18,11 @@ import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/sta
 import { KITTEN, KITTY, NO_DESKTOP_SESSION } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { CLEAR_THE_TERMINAL, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, USAGE } from './run_the_martha_command.ts'
+import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLAUDE_SWITCH, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, UP, USAGE } from './run_the_martha_command.ts'
+import { A_WORKSPACES_CLONES, CLAUDE_CODE_TEAM, declareTheTeam, BUILDER_ROLE } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
+import { SESSION_FILE, KITTY_PLACE } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
+import { THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
+import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, SAID_BY } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { MEMBER_SWITCH } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { A_MUTE_NEEDS_THE_OWNERS_TERMINAL, BELLS_HEARD, BELLS_MUTED, THE_BELLS_FILE, THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
@@ -101,10 +105,13 @@ test('martha with no act shows how it is used, and ends as a usage error', (t) =
   assert.ok(run.said.includes(USAGE), run.said)
 })
 
-test('martha outside any git checkout refuses, saying so', (t) => {
-  const run = martha(placeFor(t, { checkout: false }), 'init')
-  assert.equal(run.status, EXIT_REFUSED)
-  assert.match(run.said, /git checkout/)
+test('#511: a folder outside any git checkout is its own crew\'s root: martha init declares there instead of refusing', (t) => {
+  const place = placeFor(t, { checkout: false })
+  writeFileSync(join(place.home, '.gitconfig'), '[user]\n\tname = Ada Owner\n')
+  const run = martha(place, 'init')
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.ok(existsSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)))
+  assert.ok(!run.said.includes('git checkout'), run.said)
 })
 
 test('martha init writes the declaration once and refuses the second time', (t) => {
@@ -202,6 +209,97 @@ test('bare martha start on a terminal, with a crew declared and no desktop sessi
   assert.ok(run.said.includes(NO_DESKTOP_SESSION), run.said)
   assert.ok(!run.said.includes(USAGE), run.said)
   assert.equal(existsSync(kitty.started), false, 'kitty was started with no desktop session')
+})
+
+// --- martha help and martha version (martha#511) -------------------------------
+
+test('#511: martha help, -h and --help each print one line per act and end done', (t) => {
+  const place = placeFor(t)
+  for (const word of HELP_WORDS) {
+    const run = martha(place, word)
+    assert.equal(run.status, EXIT_DONE, `${word}: ${run.said}`)
+    assert.equal(run.out, `${HELP.join('\n')}\n`, word)
+  }
+})
+
+test('#511: every act the command takes has its own line in the help', () => {
+  const acts = [...ACTS_ALONE, ...ACTS_OF_ONE, ...Object.keys(ACTS_OF_THEIR_OWN)].filter((act) => act !== '--version')
+  for (const act of acts) assert.ok(HELP.some((line) => line.startsWith(`martha ${act} `)), act)
+})
+
+test('#511: martha version prints exactly what martha --version prints', (t) => {
+  const place = placeFor(t)
+  const word = martha(place, 'version')
+  const flag = martha(place, '--version')
+  assert.equal(word.status, EXIT_DONE, word.said)
+  assert.equal(word.out, flag.out)
+  assert.match(word.out, /^\d+\.\d+\.\d+/)
+})
+
+test('#511: a word that is no act says so first, then prints the help, and ends as a usage error', (t) => {
+  const run = martha(placeFor(t), 'frobnicate')
+  assert.equal(run.status, EXIT_USAGE, run.said)
+  const lines = run.err.split('\n').filter((line) => line !== '')
+  assert.ok(lines[0]!.endsWith(`${UNKNOWN_COMMAND} frobnicate`), lines[0]!)
+  assert.deepEqual(lines.slice(1).map((line) => line.replace(/^martha: /, '')), HELP)
+})
+
+// --- martha up --claude (martha#511) -------------------------------
+
+/** A workspace as the owner keeps one: no git checkout, a clones folder, and the owner's name in their git config. */
+function aWorkspace(t: TestContext): Place {
+  const place = placeFor(t, { checkout: false })
+  mkdirSync(join(place.root, A_WORKSPACES_CLONES))
+  writeFileSync(join(place.home, '.gitconfig'), '[user]\n\tname = Ada Owner\n')
+  return place
+}
+
+test('#511: martha up takes --claude and nothing else; plain up and any other word are usage errors', (t) => {
+  const place = aWorkspace(t)
+  for (const words of [[UP], [UP, '--engine'], [UP, CLAUDE_SWITCH, 'extra']]) {
+    const run = martha(place, ...words)
+    assert.equal(run.status, EXIT_USAGE, `${words.join(' ')}: ${run.said}`)
+  }
+  assert.ok(USAGE.includes(`martha ${UP} ${CLAUDE_SWITCH}`), USAGE)
+})
+
+test('#511: martha up --claude whose input is no terminal refuses, and declares nothing', (t) => {
+  const place = aWorkspace(t)
+  const run = martha(place, UP, CLAUDE_SWITCH)
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.equal(existsSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)), false)
+})
+
+test('#511: martha up --claude in a workspace that is no checkout declares the team, says so once, and reaches the kitty opener', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const run = marthaOnATerminal(place, kitty.env, UP, CLAUDE_SWITCH)
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.said.includes(`Declared a team in ${join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)}: ${CLAUDE_CODE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
+  assert.ok(run.said.includes(NO_DESKTOP_SESSION), run.said)
+  assert.equal(existsSync(kitty.started), false, 'kitty was started with no desktop session')
+  const again = marthaOnATerminal(place, kitty.env, UP, CLAUDE_SWITCH)
+  assert.ok(!again.said.includes('Declared') && !again.said.includes('Added'), again.said)
+  assert.ok(again.said.includes(NO_DESKTOP_SESSION), again.said)
+})
+
+test('#511: on a desktop, martha up --claude opens kitty with a tab for each Claude Code member and none for the engine\'s', async (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const engine = { name: 'engine-a', role: BUILDER_ROLE, model: 'an-engine-model', host: THE_ENGINES_HOST }
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok('directory' in state)
+  const documents = { read: (path: string) => import('node:fs/promises').then((fs) => fs.readFile(path, 'utf8')) }
+  const first = await declareTheTeam({ root: place.root, owner: 'Ada Owner', state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: THE_ENGINES_HOST, members: [engine] })
+  assert.ok(first.declared, first.declared ? '' : first.refusal)
+  const run = marthaOnATerminal(place, { ...kitty.env, WAYLAND_DISPLAY: 'wayland-511' }, UP, CLAUDE_SWITCH)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.ok(run.said.includes(`Added to the team in ${join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)}: ${CLAUDE_CODE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
+  assert.ok(existsSync(kitty.started), 'kitty was not started')
+  const session = readFileSync(join(state.directory, KITTY_PLACE, SESSION_FILE), 'utf8')
+  const tabs = session.split('\n').filter((line) => line.startsWith('new_tab ')).map((line) => line.slice('new_tab '.length))
+  assert.deepEqual(tabs, CLAUDE_CODE_TEAM.map((member) => member.name))
+  assert.ok(!session.includes(engine.name), session)
 })
 
 // --- the owner's release and the gate (martha#321) -------------------------------
@@ -477,6 +575,10 @@ test('what martha shows the owner carries no terminal control: it is written out
   t.after(() => removeTheTree(home))
   const root = join(home, EVERY_CONTROL_CLASS)
   mkdirSync(root)
+  // A folder outside any checkout is its own crew's root (martha#511): a declaration folder that is a file is refused
+  // naming its path, so the folder's name is shown to the owner.
+  writeFileSync(join(home, '.gitconfig'), '[user]\n\tname = Ada Owner\n')
+  writeFileSync(join(root, DECLARATION_DIRECTORY), '')
   const run = martha({ home, root }, 'init')
   assert.equal(run.status, EXIT_REFUSED, run.said)
   assert.doesNotMatch(run.said, SHOWN_CONTROLS)
