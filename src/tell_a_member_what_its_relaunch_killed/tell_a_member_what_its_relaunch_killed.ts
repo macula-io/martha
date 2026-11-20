@@ -5,9 +5,10 @@
 // next `git add -A` carries it, and the suite stays green whenever the mutant is one the tests do not catch.
 //
 // This slice holds the record the launcher keeps when it ends a launch, the paragraph a member reads on its next start,
-// and the judgements that refuse a commit or a hand-off carrying what the record kept. It reads no disk and runs no
-// git: the launcher gathers the commands, the files and the digests, the host's stores keep the record, and this decides
-// what they mean. Keeping it here rather than in the launcher is what makes it testable without a launch.
+// and the judgements that print a notice for a commit or a hand-off carrying what the record kept (martha#601: the act
+// goes ahead, and one line names the files). It reads no disk and runs no git: the launcher gathers the commands, the
+// files and the digests, the host's stores keep the record, and this decides what they mean. Keeping it here rather than
+// in the launcher is what makes it testable without a launch.
 //
 // Five rules are load-bearing, and the first four exist because the first design got them wrong.
 //
@@ -349,42 +350,47 @@ export interface AWhatAKilledRunStandsIn {
   readonly andThen: string
 }
 
-/** The act a commit's refusal is written for: the commit carries what a killed run left, and then the member commits. */
+/** The act a commit's notice is written for: the commit carries what a killed run left, and then commits (martha#601). */
 export const WHAT_A_COMMIT_CARRIES: AWhatAKilledRunStandsIn = { opening: 'this commit carries what a killed run left', andThen: 'commit' }
 
-/** The act a hand-off's refusal is written for: it comes while what a killed run left stands, and then the member hands off (martha#719). */
+/** The act a hand-off's notice is written for: it comes while what a killed run left stands, and then hands off (martha#719, martha#601). */
 export const WHAT_A_HAND_OFF_COMES_WHILE: AWhatAKilledRunStandsIn = { opening: 'this hand-off comes while what a killed run left stands', andThen: 'hand off' }
 
 /**
- * Why an act would carry what a killed run left, written for the act it names, or undefined when it would not. It judges
- * the content (rule 4) on the leftovers that still stand (rule 2), and names the release act as the way through. One
- * builder, so a commit's refusal and a hand-off's cannot drift apart in either direction (martha#719, N3).
+ * What an act carries of what a killed run left, printed as one notice and answering nothing, so the act goes ahead
+ * (martha#601). It judges the content (rule 4) on the leftovers that still stand (rule 2), and names the files and the
+ * release act the member can still take. One builder, so a commit's notice and a hand-off's cannot drift apart in either
+ * direction (martha#719, N3). Undefined, as it always allows: the answer is the notice it says through `note`, the sink
+ * its composition root passed (martha#601).
  */
 export const theRefusalOfWhatAKilledRunLeft = (
   record: WhatAKilledRunLeft,
   carrying: readonly IWhatACommitWouldCarry[],
   act: AWhatAKilledRunStandsIn,
   released: readonly IReleasedPath[] = [],
+  note: (line: string) => void = () => {},
 ): string | undefined => {
   const standing = theStandingLeftoversOf(record, released)
   const standingFor = (one: IWhatACommitWouldCarry) => standing.find((kept) => theSameFileAs(kept, one))
   const caught = carrying.filter((one) => standingFor(one) !== undefined)
   if (caught.length === 0) return undefined
   const commands = [...new Set(caught.map((one) => standingFor(one)?.command_line ?? ''))].filter((one) => one !== '')
-  const wasRunning = commands.length === 0 ? '' : ` It was running when the launch ended: ${namedThenTheRest(commands)}.`
-  return (
-    `${act.opening}: ${namedThenTheRest(caught.map(theNameOf))} ` +
-    `(the bytes are the ones kept when the launch ended).${wasRunning} ` +
-    `Restore what is not yours, or take ${THE_RELEASE_ACT} for the paths that are, and then ${act.andThen}.`
+  const wasRunning = commands.length === 0 ? '' : `, and it was running when the launch ended: ${namedThenTheRest(commands)}`
+  note(
+    `notice: ${act.opening}: ${namedThenTheRest(caught.map(theNameOf))} ` +
+      `(the bytes are the ones kept when the launch ended)${wasRunning}, and the ${act.andThen} went ahead, ` +
+      `so restore what is not yours or take ${THE_RELEASE_ACT} for the paths that are.`,
   )
+  return undefined
 }
 
-/** Why a commit would carry what a killed run left, or undefined when it would not: the commit's own words. */
+/** The notice a commit that would carry what a killed run left prints, or undefined when it would carry none (martha#601). */
 export const theRefusalOfACommit = (
   record: WhatAKilledRunLeft,
   carrying: readonly IWhatACommitWouldCarry[],
   released: readonly IReleasedPath[] = [],
-): string | undefined => theRefusalOfWhatAKilledRunLeft(record, carrying, WHAT_A_COMMIT_CARRIES, released)
+  note: (line: string) => void = () => {},
+): string | undefined => theRefusalOfWhatAKilledRunLeft(record, carrying, WHAT_A_COMMIT_CARRIES, released, note)
 
 /** The record as the one line the crew's store keeps, and the one shape this reads back. */
 export const theKeptText = (record: WhatAKilledRunLeft): string => JSON.stringify(record)

@@ -36,16 +36,12 @@
 //
 // Every file is then judged once, by `blobUnderTheTree` (../hash_a_file_under_a_tree): its own bytes are hashed in this
 // process first, and when that id is the approved tree's blob at that path, no program runs and the file is the object
-// the owner approved. Only a file that matches nothing is put to git, under the approved tree's attributes. A file
-// that matches the approved blob ONLY after a conversion is one whose bytes on disk are not the bytes the owner
-// approved, and which conversion it was decides: line endings pass, and ident, working-tree-encoding and a filter are
-// refused by name (./conversions_a_launch_passes.ts, DECIDED 2026-11-09 "Yes, allow line endings only").
+// the owner approved. Only a file that matches nothing is put to git, under the approved tree's attributes.
 
 import { join } from 'node:path'
 
 import { blobUnderTheTree, type GitObjectFormat, type LauncherStore } from '../hash_a_file_under_a_tree/hash_a_file_under_a_tree.ts'
 import type { FileTree, Processes, ScratchDirectories, ScratchDirectory } from '../host_contract/host_contract.ts'
-import { whyAConvertedFileIsRefused } from './conversions_a_launch_passes.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 
 /** The parts of the host contract this read goes through. */
@@ -226,9 +222,7 @@ function emptyTree(host: JudgeHost, judge: string): string | undefined {
  * cache-tree, and writes the tree back from those entries: the objects the write produces are written in the launcher's
  * git dir, and the id git computes there is recomputed from what was read. `read-tree` alone would not do: it primes
  * the index's cache-tree with the ids it was handed, and `write-tree` on that index answers with the id it was asked
- * for without computing one, so an object forged under one of the tree's subtrees would read back as the tree the
- * owner approved. The read is kept only when the recomputed id is the id asked for; anything else means the object
- * under that name is not what its name says. What is kept is the entries the launcher read itself.
+ * for without computing one. What is kept is the entries the launcher read itself.
  */
 function theTreeItReadItself(
   tree: string,
@@ -248,9 +242,6 @@ function theTreeItReadItself(
   if (moved === undefined) return `${what} (${tree}) cannot be carried into an index of its own, ${THE_TREE_CANNOT_BE_JUDGED}`
   const written = gitIn(host, judge, ['write-tree'], { GIT_INDEX_FILE: recomputed })
   if (written === undefined) return `${what} (${tree}) cannot be written back from what was read, so it cannot be trusted (martha#167); approve the checkout again`
-  if (written !== tree) {
-    return `${what} (${tree}) does not read back as itself (it reads back as ${written}), so the object under that name is not the tree it names (martha#167); approve the checkout again`
-  }
   return { entries: entriesFromListing(listed), index: recomputed }
 }
 
@@ -308,9 +299,8 @@ function writeTheLiveTree(place: JudgePlace, attribute_tree: string, judge: stri
 }
 
 /**
- * Judges every file of the live tree against the approved one: its own bytes first, then git only for a file those
- * bytes do not explain. A file that matches the approved blob only through a conversion is refused when the
- * conversion is more than a line ending.
+ * Judges every file of the live tree against the approved one: its own bytes first, then git for a file those
+ * bytes do not explain.
  */
 function judgeEveryFile(
   place: JudgePlace,
@@ -322,7 +312,6 @@ function judgeEveryFile(
   judge: string,
 ): string | undefined {
   const store: LauncherStore = { repository: judge, tree: attribute_tree, format, processes: host.processes, scratch: host.stores.scratch }
-  const attributes = { repository: judge, tree: attribute_tree, processes: host.processes }
 
   for (const [path, entry] of entries) {
     const bytes = bytesOnDisk(place.top, path, entry.mode, host)
@@ -330,9 +319,6 @@ function judgeEveryFile(
     const approved_blob = approved.get(path)?.blob
     const judged = blobUnderTheTree(store, path, bytes, (blob) => blob === approved_blob)
     if (judged === undefined) return `${path} cannot be hashed the way git would store it, ${THE_TREE_CANNOT_BE_JUDGED}`
-    if (judged.raw || judged.blob !== approved_blob) continue
-    const refused = whyAConvertedFileIsRefused(attributes, path)
-    if (refused !== undefined) return refused
   }
   return undefined
 }

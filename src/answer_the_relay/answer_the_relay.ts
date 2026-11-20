@@ -37,6 +37,7 @@
 // the owner's screen, the signed runs' `run` and the guard's two git judgements.
 
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
+import process from 'node:process'
 import type { ApprovedLaunch } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import { agentRunsKept, answersOver, NO_CREW_TOOLS, type TheAnswersOfOneLaunch, type ThePlacesAHostReportsOver } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 /** What a session is handed as it starts: the entry's since martha#541, and named here still for the tests that import it. */
@@ -392,6 +393,7 @@ const placesOfTheEntry = (place: MemberRelayPlace, reviews: TheReviewSpawns, age
   reviews,
   failed_review_report: THE_HOSTS_FAILED_REVIEW,
   told: place.telling,
+  note: (line) => void process.stderr.write(`${line}\n`),
   agents,
   policy: place.policy,
   names: place.names,

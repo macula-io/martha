@@ -115,15 +115,13 @@ test('#307: a running member is not removed, and the refusal names martha stop (
   assert.equal(declarationOf(place), before)
 })
 
-test('#307: a change made inside a member is refused, and nothing is written (martha#619)', (t) => {
+test('#307: a change made inside a member goes ahead, and is written (martha#619, cut to one act at #601)', (t) => {
   const place = aCrew(t)
   // This test's own process stands as the member's host: martha runs below it, as a member's shell would.
   aLaunchOf(place, BUILDER.name, process.pid)
-  const before = declarationOf(place)
   const run = martha(place, CREW, SET_MODEL, BUILDER.name, 'a-model')
-  assert.equal(run.status, EXIT_REFUSED, run.said)
-  assert.match(run.said, /this runs inside builder's session/)
-  assert.equal(declarationOf(place), before)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.match(declarationOf(place), /a-model/)
   // Drawing the strip only reads, so `martha crew` alone is never one of the owner's own acts.
 })
 

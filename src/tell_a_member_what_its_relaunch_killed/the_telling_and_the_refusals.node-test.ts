@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import process from 'node:process'
 
 import { MINUTE_MS, WORKTREES } from '../declare_crew/declare_crew.ts'
 import { shownSafely } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
@@ -56,6 +57,22 @@ const anEnd = (different: Partial<Parameters<typeof theRecordAfter>[0]> = {}) =>
   mtimes: [anMtime(A_FILE, STARTED_AT)],
   ...different,
 })
+
+/** Everything written to the process's own error output while `act` runs: the one line a notice prints (martha#601). */
+const theNoticeWhile = (act: (note: (line: string) => void) => void): string => {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    act((line) => void process.stderr.write(`${line}\n`))
+  } finally {
+    process.stderr.write = original
+  }
+  return written.join('')
+}
 
 test('a record that left nothing says nothing', () => {
   assert.equal(theTellingOf(aRecord()), undefined)
@@ -125,13 +142,16 @@ test('a file written before the command started is the member\'s own work: it is
   assert.equal(theRefusalOfACommit(theRecordAfter(writtenFirst), [{ path: A_FILE.path, digest: A_FILE.digest }]), undefined)
 })
 
-test('a file written after the command started is a leftover, and the commit that stages it is refused', () => {
+test('#601: a file written after the command started is a leftover, and the commit goes ahead with a notice naming it', () => {
   const record = theRecordAfter(anEnd())
-  const refused = theRefusalOfACommit(record, [{ path: A_FILE.path, digest: A_FILE.digest }])
-  assert.ok(refused !== undefined)
-  assert.match(refused, /this commit carries what a killed run left: "src\/a_slice\/a_file\.ts"/)
-  assert.match(refused, /node run_the_mutants\.mjs src\//)
-  assert.ok(refused.includes(THE_RELEASE_ACT))
+  let answer: string | undefined
+  const notice = theNoticeWhile((note) => {
+    answer = theRefusalOfACommit(record, [{ path: A_FILE.path, digest: A_FILE.digest }], undefined, note)
+  })
+  assert.equal(answer, undefined, 'the commit was still refused')
+  assert.match(notice, /notice: this commit carries what a killed run left: "src\/a_slice\/a_file\.ts"/)
+  assert.match(notice, /node run_the_mutants\.mjs src\//)
+  assert.ok(notice.includes(THE_RELEASE_ACT), 'the notice did not name the release act')
 })
 
 test('a file written at the very instant the command started is a leftover: the clock is not a way through', () => {
@@ -151,12 +171,17 @@ test('the newest running command is the one a leftover is recorded against', () 
   assert.equal(one[0]?.command_line, 'newer')
 })
 
-test('a killed file the member did not touch is still refused after an end that found nothing running (carry-over)', () => {
+test('a killed file the member did not touch is still noticed after an end that found nothing running (carry-over)', () => {
   const afterTheKill = theRecordAfter(anEnd())
   const told = toldAt(afterTheKill, ENDED_AT + 1_000)
   const afterTheStart = theRecordAfter({ ...anEnd({ running: [], mtimes: [] }), replaced: told })
   assert.equal(afterTheStart.leftovers.length, 1)
-  assert.ok(theRefusalOfACommit(afterTheStart, [{ path: A_FILE.path, digest: A_FILE.digest }]) !== undefined)
+  let answer: string | undefined
+  const notice = theNoticeWhile((note) => {
+    answer = theRefusalOfACommit(afterTheStart, [{ path: A_FILE.path, digest: A_FILE.digest }], undefined, note)
+  })
+  assert.equal(answer, undefined, 'the carried-over leftover still refused the commit')
+  assert.match(notice, /notice: this commit carries what a killed run left: "src\/a_slice\/a_file\.ts"/)
 })
 
 test('the release act lets a carried-over leftover through, and the next commit is not refused', () => {
@@ -170,10 +195,10 @@ test('the release act lets a carried-over leftover through, and the next commit 
   assert.doesNotMatch(told, /still hold what it was writing/)
 })
 
-test('#693 r=3 R5: a release answers the bytes it was taken for, and a later run\'s mutant at the same path is refused', () => {
+test('#693 r=3 R5: a release answers the bytes it was taken for, and a later run\'s mutant at the same path is noticed', () => {
   const first = theRecordAfter(anEnd())
   const released = first.leftovers.map((one) => ({ path: one.path, digest: one.digest }))
-  // The bytes the member looked at and answered are committed unrefused.
+  // The bytes the member looked at and answered are committed with no notice.
   assert.equal(theRefusalOfACommit(first, [{ path: A_FILE.path, digest: A_FILE.digest }], released), undefined)
   // A second killed run leaves its own mutant at the same path: the release answers none of those bytes.
   const secondRuns = { ...A_FILE, digest: 'the second run\'s bytes' }
@@ -183,7 +208,12 @@ test('#693 r=3 R5: a release answers the bytes it was taken for, and a later run
     replaced: first,
   })
   assert.deepEqual(second.leftovers.map((one) => one.digest), [secondRuns.digest])
-  assert.ok(theRefusalOfACommit(second, [{ path: A_FILE.path, digest: secondRuns.digest }], released) !== undefined)
+  let answer: string | undefined
+  const notice = theNoticeWhile((note) => {
+    answer = theRefusalOfACommit(second, [{ path: A_FILE.path, digest: secondRuns.digest }], released, note)
+  })
+  assert.equal(answer, undefined, 'the second run\'s mutant still refused the commit')
+  assert.match(notice, /notice: this commit carries what a killed run left/, 'the second run\'s mutant was not noticed')
   // The telling names the bytes that stand now, though the member released the path's older ones.
   assert.match(theTellingOf(second, released) ?? '', /still hold what it was writing/)
 })
@@ -218,9 +248,12 @@ test('two worktrees holding one path are told apart by the worktree', () => {
     theRefusalOfACommit(record, [{ path: A_FILE.path, worktree: 'two', digest: A_FILE.digest }]),
     undefined,
   )
-  assert.ok(
-    theRefusalOfACommit(record, [{ path: A_FILE.path, worktree: 'one', digest: A_FILE.digest }]) !== undefined,
-  )
+  let answer: string | undefined
+  const notice = theNoticeWhile((note) => {
+    answer = theRefusalOfACommit(record, [{ path: A_FILE.path, worktree: 'one', digest: A_FILE.digest }], undefined, note)
+  })
+  assert.equal(answer, undefined, 'the commit of the worktree that holds the leftover was refused')
+  assert.match(notice, /notice: this commit carries what a killed run left/, 'the worktree that holds the leftover was not noticed')
 })
 
 test('a record read back is the record that was kept', () => {
@@ -322,7 +355,12 @@ test(`the record keeps ${KEPT_IN_A_RECORD} leftovers, dropping the oldest and sa
   assert.equal(record.dropped.leftovers, 1)
   assert.equal(theRefusalOfACommit(record, [{ path: many[0]!.path, digest: many[0]!.digest }]), undefined)
   const kept = many[many.length - 1]!
-  assert.ok(theRefusalOfACommit(record, [{ path: kept.path, digest: kept.digest }]) !== undefined)
+  let answer: string | undefined
+  const notice = theNoticeWhile((note) => {
+    answer = theRefusalOfACommit(record, [{ path: kept.path, digest: kept.digest }], undefined, note)
+  })
+  assert.equal(answer, undefined, 'the commit of a kept leftover was refused')
+  assert.match(notice, /notice: this commit carries what a killed run left/, 'the kept leftover was not noticed')
 })
 
 test('a worktree found gone is told as gone, with its path', () => {
