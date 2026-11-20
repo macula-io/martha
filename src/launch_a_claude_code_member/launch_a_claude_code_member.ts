@@ -94,7 +94,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
 
@@ -179,6 +179,7 @@ import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { keepTheTranscriptsOf } from '../keep_the_transcripts_of_a_launch/keep_the_transcripts_of_a_launch.ts'
 
 /** The empty directory inside a launch's relay directory (../refuse_code_a_checkout_runs_itself). */
 export const EMPTY_DIRECTORY_NAME = 'nothing'
@@ -320,6 +321,11 @@ export interface ReadyLaunch {
   readonly prepared: Extract<PreparedLaunch, { readonly allow: true }>
   /** Removes the approved copies. */
   removeSnapshot(): void
+  /**
+   * Keeps what the member's host wrote of its session, before the snapshot that holds it goes (martha#646). A failure
+   * is said in one line and never stops the removals.
+   */
+  keepTranscripts(): void
   readonly hostEnv: Readonly<Record<string, string | undefined>>
   /** What the settings files the host loads add to every server's environment. */
   readonly settingsEnv: Readonly<Record<string, string>>
@@ -415,7 +421,22 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
-  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings, crew_text }
+  // The host writes the member's session under the folder this snapshot holds, so the keep is taken here, beside the
+  // snapshot's removal, and each of the three ends calls it (martha#646). A launch on an approval keeps the id its own
+  // writes are kept under; any other launch is named by its snapshot, which is made afresh for each launch.
+  const keepTranscripts = (): void => {
+    try {
+      const kept = { state_root: launch.places.state_root, project_root: launch.place.launch_dir, config_folder: membersConfigFolderOf(prepared), theLaunch: launch.place.since_approval?.launch_id ?? basename(prepared.snapshot_dir), theLaunchKey: hostEnv[API_KEY_VARIABLE] ?? '' }
+      for (const line of keepTheTranscriptsOf(kept)) launch.tellOwner(`Not kept for ${launch.member_name}: ${line}`)
+    } catch (error) {
+      try {
+        launch.tellOwner(`Not kept for ${launch.member_name}: ${(error as Error).message}`)
+      } catch {
+        // The launch is ending: what cannot be said now does not stop it.
+      }
+    }
+  }
+  return { prepared, removeSnapshot, keepTranscripts, hostEnv, settingsEnv: fromSettings.env, hookSettings, crew_text }
 }
 
 /**

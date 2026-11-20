@@ -12,7 +12,7 @@ import { test } from 'node:test'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { keepTheLifelineIn, type TheRunsEnd } from './keep_the_lifeline_in.ts'
-import { RUN_LIFELINE_VARIABLE, theRunsLifeline } from './the_run_lifeline.ts'
+import { RUN_LIFELINE_VARIABLE, takeTheLaunchOffTheDisk, theRunsLifeline } from './the_run_lifeline.ts'
 
 /** A directory of this test's own, removed with everything in it. */
 const aDirectoryOfItsOwn = (name: string): string => mkdtempSync(join(tmpdir(), `martha-${name}-`))
@@ -133,6 +133,18 @@ test('a run\'s lifeline is a named pipe: a socket could not be reopened, and a d
     lifeline.close()
     removeTheTree(directory)
   }
+})
+
+test('a run\'s end keeps the member\'s transcripts after the relay and before the snapshot, and the record last (#472, martha#646)', () => {
+  const order: string[] = []
+  const made = {
+    relayDirectory: { remove: (): void => void order.push('relay-directory') },
+    keepTranscripts: (): void => void order.push('keep-transcripts'),
+    removeSnapshot: (): void => void order.push('snapshot'),
+  }
+  takeTheLaunchOffTheDisk(made, () => order.push('launch-record'))
+  assert.deepEqual(order, ['relay-directory', 'keep-transcripts', 'snapshot', 'launch-record'],
+    'the keep does not sit between the relay and the snapshot with the record last, so it can lose what the snapshot holds')
 })
 
 /**

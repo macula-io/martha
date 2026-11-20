@@ -56,6 +56,7 @@ const THE_HOST_ADAPTERS = [
     'keep_martha_state_outside_the_checkout',
     'keep_where_owners_acts_were_typed',
     'keep_the_relays_journal',
+    'keep_the_transcripts_of_a_launch',
     'keep_what_the_owner_signed',
     'launch_a_claude_code_member',
     'launch_a_goose_member',
