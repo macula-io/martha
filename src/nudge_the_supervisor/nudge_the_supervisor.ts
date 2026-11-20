@@ -27,7 +27,8 @@ import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import type { CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
 import type { AHead } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
-import { OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { offlineAfterMsOf, type CrewThresholds } from '../declare_crew/the_crews_thresholds.ts'
+import { type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
 /** The kinds of stall a nudge names, as the Supervisor reads them. A wait on the owner is that person's nudge, and a
  * `paused` one is a package a failed act paused until it is resumed (../recover_a_failed_act, martha#512). */
@@ -56,6 +57,8 @@ export interface NudgeWindows {
   readonly stalled_ms: number
   readonly review_ms: number
   readonly person_ms: number
+  /** How quiet a row must be to read offline (martha#931 A): a quiet row is the subject of no nudge. */
+  readonly offline_ms: number
 }
 
 /** A HANDOFF that no answer has followed: the package, who sent it, who it reached, when, and the tip it named. */
@@ -211,7 +214,7 @@ const theEndsOf = (closes: Readonly<Record<string, number>>): readonly LandedPac
   Object.entries(closes).map(([package_name, at]) => ({ package: package_name, at }))
 
 /** Whether a row is fresh enough to be read at all: a quiet row is `offline`, and no member is nudged for one. */
-const quiet = (row: DashboardRow, now: number): boolean => now - row.at > OFFLINE_AFTER_MS
+const quiet = (row: DashboardRow, input: Pick<NudgeInput, 'now' | 'windows'>): boolean => input.now - row.at > input.windows.offline_ms
 
 /** A member at work, as the owner's pane counts it: the two states that are expected to move on their own. */
 export const BUSY = ['working', 'waiting'] as const
@@ -234,7 +237,7 @@ const canStall = (row: DashboardRow): boolean => row.progress.step < row.progres
 
 /** Whether a member is one a nudge is never made about: a receiver, a parked member, or one whose row has gone quiet. */
 const outOfScope = (row: DashboardRow, input: NudgeInput): boolean =>
-  isAReceiver(row.member, input.receivers) || row.state === PARKED_STATE || quiet(row, input.now) || input.parked.some((name) => same(name, row.member))
+  isAReceiver(row.member, input.receivers) || row.state === PARKED_STATE || quiet(row, input) || input.parked.some((name) => same(name, row.member))
 
 /** Members that say they are busy and have not reported progress for the window. */
 function stalledNudges(input: NudgeInput): Nudge[] {
@@ -382,9 +385,10 @@ export function theNudgesPartLines(nudges: readonly Nudge[], crew: TheDeclaredNa
   return part === null ? [] : part.split('\n')
 }
 
-/** The windows a declaration gave, in milliseconds, with 0 for a kind the crew turned off. */
-export function windowsOf(house_rules: { readonly stalled_minutes: number | null; readonly review_minutes: number | null; readonly person_minutes: number | null }): NudgeWindows {
+/** The windows a declaration gave, in milliseconds, with 0 for a kind the crew turned off, and the crew's offline time. */
+export function windowsOf(house_rules: { readonly stalled_minutes: number | null; readonly review_minutes: number | null; readonly person_minutes: number | null }, thresholds: CrewThresholds): NudgeWindows {
   return {
+    offline_ms: offlineAfterMsOf(thresholds),
     stalled_ms: (house_rules.stalled_minutes ?? 0) * MINUTE_MS,
     review_ms: (house_rules.review_minutes ?? 0) * MINUTE_MS,
     person_ms: (house_rules.person_minutes ?? 0) * MINUTE_MS,

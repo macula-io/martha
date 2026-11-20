@@ -8,7 +8,7 @@ import { test } from 'node:test'
 
 import { MINUTE_MS, OWNER } from '../declare_crew/declare_crew.ts'
 import type { Addressee } from '../keep_the_crew_channel/crew_channel.ts'
-import { IDLE, OFFLINE_AFTER_MS, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { IDLE, type DashboardRow, type State } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { MENU } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import {
@@ -26,12 +26,15 @@ import {
   type NudgeInput,
   type SentMessage,
 } from './nudge_the_supervisor.ts'
+import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
 
 const NOW = 1_762_900_000_000
 const STALLED = 60 * MINUTE_MS
 const REVIEW = 45 * MINUTE_MS
 const PERSON = 30 * MINUTE_MS
-const WINDOWS = { stalled_ms: STALLED, review_ms: REVIEW, person_ms: PERSON }
+const WINDOWS = { stalled_ms: STALLED, review_ms: REVIEW, person_ms: PERSON, offline_ms: OFFLINE_AFTER_MS }
 const CREW = { owner: 'Ann', members: [{ name: 'Vesta' }, { name: 'Mars' }, { name: 'Supervisor' }] }
 const RECEIVERS = ['Supervisor']
 /** The dashboard's own word for a parked member, written once here as the slice writes it. */
@@ -119,7 +122,7 @@ test('r=2 R3: zero turns a kind of nudge off, and every kind is checked, not onl
   const stalled = row('Vesta', { progress: { step: 1, of: 4, at: NOW - 10 * STALLED } })
   const held = row('Mars', { state: 'waiting', waits: { on: 'Uranus', for: MENU, since: NOW - 10 * PERSON }, progress: { step: 1, of: 4, at: NOW - 1_000 } })
   const waits = reviewWaitsIn([sent('Vesta', ['Mars'], handoff('macula-io/martha#320'), NOW - 10 * REVIEW)], [], RECEIVERS)
-  const turnedOff = { stalled_ms: 0, review_ms: 0, person_ms: 0 }
+  const turnedOff = { ...WINDOWS, stalled_ms: 0, review_ms: 0, person_ms: 0 }
 
   assert.deepEqual(nudgesOf(input([stalled, held], { waits, windows: turnedOff })), [], 'a crew that turned all three windows to zero is told nothing at all')
   assert.deepEqual(nudgesOf(input([stalled], { windows: { ...WINDOWS, stalled_ms: 0 } })), [], 'a stall window of zero turns stalled nudges off')
@@ -278,12 +281,13 @@ test('nothing to say reads as no part at all, and every nudge sorts oldest first
 // --- the declaration's own reading ------------------------------------------
 
 test('the windows are read from the declaration in minutes, and a kind turned off is 0', () => {
-  assert.deepEqual(windowsOf({ stalled_minutes: 60, review_minutes: 0, person_minutes: null }), {
+  assert.deepEqual(windowsOf({ stalled_minutes: 60, review_minutes: 0, person_minutes: null }, THRESHOLDS_WHEN_UNNAMED), {
     stalled_ms: 60 * MINUTE_MS,
     review_ms: 0,
     person_ms: 0,
+    offline_ms: OFFLINE_AFTER_MS,
   })
-  assert.deepEqual(nudgesOf(input([row('Vesta', { progress: { step: 1, of: 4, at: NOW - 10 * STALLED } })], { windows: windowsOf({ stalled_minutes: 0, review_minutes: 0, person_minutes: 0 }) })), [], 'a crew that turned every window off reads no nudge')
+  assert.deepEqual(nudgesOf(input([row('Vesta', { progress: { step: 1, of: 4, at: NOW - 10 * STALLED } })], { windows: windowsOf({ stalled_minutes: 0, review_minutes: 0, person_minutes: 0 }, THRESHOLDS_WHEN_UNNAMED) })), [], 'a crew that turned every window off reads no nudge')
 })
 
 test('a row written before progress carried its moment counts from its own beat', () => {
@@ -366,4 +370,14 @@ test('#415: nothing waiting asks GitHub nothing, and a landing ends a wait as a 
   })
   assert.deepEqual(waits, [])
   assert.equal(calls, 0, 'a landing left nothing waiting, so nothing was asked')
+})
+
+test('#931 A: the windows carry the declared offline time, and a stall is read against it, not the default', () => {
+  const declared = { ...THRESHOLDS_WHEN_UNNAMED, offline_after_seconds: THRESHOLDS_WHEN_UNNAMED.offline_after_seconds * 3 }
+  const house = { stalled_minutes: 60, review_minutes: 0, person_minutes: 0 }
+  assert.equal(windowsOf(house, declared).offline_ms, offlineAfterMsOf(declared))
+  const quietPastTheDefault = row('Vesta', { at: NOW - OFFLINE_AFTER_MS * 2, progress: { step: 1, of: 4, at: NOW - STALLED } })
+  assert.deepEqual(nudgesOf(input([quietPastTheDefault])), [], 'under the default the row is offline, and no stall is said')
+  const stalled = nudgesOf(input([quietPastTheDefault], { windows: windowsOf(house, declared) }))
+  assert.deepEqual(stalled.map((nudge) => [nudge.kind, nudge.member]), [['stalled', 'Vesta']], 'inside the declared offline time the row is live, and its stall is said')
 })

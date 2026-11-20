@@ -41,6 +41,7 @@ import {
   HOLD_REVIEWS,
   THE_HOST_A_MEMBER_RAN_ON,
   PARKED,
+  MESH_KEY,
   declareCrew,
   declareCrewOnHosts,
   holdsReviews,
@@ -51,6 +52,7 @@ import {
   type WorkspaceLayout,
 } from './declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
+import { PROFILE } from './the_crews_profiles.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -309,8 +311,7 @@ test('every act a table does not name is the owner\'s alone, so a crew file writ
 
 test('a field that is not an object is refused with its shape, naming every key it takes', async () => {
   const shapes: [unknown, string, readonly string[]][] = [
-    [{ ...team, members: ['Lead'] }, 'members[0]', ['name', 'role', 'model?', 'host?', `${PARKED}?`]],
-    [{ ...team, mode: 'team' }, 'mode', Object.keys(team.mode)],
+    [{ ...team, members: ['Lead'] }, 'members[0]', ['name', 'role', 'model?', 'host?', `${PARKED}?`, `${PROFILE}?`, `${MESH_KEY}?`]],
     [{ ...team, mode: { ...team.mode, may: [] } }, 'mode.may', Object.keys(team.mode.may)],
   ]
   for (const [declaration, field, keys] of shapes) {
@@ -318,6 +319,15 @@ test('a field that is not an object is refused with its shape, naming every key 
       assert.ok(error instanceof DeclarationRefused)
       assert.equal(error.field, field)
       assert.ok(error.message.endsWith(`is not { ${keys.join(', ')} }`), error.message)
+      return true
+    })
+  }
+  // A mode may be named by its name alone (martha#931), so a mode that is neither says both.
+  for (const mode of [7, ['team'], null]) {
+    await assert.rejects(declare({ ...team, mode }).settings, (error: unknown) => {
+      assert.ok(error instanceof DeclarationRefused)
+      assert.equal(error.field, 'mode')
+      assert.ok(error.message.endsWith(`is not a mode's name, or { ${Object.keys(team.mode).join(', ')} }`), error.message)
       return true
     })
   }

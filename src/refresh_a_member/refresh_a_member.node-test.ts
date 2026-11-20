@@ -17,25 +17,10 @@ import { after, test } from 'node:test'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import {
-  aDeclineIsAllowed,
-  theFlowSentBack,
-  aFlowStarting,
-  aFlowStalled,
-  aRefreshIsDue,
-  FLOW_WINDOW_MS,
-  HANDOVER_LIMIT_PERCENT,
-  keepTheFlow,
-  REFRESH_MARGIN_PERCENT,
-  refreshesPlace,
-  theFlowAbandoned,
-  theFlowClearing,
-  theFlowDeclined,
-  theFlowOf,
-  theRefreshFile,
-  type ARefresh,
-  type TheSessionsReading,
-} from './refresh_a_member.ts'
+import {aDeclineIsAllowed, theFlowSentBack, aFlowStarting, aFlowStalled, aRefreshIsDue, FLOW_WINDOW_MS, keepTheFlow, REFRESH_MARGIN_PERCENT, refreshesPlace, theFlowAbandoned, theFlowClearing, theFlowDeclined, theFlowOf, theRefreshFile, type ARefresh, type TheSessionsReading} from './refresh_a_member.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const HANDOVER_LIMIT_PERCENT = THRESHOLDS_WHEN_UNNAMED.handover_percent
 
 const home = mkdtempSync(join(tmpdir(), 'martha-refresh-'))
 after(() => removeTheTree(home))
@@ -44,6 +29,7 @@ const crew = join(home, 'the-crew-files')
 /** A reading of a session that has done nothing yet: a small context, no flow, no task finished. */
 const reading = (over: Partial<TheSessionsReading> = {}): TheSessionsReading => ({
   percent: 10,
+  limit_percent: HANDOVER_LIMIT_PERCENT,
   started_at_percent: 10,
   finished_report: '',
   refresh_between_tasks: false,
