@@ -48,6 +48,11 @@ export interface RecordedHost extends MarkdownTheHostLoads, ProtectedConfigPlace
    */
   readonly sign_in_store_variable: string
   /**
+   * The variables any one of which switches the host off its own API, onto a gateway or a cloud provider, cut from the
+   * binary (martha#916 r=4): no billed member is given any of them, nor is the sign-in question asked with them.
+   */
+  readonly provider_switch_variables: readonly string[]
+  /**
    * Which of a file tool's rules the host's file permission checks match, cut from the binary (martha#226). It is a
    * field of its own rather than a mix-in: what is recorded is the host's statement, and the mapping is derived.
    */
@@ -109,6 +114,15 @@ function signInStoreVariableOf(recording: RecordedHost): string {
   return recording.sign_in_store_variable
 }
 
+/** The recorded provider switches, or a refusal when the recording holds none or a name that is not one (martha#916). */
+function providerSwitchVariablesOf(recording: RecordedHost): readonly string[] {
+  const names: unknown = recording.provider_switch_variables
+  if (!Array.isArray(names) || names.length === 0 || names.some((name) => typeof name !== 'string' || name === '')) {
+    throw new Error('The recording does not hold the variables that switch the host off its own API, so which of them a member must not be given cannot be told (martha#916).')
+  }
+  return names as readonly string[]
+}
+
 export function recordedHostFrom(text: string): RecordedHost {
   const recording = JSON.parse(text) as RecordedHost
   if (!Array.isArray(recording.classic_hook_events) || recording.classic_hook_events.length === 0) {
@@ -126,6 +140,7 @@ export function recordedHostFrom(text: string): RecordedHost {
     throw new Error("The recording does not hold the global config file the host prefers over .claude.json, so the file the owner's user MCP servers are read from cannot be told (martha#187).")
   }
   signInStoreVariableOf(recording)
+  providerSwitchVariablesOf(recording)
   theSkillsLoaderHolds(recording)
   ruleMatchersIn(filePermissionRulesOf(recording).matcher)
   failedAgentsReportOf(recording)
@@ -216,3 +231,9 @@ export const CLAUDE_CODE_FILE_RULE_TOOL: string = theToolItsChecksMatch(
  * the store is the owner's default one, so a member with a config folder of its own is signed in without a copy.
  */
 export const CLAUDE_CODE_SIGN_IN_STORE_VARIABLE: string = RECORDED_HOST.sign_in_store_variable
+
+/**
+ * The variables that switch the recorded host off its own API, onto a gateway or a cloud provider, any one of them set
+ * (martha#916 r=4): a member given one is billed by that gateway or provider, off the owner's sign-in and off the launcher's key alike.
+ */
+export const CLAUDE_CODE_PROVIDER_SWITCH_VARIABLES: readonly string[] = RECORDED_HOST.provider_switch_variables

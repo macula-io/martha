@@ -51,10 +51,11 @@
 //      owner's arguments go first, then the launch gate's
 //      switches and the relay's copy. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
-//      environment is `theEnvironmentAMemberIsGiven(inherited, switches, crew, config, host)`
+//      environment is `theEnvironmentAMemberIsGiven(inherited, switches, crew, config, host)`, made with the
+//      member's own config folder by `giveAMemberItsStart`
 //      (./the_environment_a_member_is_given.ts): what it inherits without the crew's
 //      state, the switches, the member's own config folder and the launcher's own
-//      state home, then the settings that keep a checkout from running its hooks,
+//      state home, with the one credential its billing picks (martha#916), then the settings that keep a checkout from running its hooks,
 //      install scripts and .envrc through the member's own commands (martha#24),
 //      plus the socket's path. Its PATH starts with the launch's own `git` guard, and
 //      git is pointed at the guard's hooks (../guard_the_git_a_member_runs,
@@ -100,6 +101,9 @@ import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
 import { machineRootsFrom, theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 
+import { staleReadsOver, type TheStaleReads } from '../ask_git_how_far_a_clone_is_behind/ask_git_how_far_a_clone_is_behind.ts'
+import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
+
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
@@ -124,7 +128,7 @@ import {
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_served/watch_the_crew_tools_a_launch_served.ts'
-import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import type { Billing, CrewSettings } from '../declare_crew/declare_crew.ts'
 import { TRANSCRIPTS_WHEN_UNNAMED, type CrewTranscripts } from '../declare_crew/the_crews_transcripts.ts'
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 import { crewTextToHand, noCrewTextFor } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
@@ -171,12 +175,12 @@ import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/re
 import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
-import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { isBelowACarriedFolder } from '../refuse_launch_of_unapproved_config/carry_the_approved_skills.ts'
 import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
-import { theDroppedPluginsLines, theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
+import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDroppedPluginsLines } from './the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -407,28 +411,27 @@ export interface LaunchMade extends ReadyLaunch, WhatTheRunWatches {
  * owner's folder must still be told, since the places a member may not write are read from it (ownerMemoryOf). Or why
  * not.
  */
-function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extract<PreparedLaunch, { readonly allow: true }>): Record<string, string> | string {
+function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extract<PreparedLaunch, { readonly allow: true }>, billing: Billing): Record<string, string> | string {
   const owners = userSettingsPath(launch.inherited)
   if ('refusal' in owners) return owners.refusal
   const memberConfig = membersConfigFolderOf(prepared)
-  const env = theEnvironmentAMemberIsGiven({
+  return giveAMemberItsStart({
     inherited: launch.inherited,
     switches: prepared.switches,
     crew: { state_root: launch.places.state_root, rows: launch.places.rows },
     member_config: memberConfig,
     host: CLAUDE_CODE,
+    billing,
+    checkout: launch.place.launch_dir,
+    skills: theCarriedSkills(prepared.carried_files),
   })
-  // The key answered yes is the one the member is handed, read from the environment it starts with.
-  const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir, env[API_KEY_VARIABLE], theCarriedSkills(prepared.carried_files))
-  if (!made.made) return made.refusal
-  return env
 }
 
 /** The member's own config folder for a launch: decided once, from the launch's snapshot directory, and read by both its users. */
 const membersConfigFolderOf = (prepared: Extract<PreparedLaunch, { readonly allow: true }>): string => join(prepared.snapshot_dir, MEMBER_CONFIG_FOLDER)
 
 /** Step 1: the launch gate, the mesh server version, and the settings files' env; or the refusal. */
-function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
+function readyLaunch(launch: ClaudeCodeMemberLaunch, billing: Billing): ReadyLaunch | string {
   if (launch.place.host !== CLAUDE_CODE) return `${NOT_STARTED}: this launcher starts ${CLAUDE_CODE}, not ${launch.place.host}.`
 
   const prepared = prepareLaunch(launch.place, thisMachine)
@@ -448,7 +451,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     removeSnapshot()
     return `${NOT_STARTED}: ${unproved}`
   }
-  const hostEnv = membersHostEnvironment(launch, prepared)
+  const hostEnv = membersHostEnvironment(launch, prepared, billing)
   if (typeof hostEnv === 'string') {
     removeSnapshot()
     return `${NOT_STARTED}: ${hostEnv}`
@@ -474,9 +477,11 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   // The host writes the member's session under the folder this snapshot holds, so the keep is taken here, beside the
   // snapshot's removal, and each of the three ends calls it (martha#646). A launch on an approval keeps the id its own
   // writes are kept under; any other launch is named by its snapshot, which is made afresh for each launch.
+  // The key redacted is the launcher's, which is the member's own under api_key and still one a member billed by the
+  // subscription may meet in the owner's files though it is not handed it (martha#916).
   const keepTranscripts = (): void => {
     try {
-      const kept = whatALaunchKeeps(launch, membersConfigFolderOf(prepared), prepared.snapshot_dir, hostEnv[API_KEY_VARIABLE] ?? '')
+      const kept = whatALaunchKeeps(launch, membersConfigFolderOf(prepared), prepared.snapshot_dir, launch.inherited[API_KEY_VARIABLE] ?? '')
       for (const line of keepTheTranscriptsOf(kept)) launch.tellOwner(`Not kept for ${launch.member_name}: ${line}`)
     } catch (error) {
       try {
@@ -580,6 +585,16 @@ function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSessio
     : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared), served_tools }) }
 }
 
+/**
+ * The note a read in a clone behind its origin carries (martha#969): over the workspace the crew declared, asking git on
+ * this machine. A crew that declared no layout gets none, as it gets no git guard.
+ */
+export function staleReadsOf(launch: { readonly crew_settings?: CrewSettings }): { readonly stale_reads?: TheStaleReads } {
+  const workspace = launch.crew_settings === undefined ? undefined : theWorkspaceTheCrewDeclared(launch.crew_settings)
+  if (workspace === undefined || workspace.clones === null || workspace.worktrees === null) return {}
+  return { stale_reads: staleReadsOver({ host: thisMachine, places: { clones: workspace.clones, worktrees: workspace.worktrees }, now: () => Date.now() }) }
+}
+
 /** What this launch raises turns to, or nothing: a launch given none raises nothing (martha#253). */
 function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising } {
   return launch.turns === undefined ? {} : { turns: launch.turns }
@@ -654,6 +669,7 @@ async function servedRelay(
     volatile_roots: theVolatileRootsOf(launch),
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
+    ...staleReadsOf(launch),
     ...thePlacesOfItsOwn(launch, watched.journalOver),
     stopMember: stop,
   }
@@ -730,13 +746,28 @@ function aTickOfWorkFor(launch: ClaudeCodeMemberLaunch, misses: string): () => v
   return aTickOfTheRowsWork(aFolderOfTheMisses(misses, launch.member_name, beats), aFolderOfTheScan(launch.leftovers?.workspace, launch.member_name, beats, scan))
 }
 
+/**
+ * Before anything of the member is made: the credential it is billed by, and the owner told when it is not the usual one
+ * (martha#916). What the declaration says is the member's own: its profile's provider's `billing`.
+ */
+async function billingOf(launch: ClaudeCodeMemberLaunch): Promise<Billing> {
+  const billed = await theBillingOfALaunch({
+    declared: theDeclaredBillingOf(launch.crew_settings, launch.member_name),
+    inherited: launch.inherited,
+    command: launch.command,
+    cwd: launch.place.launch_dir,
+  })
+  if (billed.told !== undefined) launch.tellOwner(billed.told)
+  return billed.billing
+}
+
 /** The launch itself, on a run that has said whether it is still there. */
 async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeline): Promise<MemberStarted> {
   const refuse = (refusal: string): MemberStarted => {
     launch.tellOwner(refusal)
     return { started: false, refusal }
   }
-  const ready = readyLaunch(launch)
+  const ready = readyLaunch(launch, await billingOf(launch))
   if (typeof ready === 'string') return refuse(ready)
   const directories = launchDirectories(launch, ready)
   if (typeof directories === 'string') return refuse(directories)

@@ -32,7 +32,11 @@ const WINDOW = IDLE_MINUTES * MINUTE_MS
 const RECEIVER = 'Supervisor'
 const MEMBER = 'Vesta'
 
-/** A GitHub that answers the backlog search with two open issues, one held by a member and one by a stranger. */
+/**
+ * A GitHub that answers the backlog search with two open issues, one held by a member and one by a stranger. The crew's
+ * budget asks what is left before each search (martha#947); that question is answered with plenty and not counted, so
+ * `calls` is the searches alone.
+ */
 function aGithub(): { readonly calls: () => number; readonly run: (request: ProcessRequest) => Promise<ProcessOutcome> } {
   let calls = 0
   const node = (number: number, holder: string) => ({
@@ -48,6 +52,7 @@ function aGithub(): { readonly calls: () => number; readonly run: (request: Proc
   return {
     calls: () => calls,
     run: async (request) => {
+      if (request.args[1] === 'rate_limit') return { exit_code: 0, stdout: JSON.stringify({ resources: { core: { remaining: 5000, reset: 0 } } }), stderr: '' }
       calls += 1
       assert.equal(request.args[1], 'graphql', `the backlog read asked GitHub something else: ${request.args.join(' ')}`)
       return { exit_code: 0, stdout: JSON.stringify(page), stderr: '' }

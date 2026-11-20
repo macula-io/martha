@@ -133,16 +133,13 @@ function withTheLineHanded(passed: unknown, line: string): Readonly<Record<strin
 }
 
 /**
- * A ran tool's answer with the launcher's line beside it (martha#980): the host hands a tool call's `context` to the
- * model with the answer, one entry per line, so an answer that already carries some keeps them and the line goes last.
- * A port of crew-code's note on a send (its `withNote`). An answer that is not an object is handed back as it is: the
- * line is never bought by losing the answer.
+ * A ran tool's result with the launcher's note added to what the model is told of it (martha#969): the host's own
+ * `context` list on a tool's answer, the one crew-code's stale-clone note used. The result itself is unchanged.
  */
-function withALineBesideTheAnswer<Answer>(answer: Answer, line: string): Answer {
-  if (typeof answer !== 'object' || answer === null || Array.isArray(answer)) return answer
-  const rest = answer as Record<string, unknown>
+function withTheNote(result: unknown, note: string): Readonly<Record<string, unknown>> {
+  const rest = typeof result === 'object' && result !== null && !Array.isArray(result) ? (result as Record<string, unknown>) : {}
   const already = Array.isArray(rest['context']) ? (rest['context'] as unknown[]) : []
-  return { ...rest, context: [...already, line] } as Answer
+  return { ...rest, context: [...already, note] }
 }
 
 /** Posts one event to the launcher and hears its answer; never rejects. */
@@ -300,7 +297,8 @@ export const register = (on: RelayOn): void => {
     if (!after.yes) return stopThisMember($, after.why)
     // The end of the running turn rides on the yes to the last call in flight (martha#311 ruling D): carried after it.
     if (after.end_turn !== undefined) await $.turn.abort({ turnId: after.end_turn }).catch(() => undefined)
-    return after.handed === undefined ? result : withALineBesideTheAnswer(result, after.handed)
+    // A read in a clone behind its origin carries the launcher's note for the model (martha#969), and nothing else changes.
+    return after.note === undefined ? result : withTheNote(result, after.note)
   }).catch(async ($, _e, next) =>
     next.called ? stopThisMember($, 'its relay failed after the tool ran') : { deny: refusal('its relay failed before the launcher answered') },
   )

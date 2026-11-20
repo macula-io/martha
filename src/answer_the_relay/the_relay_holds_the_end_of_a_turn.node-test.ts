@@ -303,7 +303,7 @@ test('#980: a SendMessage citing a path a reboot deletes is handed the volatile 
   const send = call(SEND_MESSAGE_TOOL, { to: 'a-member', message: `The notes are in ${A_CITED_PATH}, read them.` })
   assert.deepEqual(await relay.answer('tool_called', send), { answered: true, body: { allow: 1 } }, 'the gate did not allow the send this test runs')
   const answered = await relay.answer('tool_answered', { ...send, answer: { success: true } })
-  assert.deepEqual(answered, { answered: true, body: { taken: 1, handed: theVolatileNote([A_CITED_PATH]) } })
+  assert.deepEqual(answered, { answered: true, body: { taken: 1, note: theVolatileNote([A_CITED_PATH]) } })
   assert.ok(theVolatileNote([A_CITED_PATH]).includes(A_CITED_PATH), 'the note does not name the cited path')
 })
 

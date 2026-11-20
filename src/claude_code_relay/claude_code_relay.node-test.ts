@@ -320,27 +320,23 @@ test('#311 ruling D: a report answered with a turn to end that names none is no 
   assert.deepEqual([fake.ran[0], fake.aborted], [['kill', '-s', 'KILL', '--', '-4242'], []], 'the member was not stopped, or a turn was ended')
 })
 
-/** A launcher that answers a ran tool's report with `reply`, and yes to everything else. */
-const answeringTheReportWith = (reply: string): Launcher => async ({ url }) =>
-  ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? reply : yesTo(url.slice(RELAY_ORIGIN.length)) })
-
-test('#980: a report the launcher answers yes with a line to hand puts that line beside the tool\'s answer, last, and stops nothing (mutant: drop the line)', async () => {
-  const line = 'a line the launcher hands beside the answer'
-  const fake = fakeEngine(answeringTheReportWith(JSON.stringify({ taken: 1, handed: line })))
+test('#969: a report the launcher answers yes with a note hands the tool\'s result back with the note added to its context, and stops nothing (mutant: drop the note)', async () => {
+  const note = 'note: the clone /w/acme/widget is 1 commit behind origin/main.'
+  const noting: Launcher = async ({ url }) =>
+    ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? JSON.stringify({ taken: 1, note }) : yesTo(url.slice(RELAY_ORIGIN.length)) })
+  const fake = fakeEngine(noting)
   const call = await callThrough(fake)
-  assert.deepEqual(await call.answer, { ...RESULT, context: [line] }, 'the line was not handed beside the answer')
-  assert.deepEqual([fake.ran, fake.aborted], [[], []], 'the member was stopped, or a turn ended, on a yes')
-  const both = fakeEngine(answeringTheReportWith(JSON.stringify({ taken: 1, end_turn: 'the-running-turn', handed: line })))
-  assert.deepEqual(await (await callThrough(both)).answer, { ...RESULT, context: [line] }, 'a line beside a turn to end was lost')
-  assert.deepEqual(both.aborted, ['the-running-turn'], 'a turn to end beside a line was not ended')
+  assert.deepEqual(await call.answer, { ...RESULT, context: [note] }, 'the note was not added to the result')
+  assert.deepEqual([fake.ran, fake.aborted], [[], []], 'a note stopped the member or ended its turn')
 })
 
-test('#980: a line to hand that is empty, or a field a taken answer may not carry, is no yes (mutant: read any field as a yes)', () => {
-  for (const reply of ['{"taken":1,"handed":""}', '{"taken":1,"handed":7}', '{"taken":1,"said":"a line"}']) {
-    assert.equal(heardTaken(200, reply).yes, false, reply)
+test('#969: a report answered with an empty note, or a key the relay does not know, is no yes, and the member is stopped (mutant: read any taken as a yes)', async () => {
+  for (const answered of [{ taken: 1, note: '' }, { taken: 1, said: 'x' }, { taken: 1, end_turn: 't', note: 3 }]) {
+    const fake = fakeEngine(async ({ url }) => ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? JSON.stringify(answered) : yesTo(url.slice(RELAY_ORIGIN.length)) }))
+    const call = await callThrough(fake)
+    assert.equal(await settled(call.answer as Promise<unknown>), 'pending', `${JSON.stringify(answered)} was read as a yes`)
+    assert.deepEqual(fake.ran[0], ['kill', '-s', 'KILL', '--', '-4242'], `the member was not stopped for ${JSON.stringify(answered)}`)
   }
-  assert.deepEqual(heardTaken(200, '{"taken":1,"handed":"a line"}'), { yes: true, handed: 'a line' })
-  assert.deepEqual(heardTaken(200, '{"taken":1}'), { yes: true })
 })
 
 test('a hook that failed: its catch drops or denies before the tool ran, and stops the member after', async () => {

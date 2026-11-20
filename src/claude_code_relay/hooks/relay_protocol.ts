@@ -111,8 +111,11 @@ export interface Ran {
 export interface Taken {
   readonly taken: 1
   readonly end_turn?: string
-  /** A line the relay hands the model beside the ran tool's answer (martha#980): the volatile-path note on a send. */
-  readonly handed?: string
+  /**
+   * On a ran read's report, the line its result carries for the model (martha#969): the clone it read in is behind its
+   * origin. The relay adds it to the result and changes nothing else.
+   */
+  readonly note?: string
 }
 
 /**
@@ -137,8 +140,9 @@ export const TAKEN: Taken = { taken: 1 }
 export const ALLOW: Verdict = { allow: 1 }
 
 /** What the relay acts on: the launcher's yes, or why not. A yes may carry the one line a session is handed as it
- * starts (martha#254 test 10), or the turn a ran tool's report ends (martha#311): nothing else but its verdict. */
-export type Heard = { readonly yes: true; readonly handed?: string; readonly end_turn?: string } | { readonly yes: false; readonly why: string }
+ * starts (martha#254 test 10), the turn a ran tool's report ends (martha#311), or the note a ran read's result carries
+ * (martha#969): nothing else but its verdict. */
+export type Heard = { readonly yes: true; readonly handed?: string; readonly end_turn?: string; readonly note?: string } | { readonly yes: false; readonly why: string }
 
 const NO = (why: string): Heard => ({ yes: false, why })
 const YES: Heard = { yes: true }
@@ -198,29 +202,29 @@ export function answeredBody(session_id: string, call: unknown, answer: unknown)
   return body
 }
 
-/** The fields a taken answer may carry beside `taken`, each a line of text when it is there. */
-const WHAT_A_TAKEN_ANSWER_MAY_CARRY: readonly string[] = ['end_turn', 'handed']
-
-/**
- * A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the only yes, and it may carry the turn to end
- * (martha#311) and a line to hand the model beside a ran tool's answer (martha#980). Anything else is a no.
- */
+/** A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the yes, with an `end_turn` and a `note` it may carry. */
 export function heardTaken(status: number, text: string): Heard {
   if (status !== 200) return NO(`the launcher answered with status ${status}`)
   const value = jsonObjectOf(text)
   if (value === undefined) return NO(MALFORMED)
   if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
-  return value.taken === 1 ? whatATakenAnswerCarries(value) : NO(MALFORMED)
+  if (value.taken !== 1) return NO(MALFORMED)
+  return exactKeys(value, ['taken']) ? YES : (theYesCarrying(value) ?? NO(MALFORMED))
 }
 
-/** The yes of a taken answer, with what it carries beside `taken`; a field it may not carry, or one with no text, is a no. */
-function whatATakenAnswerCarries(value: Record<string, unknown>): Heard {
-  const carried = Object.keys(value).filter((key) => key !== 'taken')
-  if (carried.some((key) => !WHAT_A_TAKEN_ANSWER_MAY_CARRY.includes(key) || !isReason(value[key]))) return NO(MALFORMED)
-  if (carried.length === 0) return YES
-  const { end_turn, handed } = value as { readonly end_turn?: string; readonly handed?: string }
-  return { yes: true, ...(end_turn === undefined ? {} : { end_turn }), ...(handed === undefined ? {} : { handed }) }
+/** A yes with what a taken answer may carry beside it, each a reason; undefined for any other key or an empty one. */
+function theYesCarrying(value: Record<string, unknown>): Heard | undefined {
+  if (!Object.keys(value).every((key) => TAKEN_MAY_CARRY.includes(key))) return undefined
+  const carried = TAKEN_CARRIES.filter((key) => Object.hasOwn(value, key))
+  if (!carried.every((key) => isReason(value[key]))) return undefined
+  return { yes: true, ...Object.fromEntries(carried.map((key) => [key, value[key]])) }
 }
+
+/** What a taken answer may carry beside the yes: the turn a ran tool ends, and the note a ran read carries. */
+const TAKEN_CARRIES = ['end_turn', 'note'] as const
+
+/** The keys a taken answer may hold: the yes itself, and what it carries. */
+const TAKEN_MAY_CARRY: readonly string[] = ['taken', ...TAKEN_CARRIES]
 
 /**
  * A session's start, as the relay hears it: `{"taken":1}`, or `{"taken":1,"handed":"<line>"}` when the launcher hands
