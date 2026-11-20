@@ -15,7 +15,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { sayToTheCrewOver } from './say_to_the_crew_tool.ts'
-import { theCommitsAHandoffNames } from './the_commits_a_handoff_names.ts'
+import { FETCH_MS, LOCAL_MS, theCommitsAHandoffNames } from './the_commits_a_handoff_names.ts'
 
 const PACKAGE = 'synthetic-acme/widget#7'
 const NO_COMMIT = 'f'.repeat(40)
@@ -53,7 +53,7 @@ function aClone(t: TestContext): AClone {
   const tip = aCommitIn(seed, 'two')
   gitIn(seed, 'remote', 'add', 'origin', origin)
   gitIn(seed, 'push', '--quiet', '-u', 'origin', 'main')
-  const clones = join(root, 'clones')
+  const clones = join(root, 'the-crews-clones')
   const clone = join(clones, 'synthetic-acme', 'widget')
   mkdirSync(join(clones, 'synthetic-acme'), { recursive: true })
   execFileSync('git', ['clone', '--quiet', origin, clone])
@@ -128,7 +128,7 @@ test('#980 p3 T2c: a crew with no clones root, or a relative one, starts no proc
   const line = handing('a'.repeat(40), 'b'.repeat(40))
   const marked = [`range not verified (the crew declares no workspace): ${'a'.repeat(40)}..${'b'.repeat(40)}`]
   assert.deepEqual(await theCommitsAHandoffNames({ processes: nothingRuns, clones: null }, line), marked)
-  assert.deepEqual(await theCommitsAHandoffNames({ processes: nothingRuns, clones: 'clones' }, line), marked)
+  assert.deepEqual(await theCommitsAHandoffNames({ processes: nothingRuns, clones: 'a-relative-root' }, line), marked)
 })
 
 test('#980 p3 T3 and T4: every git run carries Martha\'s own settings, a bound, and only the ceiling in its environment', async (t) => {
@@ -143,7 +143,7 @@ test('#980 p3 T3 and T4: every git run carries Martha\'s own settings, a bound, 
     assert.deepEqual(request.args.slice(0, 6), ['-c', 'core.fsmonitor=false', '-c', 'safe.bareRepository=explicit', '-C', at.clone])
     assert.equal(request.cwd, at.clones)
     assert.deepEqual(request.environment, { drop_prefixes: [], set: { GIT_CEILING_DIRECTORIES: join(at.clones, 'synthetic-acme') } })
-    assert.equal(request.timeout_ms, request.args.includes('fetch') ? 20_000 : 5_000)
+    assert.equal(request.timeout_ms, request.args.includes('fetch') ? FETCH_MS : LOCAL_MS)
   }
 })
 
