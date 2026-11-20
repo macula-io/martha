@@ -32,6 +32,8 @@ import {
   type TheTextsAMemberReads,
 } from './hand_a_member_its_crew_text.ts'
 import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
+import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
 
 const ROOT = `/${CREWS_PLACE}/site`
 const CREW = join(ROOT, DECLARATION_DIRECTORY)
@@ -59,6 +61,8 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     volatile_paths: [],
     engine_endpoint: null,
     thresholds: THRESHOLDS_WHEN_UNNAMED,
+    github: GITHUB_WHEN_UNNAMED,
+    transcripts: TRANSCRIPTS_WHEN_UNNAMED,
   }
 }
 

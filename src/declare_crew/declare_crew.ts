@@ -25,6 +25,8 @@ import { hostRuns, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 
 export type { ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { memberNameKey } from './member_names.ts'
+import { GITHUB, GITHUB_KEYS, githubOf, type CrewGithub } from './the_crews_github.ts'
+import { TRANSCRIPTS, TRANSCRIPTS_KEYS, transcriptsOf, type CrewTranscripts } from './the_crews_transcripts.ts'
 import { THRESHOLDS, THRESHOLDS_KEYS, thresholdsOf, type CrewThresholds } from './the_crews_thresholds.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
@@ -414,6 +416,10 @@ export interface CrewSettings {
   readonly engine_endpoint: EngineEndpoint | null
   /** The crew's thresholds (martha#931 A): see ./the_crews_thresholds; each field the declaration leaves out reads today's value. */
   readonly thresholds: CrewThresholds
+  /** The crew's GitHub block (martha#931 B): see ./the_crews_github. */
+  readonly github: CrewGithub
+  /** The crew's transcript bounds (martha#931 B): see ./the_crews_transcripts. */
+  readonly transcripts: CrewTranscripts
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -429,7 +435,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS, GITHUB, TRANSCRIPTS] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 const OPTIONAL_MEMBER_KEYS = ['model', HOST] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
@@ -460,6 +466,8 @@ export const DECLARATION_FIELDS: Readonly<Record<string, readonly string[]>> = {
   [BACKLOG]: BACKLOG_KEYS,
   [ENGINE_ENDPOINT]: [...ENGINE_ENDPOINT_REQUIRED_KEYS, ...ENGINE_ENDPOINT_OPTIONAL_KEYS],
   [THRESHOLDS]: THRESHOLDS_KEYS,
+  [GITHUB]: GITHUB_KEYS,
+  [TRANSCRIPTS]: TRANSCRIPTS_KEYS,
 }
 
 type Json = Record<string, unknown>
@@ -582,6 +590,8 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
     thresholds: thresholdsOf(value[THRESHOLDS], (field, why) => refuse.at(field, why)),
+    github: githubOf(value[GITHUB], (field, why) => refuse.at(field, why)),
+    transcripts: transcriptsOf(value[TRANSCRIPTS], (field, why) => refuse.at(field, why)),
     backlog: backlogOf(refuse, value[BACKLOG]),
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
     engine_endpoint: engineEndpointOf(refuse, value[ENGINE_ENDPOINT]),

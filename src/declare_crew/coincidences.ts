@@ -7,6 +7,7 @@ import { THE_CHANNEL_READ_ASK } from '../keep_the_crew_channel/the_channel_read.
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { HOST, OWNER, ROLE_TEXTS_DIRECTORY } from './declare_crew.ts'
+import { TRANSCRIPTS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
 /** Why `'owner'` is written by literal in the declaration (#289 part b). */
@@ -37,5 +38,8 @@ export const COINCIDENCES: readonly Exception[] = [
   // martha#541 package A: engine_endpoint's `host` is the server an engine member's model is reached on (the provider's
   // own OPENAI_HOST word), not the host a member runs on that HOST names.
   { value: HOST, file: 'declare_crew/declare_crew.ts', reason: 'engine_endpoint.host, the server an engine member\'s model is reached on, not the host a member runs on' },
+  // martha#931 B: the declaration's `transcripts` block, the bounds the crew keeps its transcripts to, is not the place
+  // under Martha's state the kept transcripts sit in. One word names both; the block's key is excused here alone.
+  { value: TRANSCRIPTS_PLACE, file: 'declare_crew/the_crews_transcripts.ts', reason: 'the declaration\'s transcripts block, not the place under Martha\'s state the kept transcripts sit in' },
   { value: THE_MODELS_SWITCH, file: 'declare_crew/change_a_member.ts', reason: 'the switch martha crew add takes for a member\'s model, not the switch a host is started with' },
 ]

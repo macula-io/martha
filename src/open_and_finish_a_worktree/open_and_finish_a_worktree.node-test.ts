@@ -33,6 +33,8 @@ import {
   type WorktreesRequest,
 } from './open_and_finish_a_worktree.ts'
 import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
+import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
 
 /** The member these tools answer for, and the branch prefix its worktrees carry. */
 const MEMBER = 'Ceres'
@@ -111,6 +113,8 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
   volatile_paths: [],
   engine_endpoint: null,
     thresholds: THRESHOLDS_WHEN_UNNAMED,
+    github: GITHUB_WHEN_UNNAMED,
+    transcripts: TRANSCRIPTS_WHEN_UNNAMED,
 })
 
 /** A real git, so a test sees what git does rather than what a stand-in is told to say. */

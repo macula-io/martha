@@ -6,7 +6,7 @@
 //
 // It is synchronous on purpose: one of the three is a process `exit` handler, where nothing can be awaited. So it reads
 // the folder, redacts and writes, bounded (../choose_the_transcripts_to_keep) by the launch's own bound, and prunes the
-// launches past the newest TRANSCRIPTS_LAUNCHES_KEPT — a fraction of a second's work, waiting on no other process and
+// launches past the newest the crew declares (transcripts.launches_kept) — a fraction of a second's work, waiting on no other process and
 // no timer. What it could not keep is returned as one line each, so a caller can say it and the other removals go on.
 //
 // The place is the project's own state (../keep_martha_state_outside_the_checkout), made 0700, with every file 0600 and
@@ -22,12 +22,10 @@ import {
   THE_MARK_FILE,
   theHostsProjectsPlace,
   theHostsTranscriptPath,
-  TRANSCRIPTS_FILE_BYTES_KEPT,
-  TRANSCRIPTS_LAUNCHES_KEPT,
-  TRANSCRIPTS_LAUNCH_BYTES_KEPT,
   theMarkOf,
   type AConfigFile,
 } from '../choose_the_transcripts_to_keep/choose_the_transcripts_to_keep.ts'
+import { bytesKeptOf, type CrewTranscripts } from '../declare_crew/the_crews_transcripts.ts'
 import { openState, STATE_DIRECTORY_MODE, STATE_FILE_MODE, TRANSCRIPTS_PLACE, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { STAGING_PREFIX } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 
@@ -42,6 +40,8 @@ export interface WhatIsKept {
   readonly theLaunch: string
   /** The key this launch handed its member, redacted by its exact value wherever it was printed. */
   readonly theLaunchKey: string
+  /** The crew's transcript bounds as declared (martha#931 B). */
+  readonly transcripts: CrewTranscripts
 }
 
 /** The directory one launch's transcripts are kept under: never a path, and never a dot a person or git could steer with. */
@@ -58,10 +58,10 @@ interface ATranscriptHere {
  * launch's budget. The folder is not walked blind: a name that is not the host's transcript shape is never read, so a
  * stray or planted file costs the exit handler nothing (martha#646 r=1 R4).
  */
-const whatTheFolderHolds = (configFolder: string, fileBytesKept: number, launchBytesKept: number): readonly AConfigFile[] => {
+const whatTheFolderHolds = (configFolder: string, bytesKept: number): readonly AConfigFile[] => {
   const projects = theHostsProjectsPlace(configFolder)
   const read = { bytes: 0 }
-  return theTranscriptsUnder(projects).map((one) => theTranscriptAt(one, fileBytesKept, launchBytesKept, read))
+  return theTranscriptsUnder(projects).map((one) => theTranscriptAt(one, bytesKept, read))
 }
 
 /** The host's transcripts under `projects`, in path order, so the same folder is always read the same way. */
@@ -90,19 +90,19 @@ const theFilesOfOneKey = (projects: string, key: string): readonly ATranscriptHe
 }
 
 /**
- * One transcript, read when both bounds have room for it: `read` keeps the launch's bytes actually read, counted by
- * `Buffer.byteLength` and never by what `stat` said, and a file past either bound carries why it was not read rather
- * than being read and thrown away.
+ * One transcript, read when the launch's bound has room for it: `read` keeps the launch's bytes actually read, counted
+ * by `Buffer.byteLength` and never by what `stat` said, and a file past the bound carries why it was not read rather
+ * than being read and thrown away. One file's bound is the same number (martha#931 B), so a file past it never has the
+ * launch's room either; the chooser tells the two apart by the file's size.
  */
-const theTranscriptAt = (at: ATranscriptHere, fileBytesKept: number, launchBytesKept: number, read: { bytes: number }): AConfigFile => {
+const theTranscriptAt = (at: ATranscriptHere, bytesKept: number, read: { bytes: number }): AConfigFile => {
   let size = 0
   try {
     size = fs.statSync(at.full).size
   } catch {
     return { path: at.path, bytes: 0, unread: 'could-not-read' }
   }
-  if (size > fileBytesKept) return { path: at.path, bytes: size, unread: 'file' }
-  if (read.bytes + size > launchBytesKept) return { path: at.path, bytes: size, unread: 'launch' }
+  if (read.bytes + size > bytesKept) return { path: at.path, bytes: size, unread: 'launch' }
   const text = readWhole(at.full)
   if (text === undefined) return { path: at.path, bytes: size, unread: 'could-not-read' }
   read.bytes += Buffer.byteLength(text)
@@ -139,7 +139,7 @@ const writtenWhole = (path: string, text: string): void => {
 
 /**
  * Keeps what the member's config folder held for this launch, and prunes the launches past the newest
- * TRANSCRIPTS_LAUNCHES_KEPT. Returns what could not be kept, one line each; a refusal of the state itself is one line.
+ * transcripts.launches_kept the crew declares. Returns what could not be kept, one line each; a refusal of the state itself is one line.
  */
 export function keepTheTranscriptsOf(what: WhatIsKept): readonly string[] {
   const state: MarthaState | { readonly refusal: string } = openState(what.state_root, what.project_root)
@@ -147,8 +147,9 @@ export function keepTheTranscriptsOf(what: WhatIsKept): readonly string[] {
   const place = join(state.directory, TRANSCRIPTS_PLACE)
   const here = directoryOf(place, what.theLaunch)
   const chosen = chooseTheTranscripts({
-    files: whatTheFolderHolds(what.config_folder, TRANSCRIPTS_FILE_BYTES_KEPT, TRANSCRIPTS_LAUNCH_BYTES_KEPT),
+    files: whatTheFolderHolds(what.config_folder, bytesKeptOf(what.transcripts)),
     theLaunchKey: what.theLaunchKey,
+    bytes_kept: bytesKeptOf(what.transcripts),
   })
   const trouble: string[] = []
   for (const kept of chosen.kept) {
@@ -165,22 +166,22 @@ export function keepTheTranscriptsOf(what: WhatIsKept): readonly string[] {
       trouble.push(`the mark of the tokens found was not kept (${(error as NodeJS.ErrnoException).code ?? String(error)}).`)
     }
   }
-  return trouble.concat(pruneTheLaunchesPastTheNewest(place))
+  return trouble.concat(pruneTheLaunchesPastTheNewest(place, what.transcripts.launches_kept))
 }
 
-/** Removes the launch directories past the newest TRANSCRIPTS_LAUNCHES_KEPT, by each directory's own last change. */
-export function pruneTheLaunchesPastTheNewest(place: string): readonly string[] {
+/** Removes the launch directories past the newest `launches_kept`, by each directory's own last change. */
+export function pruneTheLaunchesPastTheNewest(place: string, launches_kept: number): readonly string[] {
   let names: string[]
   try {
     names = fs.readdirSync(place, { withFileTypes: true }).filter((one) => one.isDirectory()).map((one) => one.name)
   } catch {
     return []
   }
-  if (names.length <= TRANSCRIPTS_LAUNCHES_KEPT) return []
+  if (names.length <= launches_kept) return []
   const byLastChange = names
     .map((name) => ({ name, at: fs.lstatSync(join(place, name), { throwIfNoEntry: false })?.mtimeMs ?? 0 }))
     .sort((one, other) => other.at - one.at || one.name.localeCompare(other.name))
-  return byLastChange.slice(TRANSCRIPTS_LAUNCHES_KEPT).flatMap(({ name }) => {
+  return byLastChange.slice(launches_kept).flatMap(({ name }) => {
     try {
       fs.rmSync(join(place, name), { recursive: true, force: true })
       return []

@@ -123,6 +123,7 @@ import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_served/watch_the_crew_tools_a_launch_served.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import { TRANSCRIPTS_WHEN_UNNAMED, type CrewTranscripts } from '../declare_crew/the_crews_transcripts.ts'
 import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TheLeftoversALaunchKeeps } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
@@ -179,7 +180,7 @@ import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { keepTheTranscriptsOf } from '../keep_the_transcripts_of_a_launch/keep_the_transcripts_of_a_launch.ts'
+import { keepTheTranscriptsOf, type WhatIsKept } from '../keep_the_transcripts_of_a_launch/keep_the_transcripts_of_a_launch.ts'
 
 /** The empty directory inside a launch's relay directory (../refuse_code_a_checkout_runs_itself). */
 export const EMPTY_DIRECTORY_NAME = 'nothing'
@@ -223,6 +224,31 @@ export interface LauncherPlaces {
  * (martha#658). The tools it returns hold that watch (martha#710), so a builder that leaves it out cannot compile.
  */
 export type CrewToolsOfALaunch = (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch }) => HoldingTheWatch<CrewTools>
+
+/**
+ * The transcript bounds a launch keeps its member's session to (martha#931 B): its crew's declared `transcripts`, or the
+ * defaults for a launch that carries no crew (a test's launch).
+ */
+export const theTranscriptBoundsOf = (launch: { readonly crew_settings?: CrewSettings }): CrewTranscripts => launch.crew_settings?.transcripts ?? TRANSCRIPTS_WHEN_UNNAMED
+
+/**
+ * What a launch's end keeps of its member's session: where, under which launch's name, the key redacted, and to the
+ * crew's declared bounds. The launch is named by its approval when the gate recorded one, and otherwise by its snapshot,
+ * which is made afresh for each launch.
+ */
+export const whatALaunchKeeps = (
+  launch: Pick<ClaudeCodeMemberLaunch, 'places' | 'place'> & { readonly crew_settings?: CrewSettings },
+  config_folder: string,
+  snapshot_dir: string,
+  theLaunchKey: string,
+): WhatIsKept => ({
+  state_root: launch.places.state_root,
+  project_root: launch.place.launch_dir,
+  config_folder,
+  theLaunch: launch.place.since_approval?.launch_id ?? basename(snapshot_dir),
+  theLaunchKey,
+  transcripts: theTranscriptBoundsOf(launch),
+})
 
 export interface ClaudeCodeMemberLaunch {
   readonly member_name: string
@@ -426,7 +452,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   // writes are kept under; any other launch is named by its snapshot, which is made afresh for each launch.
   const keepTranscripts = (): void => {
     try {
-      const kept = { state_root: launch.places.state_root, project_root: launch.place.launch_dir, config_folder: membersConfigFolderOf(prepared), theLaunch: launch.place.since_approval?.launch_id ?? basename(prepared.snapshot_dir), theLaunchKey: hostEnv[API_KEY_VARIABLE] ?? '' }
+      const kept = whatALaunchKeeps(launch, membersConfigFolderOf(prepared), prepared.snapshot_dir, hostEnv[API_KEY_VARIABLE] ?? '')
       for (const line of keepTheTranscriptsOf(kept)) launch.tellOwner(`Not kept for ${launch.member_name}: ${line}`)
     } catch (error) {
       try {

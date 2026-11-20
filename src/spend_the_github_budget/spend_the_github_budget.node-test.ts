@@ -22,27 +22,10 @@ import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_direc
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
-import {
-  A_FRESH_BUDGET,
-  BACKOFF_MAX_MS,
-  BACKOFF_MIN_MS,
-  GITHUB_BUDGET_PLACE,
-  THE_BUDGET_FILE,
-  THE_FLOOR,
-  keepTheClose,
-  keepTheHead,
-  namesTheWholeNumber,
-  readTheHeadOfAPackagesPullRequest,
-  readTheStateOfAPackagesIssue,
-  spendTheGithubBudget,
-  theBudgetIn,
-  theClosesOfTheWaits,
-  theHeadsOfTheWaits,
-  theNextBackoff,
-  theTextOf,
-  type TheBudget,
-  type TheGithubSpender,
-} from './spend_the_github_budget.ts'
+import { A_FRESH_BUDGET, BACKOFF_MAX_MS, BACKOFF_MIN_MS, GITHUB_BUDGET_PLACE, THE_BUDGET_FILE, keepTheClose, keepTheHead, namesTheWholeNumber, readTheHeadOfAPackagesPullRequest, readTheStateOfAPackagesIssue, spendTheGithubBudget, theBudgetIn, theClosesOfTheWaits, theHeadsOfTheWaits, theNextBackoff, theTextOf, type TheBudget, type TheGithubSpender } from './spend_the_github_budget.ts'
+import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
+/** The crew's default, as a declaration that names no block reads it (martha#931 B). */
+const THE_FLOOR = GITHUB_WHEN_UNNAMED.budget_floor
 
 /** The package the tests wait on. */
 const A_PACKAGE = 'macula-io/martha#143'
@@ -106,7 +89,7 @@ const aRunner = (
 const theReadsOf = (asked: readonly (readonly string[])[]): readonly (readonly string[])[] => asked.filter((args) => !asksWhatIsLeft(args))
 
 /** A spender over the place and the runner the test gives it. */
-const aSpender = (place: CrewPlace, clock: { now: () => number }, run: (args: readonly string[]) => Promise<ProcessOutcome>): TheGithubSpender => ({ place, clock, run })
+const aSpender = (place: CrewPlace, clock: { now: () => number }, run: (args: readonly string[]) => Promise<ProcessOutcome>): TheGithubSpender => ({ place, clock, run, floor: THE_FLOOR })
 
 /** The budget a test starts from: a window with plenty left, and the wait before a call over. GitHub resets its
  * allowance on the hour, which is longer than any wait a test moves its clock through. */

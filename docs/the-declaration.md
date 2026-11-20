@@ -22,6 +22,8 @@ page does not name.
 | `host` | no | The host a member runs on when the member names none. | `claude-code` |
 | `engine_endpoint` | no | Where an engine member's model is reached (below). | none; an engine member is refused at its start |
 | `thresholds` | no | When a row reads offline, when a member hands over, when a report is stale (below). | the values below |
+| `github` | no | How the crew spends its GitHub allowance (below). | the values below |
+| `transcripts` | no | How many launches' transcripts are kept, and how large (below). | the values below |
 
 ## `members[]`
 
@@ -94,3 +96,18 @@ Each field is optional. A field left out reads the value Martha used before it w
   "thresholds": { "offline_after_seconds": 30, "progress_stale_minutes": 30, "handover_percent": 70 }
 }
 ```
+
+## `github`
+
+| Field | What it holds | When left out |
+|---|---|---|
+| `budget_floor` | The calls GitHub says are left at or below which the crew makes no more until the window resets: a whole number, 0 or more. | 500 |
+
+## `transcripts`
+
+Martha keeps each ended launch's transcripts, redacted, so the owner can read what a member's session did.
+
+| Field | What it holds | When left out |
+|---|---|---|
+| `launches_kept` | How many launches' transcripts are kept, newest first; older launches are removed. A whole number, at least 1. | 64 |
+| `megabytes_kept` | The most one transcript, and one launch's transcripts together, may hold, in whole megabytes (at least 1). A file past it is kept as one line naming the bound. | 16 |
