@@ -58,6 +58,14 @@ export function theMarkersSaid(found: readonly AMarker[]): string {
   return found.length > FINDINGS_NAMED ? `${named} and ${String(found.length - FINDINGS_NAMED)} more` : named
 }
 
+/**
+ * The one notice verify_range and land_batch give beside their answer when a tree holds marker lines, or nothing when
+ * it holds none. A marker is a notice, never a refusal: the refusal cut took it so (martha#601).
+ */
+export function aConflictMarkerNotice(commit: string, found: readonly AMarker[]): string | undefined {
+  return found.length === 0 ? undefined : `the tree at ${commit} holds a committed conflict marker at ${theMarkersSaid(found)}.`
+}
+
 /** Every marker line in the tree at `commit` in the clone at `path`, or why git could not say. */
 export async function theMarkersAt(host: Pick<HostContract, 'processes'>, path: string, commit: string): Promise<Step<readonly AMarker[]>> {
   const candidates = await git(host, path, ['grep', '-I', '-l', '--full-name', '-E', AN_OPENING.source, commit, '--', ':(top)'])
