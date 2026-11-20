@@ -5,6 +5,7 @@
 // the launcher's own process, and nothing here acts on what it finds: a nudge says what it sees, and whoever reads it
 // decides. The tools slice (../a_crews_tools) keeps only the table that calls this.
 
+import { BUDGET_LINE_LABEL, theBudgetLineOf } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import { sameMemberName } from '../declare_crew/declare_crew.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { Processes, TheCrewFilesStores } from '../host_contract/host_contract.ts'
@@ -51,7 +52,16 @@ export interface SeeTheCrewAsked {
 export async function seeTheCrewOver(asked: SeeTheCrewAsked): Promise<{ readonly answer: string }> {
   const seen = seeTheCrew(asked.settings, asked.rows, asked.now)
   const nudges = await theNudgesFor(asked)
-  return { answer: JSON.stringify(thePaneAnsweredBy(seen, asked.settings.house_rules.dashboard, READER_BEAT_MS, nudges)) }
+  return { answer: JSON.stringify(thePaneAnsweredBy(seen, asked.settings.house_rules.dashboard, READER_BEAT_MS, [...theBudgetPart(asked), ...nudges])) }
+}
+
+/**
+ * The budget line the pane draws under the members (martha#990): the crew's newest weekly reading and the reviewer
+ * gauge, or nothing before any reading. A measurement for the owner; nothing is done by it.
+ */
+function theBudgetPart(asked: SeeTheCrewAsked): readonly string[] {
+  const line = theBudgetLineOf(asked.stores.crew, asked.settings.house_rules.review_model, asked.now)
+  return line === '' ? [] : [`${BUDGET_LINE_LABEL} ${line}`]
 }
 
 /**
