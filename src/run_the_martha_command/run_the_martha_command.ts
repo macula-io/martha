@@ -64,7 +64,7 @@ import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
-import { whyAnOwnersActIsRefusedInsideAMember, type AProcessAbove } from '../refuse_an_owner_act_from_inside_a_member/refuse_an_owner_act_from_inside_a_member.ts'
+import { isStillRefusedFromInsideAMember, whyAnOwnersActIsRefusedInsideAMember, type AProcessAbove } from '../refuse_an_owner_act_from_inside_a_member/refuse_an_owner_act_from_inside_a_member.ts'
 import { ancestorsUnder, PROC_ROOT } from '../linux_process_identity/process_identity_from_proc.ts'
 import { SYSTEM_TEMPORARY_DIRECTORY } from '../host_contract/host_contract.ts'
 import { launchRecordsUnder } from '../read_a_kernel_and_a_home/launch_records_under_a_state_root.ts'
@@ -126,17 +126,17 @@ function placesOf(io: CommandIo): Places | string {
   // team, is not a checkout, and the crew's state is keyed by its real path (crewKeyOf).
   const root = gitSays(io.cwd, 'rev-parse', '--show-toplevel') ?? io.cwd
   const state_root = stateRootOf(home, io.env['XDG_STATE_HOME'])
-  const state = openState(state_root, root)
+  const state = openState(state_root, root, tellOwnerOn(io))
   return 'refusal' in state ? state.refusal : { root, home, state }
 }
 
 /** The root of the release this command is part of: its package.json, and the pin that release carries. */
 const releaseTree = (): string => join(import.meta.dirname, '..', '..')
 
-/** Why this release may not launch below this machine's version floor, found from its own real path (martha#21). */
-function belowTheFloor(): string | undefined {
+/** What this machine's version floor says about this release, told in one line, found from its own real path (martha#21, martha#601). */
+function belowTheFloor(note: (line: string) => void): void {
   const record = floorRecordOf(realpathSync(releaseTree()))
-  return record === undefined ? undefined : launchBelowTheFloor(record, readTheRecord(record, (path) => readFileSync(path, 'utf8')), version())
+  if (record !== undefined) launchBelowTheFloor(record, readTheRecord(record, (path) => readFileSync(path, 'utf8')), version(), note)
 }
 
 /** The version of the release this command is part of. */
@@ -145,7 +145,11 @@ const version = (): string => releaseVersionOf(releaseTree(), (path) => readFile
 async function init(io: CommandIo, places: Places): Promise<number> {
   // The owner and the origin are both read here, where Martha's own git runs: the origin is what says whether the
   // checkout's path can prove a workspace layout (martha#611), and the declaration slice reads it as a value.
-  const declared = await declareSoloCrew({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, origin: gitSays(places.root, 'remote', 'get-url', 'origin') ?? null, state: places.state, documents, models: CLAUDE_CODE_MODELS, host: CLAUDE_CODE })
+  // Git may hold no name (martha#601): the login name is used and the line said, rather than martha init stopping.
+  const named = gitSays(places.root, 'config', 'user.name')
+  const owner = named ?? io.env['USER'] ?? io.env['LOGNAME'] ?? ''
+  if (named === undefined) tellOwnerOn(io)(`git holds no user.name, so the crew's owner is this login (${owner})`)
+  const declared = await declareSoloCrew({ root: places.root, owner: owner === '' ? null : owner, origin: gitSays(places.root, 'remote', 'get-url', 'origin') ?? null, state: places.state, documents, models: CLAUDE_CODE_MODELS, host: CLAUDE_CODE })
   if (!declared.declared) return refused(io, declared.refusal)
   io.out(`Declared a solo crew in ${declared.declaration}: ${declared.settings.members.map((member) => member.name).join(', ')}.`)
   io.out(declared.workspace)
@@ -165,7 +169,7 @@ async function approve(io: CommandIo, places: Places): Promise<number> {
  * turned the pane on. It reads the crew's rows and writes nothing.
  */
 async function todo(io: CommandIo, places: Places): Promise<number> {
-  const rows = crewRowsDirectory(places.state.state_root, places.root)
+  const rows = crewRowsDirectory(places.state.state_root, places.root, tellOwnerOn(io))
   if ('refusal' in rows) return refused(io, rows.refusal)
   const open = theOpenRows(await rowStreamsDirectory(rows.path).read(OWNER_TODO_STREAM))
   for (const line of theListForTheTerminal(open, Date.now())) io.out(line)
@@ -226,7 +230,7 @@ async function theFirstPromptTyped(io: CommandIo, places: Places, member: string
  */
 async function held(io: CommandIo, places: Places, member: string, args: readonly string[], first: Extract<MemberStarted, { started: true }>): Promise<number> {
   const launcher = launcherOf(io, places)
-  const crew = crewStateDirectory(places.state.state_root, places.root)
+  const crew = crewStateDirectory(places.state.state_root, places.root, tellOwnerOn(io))
   if ('refusal' in launcher || 'refusal' in crew) return exitOf(await first.stopped)
   const again = async (prompt: string | undefined): Promise<MemberStarted> => {
     const started = await startingTheMember(io, places, member, args, prompt)
@@ -243,9 +247,9 @@ async function held(io: CommandIo, places: Places, member: string, args: readonl
  * start` does, so the two verbs end the same way.
  */
 async function wake(io: CommandIo, places: Places, member: string): Promise<number> {
-  const crew = crewStateDirectory(places.state.state_root, places.root)
+  const crew = crewStateDirectory(places.state.state_root, places.root, tellOwnerOn(io))
   if ('refusal' in crew) return refused(io, crew.refusal)
-  const declaration = await theDeclarationsOf(places)
+  const declaration = await theDeclarationsOf(places, tellOwnerOn(io))
   if (typeof declaration === 'string') return refused(io, declaration)
   let running: MemberStarted | undefined
   const woken = await wakeAMember(
@@ -264,9 +268,9 @@ async function wake(io: CommandIo, places: Places, member: string): Promise<numb
 }
 
 /** The declaration as parking and waking read it; or why it could not be read. */
-async function theDeclarationsOf(places: Places): Promise<TheDeclaration | string> {
+async function theDeclarationsOf(places: Places, note: (line: string) => void): Promise<TheDeclaration | string> {
   try {
-    const settings = await declareCrew(documents, places.root, CLAUDE_CODE_MODELS)
+    const settings = await declareCrew(documents, places.root, CLAUDE_CODE_MODELS, note)
     return { members: settings.members.map((member) => ({ name: member.name, role: member.role })), mode: { may: settings.mode.may } }
   } catch (error) {
     return `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}`
@@ -317,10 +321,10 @@ function launcherOf(io: CommandIo, places: Places): ReturnType<typeof launcherPl
 async function crewsPlacesOf(io: CommandIo, places: Places): Promise<TheCrewsPlaces | string> {
   const launcher = launcherOf(io, places)
   if ('refusal' in launcher) return launcher.refusal
-  const crew = crewStateDirectory(places.state.state_root, places.root)
+  const crew = crewStateDirectory(places.state.state_root, places.root, tellOwnerOn(io))
   if ('refusal' in crew) return crew.refusal
   try {
-    return { launcher, crew: crew.path, settings: await declareCrew(documents, places.root, CLAUDE_CODE_MODELS) }
+    return { launcher, crew: crew.path, settings: await declareCrew(documents, places.root, CLAUDE_CODE_MODELS, tellOwnerOn(io)) }
   } catch (error) {
     return `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}`
   }
@@ -359,7 +363,7 @@ async function openTheCrew(io: CommandIo, places: Places, which: (settings: Crew
   if (!io.terminal.is_terminal) return refused(io, START_NEEDS_A_TERMINAL)
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
-  const place = stateSubdirectory(places.state, KITTY_PLACE)
+  const place = stateSubdirectory(places.state, KITTY_PLACE, tellOwnerOn(io))
   if ('refusal' in place) return refused(io, place.refusal)
   return openTheCrewInKitty(io, { root: places.root, members: crew.settings.members.filter((member) => which(crew.settings, member)).map((member) => member.name), isRunning: (member) => isRunning(crew, member), martha: THIS_MARTHA(), env: io.env, place: place.path, kittySays: kittySaysOnThisMachine, write: writeOwnerOnly, startKitty: startKittyDetached })
 }
@@ -458,7 +462,7 @@ async function changeTheCrew(io: CommandIo, places: Places, change: CrewChange):
   if ('refusal' in outcome) return refused(io, outcome.refusal)
   const unwritten = writeAChangedDeclaration(places.root, outcome)
   if (unwritten !== undefined) return refused(io, unwritten)
-  const ids = change.kind === ADD ? nodeIdsFor(places.state, [change.member]) : undefined
+  const ids = change.kind === ADD ? nodeIdsFor(places.state, [change.member], tellOwnerOn(io)) : undefined
   theChangeTold(change, outcome, THE_VOCABULARIES_OF_HOST).forEach(tellOwnerOn(io))
   return ids !== undefined && 'refusal' in ids ? refused(io, ids.refusal) : EXIT_DONE
 }
@@ -752,8 +756,8 @@ async function runAct(argv: readonly string[], io: CommandIo): Promise<number> {
 
 /**
  * The acts that need no place: a version, a shape the launcher runs, and an install, which must work with no checkout.
- * Every act but the version and the install is held to this machine's version floor first (martha#21): a release
- * below it still says what it is, and still puts the highest signed release back.
+ * Every act but the version and the install is told what this machine's version floor says about this release in one
+ * line, then goes ahead (martha#21, martha#601).
  */
 async function actOfPlaces(asked: Asked, io: CommandIo): Promise<number> {
   if (VERSION_WORDS.includes(asked.act)) {
@@ -761,8 +765,7 @@ async function actOfPlaces(asked: Asked, io: CommandIo): Promise<number> {
     return EXIT_DONE
   }
   if (asked.act === 'install') return install(io, asked.args)
-  const below = belowTheFloor()
-  if (below !== undefined) return refused(io, below)
+  belowTheFloor(tellOwnerOn(io))
   if (asked.act === 'run') return run(io, asked.args[0]!)
   const places = placesOf(io)
   return typeof places === 'string' ? refused(io, places) : actIn(asked, places, io)
@@ -832,6 +835,7 @@ const isAnOwnersOwnAct = (asked: Asked, act: ((io: CommandIo, places: Places, as
  * a refusal too, since what cannot be read cannot clear the act.
  */
 function theMemberThisRunsInside(io: CommandIo, places: Places, act: string): string | undefined {
+  if (!isStillRefusedFromInsideAMember(act)) return undefined
   const records = launchRecordsUnder(THE_PLACES_A_STATE_ROOT_KEEPS)(places.home, io.env['XDG_STATE_HOME'])
   if ('cannot_tell' in records) return `martha ${act} cannot tell whether it runs inside a member: ${records.cannot_tell}`
   return whyAnOwnersActIsRefusedInsideAMember({

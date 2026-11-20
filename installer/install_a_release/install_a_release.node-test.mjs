@@ -115,23 +115,30 @@ test('refused: an unsigned digest; with no version named the refusal says to nam
   nothingAtAll(w)
 })
 
-test('refused: a second digest for a version this machine holds', async (t) => {
+test('a second digest for a version this machine holds is installed with one line', async (t) => {
   const first = release({ version: '1.2.0' })
   const w = await world(t, [first])
   await w.run({ version: '1.2.0' })
   const second = release({ version: '1.2.0', entries: [...goodEntries(), { name: 'martha/extra', body: 'x' }] })
   const w2 = await serveRegistry([second])
   t.after(w2.close)
-  await refusedWith(w.run({ version: '1.2.0', base: w2.base, makeVerifier: sigstoreStandIn(new Map([[second.digest, { ref: 'refs/tags/v1.2.0' }]])) }),
-    /1\.2\.0 is installed as sha256-\S+ and the package now names sha256:\S+ for it; a version is published once/)
-  assert.equal(readlinkSync(w.places.current), join(w.places.releases, `1.2.0-${first.digest.replace(':', '-')}`))
+  const result = await w.run({ version: '1.2.0', base: w2.base, makeVerifier: sigstoreStandIn(new Map([[second.digest, { ref: 'refs/tags/v1.2.0' }]])) })
+  assert.equal(result.digest, second.digest)
+  assert.ok(w.lines.includes(`martha: 1.2.0 is installed as ${first.digest.replace(':', '-')} and this package names ${second.digest} for it; installing the bytes you named`))
+  const firstPlaced = join(w.places.releases, `1.2.0-${first.digest.replace(':', '-')}`)
+  const secondPlaced = join(w.places.releases, `1.2.0-${second.digest.replace(':', '-')}`)
+  assert.ok(existsSync(firstPlaced), 'the first release is still there')
+  assert.equal(readlinkSync(w.places.current), secondPlaced, 'the bytes named are now the ones in use')
 })
 
-test('the one downgrade rule: lower is refused, --downgrade needs the version named, and then installs it', async (t) => {
+test('the one downgrade rule: lower is installed with one line, --downgrade without a version takes the newest, and naming it installs it', async (t) => {
   const w = await world(t, [release({ version: '1.2.0' }), release({ version: '1.3.0' })])
   await w.run({ version: '1.3.0' })
-  await refusedWith(w.run({ version: '1.2.0' }), /1\.2\.0 is lower than the installed 1\.3\.0; refused\. To go back on purpose: martha-install 1\.2\.0 --downgrade/)
-  await refusedWith(w.run({ downgrade: true }), /--downgrade installs only the version you name/)
+  assert.equal((await w.run({ version: '1.2.0' })).version, '1.2.0')
+  assert.ok(w.lines.includes('martha: 1.2.0 is lower than the installed 1.3.0; installing it, as you named it'))
+  assert.match(readlinkSync(w.places.current), /1\.2\.0-sha256-/)
+  assert.equal((await w.run({ downgrade: true })).version, '1.3.0')
+  assert.ok(w.lines.includes('martha: --downgrade names no version, so the newest is installed'))
   assert.match(readlinkSync(w.places.current), /1\.3\.0-sha256-/)
   assert.equal((await w.run({ version: '1.2.0', downgrade: true })).version, '1.2.0')
   assert.match(readlinkSync(w.places.current), /1\.2\.0-sha256-/)

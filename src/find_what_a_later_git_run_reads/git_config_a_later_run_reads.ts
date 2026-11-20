@@ -13,11 +13,10 @@
 // Resolution is git's own: a relative value resolves against the top of the work
 // tree, except an include path, which resolves against the directory of the file
 // that holds it; `~/` expands from the home the guard was given; `%(prefix)` is a
-// path this module cannot place without asking git, so a value holding it is a
-// refusal rather than a guess. So is a variable or a command substitution with
-// nothing written before it (martha#192 r=2, r=3): the path is worked out when the
-// shell runs, so it is not in the file, and a rule that cannot read the path refuses
-// rather than passing it. One the owner cannot steer is let through: a positional or
+// path this module cannot place without asking git, so a value holding it names
+// nothing here. So does a variable or a command substitution with nothing written
+// before it (martha#192 r=2, r=3): the path is worked out when the shell runs, so it
+// is not in the file. One the owner cannot steer is let through: a positional or
 // special parameter (`$1`, `$@`, `$$`, …) is the owner's own argument or shell
 // state, and the alias `!f() { git checkout "$1"; }; f` is the standard way to write
 // an alias that takes one. Anything else the shell works out — another variable, a
@@ -30,12 +29,11 @@
 //
 // The parser models a measured subset of git's syntax — the section and key forms,
 // the comments, the continuation, the quoting and the escape set git itself takes —
-// and anything else is a refusal. A parser that disagrees with git without saying
-// so fails open, which is the one failure this guard cannot have: a config it
-// cannot read refuses every write into the checkout, with the file and line named.
+// and stops at anything else, keeping the paths it has read so far: a line it cannot
+// read names no place, and the write goes ahead.
 //
 // It reads bytes through the host contract and never runs git on a directory a
-// member chose: asking git about the member's config would be the thing refused.
+// member chose.
 
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 
@@ -65,11 +63,9 @@ export interface ConfigNamedPlace {
   readonly why: string
 }
 
-/** What the configuration of a checkout's git runs came to: the paths it names inside the checkout, or a refusal. */
+/** What the configuration of a checkout's git runs came to: the paths it names inside the checkout. */
 export interface WhatALaterGitRunReads {
   readonly places: readonly ConfigNamedPlace[]
-  /** A config the parser could not read: every write into the checkout is refused while it stands. */
-  readonly refusal?: string
 }
 
 /** One `key = value` a config file holds, with where it was read. */
@@ -83,13 +79,14 @@ export interface ConfigEntry {
   readonly value: string
 }
 
-/** What reading one config file came to. */
-export type ConfigRead = { readonly kind: 'entries'; readonly entries: readonly ConfigEntry[] } | { readonly kind: 'refused'; readonly refusal: string }
+/** What reading one config file came to: the entries git reads there. */
+export interface ConfigRead {
+  readonly kind: 'entries'
+  readonly entries: readonly ConfigEntry[]
+}
 
 /**
- * Every path the configuration names inside the checkout at `top`, or the refusal
- * that stands for the whole checkout when a file the reader must read cannot be
- * read as git reads it (martha#192).
+ * Every path the configuration names inside the checkout at `top` (martha#192).
  */
 export function whatALaterGitRunReads(
   top: string,
@@ -101,13 +98,9 @@ export function whatALaterGitRunReads(
 ): WhatALaterGitRunReads {
   const places: ConfigNamedPlace[] = []
   const seen = new Set<string>()
-  const reading = { refusal: undefined as string | undefined }
 
   const files = [...configFilesOf(git_dirs, host), ...owner_config_files]
-  for (const file of files) {
-    readOne(file, top, home, places, seen, hop_cap, reading, host)
-    if (reading.refusal !== undefined) return { places: [], refusal: reading.refusal }
-  }
+  for (const file of files) readOne(file, top, home, places, seen, hop_cap, host)
   return { places }
 }
 
@@ -130,13 +123,11 @@ function configFilesOf(git_dirs: readonly string[], host: LaunchHost): string[] 
 /**
  * Whether the git directory's config turns `extensions.worktreeConfig` on, read as
  * git reads a boolean: `true`, `yes` and `on` in any case, a key with no value, and
- * any number but zero (r=2, R2). A config this cannot be read from, and a value git
- * itself would refuse as no boolean, are taken as on: the second file is read rather
- * than skipped, which is the safe direction.
+ * any number but zero (r=2, R2). A value git itself would refuse as no boolean is
+ * taken as on: the second file is read rather than skipped.
  */
 function worktreeConfigIsOn(file: string, host: LaunchHost): boolean {
   const read = entriesIn(file, host)
-  if (read.kind === 'refused') return true
   return read.entries.some((entry) => entry.key === WORKTREE_CONFIG_KEY && !isAGitFalse(entry.value))
 }
 
@@ -155,35 +146,20 @@ function readOne(
   places: ConfigNamedPlace[],
   seen: Set<string>,
   hops_left: number,
-  reading: { refusal: string | undefined },
   host: LaunchHost,
 ): void {
-  if (reading.refusal !== undefined || seen.has(file)) return
+  if (seen.has(file)) return
   seen.add(file)
   const read = entriesIn(file, host)
-  if (read.kind === 'refused') {
-    reading.refusal = read.refusal
-    return
-  }
-  for (const entry of read.entries) {
-    if (reading.refusal !== undefined) return
-    collectFrom(entry, top, home, places, seen, hops_left, reading, host)
-  }
+  for (const entry of read.entries) collectFrom(entry, top, home, places, seen, hops_left, host)
 }
 
 /** What one entry adds: its paths, then the files it includes, read as config in their turn. */
-function collectFrom(entry: ConfigEntry, top: string, home: string, places: ConfigNamedPlace[], seen: Set<string>, hops_left: number, reading: { refusal: string | undefined }, host: LaunchHost): void {
+function collectFrom(entry: ConfigEntry, top: string, home: string, places: ConfigNamedPlace[], seen: Set<string>, hops_left: number, host: LaunchHost): void {
   const named = placeOfEntry(entry, top, home, host)
-  if (named.kind === 'refused') {
-    reading.refusal = named.refusal
-    return
-  }
-  if (isAnInclude(entry) && hops_left <= 0) {
-    reading.refusal = `${entry.file}:${entry.line} includes ${entry.value}, one hop past the includes this guard follows (the cap the link rule uses), so which paths a later git run of the owner's reads cannot be told: a member does not write into that checkout while it stands (martha#192)`
-    return
-  }
   places.push(...named.places)
-  for (const target of named.includes) readOne(target, top, home, places, seen, hops_left - 1, reading, host)
+  if (hops_left <= 0) return
+  for (const target of named.includes) readOne(target, top, home, places, seen, hops_left - 1, host)
 }
 
 /** Whether the entry is an include, whose value is a path of more config rather than a word of a command. */
@@ -193,52 +169,42 @@ function isAnInclude(entry: ConfigEntry): boolean {
 }
 
 /** What one entry names: the places it names inside the checkout, and the config files it includes. */
-function placeOfEntry(entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[]; readonly includes: readonly string[] } | { readonly kind: 'refused'; readonly refusal: string } {
+function placeOfEntry(entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly places: readonly ConfigNamedPlace[]; readonly includes: readonly string[] } {
   const places: ConfigNamedPlace[] = []
   const includes: string[] = []
-  const read = wordsTakenByAShell(withoutTheSignIn(entry.value))
-  if (read.kind === 'pastTheCap') return { kind: 'refused', refusal: pastTheCapIn(entry) }
-  for (const candidate of candidatesIn(entry, read.words)) {
+  const words = wordsTakenByAShell(withoutTheSignIn(entry.value))
+  for (const candidate of candidatesIn(entry, words)) {
     const one = oneCandidate(candidate, entry, top, home, host)
-    if (one.kind === 'refused') return one
+    if (one === undefined) continue
     if (isAnInclude(entry)) includes.push(one.path)
     if (one.inside) places.push({ what: one.path, why: whyTheValueIsRefused(entry) })
   }
-  const computed = computedPlacesIn(entry, read.words, top, home, host)
-  if (computed.kind === 'refused') return computed
-  places.push(...computed.places)
-  return { kind: 'places', places, includes }
+  places.push(...computedPlacesIn(entry, words, top, home, host))
+  return { places, includes }
 }
 
 /**
- * The folders a value's shell words work a path out in, and the refusal that stands
- * when nothing is written before one of them (martha#192 r=3, r=4). A word names one
- * name in the folder written before the character the shell resolves, so that folder —
- * and, when the folder holds the checkout rather than standing inside it, the
- * checkout with it — is what a member would have to write into to steer the word.
- * A word with nothing written before it (`$HOME/x`, `$(dirname x)/…`, `*.sh`) names
- * a thing the guard cannot place at all, and refusing every write into that checkout
- * is the direction that cannot fail open.
+ * The folders a value's shell words work a path out in (martha#192 r=3, r=4). A word
+ * names one name in the folder written before the character the shell resolves, so
+ * that folder — and, when the folder holds the checkout rather than standing inside
+ * it, the checkout with it — is what a member would have to write into to steer the
+ * word. A word with nothing written before it (`$HOME/x`, `$(dirname x)/…`, `*.sh`)
+ * names a thing the guard cannot place at all.
  *
  * The words are those of every shell the value reaches: the outer one, and each line one
  * shell hands the next (r=4, r=5) — a glob there names its folder as a glob at the outer
  * level does.
  */
-function computedPlacesIn(entry: ConfigEntry, words: readonly ShellWord[], top: string, home: string, host: LaunchHost): { readonly kind: 'places'; readonly places: readonly ConfigNamedPlace[] } | { readonly kind: 'refused'; readonly refusal: string } {
+function computedPlacesIn(entry: ConfigEntry, words: readonly ShellWord[], top: string, home: string, host: LaunchHost): readonly ConfigNamedPlace[] {
   const places: ConfigNamedPlace[] = []
   for (const word of words) {
     if (word.computed === undefined) continue
-    const { writtenBefore, what } = word.computed
-    if (writtenBefore === '') {
-      return {
-        kind: 'refused',
-        refusal: `${entry.file}:${entry.line} names ${entry.value} as ${entry.key}, which holds ${what} with nothing written before it: a path worked out when the shell runs is one this guard cannot follow, so a member does not write into that checkout while it stands (martha#192)`,
-      }
-    }
+    const { writtenBefore } = word.computed
+    if (writtenBefore === '') continue
     const folder = resolvedPathOf(folderWrittenBefore(writtenBefore), entry, top, home, host)
     if (reachesTheTree(folder, top)) places.push({ what: folder, why: whyTheValueIsRefused(entry) })
   }
-  return { kind: 'places', places }
+  return places
 }
 
 /**
@@ -263,16 +229,11 @@ function reachesTheTree(folder: string, top: string): boolean {
   return insideTheTree(folder, top) || insideTheTree(top, folder)
 }
 
-/** One word of a value, or the value whole: where it lands, and whether that is inside the checkout. */
-function oneCandidate(candidate: string, entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly kind: 'path'; readonly path: string; readonly inside: boolean } | { readonly kind: 'refused'; readonly refusal: string } {
-  if (candidate.includes('%(prefix)')) {
-    return {
-      kind: 'refused',
-      refusal: `${entry.file}:${entry.line} names ${entry.value} under ${entry.key}, and %(prefix) is a path this guard cannot place without asking git about a directory a member chose: a member does not write into that checkout while it stands (martha#192)`,
-    }
-  }
+/** One word of a value, or the value whole: where it lands, and whether that is inside the checkout; nothing when it names no place here. */
+function oneCandidate(candidate: string, entry: ConfigEntry, top: string, home: string, host: LaunchHost): { readonly path: string; readonly inside: boolean } | undefined {
+  if (candidate.includes('%(prefix)')) return undefined
   const path = resolvedPathOf(candidate, entry, top, home, host)
-  return { kind: 'path', path, inside: insideTheTree(path, top) }
+  return { path, inside: insideTheTree(path, top) }
 }
 
 /** Why a value's path is refused, in the guard's words: the file and line, and the key and value written there. */
@@ -308,7 +269,7 @@ const SHELL_QUOTES = '\'"'
  * How many shells deep one value's words are read (martha#192 r=5). A word handed to
  * `sh -c` is a line a second shell reads, and a word of that line is again a line for
  * a third, so the reading repeats until no new word appears. Past this many readings
- * the guard refuses the whole checkout rather than read a line it cannot vouch for.
+ * the guard names only the words it has read.
  */
 export const SHELL_DEPTH_CAP = 8
 
@@ -324,8 +285,7 @@ export const SHELL_DEPTH_CAP = 8
  * A positional or special parameter is not one of those: `$1` .. `$9`, `$@`, `$*`,
  * `$#`, `$?`, `$$`, `$!`, `$-` and `$0` are the owner's own argument or shell state,
  * which a member cannot write (an alias taking `"$1"` is the standard way to spell
- * one, and refusing it refused every write into every checkout). A `$` or a glob
- * inside single quotes is a shell's literal text, not an expansion.
+ * one). A `$` or a glob inside single quotes is a shell's literal text, not an expansion.
  */
 function shellWordsIn(value: string): ShellWord[] {
   const words: ShellWord[] = []
@@ -517,10 +477,7 @@ function upToMatchingParen(value: string, at: number): string {
  * joining and its globs, variables and substitutions marking the folder written before
  * them. A line can hide the next one the same way (`sh -c "sh -c 'sh tools/*.sh'"`), so
  * the reading repeats until no new word appears, and `SHELL_DEPTH_CAP` bounds how many
- * times: a value that outlasts it is one whose next shell the guard cannot vouch for,
- * and `pastTheCap` says so rather than stopping short. A rule that names too much
- * refuses too much, which is the direction this guard takes; one that names too little
- * fails open.
+ * times: a value that outlasts it names no more than the shells the guard read.
  *
  * A word is new when its whole self is new, and not when its text is (r=6): a text a
  * shell reads literally is a glob to the next one, so `sh -c 'tools/*.sh'` is two words
@@ -528,28 +485,20 @@ function upToMatchingParen(value: string, at: number): string {
  * name in `tools/`. Remembered by its text alone, the second would be dropped as the
  * first, and the folder it names would go unprotected.
  */
-function wordsTakenByAShell(value: string): WordsAValueIsReadAs {
+function wordsTakenByAShell(value: string): readonly ShellWord[] {
   const words = new Map<string, ShellWord>()
   let fresh = shellWordsIn(value)
   for (let depth = 0; fresh.length > 0; depth += 1) {
-    if (depth >= SHELL_DEPTH_CAP) return { kind: 'pastTheCap' }
+    if (depth >= SHELL_DEPTH_CAP) break
     for (const word of fresh) words.set(wholeOf(word), word)
     fresh = fresh.flatMap((word) => shellWordsIn(word.text)).filter((word) => !words.has(wholeOf(word)))
   }
-  return { kind: 'words', words: [...words.values()] }
+  return [...words.values()]
 }
 
 /** A word as the reading remembers it: what it says and what its shell works out of it, which is what makes it that word. */
 function wholeOf(word: ShellWord): string {
   return JSON.stringify([word.text, word.computed?.writtenBefore ?? null, word.computed?.what ?? null])
-}
-
-/** What reading a value through the shells it reaches came to: every word it runs, or the cap run out. */
-type WordsAValueIsReadAs = { readonly kind: 'words'; readonly words: readonly ShellWord[] } | { readonly kind: 'pastTheCap' }
-
-/** The refusal for a value nested deeper than the shells this guard reads through (martha#192 r=5). */
-function pastTheCapIn(entry: ConfigEntry): string {
-  return `${entry.file}:${entry.line} names ${entry.value} as ${entry.key}, one shell past the ${SHELL_DEPTH_CAP} shells a value is read through, so what the next one runs cannot be told: a member does not write into that checkout while it stands (martha#192)`
 }
 
 /**
@@ -570,7 +519,7 @@ function pastTheCapIn(entry: ConfigEntry): string {
  * its own words, and `tools/h.sh` is what runs, however that line spells it — a glob,
  * a quote or a substitution there is the shell's that reads it, not text. The words
  * come from the caller, which has already read the value through every shell it
- * reaches and refused it when it outlasts `SHELL_DEPTH_CAP`.
+ * reaches, up to `SHELL_DEPTH_CAP`.
  */
 function candidatesIn(entry: ConfigEntry, words: readonly ShellWord[]): string[] {
   const whole = entry.value
@@ -633,9 +582,8 @@ function isGitSpace(letter: string): boolean {
 }
 
 /**
- * The entries one config file holds, read as git reads them, or the refusal that
- * stands for every write into the checkout when it holds a form this does not model
- * (martha#192). A file that is not there holds nothing.
+ * The entries one config file holds, read as git reads them (martha#192). A file that
+ * is not there, or cannot be read, holds nothing.
  */
 export function entriesIn(file: string, host: LaunchHost): ConfigRead {
   let bytes: Buffer
@@ -644,16 +592,16 @@ export function entriesIn(file: string, host: LaunchHost): ConfigRead {
     if (kind === 'absent') return { kind: 'entries', entries: [] }
     bytes = Buffer.from(host.stores.files.bytesOf(file))
   } catch {
-    return { kind: 'refused', refusal: `${file} cannot be read, so which paths a later git run of the owner's takes from it cannot be told: a member does not write into that checkout while it stands (martha#192)` }
+    return { kind: 'entries', entries: [] }
   }
   return entriesInText(file, bytes.toString('utf8'))
 }
 
 /**
- * The entries a config text holds, or the refusal naming the line this does not
- * model. The lines are git's own: a blank line and a comment are skipped whole, and
- * a backslash continues a value alone — a comment continues nothing, and the key on
- * the line after it is git's to read (martha#192).
+ * The entries a config text holds. The lines are git's own: a blank line and a comment
+ * are skipped whole, and a backslash continues a value alone — a comment continues
+ * nothing, and the key on the line after it is git's to read (martha#192). Reading
+ * stops at the first line this does not model, keeping the entries before it.
  */
 export function entriesInText(file: string, text: string): ConfigRead {
   const entries: ConfigEntry[] = []
@@ -662,7 +610,7 @@ export function entriesInText(file: string, text: string): ConfigRead {
   let at = 0
   while (at < lines.length) {
     const read = lineAt(file, lines, at, section)
-    if (read.kind === 'refused') return read
+    if (read.kind === 'stop') break
     if (read.kind === 'section') section = read.section
     if (read.kind === 'entry') {
       entries.push(read.entry)
@@ -673,12 +621,12 @@ export function entriesInText(file: string, text: string): ConfigRead {
   return { kind: 'entries', entries }
 }
 
-/** One line of a config: a section header, an entry, a line to skip, or the refusal, and where reading goes next. */
+/** One line of a config: a section header, an entry, a line to skip, or the end of what this models, and where reading goes next. */
 type ALineRead =
   | { readonly kind: 'section'; readonly section: string; readonly next: number }
   | { readonly kind: 'entry'; readonly entry: ConfigEntry; readonly next: number; readonly opened: string | undefined }
   | { readonly kind: 'skip'; readonly next: number }
-  | { readonly kind: 'refused'; readonly refusal: string }
+  | { readonly kind: 'stop' }
 
 /** What one line of a config holds, and where the line after it is. */
 function lineAt(file: string, lines: readonly string[], at: number, section: string): ALineRead {
@@ -687,14 +635,14 @@ function lineAt(file: string, lines: readonly string[], at: number, section: str
   const next = at + 1
   if (line === '' || isAComment(line)) return { kind: 'skip', next }
   if (line.startsWith('[')) return headerLine(file, line, number, lines, next)
-  if (section === '') return { kind: 'refused', refusal: `${file}:${number} holds a key before any section, which no git run takes as configuration: a member does not write into that checkout while it stands (martha#192)` }
+  if (section === '') return { kind: 'stop' }
   return entryLine(file, line, section, number, lines, next, undefined)
 }
 
 /** A line that opens sections, and the entry git reads on it when anything follows the last one. */
 function headerLine(file: string, line: string, number: number, lines: readonly string[], next: number): ALineRead {
   const opened = headersOn(line)
-  if (opened === undefined) return { kind: 'refused', refusal: unmodelled(file, number) }
+  if (opened === undefined) return { kind: 'stop' }
   const section = opened.sections[opened.sections.length - 1]!
   if (opened.rest === '' || isAComment(opened.rest)) return { kind: 'section', section, next }
   return entryLine(file, opened.rest, section, number, lines, next, section)
@@ -703,9 +651,9 @@ function headerLine(file: string, line: string, number: number, lines: readonly 
 /** A key and its value, read from the text after a section's name whether it stands on its own line or the header's, and the section the line opened. */
 function entryLine(file: string, text: string, section: string, number: number, lines: readonly string[], next: number, opened: string | undefined): ALineRead {
   const split = keyAndValue(text)
-  if (!KEY.test(split.key)) return { kind: 'refused', refusal: unmodelled(file, number) }
+  if (!KEY.test(split.key)) return { kind: 'stop' }
   const value = valueFrom(split.value, lines, next)
-  if (value.kind === 'refused') return { kind: 'refused', refusal: `${file}:${number} ${value.refusal}: a member does not write into that checkout while it stands (martha#192)` }
+  if (value.kind === 'stop') return { kind: 'stop' }
   return { kind: 'entry', entry: { file, line: number, key: `${section}.${split.key.toLowerCase()}`, value: value.text }, next: next + value.taken, opened }
 }
 
@@ -714,11 +662,6 @@ function withoutLeadingSpace(line: string): string {
   let at = 0
   while (at < line.length && isGitSpace(line[at]!)) at += 1
   return line.slice(at)
-}
-
-/** The line a refusal is about, in the guard's words. */
-function unmodelled(file: string, at: number): string {
-  return `${file}:${at} holds a form this guard does not model as git configuration, so which paths a later git run of the owner's takes from it cannot be told: a member does not write into that checkout while it stands (martha#192)`
 }
 
 /** A section header's key, and the text after it on the same line, or undefined when the line opens no header. */
@@ -767,8 +710,8 @@ interface ValueState {
   readonly continuing: boolean
 }
 
-/** What reading a value came to: the letters git keeps, and how many of the following lines it took. */
-type AValueRead = { readonly kind: 'text'; readonly text: string; readonly taken: number } | { readonly kind: 'refused'; readonly refusal: string }
+/** What reading a value came to: the letters git keeps and how many of the following lines it took, or the end of what this models. */
+type AValueRead = { readonly kind: 'text'; readonly text: string; readonly taken: number } | { readonly kind: 'stop' }
 
 /**
  * git's own reading of a value (`parse_value`, git 2.56.0): the double quotes
@@ -797,9 +740,9 @@ function valueFrom(first: string, lines: readonly string[], after: number): AVal
   }
 }
 
-/** What reading a value came to next: the refusal, the value ended, or where the reading stands one letter on. */
+/** What reading a value came to next: the end of what this models, the value ended, or where the reading stands one letter on. */
 type ANextRead =
-  | { readonly kind: 'refused'; readonly refusal: string }
+  | { readonly kind: 'stop' }
   | { readonly kind: 'text'; readonly text: string; readonly taken: number }
   | { readonly kind: 'read-on'; readonly state: ValueState; readonly piece: string; readonly column: number; readonly taken: number }
 
@@ -807,68 +750,69 @@ type ANextRead =
 function nextOutcome(state: ValueState, piece: string, column: number, taken: number, lines: readonly string[], after: number): ANextRead {
   if (column >= piece.length) return afterTheLine(state, taken, lines[after + taken])
   const stepped = afterTheLetter(state, piece, column)
-  if ('refusal' in stepped) return { kind: 'refused', refusal: stepped.refusal }
+  if (stepped.kind === 'stop') return { kind: 'stop' }
   return { kind: 'read-on', state: stepped.state, piece, column: stepped.column, taken }
 }
 
-/** What the end of a value's line does: continue onto the line after it, end the value, or the refusal. */
+/** What the end of a value's line does: continue onto the line after it, end the value, or stop. */
 function afterTheLine(state: ValueState, taken: number, next: string | undefined): ANextRead {
   const ended = lineEnded(state, next)
-  if (ended.kind === 'refused') return { kind: 'refused', refusal: ended.refusal }
+  if (ended.kind === 'stop') return { kind: 'stop' }
   if (ended.kind === 'done') return { kind: 'text', text: state.text, taken }
   return { kind: 'read-on', state: ended.state, piece: ended.piece, column: 0, taken: taken + 1 }
 }
 
-/** Where the reading stands after the letter at `column`, or the refusal for an escape git itself refuses. */
-function afterTheLetter(state: ValueState, piece: string, column: number): { readonly state: ValueState; readonly column: number } | { readonly refusal: string } {
+/** Where the reading stands after the letter at `column`, or stops for an escape git itself refuses. */
+function afterTheLetter(state: ValueState, piece: string, column: number): { readonly kind: 'letter'; readonly state: ValueState; readonly column: number } | { readonly kind: 'stop' } {
   const step = letterTaken(state, piece[column]!, column + 1 < piece.length ? piece[column + 1] : undefined)
-  if ('refusal' in step) return step
-  return { state: step.state, column: column + 1 + step.consumed }
+  if (step.kind === 'stop') return step
+  return { kind: 'letter', state: step.state, column: column + 1 + step.consumed }
 }
 
 /** What one letter did: the state after it, and how many letters after it it took with it. */
 interface AStep {
+  readonly kind: 'step'
   readonly state: ValueState
   readonly consumed: number
 }
 
 /**
  * What one letter of a value does: the state after it and the letters after it it
- * took with it, or the refusal for an escape git itself refuses.
+ * took with it, or stops for an escape git itself refuses.
  */
-function letterTaken(state: ValueState, letter: string, next: string | undefined): AStep | { readonly refusal: string } {
-  if (state.comment) return { state, consumed: 0 }
+function letterTaken(state: ValueState, letter: string, next: string | undefined): AStep | { readonly kind: 'stop' } {
+  if (state.comment) return { kind: 'step', state, consumed: 0 }
   if (state.quoted) return kept(state, letter, next)
-  if (isGitSpace(letter)) return { state: { ...state, pending: state.text === '' ? '' : `${state.pending}${letter}` }, consumed: 0 }
-  if (letter === '#' || letter === ';') return { state: { ...state, comment: true }, consumed: 0 }
+  if (isGitSpace(letter)) return { kind: 'step', state: { ...state, pending: state.text === '' ? '' : `${state.pending}${letter}` }, consumed: 0 }
+  if (letter === '#' || letter === ';') return { kind: 'step', state: { ...state, comment: true }, consumed: 0 }
   return kept(state, letter, next)
 }
 
 /** A letter git keeps as written, or the two that are not: a quote, and an escape. */
-function kept(state: ValueState, letter: string, next: string | undefined): AStep | { readonly refusal: string } {
-  if (letter === '"') return { state: { ...state, quoted: !state.quoted }, consumed: 0 }
-  if (letter !== '\\') return { state: { ...state, text: `${state.text}${state.pending}${letter}`, pending: '' }, consumed: 0 }
+function kept(state: ValueState, letter: string, next: string | undefined): AStep | { readonly kind: 'stop' } {
+  if (letter === '"') return { kind: 'step', state: { ...state, quoted: !state.quoted }, consumed: 0 }
+  if (letter !== '\\') return { kind: 'step', state: { ...state, text: `${state.text}${state.pending}${letter}`, pending: '' }, consumed: 0 }
   // git empties its waiting whitespace before it reads an escape, so `hooksPath = hk \`
   // is the folder `hk ` and not `hk` (measured at a continuation, and at the end of a
   // file): the space is before the backslash and belongs to the value.
   const flushed = { ...state, text: `${state.text}${state.pending}`, pending: '' }
-  return next === undefined ? { state: { ...flushed, continuing: true }, consumed: 0 } : escapeTaken(flushed, next)
+  return next === undefined ? { kind: 'step', state: { ...flushed, continuing: true }, consumed: 0 } : escapeTaken(flushed, next)
 }
 
-/** `\x` as git resolves it, with the whitespace before it kept, or the refusal for an escape git itself refuses. */
-function escapeTaken(state: ValueState, next: string): AStep | { readonly refusal: string } {
+/** `\x` as git resolves it, with the whitespace before it kept, or stops for an escape git itself refuses. */
+function escapeTaken(state: ValueState, next: string): AStep | { readonly kind: 'stop' } {
   const resolved = ESCAPES[next]
-  if (resolved === undefined) return { refusal: `holds the escape \\${next}, which git itself refuses` }
-  return { state: { ...state, text: `${state.text}${state.pending}${resolved}`, pending: '' }, consumed: 1 }
+  if (resolved === undefined) return { kind: 'stop' }
+  return { kind: 'step', state: { ...state, text: `${state.text}${state.pending}${resolved}`, pending: '' }, consumed: 1 }
 }
 
 /**
  * What the end of a line does: continue onto the line after it, end the value, or
- * the refusal for a quote git itself refuses to leave open at a line's end.
+ * stops for a quote git itself refuses to leave open at a line's end.
  */
-function lineEnded(state: ValueState, next: string | undefined): { readonly kind: 'refused'; readonly refusal: string } | { readonly kind: 'done' } | { readonly kind: 'continue'; readonly state: ValueState; readonly piece: string } {
+function lineEnded(state: ValueState, next: string | undefined): { readonly kind: 'stop' } | { readonly kind: 'done' } | { readonly kind: 'continue'; readonly state: ValueState; readonly piece: string } {
   if (state.continuing) return next === undefined ? { kind: 'done' } : { kind: 'continue', state: { ...state, continuing: false }, piece: next }
-  if (state.quoted) return { kind: 'refused', refusal: 'holds an unterminated quote, which git itself refuses' }
+  if (state.quoted) return { kind: 'stop' }
   return { kind: 'done' }
 }
 

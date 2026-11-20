@@ -1,18 +1,20 @@
-// What the workspace's layout refuses of a call (martha#562, port-map step 9).
+// What the workspace's layout refuses of a call, and what it only notices (martha#562, port-map step 9, martha#601).
 //
-// The claims this file pins are the slice's. A clone stays on its default branch, so a call that would move one is
-// refused where it stands, a call that only reads, or works in a worktree, is not, and a call that puts a drifted clone
-// back on that branch is not either. Another member's worktree or branch is theirs, in every shape a call can reach one
-// — the delete, the move, the worktree removal and the worktree's own move and prune, the pruning push, the deleting
-// push and the raw ref update — however the worktree's path is spelled, and a member's own branch stays deletable, a
-// `main` and a `feature/x` belong to nobody and are not touched by the rule. A call is judged where its line leaves the
-// shell, and where the reader cannot tell, it is judged nowhere rather than somewhere it is not. The last claim is the
-// one that keeps the rule honest: a place is read with a separator after it, so a path that merely starts with the same
-// letters is another place. One push is refused whoever makes it (martha#925): a push whose target is the default branch
-// git names, in every shape a refspec writes it; any other target passes, and so does every push where git names none.
+// The claims this file pins are the slice's. A clone stays on its default branch, so a call that would move one runs as
+// asked with one line saying where the work belongs, a call that only reads, or works in a worktree, says nothing, and a
+// call that puts a drifted clone back on that branch says nothing either. Another member's worktree or branch is theirs,
+// in every shape a call can reach one — the delete, the move, the worktree removal and the worktree's own move and
+// prune, the pruning push, the deleting push and the raw ref update — however the worktree's path is spelled, and a
+// member's own branch stays deletable, a `main` and a `feature/x` belong to nobody and are not touched by the rule. A
+// call is judged where its line leaves the shell, and where the reader cannot tell, it is judged nowhere rather than
+// somewhere it is not. The last claim is the one that keeps the rule honest: a place is read with a separator after it,
+// so a path that merely starts with the same letters is another place. One push is refused whoever makes it
+// (martha#925): a push whose target is the default branch git names, in every shape a refspec writes it; any other
+// target passes, and so does every push where git names none.
 
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import process from 'node:process'
 import { test } from 'node:test'
 
 import { readTheGitCallsInAShellLine } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
@@ -52,9 +54,9 @@ const FACTS: TheFacts = {
   ],
 }
 
-/** A refusal as a shell call meets it, read from the line the way the relay reads it. */
-const refused = (line: string, directory: string | null, member = 'Hygiea', facts: TheFacts = FACTS): string | undefined =>
-  refuseACallInTheWorkspace({ calls: readTheGitCallsInAShellLine(line, { directory }), workspace: WORKSPACE, member, facts })
+/** A refusal as a shell call meets it, read from the line the way the relay reads it, with the sink the notice goes through. */
+const refused = (line: string, directory: string | null, member = 'Hygiea', facts: TheFacts = FACTS, note: (line: string) => void = () => {}): string | undefined =>
+  refuseACallInTheWorkspace({ calls: readTheGitCallsInAShellLine(line, { directory }), workspace: WORKSPACE, member, facts }, note)
 
 /** A line is refused, and its words say why. */
 const refusedWith = (line: string, directory: string | null, member: string, says: RegExp): void => {
@@ -66,6 +68,22 @@ const refusedWith = (line: string, directory: string | null, member: string, say
 // A crew declared at a workspace, as `martha up` reads it (martha#958): a root the project holds, and no house rules.
 const A_PROJECT_ROOT = '/martha-project'
 const DECLARED_AT = join(A_PROJECT_ROOT, DECLARATION_DIRECTORY, DECLARATION_FILE)
+
+/** The answer, and everything written to the process's own error output while the call is judged (martha#601). */
+const theNoticeWhile = (act: (note: (line: string) => void) => string | undefined): { readonly answer: string | undefined; readonly notice: string } => {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: act((line) => void process.stderr.write(`${line}\n`)), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
+}
+
 
 /** The team a reading test declares: two builders and a lead, no act named, so every act stays the owner's. */
 const aTeam = (extra: Readonly<Record<string, unknown>>): unknown => ({
@@ -108,34 +126,52 @@ test('the places a crew names turn the guard on, whichever block named them (#95
 test('a crew that named no places is guarded by nothing, and one that named them is guarded by its rules (#958)', async () => {
   assert.equal(theWorkspaceTheCrewDeclared(await declared({})), undefined)
   const workspace = theWorkspaceTheCrewDeclared(await declared({ workspace: { root: 'projects' } }))!
-  const push = (line: string) =>
-    refuseACallInTheWorkspace({ calls: readTheGitCallsInAShellLine(line, { directory: join(workspace.clones, 'acme', 'widget') }), workspace, member: 'Hygiea', facts: FACTS })
-  assert.match(push('git push origin main') ?? '', /default branch/, 'the push rule holds in a crew declared this way')
-  assert.match(push('git checkout -b mine') ?? '', /a clone stays on its default branch/)
+  const judged = (line: string, note?: (line: string) => void) =>
+    refuseACallInTheWorkspace({ calls: readTheGitCallsInAShellLine(line, { directory: join(workspace.clones, 'acme', 'widget') }), workspace, member: 'Hygiea', facts: FACTS }, note)
+  assert.match(judged('git push origin main') ?? '', /default branch/, 'the push rule refuses in a crew declared this way')
+  // The switch rule is the notice martha#601 made it: what this test pins is that the rules are read at all here.
+  const { answer, notice } = theNoticeWhile((note) => judged('git checkout -b mine', note))
+  assert.equal(answer, undefined)
+  assert.match(notice, /a clone stays on its default branch/, 'a crew declared this way is judged, and its rules speak')
 })
 
 // --- a clone stays on its default branch --------------------------------------------
 
-test('a call that moves a clone off its default branch is refused, in every shape it is written in', () => {
+test('#601: a call that moves a clone off its default branch runs as asked, in every shape it is written in', () => {
   const inAClone = `${CLONES}/org/repo`
   for (const line of ['git checkout -b mine', 'git checkout -B mine', 'git checkout --orphan mine', 'git switch -c mine', 'git switch -C mine', 'git branch mine']) {
-    refusedWith(line, inAClone, 'Hygiea', /a clone stays on its default branch/)
+    const { answer, notice } = theNoticeWhile((note) => refused(line, inAClone, 'Hygiea', undefined, note))
+    assert.equal(answer, undefined, `${line} was refused`)
+    assert.match(notice, /a clone stays on its default branch/, `${line} was allowed without a notice`)
   }
   // A switch to a branch that is not the clone's default is the same drift, written the other way.
-  refusedWith('git checkout uranus/9', inAClone, 'Hygiea', /a clone stays on its default branch/)
-  refusedWith('git switch hygiea/562', inAClone, 'Hygiea', /a clone stays on its default branch/)
+  for (const line of ['git checkout uranus/9', 'git switch hygiea/562']) {
+    const { answer, notice } = theNoticeWhile((note) => refused(line, inAClone, 'Hygiea', undefined, note))
+    assert.equal(answer, undefined, `${line} was refused`)
+    assert.match(notice, /a clone stays on its default branch/, `${line} was allowed without a notice`)
+  }
 })
 
-test('a call that puts a drifted clone back on its default branch is not refused', () => {
+test('a call that puts a drifted clone back on its default branch says nothing', () => {
   const inAClone = `${CLONES}/org/repo`
   for (const line of ['git checkout main', 'git switch main', 'git checkout main && git pull', 'git status']) {
     assert.equal(refused(line, inAClone), undefined, line)
   }
   // A clone whose default branch git cannot name is not one the rule can read: it does not fire, and a branch made
-  // there is still refused, since making one needs no fact.
+  // there is still noticed, since making one needs no fact.
   const unknown: TheFacts = { ...FACTS, defaultBranch: null }
   assert.equal(refused('git checkout uranus/9', inAClone, 'Hygiea', unknown), undefined)
-  refusedWith('git switch -c mine', inAClone, 'Hygiea', /a clone stays on its default branch/)
+  const { answer, notice } = theNoticeWhile((note) => refused('git switch -c mine', inAClone, 'Hygiea', undefined, note))
+  assert.equal(answer, undefined)
+  assert.match(notice, /a clone stays on its default branch/)
+})
+
+test('#601: a worktree is made inside a clone as asked, with one line saying where it belongs', () => {
+  const { answer, notice } = theNoticeWhile((note) => refused(`git worktree add ${CLONES}/org/repo-x`, null, 'Hygiea', undefined, note))
+  assert.equal(answer, undefined, 'a worktree inside a clone was refused')
+  assert.match(notice, /a worktree made inside a clone/, 'the worktree was made without a notice')
+  assert.equal(refused(`git worktree add ${WORKTREES}/repo-7 -b hygiea/7`, null), undefined)
+  assert.equal(refused('git worktree add ../repo-7 -b hygiea/7', '/place/b'), undefined)
 })
 
 test('a call that only reads or works is not refused, even in a clone', () => {
@@ -143,12 +179,6 @@ test('a call that only reads or works is not refused, even in a clone', () => {
   for (const line of ['git status', 'git branch', 'git branch -a', 'git branch --list', 'git fetch', 'git checkout -- src/app.ts', 'git checkout src/app.ts']) {
     assert.equal(refused(line, inAClone), undefined, line)
   }
-})
-
-test('a worktree is not made inside a clone, and the place a crew declared for one is not a clone', () => {
-  refusedWith(`git worktree add ${CLONES}/org/repo-x`, null, 'Hygiea', /a worktree is not made inside a clone/)
-  assert.equal(refused(`git worktree add ${WORKTREES}/repo-7 -b hygiea/7`, null), undefined)
-  assert.equal(refused('git worktree add ../repo-7 -b hygiea/7', '/place/b'), undefined)
 })
 
 test('a call in a worktree, or in a place that merely starts like the clone place, is not a call in a clone', () => {
@@ -246,7 +276,11 @@ test("martha#925: the default branch is the one git names, and a push where git 
 
 test('a call is judged where its line leaves the shell, and unknown rather than somewhere it is not', () => {
   // A newline ends a command as a semicolon does, so the second `cd` is the one in force when the call runs.
-  refusedWith(`cd ${CLONES}\ncd ${CLONES}/org/repo\ngit switch -c mine`, '/place/nowhere', 'Hygiea', /a clone stays on its default branch/)
+  const { answer, notice } = theNoticeWhile((note) =>
+    refused(`cd ${CLONES}\ncd ${CLONES}/org/repo\ngit switch -c mine`, '/place/nowhere', 'Hygiea', undefined, note),
+  )
+  assert.equal(answer, undefined)
+  assert.match(notice, /a clone stays on its default branch/, 'the call in the clone was not noticed')
   // A `cd` behind `then` sits where the reader does not see a command begin, so where the call runs is not known: it is
   // not handed the directory the line started in, and a call that really runs in a worktree is not refused as a clone's.
   assert.equal(refused(`if true; then cd ${WORKTREES}/repo-562; fi; git switch -c mine`, `${CLONES}/org/repo`), undefined)

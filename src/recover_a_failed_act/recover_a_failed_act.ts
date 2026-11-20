@@ -517,24 +517,3 @@ async function theOneMoreTry(host: LedgerHost, input: AnActOnPackages, attempt: 
   if (decided.decision === 'concluded_from_the_inspection') return concludedWhatWasFound(host, input, retried, parts, noted)
   throw new RecoveryDecided(theWordsOf(input, parts, noted, thePackagesThatKept(input.packages, noted)), parts)
 }
-
-/**
- * Whether none of these packages stands paused, for an act that lands them all (martha#512 slice 2): read before
- * anything is cut, merged or announced, so a batch that would be refused writes nothing on any of its packages. A pause
- * that already stands holds the batch and pauses nothing else; only a pause decided on the batch's own push pauses
- * every package in it. A ledger that cannot be read refuses too, since it cannot say the package is not paused.
- */
-export async function noneOfTheseIsPaused(host: LedgerHost, packages: readonly string[], what: string): Promise<{ readonly ok: true } | { readonly refused: string }> {
-  for (const work_package of packages) {
-    let pause: RecoveryRow | undefined
-    try {
-      pause = thePauseOn(await readLedger(host, work_package))
-    } catch (error) {
-      return { refused: `the ledger of ${work_package} could not be read, so nothing says it is not paused (${theMessageOf(error)}): ${what}.` }
-    }
-    if (pause !== undefined) {
-      return { refused: `${what}: ${work_package} is paused since the ${pause.act.kind} (${pause.act.what}) failed as ${pause.failure.class}, and ${WHAT_A_PAUSE_HOLDS()}. Leave it out of the batch, or land the batch once it is resumed.` }
-    }
-  }
-  return { ok: true }
-}

@@ -173,6 +173,11 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    */
   readonly processes?: HostContract['processes']
   /**
+   * The sink a line about an act the tools carried on past is said through (martha#601): the launcher's writer to the
+   * process's own error output. Absent, nothing is said.
+   */
+  readonly note?: ((line: string) => void) | undefined
+  /**
    * Where a restart is asked of a member's launcher (martha#312): the crew's lifecycle requests, the launch records and
    * the ledger. A launch given none refuses `restart_a_member` by name.
    */
@@ -816,9 +821,9 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [REFRESH_THIS_SESSION]: async (args) => theRefreshAskedOf(places, args),
     [VERIFY_RANGE_TOOL.name]: (args) =>
       actingOn(theRangeACallNames(args), async (on, asked) =>
-        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), { member: places.member, declaration: on.settings }, asked)),
+        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), asked, places.note)),
     [LAND_BATCH_TOOL.name]: (args) =>
-      actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry)),
+      actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry, places.note)),
     [FAST_FORWARD_TOOL.name]: (args) =>
       actingOn(theFastForwardACallNames(args), async (on, asked) =>
         on.settings === undefined ? { refused: NO_ACTING_PLACE } : fastForwardOntoTheApprovedTipOver(actingHost(on), places.member, asked, on.settings)),

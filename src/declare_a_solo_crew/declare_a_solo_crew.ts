@@ -5,9 +5,6 @@
 // the file is read back through the reader before init says it is done, so init can never leave a declaration the
 // crew would refuse.
 //
-// It declares only in a real directory of the checkout: a declaration directory that is a link is refused by name,
-// so a checkout cannot point init at a place outside it.
-//
 // It never writes over a declaration: the file is created only when it does not exist (O_EXCL), so one the
 // owner wrote, or one a pull brought in, is left as it was and named. Each member's node id is made here too,
 // in Martha's state outside the checkout (../keep_martha_state_outside_the_checkout), never typed by the owner.
@@ -59,14 +56,15 @@ export type SoloCrewDeclared =
 export const NO_OWNER =
   'Martha needs your name as the crew\'s owner and git has none. Set it with git config user.name "Your Name", then run martha init again.'
 
-/** Makes the declaration's directory when missing; why it may not hold one (a link, or not a directory), or undefined. */
+/** Makes the declaration's directory when missing; why it may not hold one (not a directory), or undefined. A
+ * directory that is a link is followed: the owner cut that refusal (martha#601), so what it points at is where the
+ * crew is declared. */
 export function declarationDirectory(directory: string): string | undefined {
-  const found = fs.lstatSync(directory, { throwIfNoEntry: false })
+  const found = fs.statSync(directory, { throwIfNoEntry: false })
   if (found === undefined) {
     fs.mkdirSync(directory)
     return undefined
   }
-  if (found.isSymbolicLink()) return `${directory} is a link, and Martha declares a crew only in a directory of its own.`
   return found.isDirectory() ? undefined : `${directory} is not a directory, so Martha cannot declare a crew in it.`
 }
 

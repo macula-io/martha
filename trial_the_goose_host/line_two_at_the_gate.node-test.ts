@@ -2,6 +2,7 @@
 // from the session by the gate refusing it before anything starts, naming each skill root it holds.
 
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,11 +16,20 @@ import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 const ROOTS = RECORDED_GOOSE_ENGINE.checkout_skill_roots
 const EVERY_SKILL_ROOT = [...ROOTS.skill_folders, ROOTS.plugin_folder, ...ROOTS.plugin_settings]
 
+/** Runs git in a directory, the way the tests that stand up a checkout the gate can read do (../src/judge_a_checkouts_tree). */
+function git(cwd: string, ...args: string[]): void {
+  execFileSync('git', ['-c', 'user.name=martha-test', '-c', 'user.email=martha-test@example.invalid', '-c', 'commit.gpgsign=false', ...args], { cwd })
+}
+
 /** A place for line 2, under a directory removed when the case ends; `planted` says whether the checkout holds the markers. */
 function aPlace(t: TestContext, planted: boolean): Place {
   const base = mkdtempSync(join(tmpdir(), 'martha-614-line-2-'))
   t.after(() => removeTheTree(base))
   const place = aPlaceFor(2, join(base, 'evidence'), join(base, 'launch'))
+  // A real checkout, so the gate reads it as an unapproved checkout and refuses it. A plain directory falls outside
+  // any git checkout, where #601's notice says the config in one line and the launch goes ahead; this trial is line
+  // 2's, the gate's refusal, so the place it stands up must be one the gate reads a tree from.
+  git(place.checkout, 'init', '-q', '.')
   if (planted) plant(place.checkout, CHECKOUT_MARKERS)
   return place
 }

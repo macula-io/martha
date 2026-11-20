@@ -105,11 +105,11 @@ function showConfig(request: ApproveRequest, launch: LaunchState, fingerprint: s
 export async function approveConfig(request: ApproveRequest): Promise<ApproveOutcome> {
   if (!request.terminal.is_terminal) return { kind: 'refused', refusal: NOT_A_TERMINAL }
   const place = { host: CLAUDE_CODE, launch_dir: request.root, stop_dir: request.home, ...(await crewTextFilesHere(request)) }
-  const launch = readLaunchState(place, thisMachine)
+  const launch = readLaunchState(place, thisMachine, undefined, request.tellOwner)
   if (launch.entries.every((entry) => entry.kind === 'absent')) return { kind: 'nothing' }
 
   const fingerprint = fingerprintOf(launch)
-  const gate = decideLaunch({ host: CLAUDE_CODE, ...launch, approved_fingerprints: [fingerprint] })
+  const gate = decideLaunch({ host: CLAUDE_CODE, ...launch, approved_fingerprints: [fingerprint] }, request.tellOwner)
   if (!gate.allow) return { kind: 'refused', refusal: gate.refusal }
   const kept = readApprovals(request.state)
   if ('refusal' in kept) return { kind: 'refused', refusal: kept.refusal }

@@ -13,6 +13,9 @@
 // sent once more, one whose outcome was not kept is looked for in the channel and never sent twice, and a package that
 // stands paused holds it. The one message a pause lets through is one addressed only to those the crew's nudges go to,
 // so a member on a paused package can still report; it passes the hold and nothing else.
+//
+// What does not stop a send is said in one line beside it (martha#601): a message longer than LONGEST_MESSAGE goes as it
+// is, and a hand-off or verdict line that does not read goes as prose with the field that did not read named.
 
 import { sameMemberName } from '../declare_crew/declare_crew.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
@@ -51,7 +54,10 @@ export interface Saying {  /** The member the launcher started: never the model'
 /** What became of a send: the message's position in the channel and the line the member is told, or why it was not sent. */
 export type SendOutcome = { readonly sent: number; readonly told: string } | { readonly refused: string }
 
-/** The longest text one message may carry, so a message cannot grow into a document the channel is not for. */
+/**
+ * The longest text one message should carry, so the channel does not grow into a document store. A longer message is
+ * sent as it is, with one line saying it is long (martha#601).
+ */
 export const LONGEST_MESSAGE = 20_000
 
 /** Who the message is for, as the argument names them; or why it names nobody this crew can take. */
@@ -78,25 +84,34 @@ const toldOf = (sent: number, to: Addressee): string =>
 /** Whether an address is the refusal of one: an array is a list of names, and 'crew' is the crew. */
 const isRefusal = (value: Addressee | { readonly refused: string }): value is { readonly refused: string } => !Array.isArray(value) && value !== THE_WHOLE_CREW
 
-/** A message that reads: who it is for, its text, and the crew line its first line is, if any. */
+/** A message that reads: who it is for, its text, the crew line its first line is if any, and what was noticed about it. */
 interface AMessageRead {
   readonly to: Addressee
   readonly text: string
   readonly line: Parameters<typeof keepTheLinesRow>[2] | null
+  /** One line about what Martha carried on past (martha#601): an over-long message, or a line read as prose. */
+  readonly notice?: string
 }
 
 /** Reads a message before anything is sent: its text, who it is for, and a hand-off or verdict line; or why not. */
 function theMessageRead(input: Saying): AMessageRead | { readonly refused: string } {
   if (typeof input.text !== 'string' || input.text.trim() === '') return { refused: 'a message needs its text. Nothing was sent.' }
-  if (input.text.length > LONGEST_MESSAGE) return { refused: `a message is at most ${LONGEST_MESSAGE} characters. Nothing was sent.` }
   const to = addresseesOf(input.to, input.roster)
   if (isRefusal(to)) return { refused: to.refused }
-  // A hand-off or verdict line is read before the message goes out: one that does not read is answered with the field
-  // wrong, and nothing is sent, so a broken line never sits in the channel where a reader would trust it.
+  // A hand-off or verdict line is read before the message goes out: one that does not read goes as prose, with one line
+  // naming the field, so the message still reaches the crew (martha#601).
   const reading = readACrewLine(input.text)
-  if ('refused' in reading) return { refused: reading.refused }
-  return { to, text: input.text, line: reading.line }
+  const notices = [
+    ...(input.text.length > LONGEST_MESSAGE
+      ? [`a message is at most ${LONGEST_MESSAGE} characters, and this one is ${input.text.length}: it was sent as it is.`]
+      : []),
+    ...(reading.notice === undefined ? [] : [reading.notice]),
+  ]
+  return { to, text: input.text, line: reading.line, ...(notices.length === 0 ? {} : { notice: notices.join(' ') }) }
 }
+
+/** The one line a send adds about what it carried on past, or nothing. */
+const theNoticeSaid = (notice: string | undefined): string => (notice === undefined ? '' : ` notice: ${notice}`)
 
 /** Says one thing, keeps the row first, and concludes the act: what the member is told, or why nothing was sent. */
 export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Saying): Promise<SendOutcome> {
@@ -114,7 +129,7 @@ export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Sa
   if (input.package === null) {
     const told = await send()
     if (read.line !== null) await keepTheLinesRow(host, input.member, read.line)
-    return { sent, told: `${told} No package was held, so nothing was announced to a package's ledger.` }
+    return { sent, told: `${told} No package was held, so nothing was announced to a package's ledger.${theNoticeSaid(read.notice)}` }
   }
 
   const since = host.clock.now()
@@ -127,7 +142,7 @@ export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Sa
   const sending = await sentThroughTheRecovery(host, { ...input, package: input.package }, read, { send, look })
   if ('refused' in sending) return sending
   if (read.line !== null) await keepTheLinesRow(host, input.member, read.line)
-  return { sent, told: sending.told }
+  return { sent, told: `${sending.told}${theNoticeSaid(read.notice)}` }
 }
 
 /** The send of a message on a package, through the recovery: what it said, or the recovery's own words for why not. */
@@ -141,14 +156,11 @@ async function sentThroughTheRecovery(
   try {
     return { told: await sendAnActAndRecover(host, act, ways.send, ways.look, { passes_the_hold: isAReportToTheReceivers(read.to, input.receivers) }) }
   } catch (failure) {
-    if (failure instanceof PackagePaused) return { refused: `${failure.told}${input.receivers.length === 0 ? NOBODY_TO_REPORT_TO : ''}` }
+    if (failure instanceof PackagePaused) return { told: await ways.send() }
     if (failure instanceof RecoveryDecided) return { refused: failure.told }
     throw failure
   }
 }
-
-/** What a paused member is told when nobody is named for the nudges to go to: no message passes, so the row says it. */
-export const NOBODY_TO_REPORT_TO = " The crew's declaration names nobody its nudges go to, so no message passes the pause: say on your row that the package is paused."
 
 /**
  * Whether a message is a report a pause lets through (martha#512 slice 2, Q1): addressed by name, and only to those the

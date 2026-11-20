@@ -57,25 +57,33 @@ test('two projects never share a state directory', (t) => {
   assert.notEqual(opened(stateRoot, project).directory, opened(stateRoot, other).directory)
 })
 
-test('a state directory others may write is refused by name', (t) => {
+test('a state directory others may write is said in one line by name, and used anyway', (t) => {
   const { project, stateRoot } = homeFor(t)
   const state = opened(stateRoot, project)
   chmodSync(state.directory, 0o777)
-  const again = openState(stateRoot, project)
-  assert.ok('refusal' in again)
-  assert.ok(again.refusal.includes(state.directory), again.refusal)
+  const said: string[] = []
+  const again = openState(stateRoot, project, (line) => said.push(line))
+  assert.ok('directory' in again, 'the state directory is used')
+  assert.equal(again.directory, state.directory)
+  assert.equal(said.length, 1, said.join('\n'))
+  assert.ok(said[0]!.includes(state.directory), said.join('\n'))
+  assert.ok(said[0]!.includes('may be written by others'), said.join('\n'))
 })
 
-test('a state directory that is a link is refused by name', (t) => {
+test('a state directory that is a link is said in one line by name, and used anyway', (t) => {
   const { home, project, stateRoot } = homeFor(t)
   const state = opened(stateRoot, project)
   removeTheTree(state.directory)
   const elsewhere = join(home, 'elsewhere')
   mkdirSync(elsewhere, { mode: STATE_DIRECTORY_MODE })
   symlinkSync(elsewhere, state.directory)
-  const again = openState(stateRoot, project)
-  assert.ok('refusal' in again)
-  assert.ok(again.refusal.includes(state.directory), again.refusal)
+  const said: string[] = []
+  const again = openState(stateRoot, project, (line) => said.push(line))
+  assert.ok('directory' in again, 'the state directory is used')
+  assert.equal(again.directory, state.directory)
+  assert.equal(said.length, 1, said.join('\n'))
+  assert.ok(said[0]!.includes(state.directory), said.join('\n'))
+  assert.ok(said[0]!.includes('is a link'), said.join('\n'))
 })
 
 test('each member gets a node id of its own, kept closed, and keeps it', (t) => {
@@ -95,17 +103,22 @@ test('each member gets a node id of its own, kept closed, and keeps it', (t) => 
   assert.match(again.ids['third'] ?? '', NODE_ID)
 })
 
-test('a members file others may read is refused by name, and nothing is written over it', (t) => {
+test('a members file others may read is said in one line by name, then read and added to anyway', (t) => {
   const { project, stateRoot } = homeFor(t)
   const state = opened(stateRoot, project)
-  assert.ok('ids' in nodeIdsFor(state, ['builder']))
+  const first = nodeIdsFor(state, ['builder'])
+  assert.ok('ids' in first)
   const file = join(state.directory, MEMBERS_FILE)
   chmodSync(file, 0o644)
-  const before = readFileSync(file, 'utf8')
-  const again = nodeIdsFor(state, ['builder', 'reviewer'])
-  assert.ok('refusal' in again)
-  assert.ok(again.refusal.includes(file), again.refusal)
-  assert.equal(readFileSync(file, 'utf8'), before)
+  const said: string[] = []
+  const again = nodeIdsFor(state, ['builder', 'reviewer'], (line) => said.push(line))
+  assert.ok('ids' in again, 'the members file is read')
+  assert.equal(again.ids['builder'], first.ids['builder'], 'the id it kept is read back')
+  assert.match(again.ids['reviewer'] ?? '', NODE_ID, 'the missing id is made and kept')
+  assert.equal(said.length, 1, said.join('\n'))
+  assert.ok(said[0]!.includes(file), said.join('\n'))
+  assert.ok(said[0]!.includes('not a file only this user may read and write'), said.join('\n'))
+  assert.equal(lstatSync(file).mode & PERMISSIONS, STATE_FILE_MODE, 'the file is kept closed again')
 })
 
 /** An approval whose fingerprint is the launch gate's own over its entries and tree, as approve keeps one. */
@@ -176,6 +189,22 @@ for (const [what, line] of Object.entries(FORGERIES)) {
     assert.ok(read.refusal.includes(`${file} line 2`), read.refusal)
   })
 }
+
+test('an approvals file others may write is said in one line, then appended to anyway', (t) => {
+  const { project, stateRoot } = homeFor(t)
+  const state = opened(stateRoot, project)
+  assert.equal(appendApproval(state, anApproval('1'.repeat(40))), undefined)
+  const file = join(state.directory, APPROVALS_FILE)
+  chmodSync(file, 0o644)
+  const said: string[] = []
+  assert.equal(appendApproval(state, anApproval('2'.repeat(40)), (line) => said.push(line)), undefined, 'the approval is kept')
+  assert.equal(said.length, 1, said.join('\n'))
+  assert.ok(said[0]!.includes(file), said.join('\n'))
+  assert.ok(said[0]!.includes('not a file only this user may read and write'), said.join('\n'))
+  const read = readApprovals(state)
+  assert.ok('approvals' in read, 'the file is read')
+  assert.equal(read.approvals.length, 2, 'both approvals are there')
+})
 
 test('an approvals file that is a link is refused by name on read and on append, never thrown', (t) => {
   const { home, project, stateRoot } = homeFor(t)
