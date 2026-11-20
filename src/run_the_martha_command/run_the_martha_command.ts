@@ -28,7 +28,8 @@ import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../appro
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
-import { declareCrew, OWNER_BELL, sameMemberName } from '../declare_crew/declare_crew.ts'
+import { declareCrew, OWNER_BELL, sameMemberName, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
+import { CLAUDE_CODE_TEAM, declareTheTeam } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
 import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
@@ -75,7 +76,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha approve | martha todo | martha start [<member> [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha up --claude | martha approve | martha todo | martha start [<member> [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -116,8 +117,9 @@ function gitSays(cwd: string, ...args: string[]): string | undefined {
 function placesOf(io: CommandIo): Places | string {
   const home = absolute(io.env['HOME'])
   if (home === undefined) return 'HOME is not set to an absolute path, so Martha cannot tell where your home is.'
-  const root = gitSays(io.cwd, 'rev-parse', '--show-toplevel')
-  if (root === undefined) return `${io.cwd} is not inside a git checkout. Run martha in the checkout your crew works in.`
+  // A folder in no checkout is its own crew's root (martha#511): the owner's workspace, where `martha up` declares a
+  // team, is not a checkout, and the crew's state is keyed by its real path (crewKeyOf).
+  const root = gitSays(io.cwd, 'rev-parse', '--show-toplevel') ?? io.cwd
   const state_root = stateRootOf(home, io.env['XDG_STATE_HOME'])
   const state = openState(state_root, root)
   return 'refusal' in state ? state.refusal : { root, home, state }
@@ -310,15 +312,32 @@ async function crew(io: CommandIo, places: Places, tabOf?: string): Promise<numb
   return EXIT_DONE
 }
 
-/** Bare `martha start` (#547 S6): every member that is not running opened in a kitty tab of its own. */
-async function openTheCrew(io: CommandIo, places: Places): Promise<number> {
+/** Bare `martha start` (#547 S6): every member that is not running opened in a kitty tab of its own; with `which`, only the members it picks. */
+async function openTheCrew(io: CommandIo, places: Places, which: (settings: CrewSettings, member: Member) => boolean = () => true): Promise<number> {
   // Each tab starts its member on kitty's terminal, so the owner's own terminal is asked for first, as start <member> asks.
   if (!io.terminal.is_terminal) return refused(io, START_NEEDS_A_TERMINAL)
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
   const place = stateSubdirectory(places.state, KITTY_PLACE)
   if ('refusal' in place) return refused(io, place.refusal)
-  return openTheCrewInKitty(io, { root: places.root, members: crew.settings.members.map((member) => member.name), isRunning: (member) => isRunning(crew, member), martha: [process.execPath, ...process.execArgv, process.argv[1]!], env: io.env, place: place.path, kittySays: kittySaysOnThisMachine, write: writeOwnerOnly, startKitty: startKittyDetached })
+  return openTheCrewInKitty(io, { root: places.root, members: crew.settings.members.filter((member) => which(crew.settings, member)).map((member) => member.name), isRunning: (member) => isRunning(crew, member), martha: [process.execPath, ...process.execArgv, process.argv[1]!], env: io.env, place: place.path, kittySays: kittySaysOnThisMachine, write: writeOwnerOnly, startKitty: startKittyDetached })
+}
+
+/** The switch `martha up` takes to start the crew's Claude Code members (martha#511). */
+export const UP = 'up'
+export const CLAUDE_SWITCH = '--claude'
+
+/**
+ * `martha up --claude` (martha#511): the team declared at this folder, or its missing Claude Code members added, then
+ * every Claude Code member that is not running opened in a kitty tab of its own. Plain `martha up` is the engine's.
+ */
+async function up(io: CommandIo, places: Places): Promise<number> {
+  if (!io.terminal.is_terminal) return refused(io, START_NEEDS_A_TERMINAL)
+  const declared = await declareTheTeam({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, state: places.state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: CLAUDE_CODE, members: CLAUDE_CODE_TEAM })
+  if (!declared.declared) return refused(io, declared.refusal)
+  if (declared.wrote) io.out(`Declared a team in ${declared.declaration}: ${declared.added.join(', ')}.`)
+  else if (declared.added.length > 0) io.out(`Added to the team in ${declared.declaration}: ${declared.added.join(', ')}.`)
+  return openTheCrew(io, places, (settings, member) => theHostOfMember(settings, member) === CLAUDE_CODE)
 }
 
 /**
@@ -498,6 +517,12 @@ export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: read
   start: startOf,
   answer: answerOf,
   crew: crewOf,
+  [UP]: upOf,
+}
+
+/** `up --claude` (martha#511): the one switch; plain `up` is the engine's, which this release does not take yet. */
+function upOf(act: string, argv: readonly string[]): Asked | undefined {
+  return argv.length === 2 && argv[1] === CLAUDE_SWITCH ? { act, args: [CLAUDE_SWITCH] } : undefined
 }
 
 /** `crew`, which draws the strip, or `crew <verb> <member> …`, the owner's change to one member (martha#307). */
@@ -626,6 +651,7 @@ const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Place
   'keep-shapes': (io, places, asked) => keepShapes(io, places, asked.args[0]!),
   approve: (io, places) => approve(io, places),
   release: (io, places, asked) => release(io, places, asked.args[0]!),
+  [UP]: (io, places) => up(io, places),
   answer: (io, places, asked) => answerInAProject(io, places, asked.member, asked.args),
 }
 
