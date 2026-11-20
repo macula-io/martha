@@ -31,22 +31,30 @@ export interface TheRecordsMoved {
   readonly park: boolean
 }
 
+/**
+ * What a rename wrote again, and the refusal that stopped it part-way (review r=1): the owner is told which records
+ * moved and which are still under the old name, since the declaration has already changed by then.
+ */
+export interface TheRecordsMove extends TheRecordsMoved {
+  readonly refusal?: Refused
+}
+
 /** What ends a handover's own file name for one member: the day stands before it, and the file's suffix after. */
 const endsWithMember = (from: string): string => `_${from}.md`
 
-/** The handovers this crew wrote for `from`: each one written again for `to`, stamped with the new name; or why not. */
-function handoversMoved(stores: TheRecordStores, from: string, to: string): Refused | readonly string[] {
+/** The handovers this crew wrote for `from`, and the refusal that stopped the move part-way. */
+function handoversMoved(stores: TheRecordStores, from: string, to: string): { readonly moved: readonly string[]; readonly refusal?: Refused } {
   const place = stores.crew.place(HANDOVERS_PLACE)
-  if ('refusal' in place) return place
+  if ('refusal' in place) return { moved: [], refusal: place }
   const names = place.names()
-  if ('refusal' in names) return names
+  if ('refusal' in names) return { moved: [], refusal: names }
   const moved: string[] = []
   for (const name of names.filter((one) => one.endsWith(endsWithMember(from)))) {
     const refusal = oneHandoverMoved(stores, place, name, from, to)
-    if (refusal !== undefined) return refusal
+    if (refusal !== undefined) return { moved, refusal }
     moved.push(name)
   }
-  return moved
+  return { moved }
 }
 
 /** One handover written again under the new name, and its stamp rewritten; or why it was not. */
@@ -79,13 +87,41 @@ function rowMoved(stores: TheRecordStores, from: string, to: string): Refused | 
   return kept.kept ? true : { refusal: kept.why ?? `the dashboard row for ${to} was not kept.` }
 }
 
-/** Every per-name record of `from` written again for `to`; or the first refusal that stopped it. */
-export function moveTheRecordedName(stores: TheRecordStores, from: string, to: string): Refused | TheRecordsMoved {
+/** How many handovers the crew wrote for `name`; none when the place cannot be read. */
+function handoverCount(place: CrewPlace, name: string): number {
+  const names = place.names()
+  return 'refusal' in names ? 0 : names.filter((one) => one.endsWith(endsWithMember(name))).length
+}
+
+/** Whether the crew holds a park marker for `name`. */
+function theParkHeld(place: CrewPlace, name: string): boolean {
+  const read = place.read(theParkMarker(name))
+  return read !== undefined && 'text' in read
+}
+
+/**
+ * What the crew still keeps under `name`: the handovers written for it, its park, and its dashboard row (martha#985).
+ * A rename asks this of the new name before it starts, and of the old one after a refusal, so nothing it would take
+ * over and nothing it left behind is guessed.
+ */
+export function whatIsHeldUnder(stores: TheRecordStores, name: string): readonly string[] {
+  const handovers = stores.crew.place(HANDOVERS_PLACE)
+  const count = 'refusal' in handovers ? 0 : handoverCount(handovers, name)
+  const parked = stores.crew.place(PARKED_PLACE)
+  return [
+    ...(count > 0 ? [`${count} handover(s)`] : []),
+    ...(!('refusal' in parked) && theParkHeld(parked, name) ? ['the park'] : []),
+    ...(stores.rows.read(name) === null ? [] : ['the dashboard row']),
+  ]
+}
+
+/** Every per-name record of `from` written again for `to`, with what moved before any refusal (review r=1). */
+export function moveTheRecordedName(stores: TheRecordStores, from: string, to: string): TheRecordsMove {
   const handovers = handoversMoved(stores, from, to)
-  if ('refusal' in handovers) return handovers
+  if (handovers.refusal !== undefined) return { handovers: handovers.moved, row: false, park: false, refusal: handovers.refusal }
   const park = parkMoved(stores, from, to)
-  if (typeof park !== 'boolean') return park
+  if (typeof park !== 'boolean') return { handovers: handovers.moved, row: false, park: false, refusal: park }
   const row = rowMoved(stores, from, to)
-  if (typeof row !== 'boolean') return row
-  return { handovers, row, park }
+  if (typeof row !== 'boolean') return { handovers: handovers.moved, row: false, park, refusal: row }
+  return { handovers: handovers.moved, row, park }
 }

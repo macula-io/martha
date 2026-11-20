@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -20,7 +20,7 @@ import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { EXIT_DONE, EXIT_REFUSED } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { HANDOVERS_PLACE, theHandoverFile } from '../write_my_handover/write_my_handover.ts'
-import { theNewestHandover } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { PARKED_PLACE, theNewestHandover, theParkMarker } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
@@ -107,7 +107,7 @@ test('a rename leaves the handover the old name wrote as one the new name resume
   assert.equal(wake.handover.content, 'the work Scout left\n', 'the successor resumes what the predecessor left')
 })
 
-test('a rename moves the dashboard row and the park the old name had (mutant: the row left under the old name)', (t) => {
+test('a rename moves the dashboard row and the park the old name had (mutant: the row left under the old name, the park left behind)', (t) => {
   const place = aPlace(t)
   assert.equal(martha(place, 'init').status, EXIT_DONE)
   added(place, 'Scout')
@@ -115,8 +115,59 @@ test('a rename moves the dashboard row and the park the old name had (mutant: th
   mkdirSync(join(crew, CREW_ROW_PLACE), { recursive: true })
   const rows = dashboardRowsIn(join(crew, CREW_ROW_PLACE))
   assert.equal(rows.change('Scout', (held) => ({ ...(held ?? { member: 'Scout', session: 'a-session', at: AT.getTime(), ...theRowWithNothingSaid() }) })).kept, true)
+  const parked = keepTheCrewsFilesAsDirectories(crew).place(PARKED_PLACE)
+  assert.ok(!('refusal' in parked), 'refusal' in parked ? parked.refusal : '')
+  assert.equal(parked.keep(theParkMarker('Scout'), `${JSON.stringify({ parked: true, reason: 'waiting on the owner', since: AT.toISOString() })}\n`), undefined)
+
   assert.equal(martha(place, 'rename', 'Scout', 'Runner').status, EXIT_DONE)
   assert.notEqual(dashboardRowsIn(join(crew, CREW_ROW_PLACE)).read('Runner'), null, 'the new name has the row')
+  const park = parked.read(theParkMarker('Runner'))
+  assert.ok(park !== undefined && 'text' in park, 'the new name reads as parked: the park marker did not move')
+  assert.match(park !== undefined && 'text' in park ? park.text : '', /"parked":true/, 'the park the new name reads is the park the old name had')
+})
+
+test('a rename onto a name the crew still keeps records under is refused by name (crew-code\'s name_in_use)', (t) => {
+  // The instance: a member is removed, its records stay, and a rename onto its name would take over its handover and
+  // its node id, so a successor would resume work it never wrote.
+  const place = aPlace(t)
+  assert.equal(martha(place, 'init').status, EXIT_DONE)
+  added(place, 'Runner')
+  const { crew } = placesOf(place)
+  const handovers = keepTheCrewsFilesAsDirectories(crew).place(HANDOVERS_PLACE)
+  assert.ok(!('refusal' in handovers), 'refusal' in handovers ? handovers.refusal : '')
+  assert.equal(handovers.keep(theHandoverFile('Runner', AT), 'the work Runner left\n'), undefined)
+  assert.equal(martha(place, 'crew', 'remove', 'Runner').status, EXIT_DONE)
+  added(place, 'Scout')
+  const before = { declaration: readFileSync(placesOf(place).declaration, 'utf8'), ids: JSON.stringify(nodeIds(place)) }
+
+  const run = martha(place, 'rename', 'Scout', 'Runner')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.match(run.said, /Runner is already in use: the crew still keeps a node id, 1 handover\(s\) under it\. Pick another name\./)
+  assert.equal(readFileSync(placesOf(place).declaration, 'utf8'), before.declaration, 'the declaration is untouched')
+  assert.equal(JSON.stringify(nodeIds(place)), before.ids, 'the ids are untouched')
+})
+
+test('a store that refuses after the declaration moved says what names the new name and what is still under the old (review r=1)', (t) => {
+  const place = aPlace(t)
+  assert.equal(martha(place, 'init').status, EXIT_DONE)
+  added(place, 'Scout')
+  const { crew } = placesOf(place)
+  const handovers = keepTheCrewsFilesAsDirectories(crew).place(HANDOVERS_PLACE)
+  assert.ok(!('refusal' in handovers), 'refusal' in handovers ? handovers.refusal : '')
+  const file = join(handovers.path, theHandoverFile('Scout', AT))
+  assert.equal(handovers.keep(theHandoverFile('Scout', AT), 'the work Scout left\n'), undefined)
+  // A handover any other user may read is one the crew's own store refuses, so the move stops after the declaration.
+  chmodSync(file, 0o666)
+  const id = nodeIds(place)['Scout']
+
+  const run = martha(place, 'rename', 'Scout', 'Runner')
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.match(run.said, /The declaration and Runner's node id now name Runner\./)
+  assert.match(run.said, /Still under Scout: the park, the dashboard row\./)
+  assert.match(run.said, /A handover's old copy is never deleted/)
+  const declared = JSON.parse(readFileSync(placesOf(place).declaration, 'utf8')) as { members: { name: string }[] }
+  assert.ok(declared.members.some((member) => member.name === 'Runner'), 'the declaration names the new name, as the refusal said')
+  assert.equal(nodeIds(place)['Runner'], id, 'the node id moved, as the refusal said')
 })
 
 test('each refusal leaves the declaration, the node ids and the records as they were', (t) => {

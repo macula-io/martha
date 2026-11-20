@@ -37,13 +37,13 @@ import { noCrewDeclaredAt, upStarts } from '../bring_up_the_declared_crew/bring_
 import { declareTheEnginesEndpoint } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import { theKeyInAFile } from '../start_an_engine_member/start_an_engine_member.ts'
 import { ADD, aChangedDeclaration, aNameToRenameTo, REMOVE, RENAMED, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
-import { moveTheRecordedName, type TheRecordsMoved } from '../move_a_members_records/move_a_members_records.ts'
+import { moveTheRecordedName, whatIsHeldUnder, type TheRecordsMoved, type TheRecordStores } from '../move_a_members_records/move_a_members_records.ts'
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { appendStateLine, crewRowsDirectory, crewStateDirectory, moveANodeId, nodeIdsFor, openState, readApprovals, readStateFile, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, moveANodeId, nodeIdsFor, nodeIdsKept, openState, readApprovals, readStateFile, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -471,6 +471,55 @@ function theRecordsMovedTold(moved: TheRecordsMoved, to: string): string {
   return parts.length === 0 ? `Nothing that was left under another name had to move.` : `Moved to ${to}: ${parts.join(', ')}.`
 }
 
+/** What a rename had done when a store refused it, so the owner is told rather than left with half a rename (r=1). */
+interface AHalfRename {
+  readonly from: string
+  readonly to: string
+  readonly stores: TheRecordStores
+  readonly moved: TheRecordsMoved
+  /** Whether the handovers were attempted: a node id that refused stopped the rename before any record. */
+  readonly handoversTried: boolean
+  readonly nodeIdMoved: boolean
+}
+
+/** The records a rename wrote again, as words. */
+const wroteInWords = (moved: TheRecordsMoved): readonly string[] => [
+  ...(moved.handovers.length > 0 ? [`${moved.handovers.length} handover(s)`] : []),
+  ...(moved.park ? ['the park'] : []),
+  ...(moved.row ? ['the dashboard row'] : []),
+]
+
+/** The records a rename did not finish, as words: the handovers only when the rename stopped before them. */
+const stillInWords = (half: AHalfRename): readonly string[] => [
+  ...(half.handoversTried ? [] : ['the handovers']),
+  ...(half.moved.park ? [] : ['the park']),
+  ...(half.moved.row ? [] : ['the dashboard row']),
+]
+
+/**
+ * What a refusal after the declaration was written must say as well (review r=1): which names the new name now, what
+ * was written again, and what the crew still keeps under the old one. A rename has no way back, and crew-code has none
+ * either, so the owner is told exactly where it stopped.
+ */
+function theHalfDoneTold(half: AHalfRename): string {
+  const now = half.nodeIdMoved
+    ? `The declaration and ${half.to}'s node id now name ${half.to}.`
+    : `The declaration now names ${half.to}; ${half.from}'s node id did not move.`
+  const wrote = wroteInWords(half.moved)
+  const still = stillInWords(half)
+  const left = still.length > 0 ? ` Still under ${half.from}: ${still.join(', ')}.` : ''
+  const copies = half.handoversTried ? ` A handover's old copy is never deleted, so what was copied stays under ${half.from}.` : ''
+  return `${now}${wrote.length > 0 ? ` Moved: ${wrote.join(', ')}.` : ''}${left}${copies}`
+}
+
+/** Why a rename may not take `name`: the crew still keeps something under it (crew-code's `name_in_use`, review r=1). */
+function whyTheNameIsInUse(state: MarthaState, stores: TheRecordStores, name: string): string | undefined {
+  const kept = nodeIdsKept(state)
+  if ('refusal' in kept) return kept.refusal
+  const inUse = [...(Object.hasOwn(kept.ids, name) ? ['a node id'] : []), ...whatIsHeldUnder(stores, name)]
+  return inUse.length === 0 ? undefined : `${name} is already in use: the crew still keeps ${inUse.join(', ')} under it. Pick another name.`
+}
+
 /**
  * `martha rename <Old> <New>` (martha#985, gap 20 of #957): the declaration changes first, through its own reader, so
  * every refusal leaves the declaration, the node ids and the records exactly as they were; then the node id moves to
@@ -479,8 +528,11 @@ function theRecordsMovedTold(moved: TheRecordsMoved, to: string): string {
 async function renamed(io: CommandIo, places: Places, from: string, to: string): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
+  const stores: TheRecordStores = { crew: keepTheCrewsFilesAsDirectories(crew.crew), stamps: handoverStampsIn(crew.crew), rows: dashboardRowsIn(crew.launcher.dashboard) }
   const unnameable = aNameToRenameTo(crew.settings.members, from, to)
   if (unnameable !== undefined) return refused(io, unnameable)
+  const inUse = whyTheNameIsInUse(places.state, stores, to)
+  if (inUse !== undefined) return refused(io, inUse)
   const running = await whyItStays(io, places, from)
   if (running !== undefined) return refused(io, running)
   const change: CrewChange = { kind: RENAMED, member: from, to }
@@ -489,9 +541,12 @@ async function renamed(io: CommandIo, places: Places, from: string, to: string):
   const unwritten = writeAChangedDeclaration(places.root, outcome)
   if (unwritten !== undefined) return refused(io, unwritten)
   const node_id = moveANodeId(places.state, from, to, tellOwnerOn(io))
-  if (node_id !== undefined) return refused(io, node_id.refusal)
-  const moved = moveTheRecordedName({ crew: keepTheCrewsFilesAsDirectories(crew.crew), stamps: handoverStampsIn(crew.crew), rows: dashboardRowsIn(crew.launcher.dashboard) }, from, to)
-  if ('refusal' in moved) return refused(io, moved.refusal)
+  if (node_id !== undefined) {
+    const half = { from, to, stores, moved: { handovers: [], row: false, park: false }, handoversTried: false, nodeIdMoved: false }
+    return refused(io, `${node_id.refusal}\n${theHalfDoneTold(half)}`)
+  }
+  const moved = moveTheRecordedName(stores, from, to)
+  if (moved.refusal !== undefined) return refused(io, `${moved.refusal.refusal}\n${theHalfDoneTold({ from, to, stores, moved, handoversTried: true, nodeIdMoved: true })}`)
   theChangeTold(change, outcome, THE_VOCABULARIES_OF_HOST).forEach(tellOwnerOn(io))
   io.out(theRecordsMovedTold(moved, to))
   return EXIT_DONE
@@ -891,10 +946,11 @@ function theMemberThisRunsInside(io: CommandIo, places: Places, act: string): st
 
 /**
  * `martha digest <dir>` (martha#985): the one line a handoff of work outside git names, `<dir>@sha256:<hex>`, or the
- * refusal that says why there is none. The crew's runtime place is left out when it lies inside the directory named.
+ * refusal that says why there is none. A crew directory's own runtime place is left out, by crew-code's own rule, so
+ * the two programs name the same value for the same tree.
  */
-async function theDigest(io: CommandIo, places: Places, directory: string): Promise<number> {
-  const answered = await digestOf({ directory, runtime_place: places.state.state_root, read: aWorkDirectoryOnThisMachine })
+async function theDigest(io: CommandIo, _places: Places, directory: string): Promise<number> {
+  const answered = await digestOf({ directory, read: aWorkDirectoryOnThisMachine })
   if ('refusal' in answered) return refused(io, answered.refusal)
   io.out(answered.line)
   return EXIT_DONE
