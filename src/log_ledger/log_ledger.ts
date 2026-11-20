@@ -320,6 +320,12 @@ export async function actsAwaitingOutcome(
   )
 }
 
+/**
+ * How long one milestone stays one entry (martha#983, crew-code's one-entry rule): the same event for the same package
+ * in the same round, said again inside this window, is the entry already kept.
+ */
+export const ONE_ENTRY_MS = 10 * 60_000
+
 // --- writing --------------------------------------------------------------------
 
 // Async on purpose: a package name ledgerStreamOf refuses becomes a rejection
