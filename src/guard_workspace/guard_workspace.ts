@@ -22,7 +22,8 @@
 // owner's yes. The rule reads the target each refspec names — `main`, `HEAD:main`, `+x:refs/heads/main`, `:main`, a
 // `--delete` of it — on whatever remote the line names, since a URL is the same origin by another spelling. A target the
 // line leaves to git is read too (martha#925 r=1): in a clone, which stays on its default branch and which nothing stops
-// a member committing in, a push naming no refspec, or naming `HEAD` or `@`, writes that branch, so it is refused; a
+// a member committing in, a push naming no refspec, or naming `HEAD` or `@`, writes that branch, so it is refused (a
+// `--tags` with no refspec writes the tags alone, and passes); a
 // clone a member drifted off it is refused the same, as the clone is no place a branch's work is pushed from. From a
 // worktree the same words write the worktree's own branch and pass. A push of every branch (`--all`, `--branches`,
 // `--mirror`) writes the default branch with the rest, and is refused from anywhere. Like the switch rule, it fails open
@@ -113,6 +114,9 @@ const A_FORCED_REFSPEC = '+'
 
 /** The refspecs that name what is checked out, and so leave the target to the branch the call runs on. */
 const THE_CHECKED_OUT = new Set(['HEAD', '@'])
+
+/** The option a push writes the tags with, and with no refspec beside it nothing else: no branch at all. */
+const PUSH_THE_TAGS = '--tags'
 
 /** The options a push writes every local branch with, the default branch among them. */
 const PUSH_EVERY_BRANCH = new Set(['--all', '--branches', '--mirror'])
@@ -310,10 +314,11 @@ function theTargetOfARefspec(refspec: string): string {
 
 /**
  * Whether a push leaves its target to the branch checked out where it runs: no refspec past the remote, or one naming
- * `HEAD` or `@` without a colon (martha#925 r=1).
+ * `HEAD` or `@` without a colon (martha#925 r=1). A push of the tags with no refspec writes the tags alone.
  */
-function leavesTheTargetToGit(refspecs: readonly string[]): boolean {
-  return refspecs.length === 0 || refspecs.some((refspec) => THE_CHECKED_OUT.has(refspec.startsWith(A_FORCED_REFSPEC) ? refspec.slice(A_FORCED_REFSPEC.length) : refspec))
+function leavesTheTargetToGit(refspecs: readonly string[], args: readonly string[]): boolean {
+  if (refspecs.length === 0) return !args.includes(PUSH_THE_TAGS)
+  return refspecs.some((refspec) => THE_CHECKED_OUT.has(refspec.startsWith(A_FORCED_REFSPEC) ? refspec.slice(A_FORCED_REFSPEC.length) : refspec))
 }
 
 /**
@@ -324,7 +329,7 @@ function refusalOfAPushOntoTheDefault(args: readonly string[], facts: TheFacts, 
   const theDefault = facts.defaultBranch
   if (theDefault === null) return undefined
   const refspecs = theWordsNotOptions(args).slice(1)
-  const writesIt = refspecs.map(theTargetOfARefspec).includes(theDefault) || args.some((word) => PUSH_EVERY_BRANCH.has(word)) || (inAClone && leavesTheTargetToGit(refspecs))
+  const writesIt = refspecs.map(theTargetOfARefspec).includes(theDefault) || args.some((word) => PUSH_EVERY_BRANCH.has(word)) || (inAClone && leavesTheTargetToGit(refspecs, args))
   return writesIt
     ? `${theDefault} is the default branch, and a push onto it waits for the owner's yes: land the work with ${LAND_BATCH}, then ${FAST_FORWARD_AFTER_THE_OWNERS_YES} once the owner said yes. Nothing was pushed.`
     : undefined

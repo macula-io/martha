@@ -179,6 +179,13 @@ test("martha#925 r=1: a push from the clone that leaves its target to git writes
   assert.equal(gitIn(fixture.clone, 'rev-parse', 'origin/main'), theCommit, "the bare push the guard refuses is one git lands on main")
   // From a member's worktree the same words write the member's own branch, and are not refused.
   for (const line of ['git push', 'git push origin HEAD']) assert.equal(await refusalOf(fixture, line, fixture.worktree_of_member), undefined, line)
+  // A push of the tags alone names no refspec either, and writes no branch: git is shown leaving main where it was.
+  gitIn(fixture.clone, '-c', 'user.name=Ann', '-c', 'user.email=ann@example.invalid', 'tag', '-a', '-m', 'a tag', 'v-a-test-tag')
+  writeFileSync(join(fixture.clone, 'README.md'), '# widget, changed again\n')
+  commitIn(fixture.clone, 'a second commit in the clone')
+  for (const line of ['git push --tags', 'git push --tags origin']) assert.equal(await refusalOf(fixture, line, fixture.clone), undefined, line)
+  gitIn(fixture.clone, 'push', '--quiet', '--tags')
+  assert.equal(gitIn(fixture.clone, 'rev-parse', 'origin/main'), theCommit, 'a push of the tags alone moved main')
 })
 
 test("martha#925 r=1: a push of every branch writes the default branch with them, and is refused from anywhere", async (t) => {
