@@ -132,7 +132,6 @@ import { memberRelay, type MemberRelay, type MemberRelayPlace } from '../answer_
 import { theMembersTelling } from '../tell_the_member_a_line/tell_the_member_a_line.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
-  API_KEY_VARIABLE,
   hostTrustsTheFolder,
   ownerCanAnswerTheHost,
   SESSION_START_DEADLINE_MS,
@@ -167,12 +166,12 @@ import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/re
 import { relayJournalKeptIn, type RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { makeRelayDirectory, type RelayDirectory } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { aFolderOfTheMisses, theGuardOfTheLaunch, type TheGitGuard } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
-import { MEMBER_CONFIG_FOLDER, makeTheMembersConfig } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { isBelowACarriedFolder } from '../refuse_launch_of_unapproved_config/carry_the_approved_skills.ts'
 import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
-import { theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
+import { giveAMemberItsStart } from './the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -356,17 +355,15 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
   const owners = userSettingsPath(launch.inherited)
   if ('refusal' in owners) return owners.refusal
   const memberConfig = membersConfigFolderOf(prepared)
-  const env = theEnvironmentAMemberIsGiven({
+  return giveAMemberItsStart({
     inherited: launch.inherited,
     switches: prepared.switches,
     crew: { state_root: launch.places.state_root, rows: launch.places.rows },
     member_config: memberConfig,
     host: CLAUDE_CODE,
+    checkout: launch.place.launch_dir,
+    skills: theCarriedSkills(prepared.carried_files),
   })
-  // The key answered yes is the one the member is handed, read from the environment it starts with.
-  const made = makeTheMembersConfig(memberConfig, launch.place.launch_dir, env[API_KEY_VARIABLE], theCarriedSkills(prepared.carried_files))
-  if (!made.made) return made.refusal
-  return env
 }
 
 /** The member's own config folder for a launch: decided once, from the launch's snapshot directory, and read by both its users. */
