@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { API_KEY_ANSWERS_KEY, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, hostTrustsTheFolder, KEY_TAIL_LENGTH } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, hostTrustsTheFolder } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, SKILLS_KIND, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { USER_SETTINGS_FILE, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -29,13 +29,13 @@ test("the folder is made new and 0700, with the member's settings and a trust re
   const checkout = join(dir, 'checkout')
   mkdirSync(checkout)
   const folder = join(dir, 'the-members-folder')
-  assert.deepEqual(makeTheMembersConfig(folder, checkout, undefined, NO_SKILLS), { made: true })
+  assert.deepEqual(makeTheMembersConfig(folder, checkout, NO_SKILLS), { made: true })
   assert.equal(lstatSync(folder).mode & 0o777, MEMBER_CONFIG_MODE)
   assert.deepEqual(readdirSync(folder).sort(), [HOST_TRUST_RECORD_FILE, USER_SETTINGS_FILE].sort())
   // The owner's choice (martha#602): the account's connectors off and its skills not synced, each the value the host reads as that.
   assert.deepEqual(JSON.parse(readFileSync(join(folder, USER_SETTINGS_FILE), 'utf8')), { [CONNECTORS_OFF_SETTING]: true, [SYNC_OFF_SETTING]: false })
-  // With no key handed to the member, the host's record holds the first run done and the trust, and no other key:
-  // nothing else of the owner's is answered.
+  // The host's record holds the first run done and the trust, and no other key: nothing else of the owner's is
+  // answered, an API key least of all (martha#916).
   const record = JSON.parse(readFileSync(join(folder, HOST_TRUST_RECORD_FILE), 'utf8')) as Record<string, unknown>
   assert.deepEqual(Object.keys(record).sort(), [FIRST_RUN_DONE_KEY, 'projects'].sort())
   assert.equal(record[FIRST_RUN_DONE_KEY], true)
@@ -53,7 +53,7 @@ test('a checkout reached through a link is trusted by its path and its real path
   mkdirSync(join(dir, 'real'))
   symlinkSync(join(dir, 'real'), join(dir, 'linked'))
   const folder = join(dir, 'the-members-folder')
-  assert.deepEqual(makeTheMembersConfig(folder, join(dir, 'linked'), undefined, NO_SKILLS), { made: true })
+  assert.deepEqual(makeTheMembersConfig(folder, join(dir, 'linked'), NO_SKILLS), { made: true })
   const record = JSON.parse(readFileSync(join(folder, HOST_TRUST_RECORD_FILE), 'utf8')) as { projects: Record<string, unknown> }
   assert.deepEqual(Object.keys(record.projects).sort(), [join(dir, 'linked'), realpathSync(join(dir, 'real'))].sort())
 })
@@ -63,32 +63,15 @@ test('a folder that exists, or a link where it would go, is never reused', (t) =
   const checkout = join(dir, 'checkout')
   mkdirSync(checkout)
   mkdirSync(join(dir, 'there'))
-  assert.equal(makeTheMembersConfig(join(dir, 'there'), checkout, undefined, NO_SKILLS).made, false)
+  assert.equal(makeTheMembersConfig(join(dir, 'there'), checkout, NO_SKILLS).made, false)
   assert.deepEqual(readdirSync(join(dir, 'there')), [], 'nothing was written into a folder that was already there')
   symlinkSync(join(dir, 'there'), join(dir, 'link'))
-  assert.equal(makeTheMembersConfig(join(dir, 'link'), checkout, undefined, NO_SKILLS).made, false)
+  assert.equal(makeTheMembersConfig(join(dir, 'link'), checkout, NO_SKILLS).made, false)
   assert.deepEqual(readdirSync(join(dir, 'there')), [], 'nothing was written through a link')
 })
 
 test("the member's environment names its own folder and the owner's default sign-in store, set and empty, and nothing else", () => {
   assert.deepEqual(theMembersConfigEnvironment('/a/members/folder'), { [CONFIG_DIR_VARIABLE]: '/a/members/folder', [RECORDED_HOST.sign_in_store_variable]: '' })
-})
-
-test('a key handed to the member is answered yes by its tail alone, and an empty one is not answered', (t) => {
-  const dir = scratch(t)
-  const checkout = join(dir, 'checkout')
-  mkdirSync(checkout)
-  // A key whose tail differs from every other slice of it, so a wrong length or end cannot pass.
-  const key = Array.from({ length: KEY_TAIL_LENGTH * 3 }, (_, i) => String.fromCharCode(65 + (i % 26)) + String(i)).join('')
-  const folder = join(dir, 'with-a-key')
-  assert.deepEqual(makeTheMembersConfig(folder, checkout, key, NO_SKILLS), { made: true })
-  const record = JSON.parse(readFileSync(join(folder, HOST_TRUST_RECORD_FILE), 'utf8')) as Record<string, unknown>
-  assert.deepEqual(Object.keys(record).sort(), [API_KEY_ANSWERS_KEY, FIRST_RUN_DONE_KEY, 'projects'].sort())
-  assert.deepEqual(record[API_KEY_ANSWERS_KEY], { approved: [key.slice(-KEY_TAIL_LENGTH)], rejected: [] })
-  assert.ok(!readFileSync(join(folder, HOST_TRUST_RECORD_FILE), 'utf8').includes(key), 'the whole key is never written')
-  const empty = join(dir, 'with-an-empty-key')
-  assert.deepEqual(makeTheMembersConfig(empty, checkout, '', NO_SKILLS), { made: true })
-  assert.ok(!(API_KEY_ANSWERS_KEY in (JSON.parse(readFileSync(join(empty, HOST_TRUST_RECORD_FILE), 'utf8')) as Record<string, unknown>)))
 })
 
 test("the carried skills are written under the folder the host reads as user-scope skills, byte-equal, in files only the launcher's user reads (martha#747)", (t) => {
@@ -98,7 +81,7 @@ test("the carried skills are written under the folder the host reads as user-sco
   const folder = join(dir, 'the-members-folder')
   const skill = new TextEncoder().encode('---\nname: x\ndescription: a skill\n---\nbody\n')
   const script = new TextEncoder().encode('#!/bin/sh\necho a script the skill names\n')
-  assert.deepEqual(makeTheMembersConfig(folder, checkout, undefined, { 'x/SKILL.md': skill, 'x/scripts/run.sh': script }), { made: true })
+  assert.deepEqual(makeTheMembersConfig(folder, checkout, { 'x/SKILL.md': skill, 'x/scripts/run.sh': script }), { made: true })
   assert.deepEqual(readdirSync(folder).sort(), [HOST_TRUST_RECORD_FILE, SKILLS_KIND, USER_SETTINGS_FILE].sort())
   assert.deepEqual(readFileSync(join(folder, SKILLS_KIND, 'x', 'SKILL.md')), Buffer.from(skill))
   assert.deepEqual(readFileSync(join(folder, SKILLS_KIND, 'x', 'scripts', 'run.sh')), Buffer.from(script))

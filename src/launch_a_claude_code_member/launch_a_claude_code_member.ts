@@ -51,10 +51,12 @@
 //      owner's arguments go first, then the launch gate's
 //      switches and the relay's copy. `--mcp-config` takes every argument after
 //      it until the next flag, so the owner's prompt goes before it. The
-//      environment is `theEnvironmentAMemberIsGiven(inherited, switches, crew, config, host)`
+//      environment is `theEnvironmentAMemberIsGiven(inherited, switches, crew, config, host)`, made with the
+//      member's own config folder by `giveAMemberItsStart`
 //      (./the_environment_a_member_is_given.ts): what it inherits without the crew's
 //      state, the switches, the member's own config folder and the launcher's own
-//      state home, then the settings that keep a checkout from running its hooks,
+//      state home, with no API key, since the member is handed the owner's sign-in
+//      (martha#916), then the settings that keep a checkout from running its hooks,
 //      install scripts and .envrc through the member's own commands (martha#24),
 //      plus the socket's path. Its PATH starts with the launch's own `git` guard, and
 //      git is pointed at the guard's hooks (../guard_the_git_a_member_runs,

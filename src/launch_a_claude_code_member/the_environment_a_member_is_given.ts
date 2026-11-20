@@ -9,7 +9,9 @@
 // its rows place, named and decoded by the row store's own names (../row_streams_directory).
 //
 // It is handed no variable kitty sets for the programs it starts either (#572 T6, #547 S6): a member run in a kitty tab
-// must not find that kitty's remote-control line or window.
+// must not find that kitty's remote-control line or window. And, being handed the owner's sign-in, it is handed no
+// API key (martha#916, ../give_a_member_its_own_config): taken out last, so no inherited value, switch or later layer
+// puts it back.
 //
 // The environment is built in this order: what it inherits without the crew's state or kitty's, the gate's switches, the member's
 // own config folder, and the launcher's own state home last, so neither an inherited value nor a switch can point a
@@ -20,8 +22,7 @@ import { join } from 'node:path'
 
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { withoutKittysVariables } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
-import { makeTheMembersConfig, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
-import { API_KEY_VARIABLE } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { makeTheMembersConfig, NOT_GIVEN_WITH_THE_SIGN_IN, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { streamOfDirectoryName } from '../row_streams_directory/row_streams_directory.ts'
 import { SESSION_RECORD_STREAM } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -77,11 +78,12 @@ export function theEnvironmentAMemberIsGiven(asking: AMembersEnvironment): Recor
     places: theCrewsStateKnownTo(asking.crew.state_root, asking.crew.rows, named),
     session_ids: sessionIdsRecordedIn(asking.crew.rows),
   })
-  return {
+  const composed = {
     ...launchEnvironment(withoutKittysVariables(kept), asking.switches, asking.host),
     ...theMembersConfigEnvironment(asking.member_config),
     ...theCrewsStateAMemberIsGiven(asking.crew.state_root),
   }
+  return Object.fromEntries(Object.entries(composed).filter(([name]) => !NOT_GIVEN_WITH_THE_SIGN_IN.includes(name)))
 }
 
 /** What a member starts with beside its environment: the approved checkout it works in, and the skills that checkout carries. */
@@ -93,7 +95,6 @@ export interface AMembersStart extends AMembersEnvironment {
 /** The environment a member is handed, with its own config folder made for it; or why that folder could not be made. */
 export function giveAMemberItsStart(asking: AMembersStart): Record<string, string> | string {
   const env = theEnvironmentAMemberIsGiven(asking)
-  // The key answered yes is the one the member is handed, read from the environment it starts with.
-  const made = makeTheMembersConfig(asking.member_config, asking.checkout, env[API_KEY_VARIABLE], asking.skills)
+  const made = makeTheMembersConfig(asking.member_config, asking.checkout, asking.skills)
   return made.made ? env : made.refusal
 }

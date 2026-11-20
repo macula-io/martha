@@ -14,9 +14,8 @@
 //     reaches a member through its sign-in;
 //   - .claude.json: the approved checkout, and only that folder, marked trusted, so the host does not ask again at
 //     every start; and the host's first run marked done, so a fresh folder shows no first-run screens (the theme
-//     picker, the security notice) before the session starts, and the theme is the host's own default; and, when
-//     the member's environment hands the host an API key, that key answered yes, so the host does not stop the
-//     member to ask whether to use it (decided 2026-11-18). These are first-run answers Martha gives for the owner.
+//     picker, the security notice) before the session starts, and the theme is the host's own default. These are
+//     first-run answers Martha gives for the owner. It answers no API key: a member is handed no key (below).
 //
 // It also holds the skills of the approved checkout (martha#747), copied under skills/ from the bytes the launch gate
 // carried and hashed as approved: the host reads that folder as user-scope skills while project settings stay off, so
@@ -28,11 +27,16 @@
 // default store (../cut_the_rules_from_the_host_binary/the_sign_in_store.ts). Both variables go on the member's
 // environment over anything inherited, so neither the owner's shell nor a settings file the gate passes points the
 // member back at the owner's folder.
+//
+// A member handed that sign-in is handed no API key (martha#916, DECIDED 2026-11-20 "a", which supersedes the
+// 2026-11-18 "answer yes for the owner"). With both, the host bills the key, not the subscription: a G1 probe showed a
+// member on "API Usage Billing" whose key had no credit, while the owner's own record had rejected that key. So the key
+// the launcher's environment carries is taken out of the member's, and the host record answers no key at all.
 
 import { lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-import { API_KEY_ANSWERS_KEY, apiKeyAnsweredYes, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, TRUST_ACCEPTED_KEY } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { API_KEY_VARIABLE, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, TRUST_ACCEPTED_KEY } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, SKILLS_KIND, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -52,16 +56,18 @@ export const FILE_MODE = 0o600
 export const MEMBERS_OWN_SETTINGS: Readonly<Record<string, boolean>> = { [CONNECTORS_OFF_SETTING]: true, [SYNC_OFF_SETTING]: false }
 
 /**
- * The host's record for the member: its first run done, the API key the member is handed (if any) answered yes, and
- * the approved checkout trusted, by its path and its real path, and nothing else. Without the first two, a fresh
- * folder shows the host's screens before any session starts, and the launcher, holding a member in a trusted folder to
- * the short deadline, stops it (seen live and in the recorded host, martha#602).
+ * The host's record for the member: its first run done, and the approved checkout trusted, by its path and its real
+ * path, and nothing else. Without the first, a fresh folder shows the host's screens before any session starts, and
+ * the launcher, holding a member in a trusted folder to the short deadline, stops it (seen live and in the recorded
+ * host, martha#602).
  */
-export function theMembersHostRecord(checkout: string, apiKey: string | undefined): Readonly<Record<string, unknown>> {
+export function theMembersHostRecord(checkout: string): Readonly<Record<string, unknown>> {
   const trusted = { [TRUST_ACCEPTED_KEY]: true }
-  const answered = apiKey === undefined || apiKey === '' ? {} : { [API_KEY_ANSWERS_KEY]: apiKeyAnsweredYes(apiKey) }
-  return { [FIRST_RUN_DONE_KEY]: true, ...answered, projects: Object.fromEntries([...new Set([checkout, realpathSync(checkout)])].map((path) => [path, trusted])) }
+  return { [FIRST_RUN_DONE_KEY]: true, projects: Object.fromEntries([...new Set([checkout, realpathSync(checkout)])].map((path) => [path, trusted])) }
 }
+
+/** The variables a member handed the owner's sign-in is never given, whatever it inherits (martha#916). */
+export const NOT_GIVEN_WITH_THE_SIGN_IN: readonly string[] = [API_KEY_VARIABLE]
 
 /** The member's environment over everything inherited: its own config folder, and the owner's default sign-in store. */
 export function theMembersConfigEnvironment(folder: string): Readonly<Record<string, string>> {
@@ -69,13 +75,12 @@ export function theMembersConfigEnvironment(folder: string): Readonly<Record<str
 }
 
 /**
- * Makes the member's config folder at `folder` for a member of `checkout` whose environment hands the host
- * `apiKey`, or none, holding `skills`, keyed by their path below the skills folder; or why it could not be made.
+ * Makes the member's config folder at `folder` for a member of `checkout`, holding `skills`, keyed by their path below
+ * the skills folder; or why it could not be made.
  */
 export function makeTheMembersConfig(
   folder: string,
   checkout: string,
-  apiKey: string | undefined,
   skills: Readonly<Record<string, Uint8Array>>,
 ): { readonly made: true } | { readonly made: false; readonly refusal: string } {
   try {
@@ -87,7 +92,7 @@ export function makeTheMembersConfig(
   try {
     mkdirSync(folder, { mode: MEMBER_CONFIG_MODE })
     writeFileSync(join(folder, USER_SETTINGS_FILE), `${JSON.stringify(MEMBERS_OWN_SETTINGS)}\n`, { mode: FILE_MODE, flag: 'wx' })
-    writeFileSync(join(folder, HOST_TRUST_RECORD_FILE), `${JSON.stringify(theMembersHostRecord(checkout, apiKey))}\n`, { mode: FILE_MODE, flag: 'wx' })
+    writeFileSync(join(folder, HOST_TRUST_RECORD_FILE), `${JSON.stringify(theMembersHostRecord(checkout))}\n`, { mode: FILE_MODE, flag: 'wx' })
     for (const [path, bytes] of Object.entries(skills)) {
       const at = join(folder, SKILLS_KIND, path)
       mkdirSync(dirname(at), { recursive: true, mode: MEMBER_CONFIG_MODE })

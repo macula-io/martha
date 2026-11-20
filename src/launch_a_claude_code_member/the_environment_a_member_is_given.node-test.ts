@@ -9,11 +9,10 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { API_KEY_ANSWERS_KEY, API_KEY_VARIABLE, HOST_TRUST_RECORD_FILE } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
-import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
-import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { KITTY_VARIABLE_PREFIX } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { giveAMemberItsStart, theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
 
 test('K3: a member is handed none of KITTY_LISTEN_ON, KITTY_WINDOW_ID, KITTY_PID and KITTY_PUBLIC_KEY, and keeps the rest', () => {
