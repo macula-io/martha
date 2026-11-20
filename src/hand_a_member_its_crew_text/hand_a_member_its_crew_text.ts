@@ -28,6 +28,7 @@ import { CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { OFFER_OWNER_ASKS, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
 import { thePortedRules, type WhatThePortedRulesRead } from './the_ported_rules.ts'
+import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
 
 /**
  * Where Martha's own texts ship, inside this slice. `import.meta.dirname` is the one way a slice may know its own
@@ -216,14 +217,15 @@ export function theTextsAMemberReads(settings: CrewSettings, member: string, rea
   }
 }
 
-/** What the ported rules read of the declaration (martha#971): the switches that turn each on, and this role's two grants. */
+/**
+ * What the ported rules read of the declaration (martha#971): the workspace as the git guard reads it, so its rules are
+ * taught exactly where it holds them (review r=1), the review model, and this role's two grants.
+ */
 function thePortedRulesOf(settings: CrewSettings, role: string): Omit<WhatThePortedRulesRead, 'owner'> {
-  const rules = settings.house_rules
-  const { clones, worktrees } = rules
+  const { clones, worktrees } = theWorkspaceTheCrewDeclared(settings) ?? { clones: null, worktrees: null }
   return {
-    layout: rules.workspace_layout && clones !== null && worktrees !== null ? { clones, worktrees } : null,
-    member_work: rules.member_work,
-    review_model: rules.review_model,
+    layout: clones === null || worktrees === null ? null : { clones, worktrees },
+    review_model: settings.house_rules.review_model,
     assigns_work: whoTheTableGrants(settings.mode.may.assign_work).includes(role),
     offers_owner_asks: whoTheTableGrants(settings.mode.may[OFFER_OWNER_ASKS]).includes(role),
   }

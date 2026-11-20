@@ -43,6 +43,7 @@ import { TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { WORKTREE_FINISH } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
+import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
 
 const ROOT = `/${CREWS_PLACE}/site`
 const CREW = join(ROOT, DECLARATION_DIRECTORY)
@@ -94,8 +95,8 @@ const sectionFor = (settings: CrewSettings, member: string, read: ReadAText): Th
 
 const textAt = (file: string, text: string): ATextAndItsFile => ({ file, text })
 
-/** A member the ported rules hand only the progress part: no layout, no member work, no review model, no grant. */
-const NOTHING_PORTED: TheTextsAMemberReads['ported'] = { layout: null, member_work: false, review_model: null, assigns_work: false, offers_owner_asks: false }
+/** A member the ported rules hand only the progress part: no layout, no review model, no grant. */
+const NOTHING_PORTED: TheTextsAMemberReads['ported'] = { layout: null, review_model: null, assigns_work: false, offers_owner_asks: false }
 
 /** Everything a composer needs, which each case changes one field of. */
 const textsOf = (change: Partial<TheTextsAMemberReads> = {}): TheTextsAMemberReads => ({
@@ -318,7 +319,7 @@ const settingsWithEveryPortedRule = (): CrewSettings => {
   return {
     ...base,
     mode: { ...base.mode, may: { ...base.mode.may, assign_work: ['builder'], [OFFER_OWNER_ASKS]: ['builder'] } },
-    house_rules: { ...base.house_rules, workspace_layout: true, member_work: true, clones: '/a/place/for/copies', worktrees: '/a/place/for/branches', review_model: 'a-review-model' },
+    house_rules: { ...base.house_rules, workspace_layout: true, clones: '/a/place/for/copies', worktrees: '/a/place/for/branches', review_model: 'a-review-model' },
   }
 }
 
@@ -345,13 +346,18 @@ test("martha#971: a member with neither grant is handed the parts every member r
   assert.deepEqual(thePortedHeadings(section), ['Progress', 'Workspace rules', 'Reviews'])
 })
 
-test("martha#971: a crew that turns no ported rule on hands the progress part alone, and a crew with member_work but no layout hands that one rule as the first (mutants: the progress part dropped; the layout read when it is off)", () => {
+test("martha#971: a crew that turns no ported rule on hands the progress part alone, and the workspace part follows the git guard's own reading, never member_work (mutants: the progress part dropped; the layout read when it is off; review r=1: rule (4) on member_work)", () => {
   assert.deepEqual(thePortedHeadings(handAMemberItsCrewText(sectionFor(settingsOf(), 'builder', shippedReader()))), ['Progress'])
   const base = settingsOf()
-  const theirs = handAMemberItsCrewText(sectionFor({ ...base, house_rules: { ...base.house_rules, member_work: true } }, 'builder', shippedReader()))
-  assert.deepEqual(thePortedHeadings(theirs), ['Progress', 'Workspace rules'])
-  assert.ok(theirs.includes(`(1) A worktree or branch whose name starts with another member's is theirs`), 'the member-work rule is not the only one')
-  assert.ok(!theirs.includes('A clone in'), 'a layout rule was handed with no layout declared')
-  const placesNamedLayoutOff = { ...base.house_rules, clones: '/a/place/for/copies', worktrees: '/a/place/for/branches' }
-  assert.deepEqual(thePortedHeadings(handAMemberItsCrewText(sectionFor({ ...base, house_rules: placesNamedLayoutOff }, 'builder', shippedReader()))), ['Progress'], 'places named with workspace_layout off were handed as the crew\'s rules')
+  // member_work is read by no guard: with no layout the guard refuses nothing, so no workspace rule is handed.
+  const memberWorkOnly = { ...base, house_rules: { ...base.house_rules, member_work: true } }
+  assert.deepEqual(thePortedHeadings(handAMemberItsCrewText(sectionFor(memberWorkOnly, 'builder', shippedReader()))), ['Progress'], 'a rule the guard does not hold was handed as Martha\'s')
+  // The guard refuses another member's worktree wherever it holds the places, so that rule is handed with the others.
+  const layoutOnly = { ...base, house_rules: { ...base.house_rules, workspace_layout: true, member_work: false, clones: '/a/place/for/copies', worktrees: '/a/place/for/branches' } }
+  const guarded = handAMemberItsCrewText(sectionFor(layoutOnly, 'builder', shippedReader()))
+  assert.ok(guarded.includes(`(4) A worktree or branch whose name starts with another member's is theirs: only they remove it, through ${WORKTREE_FINISH}.`), 'the rule the guard refuses by was not taught')
+  // Places named with the switch off: the part is handed exactly when the guard reads a workspace from the declaration.
+  const placesNamedLayoutOff = { ...base, house_rules: { ...base.house_rules, clones: '/a/place/for/copies', worktrees: '/a/place/for/branches' } }
+  const handed = thePortedHeadings(handAMemberItsCrewText(sectionFor(placesNamedLayoutOff, 'builder', shippedReader()))).includes('Workspace rules')
+  assert.equal(handed, theWorkspaceTheCrewDeclared(placesNamedLayoutOff) !== undefined, 'the workspace part and the guard read the places differently')
 })

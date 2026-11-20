@@ -20,10 +20,11 @@ import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/op
 /** What the ported parts are given, all of it read from the declaration by the composer's caller. */
 export interface WhatThePortedRulesRead {
   readonly owner: string
-  /** The crew's clones and worktrees, when `house_rules.workspace_layout` is on; null otherwise. */
+  /**
+   * The crew's clones and worktrees as the git guard reads them (theWorkspaceTheCrewDeclared); null when the guard is
+   * off, so the workspace part is handed exactly when the guard it describes holds (martha#971 review r=1).
+   */
   readonly layout: { readonly clones: string; readonly worktrees: string } | null
-  /** Whether `house_rules.member_work` is on: another member's worktree or branch is theirs. */
-  readonly member_work: boolean
   /** The crew's review model, when `house_rules.review_model` names one. */
   readonly review_model: string | null
   /** Whether this member's role is granted `assign_work`: it hands out the crew's work. */
@@ -38,7 +39,7 @@ export function thePortedRules(reads: WhatThePortedRulesRead): readonly string[]
     theProgressPart(reads.owner),
     reads.assigns_work ? theBriefsPart() : null,
     reads.assigns_work ? theRhythmPart(reads.owner) : null,
-    theWorkspacePart(reads.layout, reads.member_work),
+    theWorkspacePart(reads.layout),
     reads.offers_owner_asks ? theAskQueuePart(reads.owner) : null,
     reads.review_model === null ? null : theReviewsPart(reads.review_model),
     reads.assigns_work ? theModelsPart() : null,
@@ -85,17 +86,15 @@ export function theRhythmPart(owner: string): string {
  * another member's worktree or branch and prints one line for a clone taken off its default branch or a worktree made
  * inside a clone (../guard_workspace); the rest are the crew's rules, which nothing refuses.
  */
-export function theWorkspacePart(layout: WhatThePortedRulesRead['layout'], member_work: boolean): string | null {
-  if (layout === null && !member_work) return null
-  const placed = layout === null ? [] : [
+export function theWorkspacePart(layout: WhatThePortedRulesRead['layout']): string | null {
+  if (layout === null) return null
+  const rules = [
     `A clone in ${layout.clones}/<org>/<repo> stays on its default branch, clean and fast-forwarded; no feature branch is ever checked out there. Martha prints one line when a call takes a clone off it.`,
     `Branch work happens in a worktree at ${layout.worktrees}/<repo>-<slug> (flat), made with ${WORKTREE_OPEN} and removed with ${WORKTREE_FINISH}, together with its local branch, when the package closes.`,
     'One clone per repo: no second copy under another organisation directory or under another name.',
+    `A worktree or branch whose name starts with another member's is theirs: only they remove it, through ${WORKTREE_FINISH}. Martha refuses a call that removes or moves it.`,
   ]
-  const theirs = member_work
-    ? [`A worktree or branch whose name starts with another member's is theirs: only they remove it, through ${WORKTREE_FINISH}. Martha refuses a call that removes or moves it.`]
-    : []
-  return `## Workspace rules\n\n${[...placed, ...theirs].map((rule, at) => `(${at + 1}) ${rule}`).join(' ')}`
+  return `## Workspace rules\n\n${rules.map((rule, at) => `(${at + 1}) ${rule}`).join(' ')}`
 }
 
 /** crew-code's `crew:ask-queue` (register.tsx:3110), in Martha's ask tools. */
