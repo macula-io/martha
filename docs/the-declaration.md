@@ -31,6 +31,7 @@ page does not name.
 | `role` | yes | One of `mode.roles`. |
 | `model` | no | The model this member runs; left out, the host's own. |
 | `host` | no | The host this member runs on; left out, the crew's `host`. |
+| `parked` | no | `true` keeps the member declared but down: `martha up` starts every member that is not parked. Left out, `false`. Not the park a running member's work is put in. |
 
 ## `mode`
 
@@ -78,6 +79,7 @@ Each switch is off unless the file says `true`.
 | `host` | yes | The endpoint's URL, `http:` or `https:`. |
 | `base_path` | no | The path under the host. |
 | `key_from` | no | The name of the environment variable that holds the key. The key itself never goes in the file. |
+| `key_file` | no | The absolute path of a file that holds the key, read only when the member starts. Never named beside `key_from`: the key is read from one place. |
 
 ## `thresholds`
 
