@@ -19,7 +19,9 @@ import {
   OWNER,
   THE_ENGINES_HOST,
   WORKTREES_BESIDE_CLONES,
+  SOLO_MODE,
   declareCrew,
+  soloDeclaration,
 } from './declare_crew.ts'
 
 const root = '/a-workspace'
@@ -196,4 +198,13 @@ test('#931: the blocks the later packages read are checked for their shape, so a
   await refusedWith({ ...draft, transcripts: [] }, 'transcripts')
   await refusedWith({ ...draft, owner_notices: { show: [''] } }, 'owner_notices.show[0]')
   await refusedWith({ ...draft, owner_notices: { hide: [] } }, 'owner_notices.hide')
+})
+
+test('#931 (PR 939 ruling): a mode named solo takes the table `martha init` writes for solo, and its members hold its roles', async () => {
+  const written = soloDeclaration('Ann').mode
+  const solo = { ...draft, mode: SOLO_MODE, members: [{ name: 'Maker', role: 'builder', profile: 'big' }, { name: 'Checker', role: 'reviewer', profile: 'big' }], house_rules: {} }
+  const { mode } = await declare(solo)
+  assert.deepEqual(mode, { name: written.name, roles: [...written.roles], may: written.may })
+  assert.notDeepEqual(mode.may, (await declare({ ...solo, mode: 'a-mode-martha-has-no-table-for' })).mode.may, 'the solo table is read, not the owner-only one')
+  await refusedWith({ ...solo, members: [{ name: 'Lead', role: 'supervisor', profile: 'big' }] }, 'members[0].role')
 })

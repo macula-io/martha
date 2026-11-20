@@ -703,15 +703,25 @@ function modeOf(refuse: Refuse, value: unknown, members: unknown): Mode {
 
 /**
  * A mode named by its name alone (martha#931, Raf's draft writes `"mode": "team"`): its text is
- * `.martha/modes/<name>.md`, as for every mode; its roles are the roles its members hold; and its table names no act,
+ * `.martha/modes/<name>.md`, as for every mode. A name Martha has a table of takes that table, as `martha init` writes
+ * it (the Supervisor's ruling on PR 939). Any other name has the roles its members hold and a table that names no act,
  * so every act is the owner's (whoTheTableGrants), the reading a table that leaves an act out has always had. A crew
  * that grants an act to a role writes the mode as `{ name, roles, may }`.
  */
 function aModeByName(refuse: Refuse, name: string, members: unknown): Mode {
   if (!isText(name)) return refuse.at('mode', 'is not a name')
+  const own = marthasOwnTableOf(name.trim())
+  if (own !== undefined) return own
   const held = Array.isArray(members) ? members.flatMap((member: unknown) => (isObject(member) && isText(member['role']) && member['role'] !== OWNER ? [member['role']] : [])) : []
   const may = Object.fromEntries(ACTS.map((act) => [act, [...whoTheTableGrants(undefined)]])) as Record<Act, string[]>
   return { name: name.trim(), roles: [...new Set(held)], may }
+}
+
+/** The table Martha writes for a mode of this name (`martha init`'s solo crew), or undefined when it writes none. */
+function marthasOwnTableOf(name: string): Mode | undefined {
+  const solo = soloDeclaration(OWNER).mode
+  if (name !== solo.name) return undefined
+  return { name: solo.name, roles: [...solo.roles], may: Object.fromEntries(ACTS.map((act) => [act, [...whoTheTableGrants((solo.may as Readonly<Record<string, unknown>>)[act])]])) as Record<Act, string[]> }
 }
 
 function rolesOf(refuse: Refuse, value: unknown): string[] {
