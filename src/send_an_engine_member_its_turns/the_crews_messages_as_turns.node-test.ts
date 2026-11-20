@@ -27,6 +27,7 @@ function turnsAnswering(...answers: WhatATurnDid[]): TheEngineMembersTurns & { r
   const took: ATurnToSend[] = []
   return {
     took,
+    settled: async () => undefined,
     take: (turn) => {
       took.push(turn)
       return Promise.resolve(answers.shift() ?? { sent: 1 })
@@ -89,6 +90,7 @@ test('#511 part B: a read that starts while another is still reading the channel
   const finishes: ((did: WhatATurnDid) => void)[] = []
   const took: ATurnToSend[] = []
   const turns: TheEngineMembersTurns = {
+    settled: async () => undefined,
     take: (turn) => {
       took.push(turn)
       return new Promise((settle) => finishes.push(settle))

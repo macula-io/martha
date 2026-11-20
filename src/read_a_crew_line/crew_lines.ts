@@ -74,6 +74,17 @@ export const CREW_LINES: readonly LineShape[] = [
   },
 ]
 
+/**
+ * The two lines that hand an Artifact to the Supervisor (martha#957 gap 13, crew-code's PROTOCOL as it is): a member
+ * whose session has no claude.ai login cannot run the Artifact tools, so it asks the Supervisor, who has one, to read a
+ * page into a file or to publish a file. A publish that updates a page adds url=<artifact link>. They are taught and
+ * named in a refusal, never read by the line reader: what comes of them is the Supervisor's reply.
+ */
+export const ARTIFACT_LINES = {
+  read: `ARTIFACT ${placeholderOf('package')} read url=<artifact link> file=<abs path>`,
+  publish: `ARTIFACT ${placeholderOf('package')} publish file=<abs path>`,
+} as const
+
 /** The verbs a member sends, as a line's own first word. */
 export const CREW_VERBS: readonly string[] = CREW_LINES.map((line) => line.verb)
 
