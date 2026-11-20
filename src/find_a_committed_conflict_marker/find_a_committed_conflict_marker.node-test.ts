@@ -48,6 +48,8 @@ test('#968: the clause names the first ten findings and counts the rest', () => 
   const found = Array.from({ length: 12 }, (_, index) => ({ path: 'a.md', line: index + 1, marker: '<<<<<<<' }))
   assert.equal(theMarkersSaid(found), 'a.md:1, a.md:2, a.md:3, a.md:4, a.md:5, a.md:6, a.md:7, a.md:8, a.md:9, a.md:10 and 2 more')
   assert.equal(theMarkersSaid(found.slice(0, 2)), 'a.md:1, a.md:2')
+  assert.equal(theMarkersSaid(found.slice(0, 11)), 'a.md:1, a.md:2, a.md:3, a.md:4, a.md:5, a.md:6, a.md:7, a.md:8, a.md:9, a.md:10 and 1 more')
+  assert.equal(theMarkersSaid(found.slice(0, 10)), 'a.md:1, a.md:2, a.md:3, a.md:4, a.md:5, a.md:6, a.md:7, a.md:8, a.md:9, a.md:10')
 })
 
 const gitIn = (cwd: string, ...args: readonly string[]): string => execFileSync(GIT, [...args], { cwd, encoding: 'utf8' }).trim()
@@ -93,4 +95,11 @@ test('#968: a commit git cannot search is refused, naming it', async (t) => {
   const found = await theMarkersAt(hostForTests({ run: runReal }).host, at.path, '0000000000000000000000000000000000000001')
   assert.ok('refused' in found, `an unknown commit was searched: ${JSON.stringify(found)}`)
   assert.match(found.refused, /could not be searched for a conflict marker at 0{39}1/)
+})
+
+test('#968: a file whose name git would quote is read by its own name, so its marker is a notice and never a refusal', async (t) => {
+  const at = aCommitHolding(t, { 'café.md': 'a\n<<<<<<< HEAD\nb\n', 'tab\there.md': 'x\n>>>>>>> theirs\n' })
+  const found = await theMarkersAt(hostForTests({ run: runReal }).host, at.path, at.commit)
+  assert.ok('ok' in found, `a quoted name stopped the read: ${JSON.stringify(found)}`)
+  assert.equal(theMarkersSaid(found.ok), 'café.md:2, tab\there.md:2')
 })

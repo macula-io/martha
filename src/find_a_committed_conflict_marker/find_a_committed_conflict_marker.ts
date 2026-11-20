@@ -68,7 +68,7 @@ export function aConflictMarkerNotice(commit: string, found: readonly AMarker[])
 
 /** Every marker line in the tree at `commit` in the clone at `path`, or why git could not say. */
 export async function theMarkersAt(host: Pick<HostContract, 'processes'>, path: string, commit: string): Promise<Step<readonly AMarker[]>> {
-  const candidates = await git(host, path, ['grep', '-I', '-l', '--full-name', '-E', AN_OPENING.source, commit, '--', ':(top)'])
+  const candidates = await git(host, path, ['grep', '-I', '-l', '-z', '--full-name', '-E', AN_OPENING.source, commit, '--', ':(top)'])
   if (candidates.exit_code === 1) return { ok: [] }
   if (candidates.exit_code !== 0) return { refused: `${path} could not be searched for a conflict marker at ${commit}: ${saidBy(candidates)}.` }
   const found: AMarker[] = []
@@ -80,10 +80,14 @@ export async function theMarkersAt(host: Pick<HostContract, 'processes'>, path: 
   return { ok: found }
 }
 
-/** The files a `git grep -l` answer names, with the tree it searched taken off each line. */
+/**
+ * The files a `git grep -l -z` answer names, with the tree it searched taken off each one. Without -z git quotes a name
+ * that is not plain ASCII or holds a tab, and `git show` of the quoted name finds no such path, so one marker in
+ * `café.md` would turn the notice into a refusal.
+ */
 function theFilesIn(said: string, commit: string): readonly string[] {
   return said
-    .split('\n')
+    .split('\0')
     .filter((line) => line !== '')
     .map((line) => (line.startsWith(`${commit}:`) ? line.slice(commit.length + 1) : line))
 }
