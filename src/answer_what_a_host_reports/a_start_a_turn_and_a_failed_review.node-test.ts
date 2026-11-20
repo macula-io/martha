@@ -320,14 +320,14 @@ test('#541 1b: a record that can no longer be vouched for breaks its session, so
 })
 
 const THE_CREW_STATE = 'Standing items (1): hold the landing for the owner.'
-const THE_STATE_CARRIES: TurnSource = 'crew_state'
+const THE_STATE_CARRIES: TurnSource = 'state_of_the_crew'
 
 test("martha#984: the crew's state a turn is handed is taken in on its own source before it is answered (mutant: handed without the take-in)", async (t) => {
   const { answers } = anEntry(t, { crew_state: { line: THE_CREW_STATE, taken_in: [THE_STATE_CARRIES] } })
   await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
 
   assert.equal(await answers.theCrewStateToHand('session-a'), THE_CREW_STATE)
-  assert.deepEqual(pathsIn(answers, 'session-a'), [PATH_OF_SOURCE.server_instructions, PATH_OF_SOURCE.crew_state])
+  assert.deepEqual(pathsIn(answers, 'session-a'), [PATH_OF_SOURCE.server_instructions, PATH_OF_SOURCE.state_of_the_crew])
 })
 
 test("martha#984: no crew state hands nothing and takes nothing in; a session the entry does not hold is handed nothing, and the crew is not asked", async (t) => {

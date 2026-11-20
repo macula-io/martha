@@ -23,7 +23,7 @@ import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts
 import type { TheStartLine } from './the_start_line.ts'
 
 /** The source the crew's state is taken in on, on a turn (martha#984): its own inbound path, beside the start's A20. */
-export const CREW_STATE_SOURCE: TurnSource = 'crew_state'
+export const CREW_STATE_SOURCE: TurnSource = 'state_of_the_crew'
 
 /**
  * How many nudge lines one turn is handed, at most (martha#984 threat model): the rest are named by count, with the

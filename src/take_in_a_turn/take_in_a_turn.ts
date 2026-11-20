@@ -76,7 +76,7 @@ export const PATH_OF_SOURCE: Readonly<Record<TurnSource, string>> = {
   subagent: 'B7',
   standing_items: 'A20',
   package_contract: 'A22',
-  crew_state: 'A28',
+  state_of_the_crew: 'A28',
 }
 
 /** A session, with the record the gate reads and whether that record could be read. */

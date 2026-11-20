@@ -221,8 +221,8 @@ test('the drive is not vacuous: without the package contract the crew hands at s
 
 test('the drive is not vacuous: without the crew state a prompted turn is handed, A28 is named', async (t) => {
   const recorded = await pathsTheLauncherRecords(t)
-  const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.crew_state)).map((gap) => gap.path)
-  assert.ok(named.includes(PATH_OF_SOURCE.crew_state), named.join(', '))
+  const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.state_of_the_crew)).map((gap) => gap.path)
+  assert.ok(named.includes(PATH_OF_SOURCE.state_of_the_crew), named.join(', '))
 })
 
 /** What these launches started the host with: the arguments and environment the adapter's declaration names (martha#135). */
