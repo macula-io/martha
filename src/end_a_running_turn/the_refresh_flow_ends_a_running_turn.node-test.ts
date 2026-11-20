@@ -90,18 +90,18 @@ async function aMemberHandingOver(options: ACrewOptions) {
   /** The order the mod is answered with, for the question put at `minute` after the ask. */
   const ask = async (minute: number, question: Readonly<Record<string, unknown>>, session = SESSION): Promise<Record<string, unknown>> => {
     clock.at = asked_at + minute * MINUTE_MS
-    const answered = await tools.answer(THE_REFRESH_ASK, { usage: { context: { percent: PAST_THE_LIMIT }, cost: { usd: null } }, turn_id: THE_TURN, answer: '', ...question }, session)
+    const answered = await tools.answer(THE_REFRESH_ASK, { usage: { startedAt: 0, context: { percent: PAST_THE_LIMIT }, cost: { usd: null } }, turn_id: THE_TURN, answer: '', ...question }, session)
     assert.ok('answer' in answered, `the flow refused the question: ${'refused' in answered ? answered.refused : ''}`)
     return JSON.parse(answered.answer) as Record<string, unknown>
   }
 
   // The session opens low, and its next turn is past the limit: the flow asks for the handover, at minute 0.
-  const opened = await tools.answer(THE_REFRESH_ASK, { usage: { context: { percent: 10 }, cost: { usd: null } }, turn_id: '', answer: '' }, SESSION)
+  const opened = await tools.answer(THE_REFRESH_ASK, { usage: { startedAt: 0, context: { percent: 10 }, cost: { usd: null } }, turn_id: '', answer: '' }, SESSION)
   assert.ok('answer' in opened, 'the session\'s first question was refused')
   if (options.holds !== undefined) beats.change(MEMBER, (row) => (row === null ? null : { ...row, holds: options.holds ?? '' }))
   clock.at += MINUTE_MS
   const asked_at = clock.at
-  const started = await tools.answer(THE_REFRESH_ASK, { usage: { context: { percent: PAST_THE_LIMIT }, cost: { usd: null } }, turn_id: 'the-asking-turn', answer: '' }, SESSION)
+  const started = await tools.answer(THE_REFRESH_ASK, { usage: { startedAt: 0, context: { percent: PAST_THE_LIMIT }, cost: { usd: null } }, turn_id: 'the-asking-turn', answer: '' }, SESSION)
   assert.ok('answer' in started && (JSON.parse(started.answer) as { carry: string }).carry === CARRY_A_TEXT, 'the flow did not ask for the handover')
 
   return {

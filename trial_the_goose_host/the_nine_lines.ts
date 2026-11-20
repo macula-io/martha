@@ -5,7 +5,10 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { chatsIn, promptOver, tokensFound, toolsIn } from './the_engine_over_acp/a_turn_with_goose.ts'
-import { CHECKOUT_MARKERS, HOME_MARKERS, tokensOf, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
+import { CHECKOUT_MARKERS, HOME_MARKERS, THE_APPROVED_SKILL, tokensOf, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
+import { RECORDED_GOOSE_ENGINE } from '../src/know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { thisMachine } from '../src/linux_process_identity/files_and_processes_on_this_machine.ts'
+import { decideLaunch, readLaunchState, type LaunchDecision } from '../src/refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { RecordingProxy } from './the_engine_over_acp/record_what_goose_sends.ts'
 import type { GooseOverAcp } from './the_engine_over_acp/speak_acp_to_goose.ts'
 
@@ -43,17 +46,35 @@ export const lineOne: Line = async (trial) => {
     { markers: tokensOf(HOME_MARKERS), hits, answer: turn.text.slice(0, 600), modelRequests: chatsIn(trial.proxy.received).length })
 }
 
-/** Line 2: nothing of an unapproved checkout reaches the session either. */
-export const lineTwo: Line = async (trial) => {
-  const turn = await promptOver(trial.acp, trial.sessionId,
-    'List, by name, every skill, recipe, agent and check you can use, and say whether you load them from this project. Reply with the names only.')
-  const hits = tokensFound(tokensOf(CHECKOUT_MARKERS), ...chatsIn(trial.proxy.received), turn.text)
-  return say(hits.length === 0 ? 'pass' : 'fail',
-    hits.length === 0 ? 'no marker of the checkout reached the model or the session' : `the checkout reached the session: ${hits.join(', ')}`,
-    {
-      markers: tokensOf(CHECKOUT_MARKERS), hits, answer: turn.text.slice(0, 600),
-      gate: 'not observed in this package: the launch gate names the Claude Code host\'s files only, and Goose\'s rows arrive with packages 7-8',
-    })
+/** The skill roots the gate must name when a checkout holds them: every skill folder, the plugin folder, each settings file. */
+const THE_SKILL_ROOTS = RECORDED_GOOSE_ENGINE.checkout_skill_roots
+const SKILL_ROOT_PATHS: readonly string[] = [...THE_SKILL_ROOTS.skill_folders, THE_SKILL_ROOTS.plugin_folder, ...THE_SKILL_ROOTS.plugin_settings]
+
+/** What the launch gate says of a place before anything starts in it, for the engine's host, with nothing approved. */
+export type AGateAtAPlace = (place: Place) => LaunchDecision
+
+/** The launch gate Martha starts the engine behind (../src/refuse_launch_of_unapproved_config), with nothing approved. */
+export const theLaunchGate: AGateAtAPlace = (place) => {
+  const host = RECORDED_GOOSE_ENGINE.engine_name
+  const state = readLaunchState({ host, launch_dir: place.checkout, stop_dir: place.home }, thisMachine)
+  return decideLaunch({ host, ...state, approved_fingerprints: [] })
+}
+
+/**
+ * Line 2 (martha#614): nothing of an unapproved checkout reaches the session, because the launch gate refuses it before
+ * anything starts. Skills are on now (DECIDED 2026-11-18 "Approved skills on"), so a launch of this checkout would hand
+ * its skills to the model: the line is the gate's refusal, naming each skill root the checkout holds, and no launch.
+ */
+export function lineTwoAtTheGate(place: Place, gate: AGateAtAPlace = theLaunchGate): Observation {
+  const held = SKILL_ROOT_PATHS.filter((root) => existsSync(join(place.checkout, root)))
+  const decision = gate(place)
+  const refusal = decision.allow ? '' : decision.refusal
+  const unnamed = held.filter((root) => !refusal.includes(root))
+  const evidence = { markers: tokensOf(CHECKOUT_MARKERS), held, unnamed, refusal: refusal.slice(0, 2000) }
+  if (held.length === 0) return say('not-observed', 'the checkout holds no skill root, so the gate had nothing to refuse', evidence)
+  if (decision.allow) return say('fail', `the launch gate let an unapproved checkout holding ${held.join(', ')} start`, evidence)
+  if (unnamed.length > 0) return say('fail', `the launch gate refused the checkout without naming ${unnamed.join(', ')}`, evidence)
+  return say('pass', `the launch gate refused the unapproved checkout before anything started, naming ${held.join(', ')}`, evidence)
 }
 
 /** Line 3: every tool call arrives as a permission request, and a once-rejection stops it. */
@@ -176,17 +197,64 @@ export const lineEight: Line = async (trial) => {
     { bangMade, modelRequestsAfterBang: sent, keptHistory, answer: bangTurn.text.slice(0, 300) })
 }
 
-/** Line 9: the model's tool list is exactly the Developer extension's, and nothing else. */
+/** Line 9: the model's tool list is the Developer extension's and the skill loader, and a typed `/<skill>` reaches it as text. */
 export const lineNine: Line = async (trial) => {
-  await promptOver(trial.acp, trial.sessionId, 'Reply with the single word: ready')
-  const offered = toolsIn(chatsIn(trial.proxy.received).at(-1) ?? '')
-  const expected = developerToolsIn(trial.gooseSource)
-  const missing = expected.filter((name) => !offered.includes(name))
-  const extra = offered.filter((name) => !expected.includes(name))
-  const same = expected.length > 0 && missing.length === 0 && extra.length === 0
-  return say(same ? 'pass' : 'fail',
-    same ? `the model was offered exactly ${offered.join(', ')}` : `missing ${missing.join(', ') || 'nothing'}; beyond the allow-list ${extra.join(', ') || 'nothing'}`,
-    { offered, expected })
+  trial.acp.answers.next = 'allow_once'
+  await promptOver(trial.acp, trial.sessionId, THE_TYPED_SKILL)
+  return theNinthLineOf(chatsIn(trial.proxy.received), [...developerToolsIn(trial.gooseSource), loadSkillToolIn(trial.gooseSource)])
+}
+
+/** What the member types in line 9 (martha#614): a slash and the approved skill's name, which reaches the model as text. */
+export const THE_TYPED_SKILL = `/${THE_APPROVED_SKILL}`
+
+/** A model request's messages, as much of them as line 9 reads. */
+interface AChatsMessages {
+  readonly messages?: readonly { readonly role?: string; readonly content?: unknown; readonly tool_calls?: readonly { readonly function?: { readonly name?: string; readonly arguments?: unknown } }[] }[]
+}
+
+const messagesOf = (body: string): NonNullable<AChatsMessages['messages']> => {
+  try {
+    return (JSON.parse(body) as AChatsMessages).messages ?? []
+  } catch {
+    return []
+  }
+}
+
+const textOf = (content: unknown): string => (typeof content === 'string' ? content : JSON.stringify(content ?? ''))
+
+/**
+ * Line 9 (martha#614, Done-when 4): the turn's own request — the first model request offering tools whose user text is
+ * the typed `/<skill>` — offers exactly Developer's tools and the engine's skill loader, lists the approved skill outside
+ * the user's words, and carries the typed words as the user's text, since slash commands are off. Each is failed by
+ * name when missing. The model then calling the loader for that skill is its own choice: a turn where it did not is
+ * not-observed, so the line is launched again, and never passed.
+ */
+export function theNinthLineOf(chats: readonly string[], allowed: readonly string[]): Observation {
+  const loader = allowed.at(-1) ?? ''
+  const request = chats.find((body) => toolsIn(body).length > 0 && messagesOf(body).some((one) => one.role === 'user' && textOf(one.content).includes(THE_TYPED_SKILL)))
+  if (request === undefined) return say('fail', `no model request offering tools carried ${THE_TYPED_SKILL} as the user's text`, { allowed })
+  const offered = toolsIn(request)
+  const missing = allowed.filter((name) => !offered.includes(name))
+  const extra = offered.filter((name) => !allowed.includes(name))
+  const listed = messagesOf(request).some((one) => one.role !== 'user' && textOf(one.content).includes(THE_APPROVED_SKILL))
+  const loaded = chats.some((body) => messagesOf(body).some((one) => (one.tool_calls ?? []).some((call) => call.function?.name === loader && textOf(call.function.arguments).includes(THE_APPROVED_SKILL))))
+  const evidence = { offered, allowed, listed, loaded }
+  const wrong = [
+    ...(missing.length > 0 ? [`missing ${missing.join(', ')}`] : []),
+    ...(extra.length > 0 ? [`beyond the allow-list ${extra.join(', ')}`] : []),
+    ...(listed ? [] : [`${THE_APPROVED_SKILL} is not listed to the model`]),
+  ]
+  if (wrong.length > 0) return say('fail', wrong.join('; '), evidence)
+  if (!loaded) return say('not-observed', `the model was offered ${offered.join(', ')} with ${THE_APPROVED_SKILL} listed, and did not call ${loader} for it`, evidence)
+  return say('pass', `the model was offered exactly ${offered.join(', ')}, saw ${THE_TYPED_SKILL} as text, and called ${loader} for it`, evidence)
+}
+
+/** The engine's own name for the tool that loads a skill (martha#614), read from its source rather than restated. */
+export function loadSkillToolIn(source: string): string {
+  const file = join(source, 'crates', 'goose-agent', 'src', 'skills', 'operation.rs')
+  const name = /pub const LOAD_SKILL_TOOL_NAME: &str = "([a-z_]+)";/.exec(existsSync(file) ? readFileSync(file, 'utf8') : '')?.[1]
+  if (name === undefined) throw new Error(`${file} names no LOAD_SKILL_TOOL_NAME, so the skill loader line 9 looks for is not known`)
+  return name
 }
 
 /** The tools the fork's Developer extension declares, read from its own source rather than restated. */
