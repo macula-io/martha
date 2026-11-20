@@ -1315,6 +1315,11 @@ answer() {
     return 0
   fi
   line "{\"type\":\"user\",\"message\":${said}}"
+  # member.long-transcript.<name> holds a byte count: one text line that long, so the transcript is longer than a pipe
+  # holds when the run reads it back (live run 3, martha#639).
+  if flag long-transcript; then
+    line "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"$(head -c "$(flag_of long-transcript)" /dev/zero | tr '\0' x)\"}]}}"
+  fi
   if ! flag silent; then
     line '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I will read it."}]}}'
   fi

@@ -10,6 +10,13 @@
 /** What a fine-grained personal access token looks like, so one the run was not given is caught too. */
 export const FINE_GRAINED_TOKEN = /github_pat_[A-Za-z0-9_]+/g
 
+/**
+ * Linux's default pipe capacity: what a pipe holds before its writer waits for the reader. A transcript longer than this
+ * reached the redactor in live run 3 and was lost to a read that could not wait (martha#639); the tests and the proof's
+ * self-test feed the redactor several of these.
+ */
+export const A_PIPES_CAPACITY = 64 * 1024
+
 /** What stands where a token was. */
 export const REDACTED = '[the token, redacted]'
 

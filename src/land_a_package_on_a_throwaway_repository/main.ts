@@ -217,10 +217,31 @@ export function runTheGuard(args: readonly string[], input: string): Said {
   }
 }
 
+/**
+ * Everything on standard input, read as a stream to its end. Never readFileSync(0): on a pipe it throws EAGAIN once the
+ * text is longer than the pipe holds, which left live run 3's builder transcript out of its log (martha#639).
+ */
+export async function allOf(input: AsyncIterable<Buffer | string>): Promise<string> {
+  const chunks: Buffer[] = []
+  for await (const chunk of input) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+  return Buffer.concat(chunks).toString('utf8')
+}
+
+/** The guard named by `args` run on `input`, read to its end; input that cannot be read is exit 2, never a pass or a 1. */
+export async function runTheGuardOn(args: readonly string[], input: AsyncIterable<Buffer | string>): Promise<Said> {
+  let text: string
+  try {
+    text = await allOf(input)
+  } catch (error) {
+    return couldNotLook(`standard input could not be read: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  return runTheGuard(args, text)
+}
+
 if (import.meta.main) {
   const args = process.argv.slice(2)
   const store = args[0] === undefined ? undefined : STORE_GUARDS[args[0]]
-  const said = store !== undefined && args.length === 2 && args[1] !== undefined ? await store(args[1]) : runTheGuard(args, readFileSync(0, 'utf8'))
+  const said = store !== undefined && args.length === 2 && args[1] !== undefined ? await store(args[1]) : await runTheGuardOn(args, process.stdin)
   if (said.out !== undefined) process.stdout.write(said.out)
   if (said.err !== undefined) process.stderr.write(`${NAME}: ${said.err}\n`)
   process.exitCode = said.code

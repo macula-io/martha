@@ -3,6 +3,7 @@
 // weaker guard would let through.
 
 import assert from 'node:assert/strict'
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,8 +11,8 @@ import { test } from 'node:test'
 
 import { whatTheStartWouldLoad, INSTRUCTION_FILES, LOADED_FOLDERS, type TheStart } from './a_clean_start.ts'
 import { whatTheRunMadeIn, whyNotDelete, type WhatTheRunMade } from './the_delete_guard.ts'
-import { runTheGuard } from './main.ts'
-import { flattened, keepAScreen, redactTheToken, REDACTED, SCREEN_DROPPED, THE_TOKEN_REACHED_THE_RECORD, TOKEN_NOT_PLACED, TOKEN_PLACED, WITHHELD } from './the_kept_record.ts'
+import { runTheGuard, runTheGuardOn } from './main.ts'
+import { A_PIPES_CAPACITY, flattened, keepAScreen, redactTheToken, REDACTED, SCREEN_DROPPED, THE_TOKEN_REACHED_THE_RECORD, TOKEN_NOT_PLACED, TOKEN_PLACED, WITHHELD } from './the_kept_record.ts'
 import { NEAR_DAYS, NO_EXPIRY_NOTE, theTokensExpiry } from './the_tokens_expiry.ts'
 import { A_USER_ACCOUNT, whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -336,6 +337,45 @@ test('redact reads the token from its file, never an argument, and says when it 
   writeFileSync(file, `${TOKEN}\n`, { mode: 0o600 })
   assert.deepEqual(runTheGuard(['redact', file], `printed ${TOKEN}`), { code: 1, err: THE_TOKEN_REACHED_THE_RECORD, out: `printed ${REDACTED}` })
   assert.deepEqual(runTheGuard(['redact', file], 'clean text'), { code: 0, out: 'clean text' })
+})
+
+// Live run 3 (martha#639): the builder's transcript, more than a pipe holds, reached the redactor through a pipe, the
+// read threw EAGAIN, node exited 1 with nothing written, and the run read that 1 as "the token reached the kept record":
+// the transcript was left out of the log and a token was named that was not there. These run main.ts as the run does,
+// fed by a shell pipe, never by an argument or a file.
+
+/** A transcript several pipes long. */
+const LONGER_THAN_A_PIPE = A_PIPES_CAPACITY * 4
+const MAIN = join(import.meta.dirname, 'main.ts')
+
+/** main.ts run as the run's bash runs it: `shell` writes its standard input through a pipe. */
+const throughAPipe = (shell: string, ...args: string[]): SpawnSyncReturns<string> =>
+  spawnSync('bash', ['-c', `${shell} | "$0" --no-warnings "$@"`, process.execPath, MAIN, ...args], { encoding: 'utf8', maxBuffer: LONGER_THAN_A_PIPE * 2 })
+
+test('redact reads a transcript longer than a pipe holds, through a pipe, and gives every byte back (mutant: readFileSync(0))', (t) => {
+  const folder = aFolder(t)
+  const file = join(folder, 'token')
+  writeFileSync(file, `${TOKEN}\n`, { mode: 0o600 })
+  const clean = throughAPipe(`head -c ${LONGER_THAN_A_PIPE} /dev/zero | tr '\\0' a`, 'redact', file)
+  assert.equal(clean.status, 0, clean.stderr)
+  assert.equal(clean.stdout, 'a'.repeat(LONGER_THAN_A_PIPE))
+  const reached = throughAPipe(`{ head -c ${LONGER_THAN_A_PIPE} /dev/zero | tr '\\0' a; printf %s '${TOKEN}'; }`, 'redact', file)
+  assert.equal(reached.status, 1, reached.stderr)
+  assert.equal(reached.stdout, `${'a'.repeat(LONGER_THAN_A_PIPE)}${REDACTED}`)
+})
+
+test('a guard whose input breaks off could not look: exit 2, nothing written, never the 1 of a token found (mutant: the read outside the try)', async (t) => {
+  const folder = aFolder(t)
+  const file = join(folder, 'token')
+  writeFileSync(file, `${TOKEN}\n`, { mode: 0o600 })
+  const brokenOff = async function* (): AsyncGenerator<string> {
+    yield `printed ${TOKEN}`
+    throw new Error('EAGAIN: resource temporarily unavailable, read')
+  }
+  const said = await runTheGuardOn(['redact', file], brokenOff())
+  assert.equal(said.code, 2)
+  assert.equal(said.out, undefined)
+  assert.match(said.err ?? '', /^could not look: standard input could not be read: EAGAIN/)
 })
 
 test("clean-start judges the run's listing, one path a line", (t) => {

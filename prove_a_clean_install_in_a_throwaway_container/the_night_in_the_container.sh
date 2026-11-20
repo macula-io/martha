@@ -552,6 +552,11 @@ night_log_held_no_token() {
   return 1
 }
 
+# Linux's default pipe capacity, as the kept record names it: the self-test's transcripts longer than a pipe are sized by it.
+night_pipes_capacity() {
+  node --no-warnings -e 'import(process.argv[1]).then((m) => process.stdout.write(String(m.A_PIPES_CAPACITY)))' "${REPO}/src/land_a_package_on_a_throwaway_repository/the_kept_record.ts"
+}
+
 # The kept record's own words for a token found in it.
 night_token_reached_words() {
   node --no-warnings -e 'import(process.argv[1]).then((m) => process.stdout.write(m.THE_TOKEN_REACHED_THE_RECORD))' "${REPO}/src/land_a_package_on_a_throwaway_repository/the_kept_record.ts"
@@ -1480,6 +1485,18 @@ night_self_test() {
   asked_for '^FAIL night log: the token reached the kept record$' "${standin}/out" || nfail 'a token in a line of the run was not named'
   if grep -qF -- "${NIGHT_SELF_TEST_TOKEN}" "${standin}/out" "${standin}/err"; then nfail 'the token reached the run'"'"'s lines'; fi
   asked_for '^  a line with .* in it$' "${standin}/out" || nfail 'the line that carried the token was not said, redacted'
+
+  # Live run 3: a member fails with a transcript longer than a pipe holds. Its transcript is kept in the log through the
+  # redactor, whole, and no token is named that was not there: the redactor's read had thrown, its exit 1 was read as a
+  # token, and the transcript was left out.
+  standin="${root}/night-long-transcript"; night_case "${standin}" member.unread
+  long=$(( $(night_pipes_capacity) * 4 ))
+  printf '%s\n' "${long}" > "${standin}/member.long-transcript.$(night_builder)"
+  night_expect 1 "${standin}" || failures=$((failures + 1))
+  asked_for "^FAIL member $(night_builder): the member did not read the outsider's README\$" "${standin}/out" || nfail 'a member that read nothing was not named'
+  if grep -q '^FAIL night log: ' "${standin}/out"; then nfail 'a transcript longer than a pipe was named as a token in the log'; fi
+  awk -v long="${long}" 'match($0, /x+/) && RLENGTH >= long { kept = 1 } END { exit !kept }' "${standin}/out" \
+    || nfail 'a transcript longer than a pipe was not kept whole in the log'
 
   # Row 1: the builder never hands off: the claims fail by the row's name.
   standin="${root}/night-no-handoff"; night_case "${standin}" night.no-handoff
