@@ -76,7 +76,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha up --claude | martha approve | martha todo | martha start [<member> [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha --version'
+  'usage: martha init | martha up --claude | martha approve | martha todo | martha start [<member> [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha version | martha help'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -489,7 +489,41 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 }
 
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
-export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', '--version']
+export const VERSION_WORDS: readonly string[] = ['--version', 'version']
+export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', ...VERSION_WORDS]
+
+/** The words that ask for the help (martha#511): each alone prints HELP. */
+export const HELP_WORDS: readonly string[] = ['help', '-h', '--help']
+
+/** What a word that is no act is told, before the help (martha#511). */
+export const UNKNOWN_COMMAND = 'unknown command:'
+
+/** One plain line per act, saying what it does (martha#511, DECIDED 2026-11-20 "no `martha version` or `martha help`?"). */
+export const HELP: readonly string[] = [
+  'martha init                  declare a solo crew of a builder and a reviewer in this checkout',
+  `martha ${UP} ${CLAUDE_SWITCH}           declare a team in this workspace and open its Claude Code members in kitty`,
+  'martha approve               read the config your members start from, and approve it',
+  'martha start [<member>]      start one member here, or open every member in kitty',
+  'martha wake <member>         start a parked member on its newest handover',
+  'martha release <member>      release a member Martha holds',
+  'martha bells [<member> ...]  list, mute or hear a member\'s bells',
+  'martha gate [--member <m>]   say what the shell gate does for each member',
+  'martha answer [...]          list or answer what members wait on you for',
+  'martha todo                  your to-do list from the crew',
+  'martha ls                    list the members and whether each runs',
+  'martha stop [<member>]       stop one member, or every running one',
+  'martha restart <member>      stop a member and start it again',
+  'martha crew [<verb> ...]     show the crew strip, or add, remove or change a member',
+  'martha run <shape>           run a command shape the owner signed, from inside a member',
+  'martha install [<version>]   install or upgrade Martha',
+  'martha pin-key <file>        pin your hardware key for this project',
+  'martha keep-shapes <file>    keep the command shapes you signed',
+  'martha version               print this release\'s version',
+  'martha help                  print this list',
+]
+
+/** Whether `word` is a word the command knows as an act. */
+const isAnAct = (word: string): boolean => ACTS_ALONE.includes(word) || ACTS_OF_ONE.includes(word) || Object.hasOwn(ACTS_OF_THEIR_OWN, word)
 /** The acts that take exactly one argument (martha#129). */
 export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release']
 
@@ -579,6 +613,16 @@ export async function runMarthaCommand(argv: readonly string[], unescaped: Comma
 
 /** The act `argv` names, run with an io that shows every line safely. */
 async function runAct(argv: readonly string[], io: CommandIo): Promise<number> {
+  const [word] = argv
+  if (word !== undefined && HELP_WORDS.includes(word) && argv.length === 1) {
+    HELP.forEach((line) => io.out(line))
+    return EXIT_DONE
+  }
+  if (word !== undefined && !HELP_WORDS.includes(word) && !isAnAct(word)) {
+    io.err(`${UNKNOWN_COMMAND} ${word}`)
+    HELP.forEach((line) => io.err(line))
+    return EXIT_USAGE
+  }
   const asked = actOf(argv)
   if (asked === undefined) {
     io.err(USAGE)
@@ -593,7 +637,7 @@ async function runAct(argv: readonly string[], io: CommandIo): Promise<number> {
  * below it still says what it is, and still puts the highest signed release back.
  */
 async function actOfPlaces(asked: Asked, io: CommandIo): Promise<number> {
-  if (asked.act === '--version') {
+  if (VERSION_WORDS.includes(asked.act)) {
     io.out(version())
     return EXIT_DONE
   }

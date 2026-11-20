@@ -18,7 +18,7 @@ import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/sta
 import { KITTEN, KITTY, NO_DESKTOP_SESSION } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { CLAUDE_SWITCH, CLEAR_THE_TERMINAL, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, UP, USAGE } from './run_the_martha_command.ts'
+import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLAUDE_SWITCH, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, UP, USAGE } from './run_the_martha_command.ts'
 import { A_WORKSPACES_CLONES, CLAUDE_CODE_TEAM, declareTheTeam, BUILDER_ROLE } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
 import { SESSION_FILE, KITTY_PLACE } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
 import { THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
@@ -209,6 +209,39 @@ test('bare martha start on a terminal, with a crew declared and no desktop sessi
   assert.ok(run.said.includes(NO_DESKTOP_SESSION), run.said)
   assert.ok(!run.said.includes(USAGE), run.said)
   assert.equal(existsSync(kitty.started), false, 'kitty was started with no desktop session')
+})
+
+// --- martha help and martha version (martha#511) -------------------------------
+
+test('#511: martha help, -h and --help each print one line per act and end done', (t) => {
+  const place = placeFor(t)
+  for (const word of HELP_WORDS) {
+    const run = martha(place, word)
+    assert.equal(run.status, EXIT_DONE, `${word}: ${run.said}`)
+    assert.equal(run.out, `${HELP.join('\n')}\n`, word)
+  }
+})
+
+test('#511: every act the command takes has its own line in the help', () => {
+  const acts = [...ACTS_ALONE, ...ACTS_OF_ONE, ...Object.keys(ACTS_OF_THEIR_OWN)].filter((act) => act !== '--version')
+  for (const act of acts) assert.ok(HELP.some((line) => line.startsWith(`martha ${act} `)), act)
+})
+
+test('#511: martha version prints exactly what martha --version prints', (t) => {
+  const place = placeFor(t)
+  const word = martha(place, 'version')
+  const flag = martha(place, '--version')
+  assert.equal(word.status, EXIT_DONE, word.said)
+  assert.equal(word.out, flag.out)
+  assert.match(word.out, /^\d+\.\d+\.\d+/)
+})
+
+test('#511: a word that is no act says so first, then prints the help, and ends as a usage error', (t) => {
+  const run = martha(placeFor(t), 'frobnicate')
+  assert.equal(run.status, EXIT_USAGE, run.said)
+  const lines = run.err.split('\n').filter((line) => line !== '')
+  assert.ok(lines[0]!.endsWith(`${UNKNOWN_COMMAND} frobnicate`), lines[0]!)
+  assert.deepEqual(lines.slice(1).map((line) => line.replace(/^martha: /, '')), HELP)
 })
 
 // --- martha up --claude (martha#511) -------------------------------
