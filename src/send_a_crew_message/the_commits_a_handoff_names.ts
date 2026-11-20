@@ -22,6 +22,7 @@ import { isAbsolute, join } from 'node:path'
 import type { ProcessOutcome, Processes } from '../host_contract/host_contract.ts'
 import { SECOND_MS } from '../declare_crew/the_crews_thresholds.ts'
 import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
+import { VALUE_SHAPES } from '../read_a_crew_line/crew_lines.ts'
 import type { CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
@@ -71,8 +72,10 @@ interface TheRange {
 
 function theRangeOf(line: CrewLineRead): TheRange | undefined {
   if (line.verb !== 'HANDOFF' || !WORK_PACKAGE.test(line.package)) return undefined
-  const [base, tip] = line.words[1]?.split('..') ?? []
-  if (base === undefined || tip === undefined) return undefined
+  // The range is taken only in the line's own shape, as crew-code's rangeNamedBy takes it (T1): never a word that is not one.
+  const range = line.words[1]
+  if (range === undefined || !VALUE_SHAPES.range.matches.test(range)) return undefined
+  const [base = '', tip = ''] = range.split('..')
   const repo = line.package.slice(0, line.package.indexOf('#'))
   const [org = '', name = ''] = repo.split('/')
   return { package_name: line.package, repo, org, name, base, tip }
