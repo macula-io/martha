@@ -21,7 +21,7 @@ import { A_FRESH_BUDGET, BACKOFF_MAX_MS, BACKOFF_MIN_MS, CALLS_PER_WAIT, GITHUB_
 import { waitForCi } from './wait_for_ci.ts'
 import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
-import { theCiWaitACallNames, theCiWaitOver } from './the_ci_wait_tool.ts'
+import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from './the_ci_wait_tool.ts'
 /** The crew's default, as a declaration that names no block reads it (martha#931 B). */
 const THE_FLOOR = GITHUB_WHEN_UNNAMED.budget_floor
 
@@ -321,6 +321,16 @@ test('#976 review r=1: a run id too long to be held exactly is refused, never re
   assert.notEqual(String(Number(tooLong)), tooLong, 'the planted id is held exactly, so it proves nothing')
   const asked = theCiWaitACallNames({ repo: A_REPO, run_id: tooLong })
   assert.ok('refused' in asked && /a run id is a whole number/.test(asked.refused), `a run id that rounds was read as another: ${JSON.stringify(asked)}`)
+})
+
+test('#976 review r=2: the tool asks for a run id as text, so a caller cannot round it on the way in', () => {
+  // The schema is what a caller reads before it writes the number: a number here is rounded by JSON before the guard.
+  assert.equal(WAIT_FOR_CI_TOOL.inputSchema.properties.run_id.type, 'string', 'the tool still asks for a run id as a number, which JSON rounds before it arrives')
+})
+
+test('#976 review r=2: a call that sends its run id as a number is refused by name, saying why', () => {
+  const asked = theCiWaitACallNames({ repo: A_REPO, run_id: A_RUN })
+  assert.ok('refused' in asked && /as text, never as a number/.test(asked.refused), `a run id sent as a number was not refused by name: ${JSON.stringify(asked)}`)
 })
 
 test('#976: a run GitHub does not answer for is cannot tell, never green', async () => {

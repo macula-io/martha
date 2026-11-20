@@ -19,8 +19,8 @@ export const WAIT_FOR_CI_TOOL = {
       repo: { type: 'string', description: 'The repository, owner/name' },
       sha: { type: 'string', description: 'The commit whose runs count: the tip you were handed' },
       run_id: {
-        type: 'number',
-        description: 'With repo, instead of sha: one run by the id GitHub gave it, for a run whose commit you cannot name',
+        type: 'string',
+        description: 'With repo, instead of sha: one run by the id GitHub gave it, the digits as the text GitHub gave them',
       },
     },
     required: ['repo'],
@@ -53,6 +53,20 @@ function theNamedValue(args: Readonly<Record<string, unknown>>, name: string): s
  */
 const aRunIdHeldExactly = (run_id: string): boolean => A_RUN_ID.test(run_id) && Number.isSafeInteger(Number(run_id))
 
+/**
+ * Why a run id sent as a number is refused rather than read (review r=2): JSON parses a long digit string into the
+ * nearest number, so the id rounds to its neighbour before any line of ours runs, and the wait could keep a green for a
+ * run nobody asked for. The digits are held exactly only when they come as text.
+ */
+const A_RUN_ID_IS_TEXT = 'a run id is sent as the digits GitHub gave it, as text, never as a number: JSON rounds a long id to its neighbour before the wait can hold it, so a number can name a run nobody asked for'
+
+/** Why the run id a call named is refused, or '' when it is text whose digits a number holds exactly (review r=1, r=2). */
+function theRunIdRefusal(named: unknown, run_id: string): string {
+  if (typeof named === 'number') return `${A_RUN_ID_IS_TEXT}; read ${JSON.stringify(run_id)}.`
+  if (!aRunIdHeldExactly(run_id)) return `a run id is a whole number, as GitHub gave it; read ${JSON.stringify(run_id)}.`
+  return ''
+}
+
 /** The wait a call names, or why it names none: a repository as owner/name, and one of its two forms. */
 export function theCiWaitACallNames(args: Readonly<Record<string, unknown>>): { readonly ok: TheCiWait } | { readonly refused: string } {
   const repo = theNamedValue(args, 'repo')
@@ -62,7 +76,8 @@ export function theCiWaitACallNames(args: Readonly<Record<string, unknown>>): { 
   if (sha !== '' && run_id !== '') return { refused: `${NAME_A_FORM}, not both.` }
   if (sha === '' && run_id === '') return { refused: `${NAME_A_FORM}.` }
   if (run_id !== '') {
-    if (!aRunIdHeldExactly(run_id)) return { refused: `a run id is a whole number, as GitHub gave it; read ${JSON.stringify(run_id)}.` }
+    const refusal = theRunIdRefusal(args['run_id'], run_id)
+    if (refusal !== '') return { refused: refusal }
     return { ok: { repo, run_id: Number(run_id) } }
   }
   if (!A_COMMIT.test(sha)) return { refused: `a CI wait names the commit whose runs count, as forty hex digits; read ${JSON.stringify(sha)}.` }
