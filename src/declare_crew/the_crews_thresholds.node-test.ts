@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { BEAT_INTERVAL_MS } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
-import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, DeclarationRefused, OWNER, SOLO_MODE, declareCrew } from './declare_crew.ts'
+import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, DeclarationRefused, MINUTE_MS, OWNER, SOLO_MODE, declareCrew } from './declare_crew.ts'
 import {
   BEATS_MISSED_BEFORE_OFFLINE,
   HANDOVER_PERCENT_LEAST,
@@ -58,7 +58,7 @@ test('#931 A: the defaults are the values the code held before #931, written out
   assert.equal(offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED), BEAT_INTERVAL_MS * BEATS_MISSED_BEFORE_OFFLINE)
   assert.equal(THRESHOLDS_WHEN_UNNAMED.offline_after_seconds * SECOND_MS, 30_000)
   assert.equal(THRESHOLDS_WHEN_UNNAMED.handover_percent, 70)
-  assert.equal(progressStaleMsOf(THRESHOLDS_WHEN_UNNAMED), 30 * 60_000)
+  assert.equal(progressStaleMsOf(THRESHOLDS_WHEN_UNNAMED), 30 * MINUTE_MS)
   for (const key of THRESHOLDS_KEYS) assert.notEqual(DECLARED[key], THRESHOLDS_WHEN_UNNAMED[key], `the test's declared ${key} must differ from its default`)
 })
 

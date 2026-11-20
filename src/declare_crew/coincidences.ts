@@ -2,6 +2,7 @@
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
 import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
+import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { THE_CHANNEL_READ_ASK } from '../keep_the_crew_channel/the_channel_read.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
@@ -18,6 +19,9 @@ export const A_ROLE_A_TEST_CREW_DECLARES = 'the role a test crew declares; a rol
 const THE_DECLARATIONS_MODEL_KEY = 'the key a member\'s own model is declared under, in the declaration this repository writes'
 
 export const COINCIDENCES: readonly Exception[] = [
+  // The offline time before martha#931, pinned as written so the default is checked against the old value rather than
+  // read back from the code that defines it; the host's answer timeout is the same number for another reason.
+  { value: HOST_ANSWER_TIMEOUT_MS, file: 'declare_crew/the_crews_thresholds.node-test.ts', reason: 'the offline time the code held before martha#931, pinned in milliseconds as written' },
   // A coincidence of names (martha#312): the declaration's own field, as v0.1.0's file lacks it, is not the launcher's ask.
   { value: THE_CHANNEL_READ_ASK, file: 'declare_crew/declare_crew.node-test.ts', reason: 'the declaration field a crew file names, which the launcher\'s ask happens to share' },
   // The declaration's mode holds a `roles` field, the list of the crew's role names; `roles/` is the directory each
