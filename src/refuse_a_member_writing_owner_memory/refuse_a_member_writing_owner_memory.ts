@@ -27,12 +27,13 @@
 // recorded host's, never typed here (PROTECTED_NAME_OWNERS says who accounts for
 // each), and a place the host records that no owner accounts for fails a test.
 //
-// It also refuses a member's write into what a later git run of the owner's
-// reads (martha#168): a `.git` segment anywhere in the path, the checkout's own
-// git directory (and the one a linked worktree shares), and the git
-// configuration files of the owner's own runs. A hook, a config or an object a
-// member put there starts or shapes the owner's next git command, and the
-// member never typed one.
+// It also notices a member's write into what a later git run of the owner's
+// reads (martha#168, martha#601): a `.git` segment anywhere in the path, the
+// checkout's own git directory (and the one a linked worktree shares), and the git
+// configuration files of the owner's own runs. One line names what was written and
+// the write goes ahead. A hook, a config or an object a member puts there starts or
+// shapes the owner's next git command, and the owner's own code folder is still
+// noticed the same way (martha#136).
 //
 // Rules:
 //
@@ -71,18 +72,21 @@
 //      from the link itself), and a `projects` folder that is a link to another
 //      disk are all followed (martha#136 r=3, r=4). A chain whose end does not
 //      exist yet is followed link by link, and past LINK_HOPS — or one that turns
-//      on itself — it is REFUSED: the write is not allowed, since the guard cannot
-//      tell which folder it lands in (martha#136 r=4, r=5). A chain that exists to
-//      its end is resolved by the system in one step, up to the system's own
-//      limit, and refused when the system cannot resolve it.
+//      on itself — it is a notice: one line says which folder the write lands in
+//      cannot be told, and the write goes ahead (martha#136 r=4, r=5; martha#601).
+//      A chain that exists to its end is resolved by the system in one step, up
+//      to the system's own limit, and a write there is a notice too.
 //   4. WRITES, NOT READS. Only the tools that write a file are refused. Reading a
 //      memory file is not a path from a member to a later session.
 //   5. WHAT A LATER GIT RUN READS (martha#168). A path segment git would take for
 //      its own `.git` directory — its own checks, not the name exactly — and the
-//      checkout's git directory, found on disk and never by `rev-parse`, are
-//      denied; so is the git configuration of the owner's own runs. The git
-//      directory is read from disk at each call, so a checkout or a git
-//      directory that appears during the session is covered from the next call.
+//      checkout's git directory, found on disk and never by `rev-parse`, are a
+//      notice, and so is the git configuration of the owner's own runs: one line
+//      says it and the write goes ahead (martha#601). The git directory is read
+//      from disk at each call, so a checkout or a git directory that appears
+//      during the session is covered from the next call. What still refuses is a
+//      configuration this guard cannot read, since nothing can be said about what
+//      a later run would take from it (martha#192).
 //
 // The permission rules (memoryDenyRules) carry the same places into the
 // settings the host is started with: the host's own memory pass stands down
@@ -92,6 +96,7 @@
 import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, normalize, relative, resolve, sep } from 'node:path'
+import process from 'node:process'
 
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
@@ -817,25 +822,25 @@ function sharedGitDirOf(git_dir: string, host: LaunchHost): string | undefined {
   }
 }
 
-/** Why a write the member spells `value` reads or starts a later git run of the owner's, or undefined (rule 5). */
-function gitDenialOf(value: string, path: string, git: CheckoutGit | undefined, places: OwnerMemoryPlaces, later: WhatALaterGitRunReads | undefined, host: LaunchHost): string | undefined {
+/** What a later git run of the owner's reads at a write, as one notice, or undefined (rule 5, martha#601). */
+function gitNoticeOf(value: string, path: string, git: CheckoutGit | undefined, places: OwnerMemoryPlaces, later: WhatALaterGitRunReads | undefined, host: LaunchHost): string | undefined {
   const segment = gitSegmentIn(path)
   if (segment !== undefined) {
-    return `${value} names ${segment} as one of its path segments, and git takes that for the .git directory it reads from there: a member does not write there, so nothing a later git run starts is something the member put there (martha#168)`
+    return `${value} names ${segment} as one of its path segments, which git takes for the .git directory it reads from there, and the write went ahead (martha#168)`
   }
   const dir = git?.dirs.find((candidate) => (spellingsOf(candidate) ?? []).some((spelling) => within(path, spelling)))
   if (dir !== undefined) {
-    return `${value} is in ${dir}, the git directory of the checkout at ${git?.top ?? dir}, which holds the hooks, the config and the objects a later git run of the owner's reads: a member does not write there, so nothing a later git run starts is something the member put there (martha#168)`
+    return `${value} is in ${dir}, the git directory of the checkout at ${git?.top ?? dir}, which holds the hooks, the config and the objects a later git run of the owner's reads, and the write went ahead (martha#168)`
   }
   const named = places.git_dirs_named_at_launch.find((candidate) => (spellingsOf(candidate) ?? []).some((spelling) => within(path, spelling)))
   if (named !== undefined) {
-    return `${value} is in ${named}, a git directory the launcher's environment names, which holds what a later git run of the owner's reads: a member does not write there, so nothing a later git run starts is something the member put there (martha#168)`
+    return `${value} is in ${named}, a git directory the launcher's environment names, which holds what a later git run of the owner's reads, and the write went ahead (martha#168)`
   }
   const file = places.git_config_files.find((candidate) => (spellingsOf(candidate) ?? []).includes(path))
   if (file !== undefined) {
-    return `${value} is ${file}, one of the git configuration files the owner's own git runs read, and everything one names runs: a member does not write there, so nothing a later git run starts is something the member put there (martha#168)`
+    return `${value} is ${file}, one of the git configuration files the owner's own git runs read, and everything one names runs, so the write went ahead (martha#168)`
   }
-  if (insideTheCheckout(path, git)) return theGitDenialInsideTheTree(value, path, git, later, host)
+  if (insideTheCheckout(path, git)) return theGitNoticeInsideTheTree(value, path, git, later, host)
   return undefined
 }
 
@@ -845,23 +850,22 @@ function insideTheCheckout(path: string, git: CheckoutGit | undefined): git is C
 }
 
 /**
- * Why a write inside the checkout at `git.top` is refused for what a later git run
- * of the owner's reads there (martha#192): the file `commondir` a split git
- * directory is assembled with, the git directory a write completes, and the paths
- * a configuration value names. The configuration is read at each call, so a value
- * written into any file it reads is covered from the next call.
+ * The notice for a write inside the checkout at `git.top` that a later git run of the owner's reads (martha#192,
+ * martha#601): the file `commondir` a split git directory is assembled with, the git directory a write completes, and
+ * the paths a configuration value names. The configuration is read at each call, so a value written into any file it
+ * reads is covered from the next call.
  */
-function theGitDenialInsideTheTree(value: string, path: string, git: CheckoutGit, later: WhatALaterGitRunReads | undefined, host: LaunchHost): string | undefined {
+function theGitNoticeInsideTheTree(value: string, path: string, git: CheckoutGit, later: WhatALaterGitRunReads | undefined, host: LaunchHost): string | undefined {
   if (basename(path) === COMMONDIR) {
-    return `${value} is a file named ${COMMONDIR} inside the checkout at ${git.top}, and a later git run of the owner's reads that name only as the other half of a git directory, whose config it then starts: a member does not write there, so nothing a later git run starts is something the member put there (martha#192)`
+    return `${value} is a file named ${COMMONDIR} inside the checkout at ${git.top}, which a later git run of the owner's reads as the other half of a git directory whose config it then starts, and the write went ahead (martha#192)`
   }
   const completed = theGitDirectoryAWriteCompletesAt(path, git.top, host)
   if (completed !== undefined) {
-    return `${value} completes a git directory at ${completed}: with ${HEAD_NAME} naming a ref or an object id, and ${OBJECTS_NAME}/ and ${REFS_NAME}/ beside it or in the directory its ${COMMONDIR} names, a later git run made at or below it reads that directory's config and starts what the config names: a member does not write there, so nothing a later git run starts is something the member put there (martha#192)`
+    return `${value} completes a git directory at ${completed}, whose config a later git run made at or below it reads and starts, and the write went ahead (martha#192)`
   }
   const named = later?.places.find((place) => within(path, place.what))
   if (named === undefined) return undefined
-  return `${value} is ${named.what}, which ${named.why}: a member does not write there, so nothing a later git run starts is something the member put there (martha#192). If this checkout is meant to be writable, ask the owner to take that value out of their own git configuration`
+  return `${value} is ${named.what}, which ${named.why}, and the write went ahead (martha#192); ask the owner to take that value out of their own git configuration if this checkout is meant to be writable`
 }
 
 /** Every project's memory folder under `root` that is a link, whether or not its target exists yet (martha#136 r=4). */
@@ -890,15 +894,15 @@ function projectEntries(root: string): string[] {
 /**
  * A place the guard must check that cannot be followed to its end — past LINK_HOPS
  * with no end yet, or a link that turns on itself — or undefined when every place
- * resolves. A write is refused while one stands, never allowed, since the guard
- * cannot tell which folder it lands in (martha#136 r=4, r=5).
+ * resolves. One that stands is a notice: the write goes ahead, and one line says which
+ * folder it lands in cannot be told (martha#136 r=4, r=5; martha#601).
  */
 function unfollowablePlace(places: OwnerMemoryPlaces, git: CheckoutGit | undefined): string | undefined {
   const named = unique([...places.memory_roots, ...places.config_dirs.map((dir) => join(dir, PROJECTS)), ...places.folders.map((folder) => folder.what), ...places.files.map((file) => file.what)])
   const place = named.find((candidate) => pathToItsEnd(candidate) === undefined)
   if (place !== undefined) return unfollowableMemory(place)
   // The projects folder itself, then every project folder and its memory: a chain of
-  // links there is where a write would land, so it is refused like any other place.
+  // links there is where a write would land, so it is said like any other place.
   const projects = unique([...places.memory_roots, ...places.config_dirs])
     .flatMap((root) => [join(root, PROJECTS), ...projectEntries(root)])
     .find((folder) => pathToItsEnd(folder) === undefined)
@@ -906,28 +910,32 @@ function unfollowablePlace(places: OwnerMemoryPlaces, git: CheckoutGit | undefin
   const linked = unique([...places.memory_roots, ...places.config_dirs]).flatMap(projectMemoryLinks).find((link) => pathToItsEnd(link) === undefined)
   if (linked !== undefined) return unfollowableMemory(linked)
   // The git directory is checked the same way: a chain of links where it should be
-  // is no git directory this guard can name, and a write is not allowed while it
-  // stands (martha#168).
+  // is no git directory this guard can name, and a write there goes ahead with its
+  // notice (martha#168).
   const gitDir = unique([...(git?.dirs ?? []), ...places.git_dirs_named_at_launch]).find((dir) => pathToItsEnd(dir) === undefined)
   return gitDir === undefined
     ? undefined
-    : `${gitDir} is a git directory a later git run of the owner's reads, and it is reached through a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so no write is allowed while it stands: which directory a write lands in cannot be told (martha#168)`
+    : `${gitDir} is a git directory a later git run of the owner's reads, and it is reached through a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which directory a write lands in cannot be told, and the write went ahead (martha#168)`
 }
 
-/** Why a memory place that cannot be followed to its end refuses every write, in the words of #136. */
+/** The notice for a memory place that cannot be followed to its end, in the words of #136 and martha#601. */
 function unfollowableMemory(place: string): string {
-  return `${place} is reached through a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so no write is allowed while it stands: which folder a write lands in cannot be told (martha#136)`
+  return `${place} is reached through a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder a write lands in cannot be told, and the write went ahead (martha#136)`
 }
 
-/** The refusal a config that cannot be read stands for, when the write would land inside the checkout it belongs to. */
-function refusalFromAConfig(later: WhatALaterGitRunReads | undefined, git: CheckoutGit | undefined, paths: readonly string[]): string | undefined {
-  if (later?.refusal === undefined || git === undefined) return undefined
-  return paths.some((path) => within(path, git.top)) ? later.refusal : undefined
+/** One line about a write Martha carried on past, where the owner reads Martha's own output (martha#601). */
+const sayTheNotice = (line: string): void => {
+  process.stderr.write(`notice: ${line}\n`)
+}
+
+/** Every notice once, in the order they were found, so a path met twice is said once. */
+const sayTheNotices = (notices: readonly string[]): void => {
+  for (const line of [...new Set(notices)]) sayTheNotice(line)
 }
 
 /**
- * Why a member's tool call writes the owner's memory, instructions, or what a
- * later git run of the owner's reads, or undefined (rules 3, 4 and 5).
+ * What a member's tool call writes of the owner's memory, instructions, or what a later git run of the owner's reads, as
+ * notices said where the owner reads Martha's own output (rules 3, 4 and 5): every such write goes ahead (martha#601).
  */
 export function writesTheOwnersMemory(
   tool: string,
@@ -942,33 +950,46 @@ export function writesTheOwnersMemory(
   // during the session is covered from the next call (martha#168).
   const git = checkoutGitOf(cwd, host)
   // What a later git run of the owner's takes from the configuration it reads is
-  // read at each call too, and a config this guard cannot read refuses every write
-  // into the checkout rather than passing one (martha#192).
+  // read at each call too (martha#192).
   const later = git === undefined ? undefined : whatALaterGitRunReads(git.top, git.dirs, places.git_config_files, home, LINK_HOPS, host)
+  const notices: string[] = []
   const unfollowable = unfollowablePlace(places, git)
-  if (unfollowable !== undefined) return unfollowable
+  if (unfollowable !== undefined) notices.push(unfollowable)
   for (const argument of FILE_ARGUMENTS) {
     const why = whyTheArgumentIsRefused(input[argument], places, git, later, host, cwd, home)
-    if (why !== undefined) return why
+    if (why.refusal !== undefined) {
+      sayTheNotices(notices)
+      return why.refusal
+    }
+    notices.push(...why.notices)
   }
+  sayTheNotices(notices)
   return undefined
 }
 
-/** Why one argument a file tool is given names a place a member does not write, or undefined when it names none. */
-function whyTheArgumentIsRefused(argument: unknown, places: OwnerMemoryPlaces, git: CheckoutGit | undefined, later: WhatALaterGitRunReads | undefined, host: LaunchHost, cwd: string, home: string): string | undefined {
-  if (typeof argument !== 'string' || argument.trim() === '') return undefined
+/** What one argument came to: a refusal that still stops the write, and the notices about places the write goes to anyway. */
+interface WhatTheArgumentCameTo {
+  readonly refusal?: string
+  readonly notices: readonly string[]
+}
+
+/** Why one argument a file tool is given is still refused, and what Martha carried on past about it (martha#601). */
+function whyTheArgumentIsRefused(argument: unknown, places: OwnerMemoryPlaces, git: CheckoutGit | undefined, later: WhatALaterGitRunReads | undefined, host: LaunchHost, cwd: string, home: string): WhatTheArgumentCameTo {
+  if (typeof argument !== 'string' || argument.trim() === '') return { notices: [] }
   const spelled = asTheHostResolves(argument, cwd, home)
   const end = pathToItsEnd(spelled)
   if (end === undefined) {
-    return `${argument} is behind a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder it lands in cannot be told: a member does not write there (martha#136)`
+    return {
+      notices: [`${argument} is behind a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder it lands in cannot be told, and the write went ahead (martha#136)`],
+    }
   }
-  const configRefusal = refusalFromAConfig(later, git, unique([spelled, end]))
-  if (configRefusal !== undefined) return configRefusal
-  const gitDenial = unique([spelled, end]).map((path) => gitDenialOf(argument, path, git, places, later, host)).find((found) => found !== undefined)
-  if (gitDenial !== undefined) return gitDenial
+  const gitNotice = unique([spelled, end]).map((path) => gitNoticeOf(argument, path, git, places, later, host)).find((found) => found !== undefined)
+  if (gitNotice !== undefined) return { notices: [gitNotice] }
   const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
-  if (place === undefined) return undefined
-  return `${argument} is in ${place.what}, which the owner's own Claude Code sessions load as their own: a member does not write there, so neither its text nor its code reaches a later session unrecorded (${place.issue})`
+  if (place === undefined) return { notices: [] }
+  return {
+    notices: [`${argument} is in ${place.what}, which the owner's own Claude Code sessions load as their own, and the write went ahead (${place.issue})`],
+  }
 }
 
 /**

@@ -350,6 +350,21 @@ function isDenied(reply: RelayReply, pattern?: RegExp): boolean {
 }
 const isRefused = (reply: RelayReply): boolean => reply.answered && 'refused' in reply.body
 
+/** What a call answered, and everything written to the process's own error output while it was answered (martha#601). */
+async function theNoticeWhile<T>(act: () => T | Promise<T>): Promise<{ readonly answer: T; readonly notice: string }> {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: await act(), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
+}
+
 async function recordedPaths(rows: RowStore, session_id = SESSION): Promise<string[]> {
   const stored = await rows.read(sessionRecordStreamOf(session_id))
   const last = stored.at(-1)
@@ -2134,7 +2149,7 @@ test("a member's file tool call that names the owner's user settings file is den
   assert.deepEqual(await relay.answer('tool_called', call(WHOLE_FILE_TOOL, { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
 })
 
-test("a member's file tool call that writes any project's memory, or the owner's CLAUDE.md, is denied; a read of memory is not (#136)", async (t) => {
+test("a member's file tool call that writes any project's memory, or the owner's CLAUDE.md, goes ahead with one notice; a read of memory is not (#136)", async (t) => {
   const place = placeFor(t)
   const { relay } = answering(place)
   await relay.answer('session_started', start('startup'))
@@ -2146,7 +2161,10 @@ test("a member's file tool call that writes any project's memory, or the owner's
     [EDIT_TOOL, { file_path: '~/' + join(relative(place.home, memory), 'MEMORY.md'), old_string: 'a', new_string: 'b' }],
     [WHOLE_FILE_TOOL, { file_path: join(config, 'CLAUDE.md'), content: 'always deploy' }],
   ] as const) {
-    assert.ok(isDenied(await relay.answer('tool_called', call(tool, input)), /martha#136/), `${tool} ${input.file_path}`)
+    const { answer, notice } = await theNoticeWhile(() => relay.answer('tool_called', call(tool, input)))
+    assert.deepEqual(answer, ALLOW_REPLY, `${tool} ${input.file_path} was not let through`)
+    assert.match(notice, /write went ahead/, `${tool} ${input.file_path}: no notice said the write went ahead`)
+    assert.match(notice, /martha#136/, `${tool} ${input.file_path}: the notice did not name the rule`)
   }
   assert.deepEqual(await relay.answer('tool_called', call('Read', { file_path: join(memory, 'MEMORY.md') })), ALLOW_REPLY)
   assert.deepEqual(await relay.answer('tool_called', call(WHOLE_FILE_TOOL, { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
@@ -2169,7 +2187,7 @@ for (const [shape, carried, kept] of [
   ['no settings file is carried', undefined, []],
   ['the approved settings file is carried', JSON.stringify({ model: 'x', permissions: { deny: ['Bash(rm:*)'], allow: ['Read'] } }), ['Bash(rm:*)']],
 ] as const) {
-  test(`when ${shape}, the host starts with a deny rule for exactly each place the gate refuses a member's memory write (#136)`, async (t) => {
+  test(`when ${shape}, the host starts with a deny rule for exactly each place the gate notices a member's memory write (#136)`, async (t) => {
     const recorded = RECORDED_MESH_SERVERS[0]
     assert.ok(recorded !== undefined)
     const { recording } = await recordedTreeOf(t, recorded.server_version)
@@ -2192,12 +2210,15 @@ for (const [shape, carried, kept] of [
       assert.equal(settings.model, 'x')
       assert.deepEqual(permissions.allow, ['Read'])
     }
-    // The other way: every rule's place is one the gate refuses a member's write into.
+    // The other way: every rule's place is one the gate now says its one line about and lets the write go ahead
+    // (martha#601), so what still stops a member there is the host's own deny rule (#226), never the gate.
     for (const rule of memoryDenyRules(places)) {
       const glob = /^(?:Write|Edit)\(\/(.*)\)$/.exec(rule)?.[1]
       assert.ok(glob !== undefined, rule)
       const inside = glob.replace('/*/', '/some-project/').replace(/\/\*\*$/, '/note.md')
-      assert.ok(writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: inside }, places, place.checkout, place.home, thisMachine) !== undefined, `${rule}: ${inside}`)
+      const { answer, notice } = await theNoticeWhile(() => writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: inside }, places, place.checkout, place.home, thisMachine))
+      assert.equal(answer, undefined, `${rule}: ${inside} was refused, though the write goes ahead (martha#601)`)
+      assert.match(notice, /write went ahead/, `${rule}: ${inside} went ahead with no notice`)
     }
   })
 }
