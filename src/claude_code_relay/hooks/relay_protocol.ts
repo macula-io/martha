@@ -207,6 +207,11 @@ export function heardTaken(status: number, text: string): Heard {
   if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
   if (value.taken !== 1) return NO(MALFORMED)
   if (exactKeys(value, ['taken'])) return YES
+  return heardTheYesCarrying(value)
+}
+
+/** A yes that carries one more field: the line a prompt is handed (martha#984), or the turn a report ends (martha#311). */
+function heardTheYesCarrying(value: Readonly<Record<string, unknown>>): Heard {
   if (exactKeys(value, ['taken', 'handed'])) return isReason(value.handed) ? { yes: true, handed: value.handed } : NO(MALFORMED)
   return exactKeys(value, ['taken', 'end_turn']) && isReason(value.end_turn) ? { yes: true, end_turn: value.end_turn } : NO(MALFORMED)
 }

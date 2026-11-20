@@ -266,7 +266,6 @@ export function answersOver(
 ): TheAnswersOfOneLaunch {
   /** Why this session may be answered for no more, for the rest of this process. */
   const broken = new Map<string, string>()
-  let queue: Promise<unknown> = Promise.resolve()
 
   const approved_start = approvedStartTreeOf(places.launch, places.machine)
 
@@ -310,11 +309,7 @@ export function answersOver(
 
   return {
     records: places.records,
-    inOrder: <T>(work: () => Promise<T>): Promise<T> => {
-      const next = queue.then(work)
-      queue = next.catch(() => undefined)
-      return next
-    },
+    inOrder: oneOrder(),
     holds: (session_id) => sessions.has(session_id),
     brokenBecause: (session_id) => broken.get(session_id),
     named: (session_id) => sessionNamed(session_id, sessions, broken),
@@ -382,6 +377,16 @@ async function takeInARefreshedSessionIn(held: TheSessionsHeld, session_id: stri
   if (predecessor === null) return undefined
   await held.places.records.load(session_id)
   return held.keep(handedAtStart(held.places, startSessionAs(held.places.records.store, { session_id, outcome: 'inherits', predecessor_id: predecessor }), null))
+}
+
+/** One queue: each piece of work runs after every piece already asked for, whether that one failed or not. */
+function oneOrder(): <T>(work: () => Promise<T>) => Promise<T> {
+  let queue: Promise<unknown> = Promise.resolve()
+  return <T>(work: () => Promise<T>): Promise<T> => {
+    const next = queue.then(work)
+    queue = next.catch(() => undefined)
+    return next
+  }
 }
 
 async function aSessionStartedIn(held: TheSessionsHeld, start: AStartingSession): Promise<TheAnswerToAStart> {
