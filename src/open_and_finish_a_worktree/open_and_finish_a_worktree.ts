@@ -22,7 +22,7 @@
 
 import { join } from 'node:path'
 
-import { type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { theWorkspaceTheCrewDeclared, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
@@ -38,9 +38,9 @@ export const REPO = /^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/
 /** The end of a worktree's path and of its branch: lowercase, so one slug names one directory on any machine. */
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
 
-/** What a crew that declared no workspace layout is told, instead of a worktree in a place nobody named. */
+/** What a crew that named no workspace places is told, instead of a worktree in a place nobody named (martha#958). */
 export const NO_LAYOUT =
-  'this crew declares no workspace layout: put "workspace_layout": true with "clones" and "worktrees" in its house rules, then start the member again.'
+  'this crew names no workspace places: name the folder its clones sit in as "workspace.root" in its declaration, or put "clones" and "worktrees" in its house rules, then start the member again.'
 
 /** What the two tools need: the host's own git, the ledger's store, the crew's declaration, and the member they answer for. */
 export interface WorktreesRequest {
@@ -83,8 +83,11 @@ export const WORKTREE_FINISH_DESCRIPTION =
 
 /** The places one call works in, or why the crew and the arguments name none. */
 function placesOf(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Places | Refused {
-  const { clones, worktrees } = request.settings.house_rules
-  if (clones === null || worktrees === null) return no(NO_LAYOUT)
+  // The one reading of the crew's places, shared with the git guard (martha#958), so a worktree and the rules that
+  // keep it in its place can never be answered from two different facts.
+  const workspace = theWorkspaceTheCrewDeclared(request.settings)
+  if (workspace === undefined) return no(NO_LAYOUT)
+  const { clones, worktrees } = workspace
   const repo = args['repo']
   const slug = args['slug']
   if (typeof repo !== 'string' || !REPO.test(repo)) return no(`${JSON.stringify(repo)} is not a repository, as org/name.`)

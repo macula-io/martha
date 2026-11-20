@@ -250,6 +250,27 @@ export const WORKTREES_BESIDE_CLONES = 'worktrees'
 /** What a checkout that proves no layout is told to add, in the words of this declaration's own keys (martha#611). */
 export const LAYOUT_TO_ADD = 'Add "workspace_layout": true with "clones" and "worktrees" to house_rules to declare one.'
 
+/** The places a crew's declaration names, and the names of its members (martha#958). */
+export interface ThePlacesTheCrewNamed {
+  readonly clones: string
+  readonly worktrees: string
+  readonly members: readonly string[]
+}
+
+/**
+ * The places the crew declared for its clones and worktrees, with its members' names; undefined when it named no
+ * places (martha#958). The places are the fact: a crew that names them is guarded, whichever block named them, since
+ * the reader fills both from `workspace.root` when `house_rules` names neither (houseRulesAsRead). The switch that used
+ * to gate this is no longer read, so a crew declared in the draft's own shape — a workspace root and no house rules —
+ * has its rules on from its first `martha up`. This is their one reading: the guard, the scan and a worktree are all
+ * answered from it, so a worktree and the rules that keep it in its place cannot come from two different facts.
+ */
+export function theWorkspaceTheCrewDeclared(settings: CrewSettings): ThePlacesTheCrewNamed | undefined {
+  const { clones, worktrees } = settings.house_rules
+  if (clones === null || worktrees === null) return undefined
+  return { clones, worktrees, members: settings.members.map((member) => member.name) }
+}
+
 /** What a checkout's own path proves about its workspace (martha#611): the layout to declare, and the line `martha init` says of it. */
 export interface WhatACheckoutProves {
   /** The two places to declare, or null when the checkout proves none. */
@@ -638,19 +659,33 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
 
 /**
  * The house rules as the reader judges them (martha#931): `gate_enforce`, as Raf's draft spells it, read as
- * `gate_enforces`; and, when the declaration names a workspace root and the rules name neither place, the clones in that
- * root and the worktrees beside it, as a checkout's own path proves them (workspaceLayoutOf). A place named in both is
- * refused, so the two can never disagree.
+ * `gate_enforces`; and, when the declaration names a workspace root, the clones in that root and the worktrees beside
+ * it, as a checkout's own path proves them (workspaceLayoutOf). A place named beside the root is refused, so the two
+ * can never disagree, and so is an explicit `workspace_layout: false`, since the root then places the guard's rules
+ * where the switch says they are off (martha#958). The places are filled whether or not the declaration has a
+ * `house_rules` block at all, so a crew declared the way `martha up` teaches it is guarded from its first run.
  */
 function houseRulesAsRead(refuse: Refuse, value: unknown, clones: string | null): unknown {
-  if (!isObject(value)) return value
-  const { [GATE_ENFORCE_AS_DRAFTED]: drafted, ...rules } = value
+  const block = isObject(value) ? value : undefined
+  const read = theDraftsGateName(refuse, block)
+  if (clones === null) return block === undefined ? value : read
+  return withTheWorkspacesPlaces(refuse, read, clones)
+}
+
+/** The rules with the draft's `gate_enforce` read as `gate_enforces`, refused when both are named (martha#931). */
+function theDraftsGateName(refuse: Refuse, block: Readonly<Record<string, unknown>> | undefined): Json {
+  if (block === undefined) return {}
+  const { [GATE_ENFORCE_AS_DRAFTED]: drafted, ...rules } = block
   if (drafted !== undefined && rules[GATE_ENFORCES] !== undefined) refuse.at(`house_rules.${GATE_ENFORCE_AS_DRAFTED}`, `is named beside ${GATE_ENFORCES}, which it is read as`)
-  const read: Json = drafted === undefined ? rules : { ...rules, [GATE_ENFORCES]: drafted }
-  if (clones === null) return read
-  const named = HOUSE_RULE_PLACES.find((place) => read[place] !== undefined)
+  return drafted === undefined ? rules : { ...rules, [GATE_ENFORCES]: drafted }
+}
+
+/** The rules with the workspace root's two places filled in, refused when a rule names one anyway (martha#958). */
+function withTheWorkspacesPlaces(refuse: Refuse, rules: Json, clones: string): Json {
+  const named = HOUSE_RULE_PLACES.find((place) => rules[place] !== undefined)
   if (named !== undefined) refuse.at(`house_rules.${named}`, `is named beside ${THE_WORKSPACES_ROOT}, which places the clones and the worktrees`)
-  return { ...read, [CLONES]: clones, [WORKTREES]: join(dirname(clones), WORKTREES_BESIDE_CLONES) }
+  if (rules[WORKSPACE_LAYOUT] === false) refuse.at(`house_rules.${WORKSPACE_LAYOUT}`, `is false beside ${THE_WORKSPACES_ROOT}, which places the clones and the worktrees`)
+  return { ...rules, [CLONES]: clones, [WORKTREES]: join(dirname(clones), WORKTREES_BESIDE_CLONES) }
 }
 
 /**

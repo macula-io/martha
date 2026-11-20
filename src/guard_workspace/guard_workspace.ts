@@ -29,8 +29,9 @@
 // `--mirror`) writes the default branch with the rest, and is refused from anywhere. Like the switch rule, it fails open
 // when git cannot name the default branch, and Martha's own git runs, which carry its settings, pass the shim as before.
 //
-// The places come from the declaration's `house_rules`, and the members from its `members`; nothing here restates
-// either. Everything a call is read from is the call's own words, read once by
+// The places come from the declaration — `house_rules`' two places, which the reader fills from `workspace.root` when
+// the rules name neither (martha#958) — and the members from its `members`; nothing here restates either. Everything a
+// call is read from is the call's own words, read once by
 // ../read_the_git_calls_in_a_shell_line, and the few tree facts only git can say are handed in: a rule that cannot see
 // a fact does not fire. That is deliberate. A member's shell must not wait on, or be refused by, something the guard
 // could not look at — failing open is recoverable, and every miss is visible in the member's row and in the scan.
@@ -46,7 +47,7 @@
 // `<member>/<slug>`, so the text before the first `/` is the member, compared with ../declare_crew's sameMemberName.
 // One rule for both, so a branch this guard calls another member's is exactly one `worktree_finish` would not remove.
 
-import { sameMemberName, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { sameMemberName, theWorkspaceTheCrewDeclared } from '../declare_crew/declare_crew.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { isAbsolute, join, resolve, sep } from 'node:path'
@@ -59,15 +60,11 @@ export interface TheWorkspace {
 }
 
 /**
- * The places the crew declared for its clones and worktrees, with its members' names; undefined when it turned no
- * workspace layout on. A crew that declared none is guarded by nothing: the guard refuses breaks of a layout, and
- * there is none to break.
+ * The places the crew declared for its clones and worktrees, with its members' names; undefined when it named no
+ * places. Read in ../declare_crew, where the places are read from the declaration, so the guard, the scan and a
+ * worktree are answered from one fact (martha#958); re-exported here for the slices that reach the guard.
  */
-export function theWorkspaceTheCrewDeclared(settings: CrewSettings): TheWorkspace | undefined {
-  const { workspace_layout: on, clones, worktrees } = settings.house_rules
-  if (on !== true || clones === null || worktrees === null) return undefined
-  return { clones, worktrees, members: settings.members.map((member) => member.name) }
-}
+export { theWorkspaceTheCrewDeclared }
 
 /** A worktree as git lists it: where it is, the branch it is on, and whether only its record is left. */
 export interface AListedWorktree {

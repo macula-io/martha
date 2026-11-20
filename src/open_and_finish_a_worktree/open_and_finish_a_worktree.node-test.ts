@@ -92,7 +92,9 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
   mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER], [HOLD_REVIEWS]: [OWNER] } },
   house_rules: {
     owner_items: false,
-    workspace_layout: true,
+    // The places are what turns a worktree on, not the switch (martha#958): this fixture names both places, and the
+    // switch stays off, as the reader sets it for a declaration in the draft's shape.
+    workspace_layout: false,
     member_work: false,
     practice: false,
     strict_gate: false,
