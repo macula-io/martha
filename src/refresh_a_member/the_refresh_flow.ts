@@ -53,7 +53,7 @@ import {
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { keepWhatTheSessionSpent, USAGE_PLACE, withWhatWasNotKept } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
-import { theHostsReadingIn, type Billing } from '../keep_what_a_session_spent/the_hosts_usage.ts'
+import { theHostsReadingIn, type Billing, type TheWeekly } from '../keep_what_a_session_spent/the_hosts_usage.ts'
 import {
   CARRY_THE_END,
   concludeTheEnd,
@@ -96,6 +96,8 @@ export interface TheSessionsQuestion {
   readonly unknown_price: 0 | 1
   /** How the session is billed, as far as the host says (martha#860 R3). */
   readonly billing: Billing
+  /** The host's weekly window, or null when it gives none (martha#990): the crew's budget gauge keeps the newest. */
+  readonly weekly: TheWeekly | null
   /** The turn that just ended, and the answer it ended with: '' at a session's start. */
   readonly turn_id: string
   readonly answer: string
