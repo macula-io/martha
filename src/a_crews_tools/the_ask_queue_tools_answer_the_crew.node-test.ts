@@ -35,6 +35,7 @@ import {
   WORKTREES,
   type CrewSettings,
 } from '../declare_crew/declare_crew.ts'
+import { TRIMS_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { ProcessOutcome, ProcessRequest, Processes } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -219,6 +220,7 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
     [STALLED_MINUTES]: null,
     [REVIEW_MINUTES]: null,
     [PERSON_MINUTES]: null,
+    ...TRIMS_WHEN_UNNAMED,
   },
   // Off: these tests ask about the tips a removal covers, and the gate is not theirs (martha#321).
   gate: { kind: 'off' },

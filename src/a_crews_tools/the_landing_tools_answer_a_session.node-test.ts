@@ -18,6 +18,7 @@ import { crewToolsIn } from '../claude_code_relay/hooks/crew_tools_answer.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import { CLONES, DASHBOARD, DECLARATION_DIRECTORY, DECLARATION_FILE, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, HOLD_REVIEWS, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, THE_HOST_A_MEMBER_RAN_ON, WORKTREES, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { TRIMS_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -134,6 +135,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
       review_model: null,
       clones: places.clones,
       worktrees: places.worktrees,
+      ...TRIMS_WHEN_UNNAMED,
     },
     // Off unless the declaration says otherwise (martha#321 reads the gate's mode from it).
     gate: { kind: 'off' },

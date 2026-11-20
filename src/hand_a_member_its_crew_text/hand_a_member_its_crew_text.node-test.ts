@@ -12,6 +12,7 @@ import { test } from 'node:test'
 
 import { CREW_CODE_DECLARATION_DIRECTORY, DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, HOLD_REVIEWS, THE_HOST_A_MEMBER_RAN_ON, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
+import { TRIMS_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
@@ -56,7 +57,7 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
       { name: 'reviewer', role: 'reviewer', model: null, host: null, parked: false, billing: null },
     ],
     mode: { name: mode, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER], [HOLD_REVIEWS]: [OWNER] } },
-    house_rules: { owner_items: false, workspace_layout: false, member_work: false, practice: overrides.practice ?? false, strict_gate: false, owner_bell: false, dashboard: false, refresh_between_tasks: false, nudges: false, stalled_minutes: null, review_minutes: null, person_minutes: null, review_model: null, clones: null, worktrees: null },
+    house_rules: { owner_items: false, workspace_layout: false, member_work: false, practice: overrides.practice ?? false, strict_gate: false, owner_bell: false, dashboard: false, refresh_between_tasks: false, nudges: false, stalled_minutes: null, review_minutes: null, person_minutes: null, review_model: null, clones: null, worktrees: null, ...TRIMS_WHEN_UNNAMED },
     // Off unless the declaration says otherwise (martha#321 reads the gate's mode from it).
     gate: { kind: 'off' },
     channel_read_seconds: 30,
