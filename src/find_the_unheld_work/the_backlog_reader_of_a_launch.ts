@@ -15,12 +15,16 @@ export interface TheBacklogsPlaces {
   readonly root: string
   readonly processes?: Processes
   readonly ledger: { readonly clock: { readonly now: () => number } }
-  /** The crew's GitHub block as declared (martha#931 B): the floor the backlog's reads are held to. */
+  /**
+   * The crew's GitHub block as declared (martha#931 B), handed to the spender. The backlog's reads use only the spender's
+   * `run`, so its floor does not hold them yet (martha#947).
+   */
   readonly github: CrewGithub
 }
 
-/** The reader over a launch's places: the crew's backlog place, `gh` through the crew's GitHub budget only when the
- * launch holds processes (undefined outside a launcher), and the time. */
+/** The reader over a launch's places: the crew's backlog place, `gh` run in the checkout only when the launch holds
+ * processes (undefined outside a launcher), and the time. The run is the spender's bare `run`, outside the crew's
+ * GitHub budget and its floor until martha#947. */
 export function theBacklogReaderIn(on: TheBacklogsPlaces): TheBacklogReader {
   const { stores, root, processes, ledger, github } = on
   const run = processes === undefined ? undefined : theGithubSpenderOf({ stores, root, processes, clock: ledger.clock, github }).run
