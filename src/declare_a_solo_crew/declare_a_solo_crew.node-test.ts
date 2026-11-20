@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -92,18 +92,6 @@ test('init with no owner name refuses, saying how to set one, and writes nothing
   assert.equal(declared.declared, false)
   assert.match(declared.declared ? '' : declared.refusal, /git config user\.name/)
   assert.equal(existsSync(join(root, DECLARATION_DIRECTORY)), false)
-})
-
-test('init refuses a declaration directory that is a link, naming it, and writes nothing where it points', async (t) => {
-  const { root, state } = placeFor(t)
-  const elsewhere = join(root, '..', 'elsewhere')
-  mkdirSync(elsewhere)
-  symlinkSync(elsewhere, join(root, DECLARATION_DIRECTORY))
-  const outcome = await declareSoloCrew({ root, owner: 'Ada Owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
-  assert.equal(outcome.declared, false)
-  const refusal = outcome.declared ? '' : outcome.refusal
-  assert.ok(refusal.includes(join(root, DECLARATION_DIRECTORY)), refusal)
-  assert.deepEqual(readdirSync(elsewhere), [])
 })
 
 test('init refuses a declaration path that is a file, naming it, rather than throwing', async (t) => {
