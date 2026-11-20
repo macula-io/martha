@@ -78,8 +78,8 @@ export interface AConfinement {
 
 /**
  * crew-code's own values, as `martha init` writes them (martha#989): its `systemd/crew.slice` ceiling of 2400% at weight
- * 50, a member's scope of 400% at 50 (`core/crew_declaration.ts`'s defaults), and the bus unit host00 already runs
- * (macula-fleet#120's `ci-systemd-bus.service`, which serves `$XDG_RUNTIME_DIR/ci-systemd-bus`).
+ * 50, a member's scope of 400% at 50 (`core/crew_declaration.ts`'s defaults), and the bus unit the lab host already
+ * runs for its CI runners (`ci-systemd-bus.service`, which serves `$XDG_RUNTIME_DIR/ci-systemd-bus`).
  */
 export const CONFINEMENT_THAT_INIT_WRITES: AConfinement = {
   slice: 'crew.slice',
