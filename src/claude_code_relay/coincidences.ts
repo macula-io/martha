@@ -2,7 +2,8 @@
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
 import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
-import { REFRESH_THIS_SESSION, THE_MODEL_REPORT_ASK, THE_OWNERS_PARK_ASK, THE_PROGRESS_SWITCH_ASK, THE_TASKS_ASK, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
+import { REFRESH_THIS_SESSION, THE_MODEL_REPORT_ASK, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
+import { THE_OWNERS_PARK_ASK, THE_PROGRESS_SWITCH_ASK, THE_TASKS_ASK } from '../a_crews_tools/a_sessions_own_tab.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { CARRY_THE_END } from '../end_a_running_turn/end_the_running_turn.ts'
 import { THE_NEXT_MESSAGE_ASK, THE_TURN_STARTED_ASK } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
