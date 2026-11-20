@@ -10,7 +10,7 @@
 // The shapes are not written here: they are read from ./crew_lines.ts, the one definition the role cards are
 // generated from, so what a member is taught and what this accepts cannot drift apart.
 
-import { noteMilestone, sendOutwardAct, WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
+import { noteMilestone, noteMilestoneOnce, sendOutwardAct, WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { CREW_VERBS, VALUE_SHAPES, shapeOf, type LineShape, type Part, type ValueName } from './crew_lines.ts'
 import { crewVerbOf, readAShorthandLine } from './the_other_crew_verbs.ts'
 
@@ -160,7 +160,8 @@ function checkValue(verb: string, name: string, value: ValueName, text: string):
 /**
  * Adds the row a line adds to its package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave, and,
  * as crew-code keeps them (martha#980), a LIVE as the release it shipped and a LAND as a checkpoint, once for each
- * package it names. The other lines keep no row: crew-code keeps none for them, or Martha keeps that fact elsewhere.
+ * package it names, and once (martha#983): said again, or logged by hand too, in the same round, it is the row already
+ * kept. The other lines keep no row: crew-code keeps none for them, or Martha keeps that fact elsewhere.
  */
 export async function keepTheLinesRow(host: LedgerHost, member: string, line: CrewLineRead): Promise<void> {
   if (line.verb === 'VERDICT') {
@@ -169,7 +170,7 @@ export async function keepTheLinesRow(host: LedgerHost, member: string, line: Cr
   }
   const milestone = MILESTONE_OF_A_LINE[line.verb]
   if (milestone !== undefined) {
-    for (const named of (line.targets ?? []).filter((target) => WORK_PACKAGE.test(target))) await noteMilestone(host, { package: named, member, milestone, note: saidOf(line) })
+    for (const named of (line.targets ?? []).filter((target) => WORK_PACKAGE.test(target))) await noteMilestoneOnce(host, { package: named, member, milestone, note: saidOf(line) })
     return
   }
   if (line.verb !== 'HANDOFF') return

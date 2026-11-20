@@ -32,6 +32,7 @@
 
 import type { HostContract, Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 /**
  * The milestones a member keeps on a package, and the two only another act keeps.
@@ -324,7 +325,34 @@ export async function actsAwaitingOutcome(
  * How long one milestone stays one entry (martha#983, crew-code's one-entry rule): the same event for the same package
  * in the same round, said again inside this window, is the entry already kept.
  */
-export const ONE_ENTRY_MS = 10 * 60_000
+export const ONE_ENTRY_MS = 10 * MINUTE_MS
+
+/** The round a milestone's note names: the tip of its range (`<base>..<tip>`), its r=, both, or neither. */
+interface Round {
+  readonly tip: string
+  readonly r: string
+}
+
+/** The round `note` names, read as crew-code reads it: a range's tip in lower case, and an r= without leading zeros. */
+export const roundOf = (note: string): Round => {
+  const range = /\b[0-9a-f]{7,40}\.\.([0-9a-f]{7,40})\b/i.exec(note)
+  const round = /(?:^|\s)r=(\d+)\b/.exec(note)
+  return { tip: range?.[1]?.toLowerCase() ?? '', r: round?.[1] === undefined ? '' : String(Number(round[1])) }
+}
+
+/**
+ * Whether two notes name one round: by their tips when both name one (a short tip and its full form are one tip), else
+ * by their r= when both name one; two notes with nothing to compare are one round.
+ */
+const sameRound = (a: Round, b: Round): boolean => {
+  if (a.tip !== '' && b.tip !== '') return a.tip.startsWith(b.tip) || b.tip.startsWith(a.tip)
+  if (a.r !== '' && b.r !== '') return a.r === b.r
+  return true
+}
+
+/** The row already kept for this milestone of the package, in this round and inside the window, if there is one. */
+const theEntryAlreadyKept = (rows: readonly PlacedRow[], milestone: Milestone, now: number, round: Round): MilestoneRow | undefined =>
+  rows.flatMap(({ row }) => (row.kind === milestone && now - row.at < ONE_ENTRY_MS && sameRound(roundOf(row.note), round) ? [row] : []))[0]
 
 // --- writing --------------------------------------------------------------------
 
@@ -345,6 +373,27 @@ export async function noteMilestone(
     at: host.clock.now(),
     note: input.note,
   })
+}
+
+/**
+ * Keeps a milestone of a package once (martha#983, a port of crew-code's one-entry rule): the same milestone said by a
+ * crew line and logged by hand, or said twice, inside ONE_ENTRY_MS and in the same round, is one row. Resolves to the
+ * row already kept when there is one, and to undefined once this one is kept. The row is kept only if nothing landed
+ * since the read; if something did, the read runs again, at most CONCLUDE_ATTEMPTS times.
+ */
+export async function noteMilestoneOnce(
+  host: LedgerHost,
+  input: Work & { readonly milestone: Milestone; readonly note: string },
+): Promise<MilestoneRow | undefined> {
+  for (let attempt = 1; attempt <= CONCLUDE_ATTEMPTS; attempt += 1) {
+    const rows = await placedRows(host, input.package)
+    const at = host.clock.now()
+    const held = theEntryAlreadyKept(rows, input.milestone, at, roundOf(input.note))
+    if (held !== undefined) return held
+    const row: MilestoneRow = { kind: input.milestone, package: input.package, member: input.member, at, note: input.note }
+    if (await keptUnlessMoved(host, row, rows.length)) return undefined
+  }
+  throw new Error(`the ${input.milestone} of ${input.package} was not kept: the package kept moving for ${CONCLUDE_ATTEMPTS} attempts`)
 }
 
 /**
@@ -442,8 +491,8 @@ export async function concludeAct(
   )
 }
 
-/** Keeps the outcome row at `length`: true when kept, false when a row landed first; any other failure throws. */
-async function keptUnlessMoved(host: LedgerHost, row: ActConcludedRow, length: number): Promise<boolean> {
+/** Keeps a row at `length`: true when kept, false when a row landed first; any other failure throws. */
+async function keptUnlessMoved(host: LedgerHost, row: LedgerRow, length: number): Promise<boolean> {
   try {
     await keep(host, row, length)
     return true
