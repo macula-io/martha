@@ -18,6 +18,7 @@ import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { theLineToHandAtStart, type TheStartLine } from '../hand_a_member_its_crew_text/the_start_line.ts'
+import { theCrewStateOfATurn } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores, ToolNames } from '../host_contract/host_contract.ts'
 import { VERIFY_RANGE_TOOL, verifyTheRangeOver } from '../check_a_range_before_the_owner_says_yes/the_verify_range_tool.ts'
 import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
@@ -63,6 +64,7 @@ import {
   type AReadableCall,
 } from '../refuse_calls_outside_the_package_contract/the_acts_of_a_call.ts'
 import type { TheContractHanded } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
+import { THE_BUDGET_ASK, keepTheWeekly, theBudgetCommandAnswer, theBudgetCommandIn } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import {
   THE_REFRESH_ASK,
   aSwitchMayFollow,
@@ -86,6 +88,7 @@ import { WHO_IS_FREE_TOOL, whoIsFreeOver } from '../see_who_is_free/who_is_free_
 import { UNHELD_WORK_TOOL, unheldWorkOver } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { theBacklogReaderIn } from '../find_the_unheld_work/the_backlog_reader_of_a_launch.ts'
 import { SAY_TO_THE_CREW_TOOL, sayToTheCrewOver } from '../send_a_crew_message/say_to_the_crew_tool.ts'
+import { GH_MS } from '../send_a_crew_message/the_runs_a_handoff_names.ts'
 import {
   BEAT_INTERVAL_MS,
   SPEND_FIELD,
@@ -108,6 +111,7 @@ import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_pat
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
 import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import type { AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
@@ -193,6 +197,8 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * declaration naming one is then refused — nothing here invents a model list.
    */
   readonly models?: ModelVocabulary
+  /** The host a session's usage is kept under (martha#999 package 5): an engine launch names its own; Claude Code when none. */
+  readonly usage_host?: AUsageHost
   /** The model this member was launched on (martha#315): what its row says until a switch is confirmed. */
   readonly launched_on?: string
   /**
@@ -273,6 +279,12 @@ export interface CrewTools extends TheReviewRule {
    * session's id is the host's own start event's, never the id of the last session that answered a tool (martha#658).
    */
   theLineToHandAtStart(session_id: string): Promise<TheStartLine | null>
+  /**
+   * The crew's state a turn of this member is handed (martha#984): the standing items and the nudges, read from what the
+   * crew recorded and nothing else, when the table lets this member assign work. Null when nothing is handed. `taken_in`
+   * names the source the session's record takes in before the text is answered.
+   */
+  theCrewStateOfATurn(): Promise<TheStartLine | null>
   /**
    * The start whose line that call built has been answered (martha#658 Done-when 4): a taken start marks the window
    * that hand read as handed to a successor, and a refused one drops the record unmarked, so the next start is handed
@@ -492,6 +504,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     },
     startSweeping: () => sweepTheOwnersList(held),
     theLineToHandAtStart: (session_id) => theStartLineOf(held, state, session_id),
+    theCrewStateOfATurn: () => theCrewStateOf(held),
     noteTheStart: (session_id, taken) => noteTheStartIn(held, state, session_id, taken),
     thePredecessorOf: (session_id) => thePredecessorOf(held, session_id),
     theSpendInForce: (session_id) => budget.theSpendInForce(session_id),
@@ -554,7 +567,17 @@ async function answerAnAskOfTheMods(
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
+  if (name === THE_BUDGET_ASK) return await theBudgetAsked(places, args)
   return undefined
+}
+
+/** `/crew-budget` as the owner typed it at this session's tab (martha#990): the line shown, or the reviewer gauge set. */
+async function theBudgetAsked(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const command = theBudgetCommandIn(args)
+  if (typeof command === 'string') return { refused: command }
+  const settings = await theSettingsOrRefusal(places)
+  if ('refused' in settings) return settings
+  return { answer: theBudgetCommandAnswer(places.stores.crew, command, settings.house_rules.review_model, places.ledger.clock.now()) }
 }
 
 /** The owner's list as the pane draws it (martha#316), with `focus` the row the owner's keyboard is on. */
@@ -619,6 +642,9 @@ async function theSessionsAct(
 ): Promise<CoreToolAnswer> {
   const question = theQuestionIn(args, from)
   if (typeof question === 'string') return { refused: question }
+  // The crew's newest weekly reading (martha#990): kept whatever the flow orders; a store that will not keep it leaves
+  // the reading before it, which the next turn's end replaces.
+  if (question.weekly !== null) keepTheWeekly(places.stores.crew, question.weekly)
   // A switch whose report never came (martha#359): the mod reports the host's command before it asks this question
   // again, so a guard still open here is one no session is coming back for. It is closed without waiting — the host's
   // save may still land, and the record it leaves is what the next launch finishes.
@@ -673,6 +699,13 @@ async function theStartLineOf(places: CrewToolPlaces, state: SessionState, sessi
   if (handed.beats_read === undefined) state.start_hands.delete(session_id)
   else state.start_hands.set(session_id, handed.beats_read)
   return handed.line
+}
+
+/** The crew's state this member's turn is handed (martha#984): the pane's own reading, with no processes to ask with. */
+async function theCrewStateOf(places: CrewToolPlaces): Promise<TheStartLine | null> {
+  const settings = await theSettingsOrRefusal(places)
+  const rows = 'refused' in settings ? {} : beatsOf(places.beats, settings)
+  return theCrewStateOfATurn({ ledger: places.ledger, stores: places.stores, root: places.root, member: places.member, settings, rows, now: places.ledger.clock.now() })
 }
 
 /**
@@ -908,6 +941,12 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   to: args['to'],
   text: args['text'],
   volatile_roots: theRootsInForce(settings.volatile_paths, places.volatile_roots ?? []),
+  // A HANDOFF's range is read in the crew's clone when the launch handed the host's processes (martha#980 package 3).
+  ...(places.processes === undefined ? {} : { commits: { processes: places.processes, clones: settings.house_rules.clones } }),
+  // A HANDOFF's ci= runs are read through the crew's GitHub budget, each gh bounded (martha#980 package 4).
+  ...(places.processes === undefined
+    ? {}
+    : { runs: theGithubSpenderOf({ stores: places.stores, root: places.root, processes: places.processes, clock: places.ledger.clock, github: settings.github, clock_zone: settings.clock_zone }, GH_MS) }),
 })
 
 /** What the receipts are read over: the channel's ledger, the member that sent, and the crew it sent to. */
@@ -1018,10 +1057,12 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     root: places.root,
     documents: places.documents,
     models: places.models ?? NO_MODEL_NAMED,
+    ...(places.usage_host === undefined ? {} : { usage_host: places.usage_host }),
     ledger: places.ledger,
     row_model: state.row_model,
     began_at: state.began_at,
     ends: state.ends,
+    ...(places.processes === undefined ? {} : { processes: places.processes }),
   }
 }
 

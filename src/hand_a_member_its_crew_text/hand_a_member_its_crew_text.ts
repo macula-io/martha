@@ -24,8 +24,11 @@ import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf, DeclarationRefused, declareCrew, DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 export { crewTextFilesOf }
 import type { DocumentStore, FileTree } from '../host_contract/host_contract.ts'
-import { CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
+import { ARTIFACT_LINES, CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { OFFER_OWNER_ASKS, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
+import { thePortedRules, type WhatThePortedRulesRead } from './the_ported_rules.ts'
+import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
 
 /**
  * Where Martha's own texts ship, inside this slice. `import.meta.dirname` is the one way a slice may know its own
@@ -64,6 +67,8 @@ export interface TheTextsAMemberReads {
   readonly mode_text: ATextAndItsFile | null
   /** The crew's conventions, when its declaration names one. */
   readonly conventions: ATextAndItsFile | null
+  /** What the crew-code rules Martha hands are read from (martha#971): the declaration's switches and this member's grants. */
+  readonly ported: Omit<WhatThePortedRulesRead, 'owner'>
 }
 
 /** Why a section was not composed: the file to blame, and the words to show the owner. */
@@ -158,11 +163,14 @@ export async function crewTextFilesToApprove(documents: DocumentStore, root: str
 
 /** The placeholders a text may carry, in the words the crew's own texts use. The owner's is the word the declaration
  * names the owner by, so a text and a declaration cannot come to spell the same person two ways. */
-export const PLACEHOLDERS = [OWNER, 'handoff', 'doc_handoff', 'verdict', 'doc_verdict'] as const
+export const PLACEHOLDERS = [OWNER, 'handoff', 'doc_handoff', 'verdict', 'doc_verdict', 'artifact_read', 'artifact_publish'] as const
 export type Placeholder = (typeof PLACEHOLDERS)[number]
 
+/** The placeholders that stand for a line that hands an Artifact to the Supervisor (martha#957 gap 13), which the line reader does not read. */
+export type ArtifactPlaceholder = 'artifact_read' | 'artifact_publish'
+
 /** The placeholders that stand for a line a member sends. */
-export type LinePlaceholder = Exclude<Placeholder, typeof OWNER>
+export type LinePlaceholder = Exclude<Placeholder, typeof OWNER | ArtifactPlaceholder>
 
 /**
  * The lines the section teaches, keyed by the placeholder a text names them with, generated from the same definitions
@@ -208,6 +216,21 @@ export function theTextsAMemberReads(settings: CrewSettings, member: string, rea
     role_text: firstOf(join(settings.paths.crew, ROLE_TEXTS_DIRECTORY, `${onTheCrew.role}.md`), join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, `${onTheCrew.role}.md`)),
     mode_text: firstOf(join(settings.paths.crew, MODE_TEXTS_DIRECTORY, `${settings.mode.name}.md`), join(SHIPPED_TEXTS, MODE_TEXTS_DIRECTORY, `${settings.mode.name}.md`)),
     conventions: conventionsOf(settings, member, firstOf),
+    ported: thePortedRulesOf(settings, onTheCrew.role),
+  }
+}
+
+/**
+ * What the ported rules read of the declaration (martha#971): the workspace as the git guard reads it, so its rules are
+ * taught exactly where it holds them (review r=1), the review model, and this role's two grants.
+ */
+function thePortedRulesOf(settings: CrewSettings, role: string): Omit<WhatThePortedRulesRead, 'owner'> {
+  const { clones, worktrees } = theWorkspaceTheCrewDeclared(settings) ?? { clones: null, worktrees: null }
+  return {
+    layout: clones === null || worktrees === null ? null : { clones, worktrees },
+    review_model: settings.house_rules.review_model,
+    assigns_work: whoTheTableGrants(settings.mode.may.assign_work).includes(role),
+    offers_owner_asks: whoTheTableGrants(settings.mode.may[OFFER_OWNER_ASKS]).includes(role),
   }
 }
 
@@ -237,6 +260,7 @@ export function handAMemberItsCrewText(texts: TheTextsAMemberReads): string {
     `## Your role: ${texts.role}\n\n${filled(role.text, role.file)}`,
     `## How this crew works: ${texts.mode}\n\n${filled(mode.text, mode.file)}`,
     `## The lines you send\n\n${theLinesTaughtText()}`,
+    ...thePortedRules({ owner: texts.owner, ...texts.ported }),
     ...(texts.conventions === null ? [] : [`## Conventions\n\n${filled(texts.conventions.text, texts.conventions.file)}`]),
   ]
   const section = parts.join('\n\n')
@@ -269,7 +293,7 @@ function theLinesTaughtText(): string {
 
 /** What each placeholder stands for, from the declaration and the lines the reader accepts. */
 function placeholdersFor(texts: TheTextsAMemberReads): Readonly<Record<Placeholder, string>> {
-  return { [OWNER]: texts.owner, ...theLinesTaught() }
+  return { [OWNER]: texts.owner, ...theLinesTaught(), artifact_read: ARTIFACT_LINES.read, artifact_publish: ARTIFACT_LINES.publish }
 }
 
 /**

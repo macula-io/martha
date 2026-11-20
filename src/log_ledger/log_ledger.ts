@@ -32,6 +32,7 @@
 
 import type { HostContract, Row, StoredRow } from '../host_contract/host_contract.ts'
 import { ROW_NOT_DURABLE, ROW_STREAM_MOVED } from '../host_contract/host_contract.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
 /**
  * The milestones a member keeps on a package, and the two only another act keeps.
@@ -59,6 +60,18 @@ export const MILESTONES = [
   'package_resumed',
 ] as const
 export type Milestone = (typeof MILESTONES)[number]
+
+/**
+ * The milestones a week counts, by name (martha#308): the review round a package closed, the release it shipped, the fix
+ * it shipped after a release, the landing that ends it, and the verdict that closed a review round (martha#507: the
+ * first-pass rate is read from these). A reader outside this slice takes them from here rather than spelling a milestone
+ * of its own, the way `PACKAGE_RESUMED` is taken.
+ */
+export const REVIEW_ROUND_CLOSED: Milestone = 'review_round_closed'
+export const RELEASE_SHIPPED: Milestone = 'release_shipped'
+export const FIX_SHIPPED_AFTER_RELEASE: Milestone = 'fix_shipped_after_release'
+export const PACKAGE_LANDED: Milestone = 'package_landed'
+export const VERDICT_GIVEN: Milestone = 'verdict_given'
 
 /**
  * The acts that leave the member's own session, or are done to it, and so are announced first. `refresh_forced` is the
@@ -142,6 +155,9 @@ export type ActConcludedRow = RowCommon & {
 export const RECOVERY_DECISIONS = ['retried_once', 'concluded_from_the_inspection', 'replanned', 'paused'] as const
 export type RecoveryDecision = (typeof RECOVERY_DECISIONS)[number]
 
+/** The decision a recovery takes when the act is sent a second time; the attempts a package paid for are these. */
+export const RETRIED_ONCE: RecoveryDecision = RECOVERY_DECISIONS[0]
+
 /**
  * The decision a package made about an act that failed, with what it was read from: the class the failure was given
  * and the evidence for it, and what the inspection read and found. The class is a diagnosis, so its words belong to the
@@ -168,6 +184,12 @@ export type ContractKeptRow = RowCommon & {
 }
 
 export type LedgerRow = MilestoneRow | ActAnnouncedRow | ActConcludedRow | RecoveryRow | ContractKeptRow
+
+/** Whether a row of a package's ledger announced an outward act (martha#308): the week counts these by kind. */
+export const isAnActAnnouncedRow = (row: LedgerRow): row is ActAnnouncedRow => row.kind === ACT_ANNOUNCED
+
+/** Whether a row of a package's ledger is the conclusion of an outward act (martha#308). */
+export const isAnActConcludedRow = (row: LedgerRow): row is ActConcludedRow => row.kind === ACT_CONCLUDED
 
 /** Whether a row of a package's ledger is a recovery it decided. */
 export const isRecoveryRow = (row: LedgerRow): row is RecoveryRow => row.kind === RECOVERY_DECIDED
@@ -222,10 +244,24 @@ interface Work {
 // where its stream lives.
 export const WORK_PACKAGE = /^[A-Za-z0-9][A-Za-z0-9-]*\/(?!\.+#)[A-Za-z0-9._-]+#[1-9][0-9]*$/
 
+/** The prefix every package's ledger stream is kept under, before the package's own name. */
+export const LEDGER_STREAM_PREFIX = 'ledger/'
+
 /** The stream a package's ledger lives in; refuses a name that is not owner/repo#n. */
 export const ledgerStreamOf = (work_package: string): string => {
   if (!WORK_PACKAGE.test(work_package)) throw new Error(`${JSON.stringify(work_package)} is not a work package (owner/repo#n)`)
-  return `ledger/${work_package}`
+  return `${LEDGER_STREAM_PREFIX}${work_package}`
+}
+
+/**
+ * The package a stream name is a ledger of, or undefined for a stream that is no package's ledger: the name under the
+ * prefix is held to the same rule `ledgerStreamOf` writes by, so a directory named like a ledger is not read as one
+ * (martha#308).
+ */
+export const thePackageOfLedgerStream = (stream: string): string | undefined => {
+  if (!stream.startsWith(LEDGER_STREAM_PREFIX)) return undefined
+  const work_package = stream.slice(LEDGER_STREAM_PREFIX.length)
+  return WORK_PACKAGE.test(work_package) ? work_package : undefined
 }
 
 // --- reading --------------------------------------------------------------------
@@ -320,6 +356,45 @@ export async function actsAwaitingOutcome(
   )
 }
 
+/**
+ * How long one milestone stays one entry (martha#983, crew-code's one-entry rule): the same event for the same package
+ * in the same round, said again inside this window, is the entry already kept.
+ */
+export const ONE_ENTRY_MS = 10 * MINUTE_MS
+
+/** The round a milestone's note names: the tip of its range (`<base>..<tip>`), its r=, both, or neither. */
+interface Round {
+  readonly tip: string
+  readonly r: string
+}
+
+/** The round `note` names, read as crew-code reads it: a range's tip in lower case, and an r= without leading zeros. */
+export const roundOf = (note: string): Round => {
+  const range = /\b[0-9a-f]{7,40}\.\.([0-9a-f]{7,40})\b/i.exec(note)
+  const round = /(?:^|\s)r=(\d+)\b/.exec(note)
+  return { tip: range?.[1]?.toLowerCase() ?? '', r: round?.[1] === undefined ? '' : String(Number(round[1])) }
+}
+
+/**
+ * Whether two notes name one round: by their tips when both name one (a short tip and its full form are one tip), else
+ * by their r= when both name one; two notes with nothing to compare are one round.
+ */
+const sameRound = (a: Round, b: Round): boolean => {
+  if (a.tip !== '' && b.tip !== '') return a.tip.startsWith(b.tip) || b.tip.startsWith(a.tip)
+  if (a.r !== '' && b.r !== '') return a.r === b.r
+  return true
+}
+
+/** Every row of a milestone counts as the same entry, unless a caller narrows it. */
+const EVERY_ROW = (): boolean => true
+
+/**
+ * The row already kept for this milestone of the package, in this round and inside the window, if there is one. `alike`
+ * narrows which rows of the milestone are the same entry: a FAIL verdict is one entry with a FAIL, never with a PASS.
+ */
+const theEntryAlreadyKept = (rows: readonly PlacedRow[], milestone: Milestone, now: number, round: Round, alike: (row: MilestoneRow) => boolean): MilestoneRow | undefined =>
+  rows.flatMap(({ row }) => (row.kind === milestone && alike(row) && now - row.at < ONE_ENTRY_MS && sameRound(roundOf(row.note), round) ? [row] : []))[0]
+
 // --- writing --------------------------------------------------------------------
 
 // Async on purpose: a package name ledgerStreamOf refuses becomes a rejection
@@ -339,6 +414,29 @@ export async function noteMilestone(
     at: host.clock.now(),
     note: input.note,
   })
+}
+
+/**
+ * Keeps a milestone of a package once (martha#983, a port of crew-code's one-entry rule): the same milestone said by a
+ * crew line and logged by hand, or said twice, inside ONE_ENTRY_MS and in the same round, is one row. Resolves to the
+ * row already kept when there is one, and to undefined once this one is kept. The row is kept only if nothing landed
+ * since the read; if something did, the read runs again, at most CONCLUDE_ATTEMPTS times. `alike` narrows which earlier
+ * rows of the milestone are this entry (every one, unless a caller says otherwise).
+ */
+export async function noteMilestoneOnce(
+  host: LedgerHost,
+  input: Work & { readonly milestone: Milestone; readonly note: string },
+  alike: (row: MilestoneRow) => boolean = EVERY_ROW,
+): Promise<MilestoneRow | undefined> {
+  for (let attempt = 1; attempt <= CONCLUDE_ATTEMPTS; attempt += 1) {
+    const rows = await placedRows(host, input.package)
+    const at = host.clock.now()
+    const held = theEntryAlreadyKept(rows, input.milestone, at, roundOf(input.note), alike)
+    if (held !== undefined) return held
+    const row: MilestoneRow = { kind: input.milestone, package: input.package, member: input.member, at, note: input.note }
+    if (await keptUnlessMoved(host, row, rows.length)) return undefined
+  }
+  throw new Error(`the ${input.milestone} of ${input.package} was not kept: the package kept moving for ${CONCLUDE_ATTEMPTS} attempts`)
 }
 
 /**
@@ -436,8 +534,8 @@ export async function concludeAct(
   )
 }
 
-/** Keeps the outcome row at `length`: true when kept, false when a row landed first; any other failure throws. */
-async function keptUnlessMoved(host: LedgerHost, row: ActConcludedRow, length: number): Promise<boolean> {
+/** Keeps a row at `length`: true when kept, false when a row landed first; any other failure throws. */
+async function keptUnlessMoved(host: LedgerHost, row: LedgerRow, length: number): Promise<boolean> {
   try {
     await keep(host, row, length)
     return true

@@ -39,7 +39,7 @@ export const ACP = {
 } as const
 
 /** The session updates a turn reads; every other kind is left for a later reader. */
-export const UPDATE = { toolCall: 'tool_call', toolCallUpdate: 'tool_call_update', messageChunk: 'agent_message_chunk' } as const
+export const UPDATE = { toolCall: 'tool_call', toolCallUpdate: 'tool_call_update', messageChunk: 'agent_message_chunk', usage: 'usage_update' } as const
 
 /** A tool call's statuses, in the protocol's own words (ACP `ToolCallStatus`). */
 export const TOOL_CALL_STATUS = { pending: 'pending', inProgress: 'in_progress', completed: 'completed', failed: 'failed' } as const
@@ -91,6 +91,31 @@ export interface ATurn {
   readonly text: string
   readonly toolCalls: readonly AToolCall[]
   readonly asked: readonly APermissionAnswered[]
+}
+
+/**
+ * What a session has used, as the agent last said in ACP's `usage_update` (martha#999 package 5): the tokens in its
+ * context, the context's size, and what the session has cost so far when the agent prices it. martha-engine sends one
+ * mid-turn and at every turn's end, before it answers the prompt (acp/server.rs build_usage_updates).
+ */
+export interface AnAgentsUsage {
+  readonly used: number
+  readonly size: number
+  readonly cost?: { readonly amount: number; readonly currency: string }
+}
+
+/** A count ACP sends: a whole number, never below zero. */
+const isACount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0
+
+/** A `usage_update` read strictly, or undefined: a context of size 0 has no share, and a cost needs both its fields. */
+function aUsageIn(update: Json): AnAgentsUsage | undefined {
+  const { used, size } = update
+  if (!isACount(used) || !isACount(size) || size === 0) return undefined
+  if (update['cost'] === undefined || update['cost'] === null) return { used, size }
+  const cost = objectOf(update['cost'])
+  const amount = cost['amount']
+  const currency = cost['currency']
+  return typeof amount === 'number' && Number.isFinite(amount) && typeof currency === 'string' ? { used, size, cost: { amount, currency } } : undefined
 }
 
 /** A session the agent opened, and the mode it says it runs in (undefined when it names none). */
@@ -177,6 +202,7 @@ export class AcpClient {
   readonly #hearAnUpdate: HearAnUpdate | undefined
   readonly #pending = new Map<number, Pending>()
   readonly #turns = new Map<string, ATurnBeingHeard>()
+  readonly #usage = new Map<string, AnAgentsUsage>()
   #nextId = 1
   #buffered = ''
   #ended: string | undefined
@@ -207,6 +233,11 @@ export class AcpClient {
     if (answer['protocolVersion'] !== ACP_PROTOCOL_VERSION) {
       throw new Error(`the agent speaks ACP version ${String(answer['protocolVersion'])}, and this client speaks ${ACP_PROTOCOL_VERSION}`)
     }
+  }
+
+  /** The latest usage the agent reported for a session, or undefined when it reported none this client could read. */
+  usageOf(sessionId: string): AnAgentsUsage | undefined {
+    return this.#usage.get(sessionId)
   }
 
   /** A new session in `cwd`, with the tool servers the caller names, and the mode the agent says it runs. */
@@ -297,6 +328,7 @@ export class AcpClient {
       // Every update reaches the listener first, a turn open or not: #hear's record is the turn's own and returns early
       // outside one (design R4).
       this.#tell(textOf(params['sessionId']), params['update'])
+      this.#keepTheUsage(params)
       this.#hear(params)
     }
   }
@@ -308,6 +340,23 @@ export class AcpClient {
     } catch (error) {
       this.notes.push(`the listener for updates failed: ${error instanceof Error ? error.message : String(error)}`)
     }
+  }
+
+  /**
+   * A session's usage, kept whether a turn is open or not. One this client cannot read drops the one kept before it, and
+   * is noted: an older share read as the session's now would let a session past its limit look under it.
+   */
+  #keepTheUsage(params: Json): void {
+    const update = objectOf(params['update'])
+    if (update['sessionUpdate'] !== UPDATE.usage) return
+    const sessionId = textOf(params['sessionId'])
+    const usage = aUsageIn(update)
+    if (usage !== undefined) {
+      this.#usage.set(sessionId, usage)
+      return
+    }
+    this.#usage.delete(sessionId)
+    this.notes.push(`a usage update this client cannot read, so session ${sessionId} has no usage until the next: ${JSON.stringify(update).slice(0, 200)}`)
   }
 
   #settle(message: Json): void {
