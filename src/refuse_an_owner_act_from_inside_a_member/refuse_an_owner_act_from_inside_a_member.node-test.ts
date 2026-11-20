@@ -10,6 +10,8 @@ import type { MemberLaunch } from '../attribute_a_cross_session_sender/attribute
 import { RELAY_SOCKET_VARIABLE } from '../claude_code_relay/hooks/relay_protocol.ts'
 import { MEMBER_CONFIG_FOLDER } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
+import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { isStillRefusedFromInsideAMember, NOT_A_WALL, whyAnOwnersActIsRefusedInsideAMember, type WhereAnOwnersActRuns } from './refuse_an_owner_act_from_inside_a_member.ts'
 
 const HOST: MemberLaunch = { member_name: 'builder', node_id: 'ab'.repeat(32), pid: 4242, process_started_at: 'a-boot:777' }
@@ -43,7 +45,7 @@ test('#601: only answering the owner ask is still refused; every other owner act
   assert.equal(isStillRefusedFromInsideAMember('answer'), true)
   // The whole of what a member leaves: the socket, its own config folder, and its host above the act, all at once.
   const inside = { env: { [RELAY_SOCKET_VARIABLE]: '/run/a-socket', [CONFIG_DIR_VARIABLE]: join('/state', 'snapshots', 'launch-1', MEMBER_CONFIG_FOLDER) }, ancestors: [{ pid: HOST.pid, identity: HOST.process_started_at }] }
-  for (const act of ['approve', 'release', 'start', 'bells', 'pin-key', 'keep-shapes', 'crew', 'stop', 'restart', 'week']) {
+  for (const act of ['approve', 'release', 'start', 'bells', 'pin-key', 'keep-shapes', THE_WHOLE_CREW, STOP, RESTART, 'week']) {
     assert.equal(isStillRefusedFromInsideAMember(act), false, act)
     assert.equal(whyAnOwnersActIsRefusedInsideAMember(where({ ...inside, act })), undefined, act)
   }
