@@ -120,15 +120,16 @@ function checkValue(verb: string, name: string, value: ValueName, text: string):
   return shape.matches.test(text) ? undefined : tookItAsProse(verb, `${name} is not ${shape.what}; read ${JSON.stringify(text)}`)
 }
 
-/** Adds the row a line adds to its package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave. */
-export async function keepTheLinesRow(host: LedgerHost, member: string, line: CrewLineRead): Promise<void> {
+/** Adds the row a line adds to its package's ledger: a HANDOFF as an outward act, a VERDICT as the verdict it gave.
+ * `lines` is how many lines the message that carried the line had, which the drift is read from (martha#1010). */
+export async function keepTheLinesRow(host: LedgerHost, member: string, line: CrewLineRead, lines: number): Promise<void> {
   if (line.verb === 'VERDICT') {
-    await noteMilestone(host, { package: line.package, member, milestone: 'verdict_given', note: saidOf(line) })
+    await noteMilestone(host, { package: line.package, member, milestone: 'verdict_given', note: saidOf(line), lines })
     return
   }
   // The line is one a member sent on the crew channel: the act it announces is that line, and its conclusion is the
   // read itself, kept here so a refreshed member finds the hand-off it sent already counted.
-  await sendOutwardAct(host, { package: line.package, member, act: { kind: 'handoff', what: saidOf(line) } }, async () => 'read as a crew line and added to this package\'s ledger')
+  await sendOutwardAct(host, { package: line.package, member, act: { kind: 'handoff', what: saidOf(line) }, lines }, async () => 'read as a crew line and added to this package\'s ledger')
 }
 
 /**

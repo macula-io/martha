@@ -157,7 +157,7 @@ const theLineOf = (checked: CheckedRange): string => ('told' in checked ? (check
 const aPassedVerdict = async (host: HostForTests, work_package: string, base: string, head: string): Promise<void> => {
   const reading = readACrewLine(`VERDICT ${work_package} PASS ${base}..${head} r=2 ci=1 req=0`)
   if (!('line' in reading) || reading.line === null) throw new Error(`the crew's own PASS line was not read: ${JSON.stringify(reading)}`)
-  await keepTheLinesRow(host.host, 'Mercurius', reading.line)
+  await keepTheLinesRow(host.host, 'Mercurius', reading.line, 1)
 }
 
 /** An answer holding one open pull request at each head, by the pull request's number. */

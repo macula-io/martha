@@ -458,6 +458,7 @@ function sayToTheSupervisor(places: TheRefreshPlaces, settings: CrewSettings, li
     package: held === '' ? null : held,
     to: [supervisor.name],
     text: line,
+    trims: settings.house_rules,
   })
 }
 

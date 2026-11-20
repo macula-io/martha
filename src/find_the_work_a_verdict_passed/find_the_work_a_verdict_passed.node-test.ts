@@ -131,7 +131,7 @@ test('#256: the PASS line the crew really sends, with req=0, is kept and read ba
   assert.ok('line' in reading && reading.line !== null, `the line the crew sends was refused, so it would write no row: ${JSON.stringify(reading)}`)
 
   const { host } = await aLedgerOf(PACKAGE, [], ghSaid(OPEN.answer))
-  await keepTheLinesRow(host, 'Pluto', reading.line)
+  await keepTheLinesRow(host, 'Pluto', reading.line, 1)
   const found = await findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD })
   assert.deepEqual(found, { pr: recorded.number, head: OPEN.sha }, `the row a real PASS line wrote did not read back: ${JSON.stringify(found)}`)
 })

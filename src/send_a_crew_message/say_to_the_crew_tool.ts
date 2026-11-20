@@ -5,6 +5,7 @@
 // slice (../a_crews_tools) keeps only the table that calls it.
 
 import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
+import type { TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
@@ -39,6 +40,8 @@ export interface ASendAsked {
   readonly held: DashboardRow | null
   readonly to: unknown
   readonly text: unknown
+  /** The crew's four trims, whose mosts the sent line is checked against (martha#1010). */
+  readonly trims: TheCrewsTrims
   /** The roots a reboot deletes (martha#314), already in force: the crew's own, or the machine's when it names none. */
   readonly volatile_roots: readonly string[]
 }
@@ -56,6 +59,7 @@ export async function sayToTheCrewOver(asked: ASendAsked): Promise<AToolAnswer> 
     package: held === null || held.holds === '' ? null : held.holds,
     to: asked.to,
     text: asked.text,
+    trims: asked.trims,
   })
   return 'refused' in sent ? { refused: sent.refused } : { answer: toldWithTheNote(sent.told, asked) }
 }

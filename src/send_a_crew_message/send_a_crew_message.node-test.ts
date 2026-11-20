@@ -19,13 +19,14 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { HostContract } from '../host_contract/host_contract.ts'
 import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { appendToTheChannel, readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
-import { readLedger, ledgerStreamOf, noteRecovery } from '../log_ledger/log_ledger.ts'
+import { isActAnnouncedRow, readLedger, ledgerStreamOf, noteRecovery } from '../log_ledger/log_ledger.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { RELAY_SOCKET_NAME } from '../serve_the_relay_to_a_launch/relay_directory.ts'
 import { addresseesOf, CREW_SAY_DESCRIPTION, LONGEST_MESSAGE, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
+import { CREW_LINE_LINES_MOST_WHEN_UNNAMED, REVIEW_ROUNDS_MOST, REVIEW_ROUNDS_MOST_WHEN_UNNAMED, TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 
 const ROSTER = ['Builder', 'Reviewer', 'Supervisor'] as const
 
@@ -50,6 +51,7 @@ const sending = (more: Partial<Parameters<typeof sendACrewMessage>[1]> = {}): Pa
   package: null,
   to: ['Reviewer'],
   text: 'a hand-off, in words',
+  trims: TRIMS_WHEN_UNNAMED,
   ...more,
 })
 
@@ -260,6 +262,38 @@ test('#253: a well-formed hand-off sent through the crew says its line reached t
   const announced = rows[0]
   assert.ok(announced !== undefined && 'act' in announced)
   assert.equal(announced.act.kind, 'handoff')
+})
+
+test('#1010: a hand-off past the crew\'s line count is sent anyway, with one notice, and its row keeps how long it was', async () => {
+  const channel = channelHost()
+  const base = 'a'.repeat(40)
+  const tip = 'b'.repeat(40)
+  const most = CREW_LINE_LINES_MOST_WHEN_UNNAMED
+  const text = [`HANDOFF macula-io/martha#253 ${base}..${tip} r=1 ci=41700170944`, ...Array.from({ length: most }, () => 'and a line of notes')].join('\n')
+  const sent = await sendACrewMessage(channel, sending({ package: 'macula-io/martha#253', text }))
+
+  assert.ok('sent' in sent, `a long hand-off was refused instead of sent: ${JSON.stringify(sent)}`)
+  assert.match(sent.told, new RegExp(`this HANDOFF is ${String(most + 1)} lines; the crew's most is ${String(most)}\\.`), 'the sender was not told how long its hand-off was')
+  assert.equal((await readTheChannel(channel)).length, 1, 'the long hand-off was not sent')
+  const announced = (await readLedger(channel, 'macula-io/martha#253')).filter(isActAnnouncedRow).find((row) => row.act.kind === 'handoff')
+  assert.ok(announced !== undefined, 'the hand-off kept no announced row to read its line count from')
+  assert.equal(announced.lines, most + 1, 'the row the hand-off wrote did not keep how many lines it had')
+})
+
+test('#1010: a verdict at a round the package already took is a notice naming the round, and it is sent', async () => {
+  const channel = channelHost()
+  const base = 'a'.repeat(40)
+  const tip = 'b'.repeat(40)
+  const most = REVIEW_ROUNDS_MOST_WHEN_UNNAMED
+  // The package is already at the crew's most: a first hand-off and a verdict that closed a round there. Those two
+  // sends turn the round notice off, so a notice in this test can only come from the verdict it is about.
+  const no_round_notice = { ...TRIMS_WHEN_UNNAMED, [REVIEW_ROUNDS_MOST]: 0 } as TheCrewsTrims
+  await sendACrewMessage(channel, sending({ package: 'macula-io/martha#253', text: `HANDOFF macula-io/martha#253 ${base}..${tip} r=1 ci=41700170944`, trims: no_round_notice }))
+  await sendACrewMessage(channel, sending({ package: 'macula-io/martha#253', text: `VERDICT macula-io/martha#253 FAIL ${base}..${tip} r=${String(most)} ci=41700170944 req=1`, trims: no_round_notice }))
+
+  const sent = await sendACrewMessage(channel, sending({ package: 'macula-io/martha#253', text: `VERDICT macula-io/martha#253 PASS ${base}..${tip} r=${String(most + 1)} ci=41700170944 req=0` }))
+  assert.ok('sent' in sent, `a verdict past the crew's rounds was refused instead of sent: ${JSON.stringify(sent)}`)
+  assert.match(sent.told, new RegExp(`this is round ${String(most + 1)}; the crew's most is ${String(most)}\\.`), 'the sender was not told the round it sent')
 })
 
 test('#253: the description a member reads teaches every line a card teaches', () => {
