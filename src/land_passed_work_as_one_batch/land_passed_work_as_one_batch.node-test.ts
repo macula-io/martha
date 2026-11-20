@@ -458,26 +458,52 @@ test('#256: a package with no PASS row stops the whole batch before a branch is 
   assert.deepEqual(theLandBranchesOnOrigin(fixture), [], 'an integration branch was pushed for a batch that could not land')
 })
 
-test('#256: a head no open pull request stands at, and a head two stand at, are each refused by name', async (t) => {
+/** The answer, and everything written to the process's own error output while the landing runs (martha#601). */
+async function theNoticeWhile(act: (note: (line: string) => void) => Promise<Landing>): Promise<{ readonly answer: Landing; readonly notice: string }> {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: await act((line) => void process.stderr.write(`${line}\n`)), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
+}
+
+test('#601: a head no open pull request stands at, and a head two stand at, are each one notice, and the head lands anyway', async (t) => {
   const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
   const passed = threePassedPackages(fixture)
   const [first, second] = passed.heads
   const no_pulls = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map([[`repos/${fixture.repo}/commits/${String(first)}/pulls`, []]]))))
   await aPassedVerdict(no_pulls, at(passed.packages, 0), base, String(first))
-  const no_pull = await landPassedWorkAsOneBatch(no_pulls.host, MEMBER, { path: fixture.clone, packages: [at(passed.packages, 0)] })
-  assert.match(wordsOf(no_pull), /no open pull request/)
-  assert.ok(wordsOf(no_pull).includes(String(first)), 'the answer did not name the head it asked about')
+  const no_pull = await theNoticeWhile((note) => landPassedWorkAsOneBatch(no_pulls.host, MEMBER, { path: fixture.clone, packages: [at(passed.packages, 0)] }, note))
+  assert.ok('told' in no_pull.answer, `a head with no open pull request was refused: ${wordsOf(no_pull.answer)}`)
+  assert.match(no_pull.notice, /no open pull request/, 'the notice did not name what is missing')
+  assert.match(no_pull.notice, new RegExp(String(first)), 'the notice did not name the head it asked about')
+  // A notice's number is never said as a pull request's: the package alone names the merge and the landing (martha#601).
+  assert.doesNotMatch(no_pull.answer.told, /PR 0/, `the landing named a pull request GitHub did not: ${no_pull.answer.told}`)
+  const first_branch = theLandBranchesOnOrigin(fixture)[0] ?? ''
+  assert.equal(
+    inTheOrigin(fixture, 'log', '-1', '--format=%s', `refs/heads/${first_branch}`),
+    `Land ${at(passed.packages, 0)} (PASS)`,
+    'the merge named a pull request GitHub did not',
+  )
 
   // Two open pull requests at one head: written, not recorded, because GitHub allows one per head and base and no
   // recording of the state was at hand. Its shape is GitHub's own.
   const two_at_one = [anOpenPullRequest(291, String(second)), anOpenPullRequest(292, String(second))].flat()
   const two_pulls = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map([[`repos/${fixture.repo}/commits/${String(second)}/pulls`, two_at_one]]))))
   await aPassedVerdict(two_pulls, at(passed.packages, 1), base, String(second))
-  const two = await landPassedWorkAsOneBatch(two_pulls.host, MEMBER, { path: fixture.clone, packages: [at(passed.packages, 1)] })
-  assert.match(wordsOf(two), /more than one open pull request/)
-  assert.match(wordsOf(two), /#291/, 'the answer did not name the first pull request')
-  assert.match(wordsOf(two), /#292/, 'the answer did not name the second pull request')
+  const two = await theNoticeWhile((note) => landPassedWorkAsOneBatch(two_pulls.host, MEMBER, { path: fixture.clone, packages: [at(passed.packages, 1)] }, note))
+  assert.ok('told' in two.answer, `a head two open pull requests stand at was refused: ${wordsOf(two.answer)}`)
+  assert.match(two.notice, /more than one open pull request/)
+  assert.match(two.notice, /#291/, 'the notice did not name the first pull request')
+  assert.match(two.notice, /#292/, 'the notice did not name the second pull request')
+  assert.doesNotMatch(two.answer.told, /PR 0/, `the landing named a pull request GitHub did not: ${two.answer.told}`)
 })
 
 test('#256: a package is landed as the pull request its verdict passed, whose number is not the issue number', async (t) => {
@@ -982,9 +1008,6 @@ test('#339: a landing merge whose parents clash is refused, so a clash settled b
 
 // --- the dry run says what a batch would do, and writes nothing (martha#339, T1, T2) --------------------------------
 
-/** What a dry run that refused said, or a failure naming what it told instead. */
-const refusedLanding = (landing: Landing): string => ('refused' in landing ? landing.refused : assert.fail(`the dry run was not refused: ${landing.told}`))
-
 /** Lands one branch on the default branch as a batch would, by a `--no-ff` merge whose subject names its pull request. */
 function aLandingOnMain(fixture: Fixture, base: string, pr: number, files: Readonly<Record<string, string>>): void {
   const head = aBranchWriting(fixture, `landed${String(pr)}`, base, files)
@@ -1014,7 +1037,7 @@ test('#339 T1: a head that clashes with three landings on main is named, each pa
   const before = whatTheCloneHolds(fixture)
 
   const forecast = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
-  const words = refusedLanding(forecast)
+  const words = wordsOf(forecast)
   assert.ok(words.includes(`- clashes by hand: ${at(packages, 0)} (PR 281): `), `the dry run did not name the head that clashes by hand: ${words}`)
   assert.ok(words.includes(`${ONE_TOOL_FILE}, ${ONE_EXCEPTIONS_FILE} with PR 376`), `the two source files are not named with the landing that brought them: ${words}`)
   assert.ok(words.includes(`${A_RELAY_SCRIPT} with PR 396`), `the relay script is not named with the landing that brought it: ${words}`)
@@ -1035,7 +1058,7 @@ test('#339 T2: two heads that clash only in the picture: the second is answered 
   const before = whatTheCloneHolds(fixture)
 
   const forecast = await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages })
-  const words = refusedLanding(forecast)
+  const words = wordsOf(forecast)
   assert.equal(whatTheCloneHolds(fixture), before, 'the dry run changed a ref, HEAD or the status of the clone while it chained a merge')
   assert.ok(
     words.includes(`- clashes by hand: ${at(packages, 1)} (PR 282): ${THE_PICTURE} with PR 281`),
@@ -1057,7 +1080,7 @@ async function aHeadCutFromOneLeftOut(t: TestContext) {
 
 test('#339: a head cut from one that clashes by hand is answered left out with it in the dry run', async (t) => {
   const { fixture, packages, tests } = await aHeadCutFromOneLeftOut(t)
-  const words = refusedLanding(await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages }))
+  const words = wordsOf(await forecastWhatABatchLands(tests.host, { path: fixture.clone, packages }))
   assert.ok(words.includes(`- clashes by hand: ${at(packages, 1)} (PR 282): shared.txt with PR 281`), `the clash by hand is not named: ${words}`)
   assert.ok(words.includes(`- left out with PR 282: ${at(packages, 2)} (PR 283)`), `the head cut from it is not left out with it: ${words}`)
 })
@@ -1207,18 +1230,5 @@ test('#512 slice 2: a paused package holds the fast-forward: nothing is announce
   assert.ok(forwarded.refused.includes(work_package), 'the refusal did not name the paused package')
   assert.deepEqual(ran, [], 'the fast-forward of a paused package ran git')
   assert.equal((await readLedger(tests.host, work_package)).length, before, 'a push was announced on a paused package')
-  for (const other of others) assert.deepEqual(await readLedger(tests.host, other), [], `a row was written on ${other}, which is not paused`)
-})
-
-test('#512 slice 2: a paused package holds the batch before a branch is cut, and git never runs', async () => {
-  const work_package = 'macula-io/martha#512'
-  const { tests, ran } = aHostThatMayRunNothing()
-  await pauseThePackage(tests.host, work_package)
-
-  const others = ['macula-io/martha#1', 'macula-io/martha#2']
-  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: '/no/clone/is/read', packages: [at(others, 0), work_package, at(others, 1)] })
-  assert.ok('refused' in landed, `a batch holding a paused package was not refused: ${wordsOf(landed)}`)
-  assert.match(landed.refused, /^nothing was landed: macula-io\/martha#512 is paused since the push \(origin Ceres\/512-a-branch\) failed as unknown/)
-  assert.deepEqual(ran, [], 'a batch holding a paused package ran git')
   for (const other of others) assert.deepEqual(await readLedger(tests.host, other), [], `a row was written on ${other}, which is not paused`)
 })

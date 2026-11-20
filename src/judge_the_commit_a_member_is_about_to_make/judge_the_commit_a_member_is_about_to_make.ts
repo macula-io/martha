@@ -74,11 +74,11 @@ async function whatTheCommitWouldCarry(processes: ACommitToJudge['processes'], d
  * bytes the index holds now. A commit whose path was staged before the member edited it is still refused, and one whose
  * edited bytes were staged over the leftover passes, which is what the content rule means.
  */
-export async function theRefusalOfTheCommit(commit: ACommitToJudge): Promise<string | undefined> {
+export async function theRefusalOfTheCommit(commit: ACommitToJudge, note: (line: string) => void = () => {}): Promise<string | undefined> {
   if (commit.directory === null) return undefined
   const staged = await whatTheCommitWouldCarry(commit.processes, commit.directory)
   const carrying = [...staged, ...whatTheWorkingTreeCarries(commit)]
-  return carrying.length === 0 ? undefined : theRefusalOfACommit(commit.record, carrying, commit.released)
+  return carrying.length === 0 ? undefined : theRefusalOfACommit(commit.record, carrying, commit.released, note)
 }
 
 /** The words a commit takes a value for: the word after one of these is not a path the commit would carry. */
@@ -151,7 +151,7 @@ export interface TheCallsToJudge {
  * member's kept record judged against the bytes the commit would carry — the index, plus the working tree's own bytes
  * when the line stages them (`git add -A && git commit`, `git commit -am`), which the index alone does not show yet.
  */
-export async function theLeftoversRefusal(incoming: TheCallsToJudge): Promise<string | undefined> {
+export async function theLeftoversRefusal(incoming: TheCallsToJudge, note: (line: string) => void = () => {}): Promise<string | undefined> {
   const commit = incoming.calls.find((call) => call.command === 'commit')
   if (incoming.leftovers === undefined || commit === undefined) return undefined
   const kept = theLeftoverRecordOf(incoming.leftovers, incoming.member)
@@ -164,5 +164,5 @@ export async function theLeftoversRefusal(incoming: TheCallsToJudge): Promise<st
     released: theReleasedPathsOf(incoming.leftovers, incoming.member),
     stagesTheWorkingTree: theLineStagesWhatItCommits(incoming.calls, commit),
     ...(incoming.files === undefined ? {} : { files: incoming.files }),
-  })
+  }, note)
 }

@@ -11,6 +11,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
@@ -164,6 +165,21 @@ const call = (tool: string, more: Readonly<Record<string, unknown>> = {}) => ({ 
 
 const denied = (why: string): RelayReply => ({ answered: true, body: { deny: why } })
 
+/** What the relay answered, and everything written to the process's own error output while it did (martha#601). */
+async function theNoticeWhile<T>(act: () => Promise<T>): Promise<{ readonly answer: T; readonly notice: string }> {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: await act(), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
+}
+
 test('#315: the relay denies a call the crew refuses, with the crew\'s own reason, and takes no signed-run receipt', async (t) => {
   const places = placesOf(t)
   const asked: string[] = []
@@ -192,7 +208,7 @@ test('#562: the relay asks the crew what the workspace guard refuses of a shell 
   assert.deepEqual(allowed, [], 'a receipt was taken for a call that never ran')
 })
 
-test('#315: the gate\'s own answer comes first, so a call the gate denies is denied by the gate though the crew refuses it', async (t) => {
+test('#315: the reach rule is one notice and the gate\'s own answer comes first, so the crew\'s rule is never asked about a call it refuses', async (t) => {
   const places = placesOf(t)
   const asked: string[] = []
   const allowed: string[] = []
@@ -200,11 +216,16 @@ test('#315: the gate\'s own answer comes first, so a call the gate denies is den
   await startedOn(relay)
 
   const widening = MESH_TOOLS_THAT_WIDEN_REACH[0]!
+  const { answer, notice } = await theNoticeWhile(() => relay.answer('tool_called', call(widening)))
+  // The reach rule is the owner's to decide (martha#601): one line, and the call goes on to the rule that still refuses it.
+  assert.match(notice, new RegExp(`${widening} is not called in a member's session, and the call was answered as asked`), 'the reach notice was not said')
+  assert.ok(notice.includes(WHO_DECIDES_REACH), 'the notice did not say who decides')
   assert.deepEqual(
-    await relay.answer('tool_called', call(widening)),
-    denied(`${widening} is not called in a member's session: ${WHO_DECIDES_REACH}.`),
-    'the crew\'s review rule answered for a call the gate refuses, so it sits before the gate rather than beside it',
+    answer,
+    denied(`${widening} hands this session other agents' text that no gate has seen, so it is not called at all. Read a room through its gate instead: it returns only what the room admits.`),
+    'the call did not go on to the gate\'s own answer',
   )
+  assert.deepEqual(asked, [], 'the crew\'s review rule was asked about a call the gate refuses, so it sits before the gate rather than beside it')
   assert.deepEqual(allowed, [], 'a receipt was taken for a call that never ran')
 })
 

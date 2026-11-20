@@ -80,25 +80,29 @@ test(`the place is <state root>/${CREWS_PLACE}/<64 hex>, mode 0700, and its rows
   assert.equal(modeOf(rows), 0o700, 'only the owner may enter the rows directory')
 })
 
-test('the crews directory itself is refused when it is a link, or when others may write into it (r=1 R1)', (t) => {
+test('the crews directory itself is said in one line when it is a link, or when others may write into it, and used anyway (r=1 R1)', (t) => {
   const state_root = aDirectory(t, 'state')
   const repo = aRepository(t)
 
   // The directory every crew's place sits in, as a link to one this test owns.
   symlinkSync(aDirectory(t, 'elsewhere'), join(state_root, CREWS_PLACE))
-  const linked = crewStateDirectory(state_root, repo)
-  assert.ok('refusal' in linked, 'a linked crews directory is refused')
-  assert.match(linked.refusal, /is a link/, 'and the refusal says it is a link')
+  const linkedSaid: string[] = []
+  const linked = crewStateDirectory(state_root, repo, (line) => linkedSaid.push(line))
+  assert.ok('path' in linked, 'a linked crews directory is used')
+  assert.equal(linkedSaid.length, 1, linkedSaid.join('\n'))
+  assert.match(linkedSaid[0] ?? '', /is a link/, linkedSaid.join('\n'))
 
   rmSync(join(state_root, CREWS_PLACE))
   mkdirSync(join(state_root, CREWS_PLACE), { recursive: true, mode: 0o700 })
   chmodSync(join(state_root, CREWS_PLACE), 0o777)
-  const written = crewStateDirectory(state_root, repo)
-  assert.ok('refusal' in written, 'a crews directory anyone may write into is refused')
-  assert.match(written.refusal, /may be written by others/, 'and the refusal says so')
+  const writtenSaid: string[] = []
+  const written = crewStateDirectory(state_root, repo, (line) => writtenSaid.push(line))
+  assert.ok('path' in written, 'a crews directory anyone may write into is used')
+  assert.equal(writtenSaid.length, 1, writtenSaid.join('\n'))
+  assert.match(writtenSaid[0] ?? '', /may be written by others/, writtenSaid.join('\n'))
 })
 
-test('a crew place that a link stands in for is refused, never followed (R1)', (t) => {
+test('a crew place that a link stands in for is said in one line, and used anyway (R1)', (t) => {
   const state_root = aDirectory(t, 'state')
   const repo = aRepository(t)
   mkdirSync(join(state_root, CREWS_PLACE), { recursive: true, mode: 0o700 })
@@ -106,9 +110,12 @@ test('a crew place that a link stands in for is refused, never followed (R1)', (
   // The key of this repository, as a link to a directory this test owns.
   symlinkSync(elsewhere, join(state_root, CREWS_PLACE, crewKeyOf(repo)))
 
-  const answer = crewStateDirectory(state_root, repo)
-  assert.ok('refusal' in answer, 'a linked crew place is refused')
-  assert.match(answer.refusal, /is a link/, 'the refusal says the place is a link')
+  const said: string[] = []
+  const answer = crewStateDirectory(state_root, repo, (line) => said.push(line))
+  assert.ok('path' in answer, 'a linked crew place is used')
+  assert.equal(answer.path, join(state_root, CREWS_PLACE, crewKeyOf(repo)))
+  assert.equal(said.length, 1, said.join('\n'))
+  assert.match(said[0] ?? '', /is a link/, said.join('\n'))
 })
 
 /** The permission bits of the directory at `path`. */
@@ -128,15 +135,18 @@ test('a directory that is not in git is keyed by its real path, so a link to it 
   assert.equal(pathOf(crewStateDirectory(state_root, link)), pathOf(crewStateDirectory(state_root, plain)))
 })
 
-test('a crew place others may write into is refused (R1)', (t) => {
+test('a crew place others may write into is said in one line, and used anyway (R1)', (t) => {
   const state_root = aDirectory(t, 'state')
   const repo = aRepository(t)
   const crew = pathOf(crewStateDirectory(state_root, repo))
   chmodSync(crew, 0o777)
 
-  const answer = crewStateDirectory(state_root, repo)
-  assert.ok('refusal' in answer, 'a crew place anyone may write into is refused')
-  assert.match(answer.refusal, /may be written by others/, 'the refusal says so')
+  const said: string[] = []
+  const answer = crewStateDirectory(state_root, repo, (line) => said.push(line))
+  assert.ok('path' in answer, 'a crew place anyone may write into is used')
+  assert.equal(answer.path, crew)
+  assert.equal(said.length, 1, said.join('\n'))
+  assert.match(said[0] ?? '', /may be written by others/, said.join('\n'))
 })
 
 test('everything else stays keyed by the checkout: two worktrees of one repository keep their own state (R1)', (t) => {

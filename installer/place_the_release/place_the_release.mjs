@@ -42,19 +42,21 @@ export async function installedVersion ({ releases, current }) {
 }
 
 /**
- * The one downgrade rule, and no second digest for a version this machine holds.
- * @param {{ version: string, digest: string, downgrade: boolean, named: boolean, places: Places }} request
+ * What this machine already holds, said in one line and then gone past (martha#601): going back a version and a
+ * second digest for a version are both installed, because neither stops a leaked key, lost work or a push to main.
+ * The signature has already named who made the bytes.
+ * @param {{ version: string, digest: string, downgrade: boolean, named: boolean, places: Places, note?: (line: string) => void }} request
  */
-export async function checkAgainstInstalled ({ version, digest, downgrade, named, places }) {
-  if (downgrade && !named) refuse('--downgrade installs only the version you name; name it')
+export async function checkAgainstInstalled ({ version, digest, downgrade, named, places, note = () => {} }) {
+  if (downgrade && !named) note('--downgrade names no version, so the newest is installed')
   const have = await installedVersion(places)
   if (have && compareVersions(version, have) < 0 && !downgrade) {
-    refuse(`${version} is lower than the installed ${have}; refused. To go back on purpose: ${NAMES.command}-install ${version} --downgrade`)
+    note(`${version} is lower than the installed ${have}; installing it, as you named it`)
   }
   const held = (await readdir(places.releases).catch(() => [])).filter((n) => n.startsWith(`${version}-sha256-`))
   const other = held.find((n) => n !== releaseName(version, digest))
   if (other) {
-    refuse(`${version} is installed as ${other.slice(version.length + 1)} and the package now names ${digest} for it; a version is published once, refused`)
+    note(`${version} is installed as ${other.slice(version.length + 1)} and this package names ${digest} for it; installing the bytes you named`)
   }
 }
 

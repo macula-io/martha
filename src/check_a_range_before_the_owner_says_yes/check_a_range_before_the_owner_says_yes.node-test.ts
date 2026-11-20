@@ -200,14 +200,14 @@ test('#256: the range is refused when its tip does not descend from its base', a
   assert.match(checked.refused, /does not descend from/)
 })
 
-test('#256: the range is refused when a conflict marker is committed at its tip', async (t) => {
+test('#601: a committed conflict marker and an unreadable CI are each one notice, and the owner is asked anyway', async (t) => {
   const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
   const tip = aBranchWithOneCommit(fixture, 'unresolved', base, 'notes.md', 'ours\n<<<<<<< HEAD\ntheirs\n')
   const checked = await verifyRange(aHostOver(aGithub(new Map())).host, { path: fixture.clone, base, tip })
-  assert.ok('refused' in checked, `a committed conflict marker was checked: ${JSON.stringify(checked)}`)
-  assert.match(checked.refused, /committed conflict marker/)
-  assert.match(checked.refused, /notes\.md/, 'the answer did not name the file that carries it')
+  assert.ok('told' in checked, `a committed conflict marker stopped the check: ${JSON.stringify(checked)}`)
+  assert.match(checked.told, /notice: the tree at .* holds a committed conflict marker: notes\.md/, 'the answer did not name the file that carries it')
+  assert.match(theLineOf(checked), /CI on [0-9a-f]+: gh could not read the runs on/, 'the line did not say the CI could not be read')
 })
 
 test('#256: a tip GitHub really answered for is named job by job, the skipped job the recording holds included', async (t) => {
