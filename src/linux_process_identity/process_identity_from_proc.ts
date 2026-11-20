@@ -132,14 +132,25 @@ export const PROC_ROOT = '/proc'
 /** The live kernel's process identities. */
 export const linuxProcessIdentities: ProcessLookups = procProcessIdentities(PROC_ROOT)
 
-/** The start time in one /proc/<pid>/stat line, or null when the line is not one. */
-export function startTimeIn(stat: string): string | null {
+/**
+ * One field of a /proc/<pid>/stat line, counted from the last closing parenthesis of the command name (the name may hold
+ * spaces and parentheses of its own), or null when the line is not one or the field is not a whole number.
+ */
+function fieldIn(stat: string, after_command: number): string | null {
   const command_end = stat.lastIndexOf(')')
   if (command_end === -1) return null
-
-  const start_time = stat.slice(command_end + 1).trim().split(/\s+/)[START_TIME_AFTER_COMMAND]
-  return start_time !== undefined && /^\d+$/.test(start_time) ? start_time : null
+  const field = stat.slice(command_end + 1).trim().split(/\s+/)[after_command]
+  return field !== undefined && /^\d+$/.test(field) ? field : null
 }
+
+/** One field of a /proc/<pid>/stat line as the pid it names, or null when the line holds no pid there. */
+function pidIn(stat: string, after_command: number): number | null {
+  const field = fieldIn(stat, after_command)
+  return field === null ? null : Number(field)
+}
+
+/** The start time in one /proc/<pid>/stat line, or null when the line is not one. */
+export const startTimeIn = (stat: string): string | null => fieldIn(stat, START_TIME_AFTER_COMMAND)
 
 function bootOrWhy(proc_root: string): { readonly boot: string } | { readonly why: string } {
   const path = join(proc_root, BOOT_ID)
@@ -161,12 +172,17 @@ export function textOrWhy(path: string): { readonly text: string } | { readonly 
 const PARENT_AFTER_COMMAND = 4 - 3
 
 /** The parent pid in one /proc/<pid>/stat line, or null when the line is not one. */
-export function parentIn(stat: string): number | null {
-  const command_end = stat.lastIndexOf(')')
-  if (command_end === -1) return null
-  const parent = stat.slice(command_end + 1).trim().split(/\s+/)[PARENT_AFTER_COMMAND]
-  return parent !== undefined && /^\d+$/.test(parent) ? Number(parent) : null
-}
+export const parentIn = (stat: string): number | null => pidIn(stat, PARENT_AFTER_COMMAND)
+
+/** The process-group id's place among the fields that follow the command name (field 3 onwards): field 5. */
+const GROUP_AFTER_COMMAND = 5 - 3
+
+/**
+ * The process-group id in one /proc/<pid>/stat line, or null when the line is not one (martha#802). It is read here,
+ * with the other stat fields, because the stop tool is copied into a planted repository beside these files and may
+ * import only the node modules and the files it is copied with.
+ */
+export const groupIn = (stat: string): number | null => pidIn(stat, GROUP_AFTER_COMMAND)
 
 /** One process on the way up from a process: its pid, and its identity as `identityOf` reads it, or null. */
 export interface AProcessSeen {
@@ -197,12 +213,7 @@ export function ancestorsUnder(proc_root: string, pid: number): readonly AProces
 /** The session id's place among the fields that follow the command name (field 3 onwards): field 6. */
 const SESSION_AFTER_COMMAND = 6 - 3
 /** The session id in one /proc/<pid>/stat line, or null when the line is not one. */
-export function sessionIn(stat: string): number | null {
-  const command_end = stat.lastIndexOf(')')
-  if (command_end === -1) return null
-  const session = stat.slice(command_end + 1).trim().split(/\s+/)[SESSION_AFTER_COMMAND]
-  return session !== undefined && /^\d+$/.test(session) ? Number(session) : null
-}
+export const sessionIn = (stat: string): number | null => pidIn(stat, SESSION_AFTER_COMMAND)
 
 /** Where a process is typed in (martha#619): the terminal on its standard input, or null, and its session id, or null. */
 export function whereItIsTypedUnder(proc_root: string, pid: number): { readonly tty: string | null; readonly session: number | null } {

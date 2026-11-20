@@ -58,6 +58,42 @@ handoff. A path the suite's own globs do not pick is refused, and a flag of your
 own is refused too — the bounds are the test script's, and `--test-name-pattern`
 is the one word it takes.
 
+## Stopping a test run on a shared box
+
+Several members run this suite at once, often as the same user. A pattern match
+on the command (`pgrep -f "npm test"`, or a bare `pkill -f`) reaches every
+session's run on the machine: the wrapper, npm and every test file's node all
+carry the same words, and it has already killed a peer's run. So start your runs
+with `npm run test:mine` and stop them with `npm run stop:my-run`.
+
+```bash
+npm run test:mine                        # the whole suite, as npm test runs it
+npm run test:mine -- src/a_slice/x.node-test.ts
+npm run stop:my-run                      # the one run this checkout started
+npm run stop:my-run -- --all-mine        # every run this checkout started
+npm run stop:my-run -- --token <t>       # that one, named
+```
+
+A run started with `test:mine` writes a record before its suite can run a file
+(`prove_the_core/the_record_of_a_test_run.ts`), and `stop:my-run` signals the
+process group that record names and nothing else. A record belongs to the
+checkout that started it, because on this box the checkout is the only thing
+that tells one member's run from a peer's. A record whose group is still there
+after the wait is kept, and `--force` kills it; `--by-cwd <dir>` is the fallback
+for a plain `npm test`, under one checkout's own top and no other: the directory
+must be what `git rev-parse --show-toplevel` answers for it, so a folder above a
+checkout (a home, a worktrees root) is refused, since every member's suite runs
+under one of those.
+
+Stopping a run is not cleaning up after a killed one: a process a test started in
+a group of its own (`detached: true`, `setsid`, `script`, `unshare`) is not
+reached by a signal to the run's group. `npm run
+check:no-launcher-outlives-its-run` is what finds those afterwards ([#724],
+[#737]).
+
+[#724]: https://github.com/macula-io/martha/issues/724
+[#737]: https://github.com/macula-io/martha/issues/737
+
 Ending a file's process must not hide what it left behind, so the script also
 loads `prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts` into
 every test file's process. A test file that leaves a server, socket, timer or
