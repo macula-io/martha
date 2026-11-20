@@ -46,6 +46,8 @@ export const COINCIDENCES: readonly Exception[] = [
   // The same git subcommand, in the recorded end's throwaway repository (martha#311): martha init reads its owner there.
   { value: CONFIG, file: 'drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: CONFIG, file: 'drive_the_recorded_host/own_writes_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'drive_the_recorded_host/a_stale_clone_note_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_stale_clone_note_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
   { value: CONFIG, file: 'drive_the_recorded_host/run_nothing_a_checkout_planted.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   // The same git subcommand, in the muted bell's throwaway repository (martha#371).
   { value: CONFIG, file: 'drive_the_recorded_host/a_muted_bell_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },

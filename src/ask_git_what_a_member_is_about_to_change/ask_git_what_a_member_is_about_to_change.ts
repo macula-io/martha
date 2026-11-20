@@ -99,7 +99,7 @@ const theBranchesOf = async (host: AQuestionAboutACall['host'], clone: string | 
   clone === null ? [] : (await linesGitPrinted(host, clone, LIST_BRANCHES)).map((line) => line.trim()).filter((line) => line !== '')
 
 /** The branch a clone starts on, as its own origin names it: `main` for `origin/main`, or null when git cannot say. */
-async function theDefaultBranchOf(host: AQuestionAboutACall['host'], clone: string | null): Promise<string | null> {
+export async function theDefaultBranchOf(host: AQuestionAboutACall['host'], clone: string | null): Promise<string | null> {
   if (clone === null) return null
   const named = (await linesGitPrinted(host, clone, THE_DEFAULT_BRANCH)).map((line) => line.trim()).find((line) => line !== '')
   return named === undefined ? null : named.slice(named.indexOf('/') + 1)

@@ -98,6 +98,9 @@ import { basename, join } from 'node:path'
 import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
 
+import { staleReadsOver, type TheStaleReads } from '../ask_git_how_far_a_clone_is_behind/ask_git_how_far_a_clone_is_behind.ts'
+import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
+
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
@@ -578,6 +581,16 @@ function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSessio
     : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared), served_tools }) }
 }
 
+/**
+ * The note a read in a clone behind its origin carries (martha#969): over the workspace the crew declared, asking git on
+ * this machine. A crew that declared no layout gets none, as it gets no git guard.
+ */
+export function staleReadsOf(launch: { readonly crew_settings?: CrewSettings }): { readonly stale_reads?: TheStaleReads } {
+  const workspace = launch.crew_settings === undefined ? undefined : theWorkspaceTheCrewDeclared(launch.crew_settings)
+  if (workspace === undefined || workspace.clones === null || workspace.worktrees === null) return {}
+  return { stale_reads: staleReadsOver({ host: thisMachine, places: { clones: workspace.clones, worktrees: workspace.worktrees }, now: () => Date.now() }) }
+}
+
 /** What this launch raises turns to, or nothing: a launch given none raises nothing (martha#253). */
 function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising } {
   return launch.turns === undefined ? {} : { turns: launch.turns }
@@ -646,6 +659,7 @@ async function servedRelay(
     crew_text: ready.crew_text,
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
+    ...staleReadsOf(launch),
     ...thePlacesOfItsOwn(launch, watched.journalOver),
     stopMember: stop,
   }
