@@ -26,6 +26,8 @@ export { crewTextFilesOf }
 import type { DocumentStore, FileTree } from '../host_contract/host_contract.ts'
 import { CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { OFFER_OWNER_ASKS, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
+import { thePortedRules, type WhatThePortedRulesRead } from './the_ported_rules.ts'
 
 /**
  * Where Martha's own texts ship, inside this slice. `import.meta.dirname` is the one way a slice may know its own
@@ -64,6 +66,8 @@ export interface TheTextsAMemberReads {
   readonly mode_text: ATextAndItsFile | null
   /** The crew's conventions, when its declaration names one. */
   readonly conventions: ATextAndItsFile | null
+  /** What the crew-code rules Martha hands are read from (martha#971): the declaration's switches and this member's grants. */
+  readonly ported: Omit<WhatThePortedRulesRead, 'owner'>
 }
 
 /** Why a section was not composed: the file to blame, and the words to show the owner. */
@@ -208,6 +212,20 @@ export function theTextsAMemberReads(settings: CrewSettings, member: string, rea
     role_text: firstOf(join(settings.paths.crew, ROLE_TEXTS_DIRECTORY, `${onTheCrew.role}.md`), join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, `${onTheCrew.role}.md`)),
     mode_text: firstOf(join(settings.paths.crew, MODE_TEXTS_DIRECTORY, `${settings.mode.name}.md`), join(SHIPPED_TEXTS, MODE_TEXTS_DIRECTORY, `${settings.mode.name}.md`)),
     conventions: conventionsOf(settings, member, firstOf),
+    ported: thePortedRulesOf(settings, onTheCrew.role),
+  }
+}
+
+/** What the ported rules read of the declaration (martha#971): the switches that turn each on, and this role's two grants. */
+function thePortedRulesOf(settings: CrewSettings, role: string): Omit<WhatThePortedRulesRead, 'owner'> {
+  const rules = settings.house_rules
+  const { clones, worktrees } = rules
+  return {
+    layout: rules.workspace_layout && clones !== null && worktrees !== null ? { clones, worktrees } : null,
+    member_work: rules.member_work,
+    review_model: rules.review_model,
+    assigns_work: whoTheTableGrants(settings.mode.may.assign_work).includes(role),
+    offers_owner_asks: whoTheTableGrants(settings.mode.may[OFFER_OWNER_ASKS]).includes(role),
   }
 }
 
@@ -237,6 +255,7 @@ export function handAMemberItsCrewText(texts: TheTextsAMemberReads): string {
     `## Your role: ${texts.role}\n\n${filled(role.text, role.file)}`,
     `## How this crew works: ${texts.mode}\n\n${filled(mode.text, mode.file)}`,
     `## The lines you send\n\n${theLinesTaughtText()}`,
+    ...thePortedRules({ owner: texts.owner, ...texts.ported }),
     ...(texts.conventions === null ? [] : [`## Conventions\n\n${filled(texts.conventions.text, texts.conventions.file)}`]),
   ]
   const section = parts.join('\n\n')

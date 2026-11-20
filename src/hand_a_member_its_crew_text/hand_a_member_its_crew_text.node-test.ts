@@ -38,6 +38,11 @@ import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
 import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
+import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
+import { TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
+import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
+import { WORKTREE_FINISH } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 
 const ROOT = `/${CREWS_PLACE}/site`
 const CREW = join(ROOT, DECLARATION_DIRECTORY)
@@ -89,6 +94,9 @@ const sectionFor = (settings: CrewSettings, member: string, read: ReadAText): Th
 
 const textAt = (file: string, text: string): ATextAndItsFile => ({ file, text })
 
+/** A member the ported rules hand only the progress part: no layout, no member work, no review model, no grant. */
+const NOTHING_PORTED: TheTextsAMemberReads['ported'] = { layout: null, member_work: false, review_model: null, assigns_work: false, offers_owner_asks: false }
+
 /** Everything a composer needs, which each case changes one field of. */
 const textsOf = (change: Partial<TheTextsAMemberReads> = {}): TheTextsAMemberReads => ({
   member: 'builder',
@@ -99,13 +107,14 @@ const textsOf = (change: Partial<TheTextsAMemberReads> = {}): TheTextsAMemberRea
   role_text: textAt(join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, 'builder.md'), shipped(join(ROLE_TEXTS_DIRECTORY, 'builder.md'))),
   mode_text: textAt(join(SHIPPED_TEXTS, MODE_TEXTS_DIRECTORY, 'solo.md'), shipped(join(MODE_TEXTS_DIRECTORY, 'solo.md'))),
   conventions: null,
+  ported: NOTHING_PORTED,
   ...change,
 })
 
 test('#306: the section carries who the member is, its practice, its role, its mode, the lines it sends, and its crew conventions, in that order', () => {
   const section = handAMemberItsCrewText(textsOf({ conventions: textAt(join(CREW, 'CONVENTIONS.md'), 'Write the issue before the code.') }))
   const headings = section.split('\n').filter((line) => line.startsWith('## '))
-  assert.deepEqual(headings, ['## You are builder, the crew\'s builder', '## Crew practice', '## Your role: builder', '## How this crew works: solo', '## The lines you send', '## Conventions'])
+  assert.deepEqual(headings, ['## You are builder, the crew\'s builder', '## Crew practice', '## Your role: builder', '## How this crew works: solo', '## The lines you send', '## Progress', '## Conventions'])
   assert.match(section, /its owner is Raf/, 'the section does not name the crew\'s owner')
   assert.match(section, /Write the issue before the code\./, 'the conventions the crew declared are not in the section')
   assert.doesNotMatch(section, /\{\{/, 'a placeholder was left in the section, reading as a rule')
@@ -301,4 +310,48 @@ test('#306: a project with no declaration approves no crew text, and a declarati
     (error: unknown) => error instanceof DeclarationRefused && error.message.startsWith(`${declaration}: `),
     'a declaration that is there and is refused was approved as a project with no crew text',
   )
+})
+
+/** A declaration whose house rules turn every ported part on, its table granting the builder both acts (martha#971). */
+const settingsWithEveryPortedRule = (): CrewSettings => {
+  const base = settingsOf()
+  return {
+    ...base,
+    mode: { ...base.mode, may: { ...base.mode.may, assign_work: ['builder'], [OFFER_OWNER_ASKS]: ['builder'] } },
+    house_rules: { ...base.house_rules, workspace_layout: true, member_work: true, clones: '/a/place/for/copies', worktrees: '/a/place/for/branches', review_model: 'a-review-model' },
+  }
+}
+
+/** The headings of the ported parts a composed section carries, in its order. */
+const thePortedHeadings = (section: string): readonly string[] =>
+  [...section.matchAll(/^## (Progress|Briefs|Rhythm|Workspace rules|The ask queue|Reviews|Models)$/gm)].map((found) => found[1] ?? '')
+
+test("martha#971: a member granted assign_work and offer_owner_asks, in a crew that turns every rule on, is handed every ported part, in crew-code's order, in Martha's tool names (mutants: each part dropped; each switch or grant read as off)", () => {
+  const section = handAMemberItsCrewText(sectionFor(settingsWithEveryPortedRule(), 'builder', shippedReader()))
+  assert.deepEqual(thePortedHeadings(section), ['Progress', 'Briefs', 'Rhythm', 'Workspace rules', 'The ask queue', 'Reviews', 'Models'])
+  assert.ok(section.includes(`Call ${REPORT_WHERE_THE_WORK_STANDS} when you start an assigned task`), 'the progress part names another tool')
+  assert.ok(section.includes(`Run ${VERIFY_RANGE} on the range`), 'the rhythm part names another tool')
+  assert.ok(section.includes('A clone in /a/place/for/copies/<org>/<repo> stays on its default branch'), 'the workspace part names another clones place')
+  assert.ok(section.includes('a worktree at /a/place/for/branches/<repo>-<slug>'), 'the workspace part names another worktrees place')
+  assert.ok(section.includes(`(4) A worktree or branch whose name starts with another member's is theirs: only they remove it, through ${WORKTREE_FINISH}.`), 'the member-work rule is not the fourth')
+  assert.ok(section.includes(`call ${TAKE_ASKS} and offer what it returns to Raf as ONE multi-select menu`), 'the ask-queue part names another tool or owner')
+  assert.ok(section.includes("Reviews run on a-review-model. When you spawn a subagent to review or attack work, pass model: 'a-review-model'"), 'the reviews part names another model')
+  assert.ok(section.includes(`the member switches with ${SWITCH_YOUR_MODEL}`), 'the models part names another tool')
+  assert.ok(!section.includes('Held messages'), 'a held-note was handed, and Martha holds no message yet (gap 15)')
+})
+
+test("martha#971: a member with neither grant is handed the parts every member reads, and none of the ones for whoever assigns work or offers the asks (mutant: a grant read from another role)", () => {
+  const section = handAMemberItsCrewText(sectionFor(settingsWithEveryPortedRule(), 'reviewer', shippedReader()))
+  assert.deepEqual(thePortedHeadings(section), ['Progress', 'Workspace rules', 'Reviews'])
+})
+
+test("martha#971: a crew that turns no ported rule on hands the progress part alone, and a crew with member_work but no layout hands that one rule as the first (mutants: the progress part dropped; the layout read when it is off)", () => {
+  assert.deepEqual(thePortedHeadings(handAMemberItsCrewText(sectionFor(settingsOf(), 'builder', shippedReader()))), ['Progress'])
+  const base = settingsOf()
+  const theirs = handAMemberItsCrewText(sectionFor({ ...base, house_rules: { ...base.house_rules, member_work: true } }, 'builder', shippedReader()))
+  assert.deepEqual(thePortedHeadings(theirs), ['Progress', 'Workspace rules'])
+  assert.ok(theirs.includes(`(1) A worktree or branch whose name starts with another member's is theirs`), 'the member-work rule is not the only one')
+  assert.ok(!theirs.includes('A clone in'), 'a layout rule was handed with no layout declared')
+  const placesNamedLayoutOff = { ...base.house_rules, clones: '/a/place/for/copies', worktrees: '/a/place/for/branches' }
+  assert.deepEqual(thePortedHeadings(handAMemberItsCrewText(sectionFor({ ...base, house_rules: placesNamedLayoutOff }, 'builder', shippedReader()))), ['Progress'], 'places named with workspace_layout off were handed as the crew\'s rules')
 })
