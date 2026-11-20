@@ -224,6 +224,18 @@ export const CLAUDE_CODE_SHELL_TOOL = 'Bash'
  */
 export const CLAUDE_CODE_READ_ATTACHES_NOTHING: HostSwitches = CLAUDE_PROJECT_CONFIG_OFF
 
+/**
+ * The tools a member reads code with (martha#969): a read in a clone behind its origin is told so on its result. Each
+ * names where it reads in the field its result row reads.
+ */
+export const CLAUDE_CODE_READING_TOOLS = ['Read', 'Grep'] as const
+
+/** The argument naming where a call of `tool` reads, or undefined when `tool` is not one of the reading tools. */
+export function readingArgumentOf(tool: string): string | undefined {
+  const row = (CLAUDE_CODE_READING_TOOLS as readonly string[]).includes(tool) ? CLAUDE_CODE_TOOL_RESULT_ROWS[tool] : undefined
+  return row !== undefined && 'field' in row ? row.field : undefined
+}
+
 export const CLAUDE_CODE_TOOL_RESULT_ROWS: ToolResultRows = {
   Read: { reads: 'a_file', source: 'checkout_file', field: FILE_PATH_ARGUMENT },
   Edit: { reads: 'a_file', source: 'checkout_file', field: FILE_PATH_ARGUMENT },

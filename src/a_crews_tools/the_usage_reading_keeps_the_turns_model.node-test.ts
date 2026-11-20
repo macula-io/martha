@@ -6,6 +6,7 @@
 //
 // The mutant each test kills is named in its title.
 
+import { THE_BUDGET_ASK } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -28,7 +29,7 @@ import { SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import type { RowStore } from '../host_contract/host_contract.ts'
-import { SPEND_NOT_KEPT, USAGE_PLACE, usageStreamOf } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
+import { SPEND_NOT_KEPT, THE_ENGINES_USAGE_HOST, USAGE_PLACE, usageStreamOf, type AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 import { theSpendBetween } from '../keep_what_a_session_spent/the_spend_between.ts'
 import { crewToolsOver, THE_MODEL_REPORT_ASK, type CrewTools } from './a_crews_tools.ts'
 
@@ -55,7 +56,7 @@ interface ACrew {
 }
 
 /** A solo crew whose member runs on its own model and may switch to the crew's reviewer model. */
-async function aCrewOfTools(): Promise<ACrew> {
+async function aCrewOfTools(more: { readonly usage_host?: AUsageHost } = {}): Promise<ACrew> {
   const home = join(homeOfAll, `crew-${String(Math.random()).slice(2)}`)
   const root = join(home, 'checkout')
   const clock = { at: STARTED_AT }
@@ -84,6 +85,7 @@ async function aCrewOfTools(): Promise<ACrew> {
     stores: { crew: keepTheCrewsFilesAsDirectories(join(home, THE_CREW_FILES)) },
     models: HOST_MODELS,
     launched_on: OWN_MODEL,
+    ...more,
     owners_settings: { config_dir, file: join(config_dir, USER_SETTINGS_FILE), store: ownersSettingsIn(join(config_dir, USER_SETTINGS_FILE), state.state_root) },
   })
   return { tools, rows, home, beats, aTurnLater: () => (clock.at += MINUTE_MS) }
@@ -195,4 +197,32 @@ test('#860 R4: a refusal while the flow waits on the phase it wrote earlier is s
   answerAgain()
   await aTurnEnds(crew, 't-4', 0.625)
   assert.deepEqual(theRowPhaseOf(crew), flows, 'once a reading was kept, the row does not say the flow\'s own phase as the flow wrote it')
+})
+
+test('#999 package 5: an engine launch\'s readings are kept under the engine\'s name, and a launch that names no host keeps Claude Code\'s (mutant: the host left hard-coded)', async () => {
+  for (const [more, host] of [[{ usage_host: THE_ENGINES_USAGE_HOST }, THE_ENGINES_USAGE_HOST], [{}, CLAUDE_CODE]] as const) {
+    const crew = await aCrewOfTools(more)
+    await aTurnEnds(crew, '', 0)
+    await aTurnEnds(crew, 't-1', 0.25)
+    const hosts = (await crew.rows.read(usageStreamOf(null))).map((stored) => stored.row['host'])
+    assert.ok(hosts.length > 0, 'no reading was kept')
+    assert.deepEqual([...new Set(hosts)], [host])
+  }
+})
+
+test('#990: a turn\'s weekly reading is the crew\'s budget: /crew-budget shows it, sets the reviewer gauge, and the pane draws the line (mutant: the reading not kept)', async () => {
+  const crew = await aCrewOfTools()
+  const resets_at = STARTED_AT + 3 * 24 * 60 * MINUTE_MS
+  const weekly = { kind: 'seven_day', percentUsed: 37, resetsAt: new Date(resets_at).toISOString() }
+  crew.aTurnLater()
+  const asked = await crew.tools.answer(THE_REFRESH_ASK, { usage: { startedAt: STARTED_AT, context: { percent: 5 }, cost: { usd: 1 }, rateLimits: [weekly] }, turn_id: 'turn-990', answer: '' }, SESSION)
+  assert.ok('answer' in asked, `the flow refused the question: ${'refused' in asked ? asked.refused : ''}`)
+  const shown = await crew.tools.answer(THE_BUDGET_ASK, { typed: '' }, SESSION)
+  assert.ok('answer' in shown && shown.answer.startsWith('Budget: weekly 37% · resets in 3d.'), `the budget was not shown from the turn's reading: ${JSON.stringify(shown)}`)
+  const set = await crew.tools.answer(THE_BUDGET_ASK, { typed: `${THE_REVIEWER_MODEL} 56` }, SESSION)
+  assert.ok('answer' in set && set.answer.includes(' · Fable 56% (set 1m ago).'), `the reviewer gauge was not set: ${JSON.stringify(set)}`)
+  const pane = await crew.tools.answer('see_the_crew', {}, SESSION)
+  assert.ok('answer' in pane)
+  const lines = (JSON.parse(pane.answer) as { lines: string[] }).lines
+  assert.ok(lines.some((line) => line.startsWith('Budget: weekly 37% · resets in 3d') && line.endsWith('Fable 56% (set 1m ago)')), `the pane draws no budget line: ${lines.join(' | ')}`)
 })

@@ -5,6 +5,7 @@
 // the launcher's own process, and nothing here acts on what it finds: a nudge says what it sees, and whoever reads it
 // decides. The tools slice (../a_crews_tools) keeps only the table that calls this.
 
+import { BUDGET_LINE_LABEL, theBudgetLineOf } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import { sameMemberName } from '../declare_crew/declare_crew.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { Processes, TheCrewFilesStores } from '../host_contract/host_contract.ts'
@@ -51,7 +52,16 @@ export interface SeeTheCrewAsked {
 export async function seeTheCrewOver(asked: SeeTheCrewAsked): Promise<{ readonly answer: string }> {
   const seen = seeTheCrew(asked.settings, asked.rows, asked.now)
   const nudges = await theNudgesFor(asked)
-  return { answer: JSON.stringify(thePaneAnsweredBy(seen, asked.settings.house_rules.dashboard, READER_BEAT_MS, nudges)) }
+  return { answer: JSON.stringify(thePaneAnsweredBy(seen, asked.settings.house_rules.dashboard, READER_BEAT_MS, [...theBudgetPart(asked), ...nudges])) }
+}
+
+/**
+ * The budget line the pane draws under the members (martha#990): the crew's newest weekly reading and the reviewer
+ * gauge, or nothing before any reading. A measurement for the owner; nothing is done by it.
+ */
+function theBudgetPart(asked: SeeTheCrewAsked): readonly string[] {
+  const line = theBudgetLineOf(asked.stores.crew, asked.settings.house_rules.review_model, asked.now)
+  return line === '' ? [] : [`${BUDGET_LINE_LABEL} ${line}`]
 }
 
 /**
@@ -68,7 +78,7 @@ async function theNudgesFor(asked: SeeTheCrewAsked): Promise<readonly string[]> 
   const waits = await theWaitsTheClosesLeave(messages, receivers, await whatEndsAWaitIn(asked, messages))
   const input = { rows: Object.values(asked.rows), waits, parked: theParkedMembers({ stores: asked.stores }, settings.members.map((member) => member.name)), windows: windowsOf(settings.house_rules, settings.thresholds), now: asked.now, owner: settings.owner, receivers }
   const heads = await theHeadsOfTheWaiters(asked, waits)
-  const unheld = await theUnheldNudgesFor({ backlog: settings.backlog, members: settings.members.map((member) => member.name), reader: theBacklogReaderIn({ ...asked, github: settings.github }), rows: input.rows, parked: input.parked, receivers, offline_ms: input.windows.offline_ms })
+  const unheld = await theUnheldNudgesFor({ backlog: settings.backlog, members: settings.members.map((member) => member.name), reader: theBacklogReaderIn({ ...asked, github: settings.github, clock_zone: settings.clock_zone }), rows: input.rows, parked: input.parked, receivers, offline_ms: input.windows.offline_ms })
   const paused = await thePausedNudges(asked.ledger, [...input.rows.map((row) => row.holds), ...packagesNamedIn(messages)])
   return theNudgesPartLines(nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads), ...unheld, ...paused]), settings)
 }

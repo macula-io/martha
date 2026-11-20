@@ -60,6 +60,7 @@ import {
   type AReadableCall,
 } from '../refuse_calls_outside_the_package_contract/the_acts_of_a_call.ts'
 import type { TheContractHanded } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
+import { THE_BUDGET_ASK, keepTheWeekly, theBudgetCommandAnswer, theBudgetCommandIn } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import {
   THE_REFRESH_ASK,
   aSwitchMayFollow,
@@ -108,6 +109,7 @@ import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_pat
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
 import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import type { AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
@@ -193,6 +195,8 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * declaration naming one is then refused — nothing here invents a model list.
    */
   readonly models?: ModelVocabulary
+  /** The host a session's usage is kept under (martha#999 package 5): an engine launch names its own; Claude Code when none. */
+  readonly usage_host?: AUsageHost
   /** The model this member was launched on (martha#315): what its row says until a switch is confirmed. */
   readonly launched_on?: string
   /**
@@ -565,7 +569,17 @@ async function answerAnAskOfTheMods(
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
+  if (name === THE_BUDGET_ASK) return await theBudgetAsked(places, args)
   return undefined
+}
+
+/** `/crew-budget` as the owner typed it at this session's tab (martha#990): the line shown, or the reviewer gauge set. */
+async function theBudgetAsked(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const command = theBudgetCommandIn(args)
+  if (typeof command === 'string') return { refused: command }
+  const settings = await theSettingsOrRefusal(places)
+  if ('refused' in settings) return settings
+  return { answer: theBudgetCommandAnswer(places.stores.crew, command, settings.house_rules.review_model, places.ledger.clock.now()) }
 }
 
 /** The owner's list as the pane draws it (martha#316), with `focus` the row the owner's keyboard is on. */
@@ -602,6 +616,9 @@ async function theSessionsAct(
 ): Promise<CoreToolAnswer> {
   const question = theQuestionIn(args, from)
   if (typeof question === 'string') return { refused: question }
+  // The crew's newest weekly reading (martha#990): kept whatever the flow orders; a store that will not keep it leaves
+  // the reading before it, which the next turn's end replaces.
+  if (question.weekly !== null) keepTheWeekly(places.stores.crew, question.weekly)
   // A switch whose report never came (martha#359): the mod reports the host's command before it asks this question
   // again, so a guard still open here is one no session is coming back for. It is closed without waiting — the host's
   // save may still land, and the record it leaves is what the next launch finishes.
@@ -823,7 +840,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [KEEP_THE_CONTRACT_TOOL.name]: async (args) => keepTheContract({ ...ledger, documents: places.documents }, args),
     [SEE_THE_CREW_TOOL.name]: declaring(places, async (declared) => seeTheCrewOver(thePaneAsked(places, declared.settings))),
     [WHO_IS_FREE_TOOL.name]: declaring(places, async (declared, args) => whoIsFreeOver(theWhoIsFreeAsked(places, declared.settings, args))),
-    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn({ ...places, github: declared.settings.github }) })),
+    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn({ ...places, github: declared.settings.github, clock_zone: declared.settings.clock_zone }) })),
     [SAY_TO_THE_CREW_TOOL.name]: declaring(places, async (declared, args) => sayToTheCrewOver(theSendAsked(places, state, declared.settings, args))),
     [READ_THE_RECEIPTS_TOOL.name]: declaring(places, async (declared) => theReceiptsOver(theReceiptsAsked(places, declared.settings))),
     [PARK_A_MEMBER_TOOL.name]: declaring(places, (declared, args) => parked(declared, args, parkAMember)),
@@ -1020,6 +1037,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     root: places.root,
     documents: places.documents,
     models: places.models ?? NO_MODEL_NAMED,
+    ...(places.usage_host === undefined ? {} : { usage_host: places.usage_host }),
     ledger: places.ledger,
     row_model: state.row_model,
     began_at: state.began_at,

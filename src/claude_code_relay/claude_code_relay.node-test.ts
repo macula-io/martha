@@ -320,6 +320,25 @@ test('#311 ruling D: a report answered with a turn to end that names none is no 
   assert.deepEqual([fake.ran[0], fake.aborted], [['kill', '-s', 'KILL', '--', '-4242'], []], 'the member was not stopped, or a turn was ended')
 })
 
+test('#969: a report the launcher answers yes with a note hands the tool\'s result back with the note added to its context, and stops nothing (mutant: drop the note)', async () => {
+  const note = 'note: the clone /w/acme/widget is 1 commit behind origin/main.'
+  const noting: Launcher = async ({ url }) =>
+    ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? JSON.stringify({ taken: 1, note }) : yesTo(url.slice(RELAY_ORIGIN.length)) })
+  const fake = fakeEngine(noting)
+  const call = await callThrough(fake)
+  assert.deepEqual(await call.answer, { ...RESULT, context: [note] }, 'the note was not added to the result')
+  assert.deepEqual([fake.ran, fake.aborted], [[], []], 'a note stopped the member or ended its turn')
+})
+
+test('#969: a report answered with an empty note, or a key the relay does not know, is no yes, and the member is stopped (mutant: read any taken as a yes)', async () => {
+  for (const answered of [{ taken: 1, note: '' }, { taken: 1, said: 'x' }, { taken: 1, end_turn: 't', note: 3 }]) {
+    const fake = fakeEngine(async ({ url }) => ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? JSON.stringify(answered) : yesTo(url.slice(RELAY_ORIGIN.length)) }))
+    const call = await callThrough(fake)
+    assert.equal(await settled(call.answer as Promise<unknown>), 'pending', `${JSON.stringify(answered)} was read as a yes`)
+    assert.deepEqual(fake.ran[0], ['kill', '-s', 'KILL', '--', '-4242'], `the member was not stopped for ${JSON.stringify(answered)}`)
+  }
+})
+
 test('a hook that failed: its catch drops or denies before the tool ran, and stops the member after', async () => {
   const hooks = hooksOfTheRelay()
   const fake = fakeEngine(sayYes)

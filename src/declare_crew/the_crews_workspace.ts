@@ -92,7 +92,10 @@ function clonesOf(value: unknown, root: string, refuse: RefuseAWorkspaceField): 
   const named = value['root']
   if (named === undefined) return null
   if (!isText(named) || isAbsolute(named)) return refuse(THE_WORKSPACES_ROOT, 'is not a folder relative to the project root')
-  const clones = normalize(join(root, named))
+  // A root written with a trailing separator places the same folder as the same root without one (martha#995): the
+  // guard matches a place with a separator after it, so a clones folder that kept the slash (`<root>/clones//`) would
+  // be found by no call, and every clone rule and the stale-clone note would be off without a word.
+  const clones = normalize(join(root, named)).replace(/\/+$/, '')
   if (!clones.startsWith(root + sep)) refuse(THE_WORKSPACES_ROOT, 'leaves the project root')
   return clones
 }
