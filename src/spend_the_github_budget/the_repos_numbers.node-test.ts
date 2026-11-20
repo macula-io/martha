@@ -10,6 +10,7 @@ import { test, type TestContext } from 'node:test'
 
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { A_DAY_MS, DAYS_KEPT, GITHUB_DRIFT_PLACE, THE_DRIFT_FILE, dayOf, keepTheDriftRecord, theDriftReadToday, theDriftRecordIn, type TheDriftRecord } from './the_repos_numbers.ts'
 import type { TheGithubSpender } from './spend_the_github_budget.ts'
 
@@ -70,7 +71,7 @@ test('#1010 B: a number read today is never asked for again today', async (t: Te
 
   await theDriftReadToday(github.spender, [REPO], NOW, 3)
   const before = theSearches(github.asked).length
-  const again = await theDriftReadToday(github.spender, [REPO], NOW + 60_000, 3)
+  const again = await theDriftReadToday(github.spender, [REPO], NOW + MINUTE_MS, 3)
   assert.equal(theSearches(github.asked).length, before, 'a second read the same day asked GitHub again')
   assert.equal(again[REPO]?.[dayOf(NOW)]?.open_issues, 123, 'the numbers kept for today were not read back')
 })
