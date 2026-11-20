@@ -107,6 +107,17 @@ test('martha outside any git checkout refuses, saying so', (t) => {
   assert.match(run.said, /git checkout/)
 })
 
+test('#601: martha init with no git user.name declares the crew for this login, and says so in one line', (t) => {
+  const place = placeFor(t)
+  execFileSync('git', ['config', '--unset', 'user.name'], { cwd: place.root })
+  const run = marthaWith(place, { USER: 'grace' }, 'init')
+  assert.equal(run.status, EXIT_DONE, run.said)
+  const written = readFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')
+  assert.match(written, /grace/)
+  assert.match(run.err, /git holds no user\.name, so the crew's owner is this login \(grace\)/)
+  allSaidByMartha(run.err)
+})
+
 test('martha init writes the declaration once and refuses the second time', (t) => {
   const place = placeFor(t)
   const first = martha(place, 'init')
@@ -790,38 +801,38 @@ function aMemberLaunchedAs(place: Place, member: string, pid: number): void {
   launchRecordsDirectory(records).keep(member, { member_name: member, node_id: 'ab'.repeat(32), pid, process_started_at })
 }
 
-test("#619: martha approve under a terminal a member's shell made (script), with a member's host above it, is refused naming the member", (t) => {
+test("#619: martha answer under a terminal a member's shell made (script), with a member's host above it, is refused naming the member", (t) => {
   const place = placeFor(t)
   // This test's own process stands as the member's host: script, then martha, run below it, as a member's shell would.
   aMemberLaunchedAs(place, 'builder', process.pid)
-  const run = marthaOnATerminal(place, {}, 'approve')
+  const run = marthaOnATerminal(place, {}, 'answer')
   assert.equal(run.status, EXIT_REFUSED, run.said)
   assert.ok(run.said.includes("this runs inside builder's session") && run.said.includes(NOT_A_WALL), run.said)
 })
 
-test('#619: each owner-only act refuses inside a member, and an act that only reads is not refused there (mutant: the walk or the act list removed)', (t) => {
+test('#619: answering the owner ask refuses inside a member, and every other owner act goes ahead there (#601: the act list cut to one)', (t) => {
   const place = placeFor(t)
   aMemberLaunchedAs(place, 'builder', process.pid)
   // A stand-in claude that ends at once, so an act this lets through starts nothing real and ends the case quickly.
   const claude = claudeThatEnds(place, t)
-  for (const words of [['approve'], ['release', 'builder'], ['pin-key', 'a-key'], ['keep-shapes', 'a-list'], ['bells', 'builder', BELLS_MUTED], ['start', 'builder'], ['answer'], ['answer', 'builder', 'permission:call-1', 'allow']]) {
+  for (const words of [['answer'], ['answer', 'builder', 'permission:call-1', 'allow']]) {
     const run = marthaOnATerminal(place, claude.env, ...words)
     assert.ok(run.said.includes("this runs inside builder's session"), `martha ${words.join(' ')}: ${run.said}`)
   }
-  for (const words of [['ls'], ['bells']]) {
+  for (const words of [['approve'], ['release', 'builder'], ['pin-key', 'a-key'], ['keep-shapes', 'a-list'], ['bells', 'builder', BELLS_MUTED], ['ls'], ['bells']]) {
     const run = marthaOnATerminal(place, claude.env, ...words)
-    assert.ok(!run.said.includes("this runs inside builder's session"), `martha ${words.join(' ')} only reads, and was refused: ${run.said}`)
+    assert.ok(!run.said.includes("this runs inside builder's session"), `martha ${words.join(' ')} is not the one act kept, and was refused: ${run.said}`)
   }
 })
 
-test("#619: an owner-only act with a member's relay socket or its own config folder in the environment is refused, and the owner's own terminal is not", (t) => {
+test("#619: answering the owner ask with a member's relay socket or its own config folder in the environment is refused, and the owner's own terminal is not", (t) => {
   const place = placeFor(t)
-  const socket = marthaOnATerminal(place, { [RELAY_SOCKET_VARIABLE]: join(place.home, 'a-socket') }, 'approve')
+  const socket = marthaOnATerminal(place, { [RELAY_SOCKET_VARIABLE]: join(place.home, 'a-socket') }, 'answer')
   assert.ok(socket.said.includes(RELAY_SOCKET_VARIABLE) && socket.said.includes(NOT_A_WALL), socket.said)
-  const folder = marthaOnATerminal(place, { [CONFIG_DIR_VARIABLE]: join(place.home, 'snapshots', 'launch-1', MEMBER_CONFIG_FOLDER) }, 'approve')
+  const folder = marthaOnATerminal(place, { [CONFIG_DIR_VARIABLE]: join(place.home, 'snapshots', 'launch-1', MEMBER_CONFIG_FOLDER) }, 'answer')
   assert.ok(folder.said.includes(MEMBER_CONFIG_FOLDER) && folder.said.includes(NOT_A_WALL), folder.said)
   // The owner's own terminal: no member's mark, and no member's launch above it.
-  const owners = marthaOnATerminal(place, {}, 'approve')
+  const owners = marthaOnATerminal(place, {}, 'answer')
   assert.ok(!owners.said.includes(NOT_A_WALL), owners.said)
 })
 
@@ -832,7 +843,7 @@ test('#619: a launch record whose pid is above this act but whose start time is 
   const records = join(state.directory, THE_PLACES_A_STATE_ROOT_KEEPS.records_place)
   mkdirSync(records, { recursive: true, mode: THE_PLACES_A_STATE_ROOT_KEEPS.only_its_owner_may_enter })
   launchRecordsDirectory(records).keep('builder', { member_name: 'builder', node_id: 'ab'.repeat(32), pid: process.pid, process_started_at: 'another-boot:1' })
-  const run = marthaOnATerminal(place, {}, 'approve')
+  const run = marthaOnATerminal(place, {}, 'answer')
   assert.ok(!run.said.includes("this runs inside builder's session"), run.said)
 })
 
