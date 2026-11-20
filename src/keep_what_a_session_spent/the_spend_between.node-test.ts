@@ -19,7 +19,7 @@ import { test } from 'node:test'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import type { StoredRow } from '../host_contract/host_contract.ts'
-import { USAGE_READ, type AUsageRead } from './keep_what_a_session_spent.ts'
+import { THE_ENGINES_USAGE_HOST, USAGE_READ, type AUsageRead } from './keep_what_a_session_spent.ts'
 import { theSpendBetween, type TheSpend } from './the_spend_between.ts'
 
 const THE_PACKAGE = 'macula-io/martha#860'
@@ -34,7 +34,7 @@ type AReading = Omit<AUsageRead, 'kind' | 'opens' | 'at_start' | 'unknown_price'
 const MARS = { member: 'mars', host: CLAUDE_CODE, session: 'mars-session', started_at: at(-30), billing: 'metered', package: THE_PACKAGE } as const
 const MARS_CLEARED = { ...MARS, started_at: at(60) } as const
 const VENUS = { member: 'venus', host: CLAUDE_CODE, session: 'venus-session', started_at: at(-5), billing: 'subscription', model: 'sonnet' } as const
-const JUNO_SILENT = { member: 'juno', host: 'martha-engine', session: 'juno-silent', started_at: null, billing: 'unknown', model: 'deepseek', package: THE_PACKAGE, usd: null } as const
+const JUNO_SILENT = { member: 'juno', host: THE_ENGINES_USAGE_HOST, session: 'juno-silent', started_at: null, billing: 'unknown', model: 'deepseek', package: THE_PACKAGE, usd: null } as const
 const JUNO_UNKNOWN = { ...JUNO_SILENT, session: 'juno-unknown' } as const
 const MERCURIUS = { member: 'mercurius', host: CLAUDE_CODE, session: 'mercurius-session', started_at: at(11), billing: 'metered', model: 'haiku' } as const
 
