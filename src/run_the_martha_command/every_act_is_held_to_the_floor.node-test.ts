@@ -82,9 +82,10 @@ test('below this machine\'s record every act but --version and install is told t
     assert.ok(!launched.stderr.includes('Put the highest signed release back with'), `${act}: the floor refused it (${launched.stderr})`)
   }
 
-  // One act's own answer after the line proves it went on: `ls` reaches the checkout check a floor refusal never did.
+  // One act's own answer after the line proves it went on: `ls` reads the crew the workspace declares (#511 part B),
+  // and its own line is one a floor refusal never reached.
   const listed = run(['ls'])
   assert.ok(listed.stderr.includes(notice), listed.stderr)
   assert.ok(!listed.stderr.includes('Put the highest signed release back with'), listed.stderr)
-  assert.ok(listed.stderr.includes('is not inside a git checkout'), `ls went on past the floor (${listed.stderr})`)
+  assert.ok(listed.stderr.includes('declaration'), `ls went on past the floor (${listed.stderr})`)
 })
