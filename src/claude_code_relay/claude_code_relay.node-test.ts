@@ -392,7 +392,10 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   // same way. It decides nothing of its own (martha#255): the pane's lines, how it opens and the order a session is
   // given all come from the launcher's answer, and the reading of those answers is the one file below (r=2 R1, R2),
   // so the mod itself holds no parser and no rule.
-  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_command.ts', './crew_channel_reading.ts', './crew_turn_beat.ts', './crew_answers.ts'])
+  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_command.ts', './crew_channel_reading.ts', './crew_turn_beat.ts', './crew_tasks.ts', './crew_answers.ts'])
+  // The host's own task list, folded as a session keeps it (martha#1000, gap 8 of #957): a plain file with no imports,
+  // so a test folds a list without the host.
+  assert.deepEqual(specifiers('crew_tasks.ts'), [])
   // The owner's `/crew` (martha#927): what it asks and prints, read with the pane's own reader and nothing else, so a
   // test drives it with the launcher's own answers.
   assert.deepEqual(specifiers('crew_command.ts'), ['./crew_answers.ts'])
@@ -413,6 +416,42 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   // The entry itself is a .tsx (it hands the registration to a module that draws), and the host compiles it; what this
   // reads is that one module is listed, and the .ts modules it loads keep their own import lists.
   assert.deepEqual(JSON.parse(read('hooks.json')), { modules: ['./martha.tsx'] })
+})
+
+test('the end of a turn and of an agent carry the work the session has in hand, and neither is gated (martha#1000)', async () => {
+  const inFlight = {
+    background_tasks: [{ id: 'ag-1', type: 'subagent', description: 'review the diff', agent_type: 'an-agent-kind' }],
+    session_crons: [{ id: 'cron-1' }],
+  }
+  const stop = { hook_event_name: 'Stop', session_id: SESSION, ...inFlight }
+  const fake = fakeEngine(sayYes)
+  const { fn, calls } = next<Readonly<Record<string, unknown>>>({ fromTheHost: 1 })
+  const answer = await hooksOfTheRelay().get('classic.Stop')?.hook(fake.$, stop, fn)
+  assert.deepEqual(answer, { fromTheHost: 1 }, 'the turn\'s own end is the chain\'s answer, whatever the launcher said')
+  assert.deepEqual(calls, [stop], 'the chain is handed the host\'s own input unchanged')
+  assert.deepEqual(fake.posted, [
+    {
+      url: `${RELAY_ORIGIN}${RELAY_PATHS.session_stopped}`,
+      body: { session_id: SESSION, background_tasks: inFlight.background_tasks, session_crons: 1 },
+      socketPath: SOCKET,
+    },
+  ])
+
+  // An agent's stop carries the same two fields beside the agent (martha#170), so the row drops the agent at its stop.
+  const agentStop = fakeEngine(sayYes)
+  const stopOfAnAgent = { agent_id: 'ag-1', agent_type: 'an-agent-kind', ...inFlight }
+  await hooksOfTheRelay().get('classic.SubagentStop')?.hook(agentStop.$, stopOfAnAgent, next({}).fn)
+  assert.deepEqual(agentStop.posted, [
+    {
+      url: `${RELAY_ORIGIN}${RELAY_PATHS.subagent_stopped}`,
+      body: { session_id: SESSION, agent_id: 'ag-1', agent_type: 'an-agent-kind', background_tasks: inFlight.background_tasks, session_crons: 1 },
+      socketPath: SOCKET,
+    },
+  ])
+  // A host that says neither field says nothing: the row keeps what it last heard rather than reading as empty.
+  const quiet = fakeEngine(sayYes)
+  await hooksOfTheRelay().get('classic.Stop')?.hook(quiet.$, { hook_event_name: 'Stop' }, next({}).fn)
+  assert.deepEqual(quiet.posted, [{ url: `${RELAY_ORIGIN}${RELAY_PATHS.session_stopped}`, body: { session_id: SESSION }, socketPath: SOCKET }])
 })
 
 test('the relay reads the socket only from the variable the launcher sets', async () => {

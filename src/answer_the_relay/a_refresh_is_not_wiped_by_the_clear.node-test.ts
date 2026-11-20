@@ -78,6 +78,7 @@ function aCrewClearingFrom(predecessor: string | null): CrewTools {
     refusesTheSubagent: async () => undefined,
     refusesTheGitIn: async () => undefined,
     noteTheCallsAnswer: () => {},
+    noteTheWorkInHand: () => {},
   }
 }
 

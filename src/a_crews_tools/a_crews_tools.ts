@@ -14,11 +14,12 @@
 // tool, the state one place's tools hold between calls, the handler table and the answers the mod asks for by name —
 // the refresh flow's question among them, which reads the launch's every place and so cannot leave this file.
 
-import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { declareCrew, sameMemberName, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { theLineToHandAtStart, type TheStartLine } from '../hand_a_member_its_crew_text/the_start_line.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores, ToolNames } from '../host_contract/host_contract.ts'
+import type { AWorkInHandReported } from '../host_contract/host_contract.ts'
 import { VERIFY_RANGE_TOOL, verifyTheRangeOver } from '../check_a_range_before_the_owner_says_yes/the_verify_range_tool.ts'
 import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { THE_CHANNEL_READ_ASK, theChannelReadAsk } from '../keep_the_crew_channel/the_channel_read.ts'
@@ -35,7 +36,7 @@ import { theFastForwardACallNames, theLandingACallNames } from '../land_passed_w
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { finishAWorktree, openAWorktree, type WorktreesRequest } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { WORKTREE_FINISH_TOOL, WORKTREE_OPEN_TOOL, theWorktreeToolOver } from '../open_and_finish_a_worktree/the_worktree_tools.ts'
-import { parkAMember, parkedPlace, theParkOf, unparkAMember, type TheDeclaration } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { parkAMember, parkedPlace, theParkOf, unparkAMember } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL, theParkToolOver, type AParkAsked } from '../park_and_wake_a_member/the_park_tools.ts'
 import type { AGuardedSwitch, OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack, type AnOrderAsked } from '../put_the_owners_model_back/the_guarded_switch.ts'
@@ -75,7 +76,7 @@ import { REPORT_PROGRESS_TOOL, reportProgressOver } from '../report_where_the_wo
 import { theBudgetOver, theSpendOnARow, type TheBudgetAsACrewHoldsIt } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
 import type { ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
 import type { TheCrew } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
-import { type ASpawnedAgent, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
+import { type ASpawnedAgent, carriesAReviewWord, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { SEE_THE_CREW_TOOL, seeTheCrewOver } from '../see_the_crew/the_see_the_crew_tool.ts'
@@ -98,13 +99,28 @@ import { READ_THE_RECEIPTS_TOOL, theReceiptsOver } from '../show_what_a_message_
 import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
-import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
+import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, returnedWhenTheSwitchedPackageFinished, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
 import { theBeatOverTheCrewTools, theBeatsMarkedOn, withTheOwedLine, withTheTimesLineOnAReturn, type AHandedWindow, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
 import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import {
+  PROGRESS_REPORTING_IS_OFF,
+  THE_OWNERS_PARK_ASK,
+  THE_PROGRESS_SWITCH_ASK,
+  THE_TASKS_ASK,
+  theOwnersParkMoved,
+  theProgressSwitched,
+  theRowSettledBetweenTurns,
+  theSessionsOwnState,
+  theStateThisSessionSettlesTo,
+  theTasksNoted,
+  theWorkInHandHeld,
+  type AnOwnTabAsked,
+  type TheSessionsOwnState,
+} from './a_sessions_own_tab.ts'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
@@ -116,20 +132,8 @@ export const REFRESH_THIS_SESSION = 'refresh_this_session'
 /** What the mod asks under to say which model the session now runs on, once the host's command resolved (martha#315). */
 export const THE_MODEL_REPORT_ASK = 'note_the_model_the_session_runs'
 
-/**
- * What the owner's `/crew-progress on|off` asks (martha#1000, gap 8 of #957): turn this session's progress reporting on
- * or off. It is the session's own switch, as crew-code's was, so it names no member (register.tsx:6699).
- */
-export const THE_PROGRESS_SWITCH_ASK = 'switch_progress_reporting'
-
-/** What the owner's `/crew-park` asks: park the session the command was typed in, or `/crew-park off` unpark it. */
-export const THE_OWNERS_PARK_ASK = 'park_this_session'
-
-/**
- * What a member's own report is answered with while its owner has progress reporting off (martha#1000): crew-code's own
- * line, so the member is told rather than left guessing why its report changed nothing (register.tsx:6815).
- */
-export const PROGRESS_REPORTING_IS_OFF = 'Progress reporting is off for this session; no need to call this.'
+/** The words a session's own tab asks under, and the line a member's report is answered with while progress is off. */
+export { PROGRESS_REPORTING_IS_OFF, THE_OWNERS_PARK_ASK, THE_PROGRESS_SWITCH_ASK, THE_TASKS_ASK } from './a_sessions_own_tab.ts'
 
 /** What `refresh_this_session` says it is for: a member told to refresh asks for one, and hands over at its next turn's end. */
 export const CREW_REFRESH_DESCRIPTION =
@@ -316,6 +320,12 @@ export interface CrewTools extends TheReviewRule {
    */
   noteTheCallsAnswer(call: ACallAnswered, session: string): void
   /**
+   * The host said what this session still has in hand, at the end of a turn or of an agent (martha#1000, gap 8 of
+   * #957): the row's `agents` is written from it, and a row that said it was waiting or reviewing is settled again,
+   * because the work it held may be the work that just ended. Nothing is refused: the row is the crew's own bookkeeping.
+   */
+  noteTheWorkInHand(session_id: string, work: AWorkInHandReported): void
+  /**
    * The end of a running turn held at a tool boundary (martha#311, ruling D): the launcher's tool verdict asks it last,
    * so it only narrows a yes, and hands the end out on a yes to the last call in flight.
    */
@@ -432,11 +442,11 @@ interface SessionState {
    */
   readonly start_hands: Map<string, AHandedWindow>
   /**
-   * The sessions whose owner turned progress reporting off from their own tab (martha#1000, gap 8 of #957): the member's
-   * own report answers that it is off and records nothing, and the record already taken is cleared when the switch is
-   * turned. Kept by the session id, because the command is the session's, as crew-code kept it (register.tsx:5272).
+   * What this session's own tab keeps of its row (martha#1000, gap 8 of #957): whose progress reporting is off, the work
+   * each session has in hand, the wake-ups it scheduled, and whether a turn is running. It is the session's own facts as
+   * crew-code kept them, and ./a_sessions_own_tab decides what they make of the row.
    */
-  readonly progress_off: Set<string>
+  readonly own: TheSessionsOwnState
 }
 
 /**
@@ -476,7 +486,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     guarded: null,
     owner_needs: null,
     start_hands: new Map<string, AHandedWindow>(),
-    progress_off: new Set<string>(),
+    own: theSessionsOwnState(),
   }
   const handlers = handlersOver(held, state)
   // One budget over this launch's places (martha#513, slice 3): it reads a package's spend once per session and keeps
@@ -489,7 +499,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     async answer(name: string, args: Readonly<Record<string, unknown>>, from: string): Promise<CoreToolAnswer> {
       state.session = from
       // A session whose owner turned progress reporting off takes no more of the member's own reports (martha#1000).
-      if (name === REPORT_PROGRESS_TOOL.name && state.progress_off.has(from)) return { answer: PROGRESS_REPORTING_IS_OFF }
+      if (name === REPORT_PROGRESS_TOOL.name && state.own.progress_off.has(from)) return { answer: PROGRESS_REPORTING_IS_OFF }
       const asked = await answerAnAskOfTheMods(held, state, budget, name, args, from)
       if (asked !== undefined) return asked
       const handle = handlers[name as CrewToolName]
@@ -499,8 +509,9 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
       return handle(args)
     },
     startBeating(): () => void {
-      // A heartbeat says nothing of its own but the crew tools (martha#658): it is the row as this session last left it.
-      const beat = theBeatOverTheCrewTools(held, () => state.session, (change) => writeRow(held, state, change))
+      // A heartbeat says nothing of its own but the crew tools (martha#658): it is the row as this session last left it,
+      // re-settled between turns when what it said it waited on is gone (martha#1000, gap 8 of #957).
+      const beat = theBeatOverTheCrewTools(held, () => state.session, (change) => writeRow(held, state, (row) => theRowSettledBetweenTurns(change(row), state.own, state.session, carriesAReviewWord)))
       const timer = setInterval(() => {
         try {
           beat()
@@ -519,6 +530,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     noteTheCallCounted: (session_id, own_name) => budget.noteTheCallCounted(session_id, own_name),
     ...theReviewRuleOver({ declared: () => crewOrRefusal(held), spawn: held.spawn }),
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
+    noteTheWorkInHand: (session_id, work) =>
+      theWorkInHandHeld(ownTabAsked(held, state), state.own, session_id, work, held.ledger.clock.now(), carriesAReviewWord),
     ends: state.ends,
     theContractInForce: (call, names) => theContractTheMemberHolds(held, call, names),
     refusesTheGitIn: async (call) => (held.refusesTheGitCall === undefined ? undefined : held.refusesTheGitCall(call)),
@@ -573,10 +586,29 @@ async function answerAnAskOfTheMods(
   if (channel !== undefined) return channel
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
-  if (name === THE_PROGRESS_SWITCH_ASK) return theProgressSwitched(places, state, args)
-  if (name === THE_OWNERS_PARK_ASK) return theOwnersParkMoved(places, args)
+  const fromTheTab = anAskTheSessionsOwnTabMakes(places, state, name, args)
+  if (fromTheTab !== undefined) return fromTheTab
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
   return undefined
+}
+
+/**
+ * The three asks a session's own tab makes (martha#1000, gap 8 of #957): the owner's two overrides, and the host's task
+ * list posted by the mod. Undefined when the ask is another's, which the questions above and below it answer.
+ */
+function anAskTheSessionsOwnTabMakes(places: CrewToolPlaces, state: SessionState, name: string, args: Readonly<Record<string, unknown>>): CoreToolAnswer | undefined {
+  if (name === THE_PROGRESS_SWITCH_ASK) return theProgressSwitched(ownTabAsked(places, state), state.own, state.session, args)
+  if (name === THE_TASKS_ASK) return theTasksNoted(ownTabAsked(places, state), args)
+  if (name === THE_OWNERS_PARK_ASK) return theOwnersParkMoved({ member: places.member, stores: places.stores, now: places.ledger.clock.now() }, args)
+  return undefined
+}
+
+/**
+ * What a session's own tab is answered over (martha#1000, gap 8 of #957): this member's name, and the one writer of its
+ * row — the writer that owns the row's `at`, so a change this file makes never lands older than the row held.
+ */
+function ownTabAsked(places: CrewToolPlaces, state: SessionState): AnOwnTabAsked {
+  return { member: places.member, writeTheRow: (change) => writeRow(places, state, change) }
 }
 
 /** The owner's list as the pane draws it (martha#316), with `focus` the row the owner's keyboard is on. */
@@ -618,18 +650,38 @@ async function theSessionsAct(
   // save may still land, and the record it leaves is what the next launch finishes.
   await closeTheGuardNoOneReported(anOrderOver(places, state))
   const act = await theRefreshAct(refreshPlacesOf(places, state), question)
+  // What the package this member's model was switched for says about its switch (martha#1000, gap 8 of #957): a release
+  // logged for it, or its landing, is the package finished, and the member comes home. Read before the order, so the
+  // same turn's order carries the member back.
+  await returnedWhenTheSwitchedPackageFinished(triggerPlaceOf(places), question)
   const ordered = theOrderOf(act)
   const switching = aSwitchMayFollow(ordered, question) ? await theModelOrder(anOrderOver(places, state)) : null
   // What the package has spent, through the one budget this launch keeps: a session's first question is where that
   // read happens, so the row costs nothing a call would not have cost anyway (martha#513, slice 3).
   const spend = theSpendOnARow(await budget.theSpendInForce(from))
-  writeRow(places, state, (row) => theRowAfterTheTurn(state, row, question, act, spend))
+  state.own.turn_running = question.turn_running
+  const may_ask = await mayPutAQuestionToTheOwner(places, question)
+  writeRow(places, state, (row) => theRowAfterTheTurn(state, row, question, act, spend, may_ask))
   return { answer: JSON.stringify(switching ?? ordered) }
+}
+
+/**
+ * Whether this member may put a closing question to the owner (martha#1000, gap 8 of #957): crew-code's rule that a
+ * member of a team crew asks its Supervisor, not the owner (register.tsx:3927 #472). It is the declaration's own routing
+ * table — who this crew's nudges go to — read only at a turn's end, and only when the turn's answer ends in a question.
+ */
+async function mayPutAQuestionToTheOwner(places: CrewToolPlaces, question: TheSessionsQuestion): Promise<boolean> {
+  if (question.at_start || question.turn_running || !question.answer.trimEnd().endsWith('?')) return false
+  const declared = await crewOrRefusal(places)
+  return !('refused' in declared) && theNudgesGoTo(declared.settings).some((name) => sameMemberName(name, declared.crew.owner))
 }
 
 /**
  * The row after one turn's question, in ONE write: what the session reported about itself and what the flow said it is
  * doing, because the row store keeps the newest beat and two writes in the same millisecond would lose the second.
+ *
+ * The turn's end is also where the row settles its state (martha#1000, gap 8 of #957): what the member holds, and a
+ * closing question it can put to the owner.
  */
 function theRowAfterTheTurn(
   state: SessionState,
@@ -637,8 +689,21 @@ function theRowAfterTheTurn(
   question: TheSessionsQuestion,
   act: TheAct,
   spend: readonly AUnitOnARow[] | undefined,
+  may_ask_the_owner: boolean,
 ): DashboardRow {
-  return { ...row, ...(act.refresh === undefined ? {} : { refresh: act.refresh }), needs: theNeedsAfter(state, row), session: question.session_id, host: { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd }, [SPEND_FIELD]: spend }
+  const settled =
+    question.at_start || question.turn_running
+      ? row.state
+      : theStateThisSessionSettlesTo(state.own, row, question.session_id, question.answer, may_ask_the_owner, carriesAReviewWord)
+  return {
+    ...row,
+    state: settled,
+    ...(act.refresh === undefined ? {} : { refresh: act.refresh }),
+    needs: theNeedsAfter(state, row),
+    session: question.session_id,
+    host: { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd },
+    [SPEND_FIELD]: spend,
+  }
 }
 
 /** The row's `needs` after this turn (martha#359): what the owner's file said, or its own line taken away again. */
@@ -1001,47 +1066,6 @@ async function theModelReported(places: CrewToolPlaces, state: SessionState, arg
   const noted = `Noted: this row says ${model}.`
   return { answer: putBack.why === '' ? noted : `${noted} ${putBack.why}` }
 }
-
-/**
- * The owner's `/crew-progress on|off` (martha#1000, gap 8 of #957): this session's progress reporting, and what the row
- * says when it is turned off. Off is answered to the member's own reports from here on, and the report already taken is
- * cleared from the row — a task and a figure that stand after the owner asked for none would be the session's word and
- * not the member's (crew-code clears the record the same way, register.tsx:6700).
- */
-function theProgressSwitched(places: CrewToolPlaces, state: SessionState, args: Readonly<Record<string, unknown>>): CoreToolAnswer {
-  const wanted = textOf(args['wanted'])
-  if (wanted !== 'on' && wanted !== 'off') return { refused: 'progress reporting is turned on or off: /crew-progress on, or /crew-progress off' }
-  if (wanted === 'off') {
-    state.progress_off.add(state.session)
-    writeRow(places, state, (row) => ({ ...row, task: '', progress: { ...row.progress, step: 0 } }))
-  } else {
-    state.progress_off.delete(state.session)
-  }
-  return { answer: `Progress reporting ${wanted} for this session.` }
-}
-
-/**
- * The owner's `/crew-park` (martha#1000, gap 8 of #957): the park of the session the command was typed in, moved on the
- * owner's own word. The actor is the member itself, so the declaration's table is not asked — a member may always park
- * itself — and the reason says who moved it, so the marker reads as the owner's act (crew-code's `/crew-park`,
- * register.tsx:6684).
- */
-function theOwnersParkMoved(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): CoreToolAnswer {
-  const parked = args['parked'] !== false && args['parked'] !== 'off'
-  const parking = { actor: places.member, member: places.member, reason: PARKED_BY_THE_OWNER, at: new Date(places.ledger.clock.now()), declaration: THE_DECLARATION_NOT_ASKED }
-  const moved = parked ? parkAMember(places, parking) : unparkAMember(places, parking)
-  if ('refusal' in moved) return { refused: moved.refusal }
-  return { answer: parked ? `${places.member} is parked: wake-on-idle no longer wakes it, and /crew-park off unparks it.` : `${places.member} is unparked: wake-on-idle wakes it again.` }
-}
-
-/** What a park the owner moved from a session's own tab says, so the marker reads as the owner's act and not a member's. */
-const PARKED_BY_THE_OWNER = 'parked by the owner from this session'
-
-/**
- * The declaration a park is granted by, when there is none to ask: a member moving its own park is always allowed
- * (`moveThePark`, park_and_wake_a_member.ts:147), so the table this is handed is never read.
- */
-const THE_DECLARATION_NOT_ASKED: TheDeclaration = { members: [], mode: { may: {} } }
 
 /** The places the refresh flow decides over: the crew's own store, the row, the stamps, and where this session began. */
 function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefreshPlaces {

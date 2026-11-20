@@ -39,6 +39,9 @@ export const RELAY_PATHS = {
   // agent's answer reaches us: the host delivers it into the member's turn with no tool result to place it on.
   subagent_started: '/subagent-started',
   subagent_stopped: '/subagent-stopped',
+  // The end of a turn, with the work the session still has in hand (martha#1000, gap 8 of #957): the background tasks
+  // it started and the wake-ups it scheduled. The host raises no such report anywhere else while it idles.
+  session_stopped: '/session-stopped',
   // What the host is asking the owner (martha#313): the dialog it put in its own terminal, and the check it runs about
   // a call before it may ask about one. The check names the call the question is about, which the question itself
   // carries no id for.
@@ -170,11 +173,32 @@ export const LARGEST_RELAYED_ANSWER = 8 * 1024 * 1024
  * A `subagent_started`/`subagent_stopped` body (martha#170): the agent the host names, under the member's own
  * session. The host carries `agent_id` and `agent_type` on both, and the agent's own last words on the stop; nothing
  * the relay adds, and nothing the host's text could rename.
+ *
+ * A stop also carries the work the session still has in hand, when the host says it (martha#1000): the same fields the
+ * end of a turn carries, so an agent that ended leaves the member's row at the stop and not a beat later.
  */
 export function subagentBody(session_id: string, input: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
   const body: Record<string, unknown> = { session_id, agent_id: input['agent_id'], agent_type: input['agent_type'] }
   if (input['last_assistant_message'] !== undefined) body['last_assistant_message'] = input['last_assistant_message']
-  return body
+  const inFlight = inFlightIn(input)
+  return inFlight === undefined ? body : { ...body, ...inFlight }
+}
+
+/**
+ * The end of a turn, as the host reports it (martha#1000, gap 8 of #957): the work the session still has in hand, and
+ * nothing this module decides. A host that says neither field says nothing, and the body carries neither.
+ */
+export function inFlightBody(session_id: string, input: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+  const inFlight = inFlightIn(input)
+  return inFlight === undefined ? { session_id } : { session_id, ...inFlight }
+}
+
+/** The two fields a Stop reports the session's work in hand with, each task kept as the host wrote it, or undefined. */
+function inFlightIn(input: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> | undefined {
+  const tasks = input['background_tasks']
+  const crons = input['session_crons']
+  if (!Array.isArray(tasks) && !Array.isArray(crons)) return undefined
+  return { background_tasks: Array.isArray(tasks) ? tasks : [], session_crons: Array.isArray(crons) ? crons.length : 0 }
 }
 
 /**

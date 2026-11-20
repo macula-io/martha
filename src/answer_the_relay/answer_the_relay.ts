@@ -51,7 +51,7 @@ import {
   type SessionStartHookInput,
 } from '../claude_code_host/claude_code_host.ts'
 import { namesTheOwnersSettings, type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
-import type { ACalledTool, AnAgentOfASession, AResultOfACall, AStartingSession, TheAnswerToAnAgent, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
+import type { ACalledTool, AnAgentOfASession, AResultOfACall, AStartingSession, AWorkInHandReported, TheAnswerToAnAgent, ToolNames, TurnSource } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE_FILE_TOOLS } from '../claude_code_host/claude_code_file_tools.ts'
 import { reviewSpawnsRemembered, type TheReviewSpawns } from '../name_a_review_the_host_reported_failed/name_the_review_the_host_reported_failed.ts'
 import { resolvedModelIn } from '../read_what_claude_code_says_of_an_agent/the_agent_calls_answer.ts'
@@ -266,6 +266,7 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     tool_answered: async (body) => toolAnswered(state, body),
     subagent_started: async (body) => subagentStarted(state, body),
     subagent_stopped: async (body) => subagentStopped(state, body),
+    session_stopped: async (body) => sessionStopped(state, body),
     owner_dialog: async (body) => ownerDialog(state, body),
     tool_checked: async (body) => toolChecked(state, body),
   }
@@ -280,6 +281,8 @@ export function memberRelay(place: MemberRelayPlace, sessions: Map<string, HostS
     // shell; the event itself is only refused, never the member stopped, because nothing ran.
     subagent_started: refused,
     subagent_stopped: refused,
+    // The end of a turn is the row's own bookkeeping and gates nothing: refused as an event, never as the member's work.
+    session_stopped: refused,
     // A dialog or a check this launcher cannot read is refused and nothing else: neither is a gate on what the member
     // may do, and the host's own dialog still reaches the owner.
     owner_dialog: refused,
@@ -477,11 +480,75 @@ async function subagentStarted(state: RelayState, body: Body): Promise<RelayRepl
 
 /**
  * The host says an agent stopped (martha#170), which is the only report of a background agent's answer; the entry
- * decides whether that answer is a subagent's text to record.
+ * decides whether that answer is a subagent's text to record. The stop also carries what the session still has in hand
+ * (martha#1000, gap 8 of #957), which the agent that just ended is no longer part of: an agent that ended leaves the
+ * row at its stop, not a beat later.
  */
 async function subagentStopped(state: RelayState, body: Body): Promise<RelayReply> {
-  return theAgentsAnswer(state, body, 'the agent stop names no agent', async (agent) => state.answers.anAgentStopped(agent))
+  const reply = await theAgentsAnswer(state, body, 'the agent stop names no agent', async (agent) => state.answers.anAgentStopped(agent))
+  if (reply.answered && 'taken' in reply.body) await noteTheWorkInHand(state, body)
+  return reply
 }
+
+/** The end of a turn (martha#1000, gap 8 of #957): the work the session still has in hand, handed to the entry. */
+async function sessionStopped(state: RelayState, body: Body): Promise<RelayReply> {
+  if (!isText(body.session_id)) return refused('the end of a turn names no session')
+  // A host that says neither field says nothing about what the member holds, and the row keeps what it last heard.
+  if (body.background_tasks === undefined && body.session_crons === undefined) return answered(TAKEN)
+  const work = workInHandOf(body)
+  if (work === undefined) return refused('the end of a turn carries work in hand this launcher cannot read')
+  const answer = await state.answers.aStopReportedTheWorkInHand(work)
+  return 'refused' in answer ? refused(answer.refused) : answered(TAKEN)
+}
+
+/** A stop's work in hand, handed to the entry when the host reported any, and nothing when it reported none. */
+async function noteTheWorkInHand(state: RelayState, body: Body): Promise<void> {
+  const work = workInHandOf(body)
+  if (work !== undefined) await state.answers.aStopReportedTheWorkInHand(work)
+}
+
+/**
+ * The work a stop reports, in the contract's words (martha#1000, gap 8 of #957): the session, its background tasks and
+ * how many wake-ups it scheduled. Undefined when the host said neither, so a host that reports none claims none; a body
+ * whose tasks are not tasks this launcher reads is undefined too, and the event is refused rather than recorded as a
+ * row that says the member holds nothing.
+ */
+export function workInHandOf(body: Body): (AWorkInHandReported & { readonly session_id: string }) | undefined {
+  if (!isText(body.session_id) || (body.background_tasks === undefined && body.session_crons === undefined)) return undefined
+  const tasks = backgroundTasksIn(body.background_tasks)
+  const crons = body.session_crons
+  if (tasks === undefined || !Number.isSafeInteger(crons) || (crons as number) < 0) return undefined
+  return { session_id: body.session_id, background_tasks: tasks, session_crons: crons as number }
+}
+
+/** The background tasks a stop names, each read by the three fields a row carries of it, or undefined when not read. */
+function backgroundTasksIn(value: unknown): AWorkInHandReported['background_tasks'] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const read: AWorkInHandReported['background_tasks'][number][] = []
+  for (const task of value) {
+    const one = aBackgroundTaskIn(task)
+    if (one === undefined) return undefined
+    read.push(one)
+  }
+  return read
+}
+
+/** One background task as the contract keeps it: the host's id and kind, and its words where the host gives them. */
+function aBackgroundTaskIn(task: unknown): AWorkInHandReported['background_tasks'][number] | undefined {
+  if (!isBody(task) || !isText(task['id']) || !isText(task['type'])) return undefined
+  const command = textWhereGiven(task['command'])
+  const agent_type = textWhereGiven(task['agent_type'])
+  return {
+    id: task['id'],
+    type: task['type'],
+    description: textWhereGiven(task['description']) ?? '',
+    ...(command === undefined ? {} : { command }),
+    ...(agent_type === undefined ? {} : { agent_type }),
+  }
+}
+
+/** A field of a host's task as text, or undefined when the host said none there. */
+const textWhereGiven = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined)
 
 /** An agent's start or stop, answered: a body that names no agent is refused, after why its session cannot be answered for when it cannot be. */
 async function theAgentsAnswer(state: RelayState, body: Body, no_agent: string, ask: (agent: AnAgentOfASession) => Promise<TheAnswerToAnAgent>): Promise<RelayReply> {

@@ -10,7 +10,7 @@
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { A_PACKAGE } from '../keep_the_ledger/the_ledger_tools.ts'
-import { noteMilestone, type LedgerHost } from '../log_ledger/log_ledger.ts'
+import { noteMilestone, readLedger, type LedgerHost, type Milestone } from '../log_ledger/log_ledger.ts'
 import {
   homeModelOf,
   modelPlace,
@@ -164,6 +164,29 @@ export async function returnedForAnotherPackage(asked: TheTriggerPlace, holds: s
   const current = theModelOf(place, asked.member)
   if (current.kind !== 'switched' || holds === '' || holds === current.marker.package) return null
   return await returnedHome(asked, current.marker, `you reported progress on ${holds}`)
+}
+
+/** The milestone rows that say a package finished (martha#1000, gap 8 of #957): its release, and its landing. */
+export const THE_ROWS_A_FINISHED_PACKAGE_KEEPS: readonly Milestone[] = ['release_shipped', 'package_landed']
+
+/**
+ * The return a finished package makes of it (martha#1000, gap 8 of #957): a member switched for one package comes home
+ * when that package's ledger says it was released or landed, and only then — a row written before the switch was made
+ * is not this package finishing under it. Read at a turn's end, before the model order, so the order carries the member
+ * back in the same turn. Null when the member is not switched, the turn is a session's start, or the package holds no
+ * such row since the switch.
+ */
+export async function returnedWhenTheSwitchedPackageFinished(asked: TheTriggerPlace, when: { readonly turn_id: string }): Promise<string | null> {
+  if (when.turn_id === '') return null
+  const place = modelPlace(asked)
+  if ('refusal' in place) return null
+  const current = theModelOf(place, asked.member)
+  if (current.kind !== 'switched' || current.marker.package === '') return null
+  const rows = await readLedger(asked.ledger, current.marker.package)
+  const since = Date.parse(current.marker.since)
+  const finished = rows.find((row) => THE_ROWS_A_FINISHED_PACKAGE_KEEPS.includes(row.kind as Milestone) && (Number.isNaN(since) || row.at >= since))
+  if (finished === undefined) return null
+  return await returnedHome(asked, current.marker, `the package finished: its ${finished.kind === 'package_landed' ? 'landing' : 'release'} is in the ledger`)
 }
 
 /**

@@ -14,6 +14,7 @@ import { heardToolAnswer, PANE, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } f
 import { theCrewCommandAnswers, theCrewCommandResult, type Heard } from './crew_command.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
+import { NO_TASKS, afterATaskWasCreated, afterATaskWasUpdated, afterAToDoListWasWritten, theTasksToPost, type TheTaskList } from './crew_tasks.ts'
 import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
 
 /** Why a tool call has no answer: Martha did not launch this session (it was started by hand), or the launcher could not be heard. */
@@ -363,6 +364,68 @@ async function answerTheProgressCommand($: CrewEngine, e: { readonly args?: unkn
   return { text: 'said' in heard ? heard.said : `Martha did not answer: ${heard.why}` }
 }
 
+/** The task list the session keeps, folded from the host's own task tools (martha#1000, gap 8 of #957). */
+let theSessionsTasks: TheTaskList = NO_TASKS
+
+/**
+ * Posts this session's task list to the launcher, which writes it onto the member's row. A launcher that cannot be
+ * heard is told to the owner once and the member's turn goes on: the list is the row's, and nothing the member does
+ * waits on it.
+ */
+async function postTheSessionsTasks($: CrewEngine): Promise<void> {
+  const heard = await hearTheLauncher($, 'note_the_tasks_the_session_keeps', { tasks: theTasksToPost(theSessionsTasks) })
+  if (!('said' in heard)) $.ui.toast(`Martha did not note this session's tasks: ${heard.why}`)
+}
+
+/** Whether the host's own tool refused or failed the write: a write that did not happen moves no list. */
+function theHostRefusedTheWrite(ran: unknown): boolean {
+  if (typeof ran !== 'object' || ran === null) return true
+  const answer = ran as { readonly deny?: unknown; readonly isError?: unknown }
+  return answer.deny !== undefined || answer.isError === true
+}
+
+/** The id the host's own `TaskCreate` answered with, or '' when it made none this session can name again. */
+function theCreatedIdIn(ran: unknown): string {
+  const made = typeof ran === 'object' && ran !== null ? (ran as { readonly result?: unknown }).result : undefined
+  const task = typeof made === 'object' && made !== null ? (made as { readonly task?: unknown }).task : undefined
+  const id = typeof task === 'object' && task !== null ? (task as { readonly id?: unknown }).id : undefined
+  return typeof id === 'string' ? id : ''
+}
+
+/**
+ * `TaskCreate`, `TaskUpdate` and `TodoWrite` (martha#1000, gap 8 of #957): the host's own tool runs first, and the list
+ * it leaves is folded and posted. Each answers with the host's own answer, so the member's tasks are exactly the
+ * host's; only the member's row is Martha's.
+ */
+const afterATaskIsCreated = async ($: CrewEngine, e: Record<string, unknown>, next: CrewNext): Promise<unknown> => {
+  const ran = await next(e)
+  const id = theHostRefusedTheWrite(ran) ? '' : theCreatedIdIn(ran)
+  if (id === '') return ran
+  theSessionsTasks = afterATaskWasCreated(theSessionsTasks, { id, subject: typeof e['subject'] === 'string' ? e['subject'] : '' })
+  await postTheSessionsTasks($)
+  return ran
+}
+
+const afterATaskIsUpdated = async ($: CrewEngine, e: Record<string, unknown>, next: CrewNext): Promise<unknown> => {
+  const ran = await next(e)
+  if (theHostRefusedTheWrite(ran)) return ran
+  theSessionsTasks = afterATaskWasUpdated(theSessionsTasks, {
+    task_id: typeof e['taskId'] === 'string' ? e['taskId'] : '',
+    subject: e['subject'],
+    status: e['status'],
+  })
+  await postTheSessionsTasks($)
+  return ran
+}
+
+const afterAToDoListIsWritten = async ($: CrewEngine, e: Record<string, unknown>, next: CrewNext): Promise<unknown> => {
+  const ran = await next(e)
+  if (theHostRefusedTheWrite(ran)) return ran
+  theSessionsTasks = afterAToDoListWasWritten(theSessionsTasks, e['todos'])
+  await postTheSessionsTasks($)
+  return ran
+}
+
 /**
  * The pane as the host draws it: the crew's rows, then the owner's list (martha#316). When the read failed it says it
  * could not read the crew, and why: drawing `0/0 online` and "no one has reported" over a broken answer tells the owner
@@ -393,13 +456,15 @@ async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
 }
 
 /**
- * The owner's two overrides (martha#1000, gap 8 of #957), answered without `next`: no command of the host's runs beneath
- * them, and what they say is the launcher's answer, printed for the owner. It is its own function so the registration
- * above stays under the structural floor the repository holds every function to.
+ * The owner's two overrides and the host's own task tools, each registered where the host runs it (martha#1000, gap 8 of
+ * #957). Its own function so the registration it is called from stays under the structural floor.
  */
-function registerTheOwnersOverrides(on: (event: string, options?: unknown, handler?: unknown) => unknown): void {
+function registerTheSessionsOwnTab(on: (event: string, options?: unknown, handler?: unknown) => unknown): void {
   on('command.run', { command: 'crew-park' }, answerTheParkCommand)
   on('command.run', { command: 'crew-progress' }, answerTheProgressCommand)
+  on('tool.call', { tool: 'TaskCreate' }, afterATaskIsCreated)
+  on('tool.call', { tool: 'TaskUpdate' }, afterATaskIsUpdated)
+  on('tool.call', { tool: 'TodoWrite' }, afterAToDoListIsWritten)
 }
 
 /**
@@ -460,7 +525,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // The owner's `/crew` (martha#927): answered here without `next`, so no command runs beneath it, and shown to the
   // owner alone, so the model takes no turn. What it asks and prints is ./crew_command.ts's.
   on('command.run', { command: CREW_COMMAND }, answerTheCrewCommand)
-  registerTheOwnersOverrides(on)
+  registerTheSessionsOwnTab(on)
 
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.

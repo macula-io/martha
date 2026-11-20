@@ -47,6 +47,7 @@ import type {
   Arrival,
   ArrivingTurn,
   AStartingSession,
+  AWorkInHandReported,
   TheAnswerToACall,
   TheAnswerToAnAgent,
   TheAnswerToAResult,
@@ -245,6 +246,11 @@ export interface TheAnswersOfOneLaunch {
   /** The host says an agent stopped (martha#170): an unvouched agent's answer is recorded as a subagent's text. */
   anAgentStopped(agent: AnAgentOfASession): Promise<TheAnswerToAnAgent>
   /**
+   * The host says what a session still has in hand, at the end of a turn or of one agent (martha#1000, gap 8 of #957):
+   * the crew writes it onto the member's row, and re-settles a row that said it waited on the work that just ended.
+   */
+  aStopReportedTheWorkInHand(work: AWorkInHandReported & { readonly session_id: string }): Promise<TheAnswerToAnAgent>
+  /**
    * A tool the crew's mod asks the launcher to answer (martha#254), its session taken in first when the crew refreshed
    * it before the host's own start arrived (martha#255): the mod's question can come first.
    */
@@ -312,9 +318,7 @@ export function answersOver(
     holds: (session_id) => sessions.has(session_id),
     brokenBecause: (session_id) => broken.get(session_id),
     named: (session_id) => sessionNamed(session_id, sessions, broken),
-    keep,
-    vouchFor,
-    approved_start,
+    keep, vouchFor, approved_start,
     aSessionStarted: async (start) => aSessionStartedIn(held, start),
     aTurnArrived: async (session_id, turn) => aTurnArrivedIn(held, session_id, turn),
     aReviewTheHostSawFail: async (report) => aReviewTheHostSawFailIn(held, report),
@@ -322,9 +326,15 @@ export function answersOver(
     aResultCame: async (result) => aResultCameIn(held, result),
     anAgentStarted: async (agent) => anAgentStartedIn(held, agent),
     anAgentStopped: async (agent) => anAgentStoppedIn(held, agent),
+    ...theStopsAnswers(held),
     aCrewToolAsked: async (ask) => aCrewToolAskedIn(held, ask),
     aTurnTheHostNeverRaised: async (session_id, arrival) => aTurnTheHostNeverRaisedIn(held, session_id, arrival),
   }
+}
+
+/** What a host's stop reports are answered with (martha#1000, gap 8 of #957): the work a session still has in hand. */
+function theStopsAnswers(held: TheSessionsHeld): Pick<TheAnswersOfOneLaunch, 'aStopReportedTheWorkInHand'> {
+  return { aStopReportedTheWorkInHand: async (work) => aStopReportedTheWorkInHandIn(held, work) }
 }
 
 /** What the delivery family's answers share: the launch's places, the sessions it holds and has broken, and how it keeps one. */
@@ -656,6 +666,18 @@ async function anAgentStoppedIn(held: TheSessionsHeld, agent: AnAgentOfASession)
   if (anAgentSeenToStop(held.places.agents, session.id, agent.agent_id)) return { taken: 1 }
   const why = await held.keep(takeInTurn(session, { source: 'subagent' }, held.places.binder))
   return why === undefined ? { taken: 1 } : { refused: why }
+}
+
+/**
+ * What a session still has in hand, at the end of a turn or of one agent (martha#1000, gap 8 of #957): handed to the
+ * crew, which writes the member's row and re-settles it. A session this launch does not hold is refused, as any event
+ * naming one is; a launch with no crew has no row to write and takes it.
+ */
+async function aStopReportedTheWorkInHandIn(held: TheSessionsHeld, work: AWorkInHandReported & { readonly session_id: string }): Promise<TheAnswerToAnAgent> {
+  const session = sessionNamed(work.session_id, held.sessions, held.broken)
+  if (typeof session === 'string') return { refused: session }
+  held.places.crew?.noteTheWorkInHand(session.id, work)
+  return { taken: 1 }
 }
 
 /**

@@ -80,6 +80,7 @@ function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
     theReviewModelOfTheCall: async () => null,
     theReviewModel: async () => THE_REVIEWER_MODEL,
     noteTheCallsAnswer: (call) => void seen.steps.push(`menu answer noted ${call.tool}`),
+    noteTheWorkInHand: () => {},
     refusesTheSubagent: async () => undefined,
   }
 }

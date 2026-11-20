@@ -89,6 +89,7 @@ function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
     theReviewModelOfTheCall: async () => does.review_model_of_the_call ?? null,
     theReviewModel: async () => THE_REVIEWER_MODEL,
     noteTheCallsAnswer: () => undefined,
+    noteTheWorkInHand: () => {},
     refusesTheSubagent: async () => undefined,
   }
 }

@@ -565,6 +565,25 @@ export interface AnAgentOfASession {
 /** What an agent's start or stop is answered with: taken, or refused and why. */
 export type TheAnswerToAnAgent = { readonly taken: 1 } | { readonly refused: string }
 
+/**
+ * The work a session still has in hand, as its host's own Stop reports it (martha#1000, gap 8 of #957): the background
+ * tasks it started and the wake-ups it scheduled. One task is the host's own kind and words, read here by name only.
+ */
+export interface AWorkInHandReported {
+  readonly background_tasks: readonly {
+    readonly id: string
+    /** The host's kind for it: `subagent` for an agent it follows, or its own kind for a background command. */
+    readonly type: string
+    readonly description: string
+    /** The command a background command runs, in the host's own words; absent for an agent. */
+    readonly command?: string
+    /** The kind of agent it is, where the host says one. */
+    readonly agent_type?: string
+  }[]
+  /** How many wake-ups the session has scheduled. */
+  readonly session_crons: number
+}
+
 /** A tool the crew's mod asks the launcher to answer (martha#254): its session, the tool's own name, and its arguments. */
 export interface ACrewToolAsked {
   readonly session_id: string

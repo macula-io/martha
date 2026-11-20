@@ -124,6 +124,25 @@ export interface ATaskOnARow {
 }
 
 /**
+ * The row's own field for the work the member's session has in hand (martha#1000, gap 8 of #957): the background work
+ * the host's own Stop reports, under crew-code's own name for that list (register.tsx:4105). A spelling of the row, and
+ * nothing else: which of it counts as what holds the member up is the settle's rule below, and the row keeps what the
+ * session last reported. Not `agents`, which is the host's own name for a folder and would be excused as a coincidence
+ * at a dozen places that are its folder and not this field.
+ */
+export const AGENTS_FIELD = 'background'
+
+/** One piece of background work the session has in hand, as the row carries it. */
+export interface AnAgentOnARow {
+  /** The host's own id for the agent; '' for a background command, which the host follows by none. */
+  readonly id: string
+  /** What it is doing, in the host's own words: its kind, and the description it was started with. */
+  readonly label: string
+  /** Milliseconds since the epoch, when this row first had it in hand: a beat that re-reads it keeps the first moment. */
+  readonly started: number
+}
+
+/**
  * The task a reader shows first: the one in progress, else the first still pending, and '' when none is open — the
  * host's own order, as crew-code read it (register.tsx:3783). A list of finished tasks names nothing.
  */
@@ -189,6 +208,12 @@ export interface DashboardRow {
    * empty list. The member's own `progress` stays the member's own report: the two are told apart by which wrote them.
    */
   readonly tasks?: readonly ATaskOnARow[]
+  /**
+   * The background work the member's session has in hand (martha#1000, gap 8 of #957): what the host's own Stop last
+   * reported, absent on a row written before the field existed and on a session that reported none, so a reader shows
+   * nothing rather than an empty list.
+   */
+  readonly background?: readonly AnAgentOnARow[]
 }
 
 /** The file one member's row is kept in: never a path, and never a dot a person or git could steer with. */
@@ -325,9 +350,15 @@ const EACH_OPTIONAL_FIELD: readonly ((row: Record<string, unknown>) => boolean)[
   (row) => row[SPEND_FIELD] === undefined || isBudgetUnits(row[SPEND_FIELD]),
   (row) => row[CREW_TOOLS_FIELD] === undefined || isCrewTools(row[CREW_TOOLS_FIELD]),
   (row) => row[TASKS_FIELD] === undefined || isTasks(row[TASKS_FIELD]),
+  (row) => row[AGENTS_FIELD] === undefined || isAgents(row[AGENTS_FIELD]),
 ]
 
 const isTheOptionalFields = (row: Record<string, unknown>): boolean => EACH_OPTIONAL_FIELD.every((holds) => holds(row))
+
+/** Whether a field is the work in hand a row carries: one entry per agent, each its id, its label and when it started. */
+const isAgents = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.every((one: unknown) => isRecord(one) && isText(one['id']) && isText(one['label']) && isPosition(one['started']))
 
 /** Whether a field is the task list a row carries: one entry per task, each a subject and one of the three standings. */
 const isTasks = (value: unknown): boolean =>
