@@ -81,6 +81,16 @@ test('#959 test 3: every member the crew must leave alone is left alone, each fo
     null,
     'a row that has gone quiet is offline, not idle, and was woken',
   )
+  assert.equal(
+    theWakeOf(look({ ...due, row: row({ at: NOW + AFTER - OFFLINE_MS }) })),
+    THE_WAKE_TEXT,
+    'a row exactly at the offline window is still live, and was not woken',
+  )
+  assert.equal(
+    theWakeOf(look({ ...due, row: row({ at: NOW + AFTER - OFFLINE_MS - 1 }) })),
+    null,
+    'a row one millisecond past the offline window is offline, not idle, and was woken',
+  )
   assert.equal(theWakeOf(look({ ...due, windows: { after_ms: 0, cap_ms: CAP, offline_ms: OFFLINE_MS } })), null, 'a crew that turned wakes off was woken')
 })
 
