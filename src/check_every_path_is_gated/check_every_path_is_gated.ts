@@ -34,7 +34,7 @@ import { MAX_ASK, type AnAsk } from '../queue_the_owners_asks/queue_the_owners_a
 import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import type { Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
-import { THE_MODELS_SWITCH, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { THE_MODELS_SWITCH, THE_RESUME_SWITCH, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { THE_COMMAND_STARTS } from '../speak_acp_to_an_agent/the_acp_client.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import {
@@ -414,14 +414,14 @@ export function gapsInConfigPathCoverage(gate: PathGate, standIn: (probe: Config
 export const ARGUMENT_PROBES: readonly ArgumentProbe[] = [
   { passes: true, what: 'no arguments at all', args: [] },
   { passes: true, what: 'a model to run', args: [THE_MODELS_SWITCH, 'a-model'] },
-  { passes: false, what: 'a prompt on the command line', args: ['a prompt'] },
+  { passes: true, what: 'a first prompt on the command line (martha#511)', args: ['a prompt'] },
   { passes: false, what: 'a settings file or JSON', args: ['--settings', '{}'] },
   { passes: false, what: 'which settings sources load', args: ['--setting-sources', 'user,project'] },
   { passes: false, what: 'a tool-server config', args: [MCP_CONFIG_SWITCH, 'servers.json'] },
   { passes: false, what: 'a plugin directory', args: ['--plugin-dir', 'plugin'] },
   { passes: false, what: 'skipping every permission check', args: ['--dangerously-skip-permissions'] },
   { passes: false, what: 'a permission mode', args: ['--permission-mode', 'bypassPermissions'] },
-  { passes: false, what: 'a session brought back', args: ['--resume', 'a-session'] },
+  { passes: true, what: 'a session brought back (martha#511)', args: [THE_RESUME_SWITCH, 'a-session'] },
   { passes: false, what: 'a switch carried as another switch\'s value', args: [THE_MODELS_SWITCH, '--settings', '{}'] },
   { passes: false, what: 'a switch nobody has read', args: ['--a-switch-a-later-host-adds'] },
   { passes: false, what: 'a prompt by its short switch', args: ['-p', 'a prompt'] },
