@@ -7,16 +7,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import {
-  beatAfter,
-  BEAT_INTERVAL_MS,
-  CREW_TOOLS_FIELD,
-  isDashboardRow,
-  memberOfRowFileName,
-  OFFLINE_AFTER_MS,
-  rowFileNameOf,
-  type DashboardRow,
-} from './show_dashboard_beat.ts'
+import {beatAfter, BEAT_INTERVAL_MS, CREW_TOOLS_FIELD, isDashboardRow, memberOfRowFileName, rowFileNameOf, type DashboardRow} from './show_dashboard_beat.ts'
+import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
 
 function beat(member: string, at: number, changes: Partial<DashboardRow> = {}): DashboardRow {
   return {

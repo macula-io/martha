@@ -1,19 +1,21 @@
-// The nightly live run's kept record holds no token (martha#639, R4).
+// The live run's kept record holds no token (martha#639, R4).
 //
 // Members hold Bash and, in the landing phase, the throwaway token, so a member's transcript can carry it: `gh auth
 // token`, `gh auth status -t`, gh's hosts file read whole, a remote URL with credentials in it. The run keeps
-// transcripts and screens in its log when a step fails, and the night's findings are posted from that log. So every
+// transcripts and screens in its log when a step fails, and the live run's findings are posted from that log. So every
 // text bound for the log goes through here first: the token's exact value, and anything in the shape of a fine-grained
-// token, is replaced, and the run fails the night by name when anything was. The private scan before a post stays as a
+// token, is replaced, and the run fails the live run by name when anything was. The private scan before a post stays as a
 // second line, not the first.
 
+import { FINE_GRAINED_TOKEN_PREFIX } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+
 /** What a fine-grained personal access token looks like, so one the run was not given is caught too. */
-export const FINE_GRAINED_TOKEN = /github_pat_[A-Za-z0-9_]+/g
+export const FINE_GRAINED_TOKEN = new RegExp(`${FINE_GRAINED_TOKEN_PREFIX}[A-Za-z0-9_]+`, 'g')
 
 /** What stands where a token was. */
 export const REDACTED = '[the token, redacted]'
 
-/** The night's failure when a token reached the kept record, in the words the run prints. */
+/** The live run's failure when a token reached the kept record, in the words the run prints. */
 export const THE_TOKEN_REACHED_THE_RECORD = 'the token reached the kept record'
 
 /** A text made fit for the kept record, and whether a token had reached it. */

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { passesOnlySwitchesThatLoadNoConfig, SWITCHES_THAT_LOAD_NO_CONFIG, unpassedOwnerArgument } from './pass_only_switches_that_load_no_config.ts'
+import { passesOnlySwitchesThatLoadNoConfig, SWITCHES_THAT_LOAD_NO_CONFIG, THE_RESUME_SWITCH, unpassedOwnerArgument } from './pass_only_switches_that_load_no_config.ts'
 
 test('every switch on the list passes, each with a value when it takes one', () => {
   const args = Object.entries(SWITCHES_THAT_LOAD_NO_CONFIG).flatMap(([name, takes]) => (takes === 'value' ? [name, 'a-value'] : [name]))
@@ -34,4 +34,24 @@ test("T9b: the host's bare-mode switch, as its recorded bare-mode test spells it
   assert.ok(bare !== undefined, RECORDED_HOST.bare_mode_test)
   assert.ok((unpassedOwnerArgument([bare]) ?? '').startsWith(`${bare} `), 'bare mode is refused, naming it')
   assert.equal(passesOnlySwitchesThatLoadNoConfig(['--verbose', bare]), false)
+})
+
+test('#919: a word that is no switch is refused by name, alone or after a switch that passes, and the refusal names --prompt', () => {
+  for (const args of [['read the brief and start'], ['--verbose', 'read the brief and start'], ['/hello']]) {
+    const why = unpassedOwnerArgument(args) ?? ''
+    assert.ok(why.startsWith(`${args.at(-1)!} is no switch`), why)
+    assert.ok(why.includes('A first prompt is given before --, as --prompt <text>.'), why)
+  }
+})
+
+test('#511: --resume passes, with the session it names and without one', () => {
+  assert.equal(unpassedOwnerArgument([THE_RESUME_SWITCH]), undefined)
+  assert.equal(unpassedOwnerArgument([THE_RESUME_SWITCH, 'a-session-id']), undefined)
+  assert.equal(unpassedOwnerArgument([THE_RESUME_SWITCH, '--verbose']), undefined)
+})
+
+test('#511: the permission bypass is still refused by name, before a prompt or after --resume', () => {
+  const bypass = '--dangerously-skip-permissions'
+  assert.ok((unpassedOwnerArgument([bypass, 'a prompt']) ?? '').startsWith(`${bypass} `))
+  assert.ok((unpassedOwnerArgument([THE_RESUME_SWITCH, bypass]) ?? '').startsWith(`${bypass} `))
 })

@@ -19,6 +19,7 @@ import { thisMachine } from '../linux_process_identity/files_and_processes_on_th
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import {
   CrewTextRefused,
+  noCrewTextFor,
   crewTextFilesOf,
   crewTextFilesToApprove,
   crewTextToHand,
@@ -31,6 +32,12 @@ import {
   type ReadAText,
   type TheTextsAMemberReads,
 } from './hand_a_member_its_crew_text.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
+import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
+import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 
 const ROOT = `/${CREWS_PLACE}/site`
 const CREW = join(ROOT, DECLARATION_DIRECTORY)
@@ -45,8 +52,8 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     owner: 'Raf',
     host: THE_HOST_A_MEMBER_RAN_ON,
     members: [
-      { name: 'builder', role: 'builder', model: null, host: null },
-      { name: 'reviewer', role: 'reviewer', model: null, host: null },
+      { name: 'builder', role: 'builder', model: null, host: null, parked: false },
+      { name: 'reviewer', role: 'reviewer', model: null, host: null, parked: false },
     ],
     mode: { name: mode, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER], [HOLD_REVIEWS]: [OWNER] } },
     house_rules: { owner_items: false, workspace_layout: false, member_work: false, practice: overrides.practice ?? false, strict_gate: false, owner_bell: false, dashboard: false, refresh_between_tasks: false, nudges: false, stalled_minutes: null, review_minutes: null, person_minutes: null, review_model: null, clones: null, worktrees: null },
@@ -56,6 +63,13 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
     backlog: null,
     volatile_paths: [],
+    engine_endpoint: null,
+    thresholds: THRESHOLDS_WHEN_UNNAMED,
+    github: GITHUB_WHEN_UNNAMED,
+    transcripts: TRANSCRIPTS_WHEN_UNNAMED,
+    owner_notices: OWNER_NOTICES_WHEN_UNNAMED,
+    clock_zone: CLOCK_ZONE_WHEN_UNNAMED,
+    opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
   }
 }
 
@@ -117,16 +131,22 @@ test('#306: a role with no text refuses the launch, naming the file to write', (
   assert.throws(
     () => handAMemberItsCrewText(textsOf({ role_text: null })),
     (error: unknown) =>
-      error instanceof CrewTextRefused && error.file === join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md') && /no a role text/.test(error.message),
+      error instanceof CrewTextRefused && error.file === join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md') && error.message === `${join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md')}: Martha ships no role text for "builder", and this crew has written none. Write one at that path.`,
     'a role with no text did not refuse by the path the owner would write',
   )
 })
 
 test('#306: a mode with no text refuses the launch too, naming its file', () => {
+  const file = join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, SOLO_MODE + '.md')
   assert.throws(
     () => handAMemberItsCrewText(textsOf({ mode_text: null })),
-    (error: unknown) => error instanceof CrewTextRefused && error.file === join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, SOLO_MODE + '.md'),
+    (error: unknown) => error instanceof CrewTextRefused && error.file === file && error.message === `${file}: Martha ships no mode text for "${SOLO_MODE}", and this crew has written none. Write one at that path.`,
   )
+})
+
+test('a member refused its crew text is named first, then what to write: the words the owner reads, exactly', () => {
+  const refusal = `${join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, 'proof.md')}: Martha ships no mode text for "proof", and this crew has written none. Write one at that path.`
+  assert.equal(noCrewTextFor('Probe-a', refusal), `Probe-a would be handed no crew text. ${refusal}`)
 })
 
 test('#306: a crew\'s own role text wins over the one Martha ships, and its own mode text too', () => {
@@ -221,7 +241,7 @@ test('#306: the files a crew must approve are its roles\' texts, its mode\'s tex
 test('#306: Martha\'s own texts compose for every role it ships, in both modes, with no placeholder left and nothing refused', () => {
   for (const [mode, member] of [[SOLO_MODE, 'builder'], [SOLO_MODE, 'reviewer'], ['team', 'builder'], ['team', 'reviewer'], ['team', 'sup']] as const) {
     const settings = settingsOf({ mode })
-    const texts = sectionFor({ ...settings, members: [...settings.members, { name: 'sup', role: SUPERVISOR, model: null, host: null }] }, member, shippedReader())
+    const texts = sectionFor({ ...settings, members: [...settings.members, { name: 'sup', role: SUPERVISOR, model: null, host: null, parked: false }] }, member, shippedReader())
     const section = handAMemberItsCrewText({ ...texts, practice: textAt(join(SHIPPED_TEXTS, PRACTICE_TEXT), shipped(PRACTICE_TEXT)) })
     assert.doesNotMatch(section, /\{\{/, `the ${member} text in ${mode} leaves a placeholder: ${section.slice(section.indexOf('## Your role'))}`)
   }

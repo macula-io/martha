@@ -16,20 +16,12 @@
 //
 // The slice reads no disk: the park is asked through a function the caller hands it.
 
-import { HANDOVER_LIMIT_PERCENT } from '../refresh_a_member/refresh_a_member.ts'
+import { progressStaleMsOf, type CrewThresholds } from '../declare_crew/the_crews_thresholds.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { theCrewToolsFlag, type CrewRow } from '../see_the_crew/see_the_crew.ts'
+import { type CrewRow } from '../see_the_crew/see_the_crew.ts'
 import { IDLE, OFFLINE, type ShownState } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
-/**
- * The context share at which a member is no longer free: the handover limit itself, imported, because a member that
- * would hand over before it starts a package cannot take one.
- */
-export const CLAIM_LIMIT_PERCENT = HANDOVER_LIMIT_PERCENT
-
-/** How old a member's last report may be, while it is in the middle of a package, before its row is flagged. */
-export const PROGRESS_STALE_AFTER_MS = 30 * MINUTE_MS
 
 /** What a declared member that has never started reads as: not idle, because nothing of it runs. */
 export const NOT_RUNNING = 'not running'
@@ -63,6 +55,12 @@ export interface WhatTheCrewSays {
   readonly declared_models: Readonly<Record<string, string | null>>
   readonly parkOf: (member: string) => ThePark
   readonly now: number
+  /**
+   * The crew's thresholds (martha#931 A). A member at or past thresholds.handover_percent is no longer free, because a member
+   * that would hand over before it starts a package cannot take one; a report older than thresholds.progress_stale_minutes
+   * in the middle of a package flags its row.
+   */
+  readonly thresholds: CrewThresholds
 }
 
 /** Every declared member's row, in the declaration's order, with what stands in the way flagged. */
@@ -82,19 +80,19 @@ function freeRowOf(row: CrewRow, crew: WhatTheCrewSays): FreeRow {
     progress: row.progress,
     reported_ago,
     beat_ago: row.quiet_for,
-    flags: flagsOf(row, crew.parkOf(row.member), reported_ago),
+    flags: flagsOf(row, crew.parkOf(row.member), reported_ago, crew.thresholds),
   }
 }
 
 /** The flags a row raises, in a fixed order: the park, offline, needs-you, the context, stale progress, and lost crew tools. */
-function flagsOf(row: CrewRow, park: ThePark, reported_ago: number | null): readonly string[] {
+function flagsOf(row: CrewRow, park: ThePark, reported_ago: number | null, thresholds: CrewThresholds): readonly string[] {
   const flags: (string | null)[] = [
     parkFlagOf(park),
     row.state === OFFLINE ? OFFLINE : null,
     row.state === 'needs-you' ? 'needs-you' : null,
-    atTheLimit(row) ? `context ${String(row.host.contextPercent)}%` : null,
-    staleProgress(row, reported_ago) ? `progress ${minutesOf(reported_ago ?? 0)} old` : null,
-    theCrewToolsFlag(row),
+    atTheLimit(row, thresholds) ? `context ${String(row.host.contextPercent)}%` : null,
+    staleProgress(row, reported_ago, thresholds) ? `progress ${minutesOf(reported_ago ?? 0)} old` : null,
+    row.tools_flag,
   ]
   return flags.filter((flag): flag is string => flag !== null)
 }
@@ -102,23 +100,24 @@ function flagsOf(row: CrewRow, park: ThePark, reported_ago: number | null): read
 /** The flag a park raises: a parked member is flagged with the park's own word, read from the marker, never the row. */
 const parkFlagOf = (park: ThePark): string | null => (park.kind === 'not_parked' ? null : park.kind === 'unreadable' ? PARK_UNREADABLE_FLAG : park.kind)
 
-const atTheLimit = (row: CrewRow): boolean => row.host.contextPercent !== null && row.host.contextPercent >= CLAIM_LIMIT_PERCENT
+const atTheLimit = (row: CrewRow, thresholds: CrewThresholds): boolean => row.host.contextPercent !== null && row.host.contextPercent >= thresholds.handover_percent
 
 const finished = (row: CrewRow): boolean => row.progress.step >= row.progress.of
 
 /** Whether a member in the middle of a package has not reported for longer than the stale age. */
-const staleProgress = (row: CrewRow, reported_ago: number | null): boolean => reported_ago !== null && !finished(row) && reported_ago > PROGRESS_STALE_AFTER_MS
+const staleProgress = (row: CrewRow, reported_ago: number | null, thresholds: CrewThresholds): boolean =>
+  reported_ago !== null && !finished(row) && reported_ago > progressStaleMsOf(thresholds)
 
 const minutesOf = (ms: number): string => `${String(Math.floor(ms / MINUTE_MS))}m`
 
 /** Why a member cannot take a package now, or null when it can. The first reason that holds is the one given. */
-export function whyNotFree(row: CrewRow, park: ThePark): string | null {
+export function whyNotFree(row: CrewRow, park: ThePark, thresholds: CrewThresholds): string | null {
   const reasons: readonly (() => string | null)[] = [
     () => (row.at === null ? `${row.member} is ${NOT_RUNNING}` : null),
     () => (row.state === OFFLINE ? `${row.member} is offline: its row has been quiet for ${minutesOf(row.quiet_for ?? 0)}` : null),
     () => parkReasonOf(row.member, park),
     () => (row.state === 'needs-you' ? `${row.member} needs the owner: ${row.needs}` : null),
-    () => (atTheLimit(row) ? `${row.member} is at ${String(row.host.contextPercent)}% of its context, at or past the ${String(CLAIM_LIMIT_PERCENT)}% handover limit` : null),
+    () => (atTheLimit(row, thresholds) ? `${row.member} is at ${String(row.host.contextPercent)}% of its context, at or past the ${String(thresholds.handover_percent)}% handover limit` : null),
     () => (row.state !== IDLE && !finished(row) ? `${row.member} is in the middle of ${row.holds === '' ? 'a package' : row.holds} (${row.state}, ${String(row.progress.step)}/${String(row.progress.of)})` : null),
   ]
   for (const reason of reasons) {
@@ -149,10 +148,10 @@ export const notOnTheCrew = (member: string, names: readonly string[]): string =
 export function mayTakeAPackage(crew: WhatTheCrewSays, member: string, asker: string): MayTakeAPackage | { readonly refused: string } {
   const row = crew.rows.find((one) => one.member === member)
   if (row === undefined) return { refused: notOnTheCrew(member, crew.rows.map((one) => one.member)) }
-  const why = whyNotFree(row, crew.parkOf(member))
+  const why = whyNotFree(row, crew.parkOf(member), crew.thresholds)
   if (why === null) return { may: true, member }
   // The member refused never fits, because it is refused by the same test; the asker is left out by name.
-  const fit = crew.rows.filter((one) => one.member !== asker && whyNotFree(one, crew.parkOf(one.member)) === null)
+  const fit = crew.rows.filter((one) => one.member !== asker && whyNotFree(one, crew.parkOf(one.member), crew.thresholds) === null)
   const same = fit.filter((one) => one.host.provider === row.host.provider)
   const other = fit.filter((one) => one.host.provider !== row.host.provider)
   return { may: false, member, why, instead: [...same, ...other].map((one) => one.member) }

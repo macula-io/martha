@@ -63,12 +63,12 @@ type AToolAnswer = { readonly answer: string } | { readonly refused: string }
  * reads a call's arguments before it asks this launch for the processes it acts with (martha#443 part 5 r=2): a call
  * whose arguments are wrong is answered by those arguments even in a launch that could not act.
  */
-export async function landTheBatchOver(host: RangeCheckHost, member: string, asked: TheBatch, dry_run: boolean): Promise<AToolAnswer> {
+export async function landTheBatchOver(host: RangeCheckHost, member: string, asked: TheBatch, dry_run: boolean, note: (line: string) => void = () => {}): Promise<AToolAnswer> {
   if (dry_run) {
-    const forecast = await forecastWhatABatchLands(host, asked)
+    const forecast = await forecastWhatABatchLands(host, asked, note)
     return 'told' in forecast ? { answer: forecast.told } : { refused: forecast.refused }
   }
-  const landed = await landPassedWorkAsOneBatch(host, member, asked)
+  const landed = await landPassedWorkAsOneBatch(host, member, asked, note)
   return 'told' in landed ? { answer: landed.told } : { refused: landed.refused }
 }
 

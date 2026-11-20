@@ -8,20 +8,19 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { seeTheCrew, theCrewToolsFlag } from '../see_the_crew/see_the_crew.ts'
-import { IDLE, OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
+import { IDLE, OFFLINE, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
-import {
-  CLAIM_LIMIT_PERCENT,
-  NOBODY_FITS,
-  NOT_RUNNING,
-  PARK_UNREADABLE_FLAG,
-  PROGRESS_STALE_AFTER_MS,
-  mayTakeAPackage,
-  seeWhoIsFree,
-  theAnswerToMayTake,
-  type WhatTheCrewSays,
-} from './see_who_is_free.ts'
+import { NOBODY_FITS, NOT_RUNNING, PARK_UNREADABLE_FLAG, mayTakeAPackage, seeWhoIsFree, theAnswerToMayTake, type WhatTheCrewSays } from './see_who_is_free.ts'
+import { offlineAfterMsOf, progressStaleMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
+
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const CLAIM_LIMIT_PERCENT = THRESHOLDS_WHEN_UNNAMED.handover_percent
+
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const PROGRESS_STALE_AFTER_MS = progressStaleMsOf(THRESHOLDS_WHEN_UNNAMED)
 
 const NOW = 1_762_900_000_000
 const SUPERVISOR = 'Supervisor'
@@ -54,6 +53,7 @@ function theCrewWith(beats: Readonly<Record<string, DashboardRow>>, parks: Reado
     declared_models: {},
     parkOf: (member) => parks[member] ?? NOT_PARKED,
     now: NOW,
+    thresholds: THRESHOLDS_WHEN_UNNAMED,
   }
 }
 
@@ -173,7 +173,27 @@ test('a member working without its crew tools is flagged with the time they went
   const since = Date.parse('2026-11-18T05:48:00.000Z')
   const crew = theCrewWith({ ...everyoneFree(), Vesta: freeBeat('Vesta', { served_tools: { state: 'lost', since } }), Uranus: freeBeat('Uranus', { served_tools: { state: 'held' } }) })
   const rows = seeWhoIsFree(crew)
-  assert.deepEqual(rows.find((row) => row.member === 'Vesta')?.flags, [theCrewToolsFlag({ served_tools: { state: 'lost', since } })])
+  assert.deepEqual(rows.find((row) => row.member === 'Vesta')?.flags, ['crew tools lost since 05:48 UTC'])
   assert.deepEqual(rows.find((row) => row.member === 'Uranus')?.flags, [])
   assert.deepEqual(rows.find((row) => row.member === 'Terra')?.flags, [])
+})
+
+test('#931 A: who is free reads the declared handover share and stale age, not the defaults', () => {
+  const declared = { ...THRESHOLDS_WHEN_UNNAMED, handover_percent: CLAIM_LIMIT_PERCENT - 15, progress_stale_minutes: 7 }
+  const between = CLAIM_LIMIT_PERCENT - 10
+  const reported_ago = progressStaleMsOf(declared) + MINUTE_MS
+  const beats = {
+    ...everyoneFree(),
+    Vesta: freeBeat('Vesta', { host: { model: 'opus', provider: 'anthropic', contextPercent: between, costUsd: 1 } }),
+    Uranus: freeBeat('Uranus', { state: 'working', holds: 'macula-io/martha#931', progress: { step: 2, of: 5 }, reported_at: NOW - reported_ago }),
+  }
+  assert.deepEqual(mayTakeAPackage(theCrewWith(beats), 'Vesta', SUPERVISOR), { may: true, member: 'Vesta' }, 'under the default limit, a member at a share between the two is free')
+  const crew = { ...theCrewWith(beats), thresholds: declared }
+  const answer = mayTakeAPackage(crew, 'Vesta', SUPERVISOR)
+  assert.ok('may' in answer && !answer.may, 'a member past the declared limit was free')
+  assert.match(answer.why, new RegExp(`at or past the ${String(declared.handover_percent)}% handover limit`))
+  const rows = seeWhoIsFree(crew)
+  assert.deepEqual(rows.find((row) => row.member === 'Vesta')?.flags, [`context ${String(between)}%`])
+  assert.deepEqual(rows.find((row) => row.member === 'Uranus')?.flags, [`progress ${String(Math.floor(reported_ago / MINUTE_MS))}m old`], 'a report older than the declared stale age is flagged')
+  assert.deepEqual(seeWhoIsFree(theCrewWith(beats)).find((row) => row.member === 'Uranus')?.flags, [], 'and under the default it is not')
 })

@@ -80,7 +80,7 @@ const theCodeOf = (why: unknown): unknown => (typeof why === 'object' && why !==
 /**
  * Keeps one more call against a package's spend, before the call runs. Undefined when it was kept — or kept but not
  * made durable, which the store answers with ROW_NOT_DURABLE and which must not be appended twice — and the reason
- * when it was not, because a call nobody counted is a budget a member can walk around.
+ * when it was not, for the launch's journal: the call runs either way (martha#601, row 113).
  */
 export async function noteTheCallCounted(host: LedgerHost, counted: ACallToCount): Promise<string | undefined> {
   try {
@@ -96,6 +96,6 @@ export async function noteTheCallCounted(host: LedgerHost, counted: ACallToCount
   } catch (why) {
     if (theCodeOf(why) === ROW_NOT_DURABLE) return undefined
     const said = why instanceof Error ? why.message : String(why)
-    return `the store could not keep the row counting this call against ${counted.package}'s budget (${said}), so the call does not run.`
+    return `the store could not keep the row counting this call against ${counted.package}'s budget (${said}), so this call is not counted.`
   }
 }

@@ -1,4 +1,4 @@
-// The nightly live run's GitHub calls reach only the throwaway owner (martha#639, R1).
+// The live run's GitHub calls reach only the throwaway owner (martha#639, R1).
 //
 // The run's host-side GitHub calls go through a config folder of its own, logged in with the throwaway token, under
 // `env -i`. Two checks run before the run makes anything, each against the bot's numeric id recorded at setup:

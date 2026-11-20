@@ -9,6 +9,7 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import {
   ACTS,
   BACKLOG,
+  ENGINE_ENDPOINT,
   CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   CLONES,
   CREW_CODE_DECLARATION_DIRECTORY,
@@ -39,6 +40,8 @@ import {
   LAYOUT_TO_ADD,
   HOLD_REVIEWS,
   THE_HOST_A_MEMBER_RAN_ON,
+  PARKED,
+  MESH_KEY,
   declareCrew,
   declareCrewOnHosts,
   holdsReviews,
@@ -49,6 +52,7 @@ import {
   type WorkspaceLayout,
 } from './declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
+import { PROFILE } from './the_crews_profiles.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -101,9 +105,9 @@ const team = {
  */
 const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['model-a', 'model-b', 'model-r'] }
 
-const declare = (declaration: unknown) => {
+const declare = (declaration: unknown, note: (line: string) => void = () => {}) => {
   const { store, documentsRead } = storeOf({ [declaration_path]: JSON.stringify(declaration) })
-  return { settings: declareCrew(store, root, HOST_MODELS), documentsRead }
+  return { settings: declareCrew(store, root, HOST_MODELS, note), documentsRead }
 }
 
 /** A host that takes any model name its provider serves, as Goose does (martha#541, package 6). */
@@ -127,7 +131,7 @@ const without = (key: string, from: Record<string, unknown>) =>
 test('a solo declaration gives typed settings', async () => {
   const settings = await declare(solo).settings
   assert.equal(settings.owner, 'Ann')
-  assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null, host: null }])
+  assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null, host: null, parked: false }])
   assert.equal(settings.mode.name, SOLO_MODE)
   for (const act of ACTS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
   assert.deepEqual(settings.paths, {
@@ -268,7 +272,6 @@ test('every malformed field is refused by its name', async () => {
     [{ ...team, members: [{ name: 'has space', role: 'builder' }] }, 'members[0].name'],
     [{ ...team, members: [team.members[0], team.members[0]] }, 'members[1].name'],
     [{ ...team, members: [{ name: 'Lead', role: 'builder', model: '' }] }, 'members[0].model'],
-    [{ ...team, members: [{ name: 'Lead', role: 'builder', colour: 'red' }] }, 'members[0].colour'],
     [without('mode', team), 'mode'],
     [{ ...team, mode: { ...team.mode, name: '' } }, 'mode.name'],
     [{ ...team, mode: { ...team.mode, roles: [] } }, 'mode.roles'],
@@ -279,13 +282,41 @@ test('every malformed field is refused by its name', async () => {
     [{ ...team, conventions: '/etc/conventions.md' }, 'conventions'],
     [{ ...team, conventions: '../outside.md' }, 'conventions'],
     [{ ...team, house_rules: { practice: 'yes' } }, 'house_rules.practice'],
-    [{ ...team, house_rules: { review_model: '' } }, 'house_rules.review_model'],
-    // A model the host does not run is refused here, by name, rather than read as a rule that can never match (#315).
-    [{ ...team, house_rules: { review_model: 'model-the-host-cannot-spell' } }, 'house_rules.review_model'],
     [{ ...team, house_rules: [] }, 'house_rules'],
-    [{ ...team, extra: 1 }, 'extra'],
   ]
   for (const [declaration, field] of cases) await refusedWith(declaration, field)
+})
+
+test('#601: a field this reader does not know is named in one line, and the crew is still read', async () => {
+  const cases: [unknown, string][] = [
+    [{ ...team, extra: 1 }, 'extra'],
+    [{ ...team, members: [{ ...team.members[0], colour: 'red' }, ...team.members.slice(1)] }, 'members[0].colour'],
+  ]
+  for (const [declaration, field] of cases) {
+    const said: string[] = []
+    const settings = await declare(declaration, (line) => said.push(line)).settings
+    assert.ok(said.some((line) => line.includes(`${declaration_path}: ${field} is not a field here`)), said.join('\n'))
+    assert.equal(settings.owner, team.owner, 'the crew is still read')
+  }
+})
+
+test('#601: a review model this host cannot run is named in one line, and the crew is still read', async () => {
+  const said: string[] = []
+  const settings = await declare(
+    { ...team, house_rules: { ...team.house_rules, review_model: 'model-the-host-cannot-spell' } },
+    (line) => said.push(line),
+  ).settings
+  assert.equal(settings.house_rules.review_model, 'model-the-host-cannot-spell', 'the name is read as it was written')
+  assert.ok(
+    said.some((line) => line.includes(`${declaration_path}: house_rules.review_model is not a model this host runs`)),
+    said.join('\n'),
+  )
+
+  // A value that is not a model name at all reads as no model, and is said in one line rather than refused.
+  const emptySaid: string[] = []
+  const empty = await declare({ ...team, house_rules: { ...team.house_rules, review_model: '' } }, (line) => emptySaid.push(line)).settings
+  assert.equal(empty.house_rules.review_model, null)
+  assert.ok(emptySaid.some((line) => line.includes(`${declaration_path}: house_rules.review_model is not a model name`)), emptySaid.join('\n'))
 })
 
 test('every act a table does not name is the owner\'s alone, so a crew file written before the act existed still declares (martha#313, martha#312; mutant: the rule narrowed to one act)', async () => {
@@ -307,8 +338,7 @@ test('every act a table does not name is the owner\'s alone, so a crew file writ
 
 test('a field that is not an object is refused with its shape, naming every key it takes', async () => {
   const shapes: [unknown, string, readonly string[]][] = [
-    [{ ...team, members: ['Lead'] }, 'members[0]', ['name', 'role', 'model?', 'host?']],
-    [{ ...team, mode: 'team' }, 'mode', Object.keys(team.mode)],
+    [{ ...team, members: ['Lead'] }, 'members[0]', ['name', 'role', 'model?', 'host?', `${PARKED}?`, `${PROFILE}?`, `${MESH_KEY}?`]],
     [{ ...team, mode: { ...team.mode, may: [] } }, 'mode.may', Object.keys(team.mode.may)],
   ]
   for (const [declaration, field, keys] of shapes) {
@@ -319,12 +349,24 @@ test('a field that is not an object is refused with its shape, naming every key 
       return true
     })
   }
+  // A mode may be named by its name alone (martha#931), so a mode that is neither says both.
+  for (const mode of [7, ['team'], null]) {
+    await assert.rejects(declare({ ...team, mode }).settings, (error: unknown) => {
+      assert.ok(error instanceof DeclarationRefused)
+      assert.equal(error.field, 'mode')
+      assert.ok(error.message.endsWith(`is not a mode's name, or { ${Object.keys(team.mode).join(', ')} }`), error.message)
+      return true
+    })
+  }
 })
 
 // --- 4. unknown switches and roles --------------------------------------------
 
-test('a misspelt house rule is refused by name, so it cannot leave a rule off unseen', async () => {
-  await refusedWith({ ...team, house_rules: { owner_item: true } }, 'house_rules.owner_item')
+test('#601: a misspelt house rule is named in one line, and the crew is still read', async () => {
+  const said: string[] = []
+  const settings = await declare({ ...team, house_rules: { owner_item: true } }, (line) => said.push(line)).settings
+  assert.ok(said.some((line) => line.includes('house_rules.owner_item is not a field here')), said.join('\n'))
+  assert.equal(settings.owner, team.owner, 'the crew is still read')
 })
 
 // --- the strict shell gate is a house rule (martha#259) -----------------------
@@ -367,8 +409,14 @@ test('a place that is not an absolute path is refused by name, and a crew with t
   assert.equal(off.house_rules.worktrees, null)
 })
 
-test('an act the mode table does not know is refused by name', async () => {
-  await refusedWith({ ...team, mode: { ...team.mode, may: { ...team.mode.may, merge_anything: [OWNER] } } }, 'mode.may.merge_anything')
+test('#601: an act the mode table does not know is named in one line, and the crew is still read', async () => {
+  const said: string[] = []
+  const settings = await declare(
+    { ...team, mode: { ...team.mode, may: { ...team.mode.may, merge_anything: [OWNER] } } },
+    (line) => said.push(line),
+  ).settings
+  assert.ok(said.some((line) => line.includes('mode.may.merge_anything is not a field here')), said.join('\n'))
+  assert.deepEqual(settings.mode.may.assign_work, ['supervisor'], 'the table it did know is still read')
 })
 
 test('a member whose role is not in the mode table is refused by name', async () => {
@@ -383,7 +431,7 @@ test('two members whose names differ only in case are one name twice', async () 
 
 test('a model of null is the host\'s own model, the same as leaving the key out', async () => {
   const settings = await declare({ ...team, members: [{ name: 'Lead', role: 'builder', model: null }] }).settings
-  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null, host: null }])
+  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null, host: null, parked: false }])
 })
 
 test('the owner\'s name is trimmed', async () => {
@@ -535,8 +583,11 @@ const acrossTwoHosts = (review_model: string | undefined, hosts: { readonly buil
   house_rules: { ...without(REVIEW_MODEL, team.house_rules), ...(review_model === undefined ? {} : { [REVIEW_MODEL]: review_model }) },
 })
 
-const declareOnHosts = (declaration: unknown, vocabularies: ReadonlyMap<string, ModelVocabulary>) =>
-  declareCrewOnHosts(storeOf({ [declaration_path]: JSON.stringify(declaration) }).store, root, vocabularies)
+const declareOnHosts = (
+  declaration: unknown,
+  vocabularies: ReadonlyMap<string, ModelVocabulary>,
+  note: (line: string) => void = () => {},
+) => declareCrewOnHosts(storeOf({ [declaration_path]: JSON.stringify(declaration) }).store, root, vocabularies, note)
 
 test('#541 6b: a crew whose members name two hosts reads, and the roles that hold hold_reviews are its reviewers', async () => {
   const settings = await declareOnHosts(acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST }), CLAUDE_AND_AN_OPEN_ENGINE)
@@ -551,45 +602,40 @@ test('#541 6b: a crew whose two closed hosts both list the reviewer model reads 
   assert.equal(settings.house_rules.review_model, 'model-r')
 })
 
-test('#541 6b: the reviewer model one of the crew\'s hosts cannot spell is refused, naming that host (mutant: one host\'s list for both)', async () => {
-  await assert.rejects(
-    declareOnHosts(acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST }), CLAUDE_SPELLS_IT_ONLY),
-    (error: unknown) => {
-      assert.ok(error instanceof DeclarationRefused, `expected a DeclarationRefused, got ${String(error)}`)
-      assert.equal(error.field, 'house_rules.review_model')
-      assert.ok(error.message.includes(THE_ENGINES_HOST), error.message)
-      assert.ok(error.message.includes('engine-model'), error.message)
-      return true
-    },
+test('#541 6b, #601: the reviewer model one of the crew\'s hosts cannot spell is named in one line, naming that host, and the crew is read (mutant: one host\'s list for both)', async () => {
+  const said: string[] = []
+  const settings = await declareOnHosts(
+    acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST }),
+    CLAUDE_SPELLS_IT_ONLY,
+    (line) => said.push(line),
   )
+  assert.equal(settings.house_rules.review_model, 'model-r')
+  assert.ok(said.some((line) => line.includes(THE_ENGINES_HOST) && line.includes('engine-model')), said.join('\n'))
 })
 
-test('#541 6b: every member\'s host is held to the reviewer model, not only the reviewer member\'s (mutant: only the reviewer\'s host checked)', async () => {
+test('#541 6b, #601: every member\'s host is held to the reviewer model, not only the reviewer member\'s (mutant: only the reviewer\'s host checked)', async () => {
   // The reviewer sits on the host that can spell the model; the builder's host cannot. A rule that reads only the
-  // reviewer's host accepts this crew, and every review the builder spawns on the engine would then be held to a name
+  // reviewer's host says nothing here, so every review the builder spawns on the engine would then be held to a name
   // the engine never runs.
-  await assert.rejects(
-    declareOnHosts(acrossTwoHosts('model-r', { builder: THE_ENGINES_HOST, reviewer: CLAUDE_CODE }), CLAUDE_SPELLS_IT_ONLY),
-    (error: unknown) => {
-      assert.ok(error instanceof DeclarationRefused, `expected a DeclarationRefused, got ${String(error)}`)
-      assert.equal(error.field, 'house_rules.review_model')
-      assert.ok(error.message.includes(THE_ENGINES_HOST), error.message)
-      return true
-    },
+  const said: string[] = []
+  const settings = await declareOnHosts(
+    acrossTwoHosts('model-r', { builder: THE_ENGINES_HOST, reviewer: CLAUDE_CODE }),
+    CLAUDE_SPELLS_IT_ONLY,
+    (line) => said.push(line),
   )
+  assert.equal(settings.house_rules.review_model, 'model-r')
+  assert.ok(said.some((line) => line.includes(THE_ENGINES_HOST)), said.join('\n'))
 })
 
-test('#541 6b: a member\'s host this release records no models for is refused by name (mutant: an unrecorded host read as open)', async () => {
-  await assert.rejects(
-    declareOnHosts(acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST }), new Map([[CLAUDE_CODE, HOST_MODELS]])),
-    (error: unknown) => {
-      assert.ok(error instanceof DeclarationRefused, `expected a DeclarationRefused, got ${String(error)}`)
-      assert.equal(error.field, 'house_rules.review_model')
-      assert.ok(error.message.includes('records no models'), error.message)
-      assert.ok(error.message.includes(THE_ENGINES_HOST), error.message)
-      return true
-    },
+test('#541 6b, #601: a member\'s host this release records no models for is named in one line, and the crew is read (mutant: an unrecorded host read as open)', async () => {
+  const said: string[] = []
+  const settings = await declareOnHosts(
+    acrossTwoHosts('model-r', { builder: CLAUDE_CODE, reviewer: THE_ENGINES_HOST }),
+    new Map([[CLAUDE_CODE, HOST_MODELS]]),
+    (line) => said.push(line),
   )
+  assert.equal(settings.house_rules.review_model, 'model-r')
+  assert.ok(said.some((line) => line.includes('records no models') && line.includes(THE_ENGINES_HOST)), said.join('\n'))
 })
 
 test('#541 6b: a crew that names no reviewer model reads on a host this release records none for', async () => {
@@ -614,13 +660,14 @@ test('#541 6b r=2: declareCrew keeps its reading, so a two-host crew its callers
   const settings = await declare(twoHosts).settings
   assert.equal(settings.house_rules.review_model, 'model-r')
   assert.deepEqual(settings.members.map((member) => theHostOfMember(settings, member)), [CLAUDE_CODE, THE_ENGINES_HOST])
-  // A name that vocabulary cannot spell is refused as it always was, naming what the host runs.
-  await assert.rejects(declare({ ...twoHosts, house_rules: { ...twoHosts.house_rules, [REVIEW_MODEL]: 'engine-model' } }).settings, (error: unknown) => {
-    assert.ok(error instanceof DeclarationRefused, `expected a DeclarationRefused, got ${String(error)}`)
-    assert.equal(error.field, 'house_rules.review_model')
-    assert.ok(error.message.includes(`it runs ${HOST_MODELS.names.join(', ')}`), error.message)
-    return true
-  })
+  // A name that vocabulary cannot spell is said in one line, naming what the host runs, and the crew is still read (martha#601).
+  const said: string[] = []
+  const oneHost = await declare(
+    { ...twoHosts, house_rules: { ...twoHosts.house_rules, [REVIEW_MODEL]: 'engine-model' } },
+    (line) => said.push(line),
+  ).settings
+  assert.equal(oneHost.house_rules.review_model, 'engine-model')
+  assert.ok(said.some((line) => line.includes(`it runs ${HOST_MODELS.names.join(', ')}`)), said.join('\n'))
 })
 
 test('#541 6b: hold_reviews names the reviewer members by the act, and a role merely called reviewer holds nothing', async () => {
@@ -706,13 +753,60 @@ test('#319 B: a backlog names at least one organisation or owner/repo, and a who
   await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io/martha/extra'], idle_minutes: 30 } }, `${BACKLOG}.places`)
   await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'], idle_minutes: -1 } }, `${BACKLOG}.idle_minutes`)
   await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'], idle_minutes: 1.5 } }, `${BACKLOG}.idle_minutes`)
-  await refusedWith({ ...solo, [BACKLOG]: { places: ['macula-io'], idle_minutes: 30, every: 5 } }, `${BACKLOG}.every`)
+  // A field the backlog does not know is named in one line, and the backlog is still read (martha#601).
+  const said: string[] = []
+  const settings = await declare({ ...solo, [BACKLOG]: { places: ['macula-io'], idle_minutes: 30, every: 5 } }, (line) => said.push(line)).settings
+  assert.ok(said.some((line) => line.includes(`${BACKLOG}.every is not a field here`)), said.join('\n'))
+  assert.equal(settings.backlog?.idle_minutes, 30)
   await refusedWith({ ...solo, [BACKLOG]: ['macula-io'] }, BACKLOG)
 })
 
 test('#319 B: a declaration without a backlog has none, and one with it reads its places and window, 0 included', async () => {
   assert.equal((await declare(solo).settings).backlog, null)
   assert.deepEqual((await declare({ ...solo, [BACKLOG]: { places: ['macula-io', 'macula-io/macula'], idle_minutes: 0 } }).settings).backlog, { places: ['macula-io', 'macula-io/macula'], idle_minutes: 0 })
+})
+
+test('#541 package A: a declaration without an engine endpoint has none, and one with it reads its host, base path and key variable', async () => {
+  assert.equal((await declare(solo).settings).engine_endpoint, null)
+  assert.deepEqual((await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test:8080' } }).settings).engine_endpoint, { host: 'http://a-host.test:8080', base_path: null, key_from: null, key_file: null })
+  assert.deepEqual(
+    (await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', base_path: 'a/path', key_from: 'A_KEY_VARIABLE' } }).settings).engine_endpoint,
+    { host: 'https://a-host.test', base_path: 'a/path', key_from: 'A_KEY_VARIABLE', key_file: null },
+  )
+})
+
+test('#511 part B: an engine endpoint may name the file its key is in, by an absolute path, and never beside a key variable', async () => {
+  for (const key_file of ['/an/absolute/key-file']) {
+    assert.deepEqual((await declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file } }).settings).engine_endpoint, { host: 'https://a-host.test', base_path: null, key_from: null, key_file })
+  }
+  // A path under the home is written out by `martha up` before it reaches the declaration: the reader takes none.
+  for (const key_file of ['a/relative/key-file', '~a-user/key-file', '~/a/key-file', '/a/../key-file', 7]) {
+    await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file } }, `${ENGINE_ENDPOINT}.key_file`)
+  }
+  await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_file: 'sk-a-key' } }).settings, /the key itself never goes in the declaration/)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_from: 'A_KEY_VARIABLE', key_file: '/a/key-file' } }, `${ENGINE_ENDPOINT}.key_file`)
+  await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'https://a-host.test', key_from: 'A_KEY_VARIABLE', key_file: '/a/key-file' } }).settings, /the key is read from one place/)
+})
+
+test('#541 package A: an engine endpoint is a URL on http or https, a path, and a variable name: a key written there is refused by name', async () => {
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: 'http://a-host.test' }, ENGINE_ENDPOINT)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: {} }, `${ENGINE_ENDPOINT}.host`)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'a-host.test' } }, `${ENGINE_ENDPOINT}.host`)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'file:///a-host' } }, `${ENGINE_ENDPOINT}.host`)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', base_path: 7 } }, `${ENGINE_ENDPOINT}.base_path`)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', key_from: 'sk-a key' } }, `${ENGINE_ENDPOINT}.key_from`)
+  await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', key: 'sk-a-key' } }, `${ENGINE_ENDPOINT}.key`)
+  await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host: 'http://a-host.test', key_from: 'sk-a key' } }).settings, /the key itself never goes in the declaration/)
+  // A key carried in the host's URL, in each part it can ride in (Neptunus's F1 on PR 907; mutant: the parts check dropped).
+  for (const [host, part] of [
+    // The user-and-password case uses the tree's synthetic address domain (docs/nothing-private-gets-in.md).
+    ['https://user:sk-a-key@synthetic.invalid', /a user name and a password/],
+    ['https://a-host.test/?api_key=sk-a-key', /a query/],
+    ['https://a-host.test/#sk-a-key', /a fragment/],
+  ] as const) {
+    await refusedWith({ ...solo, [ENGINE_ENDPOINT]: { host } }, `${ENGINE_ENDPOINT}.host`)
+    await assert.rejects(declare({ ...solo, [ENGINE_ENDPOINT]: { host } }).settings, part, host)
+  }
 })
 
 /** A checkout of a made-up repository under a made-up home: this repository is public, so no real path appears here. */
@@ -765,10 +859,15 @@ test('#611 r=2: the line names no origin URL, so a token in its userinfo is neve
   assert.ok(!proved.said.includes('ghs_plantedtoken'), `the token in the origin reached the line init prints: ${proved.said}`)
 })
 
-test('a host that takes any model name reads any review model, and one that names its models refuses the rest', async () => {
+test('a host that takes any model name reads any review model, and one that names its models says the rest in one line and reads the crew', async () => {
   const declaration = { ...team, house_rules: { ...team.house_rules, review_model: 'model-the-host-cannot-spell' } }
   const { store } = storeOf({ [declaration_path]: JSON.stringify(declaration) })
-  const settings = await declareCrew(store, root, OPEN_HOST)
+  const openSaid: string[] = []
+  const settings = await declareCrew(store, root, OPEN_HOST, (line) => openSaid.push(line))
   assert.equal(settings.house_rules.review_model, declaration.house_rules.review_model)
-  await refusedWith(declaration, 'house_rules.review_model')
+  assert.deepEqual(openSaid, [], 'a host that takes any name says nothing')
+  const namedSaid: string[] = []
+  const named = await declareCrew(store, root, HOST_MODELS, (line) => namedSaid.push(line))
+  assert.equal(named.house_rules.review_model, declaration.house_rules.review_model, 'the crew is still read')
+  assert.ok(namedSaid.some((line) => line.includes('is not a model this host runs')), namedSaid.join('\n'))
 })

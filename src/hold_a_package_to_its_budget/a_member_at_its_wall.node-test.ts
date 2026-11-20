@@ -1,10 +1,10 @@
-// The wall, through the real relay (martha#513, slice 3).
+// The wall, through the real relay (martha#513, slice 3; a notice since martha#601 row 112).
 //
-// The budget is well tested on its own (./hold_a_package_to_its_budget), and so is the gate's order
-// (../answer_a_tool_call). What neither proves is that the relay ever asks: a launcher that read the spend and forgot
-// to hand it to the gate, or that let a call run without counting it, would leave both suites green and a member free
-// to spend past its package. These three hold each half: a call that runs is counted, the next one is refused at the
-// wall, and the handover still runs when nothing else will — under the name Claude Code calls it by.
+// The budget is well tested on its own (./hold_a_package_to_its_budget). What that does not prove is that the relay
+// ever asks: a launcher that read the spend and never told the member, or that let a call run without counting it,
+// would leave that suite green and a member spending past its package unawares. These three hold each half: a call
+// that runs is counted, the next one runs with a notice that the budget is spent, and the handover is told nothing —
+// under the name Claude Code calls it by.
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -35,7 +35,7 @@ import { holdingTheEnds } from '../end_a_running_turn/hold_the_end.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { noteTheContract, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { memberRelay, type MemberRelay, type RelayReply } from '../answer_the_relay/answer_the_relay.ts'
+import { memberRelay, type MemberRelay, type RelayReply, type TheMembersTelling } from '../answer_the_relay/answer_the_relay.ts'
 import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 
 import { theBudgetOver } from './the_budget_tools.ts'
@@ -127,8 +127,16 @@ function theReceiptsTaken(allowed: string[]): SignedRuns {
 }
 
 /** The relay for one member, over a crew's own tools and the receipts a call would take. */
-function relayFor(places: Places, crew: CrewTools, signed_runs: SignedRuns): MemberRelay {
+/** A telling that keeps each line its member is told, by the call it was told about. */
+const aTellingKept = (told: string[]): TheMembersTelling => ({
+  theRow: () => {},
+  theMember: async (line, call_id) => void told.push(`${call_id}: ${line}`),
+  takeTheLineBack: () => {},
+})
+
+function relayFor(places: Places, crew: CrewTools, signed_runs: SignedRuns, told: string[] = []): MemberRelay {
   return memberRelay({
+    telling: aTellingKept(told),
     records: sessionRecordsIn(rowStreamsDirectory(places.rows)),
     launch: { host: CLAUDE_CODE, launch_dir: places.checkout, stop_dir: places.home, approved_fingerprints: [] },
     policy: { may_send_executable_text: [] },
@@ -183,25 +191,33 @@ test('a call the relay lets run is one more tool call counted against its packag
   assert.deepEqual(await theSpendCounts(ledger, HELD_PACKAGE), { 'tool calls': 1 }, 'the call that ran was not counted')
 })
 
-test('at the wall the relay refuses the next call, and the handover runs under the name Claude Code calls it by', async (t) => {
+test('#601 row 112: at the wall the next call runs and its member is told once that the budget is spent; the handover is told nothing', async (t) => {
   const places = placesOf(t)
   const ledger = ledgerOf(places)
   await keepABudget(ledger, '1 tool calls')
   const allowed: string[] = []
-  const relay = relayFor(places, aCrewWithABudget(ledger), theReceiptsTaken(allowed))
+  const told: string[] = []
+  const relay = relayFor(places, aCrewWithABudget(ledger), theReceiptsTaken(allowed), told)
   await startedOn(relay)
 
-  // The one call the budget allows, counted as it runs.
+  // The one call the budget allows, counted as it runs, and told nothing.
   assert.equal(theDenyIn(await relay.answer('tool_called', call('Read'))), undefined)
+  assert.deepEqual(told, [])
 
-  const refused = theDenyIn(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL)))
-  assert.ok(refused !== undefined, 'a call past the budget was allowed to run')
-  assert.match(refused, /1 of 1 tool calls/)
-  assert.deepEqual(allowed, ['Read'], 'a receipt was taken for a call that never ran')
+  // The next call runs too, and its member is told, in one line, what was spent.
+  assert.equal(theDenyIn(await relay.answer('tool_called', call(CLAUDE_CODE_SHELL_TOOL))), undefined, 'a call past the budget was refused')
+  assert.deepEqual(allowed, ['Read', CLAUDE_CODE_SHELL_TOOL], 'the call past the budget did not run')
+  assert.equal(told.length, 1)
+  assert.match(told[0] ?? '', new RegExp(`^toolu_${CLAUDE_CODE_SHELL_TOOL}: Notice: package .*'s budget \\(contract version 1\\) is spent — 1 of 1 tool calls\\. The call runs;`))
 
-  // The handover, as it arrives from the crew's server: the wall keeps it open.
-  const handover = theDenyIn(await relay.answer('tool_called', call('mcp__martha__write_my_handover')))
-  assert.equal(handover, undefined, 'the handover was refused at the wall, which would trap the member')
+  // Another call past the wall runs and is told nothing more: a notice reaches the member as a turn of its own, so one
+  // told on every call would hand it a turn for each call it makes.
+  assert.equal(theDenyIn(await relay.answer('tool_called', call('Glob'))), undefined)
+  assert.equal(told.length, 1, 'the spent budget was told again on the next call')
+
+  // The handover, as it arrives from the crew's server: it runs and is told nothing.
+  assert.equal(theDenyIn(await relay.answer('tool_called', call('mcp__martha__write_my_handover'))), undefined)
+  assert.equal(told.length, 1, 'the handover was told the budget is spent')
 })
 
 test('the budget the relay asks is the package its member holds, and no other package pays for it', async (t) => {

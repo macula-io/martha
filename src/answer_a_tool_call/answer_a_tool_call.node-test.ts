@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import process from 'node:process'
 import { after, test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
@@ -29,14 +30,8 @@ import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { MESH_TOOLS_THAT_WIDEN_REACH } from '../refuse_widening_a_member_reach/refuse_widening_a_member_reach.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { LAND, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
-import type { ContractAction } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
-import { KEEP_THE_CONTRACT_TOOL } from '../keep_the_package_contract/the_contract_tools.ts'
-import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
-import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
-import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
-import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 
 const names = claudeCodeToolNames
 
@@ -53,8 +48,6 @@ const launch: ApprovedLaunch = {
 
 // Synthetic identities, never a real one: this repository is public.
 const supervisor_identity = 'identity-of-the-supervisor'
-/** A synthetic package, never a real one: this repository is public. */
-const PACKAGE = 'synthetic-owner/repo#7'
 
 const policy: Policy = { may_send_executable_text: [supervisor_identity] }
 
@@ -66,6 +59,21 @@ const store = (): SessionRecordStore => {
 const denied = (answer: ToolCallAnswer): string => {
   assert.notEqual(answer, undefined, 'the tool call was allowed; it must be refused')
   return (answer as { deny: string }).deny
+}
+
+/** The answer, and everything written to the process's own error output while the call is judged (martha#601). */
+const theNoticeWhile = (act: (note: (line: string) => void) => ToolCallAnswer): { readonly answer: ToolCallAnswer; readonly notice: string } => {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: act((line) => void process.stderr.write(`${line}\n`)), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
 }
 
 // --- the host's whole loop ----------------------------------------------------
@@ -151,6 +159,18 @@ test('every tool that executes is refused, by whatever name the host uses', () =
   }
 })
 
+test('#601: a call that widens a member\'s reach gets one line about who decides it, and no refusal of its own', () => {
+  const fresh = beginSession(store(), 's-1')
+  for (const tool of MESH_TOOLS_THAT_WIDEN_REACH) {
+    const { answer, notice } = theNoticeWhile((note) => answerToolCall({ names, tool, session: fresh, policy, launch, host: thisMachine }, note))
+    assert.match(notice, new RegExp(`${tool} is not called in a member's session`), `${tool} got no notice`)
+    assert.match(notice, /answered as asked/, 'the notice did not say the call went ahead')
+    // The raw mesh read stands beside it and is not one of the rows cut (martha#601), so it still refuses the call; what
+    // this pins is that the reach rule no longer answers for it.
+    assert.doesNotMatch(denied(answer), /who can reach a member/, 'the reach rule still refused the call')
+  }
+})
+
 test('a tainted member cannot send: every tool that hands text to someone else is refused', () => {
   // The threat model on martha#14 once said a tainted member could still send.
   // It cannot: sending is acting, and only tools that read stay allowed.
@@ -232,121 +252,4 @@ test('once the owner approves the new tree, the calls run again', (t) => {
 
   const again = { ...approved, approved_fingerprints: [fingerprintOf(readLaunchState(approved, thisMachine))] }
   assert.equal(answerToolCall({ names, tool: 'Read', session, policy, launch: again, host: thisMachine }), undefined)
-})
-
-// --- the package's budget (martha#513, slice 3) -------------------------------
-
-/** A package with nothing left: what the gate is handed when a member has spent its budget whole. */
-const aSpentBudget = { package: 'synthetic-owner/repo#7', version: 1, units: [{ unit: 'tool calls' as const, spent: 5, limit: 5 }] }
-
-test('the budget is asked after the gate, so a call the gate refuses keeps the gate\'s own reason', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-budget-1'), { source: 'cross_session' }, bindNothing)
-
-  const said = denied(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: tainted, policy, launch, host: thisMachine, spend: aSpentBudget }))
-  assert.match(said, /nothing executes/i)
-})
-
-test('a call the gate allows is refused at the wall, and one that ends the package runs', () => {
-  const fresh = beginSession(store(), 's-budget-2')
-
-  const said = denied(answerToolCall({ names, tool: 'Read', session: fresh, policy, launch, host: thisMachine, spend: aSpentBudget }))
-  assert.match(said, /5 of 5 tool calls/)
-  assert.equal(answerToolCall({ names, tool: 'mcp__martha__write_my_handover', session: fresh, policy, launch, host: thisMachine, spend: aSpentBudget }), undefined)
-})
-
-// --- the package's own contract, last (martha#513 slice 2) --------------------
-
-/** A contract on a package, allowing the acts it names. */
-const aContract = (allowed: readonly ContractAction[]) => ({
-  package: 'synthetic-owner/repo#7',
-  version: 2,
-  kind: 'bounded' as const,
-  allowed,
-})
-
-test('a call that is an act the contract leaves out is refused, naming the act, the version and what it allows', () => {
-  const session = beginSession(store(), 's-1')
-  const answer = denied(
-    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push origin main' }, contract: aContract(['handoff', LAND]) }),
-  )
-  assert.match(answer, /this call pushes, and package synthetic-owner\/repo#7's contract \(version 2\) allows handoff, land only/)
-  // A call that is no act runs whatever the contract says, and one the contract allows runs too.
-  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'npm test' }, contract: aContract([]) }), undefined)
-  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push' }, contract: aContract(['push']) }), undefined)
-})
-
-test('the contract is asked last of all: a call the gate refuses keeps the gate\'s own reason', () => {
-  const tainted = takeInTurn(beginSession(store(), 's-1'), { source: 'ring' }, bindNothing)
-  const answer = denied(
-    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: tainted, policy, launch, host: thisMachine, input: { command: 'git push' }, contract: aContract([]) }),
-  )
-  assert.match(answer, /nothing executes/i)
-  assert.doesNotMatch(answer, /contract/)
-})
-
-test('a land is refused under the name this host calls the tool by, not only the core\'s own', () => {
-  const session = beginSession(store(), 's-1')
-  const called = `mcp__martha__${LAND_BATCH}`
-  const answer = denied(
-    answerToolCall({ names, tool: called, session, policy, launch, host: thisMachine, input: {}, contract: aContract(['push', 'handoff', 'tag']) }),
-  )
-  assert.match(answer, /this call lands, and package synthetic-owner\/repo#7's contract \(version 2\) allows push, handoff, tag only/)
-  // The core's own name is refused by the same rule, so the two spellings cannot drift apart.
-  const own = denied(
-    answerToolCall({ names, tool: LAND_BATCH, session, policy, launch, host: thisMachine, input: {}, contract: aContract(['push', 'handoff', 'tag']) }),
-  )
-  assert.match(own, /this call lands/)
-})
-
-test('a contract the ledger could not read back refuses the act and says why, and no call that is not one', () => {
-  const session = beginSession(store(), 's-1')
-  const unreadable = { package: 'synthetic-owner/repo#7', why: 'row 3 is not a contract block' }
-  const answer = denied(
-    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push' }, contract: unreadable }),
-  )
-  assert.match(answer, /could not be read \(row 3 is not a contract block\), so push is refused until the ledger answers/)
-  assert.equal(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'npm test' }, contract: unreadable }), undefined)
-})
-
-test('a member at its wall is told it is spent, not told to ask for a new contract version', () => {
-  const session = beginSession(store(), 's-budget-3')
-  const answer = denied(
-    answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session, policy, launch, host: thisMachine, input: { command: 'git push origin main' }, spend: aSpentBudget, contract: aContract([]) }),
-  )
-  assert.match(answer, /is spent/)
-  assert.match(answer, /5 of 5 tool calls/)
-  // The contract's own refusal would name what that contract allows, which is nothing; this answer is the budget's,
-  // whose own closing line speaks of a new version of the contract and so cannot be told apart by that word alone.
-  assert.doesNotMatch(answer, /allows no act at all/)
-})
-
-// --- a package with no contract at all (martha#597) ---------------------------
-
-/** A package whose ledger holds no contract version: what the gate is handed for one (martha#597). */
-const aPackageWithNoContract = { package: PACKAGE }
-test('#597: a package with no contract is refused the work it asks for, and told the tool that records one', () => {
-  const session = beginSession(store(), 's-none-recorded')
-  // A call that is an act and one that is no act are both refused: this gate does not stand only on the act table.
-  for (const call of [
-    { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'git push origin main' } },
-    { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: 'npm test' } },
-    { tool: WHOLE_FILE_TOOL, input: { file_path: 'a-file' } },
-  ]) {
-    const said = denied(answerToolCall({ names, session, policy, launch, host: thisMachine, ...call, contract: aPackageWithNoContract }))
-    assert.match(said, /has no contract recorded, so none of its work runs/)
-    assert.match(said, new RegExp(`keeps it with ${KEEP_THE_CONTRACT_TOOL.name}`))
-  }
-  // The four that end a package still run, under the names this host calls them by, and so does the tool that keeps one.
-  for (const ending of [WRITE_MY_HANDOVER_TOOL, SAY_TO_THE_CREW, REPORT_WHERE_THE_WORK_STANDS, PARK_A_MEMBER, KEEP_THE_CONTRACT_TOOL.name]) {
-    assert.equal(
-      answerToolCall({ names, tool: `mcp__martha__${ending}`, session, policy, launch, host: thisMachine, input: {}, contract: aPackageWithNoContract }),
-      undefined,
-      ending,
-    )
-  }
-  // A look-alike of one of them is refused like any other call, so the table cannot be widened by a name.
-  const look_alike = denied(
-    answerToolCall({ names, tool: 'mcp__martha__not_write_my_handover', session, policy, launch, host: thisMachine, input: {}, contract: aPackageWithNoContract }),
-  )
-  assert.match(look_alike, /has no contract recorded/)
 })

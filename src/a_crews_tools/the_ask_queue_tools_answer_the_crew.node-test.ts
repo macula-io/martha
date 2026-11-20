@@ -44,6 +44,12 @@ import { MENU_TOOL } from '../say_what_the_host_is_asking/say_what_the_host_is_a
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { crewToolsOver, type CrewTools } from './a_crews_tools.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
+import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
+import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-ask-queue-tools-'))
 after(() => removeTheTree(home))
@@ -182,8 +188,8 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
   owner: 'Ann',
   host: THE_HOST_A_MEMBER_RAN_ON,
   members: [
-    { name: LEAD, role: SUPERVISOR, model: null, host: null },
-    { name: BUILDER, role: 'builder', model: null, host: null },
+    { name: LEAD, role: SUPERVISOR, model: null, host: null, parked: false },
+    { name: BUILDER, role: 'builder', model: null, host: null, parked: false },
   ],
   mode: {
     name: 'team',
@@ -220,6 +226,13 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
   handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
   backlog: null,
   volatile_paths: [],
+  engine_endpoint: null,
+    thresholds: THRESHOLDS_WHEN_UNNAMED,
+    github: GITHUB_WHEN_UNNAMED,
+    transcripts: TRANSCRIPTS_WHEN_UNNAMED,
+    owner_notices: OWNER_NOTICES_WHEN_UNNAMED,
+    clock_zone: CLOCK_ZONE_WHEN_UNNAMED,
+    opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
 })
 
 /** A place of the test's own, over `rows`, with the git and declaration it is handed: either may be left out. */

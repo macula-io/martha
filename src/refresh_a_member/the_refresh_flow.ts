@@ -188,7 +188,7 @@ async function theFlowsAct(places: TheRefreshPlaces, question: TheSessionsQuesti
   if (heldByTheTurnItGaveUpOn(flow, question)) return NO_ACT
   const due = theDueOf(places, question, opened, beganAt)
   if (!due.due) return NO_ACT
-  return startTheFlow(places, opened.place, due, question, flow, beganAt, now)
+  return startTheFlow(places, opened, due, question, flow, beganAt, now)
 }
 
 /** What a question is answered over: the member's flow as the store keeps it, the place it is kept in, and the crew. */
@@ -213,6 +213,7 @@ async function theOpenFlow(places: TheRefreshPlaces): Promise<AnOpenFlow | { rea
 function theDueOf(places: TheRefreshPlaces, question: TheSessionsQuestion, opened: AnOpenFlow, beganAt: number): Due {
   return aRefreshIsDue({
     percent: question.percent,
+    limit_percent: opened.settings.thresholds.handover_percent,
     started_at_percent: beganAt,
     finished_report: finishedReportIn(places),
     refresh_between_tasks: opened.settings.house_rules[REFRESH_BETWEEN_TASKS],
@@ -225,7 +226,7 @@ function theDueOf(places: TheRefreshPlaces, question: TheSessionsQuestion, opene
 /** The flow a due ask begins: kept whole, and the ask that started it taken up, once. */
 function startTheFlow(
   places: TheRefreshPlaces,
-  place: CrewPlace,
+  opened: AnOpenFlow,
   due: { readonly due: true; readonly trigger: RefreshTrigger },
   question: TheSessionsQuestion,
   previous: ARefresh | undefined,
@@ -244,12 +245,13 @@ function startTheFlow(
     // follows a decline carries whether the Supervisor was told, and the clear, which ends a flow by `resumed`, resets it.
     told: previous?.phase === 'declined' && previous.told,
   })
+  const { place } = opened
   keepTheFlow(place, places.member, starting)
   // An ask someone made is consumed here, once: a member that has answered it is not asked again by the same one.
   if (due.trigger === 'asked') consumeTheAsk(place, places.member, now)
   return {
     act: 'prompt',
-    text: theHandoverPrompt({ at_limit: due.trigger === 'at_the_limit', percent: question.percent }),
+    text: theHandoverPrompt({ at_limit: due.trigger === 'at_the_limit', percent: question.percent, limit_percent: opened.settings.thresholds.handover_percent }),
     refresh: { phase: 'handing_over', reason: starting.reason },
   }
 }
@@ -407,7 +409,7 @@ function declined(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, an
   // the design's row and one line, not a line per turn.
   const ended =
     flow.trigger === 'at_the_limit' && !flow.told
-      ? tellTheSupervisor(places, place, flow, settings, theLimitLine({ member: places.member, percent: flow.percent, said }))
+      ? tellTheSupervisor(places, place, flow, settings, theLimitLine({ member: places.member, percent: flow.percent, limit_percent: settings.thresholds.handover_percent, said }))
       : flow
   keepTheFlow(place, places.member, theFlowDeclined(ended, said, now))
   return { act: 'none', refresh: { phase: 'declined', reason: `declined: ${said}` } }

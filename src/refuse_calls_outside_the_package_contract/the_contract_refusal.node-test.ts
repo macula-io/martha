@@ -1,8 +1,8 @@
-// What a call is, and what a package's contract refuses of it (martha#513 slice 2).
+// What a call is, and what a package's contract says of it (martha#513 slice 2, martha#601 row 110).
 //
 // The two claims this file pins are the slice's: a call's act is read from what the call itself says (the command's own
-// words, the line as read) and never from a name someone gave it, and a contract refuses exactly the acts it leaves out
-// — nothing for a call that is no act, nothing without a contract, and nothing for a package the owner marked unbounded.
+// words, the line as read) and never from a name someone gave it, and a contract's notice names exactly the acts it
+// leaves out — nothing for a call that is no act, nothing without a contract, and nothing for an unbounded package.
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -11,13 +11,10 @@ import { CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host
 import { CONTRACT_ACTIONS } from '../keep_the_package_contract/the_contract_in_a_brief.ts'
 import { LAND, LAND_BATCH, FAST_FORWARD_AFTER_THE_OWNERS_YES } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
-import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
-import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
-import { KEEP_THE_CONTRACT_TOOL } from '../keep_the_package_contract/the_contract_tools.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { CONTRACT_ACTS, theActsOfACall } from './the_acts_of_a_call.ts'
-import { refuseACallOutsideTheContract, theActsNotAllowed, type TheContractInForce } from './refuse_a_call_outside_the_contract.ts'
+import { theNoticeOfACallOutsideTheContract, theActsNotAllowed, type TheContractInForce } from './refuse_a_call_outside_the_contract.ts'
 
 const PACKAGE = 'synthetic-owner/repo#7'
 /** A range as the crew's own line writes it: two forty-hex shas, since a shorter pair is refused when it is read. */
@@ -142,75 +139,47 @@ test('a handoff is the review line, read as the crew reads it, and only for the 
 test('writing a handover is never an act, even when the handover itself holds a handoff line', () => {
   const text = `HANDOFF ${PACKAGE} ${BASE}..${TIP} r=1 ci=4\n\nmy handover`
   assert.deepEqual(theActsOfACall({ tool: WRITE_MY_HANDOVER_TOOL, input: { content: text } }, PACKAGE), [])
-  const refused = refuseACallOutsideTheContract({ tool: WRITE_MY_HANDOVER_TOOL, input: { content: text } }, aContract([LAND]))
-  assert.equal(refused, undefined)
+  assert.equal(theNoticeOfACallOutsideTheContract({ tool: WRITE_MY_HANDOVER_TOOL, input: { content: text } }, aContract([LAND])), undefined)
 })
 
-// --- what the contract refuses ------------------------------------------------------
+// --- what the contract notices ------------------------------------------------------
 
-test('the acts a call is that the contract leaves out are the ones refused, and nothing else is', () => {
+test('the acts a call is that the contract leaves out are the ones noticed, and nothing else is', () => {
   assert.deepEqual(theActsNotAllowed(aShellCall('git push'), aContract(['push', LAND])), [])
   assert.deepEqual(theActsNotAllowed(aShellCall('git push'), aContract([LAND])), ['push'])
-  // `git push --tags` is both acts, so a contract holding one of them still refuses it.
+  // `git push --tags` is both acts, so a contract holding one of them still notices the other.
   assert.deepEqual(theActsNotAllowed(aShellCall('git push --tags'), aContract(['push'])), ['tag'])
   assert.deepEqual(theActsNotAllowed(aShellCall('git push --tags'), aContract(['tag'])), ['push'])
   assert.deepEqual(theActsNotAllowed(aShellCall('git push --tags'), aContract(['push', 'tag'])), [])
 })
 
-test('a call the contract allows runs, and the answer is nothing at all', () => {
-  assert.equal(refuseACallOutsideTheContract(aShellCall('git tag v1'), aContract(['tag', 'push'])), undefined)
-  assert.equal(refuseACallOutsideTheContract(aShellCall('npm test'), aContract([])), undefined)
+test('a call the contract allows is told nothing at all', () => {
+  assert.equal(theNoticeOfACallOutsideTheContract(aShellCall('git tag v1'), aContract(['tag', 'push'])), undefined)
+  assert.equal(theNoticeOfACallOutsideTheContract(aShellCall('npm test'), aContract([])), undefined)
 })
 
-test('a refused call is told which act it is, the contract\'s version, and what the contract does allow', () => {
-  const refused = refuseACallOutsideTheContract(aShellCall('git push origin main'), aContract(['handoff', LAND], 3))
-  assert.ok(refused !== undefined)
-  assert.match(refused, /this call pushes, and package synthetic-owner\/repo#7's contract \(version 3\) allows handoff, land only, so push is not in it and the call does not run/)
+test('#601 row 110: a call outside the contract is told, in one notice, which act it is, the version and what the contract allows, and that it runs', () => {
+  const told = theNoticeOfACallOutsideTheContract(aShellCall('git push origin main'), aContract(['handoff', LAND], 3))
+  assert.equal(
+    told,
+    "Notice: this call pushes, and package synthetic-owner/repo#7's contract (version 3) allows handoff, land only, so push is not in it. " +
+      "The call runs; say so in your hand-off.",
+  )
   // Both acts named when the command is both, and each of them missing is named.
-  const both = refuseACallOutsideTheContract(aShellCall('git push --tags'), aContract(['handoff']))
+  const both = theNoticeOfACallOutsideTheContract(aShellCall('git push --tags'), aContract(['handoff']))
   assert.ok(both !== undefined)
   assert.match(both, /this call pushes and tags, and package .* allows handoff only, so push and tag are not in it/)
   // A contract that allows nothing at all says so rather than printing an empty list.
-  const none = refuseACallOutsideTheContract({ tool: LAND_BATCH, input: {} }, aContract([]))
+  const none = theNoticeOfACallOutsideTheContract({ tool: LAND_BATCH, input: {} }, aContract([]))
   assert.ok(none !== undefined)
   assert.match(none, /this call lands, and package .* allows no act at all, so land is not in it/)
 })
 
-test('a call handed no contract at all, and a package the owner called unbounded, refuse nothing at all', () => {
-  assert.equal(refuseACallOutsideTheContract(aShellCall('git push'), undefined), undefined)
+test('#601 rows 109 and 111: a call handed no contract, and a package marked unbounded, are told nothing at all', () => {
+  assert.equal(theNoticeOfACallOutsideTheContract(aShellCall('git push'), undefined), undefined)
   const unbounded: TheContractInForce = { package: PACKAGE, version: 1, kind: 'unbounded', allowed: [] }
-  assert.equal(refuseACallOutsideTheContract(aShellCall('git push --tags'), unbounded), undefined)
-  assert.equal(refuseACallOutsideTheContract({ tool: LAND_BATCH, input: {} }, unbounded), undefined)
-})
-
-test('a package with no contract recorded refuses every call but the ones that end it and the tool that keeps one (martha#597)', () => {
-  const none_recorded = { package: PACKAGE }
-  // An act and a call that is no act are refused alike: this gate does not stand only on the act table.
-  for (const call of [aShellCall('git push origin main'), aShellCall('npm test'), { tool: 'Read', input: { file_path: 'a-file' } }]) {
-    const refused = refuseACallOutsideTheContract(call, none_recorded, ownNameOfCalledTool)
-    assert.ok(refused !== undefined, call.tool)
-    assert.match(refused, new RegExp(`${PACKAGE} has no contract recorded, so none of its work runs until one is kept`))
-    assert.match(refused, new RegExp(`keeps it with ${KEEP_THE_CONTRACT_TOOL.name}`))
-  }
-  // The four that end a package still run, by the host's own name for each, and so does the tool that keeps a contract.
-  for (const own_name of [WRITE_MY_HANDOVER_TOOL, SAY_TO_THE_CREW, REPORT_WHERE_THE_WORK_STANDS, PARK_A_MEMBER, KEEP_THE_CONTRACT_TOOL.name]) {
-    assert.equal(refuseACallOutsideTheContract({ tool: `mcp__martha__${own_name}`, input: {} }, none_recorded, ownNameOfCalledTool), undefined, own_name)
-  }
-  // A look-alike is another call, refused like any other.
-  assert.ok(refuseACallOutsideTheContract({ tool: 'mcp__martha__not_write_my_handover', input: {} }, none_recorded, ownNameOfCalledTool) !== undefined)
-})
-
-test('a contract the ledger cannot read back refuses that act alone, and the words say why', () => {
-  const unreadable = { package: PACKAGE, why: 'row 3 is not a contract block' }
-  const refused = refuseACallOutsideTheContract(aShellCall('git push origin main'), unreadable)
-  assert.ok(refused !== undefined)
-  assert.match(
-    refused,
-    /this call pushes, and package synthetic-owner\/repo#7's contract could not be read \(row 3 is not a contract block\), so push is refused until the ledger answers/,
-  )
-  // A call that is no act runs whatever the ledger could not answer: the unreadable contract refuses that act alone.
-  assert.equal(refuseACallOutsideTheContract(aShellCall('npm test'), unreadable), undefined)
-  assert.equal(refuseACallOutsideTheContract({ tool: 'some_read', input: {} }, unreadable), undefined)
+  assert.equal(theNoticeOfACallOutsideTheContract(aShellCall('git push --tags'), unbounded), undefined)
+  assert.equal(theNoticeOfACallOutsideTheContract({ tool: LAND_BATCH, input: {} }, unbounded), undefined)
 })
 
 test('the gate\'s words are the contract\'s words: the two vocabularies are the same four acts', () => {

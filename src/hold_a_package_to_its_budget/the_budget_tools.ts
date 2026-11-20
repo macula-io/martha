@@ -11,8 +11,8 @@
 //
 // Deliberately read differently from the contract's allowed actions (../refuse_calls_outside_the_package_contract),
 // which reads the newest contract on every act: an act is rare, a tool call is not. The price is that a version which
-// raises a limit reaches the member at its next start or refresh and not at the call it was spent at — and the four
-// calls that end a package stay open (./refuse_a_call_past_the_budget), which is how it gets to that refresh.
+// raises a limit reaches the member at its next start or refresh and not at the call it was spent at. A spent budget
+// stops no call (martha#601, row 112): the member is told in a notice (./refuse_a_call_past_the_budget).
 //
 // A package with no contract, an unbounded one, a member holding nothing, and a ledger this slice cannot read all count
 // nothing and stop nothing: a budget is a bound on work, and none of those has one to bound.
@@ -112,8 +112,8 @@ export function theBudgetOver(places: TheBudgetPlaces): TheBudgetAsACrewHoldsIt 
       if (budget === null) return undefined
       const refusal = await noteTheRow(places.ledger, { package: budget.package, member: places.member, unit: 'tool calls', count: 1 })
       if (refusal === undefined) budget.counted_since += 1
-      // An uncounted call does not run — except one that ends the package: refusing the handover at the wall would
-      // trap a member that the wall itself is telling to write one.
+      // An uncounted call runs (martha#601, row 113), and why it was not counted goes to the launch's journal. One that
+      // ends the package is not even written down: it does no work to count.
       return isACallThatEndsThePackage(own_name) ? undefined : refusal
     },
   }

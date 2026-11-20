@@ -35,6 +35,12 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { WORKTREE_FINISH, WORKTREE_OPEN } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { crewToolsOver, NO_ACTING_PLACE, THE_TOOLS_ASK, type CrewTools } from './a_crews_tools.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
+import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
+import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
 
 const MEMBER = 'Ceres'
 const SLUG = '256-the-five'
@@ -110,7 +116,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     paths: { root, crew: join(root, DECLARATION_DIRECTORY), declaration: join(root, DECLARATION_DIRECTORY, DECLARATION_FILE), conventions: null },
     owner: 'Ann',
     host: THE_HOST_A_MEMBER_RAN_ON,
-    members: [{ name: MEMBER, role: 'builder', model: null, host: null }],
+    members: [{ name: MEMBER, role: 'builder', model: null, host: null, parked: false }],
     mode: { name: SOLO_MODE, roles: ['builder'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER], [HOLD_REVIEWS]: [OWNER] } },
     house_rules: {
       owner_items: false,
@@ -135,6 +141,13 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
     backlog: null,
     volatile_paths: [],
+    engine_endpoint: null,
+    thresholds: THRESHOLDS_WHEN_UNNAMED,
+    github: GITHUB_WHEN_UNNAMED,
+    transcripts: TRANSCRIPTS_WHEN_UNNAMED,
+    owner_notices: OWNER_NOTICES_WHEN_UNNAMED,
+    clock_zone: CLOCK_ZONE_WHEN_UNNAMED,
+    opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
   }
 }
 

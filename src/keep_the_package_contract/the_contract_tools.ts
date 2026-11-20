@@ -10,7 +10,6 @@
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { A_PACKAGE } from '../keep_the_ledger/the_ledger_tools.ts'
-import { mayKeepTheOwnersList } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { KEEP_THE_PACKAGE_CONTRACT, keepThePackageContract } from './keep_the_package_contract.ts'
 
@@ -36,17 +35,10 @@ export const KEEP_THE_CONTRACT_TOOL = {
   },
 }
 
-/** The declaration, as much of it as keeping a contract is decided by: the members and the table of who may do what. */
-export interface TheDeclaration {
-  readonly members: readonly { readonly name: string; readonly role: string }[]
-  readonly mode: { readonly may: Readonly<Record<string, readonly string[]>> }
-}
-
-/** What this tool is handed: the crew's ledger, the host's own reader, the declaration's table and this member. */
+/** What this tool is handed: the crew's ledger, the host's own reader and this member. */
 export interface TheContractAsked {
   readonly ledger: LedgerHost
   readonly documents: DocumentStore
-  readonly settings: TheDeclaration
   readonly member: string
 }
 
@@ -67,18 +59,10 @@ async function theBriefAt(documents: DocumentStore, path: string): Promise<{ rea
 
 /**
  * `keep_the_package_contract`: the contract the named brief carries, kept as the package's next version — or why not:
- * a member the table does not let assign work, a call that names no brief, a brief the host cannot read, or a block
- * this slice will not read as a contract.
+ * a call that names no brief, a brief the host cannot read, or a block this slice will not read as a contract. Any
+ * member may keep one (martha#601, row 114): a contract no longer stops a call, so who wrote it bounds nothing.
  */
 export async function keepTheContract(asked: TheContractAsked, args: Readonly<Record<string, unknown>>): Promise<AToolAnswer> {
-  if (!mayKeepTheOwnersList(asked.settings, asked.member)) {
-    const granted = asked.settings.mode.may.assign_work ?? []
-    return {
-      refused:
-        `${asked.member} may not record a package's contract: this crew's table lets ${granted.join(', ') || 'nobody'} assign work, ` +
-        'and a contract bounds the work a package was given. Nothing was written.',
-    }
-  }
   const brief = textOf(args['brief']).trim()
   if (brief === '') return { refused: 'a contract is read from a brief, and this call named none: give the path of the brief file as brief.' }
   const read = await theBriefAt(asked.documents, brief)

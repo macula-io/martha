@@ -42,18 +42,16 @@
 // editing a file.
 
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
-import { clockOf } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 import type { CrewPlace, Processes, ProcessOutcome, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import type { CrewGithub } from '../declare_crew/the_crews_github.ts'
 
 /** Where a crew keeps its GitHub budget, under the one crew store (../host_contract's CrewStore). */
 export const GITHUB_BUDGET_PLACE = 'github_budget'
 
 /** The one record it holds. */
 export const THE_BUDGET_FILE = 'budget.json'
-
-/** The calls GitHub says are left below which nothing more is spent: crew-code's floor, which this ports. */
-export const THE_FLOOR = 500
 
 /** The wait between two reads of GitHub, and the longest that wait grows to. */
 export const BACKOFF_MIN_MS = MINUTE_MS
@@ -143,25 +141,25 @@ export function theWaitOn(budget: TheBudget, of: string | undefined): AWait {
  * Whether the thing named by `of` is due now, or why it is not. This is judged before GitHub is asked anything, and it
  * is what makes a read the wait refuses cost the crew no call at all — neither the read nor the question before it.
  */
-export function theWaitsWord(budget: TheBudget, now: number, of?: string): TheWord {
+export function theWaitsWord(budget: TheBudget, now: number, zone: string, of?: string): TheWord {
   const wait = theWaitOn(budget, of)
   const free_at = wait.last_at + wait.wait_ms
   if (wait.wait_ms > 0 && now < free_at) {
-    return { may: false, refusal: `the crew's GitHub budget is backing off until ${clockOf(free_at)}.` }
+    return { may: false, refusal: `the crew's GitHub budget is backing off until ${theClockOf(free_at, zone)}.` }
   }
   return { may: true }
 }
 
-/** Why the crew may not spend a call at the count this record holds, or undefined when it may. */
-export function theFloorsRefusal(budget: TheBudget): string | undefined {
-  if (budget.remaining === null || budget.remaining > THE_FLOOR) return undefined
-  const when = budget.resets_at === null ? '' : `, which resets at ${clockOf(budget.resets_at)}`
+/** Why the crew may not spend a call at the count this record holds, or undefined when it may; times in the crew's zone. */
+export function theFloorsRefusal(budget: TheBudget, floor: number, zone: string): string | undefined {
+  if (budget.remaining === null || budget.remaining > floor) return undefined
+  const when = budget.resets_at === null ? '' : `, which resets at ${theClockOf(budget.resets_at, zone)}`
   return `the crew's GitHub budget is at its floor: ${String(budget.remaining)} calls left${when}.`
 }
 
 /** Whether the crew may spend one call at the count this record holds, or why it may not. */
-export function theFloorsWord(budget: TheBudget): TheWord {
-  const refusal = theFloorsRefusal(budget)
+export function theFloorsWord(budget: TheBudget, floor: number, zone: string): TheWord {
+  const refusal = theFloorsRefusal(budget, floor, zone)
   return refusal === undefined ? { may: true } : { may: false, refusal }
 }
 
@@ -355,6 +353,10 @@ export interface TheGithubSpender {
   readonly place: CrewPlace | Refused
   readonly clock: { readonly now: () => number }
   readonly run: (args: readonly string[]) => Promise<ProcessOutcome>
+  /** The crew's declared github.budget_floor (martha#931 B): at or below it, nothing more is spent. */
+  readonly floor: number
+  /** The crew's declared clock_zone (martha#931 C): the zone a refusal's times are read in. */
+  readonly zone: string
 }
 
 /**
@@ -367,6 +369,10 @@ export interface TheSpendersPlaces {
   readonly root: string
   readonly processes: Processes
   readonly clock: { readonly now: () => number }
+  /** The crew's GitHub block as declared (martha#931 B). */
+  readonly github: CrewGithub
+  /** The crew's clock_zone as declared (martha#931 C). */
+  readonly clock_zone: string
 }
 
 /** The spender over one launch's places: the crew's budget record, its clock, and `gh` run in its checkout. */
@@ -376,6 +382,8 @@ export function theGithubSpenderOf(places: TheSpendersPlaces): TheGithubSpender 
     place: places.stores.crew.place(GITHUB_BUDGET_PLACE),
     clock: places.clock,
     run: (args) => processes.run({ command: GITHUB_CLI, args, cwd: places.root }),
+    floor: places.github.budget_floor,
+    zone: places.clock_zone,
   }
 }
 
@@ -400,7 +408,7 @@ export async function spendTheGithubBudget(spender: TheGithubSpender, args: read
   if ('refusal' in held) return held
   const writable = keepTheBudget(place, held)
   if (writable !== undefined) return writable
-  const waited = theWaitsWord(held, spender.clock.now(), of)
+  const waited = theWaitsWord(held, spender.clock.now(), spender.zone, of)
   if (!waited.may) return { refusal: waited.refusal }
   const learned = await theBudgetWithWhatIsLeft(spender, held)
   if ('refusal' in learned) return learned
@@ -430,7 +438,7 @@ const couldNotSay = (said: ProcessOutcome): string =>
 
 /** One GitHub call, once the budget allows it, with the record kept afterwards. */
 async function theCall(spender: TheGithubSpender, place: CrewPlace, budget: TheBudget, args: readonly string[], of?: string): Promise<Spent> {
-  const word = theFloorsWord(budget)
+  const word = theFloorsWord(budget, spender.floor, spender.zone)
   if (!word.may) return { refusal: word.refusal }
   const said = await spender.run(args)
   const after = afterACall(budget, spender.clock.now(), of)

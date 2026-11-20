@@ -31,11 +31,13 @@
 //      (martha#766). The stop bounds the walk when the start is in no checkout, or
 //      in one whose top is the stop or above it.
 //
-//   4. WHAT THE GATE CANNOT PIN DOWN IS REFUSED: a symlink, even an approved one;
-//      a path that is not a plain file or directory; config in a directory that
-//      is no git checkout, or in one whose top is the owner's home or above it,
-//      where nothing pins what it runs; a request that does
-//      not show every listed file as read; and a host with no entry here.
+//   4. WHAT THE GATE CANNOT PIN DOWN IS REFUSED, except where the owner cut the
+//      refusal to a notice (martha#601): a path that is not a plain file or
+//      directory; a request that does not show every listed file as read; and a
+//      host with no entry here. A symlink is followed and what it points at is
+//      approved, said in one line; config in a directory that is no git checkout,
+//      or in one whose top is the owner's home or above it, is said in one line and
+//      launched anyway.
 //
 //   5. NO CONFIG NEEDS NO APPROVAL. A checkout holding none of the files starts
 //      — still with project config off.
@@ -52,7 +54,7 @@
 import { createHash } from 'node:crypto'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 
-import { checkoutTheGateReads, readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
+import { checkoutTheGateReads, readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange, type TreeRead } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import {
@@ -475,7 +477,12 @@ export interface LaunchRequest extends LaunchState {
 }
 
 /** A launch gate: may the host start here? */
-export type LaunchGate = (request: LaunchRequest) => boolean
+/**
+ * Whether a launch gate admits a request, and the lines it says while deciding (martha#601). The note sink is how the
+ * structural check reads the notice a cut refusal became: it asks the gate and reads what it says, so a gate that
+ * admits in silence is a gap.
+ */
+export type LaunchGate = (request: LaunchRequest, note?: (line: string) => void) => boolean
 
 export type LaunchDecision =
   | { readonly allow: true }
@@ -521,11 +528,11 @@ export function theFilesOf(host: Host): readonly string[] {
   return names
 }
 
-/** Whether this host may start here, and if not, the refusal to show the owner. */
-export function decideLaunch({ host, entries, tree, approved_fingerprints, refusal }: LaunchRequest): LaunchDecision {
+/** Whether this host may start here, and if not, the refusal to show the owner. What is said and gone past is `note`. */
+export function decideLaunch({ host, entries, tree, approved_fingerprints, refusal }: LaunchRequest, note: (line: string) => void = () => {}): LaunchDecision {
   if (!theGateCanCheck(host)) return { allow: false, refusal: theUnknownHost(host) }
 
-  const unapprovable = whatNoApprovalCovers(host, entries)
+  const unapprovable = whatNoApprovalCovers(host, entries, note)
   if (unapprovable !== undefined) return { allow: false, refusal: `${REFUSED}: ${unapprovable}` }
 
   const unread = theFilesOf(host).find(
@@ -544,10 +551,10 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints, refus
   const present = entries.filter((entry) => entry.kind !== 'absent').map((entry) => entry.path)
 
   if (tree === null) {
-    return {
-      allow: false,
-      refusal: `${REFUSED}: it holds config that starts code by itself (${present.join(', ')}) outside any git checkout below the owner's home, so nothing pins what that config runs.`,
-    }
+    // Config no tree pins is said in one line and the launch goes ahead (martha#601): it is not a leaked key, lost
+    // work or a push to main without the owner's yes.
+    note(`this coding tool holds config that starts code by itself (${present.join(', ')}) outside any git checkout below the owner's home, so nothing pins what that config runs; starting it anyway`)
+    return { allow: true }
   }
 
   const fingerprint = fingerprintOf({ entries, tree })
@@ -560,15 +567,18 @@ export function decideLaunch({ host, entries, tree, approved_fingerprints, refus
 }
 
 /**
- * Why no approval can cover these entries, or undefined: a link or an unreadable path, whose content cannot be pinned
- * (rule 4), or a carried skill named like a folder the host or Martha's scan reads as its own (martha#747).
+ * Why no approval can cover these entries, or undefined: an unreadable path, whose content cannot be pinned (rule 4),
+ * or a symlink nothing resolves (a broken one). A resolvable symlink is followed when the config is read, and a
+ * carried skill named like a folder the host or Martha's scan reads as its own is said in one line and carried on
+ * (martha#601, martha#747).
  */
-function whatNoApprovalCovers(host: Host, entries: readonly ConfigEntry[]): string | undefined {
+function whatNoApprovalCovers(host: Host, entries: readonly ConfigEntry[], note: (line: string) => void): string | undefined {
   const unpinned = entries.find((entry) => entry.kind === 'symlink' || entry.kind === 'unreadable')
   if (unpinned !== undefined) {
-    return `${unpinned.path} is ${unpinned.kind === 'symlink' ? 'a symlink' : 'unreadable'}, so its content cannot be approved. Replace it with a plain file or a plain directory.`
+    return `${unpinned.path} is ${unpinned.kind === 'symlink' ? 'a symlink whose target cannot be read' : 'unreadable'}, so its content cannot be approved. Replace it with a plain file or a plain directory.`
   }
-  return aSkillWithAReservedName(entries.map((entry) => entry.path), theRowOfHost(host).carried_folders)
+  aSkillWithAReservedName(entries.map((entry) => entry.path), theRowOfHost(host).carried_folders, note)
+  return undefined
 }
 
 /** What a member started on an approval checks its own writes against (./pass_a_members_own_writes.ts, martha#132). */
@@ -604,7 +614,7 @@ export function recheckLaunch(launch: ApprovedLaunch, host: LaunchHost): LaunchD
 }
 
 /** The launch gate the registry names. */
-export const admitsLaunch: LaunchGate = (request) => decideLaunch(request).allow
+export const admitsLaunch: LaunchGate = (request, note) => decideLaunch(request, note).allow
 
 /** Where the host starts, where the walk up stops, and the host. */
 export interface LaunchPlace {
@@ -639,7 +649,7 @@ export interface LaunchPlace {
  * The top is the bound because the checkout's own config is the only config its
  * author ships, and the launch carries none above it (martha#766).
  */
-export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, machine: LaunchHost): readonly ConfigEntry[] {
+export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, machine: LaunchHost, note: (line: string) => void = () => {}): readonly ConfigEntry[] {
   const names = LAUNCH_FILES_OF_HOST[host]
   if (names === undefined) return []
 
@@ -647,7 +657,7 @@ export function readLaunchConfig({ host, launch_dir, stop_dir }: LaunchPlace, ma
   const stop = realOrResolved(machine, stop_dir)
   const top = checkoutTheGateReads(start, stop, machine)?.top
   const found = directoriesUpFrom(start, stop, top).flatMap((dir) =>
-    names.flatMap((name) => entriesAt(machine, start, dir, name)),
+    names.flatMap((name) => entriesAt(machine, start, dir, name, note)),
   )
   // Two listed names share a parent (.claude/…): a parent that is not a
   // directory is reported once.
@@ -666,18 +676,23 @@ export function approvedStartTreeOf(launch: ApprovedLaunch, host: LaunchHost): s
   return launch.approved_fingerprints.includes(fingerprintOf(state)) ? state.tree : null
 }
 
-export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approved_tree?: string): LaunchState {
+export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approved_tree?: string, note: (line: string) => void = () => {}): LaunchState {
   const read = readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine, approved_tree ?? place.approved_tree)
-  const crewText = readCrewText(place, machine)
+  const crewText = readCrewText(place, machine, note)
+  return theStateOneReadCameTo(read, crewText, [...readLaunchConfig(place, machine, note), ...crewText])
+}
+
+/**
+ * The state one checkout read and its crew text came to: the entries, the tree, and only the parts the read has, so the
+ * caller is told what stands and not what a state it never read would have held.
+ */
+function theStateOneReadCameTo(read: TreeRead, crewText: readonly ConfigEntry[], entries: readonly ConfigEntry[]): LaunchState {
   // One refusal, whichever half of the state refuses first: the checkout's tree, or a crew text that is a directory.
   const refusal = read.kind === 'refused' ? read.refusal : crewTextDirectoryIn(crewText)
-  return {
-    entries: [...readLaunchConfig(place, machine), ...crewText],
-    tree: read.kind === 'tree' ? read.tree : null,
-    ...(refusal === undefined ? {} : { refusal }),
-    ...(read.kind === 'refused' && read.the_approved_tree === true ? { the_approved_tree_is_gone: true as const } : {}),
-    ...(read.kind === 'tree' && read.changes !== undefined ? { changes: read.changes } : {}),
-  }
+  const refused: Partial<LaunchState> = refusal === undefined ? {} : { refusal }
+  const gone = read.kind === 'refused' && read.the_approved_tree === true ? { the_approved_tree_is_gone: true as const } : {}
+  const changes = read.kind === 'tree' && read.changes !== undefined ? { changes: read.changes } : {}
+  return { entries, tree: read.kind === 'tree' ? read.tree : null, ...refused, ...gone, ...changes }
 }
 
 /**
@@ -693,14 +708,16 @@ function crewTextDirectoryIn(crewText: readonly ConfigEntry[]): string | undefin
  * The crew's own text files as entries, read from the checkout the same way a host config is (martha#306): whether
  * git ignores one or not, the approval names it and its bytes are in the fingerprint. A path is written relative to
  * the directory the host starts in, as `/`, so an approval names a file the owner can find. A link anywhere between
- * that start and the text — the text itself, or any directory above it — is the entry, so the decision refuses it by
- * name rather than following it to a file under a name the crew never wrote (martha#306 r=4).
+ * that start and the text — the text itself, or any directory above it — is said in one line and what it points at is
+ * read under the name the crew wrote, so the compose still finds the text the crew put there (martha#601, over
+ * martha#306 r=4).
  */
-export function readCrewText(place: LaunchPlace, machine: LaunchHost): readonly ConfigEntry[] {
+export function readCrewText(place: LaunchPlace, machine: LaunchHost, note: (line: string) => void = () => {}): readonly ConfigEntry[] {
   const start = realOrResolved(machine, place.launch_dir)
   return (place.crew_text_files ?? []).map((file) => {
     const at = join(start, crewTextAt(place, file))
-    return linkOnTheWayTo(machine, start, at) ?? entryOf(machine, start, at)
+    noteLinksOnTheWayTo(machine, start, at, note)
+    return entryOf(machine, start, at, note)
   })
 }
 
@@ -716,19 +733,30 @@ function crewTextAt(place: LaunchPlace, file: string): string {
 }
 
 /**
- * The first link on the way from the launch's start down to `at`, the text itself included, or undefined: a crew text
- * is what stands where the crew put it, and a link is refused by name (martha#306 r=4). Two rounds tried approving
- * what a link pointed at, and each time the launch and the compose then spelled the file differently — resolving the
- * file, then the directories above it — and the member was quietly handed Martha's shipped text instead.
+ * Says each link above `at` in one line and goes on (martha#601): a crew text reached through a link is approved by
+ * what the link points at, which `entryOf` then reads under the name the crew wrote. The text itself is left to
+ * `entryOf`, so it is not said twice. A broken path is left to `entryOf`'s own refusal.
  */
-function linkOnTheWayTo(machine: LaunchHost, start: string, at: string): ConfigEntry | undefined {
-  let walked = start
-  for (const part of pathFrom(start, at).split('/')) {
-    walked = join(walked, part)
-    const entry = entryOf(machine, start, walked)
-    if (entry.kind === 'symlink') return entry
+function noteLinksOnTheWayTo(machine: LaunchHost, start: string, at: string, note: (line: string) => void): void {
+  for (const walked of directlinksAbove(start, at)) {
+    if (!isALink(machine, walked)) continue
+    note(`${pathFrom(start, walked)} is a symlink, so its content cannot be approved; approving what it points at`)
   }
-  return undefined
+}
+
+/** Each directory from `start` down to `at`'s own, the places a link could stand above the text. */
+function directlinksAbove(start: string, at: string): readonly string[] {
+  const parts = pathFrom(start, at).split('/').slice(0, -1)
+  return parts.map((_part, index) => join(start, ...parts.slice(0, index + 1)))
+}
+
+/** Whether a link stands at `at`: a path that cannot be read is no link this says, and `entryOf` refuses it by name. */
+function isALink(machine: LaunchHost, at: string): boolean {
+  try {
+    return machine.stores.files.kindOf(at).kind === 'symlink'
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -764,8 +792,8 @@ export type PreparedLaunch =
  * approved, so a file rewritten between the decision and the copy is refused
  * rather than carried.
  */
-export function prepareLaunch(place: SnapshotPlace, machine: LaunchHost): PreparedLaunch {
-  return snapshotApproved(place, readLaunchState(place, machine, place.approved_tree), machine)
+export function prepareLaunch(place: SnapshotPlace, machine: LaunchHost, note: (line: string) => void = () => {}): PreparedLaunch {
+  return snapshotApproved(place, readLaunchState(place, machine, place.approved_tree, note), machine, note)
 }
 
 /** A launch place, where its snapshots go, and what the owner approved. */
@@ -782,8 +810,8 @@ export type SnapshotPlace = LaunchPlace & {
  * rewritten after `state` was read is refused, and no snapshot is left behind
  * on any refusal.
  */
-export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machine: LaunchHost): PreparedLaunch {
-  const decision = decideLaunch({ host: place.host, ...state, approved_fingerprints: place.approved_fingerprints })
+export function snapshotApproved(place: SnapshotPlace, state: LaunchState, machine: LaunchHost, note: (line: string) => void = () => {}): PreparedLaunch {
+  const decision = decideLaunch({ host: place.host, ...state, approved_fingerprints: place.approved_fingerprints }, note)
   if (!decision.allow) return decision
 
   const launch = theRowOfHost(place.host)
@@ -920,19 +948,19 @@ function directoriesUpFrom(start: string, stop: string, top: string | undefined)
 }
 
 /** The entries for one listed name in one directory, checking every component. */
-function entriesAt(machine: LaunchHost, start: string, dir: string, name: string): readonly ConfigEntry[] {
+function entriesAt(machine: LaunchHost, start: string, dir: string, name: string, note: (line: string) => void): readonly ConfigEntry[] {
   const parts = name.split('/')
   for (let depth = 1; depth < parts.length; depth++) {
-    const parent = entryOf(machine, start, join(dir, ...parts.slice(0, depth)))
+    const parent = entryOf(machine, start, join(dir, ...parts.slice(0, depth)), note)
     if (parent.kind === 'absent') return [{ path: pathFrom(start, join(dir, name)), kind: 'absent' }]
     if (parent.kind !== 'directory') return [parent]
   }
-  return walk(machine, start, join(dir, name))
+  return walk(machine, start, join(dir, name), note)
 }
 
 /** One path, and everything under it when it is a directory other than installed packages. */
-function walk(machine: LaunchHost, start: string, path: string): readonly ConfigEntry[] {
-  const entry = entryOf(machine, start, path)
+function walk(machine: LaunchHost, start: string, path: string, note: (line: string) => void): readonly ConfigEntry[] {
+  const entry = entryOf(machine, start, path, note)
   if (entry.kind !== 'directory') return [entry]
   if (path.split(sep).at(-1) === DEPENDENCIES) return [entry]
 
@@ -942,16 +970,16 @@ function walk(machine: LaunchHost, start: string, path: string): readonly Config
   } catch (error) {
     return [{ path: entry.path, kind: 'unreadable', why: codeOf(error) }]
   }
-  return [entry, ...children.flatMap((child) => walk(machine, start, join(path, child)))]
+  return [entry, ...children.flatMap((child) => walk(machine, start, join(path, child), note))]
 }
 
-function entryOf(machine: LaunchHost, start: string, path: string): ConfigEntry {
+function entryOf(machine: LaunchHost, start: string, path: string, note: (line: string) => void): ConfigEntry {
   const at = pathFrom(start, path)
   const files = machine.stores.files
   try {
     const found = files.kindOf(path)
     if (found.kind === 'absent') return { path: at, kind: 'absent' }
-    if (found.kind === 'symlink') return { path: at, kind: 'symlink', target: found.target }
+    if (found.kind === 'symlink') return followTheLink(machine, at, path, found.target, note)
     if (found.kind === 'directory') return { path: at, kind: 'directory' }
     if (found.kind === 'other') return { path: at, kind: 'unreadable', why: 'not a regular file' }
     return { path: at, kind: 'file', sha256: createHash('sha256').update(files.bytesOf(path)).digest('hex') }
@@ -959,6 +987,23 @@ function entryOf(machine: LaunchHost, start: string, path: string): ConfigEntry 
     const code = codeOf(error)
     return code === 'ENOENT' ? { path: at, kind: 'absent' } : { path: at, kind: 'unreadable', why: code }
   }
+}
+
+/**
+ * The entry a symlink stands for, said in one line and gone past (martha#601): what it points at is read under the
+ * name the config wrote, so the approval covers the target's bytes. A link nothing resolves stays a symlink, and the
+ * gate refuses it as broken.
+ */
+function followTheLink(machine: LaunchHost, at: string, path: string, target: string, note: (line: string) => void): ConfigEntry {
+  const files = machine.stores.files
+  const followed = files.realPathOf(path)
+  if (followed === null) return { path: at, kind: 'symlink', target }
+  note(`${at} is a symlink, so its content cannot be approved; approving what it points at`)
+  const kind = files.kindOf(followed)
+  if (kind.kind === 'file') return { path: at, kind: 'file', sha256: createHash('sha256').update(files.bytesOf(followed)).digest('hex') }
+  if (kind.kind === 'directory') return { path: at, kind: 'directory' }
+  if (kind.kind === 'absent') return { path: at, kind: 'absent' }
+  return { path: at, kind: 'unreadable', why: 'the link does not point at a regular file or directory' }
 }
 
 function pathFrom(start: string, path: string): string {

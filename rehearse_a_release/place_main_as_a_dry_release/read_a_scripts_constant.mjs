@@ -1,5 +1,5 @@
 // A number a bash script of this folder defines on a line of its own, `NAME=<digits>`, read from the script itself so
-// no test and no other script spells it (martha#696). The nightly driver reads the proof's DRY_PASSED and the packer's
+// no test and no other script spells it (martha#696). The live run's driver reads the proof's DRY_PASSED and the packer's
 // NOT_PACKABLE the same way, in bash.
 
 import { readFileSync } from 'node:fs'

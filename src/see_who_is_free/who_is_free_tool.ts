@@ -35,7 +35,7 @@ export const WHO_IS_FREE_TOOL = {
 
 /** What the tool is handed: the declaration, who asks, the rows, how to read a park, the time, and whom it asks about. */
 export interface WhoIsFreeAsked {
-  readonly settings: Pick<CrewSettings, 'members' | 'mode'>
+  readonly settings: Pick<CrewSettings, 'members' | 'mode' | 'thresholds'>
   readonly asker: string
   readonly rows: readonly CrewRow[]
   readonly parkOf: (member: string) => ThePark
@@ -53,6 +53,7 @@ export function whoIsFreeOver(asked: WhoIsFreeAsked): { readonly answer: string 
     declared_models: Object.fromEntries(asked.settings.members.map((member) => [member.name, member.model])),
     parkOf: asked.parkOf,
     now: asked.now,
+    thresholds: asked.settings.thresholds,
   }
   if (asked.member === '') return { answer: JSON.stringify(seeWhoIsFree(crew)) }
   const answer = mayTakeAPackage(crew, asked.member, asked.asker)

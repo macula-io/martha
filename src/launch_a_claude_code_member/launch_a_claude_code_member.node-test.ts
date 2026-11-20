@@ -76,17 +76,20 @@ import { CONTACT_POLICY_FILE_UNDER_HOME, MESH_HELLO, RECORDED_MESH_ANSWER_SHAPES
 import { RECORDED_RING_ANSWERS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
 import { RINGS_AND_RETURNS_THE_ANSWER } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_FILE_TOOLS, EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { MINUTE_MS, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE, SKILLS_KIND } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { theScreenALaunchSees, theShownNoticesOf, theTranscriptBoundsOf, whatALaunchKeeps } from './launch_a_claude_code_member.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
+import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
 
 // --- the run this file is (martha#559) --------------------------------------------
 
@@ -349,6 +352,21 @@ function isDenied(reply: RelayReply, pattern?: RegExp): boolean {
   return pattern === undefined || pattern.test(reply.body.deny)
 }
 const isRefused = (reply: RelayReply): boolean => reply.answered && 'refused' in reply.body
+
+/** What a call answered, and everything written to the process's own error output while it was answered (martha#601). */
+async function theNoticeWhile<T>(act: () => T | Promise<T>): Promise<{ readonly answer: T; readonly notice: string }> {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: await act(), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
+}
 
 async function recordedPaths(rows: RowStore, session_id = SESSION): Promise<string[]> {
   const stored = await rows.read(sessionRecordStreamOf(session_id))
@@ -1773,6 +1791,24 @@ test('a member whose relay reports its session start in time is not stopped by t
   assert.equal(isAlive(started.pid), true, 'the member still runs')
 })
 
+test('#919: the launch tells its start each time the relay reports the session started, and the host is started with no prompt of the owner\'s', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  let heard = 0
+  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command), hearSessionStart: () => void (heard += 1) })
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
+  assert.equal(heard, 0, 'the start was told of a session the relay never reported')
+  const socketPath = readFileSync(fake.envFile, 'utf8')
+  for (const source of ['startup', 'clear']) {
+    await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(start(source)), socketPath })
+  }
+  assert.equal(heard, 2, 'each reported start is told, so the start that types a first prompt decides to type it once')
+  assert.equal(readFileSync(fake.argsFile, 'utf8').split('\n').some((word) => word.includes('first prompt')), false)
+  started.stop('the test is over')
+  await started.stopped
+})
+
 test('an approved config that installs a mesh server version nobody recorded starts nothing, naming both versions', async (t) => {
   const unrecorded = '999.0.0'
   const place = placeFor(t, meshServerAt(unrecorded))
@@ -2134,7 +2170,7 @@ test("a member's file tool call that names the owner's user settings file is den
   assert.deepEqual(await relay.answer('tool_called', call(WHOLE_FILE_TOOL, { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
 })
 
-test("a member's file tool call that writes any project's memory, or the owner's CLAUDE.md, is denied; a read of memory is not (#136)", async (t) => {
+test("a member's file tool call that writes any project's memory, or the owner's CLAUDE.md, goes ahead with one notice; a read of memory is not (#136)", async (t) => {
   const place = placeFor(t)
   const { relay } = answering(place)
   await relay.answer('session_started', start('startup'))
@@ -2146,7 +2182,10 @@ test("a member's file tool call that writes any project's memory, or the owner's
     [EDIT_TOOL, { file_path: '~/' + join(relative(place.home, memory), 'MEMORY.md'), old_string: 'a', new_string: 'b' }],
     [WHOLE_FILE_TOOL, { file_path: join(config, 'CLAUDE.md'), content: 'always deploy' }],
   ] as const) {
-    assert.ok(isDenied(await relay.answer('tool_called', call(tool, input)), /martha#136/), `${tool} ${input.file_path}`)
+    const { answer, notice } = await theNoticeWhile(() => relay.answer('tool_called', call(tool, input)))
+    assert.deepEqual(answer, ALLOW_REPLY, `${tool} ${input.file_path} was not let through`)
+    assert.match(notice, /write went ahead/, `${tool} ${input.file_path}: no notice said the write went ahead`)
+    assert.match(notice, /martha#136/, `${tool} ${input.file_path}: the notice did not name the rule`)
   }
   assert.deepEqual(await relay.answer('tool_called', call('Read', { file_path: join(memory, 'MEMORY.md') })), ALLOW_REPLY)
   assert.deepEqual(await relay.answer('tool_called', call(WHOLE_FILE_TOOL, { file_path: join(place.checkout, 'notes.md'), content: 'x' })), ALLOW_REPLY)
@@ -2169,7 +2208,7 @@ for (const [shape, carried, kept] of [
   ['no settings file is carried', undefined, []],
   ['the approved settings file is carried', JSON.stringify({ model: 'x', permissions: { deny: ['Bash(rm:*)'], allow: ['Read'] } }), ['Bash(rm:*)']],
 ] as const) {
-  test(`when ${shape}, the host starts with a deny rule for exactly each place the gate refuses a member's memory write (#136)`, async (t) => {
+  test(`when ${shape}, the host starts with a deny rule for exactly each place the gate notices a member's memory write (#136)`, async (t) => {
     const recorded = RECORDED_MESH_SERVERS[0]
     assert.ok(recorded !== undefined)
     const { recording } = await recordedTreeOf(t, recorded.server_version)
@@ -2192,12 +2231,15 @@ for (const [shape, carried, kept] of [
       assert.equal(settings.model, 'x')
       assert.deepEqual(permissions.allow, ['Read'])
     }
-    // The other way: every rule's place is one the gate refuses a member's write into.
+    // The other way: every rule's place is one the gate now says its one line about and lets the write go ahead
+    // (martha#601), so what still stops a member there is the host's own deny rule (#226), never the gate.
     for (const rule of memoryDenyRules(places)) {
       const glob = /^(?:Write|Edit)\(\/(.*)\)$/.exec(rule)?.[1]
       assert.ok(glob !== undefined, rule)
       const inside = glob.replace('/*/', '/some-project/').replace(/\/\*\*$/, '/note.md')
-      assert.ok(writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: inside }, places, place.checkout, place.home, thisMachine) !== undefined, `${rule}: ${inside}`)
+      const { answer, notice } = await theNoticeWhile(() => writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: inside }, places, place.checkout, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS))
+      assert.equal(answer, undefined, `${rule}: ${inside} was refused, though the write goes ahead (martha#601)`)
+      assert.match(notice, /write went ahead/, `${rule}: ${inside} went ahead with no notice`)
     }
   })
 }
@@ -2313,15 +2355,17 @@ for (const [which, pathOf] of OWNERS_FILES) {
   }
 }
 
-test("a plugin folder in the launcher's own environment starts nothing, naming the variable", async (t) => {
-  const recorded = RECORDED_MESH_SERVERS[0]
-  assert.ok(recorded !== undefined)
-  const { recording } = await recordedTreeOf(t, recorded.server_version)
-  const place = placeFor(t, meshServerAt(recorded.server_version))
-  const fake = fakeClaude(place)
-  const launch = memberLaunch(place, fake.command, place.approved, [], recording)
-  const refusal = await refusedLeavingNothing(t, place, { ...launch, inherited: { ...launch.inherited, [PLUGIN_DIRS_VARIABLE]: join(place.home, 'plugins') } }, fake.ranFile)
-  assert.ok(refusal.includes(PLUGIN_DIRS_VARIABLE), refusal)
+test("#511 (#601 row 72): a plugin folder in the launcher's own environment is not handed to the member, which starts, and the owner is told so once", async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaudeThatSaysHowItStarted(place)
+  const lines: string[] = []
+  const launch = memberLaunch(place, fake.command, place.approved)
+  const started = await aMemberStartedIn(t, place, { ...launch, inherited: { ...launch.inherited, [PLUGIN_DIRS_VARIABLE]: join(place.home, 'plugins') }, tellOwner: (line) => void lines.push(line) })
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write what it was started with', () => existsSync(fake.envFile), t)
+  const spawned = environmentOfDump(readFileSync(fake.envFile, 'utf8'))
+  assert.equal(Object.hasOwn(spawned, PLUGIN_DIRS_VARIABLE), false, 'the member was handed the launcher\'s plugin folder')
+  assert.deepEqual(lines.filter((line) => line.includes(PLUGIN_DIRS_VARIABLE)), [`${launch.member_name} is not handed ${PLUGIN_DIRS_VARIABLE} from this shell, so the plugins it names do not load in the member (martha#121).`])
 })
 
 test('an empty user settings file, or one whose hooks and plugins are empty or off, starts the member', async (t) => {
@@ -4669,4 +4713,26 @@ test('T7, T9a: an inherited host skill catalog and an inherited bare mode never 
   assert.equal(Object.hasOwn(env, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE), false, 'the host skill catalog is dropped')
   started.stop('the test is over')
   await started.stopped
+})
+
+test('#931 B: a launch keeps its member\'s transcripts to its crew\'s declared bounds, and to the defaults with no crew', () => {
+  const declared = { launches_kept: 2, megabytes_kept: 1 }
+  const crew = { transcripts: declared } as unknown as CrewSettings
+  assert.deepEqual(theTranscriptBoundsOf({ crew_settings: crew }), declared)
+  assert.deepEqual(theTranscriptBoundsOf({}), TRANSCRIPTS_WHEN_UNNAMED)
+  const where = { places: { state_root: '/state' }, place: { launch_dir: '/project' } } as unknown as Parameters<typeof whatALaunchKeeps>[0]
+  assert.deepEqual(whatALaunchKeeps({ ...where, crew_settings: crew }, '/the-members-folder', '/snapshots/launch-7', 'the-key').transcripts, declared, 'the launch\'s end does not keep to the crew\'s declared bounds')
+  assert.deepEqual(whatALaunchKeeps(where, '/the-members-folder', '/snapshots/launch-7', 'the-key').transcripts, TRANSCRIPTS_WHEN_UNNAMED, 'a launch with no crew does not keep to the defaults')
+})
+
+test('#931 C: a launch\'s owner\'s screen is told of its crew\'s declared notices, and of the defaults with no crew', () => {
+  // A list that is not the default: one notice the table shows as a dialog, and one it does not.
+  const declared = ['agent_completed', 'idle_prompt']
+  assert.notDeepEqual(declared, OWNER_NOTICES_WHEN_UNNAMED.show)
+  const crew = { owner_notices: { show: declared } } as unknown as CrewSettings
+  assert.deepEqual(theShownNoticesOf({ crew_settings: crew }), declared)
+  assert.deepEqual(theShownNoticesOf({}), OWNER_NOTICES_WHEN_UNNAMED.show)
+  const where = { member_name: 'Vesta', places: { dashboard: '/the-rows' }, owner_bell: undefined, stdio: 'pipe' } as unknown as Parameters<typeof theScreenALaunchSees>[0]
+  assert.deepEqual(theScreenALaunchSees({ ...where, crew_settings: crew }, () => false).shown_notices, declared, 'the owner\'s screen is not told of the crew\'s declared notices')
+  assert.deepEqual(theScreenALaunchSees(where, () => false).shown_notices, OWNER_NOTICES_WHEN_UNNAMED.show, 'a launch with no crew is not told of the defaults')
 })

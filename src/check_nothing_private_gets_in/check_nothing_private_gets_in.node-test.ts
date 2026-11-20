@@ -17,6 +17,7 @@ import {
   withoutLabNames,
 } from './check_nothing_private_gets_in.ts'
 import { HEX_SLOT, PUBLIC_DIGEST_FORMS } from './public_digest.ts'
+import { GITHUB_TOKEN_PREFIXES, TOKEN_BODY } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { ID_HEX_DIGITS } from './public_text.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
 
@@ -199,6 +200,47 @@ for (const { what, drawn } of WITHHELD_CLASSES) {
   })
 }
 
+// A GitHub token, classic or fine-grained, is refused by the scan a post goes through, and never printed (martha#904).
+// Each token is drawn here, so this file carries none: its body is hex, which every prefix's body may hold, and twice
+// the length a token needs, so the class cannot pass it for being short.
+const TOKEN_CLASS = 'a GitHub token'
+const drawnToken = (prefix: string) => `${prefix}${randomBytes(TOKEN_BODY).toString('hex')}`
+for (const prefix of GITHUB_TOKEN_PREFIXES) {
+  test(`a GitHub token with the prefix ${prefix} is refused and never printed (martha#904)`, async () => {
+    const token = drawnToken(prefix)
+    for (const text of [`token: ${token}`, `https://x-access-token:${token}@example.invalid/acme/widget.git`, `"oauth_token":"${token}"`]) {
+      const hits = await hitsOf(text)
+      assert.deepEqual(hits, [`${TOKEN_CLASS} (value withheld)`], text)
+      assert.ok(!hits.join('\n').includes(token), `the hit printed the token: ${hits.join('\n')}`)
+    }
+    assert.deepEqual(await refusedIn(`see ${token} here`), [`${TOKEN_CLASS} (${token})`])
+  })
+}
+
+// GitHub's own token kinds, as its documentation names them, stated here rather than read from the class's list, so
+// a prefix dropped from that list fails by the kind it leaves out instead of taking its own test with it.
+const GITHUBS_TOKEN_KINDS: readonly { readonly kind: string; readonly prefix: string }[] = [
+  { kind: 'a personal access token (classic)', prefix: 'ghp_' },
+  { kind: 'an OAuth access token', prefix: 'gho_' },
+  { kind: 'a user-to-server token', prefix: 'ghu_' },
+  { kind: 'a server-to-server token', prefix: 'ghs_' },
+  { kind: 'a refresh token', prefix: 'ghr_' },
+  { kind: 'a fine-grained personal access token', prefix: 'github_pat_' },
+]
+test('every kind of GitHub token is refused by the scan (martha#904)', async () => {
+  for (const { kind, prefix } of GITHUBS_TOKEN_KINDS) {
+    assert.deepEqual(await hitsOf(`token: ${drawnToken(prefix)}`), [`${TOKEN_CLASS} (value withheld)`], kind)
+  }
+})
+
+test('a word that only starts like a GitHub token is not one: its body is shorter than a token\'s (martha#904)', async () => {
+  for (const prefix of GITHUB_TOKEN_PREFIXES) {
+    const body = randomBytes(TOKEN_BODY).toString('hex').slice(0, TOKEN_BODY - 1)
+    assert.deepEqual(await hitsOf(`a variable named ${prefix}${body} is no token`), [], prefix)
+    assert.deepEqual(await hitsOf(`the next character makes it one: ${prefix}${body}0`), [`${TOKEN_CLASS} (value withheld)`], prefix)
+  }
+})
+
 // A reference hit withholds the name it found, for the same reason (martha#855): a repository that is not public
 // is not seen by the public, and a shorthand may name one. Each name is drawn here, so this file carries none.
 const drawnName = (first: string) => `${first}${randomBytes(4).toString('hex')}`
@@ -236,6 +278,7 @@ test('each synthetic form passes a real scan, so the tests that state them can b
     'dial 192.168.255.7',
     'mail ada@synthetic.invalid',
     `node ${'a'.repeat(ID_HEX_DIGITS)}`,
+    ...GITHUB_TOKEN_PREFIXES.map((prefix) => `token: ${prefix}synthetic${'a'.repeat(TOKEN_BODY)}`),
     'see synthetic-repo#12',
     `as decided in ${PRIVATE}#123`,
   ]) {
@@ -249,6 +292,13 @@ test('the synthetic allowance is the whole value, never a part of it', async () 
   }
   // A real lab hostname beside the synthetic one is still refused.
   assert.deepEqual(await hitsOf(`ci-synthetic.lab then ${labHost('ci-other')}`, scanning), ['a lab hostname (value withheld)'])
+  // A GitHub token is synthetic only when its body starts with the word, and a real one beside it is still refused.
+  for (const prefix of GITHUB_TOKEN_PREFIXES) {
+    const synthetic = `${prefix}synthetic${'a'.repeat(TOKEN_BODY)}`
+    assert.deepEqual(await hitsOf(synthetic, strict), [`${TOKEN_CLASS} (value withheld)`], `${prefix}: refused with no allowance`)
+    assert.deepEqual(await hitsOf(`${synthetic} then ${drawnToken(prefix)}`, scanning), [`${TOKEN_CLASS} (value withheld)`], prefix)
+    assert.deepEqual(await hitsOf(`${prefix}${'a'.repeat(TOKEN_BODY)}synthetic`, scanning), [`${TOKEN_CLASS} (value withheld)`], prefix)
+  }
   // A 64-hex id is synthetic only when it is one digit repeated.
   assert.deepEqual((await hitsOf(`${'a'.repeat(ID_HEX_DIGITS - 1)}b`, scanning)).length, 1)
 })
@@ -344,6 +394,102 @@ test('a path is read as well as its text, in the tree and in every commit, empty
     const inRange = await privateHitsIn(commits.flatMap((sha) => commitSources(root, sha)), strict, resolveFixed)
     assert.equal(inRange.filter((hit) => hit.where.includes(' path <lab host>')).length, 2)
     assert.ok(inRange.every((hit) => !`${hit.where} ${hit.what}`.includes('ci-synthetic')))
+  } finally {
+    removeTheTree(root)
+  }
+})
+
+// A merge of main into a branch (martha#933): main once held a line, the branch merged that main, and main has since
+// removed the line, so the range's base no longer holds it. The merge brought the line from main; the branch never
+// wrote it. Each token is drawn at run time, so this file holds none.
+const tokenLine = () => `token: ${drawnToken(GITHUB_TOKEN_PREFIXES[0] ?? '')}\n`
+
+/** start → the branch's own commit → a merge of main's commit that adds `main.txt`'s line → main removes it again. */
+function aBranchThatMergedMain(root: string, mainsLine: string): { readonly base: string; readonly mainsCommit: string } {
+  gitIn(root, 'init', '-q', '-b', 'main')
+  writeFileSync(join(root, 'main.txt'), 'clean\n')
+  gitIn(root, 'add', '.')
+  gitIn(root, 'commit', '-q', '-m', 'start')
+  gitIn(root, 'checkout', '-q', '-b', 'branch')
+  writeFileSync(join(root, 'branch.txt'), 'the branch\'s own work\n')
+  gitIn(root, 'add', '.')
+  gitIn(root, 'commit', '-q', '-m', 'the branch')
+  gitIn(root, 'checkout', '-q', 'main')
+  writeFileSync(join(root, 'main.txt'), `clean\n${mainsLine}`)
+  gitIn(root, 'commit', '-q', '-am', 'main adds a line')
+  const mainsCommit = gitIn(root, 'rev-parse', 'HEAD')
+  writeFileSync(join(root, 'main.txt'), 'clean\n')
+  gitIn(root, 'commit', '-q', '-am', 'main removes it')
+  const base = gitIn(root, 'rev-parse', 'HEAD')
+  gitIn(root, 'checkout', '-q', 'branch')
+  return { base, mainsCommit }
+}
+
+const hitsOver = async (root: string, base: string) => {
+  const commits = commitsOf(root, `${base}..${gitIn(root, 'rev-parse', 'HEAD')}`)
+  return { commits, hits: await privateHitsIn(commits.flatMap((sha) => commitSources(root, sha)), strict, resolveFixed) }
+}
+
+test('martha#933: a line main carried, brought into a branch by a merge of main, is not the branch\'s, though main has since removed it', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'nothing-private-'))
+  try {
+    const { base, mainsCommit } = aBranchThatMergedMain(root, tokenLine())
+    gitIn(root, 'merge', '-q', '--no-edit', mainsCommit)
+    const { commits, hits } = await hitsOver(root, base)
+    assert.equal(commits.length, 2, 'the range is the branch\'s commit and its merge')
+    assert.deepEqual(hits, [])
+  } finally {
+    removeTheTree(root)
+  }
+})
+
+test('martha#933: what a merge writes itself is still the branch\'s, in a resolved conflict and in a file neither side held', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'nothing-private-'))
+  try {
+    const { base, mainsCommit } = aBranchThatMergedMain(root, 'main\'s line\n')
+    // The branch writes the same line differently, so the merge conflicts there.
+    writeFileSync(join(root, 'main.txt'), 'clean\nthe branch\'s line\n')
+    gitIn(root, 'commit', '-q', '-am', 'the branch changes the line')
+    assert.throws(() => gitIn(root, 'merge', '-q', '--no-edit', mainsCommit), 'the merge conflicts')
+    writeFileSync(join(root, 'main.txt'), `clean\n${tokenLine()}`)
+    writeFileSync(join(root, 'evil.txt'), tokenLine())
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '--no-edit')
+    const merge = gitIn(root, 'rev-parse', 'HEAD').slice(0, 12)
+    const { hits } = await hitsOver(root, base)
+    assert.deepEqual(hits.map((hit) => hit.where).sort(), [`commit ${merge} evil.txt:1`, `commit ${merge} main.txt:2`])
+    assert.ok(hits.every((hit) => hit.what === `${TOKEN_CLASS} (value withheld)`), JSON.stringify(hits))
+  } finally {
+    removeTheTree(root)
+  }
+})
+
+test('martha#933 review r=1: an octopus merge, which git will not remerge, is still read for what it writes itself', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'nothing-private-'))
+  try {
+    gitIn(root, 'init', '-q', '-b', 'main')
+    writeFileSync(join(root, 'start.txt'), 'clean\n')
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '-m', 'start')
+    const base = gitIn(root, 'rev-parse', 'HEAD')
+    for (const side of ['one', 'two', 'three']) {
+      gitIn(root, 'switch', '-q', '-c', side, 'main')
+      writeFileSync(join(root, `${side}.txt`), `${side}\n`)
+      gitIn(root, 'add', '.')
+      gitIn(root, 'commit', '-q', '-m', side)
+    }
+    gitIn(root, 'switch', '-q', 'one')
+    gitIn(root, 'merge', '-q', '--no-edit', 'two', 'three')
+    writeFileSync(join(root, 'evil.txt'), tokenLine())
+    // A path is published too: an empty file whose name is a token carries no line, only its path.
+    const named = `${drawnToken(GITHUB_TOKEN_PREFIXES[0] ?? '')}.txt`
+    writeFileSync(join(root, named), '')
+    gitIn(root, 'add', '.')
+    gitIn(root, 'commit', '-q', '--amend', '--no-edit')
+    assert.equal(gitIn(root, 'log', '-1', '--format=%P').split(' ').length, 3, 'the merge is an octopus')
+    const merge = gitIn(root, 'rev-parse', 'HEAD').slice(0, 12)
+    const { hits } = await hitsOver(root, base)
+    assert.deepEqual(hits.map((hit) => hit.where).sort(), [`commit ${merge} evil.txt:1`, `commit ${merge} path ${named}`].sort())
   } finally {
     removeTheTree(root)
   }

@@ -107,7 +107,7 @@ export interface WhatIsLeftToAsk {
  * The state after one event the host raised, and the dialog events that event is: a dialog opened, one closed, or
  * every one of them dropped because a turn started (martha#313).
  */
-export function theAsksAfter(held: WhatTheHostIsAsking, said: WhatTheHostSaid, at: number): WhatIsLeftToAsk {
+export function theAsksAfter(held: WhatTheHostIsAsking, said: WhatTheHostSaid, at: number, shown: readonly string[]): WhatIsLeftToAsk {
   switch (said.said) {
     case 'turn-started':
       return { state: NOTHING_IS_ASKED, events: [{ change: 'turn-started', at }] }
@@ -124,7 +124,7 @@ export function theAsksAfter(held: WhatTheHostIsAsking, said: WhatTheHostSaid, a
     case 'elicitation-answered':
       return theElicitationAnswered(held, said, at)
     case 'notification':
-      return theNotificationOpened(held, said.message, said.type, at)
+      return theNotificationOpened(held, said.message, said.type, at, shown)
   }
 }
 
@@ -206,9 +206,12 @@ function theElicitationAnswered(held: WhatTheHostIsAsking, said: { readonly serv
   return closed(held, key, at)
 }
 
-/** A notification the owner is told of, which closes when the next turn starts and never before. */
-function theNotificationOpened(held: WhatTheHostIsAsking, message: string, type: string, at: number): WhatIsLeftToAsk {
-  if (!theOwnerIsToldOf(type)) return { state: held, events: [] }
+/**
+ * A notification the owner is told of, which closes when the next turn starts and never before: one whose name the
+ * crew's owner_notices.show holds (martha#931 C).
+ */
+function theNotificationOpened(held: WhatTheHostIsAsking, message: string, type: string, at: number, shown: readonly string[]): WhatIsLeftToAsk {
+  if (!theOwnerIsToldOf(type, shown)) return { state: held, events: [] }
   return opened(held, { kind: 'notification', message }, at)
 }
 

@@ -20,6 +20,7 @@ import { IDLE, theRowWithNothingSaid, type DashboardRow, type DashboardStore } f
 import { whatTheOwnerIsShown } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import { MENU_TOOL } from './say_what_the_host_is_asking.ts'
 import { theOwnersScreen, theOwnersScreenOfALaunch, type AnOwnersScreen } from './the_owners_screen.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 
 /** A store that keeps one member's row in memory, and can be told to refuse what it is given. */
 function aStore(held: DashboardRow | null = null, refusing = false): DashboardStore & { readonly kept: DashboardRow[] } {
@@ -221,16 +222,25 @@ test('#380 P1: one answer closing two dialogs closes both, and the row holds nei
 test('a launch whose terminal is a tmux pane sends its notification through tmux\'s passthrough, and one outside tmux does not (martha#843)', () => {
   const rung = (environment: Readonly<Record<string, string | undefined>>): string[] => {
     const wrote: string[] = []
-    const screen = theOwnersScreenOfALaunch({ member: 'Vesta', beats: aStore(aReportedRow()), declared_bells: true, muted: () => false, on_the_owners_terminal: true, environment, write: (bytes) => void wrote.push(bytes) })
+    const screen = theOwnersScreenOfALaunch({ member: 'Vesta', beats: aStore(aReportedRow()), declared_bells: true, muted: () => false, on_the_owners_terminal: true, environment, write: (bytes) => void wrote.push(bytes), shown_notices: OWNER_NOTICES_WHEN_UNNAMED.show })
     screen.heard('a-session', { said: 'permission', call: A_PERMISSION }, 20)
     return wrote
   }
   const passthrough = TMUX_PASSTHROUGH_OPENING
 
-  const inside = rung({ TMUX: '/tmp/tmux-1000/night,4242,0' })
+  const inside = rung({ TMUX: '/tmp/tmux-1000/live_run,4242,0' })
   assert.equal(inside.length, 1, 'one write, on the change into needs you')
   assert.ok(inside[0]?.startsWith(`${THE_BELL}${passthrough}`), 'the bare bell, then the notification inside the passthrough')
   const outside = rung({ TMUX: '' })
   assert.equal(outside.length, 1)
   assert.equal(outside[0]?.includes(passthrough), false, 'a launch outside tmux sends the notification as it is')
+})
+
+test('#931 C: a launch\'s screen tells the owner of the notifications its crew declares, not the default ones', () => {
+  const store = aStore(aReportedRow())
+  const screen = theOwnersScreenOfALaunch({ member: 'Vesta', beats: store, declared_bells: true, muted: () => false, on_the_owners_terminal: true, environment: {}, write: () => undefined, shown_notices: ['idle_prompt'] })
+  screen.heard('a-session', { said: 'notification', message: 'the default would show this', type: 'agent_needs_input' }, 20)
+  assert.equal(screen.held().dialogs.length, 0, 'a notification the declared list leaves out reached the owner')
+  screen.heard('a-session', { said: 'notification', message: 'the crew asked for this one', type: 'idle_prompt' }, 30)
+  assert.equal(screen.held().dialogs.length, 1, 'a notification the declared list names did not reach the owner')
 })

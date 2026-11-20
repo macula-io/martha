@@ -94,7 +94,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
 
@@ -123,7 +123,9 @@ import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_served/watch_the_crew_tools_a_launch_served.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
-import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import { TRANSCRIPTS_WHEN_UNNAMED, type CrewTranscripts } from '../declare_crew/the_crews_transcripts.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
+import { crewTextToHand, noCrewTextFor } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TheLeftoversALaunchKeeps } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -160,7 +162,7 @@ import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directo
 import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { keptBeatingWhileItRuns } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
+import { theOwnersScreenOfALaunch, type TheScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -172,13 +174,14 @@ import { isBelowACarriedFolder } from '../refuse_launch_of_unapproved_config/car
 import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
-import { theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
+import { theDroppedPluginsLines, theEnvironmentAMemberIsGiven } from './the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { appendStateLine, readStateFile } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { keepTheTranscriptsOf, type WhatIsKept } from '../keep_the_transcripts_of_a_launch/keep_the_transcripts_of_a_launch.ts'
 
 /** The empty directory inside a launch's relay directory (../refuse_code_a_checkout_runs_itself). */
 export const EMPTY_DIRECTORY_NAME = 'nothing'
@@ -222,6 +225,31 @@ export interface LauncherPlaces {
  * (martha#658). The tools it returns hold that watch (martha#710), so a builder that leaves it out cannot compile.
  */
 export type CrewToolsOfALaunch = (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch }) => HoldingTheWatch<CrewTools>
+
+/**
+ * The transcript bounds a launch keeps its member's session to (martha#931 B): its crew's declared `transcripts`, or the
+ * defaults for a launch that carries no crew (a test's launch).
+ */
+export const theTranscriptBoundsOf = (launch: { readonly crew_settings?: CrewSettings }): CrewTranscripts => launch.crew_settings?.transcripts ?? TRANSCRIPTS_WHEN_UNNAMED
+
+/**
+ * What a launch's end keeps of its member's session: where, under which launch's name, the key redacted, and to the
+ * crew's declared bounds. The launch is named by its approval when the gate recorded one, and otherwise by its snapshot,
+ * which is made afresh for each launch.
+ */
+export const whatALaunchKeeps = (
+  launch: Pick<ClaudeCodeMemberLaunch, 'places' | 'place'> & { readonly crew_settings?: CrewSettings },
+  config_folder: string,
+  snapshot_dir: string,
+  theLaunchKey: string,
+): WhatIsKept => ({
+  state_root: launch.places.state_root,
+  project_root: launch.place.launch_dir,
+  config_folder,
+  theLaunch: launch.place.since_approval?.launch_id ?? basename(snapshot_dir),
+  theLaunchKey,
+  transcripts: theTranscriptBoundsOf(launch),
+})
 
 export interface ClaudeCodeMemberLaunch {
   readonly member_name: string
@@ -280,6 +308,8 @@ export interface ClaudeCodeMemberLaunch {
    * launch gives none.
    */
   readonly hearRelayPlace?: (place: MemberRelayPlace) => void
+  /** Called each time the relay reports the session's start (martha#919): where the owner's first prompt is typed in. */
+  readonly hearSessionStart?: () => void
   /**
    * The crew's own store and the layout it declared, so this launch's end keeps what a killed command left in the
    * member's trees (#693): the record the member's next start is told from, and the two refusals judge. A launch given
@@ -315,11 +345,34 @@ export type MemberStarted =
  */
 export const HOOK_SETTINGS_CHECK_MS = 1_000
 
+/**
+ * The host's notifications a launch tells its owner of (martha#931 C): its crew's declared owner_notices.show, or the
+ * declaration's default for a launch that carries no crew (a test's launch).
+ */
+export const theShownNoticesOf = (launch: { readonly crew_settings?: CrewSettings }): readonly string[] => launch.crew_settings?.owner_notices.show ?? OWNER_NOTICES_WHEN_UNNAMED.show
+
+/** What a launch's owner's screen is made from: its row, its bells, its terminal, and the notices its crew shows. */
+export const theScreenALaunchSees = (launch: Pick<ClaudeCodeMemberLaunch, 'member_name' | 'places' | 'owner_bell' | 'stdio'> & { readonly crew_settings?: CrewSettings }, muted: () => boolean): TheScreenOfALaunch => ({
+  member: launch.member_name,
+  beats: dashboardRowsIn(launch.places.dashboard),
+  declared_bells: launch.owner_bell,
+  muted,
+  on_the_owners_terminal: isOnTheOwnersTerminal(launch.stdio),
+  environment: process.env,
+  write: (bytes) => void process.stdout.write(bytes),
+  shown_notices: theShownNoticesOf(launch),
+})
+
 /** A launch the gate allowed, with what the member's environment is built from. */
 export interface ReadyLaunch {
   readonly prepared: Extract<PreparedLaunch, { readonly allow: true }>
   /** Removes the approved copies. */
   removeSnapshot(): void
+  /**
+   * Keeps what the member's host wrote of its session, before the snapshot that holds it goes (martha#646). A failure
+   * is said in one line and never stops the removals.
+   */
+  keepTranscripts(): void
   readonly hostEnv: Readonly<Record<string, string | undefined>>
   /** What the settings files the host loads add to every server's environment. */
   readonly settingsEnv: Readonly<Record<string, string>>
@@ -385,7 +438,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   const crew = crewTextToHand(launch.crew_settings, launch.member_name, prepared.carried_files, thisMachine.stores.files)
   if ('refusal' in crew) {
     removeSnapshot()
-    return `${NOT_STARTED}: ${crew.refusal}, so ${launch.member_name} is handed no crew text`
+    return `${NOT_STARTED}: ${noCrewTextFor(launch.member_name, crew.refusal)}`
   }
   const crew_text = crew.text
   const unproved = meshServerUnproved(prepared.carried_files[CLAUDE_SERVERS])
@@ -415,7 +468,23 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     return `${NOT_STARTED}: ${fromSettings.refusal}`
   }
   for (const path of prepared.not_carried) launch.tellOwner(`Not loaded for ${launch.member_name}: ${path}`)
-  return { prepared, removeSnapshot, hostEnv, settingsEnv: fromSettings.env, hookSettings, crew_text }
+  theDroppedPluginsLines(launch.member_name, launch.inherited).forEach((line) => launch.tellOwner(line))
+  // The host writes the member's session under the folder this snapshot holds, so the keep is taken here, beside the
+  // snapshot's removal, and each of the three ends calls it (martha#646). A launch on an approval keeps the id its own
+  // writes are kept under; any other launch is named by its snapshot, which is made afresh for each launch.
+  const keepTranscripts = (): void => {
+    try {
+      const kept = whatALaunchKeeps(launch, membersConfigFolderOf(prepared), prepared.snapshot_dir, hostEnv[API_KEY_VARIABLE] ?? '')
+      for (const line of keepTheTranscriptsOf(kept)) launch.tellOwner(`Not kept for ${launch.member_name}: ${line}`)
+    } catch (error) {
+      try {
+        launch.tellOwner(`Not kept for ${launch.member_name}: ${(error as Error).message}`)
+      } catch {
+        // The launch is ending: what cannot be said now does not stop it.
+      }
+    }
+  }
+  return { prepared, removeSnapshot, keepTranscripts, hostEnv, settingsEnv: fromSettings.env, hookSettings, crew_text }
 }
 
 /**
@@ -530,7 +599,7 @@ function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch, hearing: (journal: Re
   return {
     journal,
     telling: theMembersTelling({ member: launch.member_name, dashboard: launch.places.dashboard, rows: launch.places.rows, journal }),
-    screen: theOwnersScreenOfALaunch({ member: launch.member_name, beats: dashboardRowsIn(launch.places.dashboard), declared_bells: launch.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(launch.stdio), environment: process.env, write: (bytes) => void process.stdout.write(bytes) }),
+    screen: theOwnersScreenOfALaunch(theScreenALaunchSees(launch, () => mute().muted)),
   }
 }
 
@@ -586,7 +655,10 @@ async function servedRelay(
   const relay: MemberRelay = {
     ...answering,
     answer: (event, body) => {
-      if (event === 'session_started') sessionReported()
+      if (event === 'session_started') {
+        sessionReported()
+        launch.hearSessionStart?.()
+      }
       return answering.answer(event, body)
     },
   }

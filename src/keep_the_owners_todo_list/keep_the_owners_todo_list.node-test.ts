@@ -104,7 +104,7 @@ test('#316: a title with a newline is refused by name, so a row cannot draw a se
 })
 
 test('#316: a command holding a token is refused, naming its prefix', () => {
-  const refused = refusalOf(theActAsked(aCommand('gh auth login --with-token ghp_abcdefghijklmnopqrstuvwxyz0123'), 'Pallas', NOW))
+  const refused = refusalOf(theActAsked(aCommand('gh auth login --with-token ghp_syntheticabcdefghijklmnopq0123'), 'Pallas', NOW))
   assert.match(refused, /^commands\[0\]\.command holds what reads as a secret \(it starts ghp_\)/)
 })
 

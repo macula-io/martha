@@ -8,6 +8,7 @@ import { PACKAGE_RESUMED, readLedger, thePauseOn, type LedgerHost } from '../log
 import { theNudgeLine, theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from './recover_a_failed_act.ts'
 import { thePausedNudges } from './resume_a_paused_package.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
 
 // Synthetic names, never a real one: this repository is public.
 const work = { package: 'synthetic-owner/repo#7', member: 'member-one' }
@@ -24,6 +25,7 @@ const crew = {
     { name: 'member-one', role: 'builder' },
   ],
   mode: { may: { assign_work: [SUPERVISOR] } },
+  clock_zone: CLOCK_ZONE_WHEN_UNNAMED,
 }
 const mayResume = async (): Promise<readonly string[]> => theNudgesGoTo(crew)
 

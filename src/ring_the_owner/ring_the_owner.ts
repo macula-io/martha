@@ -19,7 +19,7 @@
 // notification carries its own id, so a second member asking does not take the first member's notification away, and the
 // member that stops needing the owner takes its own notification down again (T5).
 //
-// Inside tmux (martha#843), as on a live night where each member runs in a pane of the night's tmux server, tmux reads
+// Inside tmux (martha#843), as on a live run where each member runs in a pane of the live run's tmux server, tmux reads
 // every byte the pane writes and draws its own screen from them: an OSC 99 written as it is stops at tmux and never
 // reaches the owner's terminal. So a launcher inside tmux sends each notification and each close inside tmux's own
 // passthrough (`ESC P tmux;`, every ESC doubled, the string terminator), which tmux hands as it is to a client attached

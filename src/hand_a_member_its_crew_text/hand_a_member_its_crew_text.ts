@@ -80,6 +80,9 @@ export class CrewTextRefused extends Error {
 /** The crew text a launch hands, or why it hands none: the one place a launcher and a test read this. */
 export type TheCrewTextToHand = { readonly text: string } | { readonly refusal: string }
 
+/** Why a member is not started when its crew text is refused: the member named first, then what to write or fix. */
+export const noCrewTextFor = (member: string, refusal: string): string => `${member} would be handed no crew text. ${refusal}`
+
 /** A launch that hands no crew text, because the crew declared none. */
 export const NO_CREW_TEXT: TheCrewTextToHand = { text: '' }
 
@@ -226,8 +229,8 @@ function conventionsOf(settings: CrewSettings, member: string, firstOf: (...path
 export function handAMemberItsCrewText(texts: TheTextsAMemberReads): string {
   const values = placeholdersFor(texts)
   const filled = (text: string, file: string): string => replaceThePlaceholders(text.trim(), file, values)
-  const role = textOf(texts.role_text, join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, `${texts.role}.md`), `a role text for "${texts.role}"`)
-  const mode = textOf(texts.mode_text, join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, `${texts.mode}.md`), `a mode text for "${texts.mode}"`)
+  const role = textOf(texts.role_text, join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, `${texts.role}.md`), `role text for "${texts.role}"`)
+  const mode = textOf(texts.mode_text, join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, `${texts.mode}.md`), `mode text for "${texts.mode}"`)
   const parts: string[] = [
     `## You are ${texts.member}, the crew's ${texts.role}\n\nThis crew works ${texts.mode}, and its owner is ${texts.owner}.`,
     ...(texts.practice === null ? [] : [`## Crew practice\n\n${filled(numbered(texts.practice.text), texts.practice.file)}`]),
@@ -243,7 +246,7 @@ export function handAMemberItsCrewText(texts: TheTextsAMemberReads): string {
 
 /** A text a part is built from, or the refusal naming the file to write. */
 function textOf(text: ATextAndItsFile | null, toWrite: string, what: string): ATextAndItsFile {
-  if (text === null) throw new CrewTextRefused(toWrite, `there is no ${what}: Martha ships none under that name and this crew writes none. Write it there.`)
+  if (text === null) throw new CrewTextRefused(toWrite, `Martha ships no ${what}, and this crew has written none. Write one at that path.`)
   return text
 }
 
