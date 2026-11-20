@@ -28,6 +28,7 @@
 // that has not heard of it cannot lose the guard.
 
 import { INBOUND_PATHS, type InboundPath } from '../inbound_paths/inbound_paths.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
 
 /** Text that reached this session, and who it came from. */
@@ -94,7 +95,11 @@ export interface Session {
 }
 
 export type Decision =
-  | { readonly allow: true }
+  /**
+   * `holds_prose`: the one call a tainted session still makes (martha#987 slice 4, T12), `say_to_the_crew` by the exact
+   * name the relay serves it under, runs only with its prose held (../send_a_crew_message/hold_a_tainted_members_prose).
+   */
+  | { readonly allow: true; readonly holds_prose?: true }
   /**
    * The refusal, and the arrival it stands on: the audit writes which path and which sender the gate refused for
    * (martha#321), so a refusal never has to be taken apart to find them again.
@@ -150,7 +155,11 @@ export function refuseExecutionAfterUngatedText({ tool, session, policy, strict_
 
   for (const ingest of session.ingested) {
     const refusal = refusalFor(ingest, PATHS_BY_ID.get(ingest.path), policy)
-    if (refusal !== undefined) return { allow: false, refusal, arrival: ingest }
+    if (refusal === undefined) continue
+    // Crew lines pass, prose is held (DECIDED 2026-11-06 "Crew lines pass, prose taints"): the send is let through by its exact
+    // name and nothing else, never as an entry in READ_ONLY_TOOLS, so a namespaced copy and every other send stay refused.
+    if (tool === SAY_TO_THE_CREW) return { allow: true, holds_prose: true }
+    return { allow: false, refusal, arrival: ingest }
   }
 
   return { allow: true }

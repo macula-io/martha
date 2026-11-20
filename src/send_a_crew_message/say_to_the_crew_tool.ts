@@ -9,7 +9,7 @@ import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { theVolatileNote, volatilePathsIn } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
-import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
+import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage, type TheHeldProsePlace } from './send_a_crew_message.ts'
 
 /** What `say_to_the_crew` takes, as the mod registers it. */
 export const SAY_TO_THE_CREW_TOOL = {
@@ -41,6 +41,8 @@ export interface ASendAsked {
   readonly text: unknown
   /** The roots a reboot deletes (martha#314), already in force: the crew's own, or the machine's when it names none. */
   readonly volatile_roots: readonly string[]
+  /** Where this sender's prose is kept when the gate let the send through with it held (martha#987 slice 4). */
+  readonly hold?: TheHeldProsePlace
 }
 
 /** What the tool answers: the position the message was kept at, or why nothing was sent. */
@@ -56,6 +58,7 @@ export async function sayToTheCrewOver(asked: ASendAsked): Promise<AToolAnswer> 
     package: held === null || held.holds === '' ? null : held.holds,
     to: asked.to,
     text: asked.text,
+    ...(asked.hold === undefined ? {} : { hold: asked.hold }),
   })
   return 'refused' in sent ? { refused: sent.refused } : { answer: toldWithTheNote(sent.told, asked) }
 }

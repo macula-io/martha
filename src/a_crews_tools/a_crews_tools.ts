@@ -84,6 +84,8 @@ import { WHO_IS_FREE_TOOL, whoIsFreeOver } from '../see_who_is_free/who_is_free_
 import { UNHELD_WORK_TOOL, unheldWorkOver } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { theBacklogReaderIn } from '../find_the_unheld_work/the_backlog_reader_of_a_launch.ts'
 import { SAY_TO_THE_CREW_TOOL, sayToTheCrewOver } from '../send_a_crew_message/say_to_the_crew_tool.ts'
+import type { TheHeldProsePlace } from '../send_a_crew_message/send_a_crew_message.ts'
+import { HELD_PLACE, heldFileNameOf } from '../send_a_crew_message/hold_a_tainted_members_prose.ts'
 import {
   BEAT_INTERVAL_MS,
   SPEND_FIELD,
@@ -213,6 +215,12 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
   readonly stamps?: HandoverStampStore
   /** The sessions this launch took in, by id: what a handover is stamped with, and the predecessor a refresh inherits. */
   readonly sessions?: { readonly of: (session_id: string) => HostSession | undefined }
+  /**
+   * Whether the gate lets this session's `say_to_the_crew` through only with its prose held (martha#987 slice 4): the
+   * launcher's answer, over the same record, policy and gate mode its tool-call gate reads. Absent means held, so a
+   * launch that has not heard of the rule cannot let a tainted member's prose out as crew text.
+   */
+  readonly sendHoldsProse?: (session_id: string) => boolean
   /**
    * What this launcher keeps of the menus its host closed (martha#313): a settle of the owner's asks is refused unless a
    * menu closed in the session that took the batch. A launch given none settles no batch, and says so.
@@ -883,6 +891,25 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   to: args['to'],
   text: args['text'],
   volatile_roots: theRootsInForce(settings.volatile_paths, places.volatile_roots ?? []),
+  ...((places.sendHoldsProse?.(state.session) ?? true) ? { hold: theHeldProsePlaceOf(places) } : {}),
+})
+
+/** A count of the prose this launch has held, so two sends in one millisecond keep two files. */
+let heldSoFar = 0
+
+/**
+ * Where this member's held prose is kept (martha#987 slice 4): the crew store's held place, under Martha's state root
+ * and outside the checkout, where a member's file tools may not write (martha#619). One file per send.
+ */
+const theHeldProsePlaceOf = (places: CrewToolPlaces): TheHeldProsePlace => ({
+  keep: (text) => {
+    const place = places.stores.crew.place(HELD_PLACE)
+    if ('refusal' in place) return { refused: place.refusal }
+    heldSoFar += 1
+    const name = heldFileNameOf(places.member, places.ledger.clock.now(), heldSoFar)
+    const unkept = place.keep(name, text)
+    return unkept === undefined ? { path: `${place.path}/${name}` } : { refused: unkept.refusal }
+  },
 })
 
 /** What the receipts are read over: the channel's ledger, the member that sent, and the crew it sent to. */

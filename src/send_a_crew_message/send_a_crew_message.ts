@@ -23,6 +23,7 @@ import { type Addressee, type ChannelHost, appendToTheChannel, readTheChannel, T
 import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import { sentFromTainted, splitForSend } from './hold_a_tainted_members_prose.ts'
 
 /** The name the crew registers this tool under (martha#343): the one tool that speaks, and it speaks to the crew. */
 export const SAY_TO_THE_CREW = 'say_to_the_crew'
@@ -49,6 +50,29 @@ export interface Saying {  /** The member the launcher started: never the model'
   readonly package: string | null
   readonly to: unknown
   readonly text: unknown
+  /**
+   * Where a tainted sender's prose is kept (martha#987 slice 4): present only when the gate let this send through with
+   * its prose held. The crew lines go out, the prose is kept here, and the held line names the file.
+   */
+  readonly hold?: TheHeldProsePlace
+}
+
+/** Where a tainted sender's prose is kept: the file's full path once kept, or why it could not be. */
+export interface TheHeldProsePlace {
+  keep(text: string): { readonly path: string } | { readonly refused: string }
+}
+
+/**
+ * The text a send carries: as written, or, when the prose is held, its crew lines and the held line. A hold that could
+ * not keep the prose sends nothing: prose that cannot be held never goes out instead.
+ */
+function theTextThatGoes(input: Saying): { readonly text: unknown } | { readonly refused: string } {
+  if (input.hold === undefined || typeof input.text !== 'string') return { text: input.text }
+  const { crew_lines, prose } = splitForSend(input.text)
+  if (prose === '') return { text: crew_lines.join('\n') }
+  const kept = input.hold.keep(prose)
+  if ('refused' in kept) return { refused: `this session holds text the crew cannot vouch for, so its prose is held, and it could not be kept: ${kept.refused}. Nothing was sent.` }
+  return { text: sentFromTainted(crew_lines, input.member, kept.path) }
 }
 
 /** What became of a send: the message's position in the channel and the line the member is told, or why it was not sent. */
@@ -114,7 +138,10 @@ function theMessageRead(input: Saying): AMessageRead | { readonly refused: strin
 const theNoticeSaid = (notice: string | undefined): string => (notice === undefined ? '' : ` notice: ${notice}`)
 
 /** Says one thing, keeps the row first, and concludes the act: what the member is told, or why nothing was sent. */
-export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Saying): Promise<SendOutcome> {
+export async function sendACrewMessage(host: ChannelHost & LedgerHost, asked: Saying): Promise<SendOutcome> {
+  const goes = theTextThatGoes(asked)
+  if ('refused' in goes) return goes
+  const input: Saying = { ...asked, text: goes.text }
   const read = theMessageRead(input)
   if ('refused' in read) return read
   const { to, text } = read

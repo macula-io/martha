@@ -13,6 +13,7 @@ import {
 } from './refuse_execution_after_ungated_text.ts'
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 
 // Synthetic node ids, never a real one: this repository is public.
 const crewmate = 'a'.repeat(64)
@@ -244,4 +245,27 @@ test('the owner\'s typed turn does not clear a stranger\'s text, before it or af
   const strangers: Ingestion = { path: 'A6', from_node_id: stranger }
   refusal(CLAUDE_CODE_SHELL_TOOL, [ownerTyped(), strangers])
   refusal(CLAUDE_CODE_SHELL_TOOL, [strangers, ownerTyped()])
+})
+
+// --- a tainted session still sends crew lines (martha#987 slice 4, T12) --------
+
+test('a tainted session may call say_to_the_crew, by its exact name, and only with its prose held', () => {
+  const strangers: Ingestion = { path: 'A6', from_node_id: stranger }
+  assert.deepEqual(decide(SAY_TO_THE_CREW, [strangers]), { allow: true, holds_prose: true })
+})
+
+test('an untainted session sends as before: nothing is held', () => {
+  assert.deepEqual(decide(SAY_TO_THE_CREW, []), { allow: true })
+  assert.deepEqual(decide(SAY_TO_THE_CREW, [{ path: 'A6', from_node_id: crewmate }]), { allow: true })
+})
+
+test('a namespaced copy of say_to_the_crew, and every other send, stays refused while tainted', () => {
+  const strangers: Ingestion = { path: 'A6', from_node_id: stranger }
+  for (const tool of [`mcp__a_plugin__${SAY_TO_THE_CREW}`, SAY_TO_THE_CREW.toUpperCase(), `${SAY_TO_THE_CREW} `, ...EXECUTING_TOOLS]) {
+    assert.equal(allowed(tool, [strangers]), false, tool)
+  }
+})
+
+test('say_to_the_crew is not made a read-only tool: the exception is the gate\'s, never the allow-list\'s', () => {
+  assert.equal(isReadOnlyTool(SAY_TO_THE_CREW), false)
 })
