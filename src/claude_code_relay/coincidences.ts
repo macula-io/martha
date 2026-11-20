@@ -66,6 +66,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: SAY_TO_THE_CREW, file: 'claude_code_relay/hooks/crew_command.ts', reason: `the tool /crew sends through; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   // The command's name is the crew's own word, which the channel also uses for "every member": the same spelling, and
   // not the same thing. A send from /crew names one member, never the whole crew.
+  { value: THE_WHOLE_CREW, file: 'claude_code_relay/hooks/crew_command.ts', reason: 'the /crew command the owner types (martha#927), not the channel\'s word for every member' },
   { value: THE_WHOLE_CREW, file: 'claude_code_relay/hooks/crew.tsx', reason: 'the name of the /crew command the owner types (martha#927), not the channel\'s word for every member' },
   // The release act (#693 r=2): the refusal names it and the mod answers it, each by a literal.
   { value: THE_RELEASE_ACT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },

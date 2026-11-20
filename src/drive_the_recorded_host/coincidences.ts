@@ -12,7 +12,6 @@ import { THE_SAVE_WAIT_MS } from '../put_the_owners_model_back/put_the_owners_mo
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { THE_ACT_THE_OWNER_TYPES } from '../launch_a_goose_member/coincidences.ts'
 import { THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
-import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { TRUST_ANSWER_DEADLINE_MS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 
 /**
@@ -73,5 +72,4 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/own_writes_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/the_crew_command_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
   // The owner's /crew (martha#927) is typed as the command's own name, which the channel also spells for every member.
-  { value: THE_WHOLE_CREW, file: 'drive_the_recorded_host/the_crew_command_on_the_recorded_host.node-test.ts', reason: 'the /crew command the owner types at a member\'s tab (martha#927), not the channel\'s word for every member' },
 ]
