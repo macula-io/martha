@@ -31,6 +31,11 @@ Each of those can enter through four paths:
 2. **A commit inside the pull request** that a later commit removes. GitHub keeps
    every pushed commit of a pull request reachable, so a leak that the final tree
    no longer shows is still public. The check reads every commit's added lines.
+   A merge's added lines are the ones the merge wrote itself, read against git's
+   own merge of its parents: a resolved conflict, or a change made in the merge.
+   A line a parent brought is that parent's commit's to answer for, so a merge of
+   main never reads main's lines as the branch's, even one main has since removed
+   (martha#933).
 3. **A commit message.** It is published with the commit. The check reads it.
 4. **The check's own output.** A CI log of a public repository is public. No
    value a hit found is therefore ever printed, whatever its class: a lab

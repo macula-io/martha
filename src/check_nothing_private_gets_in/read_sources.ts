@@ -62,14 +62,20 @@ const step = (prefix: string) => (state: DiffState, text: string): DiffState => 
   return { ...state, next: state.next + 1, lines: [...state.lines, line] }
 }
 
+// How a merge is read (martha#933): against git's own merge of its parents, so its lines are the ones the merge wrote
+// itself (a resolved conflict, a change made in the merge). A line either parent brought is that parent's commit's,
+// which the range reads when it holds that commit, and main's own when it does not. Read against its first parent alone,
+// a merge of main carries every line main brought, even one main has since removed, as the branch's.
+const A_MERGES_OWN_LINES = '--diff-merges=remerge'
+
 export const commitSources = (root: string, sha: string): Source[] => {
   const short = sha.slice(0, 12)
   const message = git(root, ['log', '-1', '--format=%B', sha])
-  const diff = git(root, ['show', '--format=', '--unified=0', '--no-color', '--no-ext-diff', '--diff-merges=first-parent', sha])
+  const diff = git(root, ['show', '--format=', '--unified=0', '--no-color', '--no-ext-diff', A_MERGES_OWN_LINES, sha])
   const added = diff.split('\n').reduce(step(`commit ${short}`), { path: '', next: 0, lines: [] })
   // Every path the commit adds or keeps, from git's own list: a rename, an empty
   // file and a binary file name a path with no added line to carry it.
-  const paths = git(root, ['show', '--format=', '--name-only', '-z', '--diff-filter=d', '--diff-merges=first-parent', sha])
+  const paths = git(root, ['show', '--format=', '--name-only', '-z', '--diff-filter=d', A_MERGES_OWN_LINES, sha])
     .split('\0')
     .filter((path) => path.trim() !== '')
     .map((path) => ({ where: `commit ${short} path ${path}`, text: path }))
