@@ -93,6 +93,9 @@ export const FIRST_RUN_DONE_KEY = 'hasCompletedOnboarding'
 /** The variable that hands the host an API key, which it asks about once before using it. */
 export const API_KEY_VARIABLE = 'ANTHROPIC_API_KEY'
 
+/** The variable that hands the host a bearer token, which it bills by in place of a sign-in, unasked (martha#916 r=3). */
+export const AUTH_TOKEN_VARIABLE = 'ANTHROPIC_AUTH_TOKEN'
+
 /** The key of the host's record that holds its answers to that question, as {approved, rejected} lists of key tails. */
 export const API_KEY_ANSWERS_KEY = 'customApiKeyResponses'
 

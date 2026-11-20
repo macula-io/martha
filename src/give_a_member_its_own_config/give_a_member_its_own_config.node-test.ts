@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import { API_KEY_ANSWERS_KEY, API_KEY_VARIABLE, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, hostTrustsTheFolder, KEY_TAIL_LENGTH } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { API_KEY_ANSWERS_KEY, API_KEY_VARIABLE, AUTH_TOKEN_VARIABLE, FIRST_RUN_DONE_KEY, HOST_TRUST_RECORD_FILE, hostTrustsTheFolder, KEY_TAIL_LENGTH } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, SKILLS_KIND, SYNC_OFF_SETTING } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { USER_SETTINGS_FILE, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -77,7 +77,7 @@ test("the member's environment names its own folder and the owner's default sign
 
 test("martha#916: a member billed by the key is handed its own folder and no sign-in store, and each billing leaves the other's credential out", () => {
   assert.deepEqual(theMembersConfigEnvironment('/a/members/folder', BILLED_BY_API_KEY), { [CONFIG_DIR_VARIABLE]: '/a/members/folder' })
-  assert.deepEqual(notGivenUnder(BILLED_BY_SUBSCRIPTION), [API_KEY_VARIABLE])
+  assert.deepEqual(notGivenUnder(BILLED_BY_SUBSCRIPTION), [API_KEY_VARIABLE, AUTH_TOKEN_VARIABLE])
   assert.deepEqual(notGivenUnder(BILLED_BY_API_KEY), [RECORDED_HOST.sign_in_store_variable])
 })
 

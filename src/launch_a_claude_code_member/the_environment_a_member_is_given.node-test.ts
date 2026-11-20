@@ -9,7 +9,7 @@ import { basename, dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
-import { API_KEY_ANSWERS_KEY, API_KEY_VARIABLE, apiKeyAnsweredYes, HOST_TRUST_RECORD_FILE, SIGN_IN_QUESTION_ARGS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { API_KEY_ANSWERS_KEY, API_KEY_VARIABLE, apiKeyAnsweredYes, AUTH_TOKEN_VARIABLE, HOST_TRUST_RECORD_FILE, SIGN_IN_QUESTION_ARGS } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 import { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, type Billing } from '../declare_crew/declare_crew.ts'
 import { SIGNED_IN_ANSWER } from '../drive_the_recorded_host/host_stand_in.ts'
@@ -82,6 +82,19 @@ test("martha#916: a member billed by the key starts with the launcher's key and 
   assert.deepEqual(start.record()[API_KEY_ANSWERS_KEY], apiKeyAnsweredYes(A_LAUNCHERS_KEY))
 })
 
+/** A token the launcher's environment carries in these tests: no real token, and no constant's value. */
+const A_LAUNCHERS_TOKEN = 'a-token-the-owners-shell-carries-916'
+
+test("martha#916 r=3: a member billed by the subscription is not handed the launcher's auth token, which moves the host off the sign-in, and one billed by the key keeps it", (t) => {
+  // Seen live on 2.1.329: a planted ANTHROPIC_AUTH_TOKEN turned a subscription member's banner to "API Usage Billing".
+  const bySubscription = aStart(t, BILLED_BY_SUBSCRIPTION, { [AUTH_TOKEN_VARIABLE]: A_LAUNCHERS_TOKEN })
+  assert.notEqual(typeof bySubscription.started, 'string', `the start was refused: ${String(bySubscription.started)}`)
+  assert.ok(!(AUTH_TOKEN_VARIABLE in (bySubscription.started as Record<string, string>)), `the member's environment holds ${AUTH_TOKEN_VARIABLE}`)
+  const byKey = aStart(t, BILLED_BY_API_KEY, { [API_KEY_VARIABLE]: A_LAUNCHERS_KEY, [AUTH_TOKEN_VARIABLE]: A_LAUNCHERS_TOKEN })
+  assert.notEqual(typeof byKey.started, 'string', `the start was refused: ${String(byKey.started)}`)
+  assert.equal((byKey.started as Record<string, string>)[AUTH_TOKEN_VARIABLE], A_LAUNCHERS_TOKEN, "the key's member lost the launcher's token")
+})
+
 test('martha#916: a member billed by the key whose launcher carries none is refused by name, and nothing of it is made', (t) => {
   for (const inherited of [{}, { [API_KEY_VARIABLE]: '' }]) {
     const start = aStart(t, BILLED_BY_API_KEY, inherited)
@@ -126,6 +139,13 @@ test("martha#916: with no billing declared, the host is asked whether the owner 
   // the real path of the folder it was made in, which a temporary folder reached through a link does not equal.
   assert.equal(ran_in, join(realpathSync(dirname(folder)), basename(folder)), 'the sign-in question ran in the checkout, not in its own folder')
   assert.equal(asked.billed.told, undefined, "the usual start is told")
+})
+
+test("martha#916 r=3: the sign-in question is asked without the launcher's auth token, which the host would answer instead of the owner's sign-in", async (t) => {
+  // Seen live on 2.1.329: with ANTHROPIC_AUTH_TOKEN set, `auth status` answers authMethod "oauth_token", not the sign-in.
+  const byTheToken = `[ -n "\${${AUTH_TOKEN_VARIABLE}+set}" ] && { printf '%s' '${A_SIGN_IN_BY_ANOTHER_METHOD}'; exit 0; }`
+  const asked = await billedBy(t, [byTheToken, `printf '%s' '${SIGNED_IN_ANSWER}'`], { [AUTH_TOKEN_VARIABLE]: A_LAUNCHERS_TOKEN })
+  assert.deepEqual(asked.billed, { billing: BILLED_BY_SUBSCRIPTION, told: undefined }, 'the token reached the sign-in question')
 })
 
 test("martha#916: with no billing and no sign-in, the member is billed by the launcher's key, and by the subscription when it carries none", async (t) => {
