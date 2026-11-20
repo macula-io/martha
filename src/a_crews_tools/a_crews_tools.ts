@@ -893,6 +893,8 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   to: args['to'],
   text: args['text'],
   volatile_roots: theRootsInForce(settings.volatile_paths, places.volatile_roots ?? []),
+  // A HANDOFF's range is read in the crew's clone when the launch handed the host's processes (martha#980 package 3).
+  ...(places.processes === undefined ? {} : { commits: { processes: places.processes, clones: settings.house_rules.clones } }),
 })
 
 /** What the receipts are read over: the channel's ledger, the member that sent, and the crew it sent to. */
