@@ -9,15 +9,16 @@
 //
 // A write is kept only when all of these hold; otherwise nothing is kept, and the recheck judges the change as
 // anyone else's:
-//   - the tool is one of Claude Code's file-writing tools (../claude_code_host/claude_code_file_tools.ts);
-//   - the file the call names, resolved as the host resolves it (trimmed, a leading `~` against the home, the rest
-//     against where the member started), then followed through its links, is under the checkout's top;
+//   - the tool is one whose writes the host's file tools keep as the member's own (HostFileTools.own_writes; Claude
+//     Code's are in ../claude_code_host/claude_code_file_tools.ts, #541 package A);
+//   - the file the call names, resolved as that host resolves it (Claude Code: trimmed, a leading `~` against the
+//     home, the rest against where the member started), then followed through its links, is under the checkout's top;
 //   - it is a regular file now;
-//   - for a Write, its bytes are the call's content.
+//   - for the host's whole-file tool (Claude Code's Write), its bytes are the call's content.
 
 import { isAbsolute, relative } from 'node:path'
 
-import { asTheHostResolves, fileArgumentOf, WHOLE_FILE_CONTENT, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import type { HostFileTools } from '../host_contract/host_contract.ts'
 import type { LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import { blobAsGitAdds, checkoutTopOf, realOrResolved } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { ApprovedLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
@@ -51,8 +52,8 @@ function writtenFileUnder(host: LaunchHost, top: string, named: string): { reado
 }
 
 /** The file a call names and the call's id, when the tool writes one file and the call says which. */
-function namedFileOf(call: CallThatRan): { readonly named: string; readonly tool_use_id: string } | undefined {
-  const argument = fileArgumentOf(call.tool)
+function namedFileOf(call: CallThatRan, tools: HostFileTools): { readonly named: string; readonly tool_use_id: string } | undefined {
+  const argument = Object.hasOwn(tools.own_writes, call.tool) ? tools.own_writes[call.tool] : undefined
   const named = argument === undefined ? undefined : call.input[argument]
   const tool_use_id = call.input['tool_use_id']
   if (typeof named !== 'string' || typeof tool_use_id !== 'string' || tool_use_id === '') return undefined
@@ -69,9 +70,9 @@ function checkoutOf(launch: ApprovedLaunch, host: LaunchHost): { readonly cwd: s
 const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((byte, at) => byte === b[at])
 
 /** True unless the call writes a whole file and these bytes are not its content. */
-function bytesAreTheCalls(call: CallThatRan, bytes: Uint8Array): boolean {
-  if (call.tool !== WHOLE_FILE_TOOL) return true
-  const content = call.input[WHOLE_FILE_CONTENT]
+function bytesAreTheCalls(call: CallThatRan, bytes: Uint8Array, tools: HostFileTools): boolean {
+  if (tools.whole_file === undefined || call.tool !== tools.whole_file.tool) return true
+  const content = call.input[tools.whole_file.content]
   return typeof content === 'string' && sameBytes(bytes, new TextEncoder().encode(content))
 }
 
@@ -80,19 +81,19 @@ function bytesAreTheCalls(call: CallThatRan, bytes: Uint8Array): boolean {
  * not one of the raw bytes, because the tree it is compared with is read by `git add` (#132 r=1). Undefined when the
  * call names no file under the checkout, or the bytes there are not the call's.
  */
-function writtenFileOf(call: CallThatRan, named: string, checkout: { readonly cwd: string; readonly top: string }, host: LaunchHost): { readonly path: string; readonly ownerExecutes: boolean; readonly blob: string } | undefined {
-  const file = writtenFileUnder(host, checkout.top, asTheHostResolves(named, checkout.cwd, call.home))
-  if (file === undefined || !bytesAreTheCalls(call, file.bytes)) return undefined
+function writtenFileOf(call: CallThatRan, named: string, checkout: { readonly cwd: string; readonly top: string }, host: LaunchHost, tools: HostFileTools): { readonly path: string; readonly ownerExecutes: boolean; readonly blob: string } | undefined {
+  const file = writtenFileUnder(host, checkout.top, tools.resolve(named, checkout.cwd, call.home))
+  if (file === undefined || !bytesAreTheCalls(call, file.bytes, tools)) return undefined
   const blob = blobAsGitAdds(checkout.top, file.path, host)
   return blob === undefined ? undefined : { path: file.path, ownerExecutes: file.ownerExecutes, blob }
 }
 
 /** The own write a call made, read through the host now; or undefined when it is not one. */
-export function ownWriteOfCall(launch: ApprovedLaunch, call: CallThatRan, host: LaunchHost, now: Date): OwnWrite | undefined {
+export function ownWriteOfCall(launch: ApprovedLaunch, call: CallThatRan, host: LaunchHost, now: Date, tools: HostFileTools): OwnWrite | undefined {
   const since = launch.since_approval
-  const file = namedFileOf(call)
+  const file = namedFileOf(call, tools)
   if (since === undefined || file === undefined) return undefined
-  const written = readTheWrite(launch, file.named, call, host)
+  const written = readTheWrite(launch, file.named, call, host, tools)
   return written === undefined ? undefined : { ...written, tool_use_id: file.tool_use_id, tool: call.tool, session: call.session, launch: since.launch_id, recorded_at: now.toISOString() }
 }
 
@@ -110,10 +111,10 @@ const isTheMachinesRefusal = (error: unknown): boolean =>
  * answer, and this must give one rather than throw. A failure that is not the machine's — a bug here — is thrown, so it
  * stays loud instead of being read as someone else's change.
  */
-function readTheWrite(launch: ApprovedLaunch, named: string, call: CallThatRan, host: LaunchHost): { readonly path: string; readonly blob: string; readonly mode: OwnWriteMode } | undefined {
+function readTheWrite(launch: ApprovedLaunch, named: string, call: CallThatRan, host: LaunchHost, tools: HostFileTools): { readonly path: string; readonly blob: string; readonly mode: OwnWriteMode } | undefined {
   try {
     const checkout = checkoutOf(launch, host)
-    const written = checkout === undefined ? undefined : writtenFileOf(call, named, checkout, host)
+    const written = checkout === undefined ? undefined : writtenFileOf(call, named, checkout, host, tools)
     return written === undefined ? undefined : { path: written.path, blob: written.blob, mode: written.ownerExecutes ? EXECUTABLE : REGULAR }
   } catch (error) {
     if (!isTheMachinesRefusal(error)) throw error
@@ -122,9 +123,9 @@ function readTheWrite(launch: ApprovedLaunch, named: string, call: CallThatRan, 
 }
 
 /** Keeps the call's own write, if it made one; or why it could not be kept. */
-export function rememberOwnWriteOfCall(launch: ApprovedLaunch, call: CallThatRan, host: LaunchHost): string | undefined {
+export function rememberOwnWriteOfCall(launch: ApprovedLaunch, call: CallThatRan, host: LaunchHost, tools: HostFileTools): string | undefined {
   const since = launch.since_approval
-  const write = ownWriteOfCall(launch, call, host, new Date())
+  const write = ownWriteOfCall(launch, call, host, new Date(), tools)
   if (since === undefined || write === undefined) return undefined
   return since.own_writes.append(write)
 }

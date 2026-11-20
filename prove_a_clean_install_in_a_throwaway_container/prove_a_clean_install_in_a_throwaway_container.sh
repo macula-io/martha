@@ -197,6 +197,13 @@ TERMINAL_COLUMNS=160
 # MEMBER_CONFIG_FOLDER in src/), so its transcripts are there and not under the owner's .claude, whose transcripts are
 # the sign-in session's. They are read while the member runs: the folder goes with its launch.
 TRANSCRIPTS="${CONTAINER_HOME}/.local/state/martha/*/snapshots/*/the-members-own-config/projects/*/*.jsonl"
+# What Martha kept of an ended launch's transcripts (martha#646): the snapshot goes when the launch ends, and this copy
+# under the project's own state is what is left of what the member did. The failure capture reads it when the live one
+# is gone, so a member that ended is still read rather than said to be a container that could not give it.
+KEPT_TRANSCRIPTS="${CONTAINER_HOME}/.local/state/martha/*/transcripts/*/projects/*/*.jsonl"
+# What the failure capture says when the text it logs is the copy kept after the launch ended.
+KEPT_COPY_WORDS='(its launch has ended; this is the copy Martha kept) '
+
 REQUEST_BLOB='"type":"api-request-blob"'
 ANSWER_LINE='"role":"assistant","content":[{"type":"text","text":"'
 # The host's Read returns every line of the file with its number and a tab, so a real read of the outsider's README
@@ -745,10 +752,25 @@ turn_line() {
 # blobs, each as `line <line>`. A blob repeats the conversation, so a blob that repeats the turn picks no file, and
 # what a blob repeats is not what happened.
 member_read() {
-  local blob turn
+  member_read_in "${TRANSCRIPTS}" "$1"
+}
+
+# The member named `name` read from `where` in the container, kept as MEMBER_FILES and MEMBER_TEXT: the read the
+# failure capture and the turn checks do, from the live folder or from the copy Martha kept (martha#646).
+read_member_from() {
+  local where="$1" name="$2" read
+  read="$(member_read_in "${where}" "${name}")" || return 1
+  MEMBER_FILES="$(sed -n 's/^file //p' <<< "${read}")"
+  MEMBER_TEXT="$(sed -n 's/^line //p' <<< "${read}")"
+}
+
+# The member named `name` read from `where` in the container: its session files holding the owner's turn to it, one a
+# line, then their text.
+member_read_in() {
+  local where="$1" name="$2" blob turn
   blob="$(remote_word "${REQUEST_BLOB}")"
-  turn="$(remote_word "$(turn_line "$1")")"
-  on_the_host podman exec "${CONTAINER}" sh -c "for f in ${TRANSCRIPTS}; do if [ -f \"\$f\" ] && grep -vF -- ${blob} \"\$f\" | grep -qF -- ${turn}; then printf 'file %s\n' \"\$f\"; grep -vF -- ${blob} \"\$f\" | sed 's/^/line /'; fi; done; true"
+  turn="$(remote_word "$(turn_line "${name}")")"
+  on_the_host podman exec "${CONTAINER}" sh -c "for f in ${where}; do if [ -f \"\$f\" ] && grep -vF -- ${blob} \"\$f\" | grep -qF -- ${turn}; then printf 'file %s\n' \"\$f\"; grep -vF -- ${blob} \"\$f\" | sed 's/^/line /'; fi; done; true"
 }
 
 # The session files holding the owner's turn to `name`, one a line.
@@ -760,10 +782,13 @@ member_files() {
 
 # The member named `name` read now: its session files, and their text.
 read_member() {
-  local read
-  read="$(member_read "$1")" || return 1
-  MEMBER_FILES="$(sed -n 's/^file //p' <<< "${read}")"
-  MEMBER_TEXT="$(sed -n 's/^line //p' <<< "${read}")"
+  read_member_from "${TRANSCRIPTS}" "$1"
+}
+
+# The member named `name` read from the copy Martha kept of its launch, once the live folder has gone with it: the same
+# files and their text, from KEPT_TRANSCRIPTS (martha#646).
+read_member_kept() {
+  read_member_from "${KEPT_TRANSCRIPTS}" "$1"
 }
 
 # Whether one line of the member's text holds both `first` and `second`.
@@ -879,7 +904,15 @@ member_done() {
 # screen. It is kept before the tear-down, which takes the container and the terminal's folder with it.
 keep_what_the_member_did() {
   local name="${MEMBERS[$1]}" text
-  if read_member "${name}"; then text="${MEMBER_TEXT}"; else text='(the container could not give it)'; fi
+  # The live transcript first, and the copy Martha kept when its launch has ended (martha#646, issue item 3): a member
+  # that ended is read, never said to be a container that could not give it.
+  if read_member "${name}" && [ -n "${MEMBER_TEXT}" ]; then
+    text="${MEMBER_TEXT}"
+  elif read_member_kept "${name}" && [ -n "${MEMBER_TEXT}" ]; then
+    text="${KEPT_COPY_WORDS}${MEMBER_TEXT}"
+  else
+    text='(the container could not give it, and no copy of it was kept)'
+  fi
   log "${name}${KEPT_TRANSCRIPT_WORDS}"
   log "${text}"
   log "${name}${KEPT_SCREEN_WORDS}"
@@ -1809,6 +1842,27 @@ self_test() {
   member_case 'a-read-without-the-numbering' member.read-bare '' 1 "^FAIL member ${first}: the member did not read the outsider's README\$" || case_failed=1
   member_case 'the-transcript-goes-after-the-answer' transcript.goes '' 1 "^FAIL member ${first}: the container could not give the host transcript\$" || case_failed=1
   kept_the_record 'the-transcript-goes-after-the-answer' "${first}" || case_failed=1
+  # Once the launch has ended the live folder has gone with it, and the failure capture reads the copy Martha kept
+  # (martha#646, issue item 3): a member that ended is still read, never said to be a container that could not give it.
+  local kept_root kept_copy kept_nowhere kept_log
+  kept_root="${root}/the-kept-copy"
+  kept_copy="${kept_root}/state/*/*/transcripts/*/projects/*/*.jsonl"
+  kept_nowhere="${kept_root}/no-live-folder/*/*/*/*.jsonl"
+  kept_log="${root}/the-kept-copy.log"
+  mkdir -p "${kept_root}/state/martha/p/transcripts/launch-1/projects/the-project"
+  printf '{%s}\n' "$(turn_line "${first}")" \
+    > "${kept_root}/state/martha/p/transcripts/launch-1/projects/the-project/s-1.jsonl"
+  : > "${kept_log}"
+  # The host's ssh runs the container's own command here, as the container would, so the reader is the real one.
+  (
+    MEMBERS=("${first}")
+    on_the_host() { local last; for last in "$@"; do :; done; sh -c "${last}"; }
+    KEPT_TRANSCRIPTS="${kept_copy}" TRANSCRIPTS="${kept_nowhere}" LOG_FILE="${kept_log}" keep_what_the_member_did 0
+  )
+  if ! grep -qF -- "${KEPT_COPY_WORDS}{$(turn_line "${first}")}" "${kept_log}"; then
+    echo 'the self-test: a failed step read no copy of an ended launch, so what its member did was said to be gone' >&2
+    case_failed=1
+  fi
   # A member step that fails keeps what the member did in the log before the tear-down: the transcript as the checks
   # read it and the screen. The credentials hold words of their own here, and none of them may reach the log.
   standin="${root}/a-failed-member-keeps-its-record"

@@ -100,8 +100,8 @@ import process from 'node:process'
 
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { USER_SETTINGS_FILE, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
-import { EDIT_TOOL, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
-import { FILE_ARGUMENTS } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { CLAUDE_CODE_FILE_TOOLS, WHOLE_FILE_TOOL, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
+import type { HostFileTools } from '../host_contract/host_contract.ts'
 import { HOST_TRUST_RECORD_FILE } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import type { ProtectedConfigPlaces } from '../cut_the_rules_from_the_host_binary/protected_config_places.ts'
 import { checkoutOnDisk, realOrResolved, type LaunchHost } from '../judge_a_checkouts_tree/checkout_tree.ts'
@@ -109,9 +109,6 @@ import { CONFIG, whatALaterGitRunReads, type WhatALaterGitRunReads } from '../fi
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import type { PathProbe } from '../check_every_path_is_gated/check_every_path_is_gated.ts'
 import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-
-/** The file tools a member writes a file with. */
-export const FILE_WRITING_TOOLS = [WHOLE_FILE_TOOL, EDIT_TOOL, 'MultiEdit', NOTEBOOK_EDIT_TOOL] as const
 
 /** The settings key that names the folder memory lives in. */
 export const MEMORY_DIRECTORY_KEY = 'autoMemoryDirectory'
@@ -127,6 +124,8 @@ const OWNER_RULES = 'rules'
 export interface DeniedPlace {
   readonly what: string
   readonly issue: string
+  /** Whose sessions load the place as their own, when not the owner's own Claude Code sessions (#541 package A: the owner's own engine). */
+  readonly loaded_by?: string
 }
 
 /**
@@ -935,6 +934,8 @@ const sayTheNotices = (notices: readonly string[], note: (line: string) => void)
 /**
  * What a member's tool call writes of the owner's memory, instructions, or what a later git run of the owner's reads, as
  * notices said where the owner reads Martha's own output (rules 3, 4 and 5): every such write goes ahead (martha#601).
+ * It still answers undefined: the owner cut every refusal on these places to a line, so what is left standing on them
+ * is the notice, and the host's own `permissions.deny` rules, which do not depend on this call.
  */
 export function writesTheOwnersMemory(
   tool: string,
@@ -943,9 +944,10 @@ export function writesTheOwnersMemory(
   cwd: string,
   home: string,
   host: LaunchHost,
+  tools: HostFileTools,
   note: (line: string) => void = sayTheNotice,
 ): string | undefined {
-  if (!(FILE_WRITING_TOOLS as readonly string[]).includes(tool)) return undefined
+  if (!tools.writing_tools.includes(tool)) return undefined
   // Read at each call, not at launch: a checkout or a git directory that appears
   // during the session is covered from the next call (martha#168).
   const git = checkoutGitOf(cwd, host)
@@ -955,41 +957,29 @@ export function writesTheOwnersMemory(
   const notices: string[] = []
   const unfollowable = unfollowablePlace(places, git)
   if (unfollowable !== undefined) notices.push(unfollowable)
-  for (const argument of FILE_ARGUMENTS) {
-    const why = whyTheArgumentIsRefused(input[argument], places, git, later, host, cwd, home)
-    if (why.refusal !== undefined) {
-      sayTheNotices(notices, note)
-      return why.refusal
-    }
-    notices.push(...why.notices)
+  for (const argument of tools.file_arguments) {
+    notices.push(...noticesOfTheArgument(input[argument], places, git, later, host, { cwd, home, resolve: tools.resolve }))
   }
   sayTheNotices(notices, note)
   return undefined
 }
 
-/** What one argument came to: a refusal that still stops the write, and the notices about places the write goes to anyway. */
-interface WhatTheArgumentCameTo {
-  readonly refusal?: string
-  readonly notices: readonly string[]
-}
-
-/** Why one argument a file tool is given is still refused, and what Martha carried on past about it (martha#601). */
-function whyTheArgumentIsRefused(argument: unknown, places: OwnerMemoryPlaces, git: CheckoutGit | undefined, later: WhatALaterGitRunReads | undefined, host: LaunchHost, cwd: string, home: string): WhatTheArgumentCameTo {
-  if (typeof argument !== 'string' || argument.trim() === '') return { notices: [] }
-  const spelled = asTheHostResolves(argument, cwd, home)
+/**
+ * One line for each place this argument writes that the owner's own sessions read, or none (rules 3, 4 and 5, and
+ * martha#601 for the wording of every one of them).
+ */
+function noticesOfTheArgument(argument: unknown, places: OwnerMemoryPlaces, git: CheckoutGit | undefined, later: WhatALaterGitRunReads | undefined, host: LaunchHost, from: { readonly cwd: string; readonly home: string; readonly resolve: HostFileTools['resolve'] }): readonly string[] {
+  if (typeof argument !== 'string' || argument.trim() === '') return []
+  const spelled = from.resolve(argument, from.cwd, from.home)
   const end = pathToItsEnd(spelled)
   if (end === undefined) {
-    return {
-      notices: [`${argument} is behind a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder it lands in cannot be told, and the write went ahead (martha#136)`],
-    }
+    return [`${argument} is behind a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder it lands in cannot be told, and the write went ahead (martha#136)`]
   }
   const gitNotice = unique([spelled, end]).map((path) => gitNoticeOf(argument, path, git, places, later, host)).find((found) => found !== undefined)
-  if (gitNotice !== undefined) return { notices: [gitNotice] }
+  if (gitNotice !== undefined) return [gitNotice]
   const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
-  if (place === undefined) return { notices: [] }
-  return {
-    notices: [`${argument} is in ${place.what}, which the owner's own Claude Code sessions load as their own, and the write went ahead (${place.issue})`],
-  }
+  if (place === undefined) return []
+  return [`${argument} is in ${place.what}, which ${place.loaded_by ?? "the owner's own Claude Code sessions"} load as their own, and the write went ahead (${place.issue})`]
 }
 
 /**
@@ -1066,5 +1056,5 @@ export function userScopeUnder(home: string): OwnerUserScope {
 export function admitsAWriteNoLaterGitRunReads(probe: PathProbe, note?: (line: string) => void): boolean {
   const env: Readonly<Record<string, string | undefined>> = { HOME: probe.home }
   const places = ownerMemoryPlaces({ launcher_env: env, member_env: env, home: probe.home, launch_dir: probe.cwd, settings_files: [], user_scope: userScopeUnder(probe.home) })
-  return writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine, note) === undefined
+  return writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine, CLAUDE_CODE_FILE_TOOLS, note) === undefined
 }

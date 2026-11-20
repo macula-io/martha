@@ -28,6 +28,16 @@
 // files past OWN_WRITES_LAUNCHES_KEPT, newest by their last record, are pruned when a launch starts, so the state of
 // a project no longer grows with every launch it ever had.
 //
+// What each ended launch's session was of it is kept beside those, under TRANSCRIPTS_PLACE (martha#646): one directory
+// per launch holding the host's own transcripts, redacted, and a sidecar naming the files a token was found in, so the
+// owner can read what a member's session did after its launch has ended. There are three numbers, and they are the
+// product's own: the newest TRANSCRIPTS_LAUNCHES_KEPT launches are kept, each file is bounded by
+// TRANSCRIPTS_FILE_BYTES_KEPT and each launch by TRANSCRIPTS_LAUNCH_BYTES_KEPT, so the worst a project can hold is the
+// kept launches times the launch's own bound — 1 GiB, not the two bounds' product. A file either bound leaves no room
+// for is kept as the line that says which bound it passed, never in part: a truncated JSONL presented as a transcript
+// is not what a reader should get. The 0700 and 0600 modes below are what keep another OS user out; another member is
+// not kept out, as the design says plainly, since every member runs as the owner's OS user.
+//
 // Residual, stated: pruning can take a running launch's file when OWN_WRITES_LAUNCHES_KEPT other launches of the same
 // project have written since it last did. Its next write makes the file again, and the paths it wrote before then are
 // no longer own writes, so its next recheck stops it and names martha approve: a running launch is lost, not a change
@@ -82,6 +92,18 @@ export const OWN_WRITES_SUFFIX = '.jsonl'
 
 /** How many launches' own writes are kept: the newest by the last record each kept, so a reader of the history has one. */
 export const OWN_WRITES_LAUNCHES_KEPT = 64
+
+/**
+ * The directory inside Martha's state that holds what each ended launch's transcript was of it (martha#646), one
+ * directory per launch: `<state root>/<sha256 of the project's real path>/transcripts/<the launch's own name>`, holding
+ * the host's own `projects/<key>/<session>.jsonl` redacted and a sidecar naming the files a token was found in. The
+ * newest TRANSCRIPTS_LAUNCHES_KEPT launches are kept and the rest pruned; one file is bounded by
+ * TRANSCRIPTS_FILE_BYTES_KEPT and one launch by TRANSCRIPTS_LAUNCH_BYTES_KEPT, so what a project's transcripts can hold
+ * at worst is the kept launches times the launch's bound — 1 GiB, not the two bounds' product. Both bounds are stated
+ * in the module's own words above, and the worst case is pinned by a test from the constants rather than spelled again
+ * there.
+ */
+export const TRANSCRIPTS_PLACE = 'transcripts'
 
 /** How many random bytes a node id holds: 64 hex digits, the shape NODE_ID accepts. */
 const NODE_ID_BYTES = 32

@@ -146,11 +146,15 @@ export function refusedIfTheRunIsGone<A>(made: { readonly theRunIsGone?: () => b
 
 /**
  * What is left of a launch once its member's group is dead, in the order the signal path fixes (#472): the relay
- * directory, then the snapshot, then its launch record. The group goes first, before any of this, so the member is
- * not running for the instant the directories take to remove.
+ * directory, then the member's transcripts kept (martha#646), then the snapshot, then its launch record. The group goes
+ * first, before any of this, so the member is not running for the instant the directories take to remove.
  */
-export function takeTheLaunchOffTheDisk(made: { readonly relayDirectory: { remove(): void }; removeSnapshot(): void }, dropTheRecord: () => void): void {
+export function takeTheLaunchOffTheDisk(
+  made: { readonly relayDirectory: { remove(): void }; keepTranscripts(): void; removeSnapshot(): void },
+  dropTheRecord: () => void,
+): void {
   made.relayDirectory.remove()
+  made.keepTranscripts()
   made.removeSnapshot()
   dropTheRecord()
 }

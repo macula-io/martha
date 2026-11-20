@@ -5,7 +5,7 @@ import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_lit
 import { THE_CHANNEL_READ_ASK } from '../keep_the_crew_channel/the_channel_read.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
-import { OWNER, ROLE_TEXTS_DIRECTORY } from './declare_crew.ts'
+import { HOST, OWNER, ROLE_TEXTS_DIRECTORY } from './declare_crew.ts'
 import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 
 /** Why `'owner'` is written by literal in the declaration (#289 part b). */
@@ -30,5 +30,8 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: OWNER, file: 'declare_crew/declare_crew.ts', reason: A_FIELD_OF_THE_DECLARATION },
   { value: SUPERVISOR, file: 'declare_crew/declare_crew.node-test.ts', reason: A_ROLE_A_TEST_CREW_DECLARES },
   // martha#307: the switch the owner gives martha crew add for a member's model, which a host's own switch happens to share.
+  // martha#541 package A: engine_endpoint's `host` is the server an engine member's model is reached on (the provider's
+  // own OPENAI_HOST word), not the host a member runs on that HOST names.
+  { value: HOST, file: 'declare_crew/declare_crew.ts', reason: 'engine_endpoint.host, the server an engine member\'s model is reached on, not the host a member runs on' },
   { value: THE_MODELS_SWITCH, file: 'declare_crew/change_a_member.ts', reason: 'the switch martha crew add takes for a member\'s model, not the switch a host is started with' },
 ]

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
@@ -18,7 +18,6 @@ import {
   GIT_DIR_VARIABLE,
   GIT_CONFIG_SYSTEM_VARIABLE,
   GIT_CONFIG_GLOBAL_VARIABLE,
-  FILE_WRITING_TOOLS,
   gapsInTheNameMap,
   LINK_HOPS,
   MEMORY_DIRECTORY_KEY,
@@ -32,7 +31,8 @@ import {
   type OwnerUserScope,
 } from './refuse_a_member_writing_owner_memory.ts'
 import { hostLinesNamingARule } from './the_rules_the_host_matches.ts'
-import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { CLAUDE_CODE_FILE_TOOLS, FILE_WRITING_TOOLS, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { OTHER_HOSTS_FILE_TOOLS } from '../host_contract/tool_names_for_tests.ts'
 import { SKILLS_KIND } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { APPROVALS_FILE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -91,7 +91,7 @@ function assertDeniedBy(places: OwnerMemoryPlaces, cwd: string, home: string, fi
     const input = tool === NOTEBOOK_EDIT_TOOL ? { notebook_path: file_path } : write(file_path)
     let refusal: string | undefined
     const notice = theNoticeWhile(() => {
-      refusal = writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine)
+      refusal = writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
     })
     assert.equal(refusal, undefined, `${tool}: the write was refused: ${refusal}`)
     assert.ok(notice.includes(issue), `${tool}: ${why} (notice: ${notice || 'none'})`)
@@ -237,7 +237,7 @@ test('#601: a chain of links one past the cap is one notice, and the write goes 
   for (const file_path of [join(end, 'MEMORY.md'), join(place.worktree, 'notes.md')]) {
     let why: string | undefined
     const notice = theNoticeWhile(() => {
-      why = writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path, content: 'x' }, places, place.worktree, place.home, thisMachine)
+      why = writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path, content: 'x' }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
     })
     assert.equal(why, undefined, `${file_path} was refused: ${why}`)
     assert.ok(notice.includes('cannot be followed to its end'), `${file_path} went ahead without a notice: ${notice}`)
@@ -254,11 +254,11 @@ test('#601: a link that turns on itself is one notice, and a read of the same pa
   const memory = join(project, 'memory', 'MEMORY.md')
   let why: string | undefined
   const notice = theNoticeWhile(() => {
-    why = writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: memory, content: 'x' }, places, place.worktree, place.home, thisMachine)
+    why = writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: memory, content: 'x' }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
   })
   assert.equal(why, undefined, `a cycle refused the write: ${why}`)
   assert.ok(notice.includes('cannot be followed to its end'), `a cycle went ahead without a notice: ${notice}`)
-  assert.equal(writesTheOwnersMemory('Read', { file_path: memory }, places, place.worktree, place.home, thisMachine), undefined, 'a read is not a write')
+  assert.equal(writesTheOwnersMemory('Read', { file_path: memory }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, 'a read is not a write')
 })
 
 test('#601: a projects folder that is a chain of links past the cap is one notice, not dropped (#136 r=5)', (t) => {
@@ -270,7 +270,7 @@ test('#601: a projects folder that is a chain of links past the cap is one notic
   for (const file_path of [join(disk, '-new', 'memory', 'MEMORY.md'), join(place.worktree, 'notes.md')]) {
     let why: string | undefined
     const notice = theNoticeWhile(() => {
-      why = writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path, content: 'x' }, places, place.worktree, place.home, thisMachine)
+      why = writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path, content: 'x' }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
     })
     assert.equal(why, undefined, `${file_path} was refused: ${why}`)
     assert.ok(notice.includes('cannot be followed to its end'), `${file_path} went ahead without a notice: ${notice}`)
@@ -284,7 +284,7 @@ test('#601: a project folder that is a chain of links past the cap is one notice
   symlinkSync(chainAt(join(place.root, 'project-past-cap'), LINK_HOPS, pe), join(place.config, 'projects', '-chain'))
   let why: string | undefined
   const notice = theNoticeWhile(() => {
-    why = writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: join(pe, 'memory', 'MEMORY.md'), content: 'x' }, places, place.worktree, place.home, thisMachine)
+    why = writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: join(pe, 'memory', 'MEMORY.md'), content: 'x' }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
   })
   assert.equal(why, undefined, `the write was refused: ${why}`)
   assert.ok(notice.includes('cannot be followed to its end'), `the write went ahead without a notice: ${notice}`)
@@ -405,12 +405,12 @@ test('a write in the checkout, and any read of a memory file, are allowed', (t) 
   for (const tool of FILE_WRITING_TOOLS) {
     // A file in the checkout is the member's own to write, and a directory named memory inside it is not a memory
     // folder: only the host's own places are (martha#136, #154).
-    assert.equal(writesTheOwnersMemory(tool, write(join(place.worktree, 'memory', 'notes.md')), places, place.worktree, place.home, thisMachine), undefined, tool)
-    assert.equal(writesTheOwnersMemory(tool, write(join(place.worktree, 'src', 'notes.md')), places, place.worktree, place.home, thisMachine), undefined, tool)
+    assert.equal(writesTheOwnersMemory(tool, write(join(place.worktree, 'memory', 'notes.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, tool)
+    assert.equal(writesTheOwnersMemory(tool, write(join(place.worktree, 'src', 'notes.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, tool)
   }
   // A read is never refused: the gate is about what a member leaves behind, not what it takes in (martha#136).
-  assert.equal(writesTheOwnersMemory('Read', { file_path: join(place.mainMemory, 'MEMORY.md') }, places, place.worktree, place.home, thisMachine), undefined)
-  assert.equal(writesTheOwnersMemory('Read', { file_path: join(place.config, 'projects', '-work-main-clone', 'session.jsonl') }, places, place.worktree, place.home, thisMachine), undefined)
+  assert.equal(writesTheOwnersMemory('Read', { file_path: join(place.mainMemory, 'MEMORY.md') }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined)
+  assert.equal(writesTheOwnersMemory('Read', { file_path: join(place.config, 'projects', '-work-main-clone', 'session.jsonl') }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined)
 })
 
 test('the permission rules name the same places the gate notices, one rule each under the tool the host\'s checks match (#226)', (t) => {
@@ -481,7 +481,7 @@ test('a link to the owner\'s settings file whose target does not exist yet is no
   assert.equal(existsSync(settings), false, 'the settings file is absent, so the link has no target')
   symlinkSync(USER_SETTINGS_FILE, join(place.config, 'sneaky'))
   const file_path = join(place.config, 'sneaky')
-  assert.equal(namesTheOwnersSettings({ file_path }, settings, place.worktree, place.home), undefined, 'the settings check compares the link itself, not where it leads')
+  assert.equal(namesTheOwnersSettings({ file_path }, settings, place.worktree, place.home, CLAUDE_CODE_FILE_TOOLS), undefined, 'the settings check compares the link itself, not where it leads')
   assertDeniedBy(placesFor(place), place.worktree, place.home, file_path, 'martha#187', 'the link this guard follows to its end')
 })
 
@@ -644,7 +644,7 @@ test('a name that only looks like the global config\'s family is admitted (marth
   // of characters and the extension anchors the end (both measured on 2.1.322).
   const admitted = [join(place.home, '.claudex', 'src', 'a.json'), join(place.home, `.not${HOST_TRUST_RECORD_FILE}`), join(place.home, `${HOST_TRUST_RECORD_FILE}.bak`)]
   for (const file_path of admitted) {
-    assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(file_path), places, place.worktree, place.home, thisMachine), undefined, `${file_path} is a name of its own, not the global config`)
+    assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(file_path), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, `${file_path} is a name of its own, not the global config`)
   }
 })
 
@@ -655,7 +655,7 @@ test('a write into the family through a folder that links to the home is noticed
   symlinkSync(place.home, join(elsewhere, 'hl'))
   const places = placesFor(place)
   // The gate runs through that link: a name of its own, written the same way, is allowed.
-  assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(elsewhere, 'hl', `.not${HOST_TRUST_RECORD_FILE}`)), places, place.worktree, place.home, thisMachine), undefined, 'a name of its own through the same folder link')
+  assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(elsewhere, 'hl', `.not${HOST_TRUST_RECORD_FILE}`)), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, 'a name of its own through the same folder link')
   assertDeniedBy(places, place.worktree, place.home, join(elsewhere, 'hl', GLOBAL_CONFIG_FAMILY[1] ?? ''), 'martha#202', 'through a folder link, on the name it resolves to')
 })
 
@@ -667,7 +667,7 @@ test('a link in the checkout pointing at a name in the family is noticed with on
   symlinkSync(join(place.home, `.not${HOST_TRUST_RECORD_FILE}`), join(place.worktree, 'fine.json'))
   symlinkSync(join(place.home, GLOBAL_CONFIG_FAMILY[1] ?? ''), join(place.worktree, 'innocent.json'))
   // The gate runs through a checkout link: a link to a name of its own is allowed.
-  assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.worktree, 'fine.json')), places, place.worktree, place.home, thisMachine), undefined, 'a link to a name of its own')
+  assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.worktree, 'fine.json')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, 'a link to a name of its own')
   assertDeniedBy(places, place.worktree, place.home, join(place.worktree, 'innocent.json'), 'martha#202', 'a link to a file in the family, on the file it leads to')
   assertDeniedBy(places, place.worktree, place.home, join(place.home, GLOBAL_CONFIG_FAMILY[1] ?? ''), 'martha#202', 'the target the link names')
 })
@@ -716,12 +716,12 @@ test('every place the map says another package guards is noticed with one line t
     .map(([name]) => name)
   assert.deepEqual(deniedBy.sort(), Object.keys(A_WRITE_INTO).sort(), 'every name the map says another package denies has a write this test makes')
   // The gate is known to run: a write outside every place is allowed.
-  assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.worktree, 'notes.md')), places, place.worktree, place.home, thisMachine), undefined, 'a write outside every place')
+  assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.worktree, 'notes.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, 'a write outside every place')
   for (const name of deniedBy) {
     const file_path = join(place.config, A_WRITE_INTO[name] ?? '')
     let refusal: string | undefined
     const notice = theNoticeWhile(() => {
-      refusal = writesTheOwnersMemory(WHOLE_FILE_TOOL, write(file_path), places, place.worktree, place.home, thisMachine)
+      refusal = writesTheOwnersMemory(WHOLE_FILE_TOOL, write(file_path), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
     })
     assert.equal(refusal, undefined, `${name}: ${file_path} was refused`)
     assert.ok(notice.includes('notice:'), `${name}: ${file_path} went ahead without a notice`)
@@ -776,7 +776,7 @@ function assertRefusedAsGit(places: OwnerMemoryPlaces, cwd: string, home: string
     const input = tool === NOTEBOOK_EDIT_TOOL ? { notebook_path: file_path } : write(file_path)
     let said: string | undefined
     const notice = theNoticeWhile(() => {
-      said = writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine)
+      said = writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
     })
     assert.equal(said, undefined, `${tool}: ${why} was refused (${said})`)
     assert.ok(notice.includes('martha#168'), `${tool}: ${why} (notice: ${notice || 'none'})`)
@@ -788,7 +788,7 @@ function assertRefusedAsGit(places: OwnerMemoryPlaces, cwd: string, home: string
 function assertAdmitted(places: OwnerMemoryPlaces, cwd: string, home: string, file_path: string, why: string): void {
   for (const tool of FILE_WRITING_TOOLS) {
     const input = tool === NOTEBOOK_EDIT_TOOL ? { notebook_path: file_path } : write(file_path)
-    assert.equal(writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine), undefined, `${tool}: ${why}`)
+    assert.equal(writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, `${tool}: ${why}`)
   }
 }
 
@@ -801,7 +801,7 @@ test('a write into the checkout\'s own git directory is noticed with one line, a
   assertRefusedAsGit(places, checkout, place.home, join(checkout, '.git', 'hooks', 'pre-commit'), 'a hook the owner\'s next git run would start')
   assertRefusedAsGit(places, checkout, place.home, join(checkout, '.git', CONFIG), 'the checkout\'s own git config')
   assertRefusedAsGit(places, checkout, place.home, join(checkout, '.git', 'objects', 'info', 'alternates'), 'the object store')
-  assert.equal(writesTheOwnersMemory('Read', { file_path: join(checkout, '.git', CONFIG) }, places, checkout, place.home, thisMachine), undefined, 'a read of the git config is not a write')
+  assert.equal(writesTheOwnersMemory('Read', { file_path: join(checkout, '.git', CONFIG) }, places, checkout, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, 'a read of the git config is not a write')
   assertAdmitted(places, checkout, place.home, join(checkout, 'src', 'x.ts'), 'an ordinary file in the same checkout')
 })
 
@@ -880,7 +880,7 @@ test('the git configuration files of the owner\'s own runs are noticed with one 
   assertRefusedAsGit(places, place.worktree, place.home, join(place.home, '.gitconfig'), 'the owner\'s ~/.gitconfig')
   assertRefusedAsGit(places, place.worktree, place.home, join(place.home, '.config', 'git', CONFIG), 'the XDG file\'s own default under ~/.config')
   assertAdmitted(places, place.worktree, place.home, join(place.root, 'a-project', 'gitconfig'), 'a gitconfig no git run reads')
-  assert.equal(writesTheOwnersMemory('Read', { file_path: moved }, places, place.worktree, place.home, thisMachine), undefined, 'a read of the user-level git config is not a write')
+  assert.equal(writesTheOwnersMemory('Read', { file_path: moved }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, 'a read of the user-level git config is not a write')
 
   // A path a variable named is admitted once nothing names it.
   const plain = placesFor(place)
@@ -908,7 +908,7 @@ test('#601: a git directory behind a chain of links that cannot be followed is o
   const places = placesFor(place, { GIT_DIR: loop })
   let why: string | undefined
   const notice = theNoticeWhile(() => {
-    why = writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.worktree, 'src', 'x.ts')), places, place.worktree, place.home, thisMachine)
+    why = writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.worktree, 'src', 'x.ts')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
   })
   assert.equal(why, undefined, `the write was refused (${why})`)
   assert.ok(notice.includes('martha#168'), `a write while the git dir cannot be followed went ahead without a notice (${notice})`)
@@ -981,7 +981,7 @@ function assertRefusedAs192(places: OwnerMemoryPlaces, cwd: string, home: string
     const input = tool === NOTEBOOK_EDIT_TOOL ? { notebook_path: file_path } : write(file_path)
     let said: string | undefined
     const notice = theNoticeWhile(() => {
-      said = writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine)
+      said = writesTheOwnersMemory(tool, input, places, cwd, home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
     })
     assert.equal(said, undefined, `${tool}: ${why} was refused (${said})`)
     assert.ok(notice.includes('martha#192'), `${tool}: ${why} (notice: ${notice || 'none'})`)
@@ -1428,7 +1428,7 @@ test('#601: the notice names the file, the key and the value that put a whole ch
   writeFileSync(join(place.home, '.gitconfig'), `[safe]\n\tdirectory = ${checkout}\n`)
   let said: string | undefined
   const notice = theNoticeWhile(() => {
-    said = writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(checkout, 'src', 'a.ts')), placesFor(place), checkout, place.home, thisMachine)
+    said = writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(checkout, 'src', 'a.ts')), placesFor(place), checkout, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
   })
   assert.equal(said, undefined, `a checkout the owner's own config puts out of reach was refused (${said})`)
   assert.ok(notice.includes('martha#192'), `the write went ahead without a notice (${notice})`)
@@ -1449,7 +1449,55 @@ test("Martha's own state root is one notice to a member's file tools, by the gat
   }
   assert.ok(memoryDenyRules(places).includes(`Edit(/${realPathOf(state_root)}/**)`), "the permission rules do not name Martha's state root")
   // The member's own work is not touched by it.
-  assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.worktree, 'src.ts')), places, place.worktree, place.home, thisMachine), undefined, 'a write in the checkout was refused')
+  assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.worktree, 'src.ts')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), undefined, 'a write in the checkout was refused')
   // A probe of the owner's folders names no state root, and denies none.
   assert.ok(!memoryDenyRules(placesFor(place)).some((rule) => rule.includes(realPathOf(state_root))), 'a place given no state root denied one')
+})
+
+test("a write of the owner's memory is judged by the host's own writing tools and argument, resolved as that host resolves them, never by Claude Code's (#541 package A, design G1; mutants: Claude Code's tools, arguments or resolver used)", (t) => {
+  const place = placeFor(t)
+  const places = placesFor(place)
+  const memory = join(place.mainMemory, 'MEMORY.md')
+  const [tool] = OTHER_HOSTS_FILE_TOOLS.writing_tools
+  const [argument] = OTHER_HOSTS_FILE_TOOLS.file_arguments
+  assert.ok(tool !== undefined && argument !== undefined)
+  // Every write here goes ahead (martha#601): what says whose tool and whose argument was judged is the one line
+  // the guard says, so a call it does not judge says nothing at all.
+  const own = theNoticeWhile(() => {
+    writesTheOwnersMemory(tool, { [argument]: memory }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS)
+  })
+  assert.match(own, /MEMORY\.md/, "the host's own tool on its own argument is noticed")
+  const claudeTool = theNoticeWhile(() => {
+    writesTheOwnersMemory(WHOLE_FILE_TOOL, { [argument]: memory }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS)
+  })
+  assert.equal(claudeTool, '', "Claude Code's tool is not this host's")
+  const claudeArgument = theNoticeWhile(() => {
+    writesTheOwnersMemory(tool, { file_path: memory }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS)
+  })
+  assert.equal(claudeArgument, '', "Claude Code's argument is not this host's")
+  const spelled = `~/${relative(place.home, memory)}`
+  const resolved = theNoticeWhile(() => {
+    writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: spelled }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
+  })
+  assert.match(resolved, /MEMORY\.md/, 'Claude Code resolves ~/ to the memory')
+  const theirResolution = theNoticeWhile(() => {
+    writesTheOwnersMemory(tool, { [argument]: spelled }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS)
+  })
+  assert.equal(theirResolution, '', 'this host resolves ~/ inside the checkout')
+})
+
+test("a noticed write names whose sessions load the place: the place's own word when it carries one, else the owner's Claude Code sessions (#541 package A; mutant: the place's word dropped)", (t) => {
+  const place = placeFor(t)
+  const theirs = join(place.root, 'another-hosts-folder')
+  const loaded_by = 'the sessions of a host this test names'
+  const base = placesFor(place)
+  const places: OwnerMemoryPlaces = { ...base, folders: [...base.folders, { what: theirs, issue: 'martha#541', loaded_by }] }
+  const named = theNoticeWhile(() => {
+    writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(theirs, 'notes.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
+  })
+  assert.ok(named.includes(`which ${loaded_by} load as their own`), `the place's own word is said: ${named}`)
+  const claude = theNoticeWhile(() => {
+    writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.config, 'rules', 'a.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
+  })
+  assert.ok(claude.includes("which the owner's own Claude Code sessions load as their own"), `a place with no word names Claude Code's: ${claude}`)
 })
