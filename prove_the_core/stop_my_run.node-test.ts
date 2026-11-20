@@ -60,15 +60,19 @@ function aCheckout(at: string): string {
  * when the case asks for it, a working directory it moves to and a SIGTERM it does not hear. A plant that does not hear
  * SIGTERM is not one that ends with its run: it is the case where the group outlives the signal, and only SIGKILL ends
  * it, which is what `--force` and the file's own cleanup send. A plant that survives does not end with its run either,
- * and does hear SIGTERM: it is the group a member still has to stop once its leader died alone, and it cannot vanish on
- * its own between the leader's end and the command that is about it. */
+ * and does hear SIGTERM: it is the group a member still has to stop once its leader died alone. Its file starts a child
+ * of its own in the same group that nothing but a signal ends, because a test file's own process may end the moment the
+ * run above it does — node's test runner closes its channel, and the file goes with it — so the group it leaves is told
+ * apart from a group that ended with its leader by something that has no such rule. */
 const thePlantedFile = (planted: { elsewhere?: string; deaf?: boolean; survives?: boolean }): string => {
   const endsWithTheRun = planted.deaf !== true && planted.survives !== true
-  return `import { writeFileSync } from 'node:fs'
+  return `import { spawn } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
 import { test } from 'node:test'
 ${endsWithTheRun ? `import { endWithTheRun } from ${JSON.stringify(THE_GUARD)}` : ''}
 ${planted.elsewhere === undefined ? '' : `process.chdir(${JSON.stringify(planted.elsewhere)})`}
 ${planted.deaf === true ? "process.on('SIGTERM', () => undefined)" : ''}
+${planted.survives === true ? "spawn('sleep', ['600'], { stdio: 'ignore' })" : ''}
 ${endsWithTheRun ? 'endWithTheRun((code) => process.exit(code))' : ''}
 if (process.env.THE_SEEN !== undefined) writeFileSync(process.env.THE_SEEN, JSON.stringify({ pid: process.pid, cwd: process.cwd() }))
 test('waits forever', () => new Promise(() => {}))
