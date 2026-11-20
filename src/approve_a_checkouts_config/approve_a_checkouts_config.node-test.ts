@@ -114,14 +114,18 @@ test('a checkout with no config that starts code has nothing to approve, and ask
   assert.deepEqual(readApprovals(place.state), { approvals: [] })
 })
 
-test('a config the launch gate could never start is refused with the gate\'s reason, and never asked about', async (t) => {
+test('#601: a config link is said in one line, followed, and approved; the owner is asked about what it points at', async (t) => {
   const place = placeFor(t, { 'servers.json': SERVERS })
   symlinkSync('servers.json', join(place.root, '.mcp.json'))
   const terminal = terminalAnswering('yes')
-  const outcome = await approveConfig(approving(place, terminal, []))
-  assert.equal(outcome.kind, 'refused')
-  assert.match(outcome.kind === 'refused' ? outcome.refusal : '', /\.mcp\.json is a symlink/)
-  assert.deepEqual(terminal.asked, [])
+  const lines: string[] = []
+  const outcome = await approveConfig(approving(place, terminal, lines))
+  assert.equal(outcome.kind, 'approved')
+  assert.ok(lines.some((line) => line.includes('.mcp.json is a symlink')), lines.join('\n'))
+  assert.equal(terminal.asked.length, 1, 'the owner is asked about what the link points at')
+  const kept = readApprovals(place.state)
+  assert.ok('approvals' in kept)
+  assert.equal(kept.approvals.length, 1)
 })
 
 test('approving a config already approved keeps no second line', async (t) => {
