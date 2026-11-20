@@ -38,6 +38,8 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: OWNER, file: 'declare_crew/declare_crew.ts', reason: A_FIELD_OF_THE_DECLARATION },
   { value: SUPERVISOR, file: 'declare_crew/declare_crew.node-test.ts', reason: A_ROLE_A_TEST_CREW_DECLARES },
   { value: SUPERVISOR, file: 'declare_crew/the_drafts_declaration.node-test.ts', reason: A_ROLE_A_TEST_CREW_DECLARES },
+  // PR 939 ruling: Martha's team table names its supervisor role; report_where_the_work_stands imports this slice, so its constant cannot be imported back.
+  { value: SUPERVISOR, file: 'declare_crew/declare_crew.ts', reason: 'the supervisor role Martha\'s team table names; the slice that holds SUPERVISOR imports this one, so it is not imported back' },
   // martha#931: a harness's `config` is the folder that harness keeps its own settings in, not git's config file.
   { value: CONFIG, file: 'declare_crew/the_crews_profiles.ts', reason: 'a harness\'s config field in the declaration, the folder it keeps its settings in, not git\'s config file' },
   // martha#931: `transcripts` is the declaration's block of how much of a launch's transcript is kept, not the state folder they are kept in.

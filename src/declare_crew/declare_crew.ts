@@ -717,8 +717,24 @@ function aModeByName(refuse: Refuse, name: string, members: unknown): Mode {
   return { name: name.trim(), roles: [...new Set(held)], may }
 }
 
-/** The table Martha writes for a mode of this name (`martha init`'s solo crew), or undefined when it writes none. */
+/** The mode Martha keeps a team table for, and its supervisor's role: the declaration's own words, kept here alone. */
+const TEAM_MODE = 'team'
+const TEAM_SUPERVISOR_ROLE = 'supervisor'
+
+/**
+ * Martha's own team table (the Supervisor's ruling on PR 939, matching how this crew works today; Raf may overrule):
+ * a supervisor, builders and reviewers; the supervisor assigns work and holds reviews, and every other act is the
+ * owner's, as solo's table words it.
+ */
+function theTeamTable(): Mode {
+  const roles = [TEAM_SUPERVISOR_ROLE, SOLO_MEMBERS[0].role, SOLO_REVIEWER_ROLE]
+  const granted: Partial<Record<Act, string[]>> = { assign_work: [TEAM_SUPERVISOR_ROLE], [HOLD_REVIEWS]: [TEAM_SUPERVISOR_ROLE], [APPROVE_LANDING]: [OWNER] }
+  return { name: TEAM_MODE, roles, may: Object.fromEntries(ACTS.map((act) => [act, granted[act] ?? [...whoTheTableGrants(undefined)]])) as Record<Act, string[]> }
+}
+
+/** The table Martha writes for a mode of this name (`martha init`'s solo crew, and its team table), or undefined when it has none. */
 function marthasOwnTableOf(name: string): Mode | undefined {
+  if (name === TEAM_MODE) return theTeamTable()
   const solo = soloDeclaration(OWNER).mode
   if (name !== solo.name) return undefined
   return { name: solo.name, roles: [...solo.roles], may: Object.fromEntries(ACTS.map((act) => [act, [...whoTheTableGrants((solo.may as Readonly<Record<string, unknown>>)[act])]])) as Record<Act, string[]> }

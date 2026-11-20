@@ -92,13 +92,30 @@ test('#931: a declaration in the draft\'s shape is read whole: each member on it
   ])
 })
 
-test('#931: a mode named by its name has the roles its members hold, and a table that names no act, so every act is the owner\'s', async () => {
-  const { mode } = await declare(draft)
-  assert.equal(mode.name, 'team')
+test('#931: a mode Martha has no table for has the roles its members hold, and a table that names no act, so every act is the owner\'s', async () => {
+  const { mode } = await declare({ ...draft, mode: 'a-crews-own-mode' })
+  assert.equal(mode.name, 'a-crews-own-mode')
   assert.deepEqual(mode.roles, ['supervisor', 'reviewer', 'builder'])
   for (const act of ACTS) assert.deepEqual(mode.may[act], [OWNER], act)
   await refusedWith({ ...draft, mode: ' ' }, 'mode')
   await refusedWith({ ...draft, members: [{ name: 'Lead', role: OWNER, profile: 'big' }] }, 'members[0].role')
+})
+
+test('#931 (PR 939 ruling): a mode named team takes Martha\'s team table: the supervisor assigns work and holds reviews, every other act is the owner\'s', async () => {
+  const { mode } = await declare(draft)
+  assert.deepEqual(mode, {
+    name: 'team',
+    roles: ['supervisor', 'builder', 'reviewer'],
+    may: {
+      assign_work: ['supervisor'],
+      approve_landing: [OWNER],
+      resume_parked_work: [OWNER],
+      offer_owner_asks: [OWNER],
+      restart_member: [OWNER],
+      hold_reviews: ['supervisor'],
+    },
+  })
+  await refusedWith({ ...draft, members: [{ name: 'Lead', role: 'lead', profile: 'big' }] }, 'members[0].role')
 })
 
 test('#931: the engine is reached through the provider its profiles name, a bare host on https, the key file kept as written', async () => {
