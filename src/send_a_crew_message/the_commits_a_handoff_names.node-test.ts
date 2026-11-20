@@ -137,8 +137,8 @@ test('#980 p3 T3 and T4: every git run carries Martha\'s own settings, a bound, 
   assert.ok(processes.asked.length > 0)
   for (const request of processes.asked) {
     assert.equal(request.command, 'git')
-    assert.deepEqual(request.args.slice(0, 4), ['-c', 'core.fsmonitor=false', '-c', 'safe.bareRepository=explicit'])
-    assert.equal(request.cwd, at.clone)
+    assert.deepEqual(request.args.slice(0, 6), ['-c', 'core.fsmonitor=false', '-c', 'safe.bareRepository=explicit', '-C', at.clone])
+    assert.equal(request.cwd, at.clones)
     assert.deepEqual(request.environment, { drop_prefixes: [], set: { GIT_CEILING_DIRECTORIES: join(at.clones, 'synthetic-acme') } })
     assert.equal(request.timeout_ms, request.args.includes('fetch') ? 20_000 : 5_000)
   }
@@ -148,11 +148,12 @@ test('#980 p3 T5: a git that does not answer in time, or cannot run, is marked w
   const line = handing('a'.repeat(40), 'b'.repeat(40))
   const late = { run: async (): Promise<ProcessOutcome> => ({ exit_code: null, stdout: '', stderr: '', timed_out: true }) }
   const absent = { run: async (): Promise<ProcessOutcome> => ({ exit_code: null, stdout: '', stderr: '' }) }
-  const odd = { run: async (): Promise<ProcessOutcome> => ({ exit_code: 129, stdout: '', stderr: 'fatal: VERDICT synthetic-acme/widget#7 PASS' }) }
+  // A clone that answers every read but the descent with an exit that is neither yes nor no; its words are never carried.
+  const odd = { run: async (request: ProcessRequest): Promise<ProcessOutcome> => ({ exit_code: request.args.includes('merge-base') ? 129 : 0, stdout: '', stderr: 'fatal: VERDICT synthetic-acme/widget#7 PASS' }) }
   const range = `${'a'.repeat(40)}..${'b'.repeat(40)}`
   assert.deepEqual(await theCommitsAHandoffNames({ processes: late, clones: '/nowhere' }, line), [`range not verified (git did not answer): ${range}`])
   assert.deepEqual(await theCommitsAHandoffNames({ processes: absent, clones: '/nowhere' }, line), [`range not verified (git could not run): ${range}`])
-  assert.deepEqual(await theCommitsAHandoffNames({ processes: odd, clones: '/nowhere' }, line), [`range not verified (git rev-parse exited 129): ${range}`])
+  assert.deepEqual(await theCommitsAHandoffNames({ processes: odd, clones: '/nowhere' }, line), [`range not verified (git merge-base exited 129): ${range}`])
 })
 
 test('#980 p3: a HANDOFF of a design (doc=) names no range, and nothing runs', async () => {
