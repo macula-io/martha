@@ -207,20 +207,22 @@ test('a line whose repeated key hides a token is not kept as written, however th
   // one — while the line's own bytes still hold it. A line kept as written therefore says nothing about the values the
   // parse dropped, and one that cannot be shown clean is written out again.
   const token = `${TOKEN_PREFIXES[0] ?? 'ghp_'}abcdefghijklmnopqrst`
+  /** `text` with its first character written the way a JSON string may write it, which is how a token can hide. */
+  const asAnEscape = (text: string): string => `\\u${text.charCodeAt(0).toString(16).padStart(4, '0')}${text.slice(1)}`
   // The last shape is the one the bytes cannot show: its token is written as an escape and the parse drops it too, so it
   // is not kept and not claimed — a line that cannot be shown clean is written out, and nothing of the token is in it.
   const theShapes: readonly (readonly [string, string, boolean])[] = [
     ['a duplicate value', `{"a":"${token}","a":"clean"}`, true],
     ['the launch\'s own key in a duplicate value', `{"a":"${THE_LAUNCH_KEY}","a":"clean"}`, true],
     ['a duplicate whose value is a number', `{"a":"${token}","a":1}`, true],
-    ['a duplicate whose token is written as an escape', '{"a":"\\u0067hp_abcdefghijklmnopqrst","a":"clean"}', false],
+    ['a duplicate whose token is written as an escape', `{"a":"${asAnEscape(token)}","a":"clean"}`, false],
   ]
   for (const [what, line, marked] of theShapes) {
     const chosen = choosing([aFile(aTranscriptPath('s-1'), `${line}\n`)])
     const kept = chosen.kept[0]?.text ?? ''
     assert.equal(kept.includes(token), false, `${what} was kept in the clear`)
     assert.equal(kept.includes(THE_LAUNCH_KEY), false, `${what} kept the launch's own key in the clear`)
-    assert.equal(kept.includes('\\u0067'), false, `${what} kept the token's escaped spelling`)
+    assert.equal(kept.includes(asAnEscape(token)), false, `${what} kept the token's escaped spelling`)
     assert.deepEqual(chosen.marked, marked ? [aTranscriptPath('s-1')] : [], `${what} was ${marked ? 'not' : 'claimed to be'} marked for the sidecar`)
   }
 })
