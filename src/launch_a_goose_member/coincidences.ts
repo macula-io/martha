@@ -4,6 +4,7 @@
 
 import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
+import { TREE_PARAMETER } from '../install_the_recorded_mesh_server/confine_to_the_recorded_tree.ts'
 
 /**
  * Why the engine's approving mode is written by the same word the owner types at `martha approve`. The constant
@@ -19,6 +20,20 @@ export const THE_ACT_THE_OWNER_TYPES = "the mode the Goose engine asks its clien
  */
 const THE_ENGINES_OWN_CONFIG_FOLDER = "the config folder under the engine's path root is the engine's own (martha#541); the constant holds git's config file"
 
+/**
+ * Why the engine's tree tool is written by the same word as the mesh server's confinement parameter. The test
+ * spells the developer extension's tool as the design table names it; the constant is the query parameter that
+ * confines a recorded mesh server to its tree, which no part of a Goose launch reads (martha#541).
+ */
+const THE_ENGINES_TREE_TOOL = "the engine's tree tool is the developer extension's own (martha#541); the constant is the mesh server's confinement parameter"
+
 export const COINCIDENCES: readonly Exception[] = [
   { value: CONFIG, file: 'launch_a_goose_member/launch_a_goose_member.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
+  // The test spells the engine root's folders as the design table names them, so a reader that drops one fails it.
+  { value: CONFIG, file: 'launch_a_goose_member/the_engines_decisions.node-test.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
+  // The watch names the engine's config folder by the kind the engine's paths module gives it, and its test spells it.
+  { value: CONFIG, file: 'launch_a_goose_member/the_roots_watch.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
+  { value: CONFIG, file: 'launch_a_goose_member/the_roots_watch.node-test.ts', reason: THE_ENGINES_OWN_CONFIG_FOLDER },
+  // The rows test spells the recorded tool names as the design table does, so a row keyed by another name fails it.
+  { value: TREE_PARAMETER, file: 'launch_a_goose_member/the_engines_decisions.node-test.ts', reason: THE_ENGINES_TREE_TOOL },
 ]

@@ -220,6 +220,7 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
   handover_ceiling_minutes: HANDOVER_CEILING_MINUTES_WHEN_UNNAMED,
   backlog: null,
   volatile_paths: [],
+  engine_endpoint: null,
 })
 
 /** A place of the test's own, over `rows`, with the git and declaration it is handed: either may be left out. */

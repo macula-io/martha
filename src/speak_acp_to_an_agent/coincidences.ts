@@ -13,5 +13,7 @@ const ACPS_TOOL_CALL_FIELD = "the field of an ACP tool-call update that carries 
 
 export const COINCIDENCES: readonly Exception[] = [
   { value: THE_FAILED_TASK_STATUS, file: 'speak_acp_to_an_agent/the_acp_client.node-test.ts', reason: ACPS_TOOL_CALL_STATUS },
+  // The client now holds ACP's tool-call statuses by name (TOOL_CALL_STATUS), the one place rule (a) reads them from.
+  { value: THE_FAILED_TASK_STATUS, file: 'speak_acp_to_an_agent/the_acp_client.ts', reason: ACPS_TOOL_CALL_STATUS },
   { value: WHOLE_FILE_CONTENT, file: 'speak_acp_to_an_agent/the_acp_client.ts', reason: ACPS_TOOL_CALL_FIELD },
 ]
