@@ -97,10 +97,8 @@ export function theFoldersReadBackWhole(facts: Pick<EngineFacts, 'engine_folders
   return { folders }
 }
 
-/** What the watch is given: the owner's settings watch, the read-back of the files the launch wrote, and the folders it compares whole. */
+/** What the watch is given: the read-back of the files the launch wrote, and the folders it compares whole. */
 export interface TheRootsWatchAsked {
-  /** The owner's Claude Code settings watch (`hookSettingsWatch(...).check`). */
-  readonly owners_settings: () => string | undefined
   /** The config root and the secrets file read back as written: why not, or undefined. */
   readonly the_files_as_written: () => string | undefined
   /** The folders compared whole. */
@@ -108,14 +106,13 @@ export interface TheRootsWatchAsked {
 }
 
 /**
- * Takes the snapshot of `folders` now, and returns the re-check: the three checks, in order, the first that fails
- * saying why. Called right after the launch writes its root and before the engine is spawned.
+ * Takes the snapshot of `folders` now, and returns the re-check: the two checks, in order, the first that fails saying
+ * why. Called right after the launch writes its root and before the engine is spawned. The owner's Claude Code settings
+ * are not watched here (martha#601 row 174): the engine reads no file of Claude Code's.
  */
 export function theRootsWatch(asked: TheRootsWatchAsked): () => string | undefined {
   const snapshot = asked.folders.map((folder) => ({ folder, read: aFolderRead(folder) }))
   return () => {
-    const owners = asked.owners_settings()
-    if (owners !== undefined) return owners
     const files = asked.the_files_as_written()
     if (files !== undefined) return files
     for (const { folder, read } of snapshot) {

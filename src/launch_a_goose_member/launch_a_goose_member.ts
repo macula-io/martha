@@ -367,8 +367,6 @@ export interface AGooseLaunchAsked {
   readonly model: TheModelALaunchRuns
   /** The token the crew's tool server carries: the launch's own, minted for it. Its socket is in the launch's directory. */
   readonly tool_server: { readonly token: string }
-  /** The owner's Claude Code settings watch (`hookSettingsWatch(...).check`), run first in every re-check: why the owner's settings now turn hooks off, or undefined. */
-  readonly owners_settings: () => string | undefined
   /** A test's hand on the config root (and the secrets file beside it) between their write and the engine's start; a real launch gives none. */
   readonly before_the_start?: (config_at: string) => void
   /** A test's hand right after the launcher is recorded, before anything else of the launch is written; a real launch gives none. */
@@ -475,7 +473,6 @@ function theRootReadBackAndWatched(asked: AGooseLaunchAsked, made: ALaunchMade):
   if ('refusal' in whole) return whole
   // The snapshot is taken here, after the read-back and before the spawn, so nothing of the engine's is in it.
   const settings_still_hold = theRootsWatch({
-    owners_settings: asked.owners_settings,
     the_files_as_written: () => {
       const again = theRootAsItWasWritten(asked.facts, config_at, made.config, secrets)
       return 'refusal' in again ? again.refusal : undefined

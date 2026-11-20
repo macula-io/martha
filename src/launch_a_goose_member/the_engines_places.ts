@@ -38,8 +38,8 @@ export interface TheEnginesOwnPlaces {
   readonly root: string
   /** The owner's home. */
   readonly home: string
-  /** The owner's Claude Code user settings file: the same file a Claude Code launch guards (design G1 row (a)). */
-  readonly owners_settings_file: string
+  /** The owner's Claude Code user settings file, when the launcher's environment tells it, or undefined: the same file a Claude Code launch guards (design G1 row (a)), guarded here from a member's call when it can be named (martha#601 row 174). */
+  readonly owners_settings_file: string | undefined
   /** The owner's memory places as a Claude Code launch tells them today; the owner's engine folders are added here. */
   readonly owner_memory: OwnerMemoryPlaces
   /** The launcher's environment, which places the owner's engine folders (XDG). */
@@ -68,7 +68,7 @@ export function theEnginesPlaces(shared: TheSharedPlaces, own: TheEnginesOwnPlac
     ...shared,
     names: gooseToolNames(own.facts.tool_naming),
     refusesAWriteToTheOwnersSettings: (input) =>
-      namesTheOwnersSettings(input, own.owners_settings_file, launch_dir, own.home, tools) ?? namesTheLaunchsRoot(input, rootFolders, launch_dir, own.home, tools),
+      (own.owners_settings_file === undefined ? undefined : namesTheOwnersSettings(input, own.owners_settings_file, launch_dir, own.home, tools)) ?? namesTheLaunchsRoot(input, rootFolders, launch_dir, own.home, tools),
     refusesAWriteToTheOwnersMemory: (tool, input) => writesTheOwnersMemory(tool, input, ownerMemory, launch_dir, own.home, shared.machine, tools),
     results: {
       tool_result_rows: theEnginesToolResultRows(own.facts),
