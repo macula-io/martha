@@ -37,7 +37,6 @@ import {
   refuseExecutionAfterUngatedText,
   type Policy,
 } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import process from 'node:process'
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { ToolNames } from '../host_contract/host_contract.ts'
 import { isShellTool } from '../shell_tools/shell_tools.ts'
@@ -119,9 +118,9 @@ const refusedBecauseTheAuditCouldNotBeKept = (refusal: string, why: string): Too
   deny: `${refusal} (this member is audited, and its audit line could not be kept: ${why}, so the call is refused.)`,
 })
 
-/** Refuse the tool call, or let it run. */
-export function answerToolCall(asked: ToolCall): ToolCallAnswer {
-  const refusedBeforeTheGate = theRefusalBeforeTheGate(asked)
+/** Refuse the tool call, or let it run. The note sink is the composition root's, for the one line a cut refusal says (martha#601). */
+export function answerToolCall(asked: ToolCall, note: (line: string) => void = () => {}): ToolCallAnswer {
+  const refusedBeforeTheGate = theRefusalBeforeTheGate(asked, note)
   if (refusedBeforeTheGate !== undefined) return refusedBeforeTheGate
 
   const refusedByTheGate = theGatesAnswer({ tool: asked.tool, session: asked.session, policy: asked.policy, gate: asked.gate ?? 'enforced', audit: asked.audit })
@@ -144,7 +143,7 @@ export function answerToolCall(asked: ToolCall): ToolCallAnswer {
  * What stands before the gate, each of which reads the call, the launch or the session: the launch rechecked, the raw
  * mesh read, and the two that stand on text the session took in. The reach rule is read here too, as a notice.
  */
-function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, agents_running = [], gate = 'enforced', audit }: ToolCall): ToolCallAnswer {
+function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, agents_running = [], gate = 'enforced', audit }: ToolCall, note: (line: string) => void): ToolCallAnswer {
   const launched = recheckLaunchPassingOwnWrites(launch, host)
   if (!launched.allow) {
     return {
@@ -157,7 +156,7 @@ function theRefusalBeforeTheGate({ tool, session, input, launch, names, host, ag
   if (widensMemberReach(tool, names)) {
     // The owner ruled the reach rule a notice (martha#601): the call is answered as asked, and one line says who decides
     // who can reach a member.
-    process.stderr.write(`notice: ${tool} is not called in a member's session, and the call was answered as asked: ${WHO_DECIDES_REACH}.\n`)
+    note(`notice: ${tool} is not called in a member's session, and the call was answered as asked: ${WHO_DECIDES_REACH}.`)
   }
 
   if (isRawMeshRead(tool, input, names)) {

@@ -33,6 +33,10 @@ import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts
 import { theLeftoversRefusal } from '../judge_the_commit_a_member_is_about_to_make/judge_the_commit_a_member_is_about_to_make.ts'
 import { realpathSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
+import process from 'node:process'
+
+/** The sink a notice is said through here: this adapter is the composition root the three seams end at (martha#601). */
+const saidOnTheErrorOutput = (line: string): void => void process.stderr.write(`${line}\n`)
 
 /** A call to judge: the git calls it makes, the member making it, the crew's places, and the host that runs git. */
 export interface AQuestionAboutACall {
@@ -145,7 +149,7 @@ export async function askGitWhatAMemberIsAboutToChange(request: AQuestionAboutAC
   const clone = calls.map((call) => theCloneOf(call.directory, workspace.clones)).find((found) => found !== null) ?? null
   const where = calls.map(theWorktreeListedAt).find((found) => found !== null) ?? clone
   const guarded: AGuardedCall = { calls, workspace, member, facts: await theFactsOf(host, clone, where) }
-  const refused = refuseACallInTheWorkspace(guarded)
+  const refused = refuseACallInTheWorkspace(guarded, saidOnTheErrorOutput)
   if (refused !== undefined) return refused
-  return theLeftoversRefusal({ calls, processes: host.processes, files: host.stores.files, ...(request.leftovers === undefined ? {} : { leftovers: request.leftovers }), member })
+  return theLeftoversRefusal({ calls, processes: host.processes, files: host.stores.files, ...(request.leftovers === undefined ? {} : { leftovers: request.leftovers }), member }, saidOnTheErrorOutput)
 }

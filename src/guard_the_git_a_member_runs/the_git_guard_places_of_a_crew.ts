@@ -8,9 +8,13 @@
 import type { CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import type { CrewStore, TheFilesAndProcesses } from '../host_contract/host_contract.ts'
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
+import process from 'node:process'
 import { refuseAHandOffWithALeftover } from '../refuse_a_handoff_with_a_leftover/refuse_a_handoff_with_a_leftover.ts'
 import { refuseAGitCallInAMembersShell } from '../refuse_a_git_call_in_a_members_shell/refuse_a_git_call_in_a_members_shell.ts'
 import { refuseAGitCallFromThePath, refuseTheRefUpdates } from './a_call_the_guards_seams_ask_about.ts'
+
+/** The sink a notice is said through here, where the guard's places are composed (martha#601). */
+const saidOnTheErrorOutput = (line: string): void => void process.stderr.write(`${line}\n`)
 
 /** The places the guard is asked through, each ending in ../ask_git_what_a_member_is_about_to_change. */
 export type TheGitGuardPlaces = Pick<CrewToolPlaces, 'refusesTheGitCall' | 'refusesTheGitOnThePath' | 'refusesTheRefUpdate' | 'refusesTheHandOff'>
@@ -33,6 +37,6 @@ export function theGitGuardPlacesOf(
     refusesTheGitCall: (call) => refuseAGitCallInAMembersShell({ ...at, ...call }),
     refusesTheGitOnThePath: (call) => refuseAGitCallFromThePath({ ...at, ...call }),
     refusesTheRefUpdate: (updates) => refuseTheRefUpdates(updates, workspace, member),
-    refusesTheHandOff: async (call) => refuseAHandOffWithALeftover({ ...at, ...call }),
+    refusesTheHandOff: async (call) => refuseAHandOffWithALeftover({ ...at, ...call }, saidOnTheErrorOutput),
   }
 }

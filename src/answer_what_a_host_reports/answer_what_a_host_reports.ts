@@ -104,6 +104,11 @@ export interface ThePlacesAHostReportsOver {
   /** Where a line about a failed review goes (martha#390): the owner's row and the member. Absent, nothing is told. */
   readonly told?: WhereTheFailedReviewIsTold | undefined
   /**
+   * The sink a line about a call the gate carried on past is said through (martha#601): the adapter's writer to the
+   * process's own error output. Absent, nothing is said.
+   */
+  readonly note?: ((line: string) => void) | undefined
+  /**
    * The agents the host started under this launch's sessions (martha#170). One table, made once by the launcher: a
    * called tool writes it here, and an agent's start, stop and result read it here too.
    */
@@ -455,7 +460,7 @@ async function theDenialOfACall(places: ThePlacesAHostReportsOver, session: Host
     audit: places.audit,
     contract: await theContractACrewHolds(places.crew, { tool: call.tool, input: call.input }, places.names),
     spend: await theSpendACrewHolds(places.crew, session.id),
-  })?.deny
+  }, places.note ?? (() => {}))?.deny
   if (verdict !== undefined) return verdict
   return whatTheCrewRefusesOfACall(places.crew, call, session.id)
 }

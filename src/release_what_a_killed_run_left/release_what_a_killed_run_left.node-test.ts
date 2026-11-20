@@ -1,8 +1,8 @@
-// The way out of a leftover refusal, taken by the name a refusal printed (martha#719 A1, martha#693).
+// The way out of a leftover's notice (martha#719 A1, martha#693, martha#601).
 //
-// A record now names its tree on every leftover, so both refusals print a path as `<worktree>: <path>`, and the act
+// A record now names its tree on every leftover, so both notices print a path as `<worktree>: <path>`, and the act
 // tells the member to name each path "as the telling named it". This file holds the act to that: a release taken with
-// exactly the name the hand-off refusal printed is the release the refusal reads, so the next hand-off is sent.
+// exactly the name the hand-off notice printed is the release the notice reads, so the next hand-off says nothing.
 //
 // The test builds the crew the way a launch does and asks the real seam, so a release that kept the path but matched
 // nothing is red here and nowhere else.
@@ -11,6 +11,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import process from 'node:process'
 import { test } from 'node:test'
 
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
@@ -67,7 +68,22 @@ function crewOf(crew: CrewStore, home: string): CrewTools {
   })
 }
 
-test('a member releases by the exact name the hand-off refusal printed, and the next hand-off is sent (martha#719 A1)', async (t) => {
+/** The answer, and everything written to the process's own error output while the act is judged (martha#601). */
+async function theNoticeWhile(act: () => Promise<string | undefined>): Promise<{ readonly answer: string | undefined; readonly notice: string }> {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: await act(), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
+}
+
+test('a member releases by the exact name the hand-off notice printed, and the next hand-off says nothing (martha#719 A1, martha#601)', async (t) => {
   const home = mkdtempSync(join(tmpdir(), 'martha-719-release-'))
   t.after(() => removeTheTree(home))
   const tree = join(home, WORKTREES, 'a-tree')
@@ -78,13 +94,17 @@ test('a member releases by the exact name the hand-off refusal printed, and the 
   keepTheLeftoverRecordOf(crew, record)
   const tools = crewOf(crew, home)
 
-  const refused = await whatTheCrewRefusesOfACall(tools, { tool: SAY_TO_THE_CREW, input: { to: ['Supervisor'], text: A_HAND_OFF } }, 'a-session')
-  assert.ok(refused !== undefined, 'the hand-off stands refused before the release')
-  // The name is taken from the sentence the refusal printed, quotes and all, never composed here: a test that spelled
-  // its own name would stay green while the two spellings drifted apart.
-  const printed = refused.slice(refused.indexOf('stands: "') + 'stands: "'.length, refused.indexOf('" (the bytes'))
+  const first = await theNoticeWhile(() => whatTheCrewRefusesOfACall(tools, { tool: SAY_TO_THE_CREW, input: { to: ['Supervisor'], text: A_HAND_OFF } }, 'a-session'))
+  assert.equal(first.answer, undefined, 'the hand-off stands refused before the release')
+  assert.match(first.notice, /this hand-off comes while what a killed run left stands/, 'the hand-off was sent without a notice')
+  // The name is taken from the sentence the notice said, quotes and all, never composed here: a test that spelled its
+  // own name would stay green while the two spellings drifted apart.
+  const printed = first.notice.slice(first.notice.indexOf('stands: "') + 'stands: "'.length, first.notice.indexOf('" (the bytes'))
+  assert.notEqual(printed, '', 'the notice named no path')
 
   const released = releaseTheFilesAKilledRunLeft({ crew, member: THE_MEMBER, paths: [printed] })
-  assert.ok('answer' in released, `the name the refusal printed is a name the act keeps: ${JSON.stringify(released)}`)
-  assert.equal(await whatTheCrewRefusesOfACall(tools, { tool: SAY_TO_THE_CREW, input: { to: ['Supervisor'], text: A_HAND_OFF } }, 'a-session'), undefined)
+  assert.ok('answer' in released, `the name the notice printed is a name the act keeps: ${JSON.stringify(released)}`)
+  const next = await theNoticeWhile(() => whatTheCrewRefusesOfACall(tools, { tool: SAY_TO_THE_CREW, input: { to: ['Supervisor'], text: A_HAND_OFF } }, 'a-session'))
+  assert.equal(next.answer, undefined, 'the hand-off after the release was refused')
+  assert.equal(next.notice, '', 'the hand-off after the release still said one line')
 })

@@ -459,7 +459,7 @@ test('#256: a package with no PASS row stops the whole batch before a branch is 
 })
 
 /** The answer, and everything written to the process's own error output while the landing runs (martha#601). */
-async function theNoticeWhile(act: () => Promise<Landing>): Promise<{ readonly answer: Landing; readonly notice: string }> {
+async function theNoticeWhile(act: (note: (line: string) => void) => Promise<Landing>): Promise<{ readonly answer: Landing; readonly notice: string }> {
   const written: string[] = []
   const original = process.stderr.write.bind(process.stderr)
   process.stderr.write = ((chunk: string | Uint8Array) => {
@@ -467,7 +467,7 @@ async function theNoticeWhile(act: () => Promise<Landing>): Promise<{ readonly a
     return true
   }) as typeof process.stderr.write
   try {
-    return { answer: await act(), notice: written.join('') }
+    return { answer: await act((line) => void process.stderr.write(`${line}\n`)), notice: written.join('') }
   } finally {
     process.stderr.write = original
   }
@@ -480,7 +480,7 @@ test('#601: a head no open pull request stands at, and a head two stand at, are 
   const [first, second] = passed.heads
   const no_pulls = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map([[`repos/${fixture.repo}/commits/${String(first)}/pulls`, []]]))))
   await aPassedVerdict(no_pulls, at(passed.packages, 0), base, String(first))
-  const no_pull = await theNoticeWhile(() => landPassedWorkAsOneBatch(no_pulls.host, MEMBER, { path: fixture.clone, packages: [at(passed.packages, 0)] }))
+  const no_pull = await theNoticeWhile((note) => landPassedWorkAsOneBatch(no_pulls.host, MEMBER, { path: fixture.clone, packages: [at(passed.packages, 0)] }, note))
   assert.ok('told' in no_pull.answer, `a head with no open pull request was refused: ${wordsOf(no_pull.answer)}`)
   assert.match(no_pull.notice, /no open pull request/, 'the notice did not name what is missing')
   assert.match(no_pull.notice, new RegExp(String(first)), 'the notice did not name the head it asked about')
@@ -498,7 +498,7 @@ test('#601: a head no open pull request stands at, and a head two stand at, are 
   const two_at_one = [anOpenPullRequest(291, String(second)), anOpenPullRequest(292, String(second))].flat()
   const two_pulls = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map([[`repos/${fixture.repo}/commits/${String(second)}/pulls`, two_at_one]]))))
   await aPassedVerdict(two_pulls, at(passed.packages, 1), base, String(second))
-  const two = await theNoticeWhile(() => landPassedWorkAsOneBatch(two_pulls.host, MEMBER, { path: fixture.clone, packages: [at(passed.packages, 1)] }))
+  const two = await theNoticeWhile((note) => landPassedWorkAsOneBatch(two_pulls.host, MEMBER, { path: fixture.clone, packages: [at(passed.packages, 1)] }, note))
   assert.ok('told' in two.answer, `a head two open pull requests stand at was refused: ${wordsOf(two.answer)}`)
   assert.match(two.notice, /more than one open pull request/)
   assert.match(two.notice, /#291/, 'the notice did not name the first pull request')

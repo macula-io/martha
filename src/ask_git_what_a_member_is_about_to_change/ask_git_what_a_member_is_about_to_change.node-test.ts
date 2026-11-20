@@ -4,18 +4,20 @@
 // and worktrees of it under the crew's worktree place. The glue runs real git through the host contract's
 // processes.run, so what is pinned here is what git says, not what a stand-in claims.
 //
-// Five things are pinned: that a call which would move a clone off its branch is refused because git says the word it
-// names is a branch, while the same call naming a path is not; that the branch the clone starts on is read from git as a
-// fact, so a switch back to it is not refused; that another member's worktree is refused for a removal, for a move and
-// for a prune in the shapes a call and git write them, and one's own passes; that a call whose directory names no
-// repository is asked nowhere and refused by nothing it could not look at. The last is the fail-open claim: a git that
-// cannot be run leaves the fact empty and the call goes through, because a member's shell must not wait on a guard.
+// Five things are pinned: that a call which would move a clone off its branch is noticed because git says the word it
+// names is a branch and runs as asked, while the same call naming a path says nothing; that the branch the clone starts
+// on is read from git as a fact, so a switch back to it says nothing either; that another member's worktree is refused
+// for a removal, for a move and for a prune in the shapes a call and git write them, and one's own passes; that a call
+// whose directory names no repository is asked nowhere and refused by nothing it could not look at. The last is the
+// fail-open claim: a git that cannot be run leaves the fact empty and the call goes through, because a member's shell
+// must not wait on a guard.
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
 import { readTheGitCallsInAShellLine } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
@@ -101,12 +103,31 @@ async function refusalOf(fixture: Fixture, line: string, directory: string | nul
   })
 }
 
-test('a word git says is a branch is refused in a clone, and the same call naming a path is not', async (t) => {
+/** The answer, and everything written to the process's own error output while git is asked (martha#601). */
+async function theNoticeWhile(act: () => Promise<string | undefined>): Promise<{ readonly answer: string | undefined; readonly notice: string }> {
+  const written: string[] = []
+  const original = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+  try {
+    return { answer: await act(), notice: written.join('') }
+  } finally {
+    process.stderr.write = original
+  }
+}
+
+test('a word git says is a branch is a notice in a clone, and the same call naming a path says nothing', async (t) => {
   const fixture = aCrew(t)
-  assert.match((await refusalOf(fixture, 'git switch -c mine', fixture.clone)) ?? '', /a clone stays on its default branch/)
+  const made = await theNoticeWhile(() => refusalOf(fixture, 'git switch -c mine', fixture.clone))
+  assert.equal(made.answer, undefined, 'a branch made in a clone was refused')
+  assert.match(made.notice, /a clone stays on its default branch/, 'the branch was made without a notice')
   // A branch git lists that is not the one the clone starts on is a way off it, and the rule reads it as one.
-  assert.match((await refusalOf(fixture, `git checkout ${fixture.branch_of_other}`, fixture.clone)) ?? '', /a clone stays on its default branch/)
-  // The branch the clone starts on is where the clone belongs: putting a drifted one back on it is not refused.
+  const off = await theNoticeWhile(() => refusalOf(fixture, `git checkout ${fixture.branch_of_other}`, fixture.clone))
+  assert.equal(off.answer, undefined, 'a switch to another branch in a clone was refused')
+  assert.match(off.notice, /a clone stays on its default branch/, 'the switch ran without a notice')
+  // The branch the clone starts on is where the clone belongs: putting a drifted one back on it says nothing.
   assert.equal(await refusalOf(fixture, 'git checkout main', fixture.clone), undefined)
   // git itself says `src/app.ts` is no branch of this clone, so the same command is a pathspec and passes.
   assert.equal(await refusalOf(fixture, 'git checkout src/app.ts', fixture.clone), undefined)
@@ -140,7 +161,7 @@ test("another member's branch is refused for a delete the shell writes, which ne
   assert.equal(await refusalOf(fixture, 'git branch -D hygiea/562', null), undefined)
 })
 
-test("a call that spells a place through a link meets the same rule", async (t) => {
+test("a call that spells a place through a link is refused for a worktree and noticed for a clone", async (t) => {
   const fixture = aCrew(t)
   // A link to the worktree place, as a machine's temp or work place may be reached by one (martha#79): git answers with
   // the path it resolved, and the shell names the path through the link.
@@ -150,10 +171,13 @@ test("a call that spells a place through a link meets the same rule", async (t) 
     (await refusalOf(fixture, `git worktree remove ${join(throughALink, 'widget-9')}`, fixture.worktrees)) ?? '',
     /is another member's branch/,
   )
-  // The place itself, spelled through the link, is the same place: a clone in it is still a clone.
+  // The place itself, spelled through the link, is the same place: a clone in it is still a clone, and a branch made
+  // there is noticed and runs as asked (martha#601).
   const clonesThroughALink = join(fixture.worktrees, 'clones-link')
   symlinkSync(fixture.clones, clonesThroughALink)
-  assert.match((await refusalOf(fixture, 'git switch -c mine', join(clonesThroughALink, 'acme', 'widget'))) ?? '', /a clone stays on its default branch/)
+  const noticed = await theNoticeWhile(() => refusalOf(fixture, 'git switch -c mine', join(clonesThroughALink, 'acme', 'widget')))
+  assert.equal(noticed.answer, undefined, 'a branch made in the clone through the link was refused')
+  assert.match(noticed.notice, /a clone stays on its default branch/, 'the branch was made without a notice')
 })
 
 test('a call nowhere near a repository is asked nowhere, and refused by nothing it could not look at', async (t) => {

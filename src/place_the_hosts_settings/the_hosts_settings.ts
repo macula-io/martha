@@ -16,7 +16,8 @@ import { environmentFromSettings, userSettingsPath } from '../load_the_hosts_mar
 import { meshServerInstallsIn } from '../install_the_mesh_server_for_claude_code/mesh_server_install.ts'
 import { placeRecordedMeshServers, SERVER_NEEDS } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { MESH_SERVER_PACKAGE, refusalOfInstalledMeshServers } from '../read_a_room_through_its_gate/mesh_server_tools.ts'
-import { memoryDenyRules, ownerMemoryPlaces, settingsWithMemoryDenied, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { memoryDenyRules, ownerMemoryPlaces, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
+import { settingsWithMemoryDenied } from '../refuse_a_member_writing_owner_memory/the_rules_the_host_matches.ts'
 import { CLAUDE_SERVERS, CLAUDE_SETTINGS, claudeSettingsSwitches, type PreparedLaunch } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import type { ClaudeCodeMemberLaunch } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 

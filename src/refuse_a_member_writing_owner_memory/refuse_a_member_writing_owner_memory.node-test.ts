@@ -20,7 +20,6 @@ import {
   GIT_CONFIG_GLOBAL_VARIABLE,
   FILE_WRITING_TOOLS,
   gapsInTheNameMap,
-  hostLinesNamingARule,
   LINK_HOPS,
   MEMORY_DIRECTORY_KEY,
   memoryDenyRules,
@@ -32,6 +31,7 @@ import {
   type OwnerMemoryPlaces,
   type OwnerUserScope,
 } from './refuse_a_member_writing_owner_memory.ts'
+import { hostLinesNamingARule } from './the_rules_the_host_matches.ts'
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { SKILLS_KIND } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { CLAUDE_FOLDER, MEMORY_FOLDER_OVERRIDE, REMOTE_MEMORY_ROOT } from '../know_claude_codes_own_facts/claude_code_facts.ts'

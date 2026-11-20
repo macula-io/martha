@@ -240,16 +240,20 @@ export function readStateFile(path: string, note: (line: string) => void = () =>
     return code === 'ENOENT' ? { text: '' } : { refusal: `${path} could not be read (${code ?? String(error)}).` }
   }
   try {
-    const found = fs.fstatSync(descriptor)
-    if (found.isFile() && (found.uid !== getuid?.() || (found.mode & OPEN_TO_OTHERS) !== 0)) {
-      note(`${path} is not a file only this user may read and write, so Martha does not trust it; reading it anyway.`)
-      return { text: fs.readFileSync(descriptor, 'utf8') }
-    }
-    if (!found.isFile()) return { refusal: `${path} is not a file only this user may read and write, so Martha does not trust it.` }
-    return { text: fs.readFileSync(descriptor, 'utf8') }
+    return theFileThatWasOpened(path, descriptor, note)
   } finally {
     fs.closeSync(descriptor)
   }
+}
+
+/** What a file that was opened comes to: its text, said in one line and read anyway when others may write it, or the refusal for what it is. */
+function theFileThatWasOpened(path: string, descriptor: number, note: (line: string) => void): { readonly text: string } | Refused {
+  const found = fs.fstatSync(descriptor)
+  if (!found.isFile()) return { refusal: `${path} is not a file only this user may read and write, so Martha does not trust it.` }
+  if (found.uid !== getuid?.() || (found.mode & OPEN_TO_OTHERS) !== 0) {
+    note(`${path} is not a file only this user may read and write, so Martha does not trust it; reading it anyway.`)
+  }
+  return { text: fs.readFileSync(descriptor, 'utf8') }
 }
 
 /** Writes a file into a directory this store owns, whole: under a staging name, then renamed into place. */

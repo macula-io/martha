@@ -26,7 +26,6 @@ import type { HostContract, ProcessOutcome } from '../host_contract/host_contrac
 import { readLedger, WORK_PACKAGE, type LedgerHost, type LedgerRow } from '../log_ledger/log_ledger.ts'
 import { readACrewLine, type CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
 import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-import process from 'node:process'
 
 /** A package to look up, as the landing knows it: the package, the repository being landed, and where gh runs. */
 export interface TheLookUp {
@@ -53,10 +52,11 @@ export interface LandedWork {
 export async function findTheWorkTheseVerdictsPassed(
   host: LookUpHost,
   look: { readonly packages: readonly string[]; readonly repo: string; readonly cwd: string },
+  note: (line: string) => void = () => {},
 ): Promise<{ readonly work: readonly LandedWork[] } | { readonly refused: string }> {
   const work: LandedWork[] = []
   for (const work_package of look.packages) {
-    const found = await findTheWorkAVerdictPassed(host, { package: work_package, repo: look.repo, cwd: look.cwd })
+    const found = await findTheWorkAVerdictPassed(host, { package: work_package, repo: look.repo, cwd: look.cwd }, note)
     if ('refused' in found) return found
     work.push({ package: work_package, pr: found.pr, head: found.head })
   }
@@ -84,12 +84,12 @@ export const NO_OPEN_PULL_REQUEST = 0
 /** The repository a package belongs to: `owner/repo` of `owner/repo#n`. */
 const repoOf = (work_package: string): string => work_package.slice(0, work_package.indexOf('#'))
 
-export async function findTheWorkAVerdictPassed(host: LookUpHost, look: TheLookUp): Promise<PassedWork> {
+export async function findTheWorkAVerdictPassed(host: LookUpHost, look: TheLookUp, note: (line: string) => void = () => {}): Promise<PassedWork> {
   const wrong = lookUpProblem(look)
   if (wrong !== undefined) return refused(wrong)
-  const note = latestVerdictNote(await readLedger(host, look.package), look.package)
-  if (note === undefined) return refused(`no PASS row for ${look.package}.`)
-  const verdict = readableVerdict(note, look.package)
+  const verdict_note = latestVerdictNote(await readLedger(host, look.package), look.package)
+  if (verdict_note === undefined) return refused(`no PASS row for ${look.package}.`)
+  const verdict = readableVerdict(verdict_note, look.package)
   if ('refused' in verdict) return verdict
   const head = headOf(verdict.line)
   if (head === undefined) {
@@ -100,7 +100,7 @@ export async function findTheWorkAVerdictPassed(host: LookUpHost, look: TheLookU
     args: ['api', `repos/${look.repo}/commits/${head}/pulls`],
     cwd: look.cwd,
   })
-  return theOneOpenPullRequestAt(outcome, look, head)
+  return theOneOpenPullRequestAt(outcome, look, head, note)
 }
 
 /** Why this package cannot be looked up in this repository, or nothing when it can. */
@@ -159,9 +159,9 @@ function headOf(verdict: CrewLineRead): string | undefined {
  * The passed head, with the one open pull request at it when there is one: nothing GitHub answers stops the head from
  * landing, and a pull request that cannot be found is one notice (martha#601).
  */
-function theOneOpenPullRequestAt(outcome: ProcessOutcome, look: TheLookUp, head: string): PassedWork {
+function theOneOpenPullRequestAt(outcome: ProcessOutcome, look: TheLookUp, head: string, note: (line: string) => void): PassedWork {
   const landedAnyway = (why: string): PassedWork => {
-    process.stderr.write(`notice: ${why}, and the passed head is landed as it is.\n`)
+    note(`notice: ${why}, and the passed head is landed as it is.`)
     return { pr: NO_OPEN_PULL_REQUEST, head }
   }
   if (outcome.exit_code !== 0) {

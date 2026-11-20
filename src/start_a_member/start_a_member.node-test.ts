@@ -801,6 +801,10 @@ function aCrewWithItsOwnTexts(): Readonly<Record<string, string>> {
 const itsOwnerApproves = (place: Place) =>
   approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
 
+/** The owner approves, keeping every line it says, so a test can read the notice an approval gave (martha#601). */
+const itsOwnerApprovesSaying = (place: Place, lines: string[]) =>
+  approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: (line) => void lines.push(line), now: () => new Date() })
+
 /** The crew text one session's start is handed, read off the relay's answer the way the mod reads it. */
 async function theCrewTextHandedAt(socket_path: string, source: string, session_id: string): Promise<string> {
   const heard = await postOverSocket(socket_path, RELAY_PATHS.session_started, { session_id, source })
@@ -873,45 +877,51 @@ function linkedInsteadOfWritten(place: Place, path: string, target: string): voi
 }
 
 /**
- * A link where a crew text should be is refused by name, and nothing runs (martha#306 r=3, the r=2 review's finding).
- * The gate read a link's target and approved it, while the launch looked the link's own path up among the bytes it
- * carried, found none, and handed Martha's shipped text with no word to the owner. A link has no bytes the crew
- * approved, so the start says so and stops before the host is asked.
+ * A link where a crew text should be is approved by what it points at, under the name the crew wrote (martha#601,
+ * over martha#306 r=3): the gate used to refuse it, and the owner was told the link could not be approved. Now the
+ * link is followed, the approval names the text where the crew wrote it and hashes the target's bytes, and the member
+ * is handed exactly those bytes. One line of the approval says the link, so the owner knows what was approved.
  */
-test('#306 r=3: a role text the crew wrote as a link refuses the start, naming the path and saying it is a symlink', async (t) => {
+test('#306 r=3: a role text the crew wrote as a link is approved by what it points at, under the name the crew wrote, and the member is handed that text', async (t) => {
   const roleText = join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY, 'builder.md')
   const place = placeFor(t, { ...aCrewWithItsOwnTexts(), [join('docs', 'builder.md')]: OWN_ROLE_TEXT })
   linkedInsteadOfWritten(place, roleText, join('docs', 'builder.md'))
   const fake = fakeClaude(place)
-  const lines: string[] = []
+  const said: string[] = []
 
-  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, lines))
-  assert.equal(started.started, false, 'a role text that is a symlink did not refuse the start')
-  const refusal = started.started ? '' : started.refusal
-  assert.ok(refusal.includes(asTheOwnerReadsIt(roleText)), `the refusal does not name the linked text: ${refusal}`)
-  assert.match(refusal, /is a symlink/, refusal)
-  assert.deepEqual(lines, [refusal], 'the refusal is shown to the owner once')
-  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+  const approved = await itsOwnerApprovesSaying(place, said)
+  assert.equal(approved.kind, 'approved', approved.kind === 'refused' ? approved.refusal : approved.kind)
+  const linkSaid = `${asTheOwnerReadsIt(roleText)} is a symlink`
+  assert.ok(said.some((line) => line.startsWith(linkSaid)), `the approval does not say it follows the link: ${said.join(' | ')}`)
+
+  const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  const handed = await theCrewTextHandedAt(await launchedSocket(place.relay_root, t), 'startup', 'session-306-r3-role')
+  assert.ok(handed.includes(OWN_ROLE_TEXT.trim()), `the text the link points at is not handed: ${handed.slice(0, 600)}`)
 })
 
 /**
- * The same for the conventions file the declaration names, and in particular not the refusal the r=2 fix gave: the
- * link's target was carried while the compose looked the link's path up, so the answer said the declaration named a
- * file that was not there — a wrong reason for the right outcome, sending the owner to write a file that was there.
+ * The same for the conventions file the declaration names (martha#601, over martha#306 r=3): the link is followed,
+ * the approval names the conventions where the crew wrote it and hashes the target's bytes, and the member is handed
+ * those bytes. An approval is only given when the entry is read as the file it points at, so it is never mistaken for
+ * a declaration naming a file that is not there.
  */
-test('#306 r=3: a conventions file the crew wrote as a link refuses the start by name, and not as a file that is missing', async (t) => {
+test('#306 r=3: a conventions file the crew wrote as a link is approved by what it points at, under the name the crew wrote, and the member is handed that text', async (t) => {
   const conventions = join(DECLARATION_DIRECTORY, CREW_CONVENTIONS)
   const place = placeFor(t, { ...aCrewWithItsOwnTexts(), [join('docs', CREW_CONVENTIONS)]: CONVENTIONS_AS_WRITTEN })
   linkedInsteadOfWritten(place, conventions, join('docs', CREW_CONVENTIONS))
   const fake = fakeClaude(place)
+  const said: string[] = []
+
+  const approved = await itsOwnerApprovesSaying(place, said)
+  assert.equal(approved.kind, 'approved', approved.kind === 'refused' ? approved.refusal : approved.kind)
+  const linkSaid = `${asTheOwnerReadsIt(conventions)} is a symlink`
+  assert.ok(said.some((line) => line.startsWith(linkSaid)), `the approval does not say it follows the link: ${said.join(' | ')}`)
 
   const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
-  assert.equal(started.started, false, 'a conventions file that is a symlink did not refuse the start')
-  const refusal = started.started ? '' : started.refusal
-  assert.ok(refusal.includes(asTheOwnerReadsIt(conventions)), `the refusal does not name the linked conventions file: ${refusal}`)
-  assert.match(refusal, /is a symlink/, refusal)
-  assert.ok(!refusal.includes('no such file'), `the refusal says the file is missing, and it is there as a link: ${refusal}`)
-  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  const handed = await theCrewTextHandedAt(await launchedSocket(place.relay_root, t), 'startup', 'session-306-r3-conventions')
+  assert.ok(handed.includes(CONVENTIONS_AS_WRITTEN.trim()), `the text the link points at is not handed: ${handed.slice(0, 600)}`)
 })
 
 /**
@@ -926,41 +936,53 @@ function directoryLinkedTo(place: Place, path: string, target: string): void {
 }
 
 /**
- * A crew text whose directory is a link refuses the start, by name (martha#306 r=4, the r=3 review's finding). The gate
- * used to resolve the directories above a crew text, so the approval and the carried bytes were named after the
- * directory the link points at while the compose looked the text up under the path the crew wrote: it missed, answered
- * "absent", and the member was handed Martha's shipped text with no word to the owner. A link is a name the gate
- * cannot pin down, so it is refused — the text itself, and every directory above it.
+ * A crew text whose directory is a link is approved under the name the crew wrote (martha#601, over martha#306 r=4).
+ * The gate used to refuse a link anywhere above the text, because resolving the directory above it named the approval
+ * after the target while the compose looked the text up under the crew's path. Now the link is followed and the one
+ * line says it, the text is read and carried under the name the crew wrote, and the compose finds it there.
  */
-test('#306 r=4: a role text reached through a linked roles directory refuses the start, naming the link', async (t) => {
+test('#306 r=4: a role text reached through a linked roles directory is approved by what it points at, under the name the crew wrote, and the member is handed that text', async (t) => {
   const roles = join(DECLARATION_DIRECTORY, ROLE_TEXTS_DIRECTORY)
   const place = placeFor(t, { ...aCrewDeclaringItsConventions(), [join('docs', ROLE_TEXTS_DIRECTORY, 'builder.md')]: OWN_ROLE_TEXT })
   directoryLinkedTo(place, roles, join('docs', ROLE_TEXTS_DIRECTORY))
   const fake = fakeClaude(place)
+  const said: string[] = []
+
+  const approved = await itsOwnerApprovesSaying(place, said)
+  assert.equal(approved.kind, 'approved', approved.kind === 'refused' ? approved.refusal : approved.kind)
+  const linkSaid = `${asTheOwnerReadsIt(roles)} is a symlink`
+  assert.ok(said.some((line) => line.startsWith(linkSaid)), `the approval does not say it follows the link: ${said.join(' | ')}`)
 
   const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
-  assert.equal(started.started, false, 'a role text reached through a linked directory did not refuse the start')
-  const refusal = started.started ? '' : started.refusal
-  assert.ok(refusal.includes(asTheOwnerReadsIt(roles)), `the refusal does not name the linked directory: ${refusal}`)
-  assert.match(refusal, /is a symlink/, refusal)
-  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  const handed = await theCrewTextHandedAt(await launchedSocket(place.relay_root, t), 'startup', 'session-306-r4-roles')
+  assert.ok(handed.includes(OWN_ROLE_TEXT.trim()), `the text the link points at is not handed: ${handed.slice(0, 600)}`)
 })
 
-test('#306 r=4: a mode text reached through a linked modes directory refuses the start, naming the link', async (t) => {
+test('#306 r=4: a mode text reached through a linked modes directory is approved by what it points at, under the name the crew wrote, and the member is handed that text', async (t) => {
   const modes = join(DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY)
   const place = placeFor(t, { ...aCrewWithItsOwnTexts(), [join('docs', MODE_TEXTS_DIRECTORY, `${SOLO_MODE}.md`)]: OWN_MODE_TEXT })
   directoryLinkedTo(place, modes, join('docs', MODE_TEXTS_DIRECTORY))
   const fake = fakeClaude(place)
+  const said: string[] = []
+
+  const approved = await itsOwnerApprovesSaying(place, said)
+  assert.equal(approved.kind, 'approved', approved.kind === 'refused' ? approved.refusal : approved.kind)
+  const linkSaid = `${asTheOwnerReadsIt(modes)} is a symlink`
+  assert.ok(said.some((line) => line.startsWith(linkSaid)), `the approval does not say it follows the link: ${said.join(' | ')}`)
 
   const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
-  assert.equal(started.started, false, 'a mode text reached through a linked directory did not refuse the start')
-  const refusal = started.started ? '' : started.refusal
-  assert.ok(refusal.includes(asTheOwnerReadsIt(modes)), `the refusal does not name the linked directory: ${refusal}`)
-  assert.match(refusal, /is a symlink/, refusal)
-  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  const handed = await theCrewTextHandedAt(await launchedSocket(place.relay_root, t), 'startup', 'session-306-r4-modes')
+  assert.ok(handed.includes(OWN_MODE_TEXT.trim()), `the text the link points at is not handed: ${handed.slice(0, 600)}`)
 })
 
-test('#306 r=4: a crew directory that is a link refuses the start, naming the link', async (t) => {
+/**
+ * Every text of the crew, and its declaration, behind a link one level above them all (martha#601, over martha#306
+ * r=4): the link is followed, one line of the approval says it and what it points at is approved under the name the
+ * crew wrote, and the member is handed those bytes.
+ */
+test('#306 r=4: a crew directory that is a link is followed, its crew texts approved under the name the crew wrote, and the member is handed them', async (t) => {
   // Every text of the crew, and its declaration, stand behind a link one level above them all.
   const place = placeFor(t, {
     [join('crew-files', DECLARATION_FILE)]: JSON.stringify({ ...soloDeclaration('Ada Owner'), conventions: CREW_CONVENTIONS }),
@@ -969,13 +991,18 @@ test('#306 r=4: a crew directory that is a link refuses the start, naming the li
   })
   directoryLinkedTo(place, DECLARATION_DIRECTORY, 'crew-files')
   const fake = fakeClaude(place)
+  const said: string[] = []
+
+  const approved = await itsOwnerApprovesSaying(place, said)
+  assert.equal(approved.kind, 'approved', approved.kind === 'refused' ? approved.refusal : approved.kind)
+  const linkSaid = `${asTheOwnerReadsIt(DECLARATION_DIRECTORY)} is a symlink`
+  assert.ok(said.some((line) => line.startsWith(linkSaid)), `the approval does not say it follows the link: ${said.join(' | ')}`)
 
   const started = await startedOn(place, requestFor(place, fake.command, BUILDER!.name, []))
-  assert.equal(started.started, false, 'a crew directory that is a link did not refuse the start')
-  const refusal = started.started ? '' : started.refusal
-  assert.ok(refusal.includes(asTheOwnerReadsIt(DECLARATION_DIRECTORY)), `the refusal does not name the linked crew directory: ${refusal}`)
-  assert.match(refusal, /is a symlink/, refusal)
-  assert.equal(existsSync(fake.ran), false, 'the host ran, and was handed a crew text nothing approved')
+  assert.ok(started.started, started.started ? '' : started.refusal)
+  const handed = await theCrewTextHandedAt(await launchedSocket(place.relay_root, t), 'startup', 'session-306-r4-crew-dir')
+  assert.ok(handed.includes(OWN_ROLE_TEXT.trim()), `the role text the link points at is not handed: ${handed.slice(0, 600)}`)
+  assert.ok(handed.includes(CONVENTIONS_AS_WRITTEN.trim()), `the conventions the link points at are not handed: ${handed.slice(0, 600)}`)
 })
 
 test('#312: a member Martha started is stopped by its own launcher when the owner asks, not by the verb', async (t) => {

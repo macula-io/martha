@@ -288,8 +288,9 @@ function theLinesWhileAsking(ask: (note: (line: string) => void) => boolean): { 
  */
 function theGatesAnswer(probe: { readonly admits: boolean; readonly what: string; readonly says?: string }, ask: (note: (line: string) => void) => boolean, who: string): string | undefined {
   const { answer, said } = theLinesWhileAsking(ask)
+  const says = probe.says
   if (answer !== probe.admits) return `${who} ${answer ? 'admits' : 'refuses'} ${probe.what}`
-  if (probe.says !== undefined && !said.some((line) => line.includes(probe.says))) return `${who} admits ${probe.what}, and says nothing about it`
+  if (says !== undefined && !said.some((line) => line.includes(says))) return `${who} admits ${probe.what}, and says nothing about it`
   return undefined
 }
 
