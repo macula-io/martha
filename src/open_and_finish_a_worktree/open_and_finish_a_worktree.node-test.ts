@@ -756,6 +756,24 @@ test('worktree_finish leaves the branch on origin when a name with a space at it
   assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'a name trimmed out of the list matched nothing and was taken as held')
 })
 
+test('worktree_finish leaves the branch on origin when a name git reads as pathspec magic differs on the default (martha#915 review r=2)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await tools.open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  // A name that starts with a colon: handed to git as a pathspec it is read as magic, names another path, and a file
+  // that differs on the default passes as held (review r=2).
+  const name = ':colon.txt'
+  writeFileSync(join(path, name), 'the work\n')
+  commitIn(path, 'the work')
+  gitIn(path, 'push', '--quiet', '-u', 'origin', `${MEMBER}/${SLUG}`)
+  writeFileSync(join(fixture.seed, name), 'other work\n')
+  commitIn(fixture.seed, 'other content under a name git reads as magic')
+  gitIn(fixture.seed, 'push', '--quiet', 'origin', 'main')
+  assert.match(toldOf(await tools.finish.answer(finished('acme/widget', SLUG))), /stays on origin, which its tip is not on yet/)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'a name read as pathspec magic matched another path and was taken as held')
+})
+
 test('worktree_finish removes the branch on origin after a rebase landing, when the default holds the work (martha#915)', async (t) => {
   const fixture = aCrew(t)
   const tools = toolsOf(settingsFor(fixture, fixture))

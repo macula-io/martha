@@ -273,7 +273,9 @@ async function theDefaultBranchHolds(
   const files = changed.split('\0').filter((file) => file !== '')
   // A commit that changed no file of its own has nothing left to prove, and nothing that could be lost with it.
   if (files.length === 0) return { holds: true, differs: [] }
-  const same = await git(host, clone, ['diff', '--quiet', default_branch, commit, '--', ...files])
+  // Each name is a literal path, never a pattern: git reads a name that starts with a colon as pathspec magic, which
+  // names another path, so a file that differs would match nothing and pass as held (review r=2).
+  const same = await git(host, clone, ['--literal-pathspecs', 'diff', '--quiet', default_branch, commit, '--', ...files])
   return same.exit_code === 0 ? { holds: true, differs: [] } : { holds: false, differs: files }
 }
 
