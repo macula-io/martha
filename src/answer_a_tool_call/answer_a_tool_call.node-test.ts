@@ -62,7 +62,7 @@ const denied = (answer: ToolCallAnswer): string => {
 }
 
 /** The answer, and everything written to the process's own error output while the call is judged (martha#601). */
-const theNoticeWhile = (act: () => ToolCallAnswer): { readonly answer: ToolCallAnswer; readonly notice: string } => {
+const theNoticeWhile = (act: (note: (line: string) => void) => ToolCallAnswer): { readonly answer: ToolCallAnswer; readonly notice: string } => {
   const written: string[] = []
   const original = process.stderr.write.bind(process.stderr)
   process.stderr.write = ((chunk: string | Uint8Array) => {
@@ -70,7 +70,7 @@ const theNoticeWhile = (act: () => ToolCallAnswer): { readonly answer: ToolCallA
     return true
   }) as typeof process.stderr.write
   try {
-    return { answer: act(), notice: written.join('') }
+    return { answer: act((line) => void process.stderr.write(`${line}\n`)), notice: written.join('') }
   } finally {
     process.stderr.write = original
   }
@@ -162,7 +162,7 @@ test('every tool that executes is refused, by whatever name the host uses', () =
 test('#601: a call that widens a member\'s reach gets one line about who decides it, and no refusal of its own', () => {
   const fresh = beginSession(store(), 's-1')
   for (const tool of MESH_TOOLS_THAT_WIDEN_REACH) {
-    const { answer, notice } = theNoticeWhile(() => answerToolCall({ names, tool, session: fresh, policy, launch, host: thisMachine }))
+    const { answer, notice } = theNoticeWhile((note) => answerToolCall({ names, tool, session: fresh, policy, launch, host: thisMachine }, note))
     assert.match(notice, new RegExp(`${tool} is not called in a member's session`), `${tool} got no notice`)
     assert.match(notice, /answered as asked/, 'the notice did not say the call went ahead')
     // The raw mesh read stands beside it and is not one of the rows cut (martha#601), so it still refuses the call; what

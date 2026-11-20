@@ -58,7 +58,7 @@ const sessionsOfBothKinds = () => {
 type BothKinds = ReturnType<typeof sessionsOfBothKinds>
 
 /** The answer a call gets, and everything written to the process's own error output while it is asked (martha#601). */
-function theNoticeWhile<T>(act: () => T): { readonly answer: T; readonly notice: string } {
+function theNoticeWhile<T>(act: (note: (line: string) => void) => T): { readonly answer: T; readonly notice: string } {
   const written: string[] = []
   const original = process.stderr.write.bind(process.stderr)
   process.stderr.write = ((chunk: string | Uint8Array) => {
@@ -66,7 +66,7 @@ function theNoticeWhile<T>(act: () => T): { readonly answer: T; readonly notice:
     return true
   }) as typeof process.stderr.write
   try {
-    return { answer: act(), notice: written.join('') }
+    return { answer: act((line) => void process.stderr.write(`${line}\n`)), notice: written.join('') }
   } finally {
     process.stderr.write = original
   }
@@ -79,20 +79,22 @@ const assertRefusedOnOpenCode = (tool: string, { clean, tainted }: BothKinds) =>
   }
 }
 
+/** One tool, noticed in a clean and in a tainted session, and answered on to the raw-mesh-read rule that refuses it. */
+const assertNoticedInBothKinds = (tool: string, sessions: BothKinds) => {
+  for (const [kind, session] of [['clean', sessions.clean], ['tainted', sessions.tainted]] as const) {
+    const { answer, notice } = theNoticeWhile((note) => answerToolCall({ names, tool, session, policy, input: {}, launch, host: thisMachine }, note))
+    assert.match(notice, new RegExp(`notice: ${tool} is not called in a member's session, and the call was answered as asked`), `${tool} in a ${kind} session`)
+    assert.ok(notice.includes(WHO_DECIDES_REACH), `${tool} in a ${kind} session: the notice did not say who decides`)
+    // The call goes on to the raw-mesh-read rule, which still refuses it.
+    assert.match(answer?.deny ?? '', /no gate has seen/, `${tool} in a ${kind} session did not reach the next answer`)
+  }
+}
+
 test('the tools that widen a member reach are one notice in a clean and in a tainted session, under every namespace, and the call goes on to the next answer', () => {
   const sessions = sessionsOfBothKinds()
   assert.notEqual(answerToolCall({ names, tool: CLAUDE_CODE_SHELL_TOOL, session: sessions.tainted, policy, launch, host: thisMachine }), undefined, 'the session is tainted')
   for (const prefix of NAMESPACES) {
-    for (const own of REQUIRED_REACH_TOOLS) {
-      for (const [kind, session] of [['clean', sessions.clean], ['tainted', sessions.tainted]] as const) {
-        const tool = `${prefix}${own}`
-        const { answer, notice } = theNoticeWhile(() => answerToolCall({ names, tool, session, policy, input: {}, launch, host: thisMachine }))
-        assert.match(notice, new RegExp(`notice: ${tool} is not called in a member's session, and the call was answered as asked`), `${tool} in a ${kind} session`)
-        assert.ok(notice.includes(WHO_DECIDES_REACH), `${tool} in a ${kind} session: the notice did not say who decides`)
-        // The call goes on to the raw-mesh-read rule, which still refuses it.
-        assert.match(answer?.deny ?? '', /no gate has seen/, `${tool} in a ${kind} session did not reach the next answer`)
-      }
-    }
+    for (const own of REQUIRED_REACH_TOOLS) assertNoticedInBothKinds(`${prefix}${own}`, sessions)
   }
 })
 

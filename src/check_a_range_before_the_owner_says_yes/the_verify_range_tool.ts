@@ -49,7 +49,7 @@ type AToolAnswer = { readonly answer: string } | { readonly refused: string }
  * before it asks this launch for the processes it acts with (martha#443 part 5 r=2): a call whose arguments are wrong
  * is answered by those arguments even in a launch that could not act, which is the order the base's handler had.
  */
-export async function verifyTheRangeOver(host: RangeCheckHost, asked: TheRange): Promise<AToolAnswer> {
-  const checked = await verifyRange(host, asked)
+export async function verifyTheRangeOver(host: RangeCheckHost, asked: TheRange, note: (line: string) => void = () => {}): Promise<AToolAnswer> {
+  const checked = await verifyRange(host, asked, note)
   return 'told' in checked ? { answer: checked.told } : { refused: checked.refused }
 }

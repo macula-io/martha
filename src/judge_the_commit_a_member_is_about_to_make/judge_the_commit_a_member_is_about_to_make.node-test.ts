@@ -73,7 +73,7 @@ const theRecordOf = (): WhatAKilledRunLeft => ({
 })
 
 /** The answer, and everything written to the process's own error output while the commit is judged (martha#601). */
-async function theNoticeWhile(act: () => Promise<string | undefined>): Promise<{ readonly answer: string | undefined; readonly notice: string }> {
+async function theNoticeWhile(act: (note: (line: string) => void) => Promise<string | undefined>): Promise<{ readonly answer: string | undefined; readonly notice: string }> {
   const written: string[] = []
   const original = process.stderr.write.bind(process.stderr)
   process.stderr.write = ((chunk: string | Uint8Array) => {
@@ -81,7 +81,7 @@ async function theNoticeWhile(act: () => Promise<string | undefined>): Promise<{
     return true
   }) as typeof process.stderr.write
   try {
-    return { answer: await act(), notice: written.join('') }
+    return { answer: await act((line) => void process.stderr.write(`${line}\n`)), notice: written.join('') }
   } finally {
     process.stderr.write = original
   }
@@ -90,7 +90,7 @@ async function theNoticeWhile(act: () => Promise<string | undefined>): Promise<{
 test('#601: a commit that would carry the mutant the index holds goes ahead, one line naming it and the release act', async (t) => {
   const checkout = aRepoWithAMutant(t)
   git(checkout, ['add', '-A'])
-  const { answer, notice } = await theNoticeWhile(() => theRefusalOfTheCommit({ processes, directory: checkout, record: theRecordOf() }))
+  const { answer, notice } = await theNoticeWhile((note) => theRefusalOfTheCommit({ processes, directory: checkout, record: theRecordOf() }, note))
   assert.equal(answer, undefined, 'the commit was refused')
   assert.match(notice, /notice: this commit carries what a killed run left/, 'the commit went ahead without a notice')
   assert.ok(notice.includes(A_FILE))
@@ -101,7 +101,7 @@ test('#601: the index is what is judged, so editing the file after staging it is
   const checkout = aRepoWithAMutant(t)
   git(checkout, ['add', '-A'])
   writeFileSync(join(checkout, A_FILE), THE_MEMBERS_OWN)
-  const { answer, notice } = await theNoticeWhile(() => theRefusalOfTheCommit({ processes, directory: checkout, record: theRecordOf() }))
+  const { answer, notice } = await theNoticeWhile((note) => theRefusalOfTheCommit({ processes, directory: checkout, record: theRecordOf() }, note))
   assert.equal(answer, undefined, 'the commit was refused')
   assert.match(notice, /notice: this commit carries what a killed run left/, 'the commit went ahead without a notice')
 })
@@ -142,15 +142,15 @@ const aCrewHoldingTheRecord = (t: TestContext): CrewStore => {
 /** The git calls a line makes, as the reader hands them to the guard: the command word and the words after it. */
 const aCall = (command: string, args: readonly string[], directory: string): AGitCall => ({ options: [], command, args, directory })
 
-const refusedSoFar = async (t: TestContext, calls: readonly AGitCall[]): Promise<string | undefined> => {
+const refusedSoFar = async (t: TestContext, calls: readonly AGitCall[], note: (line: string) => void = () => {}): Promise<string | undefined> => {
   const crew = aCrewHoldingTheRecord(t)
-  return theLeftoversRefusal({ calls, processes, leftovers: crew, files: filesOnThisMachine, member: THE_MEMBER })
+  return theLeftoversRefusal({ calls, processes, leftovers: crew, files: filesOnThisMachine, member: THE_MEMBER }, note)
 }
 
 test('#601: git add -A && git commit -m x goes ahead with a notice, though nothing is staged when the line is judged', async (t) => {
   const checkout = aRepoWithAMutant(t)
   const calls = [aCall('add', ['-A'], checkout), aCall('commit', ['-m', 'x'], checkout)]
-  const { answer, notice } = await theNoticeWhile(() => refusedSoFar(t, calls))
+  const { answer, notice } = await theNoticeWhile((one) => refusedSoFar(t, calls, one))
   assert.equal(answer, undefined, 'the commit was refused')
   assert.match(notice, /notice: this commit carries what a killed run left/, 'the mutant in the working tree was not noticed')
   assert.ok(notice.includes(A_FILE))
@@ -159,7 +159,7 @@ test('#601: git add -A && git commit -m x goes ahead with a notice, though nothi
 
 test('#601: git commit -am x goes ahead with a notice, though nothing is staged when the line is judged', async (t) => {
   const checkout = aRepoWithAMutant(t)
-  const { answer, notice } = await theNoticeWhile(() => refusedSoFar(t, [aCall('commit', ['-am', 'x'], checkout)]))
+  const { answer, notice } = await theNoticeWhile((note) => refusedSoFar(t, [aCall('commit', ['-am', 'x'], checkout)], note))
   assert.equal(answer, undefined, 'the commit was refused')
   assert.match(notice, /notice: this commit carries what a killed run left/, 'the mutant commit -a carries was not noticed')
   assert.ok(notice.includes(A_FILE))
@@ -183,7 +183,7 @@ test('#601: a leftover with no release is noticed, and the same one after the re
   const checkout = aRepoWithAMutant(t)
   const crew = aCrewHoldingTheRecord(t)
   const calls = [aCall('add', ['-A'], checkout), aCall('commit', ['-m', 'x'], checkout)]
-  const { answer, notice } = await theNoticeWhile(() => theLeftoversRefusal({ calls, processes, leftovers: crew, files: filesOnThisMachine, member: THE_MEMBER }))
+  const { answer, notice } = await theNoticeWhile((note) => theLeftoversRefusal({ calls, processes, leftovers: crew, files: filesOnThisMachine, member: THE_MEMBER }, note))
   assert.equal(answer, undefined, 'the commit was refused')
   assert.match(notice, /notice: this commit carries what a killed run left/, 'the leftover was not noticed')
   const told = releaseTheFilesAKilledRunLeft({ crew, member: THE_MEMBER, paths: [A_FILE] })

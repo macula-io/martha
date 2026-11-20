@@ -54,7 +54,7 @@
 import { createHash } from 'node:crypto'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 
-import { checkoutTheGateReads, readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange } from '../judge_a_checkouts_tree/checkout_tree.ts'
+import { checkoutTheGateReads, readCheckoutTree, realOrResolved, type LaunchHost, type TreeChange, type TreeRead } from '../judge_a_checkouts_tree/checkout_tree.ts'
 import type { OwnWritesStore } from '../remember_a_members_own_writes/remember_a_members_own_writes.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import {
@@ -679,15 +679,20 @@ export function approvedStartTreeOf(launch: ApprovedLaunch, host: LaunchHost): s
 export function readLaunchState(place: LaunchPlace, machine: LaunchHost, approved_tree?: string, note: (line: string) => void = () => {}): LaunchState {
   const read = readCheckoutTree(realOrResolved(machine, place.launch_dir), place.stop_dir, machine, approved_tree ?? place.approved_tree)
   const crewText = readCrewText(place, machine, note)
+  return theStateOneReadCameTo(read, crewText, [...readLaunchConfig(place, machine, note), ...crewText])
+}
+
+/**
+ * The state one checkout read and its crew text came to: the entries, the tree, and only the parts the read has, so the
+ * caller is told what stands and not what a state it never read would have held.
+ */
+function theStateOneReadCameTo(read: TreeRead, crewText: readonly ConfigEntry[], entries: readonly ConfigEntry[]): LaunchState {
   // One refusal, whichever half of the state refuses first: the checkout's tree, or a crew text that is a directory.
   const refusal = read.kind === 'refused' ? read.refusal : crewTextDirectoryIn(crewText)
-  return {
-    entries: [...readLaunchConfig(place, machine, note), ...crewText],
-    tree: read.kind === 'tree' ? read.tree : null,
-    ...(refusal === undefined ? {} : { refusal }),
-    ...(read.kind === 'refused' && read.the_approved_tree === true ? { the_approved_tree_is_gone: true as const } : {}),
-    ...(read.kind === 'tree' && read.changes !== undefined ? { changes: read.changes } : {}),
-  }
+  const refused: Partial<LaunchState> = refusal === undefined ? {} : { refusal }
+  const gone = read.kind === 'refused' && read.the_approved_tree === true ? { the_approved_tree_is_gone: true as const } : {}
+  const changes = read.kind === 'tree' && read.changes !== undefined ? { changes: read.changes } : {}
+  return { entries, tree: read.kind === 'tree' ? read.tree : null, ...refused, ...gone, ...changes }
 }
 
 /**
@@ -733,17 +738,24 @@ function crewTextAt(place: LaunchPlace, file: string): string {
  * `entryOf`, so it is not said twice. A broken path is left to `entryOf`'s own refusal.
  */
 function noteLinksOnTheWayTo(machine: LaunchHost, start: string, at: string, note: (line: string) => void): void {
-  let walked = start
-  const parts = pathFrom(start, at).split('/')
-  for (const part of parts.slice(0, -1)) {
-    walked = join(walked, part)
-    try {
-      if (machine.stores.files.kindOf(walked).kind === 'symlink') {
-        note(`${pathFrom(start, walked)} is a symlink, so its content cannot be approved; approving what it points at`)
-      }
-    } catch {
-      return
-    }
+  for (const walked of directlinksAbove(start, at)) {
+    if (!isALink(machine, walked)) continue
+    note(`${pathFrom(start, walked)} is a symlink, so its content cannot be approved; approving what it points at`)
+  }
+}
+
+/** Each directory from `start` down to `at`'s own, the places a link could stand above the text. */
+function directlinksAbove(start: string, at: string): readonly string[] {
+  const parts = pathFrom(start, at).split('/').slice(0, -1)
+  return parts.map((_part, index) => join(start, ...parts.slice(0, index + 1)))
+}
+
+/** Whether a link stands at `at`: a path that cannot be read is no link this says, and `entryOf` refuses it by name. */
+function isALink(machine: LaunchHost, at: string): boolean {
+  try {
+    return machine.stores.files.kindOf(at).kind === 'symlink'
+  } catch {
+    return false
   }
 }
 

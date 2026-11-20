@@ -35,7 +35,6 @@
 //      running, so without this a second stop would quietly downgrade a mutant to merely dirty.
 
 import { createHash } from 'node:crypto'
-import process from 'node:process'
 
 import { shownSafely } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 
@@ -361,13 +360,15 @@ export const WHAT_A_HAND_OFF_COMES_WHILE: AWhatAKilledRunStandsIn = { opening: '
  * What an act carries of what a killed run left, printed as one notice and answering nothing, so the act goes ahead
  * (martha#601). It judges the content (rule 4) on the leftovers that still stand (rule 2), and names the files and the
  * release act the member can still take. One builder, so a commit's notice and a hand-off's cannot drift apart in either
- * direction (martha#719, N3). Undefined, as it always allows: the answer is the notice it writes.
+ * direction (martha#719, N3). Undefined, as it always allows: the answer is the notice it says through `note`, the sink
+ * its composition root passed (martha#601).
  */
 export const theRefusalOfWhatAKilledRunLeft = (
   record: WhatAKilledRunLeft,
   carrying: readonly IWhatACommitWouldCarry[],
   act: AWhatAKilledRunStandsIn,
   released: readonly IReleasedPath[] = [],
+  note: (line: string) => void = () => {},
 ): string | undefined => {
   const standing = theStandingLeftoversOf(record, released)
   const standingFor = (one: IWhatACommitWouldCarry) => standing.find((kept) => theSameFileAs(kept, one))
@@ -375,10 +376,10 @@ export const theRefusalOfWhatAKilledRunLeft = (
   if (caught.length === 0) return undefined
   const commands = [...new Set(caught.map((one) => standingFor(one)?.command_line ?? ''))].filter((one) => one !== '')
   const wasRunning = commands.length === 0 ? '' : `, and it was running when the launch ended: ${namedThenTheRest(commands)}`
-  process.stderr.write(
+  note(
     `notice: ${act.opening}: ${namedThenTheRest(caught.map(theNameOf))} ` +
       `(the bytes are the ones kept when the launch ended)${wasRunning}, and the ${act.andThen} went ahead, ` +
-      `so restore what is not yours or take ${THE_RELEASE_ACT} for the paths that are.\n`,
+      `so restore what is not yours or take ${THE_RELEASE_ACT} for the paths that are.`,
   )
   return undefined
 }
@@ -388,7 +389,8 @@ export const theRefusalOfACommit = (
   record: WhatAKilledRunLeft,
   carrying: readonly IWhatACommitWouldCarry[],
   released: readonly IReleasedPath[] = [],
-): string | undefined => theRefusalOfWhatAKilledRunLeft(record, carrying, WHAT_A_COMMIT_CARRIES, released)
+  note: (line: string) => void = () => {},
+): string | undefined => theRefusalOfWhatAKilledRunLeft(record, carrying, WHAT_A_COMMIT_CARRIES, released, note)
 
 /** The record as the one line the crew's store keeps, and the one shape this reads back. */
 export const theKeptText = (record: WhatAKilledRunLeft): string => JSON.stringify(record)

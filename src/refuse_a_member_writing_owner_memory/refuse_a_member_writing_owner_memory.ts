@@ -99,7 +99,6 @@ import { basename, dirname, join, normalize, relative, resolve, sep } from 'node
 import process from 'node:process'
 
 import { CLAUDE_CODE_FILE_RULE_TOOL, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
-import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { USER_SETTINGS_FILE, userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { CLAUDE_CODE_FILE_TOOLS, WHOLE_FILE_TOOL, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
 import type { HostFileTools } from '../host_contract/host_contract.ts'
@@ -935,6 +934,8 @@ const sayTheNotices = (notices: readonly string[], note: (line: string) => void)
 /**
  * What a member's tool call writes of the owner's memory, instructions, or what a later git run of the owner's reads, as
  * notices said where the owner reads Martha's own output (rules 3, 4 and 5): every such write goes ahead (martha#601).
+ * It still answers undefined: the owner cut every refusal on these places to a line, so what is left standing on them
+ * is the notice, and the host's own `permissions.deny` rules, which do not depend on this call.
  */
 export function writesTheOwnersMemory(
   tool: string,
@@ -957,40 +958,28 @@ export function writesTheOwnersMemory(
   const unfollowable = unfollowablePlace(places, git)
   if (unfollowable !== undefined) notices.push(unfollowable)
   for (const argument of tools.file_arguments) {
-    const why = whyTheArgumentIsRefused(input[argument], places, git, later, host, { cwd, home, resolve: tools.resolve })
-    if (why.refusal !== undefined) {
-      sayTheNotices(notices, note)
-      return why.refusal
-    }
-    notices.push(...why.notices)
+    notices.push(...noticesOfTheArgument(input[argument], places, git, later, host, { cwd, home, resolve: tools.resolve }))
   }
   sayTheNotices(notices, note)
   return undefined
 }
 
-/** What one argument came to: a refusal that still stops the write, and the notices about places the write goes to anyway. */
-interface WhatTheArgumentCameTo {
-  readonly refusal?: string
-  readonly notices: readonly string[]
-}
-
-/** Why one argument a file tool is given is still refused, and what Martha carried on past about it (martha#601). */
-function whyTheArgumentIsRefused(argument: unknown, places: OwnerMemoryPlaces, git: CheckoutGit | undefined, later: WhatALaterGitRunReads | undefined, host: LaunchHost, from: { readonly cwd: string; readonly home: string; readonly resolve: HostFileTools['resolve'] }): WhatTheArgumentCameTo {
-  if (typeof argument !== 'string' || argument.trim() === '') return { notices: [] }
+/**
+ * One line for each place this argument writes that the owner's own sessions read, or none (rules 3, 4 and 5, and
+ * martha#601 for the wording of every one of them).
+ */
+function noticesOfTheArgument(argument: unknown, places: OwnerMemoryPlaces, git: CheckoutGit | undefined, later: WhatALaterGitRunReads | undefined, host: LaunchHost, from: { readonly cwd: string; readonly home: string; readonly resolve: HostFileTools['resolve'] }): readonly string[] {
+  if (typeof argument !== 'string' || argument.trim() === '') return []
   const spelled = from.resolve(argument, from.cwd, from.home)
   const end = pathToItsEnd(spelled)
   if (end === undefined) {
-    return {
-      notices: [`${argument} is behind a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder it lands in cannot be told, and the write went ahead (martha#136)`],
-    }
+    return [`${argument} is behind a chain of links that cannot be followed to its end (past ${LINK_HOPS} links, or a link that turns on itself), so which folder it lands in cannot be told, and the write went ahead (martha#136)`]
   }
   const gitNotice = unique([spelled, end]).map((path) => gitNoticeOf(argument, path, git, places, later, host)).find((found) => found !== undefined)
-  if (gitNotice !== undefined) return { notices: [gitNotice] }
+  if (gitNotice !== undefined) return [gitNotice]
   const place = unique([spelled, end]).map((path) => placeOf(path, places)).find((found) => found !== undefined)
-  if (place === undefined) return { notices: [] }
-  return {
-    notices: [`${argument} is in ${place.what}, which ${place.loaded_by ?? "the owner's own Claude Code sessions"} load as their own, and the write went ahead (${place.issue})`],
-  }
+  if (place === undefined) return []
+  return [`${argument} is in ${place.what}, which ${place.loaded_by ?? "the owner's own Claude Code sessions"} load as their own, and the write went ahead (${place.issue})`]
 }
 
 /**
@@ -1068,60 +1057,4 @@ export function admitsAWriteNoLaterGitRunReads(probe: PathProbe, note?: (line: s
   const env: Readonly<Record<string, string | undefined>> = { HOME: probe.home }
   const places = ownerMemoryPlaces({ launcher_env: env, member_env: env, home: probe.home, launch_dir: probe.cwd, settings_files: [], user_scope: userScopeUnder(probe.home) })
   return writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: probe.path }, places, probe.cwd, probe.home, thisMachine, CLAUDE_CODE_FILE_TOOLS, note) === undefined
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
-
-/**
- * The lines of what a host printed about `rules` — one per rule of this repository's the host says it never matches
- * (martha#226).
- *
- * The host says in its own words which rules its file permission checks never match, on the terminal at a session's
- * start and on the standard error of a run that is not a terminal. A rule it names there is a rule that does nothing,
- * so the launch reads this before it starts a member and refuses rather than run with a place it believes closed.
- * Each line is read for the rule it is about — the one it names as the rule it read, which is what a rule of ours has
- * to be — and never for one it merely quotes: the host's complaint ends with the rule to write instead, so a dead rule
- * in the owner's own settings quotes the very spelling this launch writes, and that is the owner's rule and not one of
- * ours (martha#226 r=1). One rule is one fault: the host prints a complaint more than once, and the first line about a
- * rule is kept.
- */
-export function hostLinesNamingARule(printed: string, rules: readonly string[]): string[] {
-  const about = new Map<string, string>()
-  for (const line of printed.split('\n').map((one) => one.trim()).filter((one) => one !== '')) {
-    const rule = theRuleTheLineIsAbout(line)
-    if (rule === undefined || !rules.includes(rule) || about.has(rule)) continue
-    about.set(rule, line)
-  }
-  return [...about.values()]
-}
-
-/**
- * The rule a host's line is about: the one it names after the settings file it read, which is the subject of the
- * complaint (martha#226 r=1). The host writes `Permission deny rule (<file>): <rule> is not matched …` and then the
- * rule to write instead, so the subject has to be cut out rather than searched for. A line that names no such rule is
- * no complaint about one. The wording is the recording's own (NOT_MATCHED_MARK), never retyped here: a host that
- * rewords the complaint fails the recording before it can be read wrongly here.
- */
-const THE_RULE_A_LINE_IS_ABOUT = new RegExp(`\\): (.+?) ${NOT_MATCHED_MARK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
-const theRuleTheLineIsAbout = (line: string): string | undefined => THE_RULE_A_LINE_IS_ABOUT.exec(line)?.[1]?.trim()
-
-
-/**
- * The settings the host is started with: the approved copy, or none, with
- * `rules` added to its `permissions.deny` after the rules it already has; or
- * why it cannot be, naming `name`. Every other key is kept as approved.
- */
-export function settingsWithMemoryDenied(approved: string | undefined, rules: readonly string[], name: string): { readonly text: string } | { readonly refusal: string } {
-  let settings: unknown = {}
-  try {
-    if (approved !== undefined) settings = JSON.parse(approved)
-  } catch {
-    return { refusal: `${name} is not JSON, so the rules that keep a member out of the owner's memory cannot be added to it (martha#136)` }
-  }
-  if (!isRecord(settings)) return { refusal: `${name} is not a JSON object, so the rules that keep a member out of the owner's memory cannot be added to it (martha#136)` }
-  const permissions = settings.permissions ?? {}
-  if (!isRecord(permissions)) return { refusal: `${name} has a permissions that is not an object, so the rules that keep a member out of the owner's memory cannot be added to it (martha#136)` }
-  const deny = permissions.deny ?? []
-  if (!Array.isArray(deny)) return { refusal: `${name} has a permissions.deny that is not a list, so the rules that keep a member out of the owner's memory cannot be added to it (martha#136)` }
-  return { text: JSON.stringify({ ...settings, permissions: { ...permissions, deny: [...(deny as unknown[]), ...rules] } }) }
 }

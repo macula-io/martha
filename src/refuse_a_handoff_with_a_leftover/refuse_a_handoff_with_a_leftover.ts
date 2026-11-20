@@ -80,7 +80,7 @@ const whatStandsNow = (host: TheFilesAndProcesses, record: WhatAKilledRunLeft, r
  * call, a message whose first line is no HANDOFF, a crew that kept no record for this member, a record nobody can read,
  * or no path whose bytes still hold the kept digest. The hand-off goes ahead either way (martha#601).
  */
-export function refuseAHandOffWithALeftover(asked: AHandOffAsked): string | undefined {
+export function refuseAHandOffWithALeftover(asked: AHandOffAsked, note: (line: string) => void = () => {}): string | undefined {
   if (asked.tool !== SAY_TO_THE_CREW) return undefined
   const text = theTextOf(asked.input)
   if (text === undefined || !isAHandOff(text)) return undefined
@@ -89,5 +89,5 @@ export function refuseAHandOffWithALeftover(asked: AHandOffAsked): string | unde
   if (kept === undefined || 'refusal' in kept || 'unreadable' in kept) return undefined
   const released = theReleasedPathsOf(asked.leftovers, asked.member)
   const carrying = whatStandsNow(asked.host, kept.record, released)
-  return theRefusalOfWhatAKilledRunLeft(kept.record, carrying, WHAT_A_HAND_OFF_COMES_WHILE, released)
+  return theRefusalOfWhatAKilledRunLeft(kept.record, carrying, WHAT_A_HAND_OFF_COMES_WHILE, released, note)
 }

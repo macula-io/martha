@@ -13,7 +13,7 @@ const OTHER_TREE = '/work/another-tree'
 const A_FILE = 'src/a_slice/a_file.ts'
 
 /** Everything written to the process's own error output while `act` runs (martha#601). */
-const theNoticeWhile = (act: () => void): string => {
+const theNoticeWhile = (act: (note: (line: string) => void) => void): string => {
   const written: string[] = []
   const original = process.stderr.write.bind(process.stderr)
   process.stderr.write = ((chunk: string | Uint8Array) => {
@@ -21,7 +21,7 @@ const theNoticeWhile = (act: () => void): string => {
     return true
   }) as typeof process.stderr.write
   try {
-    act()
+    act((line) => void process.stderr.write(`${line}\n`))
   } finally {
     process.stderr.write = original
   }
@@ -85,8 +85,8 @@ test('#601: a file written after its command started is recorded as what the kil
   assert.equal(record.leftovers.length, 1)
   assert.equal(record.leftovers[0]?.digest, theDigestOf(bytesOf('if (false) return\n')))
   let answer: string | undefined
-  const notice = theNoticeWhile(() => {
-    answer = theRefusalOfACommit(record, [{ path: A_FILE, digest: theDigestOf(bytesOf('if (false) return\n')) }])
+  const notice = theNoticeWhile((note) => {
+    answer = theRefusalOfACommit(record, [{ path: A_FILE, digest: theDigestOf(bytesOf('if (false) return\n')) }], undefined, note)
   })
   assert.equal(answer, undefined, 'the commit was refused')
   assert.match(notice, /notice: this commit carries what a killed run left/, 'the commit went ahead without a notice')
@@ -136,8 +136,8 @@ test('an end over a record whose leftover still holds its bytes carries it over 
   )
   assert.equal(later.leftovers.length, 1)
   let answer: string | undefined
-  const notice = theNoticeWhile(() => {
-    answer = theRefusalOfACommit(later, [{ path: A_FILE, digest: theDigestOf(bytesOf('if (false) return\n')) }])
+  const notice = theNoticeWhile((note) => {
+    answer = theRefusalOfACommit(later, [{ path: A_FILE, digest: theDigestOf(bytesOf('if (false) return\n')) }], undefined, note)
   })
   assert.equal(answer, undefined, 'the commit was refused')
   assert.match(notice, /notice: this commit carries what a killed run left/, 'the carried-over leftover was not noticed')

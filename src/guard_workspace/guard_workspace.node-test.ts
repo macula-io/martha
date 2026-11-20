@@ -42,9 +42,9 @@ const FACTS: TheFacts = {
   ],
 }
 
-/** A refusal as a shell call meets it, read from the line the way the relay reads it. */
-const refused = (line: string, directory: string | null, member = 'Hygiea', facts: TheFacts = FACTS): string | undefined =>
-  refuseACallInTheWorkspace({ calls: readTheGitCallsInAShellLine(line, { directory }), workspace: WORKSPACE, member, facts })
+/** A refusal as a shell call meets it, read from the line the way the relay reads it, with the sink the notice goes through. */
+const refused = (line: string, directory: string | null, member = 'Hygiea', facts: TheFacts = FACTS, note: (line: string) => void = () => {}): string | undefined =>
+  refuseACallInTheWorkspace({ calls: readTheGitCallsInAShellLine(line, { directory }), workspace: WORKSPACE, member, facts }, note)
 
 /** A line is refused, and its words say why. */
 const refusedWith = (line: string, directory: string | null, member: string, says: RegExp): void => {
@@ -54,7 +54,7 @@ const refusedWith = (line: string, directory: string | null, member: string, say
 }
 
 /** The answer, and everything written to the process's own error output while the call is judged (martha#601). */
-const theNoticeWhile = (act: () => string | undefined): { readonly answer: string | undefined; readonly notice: string } => {
+const theNoticeWhile = (act: (note: (line: string) => void) => string | undefined): { readonly answer: string | undefined; readonly notice: string } => {
   const written: string[] = []
   const original = process.stderr.write.bind(process.stderr)
   process.stderr.write = ((chunk: string | Uint8Array) => {
@@ -62,7 +62,7 @@ const theNoticeWhile = (act: () => string | undefined): { readonly answer: strin
     return true
   }) as typeof process.stderr.write
   try {
-    return { answer: act(), notice: written.join('') }
+    return { answer: act((line) => void process.stderr.write(`${line}\n`)), notice: written.join('') }
   } finally {
     process.stderr.write = original
   }
@@ -90,13 +90,13 @@ test('a crew that turned no layout on is guarded by nothing, and one that did na
 test('#601: a call that moves a clone off its default branch runs as asked, in every shape it is written in', () => {
   const inAClone = `${CLONES}/org/repo`
   for (const line of ['git checkout -b mine', 'git checkout -B mine', 'git checkout --orphan mine', 'git switch -c mine', 'git switch -C mine', 'git branch mine']) {
-    const { answer, notice } = theNoticeWhile(() => refused(line, inAClone, 'Hygiea'))
+    const { answer, notice } = theNoticeWhile((note) => refused(line, inAClone, 'Hygiea', undefined, note))
     assert.equal(answer, undefined, `${line} was refused`)
     assert.match(notice, /a clone stays on its default branch/, `${line} was allowed without a notice`)
   }
   // A switch to a branch that is not the clone's default is the same drift, written the other way.
   for (const line of ['git checkout uranus/9', 'git switch hygiea/562']) {
-    const { answer, notice } = theNoticeWhile(() => refused(line, inAClone, 'Hygiea'))
+    const { answer, notice } = theNoticeWhile((note) => refused(line, inAClone, 'Hygiea', undefined, note))
     assert.equal(answer, undefined, `${line} was refused`)
     assert.match(notice, /a clone stays on its default branch/, `${line} was allowed without a notice`)
   }
@@ -111,13 +111,13 @@ test('a call that puts a drifted clone back on its default branch says nothing',
   // there is still noticed, since making one needs no fact.
   const unknown: TheFacts = { ...FACTS, defaultBranch: null }
   assert.equal(refused('git checkout uranus/9', inAClone, 'Hygiea', unknown), undefined)
-  const { answer, notice } = theNoticeWhile(() => refused('git switch -c mine', inAClone, 'Hygiea'))
+  const { answer, notice } = theNoticeWhile((note) => refused('git switch -c mine', inAClone, 'Hygiea', undefined, note))
   assert.equal(answer, undefined)
   assert.match(notice, /a clone stays on its default branch/)
 })
 
 test('#601: a worktree is made inside a clone as asked, with one line saying where it belongs', () => {
-  const { answer, notice } = theNoticeWhile(() => refused(`git worktree add ${CLONES}/org/repo-x`, null, 'Hygiea'))
+  const { answer, notice } = theNoticeWhile((note) => refused(`git worktree add ${CLONES}/org/repo-x`, null, 'Hygiea', undefined, note))
   assert.equal(answer, undefined, 'a worktree inside a clone was refused')
   assert.match(notice, /a worktree made inside a clone/, 'the worktree was made without a notice')
   assert.equal(refused(`git worktree add ${WORKTREES}/repo-7 -b hygiea/7`, null), undefined)
@@ -195,8 +195,8 @@ test("a member's own push is never refused: the rule is about whose branch, not 
 
 test('a call is judged where its line leaves the shell, and unknown rather than somewhere it is not', () => {
   // A newline ends a command as a semicolon does, so the second `cd` is the one in force when the call runs.
-  const { answer, notice } = theNoticeWhile(() =>
-    refused(`cd ${CLONES}\ncd ${CLONES}/org/repo\ngit switch -c mine`, '/place/nowhere', 'Hygiea'),
+  const { answer, notice } = theNoticeWhile((note) =>
+    refused(`cd ${CLONES}\ncd ${CLONES}/org/repo\ngit switch -c mine`, '/place/nowhere', 'Hygiea', undefined, note),
   )
   assert.equal(answer, undefined)
   assert.match(notice, /a clone stays on its default branch/, 'the call in the clone was not noticed')

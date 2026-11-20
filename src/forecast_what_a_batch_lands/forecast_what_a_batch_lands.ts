@@ -64,14 +64,14 @@ interface TheClone {
 }
 
 /** The dry run of a batch: what each passed pull request would do, merged in order, and nothing written. */
-export async function forecastWhatABatchLands(host: LandingHost, batch: TheBatch): Promise<Landing> {
+export async function forecastWhatABatchLands(host: LandingHost, batch: TheBatch, note: (line: string) => void = () => {}): Promise<Landing> {
   const started = await theBatchMayStart(host, batch)
   if ('refused' in started) return started
   const origin = await readTheOriginACloneHas(host, batch.path)
   if ('refused' in origin) return origin
   const identity = await theCloneSaysWhoCommits(host, batch.path)
   if ('refused' in identity) return identity
-  const work = await findTheWorkTheseVerdictsPassed(host, { packages: batch.packages, repo: origin.origin.repo, cwd: batch.path })
+  const work = await findTheWorkTheseVerdictsPassed(host, { packages: batch.packages, repo: origin.origin.repo, cwd: batch.path }, note)
   if ('refused' in work) return work
   const base = await gitSaid(host, batch.path, ['rev-parse', '--verify', '--quiet', origin.origin.default_branch])
   if (base === undefined) return { refused: `${batch.path} cannot read ${origin.origin.default_branch}: fetch there, then try again.` }

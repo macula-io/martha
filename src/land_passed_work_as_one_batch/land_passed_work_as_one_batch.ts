@@ -115,7 +115,7 @@ interface TheCutBatch {
  * Lands a batch of passed work: one integration branch, one `--no-ff` merge per package at the head its reviewer
  * passed, and one push. Answers with the range for `verify_range`, or why nothing was landed.
  */
-export async function landPassedWorkAsOneBatch(host: LandingHost, member: string, batch: TheBatch): Promise<Landing> {
+export async function landPassedWorkAsOneBatch(host: LandingHost, member: string, batch: TheBatch, note: (line: string) => void = () => {}): Promise<Landing> {
   const started = await theBatchMayStart(host, batch)
   if ('refused' in started) return started
   const origin = await readTheOriginACloneHas(host, batch.path)
@@ -124,7 +124,7 @@ export async function landPassedWorkAsOneBatch(host: LandingHost, member: string
   if ('refused' in clean) return clean
   const identity = await theCloneSaysWhoCommits(host, batch.path)
   if ('refused' in identity) return identity
-  const work = await findTheWorkTheseVerdictsPassed(host, { packages: batch.packages, repo: origin.origin.repo, cwd: batch.path })
+  const work = await findTheWorkTheseVerdictsPassed(host, { packages: batch.packages, repo: origin.origin.repo, cwd: batch.path }, note)
   if ('refused' in work) return work
   const stood = await theBranchTheCloneStandsOn(host, batch.path)
   if ('refused' in stood) return stood

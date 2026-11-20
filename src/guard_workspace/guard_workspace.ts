@@ -39,7 +39,6 @@
 import { sameMemberName, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
 import { isAbsolute, join, resolve, sep } from 'node:path'
-import process from 'node:process'
 
 /** The places a crew declared, and the member names it declares: the declaration's own `house_rules` and `members`. */
 export interface TheWorkspace {
@@ -122,9 +121,9 @@ const A_CLONE_IS_NO_PLACE_TO_BRANCH =
 const A_WORKTREE_IS_NOT_MADE_IN_A_CLONE =
   'a worktree made inside a clone may be swept by the next fetch, so open one with worktree_open in the place this crew declared; the call ran as asked'
 
-/** One line about the call Martha carried on past, where the owner reads Martha's own output (martha#601). */
-const sayTheNotice = (where: string, what: string): undefined => {
-  process.stderr.write(`notice: ${where}: ${what}\n`)
+/** One line about the call Martha carried on past, said through the sink its composition root passed (martha#601). */
+const sayTheNotice = (where: string, what: string, note: (line: string) => void): undefined => {
+  note(`notice: ${where}: ${what}`)
   return undefined
 }
 
@@ -237,37 +236,37 @@ const refusalOfTheBranches = (branches: readonly string[], workspace: TheWorkspa
 }
 
 /** A call that makes a branch where the work of a branch does not belong: a clone, whose place is no place to branch. */
-function refusalOfASwitchInAClone(command: string, args: readonly string[], facts: TheFacts, where: string): string | undefined {
+function refusalOfASwitchInAClone(command: string, args: readonly string[], facts: TheFacts, where: string, note: (line: string) => void): string | undefined {
   if (args.some((word) => (command === CHECKOUT ? MAKE_A_BRANCH : SWITCH_TO_A_NEW_BRANCH).has(word))) {
-    return sayTheNotice(where, A_CLONE_IS_NO_PLACE_TO_BRANCH)
+    return sayTheNotice(where, A_CLONE_IS_NO_PLACE_TO_BRANCH, note)
   }
   // A switch back to the branch the clone starts on is the call that puts a drifted clone right, and is what the drift
   // check asks for: it is not the rule's. One the rule cannot read the default branch for fires nothing, as it cannot
   // tell a way off from a way back.
   const switching = theWordsNotOptions(args).find((word) => facts.branches.includes(word))
   const leavesTheDefault = facts.defaultBranch !== null && switching !== undefined && switching !== facts.defaultBranch
-  return leavesTheDefault ? sayTheNotice(where, A_CLONE_IS_NO_PLACE_TO_BRANCH) : undefined
+  return leavesTheDefault ? sayTheNotice(where, A_CLONE_IS_NO_PLACE_TO_BRANCH, note) : undefined
 }
 
 /** The notice a `branch` call in a clone prints, when it makes a branch rather than reading one: `-a`, `--list` read. */
-const refusalOfABranchInAClone = (args: readonly string[], where: string): string | undefined => {
+const refusalOfABranchInAClone = (args: readonly string[], where: string, note: (line: string) => void): string | undefined => {
   const reading = args.every((word) => isAnOption(word)) || args[0]?.startsWith('--') === true
   const deletesOrMoves = args.some((word) => DELETE_A_BRANCH.has(word) || MOVE_A_BRANCH.has(word))
-  return reading || deletesOrMoves ? undefined : sayTheNotice(where, A_CLONE_IS_NO_PLACE_TO_BRANCH)
+  return reading || deletesOrMoves ? undefined : sayTheNotice(where, A_CLONE_IS_NO_PLACE_TO_BRANCH, note)
 }
 
 /** The notice a `worktree add` prints, when the path it names stands inside a clone: the worktree is made anyway (martha#601). */
-function refusalOfAWorktreeInAClone(args: readonly string[], call: AGitCall, workspace: TheWorkspace): string | undefined {
+function refusalOfAWorktreeInAClone(args: readonly string[], call: AGitCall, workspace: TheWorkspace, note: (line: string) => void): string | undefined {
   const path = args.find((word) => !isAnOption(word) && word !== ADD)
   const place = path === undefined ? null : thePlaceOf(path, call.directory)
   const inside = place !== null && workspace.clones !== null && isUnder(place, workspace.clones)
-  return inside ? sayTheNotice(place, A_WORKTREE_IS_NOT_MADE_IN_A_CLONE) : undefined
+  return inside ? sayTheNotice(place, A_WORKTREE_IS_NOT_MADE_IN_A_CLONE, note) : undefined
 }
 
 /** What one call does inside a clone, by its command word: the place a branch's work belongs read as the only place. */
-function refusalInsideAClone(call: AGitCall, facts: TheFacts, where: string): string | undefined {
-  if (call.command === CHECKOUT || call.command === SWITCH) return refusalOfASwitchInAClone(call.command, call.args, facts, where)
-  if (call.command === BRANCH) return refusalOfABranchInAClone(call.args, where)
+function refusalInsideAClone(call: AGitCall, facts: TheFacts, where: string, note: (line: string) => void): string | undefined {
+  if (call.command === CHECKOUT || call.command === SWITCH) return refusalOfASwitchInAClone(call.command, call.args, facts, where, note)
+  if (call.command === BRANCH) return refusalOfABranchInAClone(call.args, where, note)
   return undefined
 }
 
@@ -325,16 +324,19 @@ function refusalOfAnotherMembers(call: AGitCall, request: AGuardedCall): string 
 }
 
 /** The first refusal one call meets: where it makes a branch, then whose worktree or branch it touches. */
-function refusalOfACall(call: AGitCall, request: AGuardedCall): string | undefined {
+function refusalOfACall(call: AGitCall, request: AGuardedCall, note: (line: string) => void): string | undefined {
   const inAClone = call.directory !== null && request.workspace.clones !== null && isUnder(call.directory, request.workspace.clones)
   const addsAWorktree = call.command === WORKTREE && call.args[0] === ADD
-  const inside = addsAWorktree ? refusalOfAWorktreeInAClone(call.args, call, request.workspace) : inAClone ? refusalInsideAClone(call, request.facts, `a call in ${call.directory}`) : undefined
+  const inside = addsAWorktree ? refusalOfAWorktreeInAClone(call.args, call, request.workspace, note) : inAClone ? refusalInsideAClone(call, request.facts, `a call in ${call.directory}`, note) : undefined
   return inside ?? refusalOfAnotherMembers(call, request)
 }
 
-/** The refusal this call meets, or undefined when the workspace's layout says nothing against it. */
-export function refuseACallInTheWorkspace(request: AGuardedCall): string | undefined {
-  const refusals = request.calls.map((call) => refusalOfACall(call, request))
+/**
+ * The refusal this call meets, or undefined when the workspace's layout says nothing against it. The note sink is the
+ * composition root's: a call the layout only notices is said in one line there and runs as asked (martha#601).
+ */
+export function refuseACallInTheWorkspace(request: AGuardedCall, note: (line: string) => void = () => {}): string | undefined {
+  const refusals = request.calls.map((call) => refusalOfACall(call, request, note))
   return refusals.find((refusal) => refusal !== undefined)
 }
 

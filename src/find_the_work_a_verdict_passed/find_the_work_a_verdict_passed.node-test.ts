@@ -97,7 +97,7 @@ const ghSaid = (answer: unknown): { readonly ok: ProcessOutcome } => ({
 })
 
 /** The answer, and everything written to the process's own error output while the lookup runs (martha#601). */
-async function theNoticeWhile(act: () => Promise<unknown>): Promise<{ readonly answer: unknown; readonly notice: string }> {
+async function theNoticeWhile(act: (note: (line: string) => void) => Promise<unknown>): Promise<{ readonly answer: unknown; readonly notice: string }> {
   const written: string[] = []
   const original = process.stderr.write.bind(process.stderr)
   process.stderr.write = ((chunk: string | Uint8Array) => {
@@ -105,7 +105,7 @@ async function theNoticeWhile(act: () => Promise<unknown>): Promise<{ readonly a
     return true
   }) as typeof process.stderr.write
   try {
-    return { answer: await act(), notice: written.join('') }
+    return { answer: await act((line) => void process.stderr.write(`${line}\n`)), notice: written.join('') }
   } finally {
     process.stderr.write = original
   }
@@ -193,7 +193,7 @@ test('#256: a package of another repository is refused, naming both', async () =
 test('#601: no open pull request at the passed head is one notice, and the head lands anyway', async () => {
   const landed = 'macula-io/martha#243'
   const { host } = await aLedgerOf(landed, [verdictLine(landed, 'PASS', CLOSED.sha)], ghSaid(CLOSED.answer))
-  const { answer, notice } = await theNoticeWhile(() => findTheWorkAVerdictPassed(host, { package: landed, repo: REPO, cwd: CWD }))
+  const { answer, notice } = await theNoticeWhile((note) => findTheWorkAVerdictPassed(host, { package: landed, repo: REPO, cwd: CWD }, note))
   assert.deepEqual(answer, { pr: NO_OPEN_PULL_REQUEST, head: CLOSED.sha }, `a closed pull request was taken for one to land: ${JSON.stringify(answer)}`)
   assert.match(notice, /no open pull request/, 'the notice did not name what is missing')
   assert.match(notice, new RegExp(CLOSED.sha), 'the notice did not name the head it asked about')
@@ -208,7 +208,7 @@ test('#601: two open pull requests at one head are one notice naming both, and t
     { number: 902, state: 'open', merged_at: null, head: { sha: OPEN.sha } },
   ]
   const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], ghSaid(written))
-  const { answer, notice } = await theNoticeWhile(() => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }))
+  const { answer, notice } = await theNoticeWhile((note) => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }, note))
   assert.deepEqual(answer, { pr: NO_OPEN_PULL_REQUEST, head: OPEN.sha }, `two open pull requests were taken for one: ${JSON.stringify(answer)}`)
   assert.match(notice, /#901/, 'the notice did not name the first pull request')
   assert.match(notice, /#902/, 'the notice did not name the second pull request')
@@ -219,7 +219,7 @@ test('#601: an open pull request whose head moved is not this package\'s, so the
   // moved past it since, which is the "the head moved after the PASS" case.
   const moved = [{ number: 903, state: 'open', merged_at: null, head: { sha: 'f'.repeat(40) } }]
   const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], ghSaid(moved))
-  const { answer, notice } = await theNoticeWhile(() => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }))
+  const { answer, notice } = await theNoticeWhile((note) => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }, note))
   assert.deepEqual(answer, { pr: NO_OPEN_PULL_REQUEST, head: OPEN.sha }, `a pull request at another head was taken for this package's: ${JSON.stringify(answer)}`)
   assert.match(notice, /no open pull request/)
 })
@@ -246,7 +246,7 @@ test('#601: a GitHub that cannot answer is one notice, and the passed head lands
   const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], {
     run: () => Promise.resolve({ exit_code: 1, stdout: '', stderr: 'gh: Not Found (HTTP 404)\n' }),
   })
-  const { answer, notice } = await theNoticeWhile(() => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }))
+  const { answer, notice } = await theNoticeWhile((note) => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }, note))
   assert.deepEqual(answer, { pr: NO_OPEN_PULL_REQUEST, head: OPEN.sha })
   assert.match(notice, /gh could not answer/, 'the notice did not say GitHub could not be read')
   assert.match(notice, /404/, 'the notice did not keep what gh said')
@@ -254,7 +254,7 @@ test('#601: a GitHub that cannot answer is one notice, and the passed head lands
 
 test('#601: an answer that is not a list of pull requests is one notice, and the passed head lands anyway', async () => {
   const { host } = await aLedgerOf(PACKAGE, [verdictLine(PACKAGE, 'PASS', OPEN.sha)], ghSaid({ message: 'Not Found' }))
-  const { answer, notice } = await theNoticeWhile(() => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }))
+  const { answer, notice } = await theNoticeWhile((note) => findTheWorkAVerdictPassed(host, { package: PACKAGE, repo: REPO, cwd: CWD }, note))
   assert.deepEqual(answer, { pr: NO_OPEN_PULL_REQUEST, head: OPEN.sha })
   assert.match(notice, /not a list of pull requests/)
 })

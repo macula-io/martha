@@ -19,7 +19,6 @@ import {
   GIT_CONFIG_SYSTEM_VARIABLE,
   GIT_CONFIG_GLOBAL_VARIABLE,
   gapsInTheNameMap,
-  hostLinesNamingARule,
   LINK_HOPS,
   MEMORY_DIRECTORY_KEY,
   memoryDenyRules,
@@ -31,6 +30,7 @@ import {
   type OwnerMemoryPlaces,
   type OwnerUserScope,
 } from './refuse_a_member_writing_owner_memory.ts'
+import { hostLinesNamingARule } from './the_rules_the_host_matches.ts'
 import { CLAUDE_CODE_FILE_TOOLS, FILE_WRITING_TOOLS, NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { OTHER_HOSTS_FILE_TOOLS } from '../host_contract/tool_names_for_tests.ts'
 import { SKILLS_KIND } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
@@ -1461,22 +1461,43 @@ test("a write of the owner's memory is judged by the host's own writing tools an
   const [tool] = OTHER_HOSTS_FILE_TOOLS.writing_tools
   const [argument] = OTHER_HOSTS_FILE_TOOLS.file_arguments
   assert.ok(tool !== undefined && argument !== undefined)
-  assert.ok(writesTheOwnersMemory(tool, { [argument]: memory }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS), "the host's own tool on its own argument is refused")
-  assert.equal(writesTheOwnersMemory(WHOLE_FILE_TOOL, { [argument]: memory }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS), undefined, "Claude Code's tool is not this host's")
-  assert.equal(writesTheOwnersMemory(tool, { file_path: memory }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS), undefined, "Claude Code's argument is not this host's")
+  // Every write here goes ahead (martha#601): what says whose tool and whose argument was judged is the one line
+  // the guard says, so a call it does not judge says nothing at all.
+  const own = theNoticeWhile(() => {
+    writesTheOwnersMemory(tool, { [argument]: memory }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS)
+  })
+  assert.match(own, /MEMORY\.md/, "the host's own tool on its own argument is noticed")
+  const claudeTool = theNoticeWhile(() => {
+    writesTheOwnersMemory(WHOLE_FILE_TOOL, { [argument]: memory }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS)
+  })
+  assert.equal(claudeTool, '', "Claude Code's tool is not this host's")
+  const claudeArgument = theNoticeWhile(() => {
+    writesTheOwnersMemory(tool, { file_path: memory }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS)
+  })
+  assert.equal(claudeArgument, '', "Claude Code's argument is not this host's")
   const spelled = `~/${relative(place.home, memory)}`
-  assert.ok(writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: spelled }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS), 'Claude Code resolves ~/ to the memory')
-  assert.equal(writesTheOwnersMemory(tool, { [argument]: spelled }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS), undefined, 'this host resolves ~/ inside the checkout')
+  const resolved = theNoticeWhile(() => {
+    writesTheOwnersMemory(WHOLE_FILE_TOOL, { file_path: spelled }, places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
+  })
+  assert.match(resolved, /MEMORY\.md/, 'Claude Code resolves ~/ to the memory')
+  const theirResolution = theNoticeWhile(() => {
+    writesTheOwnersMemory(tool, { [argument]: spelled }, places, place.worktree, place.home, thisMachine, OTHER_HOSTS_FILE_TOOLS)
+  })
+  assert.equal(theirResolution, '', 'this host resolves ~/ inside the checkout')
 })
 
-test("a refused write names whose sessions load the place: the place's own word when it carries one, else the owner's Claude Code sessions (#541 package A; mutant: the place's word dropped)", (t) => {
+test("a noticed write names whose sessions load the place: the place's own word when it carries one, else the owner's Claude Code sessions (#541 package A; mutant: the place's word dropped)", (t) => {
   const place = placeFor(t)
   const theirs = join(place.root, 'another-hosts-folder')
   const loaded_by = 'the sessions of a host this test names'
   const base = placesFor(place)
   const places: OwnerMemoryPlaces = { ...base, folders: [...base.folders, { what: theirs, issue: 'martha#541', loaded_by }] }
-  const named = writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(theirs, 'notes.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
-  assert.ok(named?.includes(`which ${loaded_by} load as their own`), `the place's own word is said: ${named}`)
-  const claude = writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.config, 'rules', 'a.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
-  assert.ok(claude?.includes("which the owner's own Claude Code sessions load as their own"), `a place with no word names Claude Code's: ${claude}`)
+  const named = theNoticeWhile(() => {
+    writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(theirs, 'notes.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
+  })
+  assert.ok(named.includes(`which ${loaded_by} load as their own`), `the place's own word is said: ${named}`)
+  const claude = theNoticeWhile(() => {
+    writesTheOwnersMemory(WHOLE_FILE_TOOL, write(join(place.config, 'rules', 'a.md')), places, place.worktree, place.home, thisMachine, CLAUDE_CODE_FILE_TOOLS)
+  })
+  assert.ok(claude.includes("which the owner's own Claude Code sessions load as their own"), `a place with no word names Claude Code's: ${claude}`)
 })

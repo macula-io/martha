@@ -303,6 +303,7 @@ export function theCrewToolsOfAStart(start: AStartOnItsHost, sessions: NonNullab
     // The five tools that act run git and gh through the launcher's own processes, over the declaration's
     // workspace places: nothing that acts runs inside the member's session (martha#256).
     processes: thisMachine.processes,
+    note: (line) => void process.stderr.write(`${line}\n`),
     settings: start.settings,
     // What a reboot deletes on this machine, read here and ruled on by ../tell_a_citer_of_a_volatile_path (martha#314).
     volatile_roots: machineRootsFrom(tmpdir(), process.env['XDG_RUNTIME_DIR']),

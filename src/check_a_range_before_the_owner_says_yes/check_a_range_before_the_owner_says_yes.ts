@@ -125,10 +125,10 @@ interface ACommit {
  * should read without its stopping the check — a committed conflict marker, CI that could not be read — is one notice
  * line beside the owner's question (martha#601); every other refusal is the whole answer, and it names what failed.
  */
-export async function verifyRange(host: RangeCheckHost, range: TheRange): Promise<CheckedRange> {
+export async function verifyRange(host: RangeCheckHost, range: TheRange, note: (line: string) => void = () => {}): Promise<CheckedRange> {
   const settled = await theRangeSettled(host, range)
   if ('refused' in settled) return settled
-  const work = await thePackagesInTheRange(host, settled.ok, range.packages)
+  const work = await thePackagesInTheRange(host, settled.ok, range.packages, note)
   if ('refused' in work) return work
   const shape = await theShapeOf(host, settled.ok)
   if ('refused' in shape) return shape
@@ -227,10 +227,10 @@ function theFilesIn(said: string, tip: string): readonly string[] {
 }
 
 /** The work the range's packages passed, once the range is exactly one `--no-ff` merge per package. */
-async function thePackagesInTheRange(host: RangeCheckHost, settled: SettledRange, packages: readonly string[] | undefined): Promise<Step<readonly LandedWork[] | undefined>> {
+async function thePackagesInTheRange(host: RangeCheckHost, settled: SettledRange, packages: readonly string[] | undefined, note: (line: string) => void): Promise<Step<readonly LandedWork[] | undefined>> {
   if (packages === undefined) return { ok: undefined }
   if (packages.length === 0) return no('the range names no package to check its merges against.')
-  const work = await findTheWorkTheseVerdictsPassed(host, { packages, repo: settled.repo, cwd: settled.path })
+  const work = await findTheWorkTheseVerdictsPassed(host, { packages, repo: settled.repo, cwd: settled.path }, note)
   if ('refused' in work) return work
   const merges = await theMergesIn(host, settled.path, settled.base, settled.tip)
   if ('refused' in merges) return merges
