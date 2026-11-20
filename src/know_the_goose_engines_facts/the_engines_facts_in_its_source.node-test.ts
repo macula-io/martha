@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
 import { anEngineSourceSaying, engineFilesSaying, theOtherKindOf } from './an_engine_source_from_its_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from './recorded_goose_engine.ts'
-import { A_TRUE_SWITCH_COUNTS, CHECKOUT_ROOT_CARRIERS, DEVELOPER_DIR, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, PATH_RESOLVER, SECRET_STORAGE, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, TELEMETRY_READERS, TOOL_CALL_META, type EngineFacts } from './the_engines_facts_in_its_source.ts'
+import { A_TRUE_SWITCH_COUNTS, CHECKOUT_ROOT_CARRIERS, DEVELOPER_DIR, ENGINE_PARTS, ENGINE_PLACES, engineFactsIn, HINT_FILE_CONSTANTS, PATH_RESOLVER, SECRET_STORAGE, SHELL_TOOL, SKILL_ROOT_READERS, SKILLS_SWITCH_READERS, TELEMETRY_READERS, TOOL_CALL_META, WORKING_DIRECTORY_AS_THE_ROOT, type EngineFacts } from './the_engines_facts_in_its_source.ts'
 
 /** The recording's facts alone: what the reader is asked to give back. */
 const { [NOTE]: _ignoredWhy, engine_commit: _ignoredCommit, ...RECORDED_FACTS } = RECORDED_GOOSE_ENGINE
@@ -610,6 +610,13 @@ const ROOTS_PLANTED_UNLISTED = [
     fn: SKILL_ROOT_READERS.skill_folders,
   },
   {
+    what: 'a second list of folders from the working directory inside the same if let (Mercurius on PR 882 r=2: only the exactly-once count refuses it)',
+    place: ENGINE_PLACES.skill_folders,
+    at: '    }\n    dirs.extend(plugin_dirs',
+    planted: '        for path in [wd.join(".cursor").join("skills")] {\n            dirs.push(SkillDirectory { path });\n        }\n',
+    fn: SKILL_ROOT_READERS.skill_folders,
+  },
+  {
     what: 'a plugin folder the discovery reads from the root beside the project one',
     place: ENGINE_PLACES.plugin_discovery,
     at: '        found.extend(list_dir_children(&project_plugins_dir)',
@@ -655,4 +662,135 @@ test('each function that carries the checkout\'s root to the plugin skills, rena
     assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'], carrier)
     assert.match(unreadable[0]?.why ?? '', new RegExp(carrier), carrier)
   }
+})
+
+/** Where a plant goes in each function a skill root is built in: after the line that opens what the function gathers. */
+const AFTER = {
+  skill_folders: '    let mut dirs = Vec::new();\n',
+  plugin_skill_dirs: '        .filter(|(path, _)| seen.insert(path.clone()))\n',
+  plugin_discovery: '    let mut found = Vec::new();\n',
+  project_plugins: `        let project_plugins_dir = ${SKILL_ROOT_READERS.plugin_folder}(root);\n`,
+  plugin_settings: '    let mut paths: Vec<(SettingsScope, PathBuf)> = Vec::new();\n',
+  plugin_folder: `fn ${SKILL_ROOT_READERS.plugin_folder}(project_root: &Path) -> PathBuf {\n`,
+  plugin_path: `fn ${SKILL_ROOT_READERS.plugin_settings}(project_root: &Path, local: bool) -> PathBuf {\n`,
+} as const
+
+const inSkillFolders = { place: 'skill_folders', fn: SKILL_ROOT_READERS.skill_folders, at: AFTER.skill_folders } as const
+const afterTheHome = { ...inSkillFolders, at: '    let home = dirs::home_dir();\n' } as const
+const afterThePlugins = { ...inSkillFolders, at: `    let plugin_dirs = ${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}(working_dir, config);\n` } as const
+
+/**
+ * A folder from a base the reader does not know, planted in each function a skill root is built in (martha#614 Done-when
+ * 6), with the text the reader is to name it by. Neptunus's R2 on PR 882 is the first; his three on PR 893 at b820f8d6
+ * (a constant read with `from_str`, a helper function's answer, a static's `to_path_buf`) follow. None uses the root, so
+ * the accounting of its uses passes every one.
+ */
+const FOLDERS_PLANTED_FROM_UNKNOWN_BASES = [
+  { what: 'Neptunus\'s R2: a folder from a relative path', ...inSkillFolders, planted: '    dirs.push(SkillDirectory { path: PathBuf::from(".cursor/skills") });\n', named: 'PathBuf::from(".cursor/skills")' },
+  { what: 'Neptunus on 893: a constant read with from_str', ...inSkillFolders, planted: '    dirs.push(SkillDirectory { path: PathBuf::from_str(CURSOR_SKILLS).unwrap() });\n', named: 'PathBuf::from_str(CURSOR_SKILLS).unwrap()' },
+  { what: 'Neptunus on 893: what a helper function returns', ...inSkillFolders, planted: '    dirs.push(SkillDirectory { path: cursor_skills() });\n', named: 'cursor_skills()' },
+  { what: 'Neptunus on 893: a static turned into a path', ...inSkillFolders, planted: '    dirs.push(SkillDirectory { path: CURSOR_DIR.to_path_buf() });\n', named: 'CURSOR_DIR.to_path_buf()' },
+  { what: 'a folder under the working directory', ...inSkillFolders, planted: '    dirs.push(SkillDirectory { path: std::env::current_dir().unwrap_or_default().join(".cursor") });\n', named: 'std::env::current_dir().unwrap_or_default().join(".cursor")' },
+  { what: 'a for list holding a helper\'s answer', ...inSkillFolders, planted: '    for path in [cursor_skills()] {\n        dirs.push(SkillDirectory { path });\n    }\n', named: 'cursor_skills()' },
+  { what: 'a path bound by a let', ...inSkillFolders, planted: '    let path = cursor_skills();\n    dirs.push(SkillDirectory { path });\n', named: 'path, which stands 11 times where the shapes this reader knows put it 10' },
+  { what: 'the list grown by a helper', ...inSkillFolders, planted: '    dirs.extend(cursor_dirs());\n', named: '.extend(cursor_dirs())' },
+  { what: 'the list handed to a helper', ...inSkillFolders, planted: '    add_cursor(&mut dirs);\n', named: 'dirs, used' },
+  { what: 'a home that is not the user\'s', ...inSkillFolders, planted: '    let home = cursor_root();\n    if let Some(h) = home.as_ref() {\n        dirs.push(SkillDirectory { path: h.join(".x") });\n    }\n', named: 'home, which stands 5 times where the shapes this reader knows put it 4' },
+  { what: 'Neptunus on 893 r=1, plant 06: the home\'s name bound again from PWD', ...inSkillFolders, planted: '    if let Some(h) = std::env::var_os("PWD").map(PathBuf::from).as_ref() {\n        dirs.push(SkillDirectory { path: h.join(".cursor").join("skills") });\n    }\n', named: 'h, which stands 6 times where the shapes this reader knows put it 5' },
+  { what: 'Neptunus on 893 r=1, plant 07: the home\'s name bound again by a let', ...inSkillFolders, planted: '    let h = PathBuf::from(".");\n    dirs.push(SkillDirectory { path: h.join(".cursor") });\n', named: 'h, which stands 6 times where the shapes this reader knows put it 5' },
+  { what: 'Neptunus on 893 r=1, plant 08: the home\'s name bound again by a for', ...inSkillFolders, planted: '    for h in [PathBuf::from(".")] {\n        dirs.push(SkillDirectory { path: h.join(".cursor") });\n    }\n', named: 'PathBuf::from(".")' },
+  { what: 'Neptunus on 893 r=1, plant 09: the home\'s name bound again from a second home_dir', ...inSkillFolders, planted: '    if let Some(h) = dirs::home_dir().as_ref() {\n        dirs.push(SkillDirectory { path: h.join("..").join("..").join("srv") });\n    }\n', named: 'h.join("..").join("..").join("srv")' },
+  { what: 'the home\'s name bound again as a closure\'s parameter', ...inSkillFolders, planted: '    dirs.extend(cursor_dirs().map(|h| SkillDirectory { path: h.join(".cursor") }));\n', named: '.extend(cursor_dirs().map(|h|SkillDirectory{path:h.join(".cursor")}))' },
+  { what: 'Neptunus on 893 r=2, plant 10: the home\'s name bound again by a tuple', ...inSkillFolders, planted: '    let (h, _n) = (PathBuf::from("."), 0);\n    dirs.push(SkillDirectory { path: h.join(".cursor") });\n', named: 'h, which stands 6 times where the shapes this reader knows put it 5' },
+  { what: 'Neptunus on 893 r=2, plant 11: the home\'s name bound again by a match arm', ...inSkillFolders, planted: '    match PathBuf::from(".") {\n        h => { dirs.push(SkillDirectory { path: h.join(".cursor") }); }\n    }\n', named: 'h, which stands 6 times where the shapes this reader knows put it 5' },
+  { what: 'Neptunus on 893 r=2, plant 12: the home\'s name bound again by a let ref', ...inSkillFolders, planted: '    let ref h = PathBuf::from(".");\n    dirs.push(SkillDirectory { path: h.join(".cursor") });\n', named: 'h, which stands 6 times where the shapes this reader knows put it 5' },
+  { what: 'Neptunus on 893 r=2, plant 13: the home\'s name bound again inside a tuple in Some', ...inSkillFolders, planted: '    if let Some((h, _)) = Some((PathBuf::from("."), 0)) {\n        dirs.push(SkillDirectory { path: h.join(".cursor") });\n    }\n', named: 'h, which stands 6 times where the shapes this reader knows put it 5' },
+  { what: 'Neptunus on 893 r=2, plant 14: the home\'s name bound again by a slice pattern', ...inSkillFolders, planted: '    let [h] = [PathBuf::from(".")];\n    dirs.push(SkillDirectory { path: h.join(".cursor") });\n', named: 'h, which stands 6 times where the shapes this reader knows put it 5' },
+  { what: 'the home bound again by a tuple after dirs::home_dir', ...afterTheHome, planted: '    let (home, _n) = (Some(PathBuf::from(".")), 0);\n', named: 'home, which stands 4 times where the shapes this reader knows put it 3' },
+  { what: 'the plugin folders bound again by a tuple', ...afterThePlugins, planted: '    let (plugin_dirs, _n) = (vec![(PathBuf::from(".cursor"), PluginScope::Project)], 0);\n', named: 'plugin_dirs, which stands 3 times where the shapes this reader knows put it 2' },
+  { what: 'a pushed path bound by a tuple', ...inSkillFolders, planted: '    let (path, _n) = (PathBuf::from(".cursor"), 0);\n    dirs.push(SkillDirectory { path });\n', named: 'path, which stands 11 times where the shapes this reader knows put it 10' },
+  { what: 'a climb out of the real home', ...inSkillFolders, planted: '    if let Some(h) = home.as_ref() {\n        dirs.push(SkillDirectory { path: h.join("..").join("srv") });\n    }\n', named: 'h.join("..").join("srv")' },
+  { what: 'an absolute folder joined onto the working directory, which Path::join takes in place of it', ...inSkillFolders, at: '            wd.join(".claude").join("skills"),\n', planted: '            wd.join("/srv"),\n', named: 'wd.join("/srv")' },
+  { what: 'plugins found in the working directory', place: 'plugin_discovery', fn: CHECKOUT_ROOT_CARRIERS.plugin_discovery, at: AFTER.plugin_discovery, planted: '    found.extend(list_dir_children(&std::env::current_dir().unwrap_or_default()).into_iter().map(|(name, root)| DiscoveredPlugin { name, root, scope: PluginScope::Project }));\n', named: '.extend(list_dir_children(&std::env::current_dir()' },
+  { what: 'plugins a helper returns', place: 'plugin_discovery', fn: CHECKOUT_ROOT_CARRIERS.plugin_discovery, at: AFTER.plugin_discovery, planted: '    found.extend(cursor_plugins());\n', named: '.extend(cursor_plugins())' },
+  { what: 'a settings file from a constant', place: 'plugin_discovery', fn: CHECKOUT_ROOT_CARRIERS.plugin_settings, at: AFTER.plugin_settings, planted: '    paths.push((SettingsScope::Local, PathBuf::from(CURSOR_SETTINGS)));\n', named: '.push((SettingsScope::Local,PathBuf::from(CURSOR_SETTINGS)))' },
+  { what: 'a plugin folder a helper returns', place: 'plugin_discovery', fn: SKILL_ROOT_READERS.plugin_folder, at: AFTER.plugin_folder, planted: '    if !project_root.exists() {\n        return cursor_plugins_dir();\n    }\n', named: 'if!project_root.exists(){returncursor_plugins_dir();}' },
+  { what: 'a settings file a helper returns', place: 'plugin_discovery', fn: SKILL_ROOT_READERS.plugin_settings, at: AFTER.plugin_path, planted: '    if local {\n        return cursor_settings();\n    }\n', named: 'iflocal{returncursor_settings();}' },
+  { what: 'Neptunus on 893 r=3, plant 19: a home bound through its as_ref() and then mapped', ...afterTheHome, planted: '    if let Some(h) = home.as_ref().map(|_| PathBuf::from("/srv")) {\n        dirs.push(SkillDirectory { path: h.join(".cursor") });\n    }\n', named: 'home, which stands 4 times where the shapes this reader knows put it 3' },
+  { what: 'Neptunus on 893 r=3, plant 20: a home bound through its as_ref() and then swapped by and()', ...afterTheHome, planted: '    if let Some(h) = home.as_ref().and(std::env::current_dir().ok()) {\n        dirs.push(SkillDirectory { path: h.join(".cursor") });\n    }\n', named: 'home, which stands 4 times where the shapes this reader knows put it 3' },
+  { what: 'Neptunus on 893 r=3, S1: the user settings file bound through user_settings_path() and then mapped', place: 'plugin_discovery', fn: CHECKOUT_ROOT_CARRIERS.plugin_settings, at: AFTER.plugin_settings, planted: '    if let Some(path) = user_settings_path().map(|_| PathBuf::from("/srv/settings.json")) {\n        paths.push((SettingsScope::User, path));\n    }\n', named: 'path, which stands 4 times where the shapes this reader knows put it 3' },
+  { what: 'Neptunus on 893 r=3, S2: the user settings file\'s name bound again by a let', place: 'plugin_discovery', fn: CHECKOUT_ROOT_CARRIERS.plugin_settings, at: AFTER.plugin_settings, planted: '    let path = PathBuf::from("/srv/settings.json");\n    paths.push((SettingsScope::User, path));\n', named: 'path, which stands 4 times where the shapes this reader knows put it 3' },
+  { what: 'the user plugin folder bound again under its name', place: 'plugin_discovery', fn: CHECKOUT_ROOT_CARRIERS.plugin_discovery, at: AFTER.plugin_discovery, planted: '    let user_plugins_dir = PathBuf::from("/srv");\n', named: 'user_plugins_dir, which stands 3 times' },
+  { what: 'the project plugin folder bound again under its name', place: 'plugin_discovery', fn: CHECKOUT_ROOT_CARRIERS.plugin_discovery, at: AFTER.project_plugins, planted: '        let project_plugins_dir = PathBuf::from("/srv");\n', named: 'project_plugins_dir, which stands 3 times' },
+  { what: 'plugin skill folders chained from a helper', place: 'plugin_skill_dirs', fn: CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs, at: AFTER.plugin_skill_dirs, planted: '        .chain(cursor_dirs())\n', named: `discovery::${CHECKOUT_ROOT_CARRIERS.plugin_discovery}(project_root,config)` },
+] as const
+
+test('a skill folder from a base the reader does not know makes the skill roots unreadable, naming it, in every function a root is built in (martha#614 Done-when 6, mutants: each rule left out)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  for (const { what, place, fn, at, planted, named } of FOLDERS_PLANTED_FROM_UNKNOWN_BASES) {
+    const path = ENGINE_PLACES[place]
+    const text = files[path] ?? ''
+    assert.equal(text.split(at).length, 2, `${what}: the tree has no one place to plant it at, so this case would prove nothing`)
+    const { facts, unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: text.replace(at, `${at}${planted}`) }))
+    assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'], what)
+    assert.ok((unreadable[0]?.why ?? '').startsWith(`${path} builds a folder in ${fn} from ${named}`), `${what}: ${unreadable[0]?.why ?? ''}`)
+    assert.equal(facts.checkout_skill_roots, undefined, what)
+  }
+  const planted = FOLDERS_PLANTED_FROM_UNKNOWN_BASES.map(({ fn }) => String(fn))
+  const builders = [...Object.values(SKILL_ROOT_READERS), ...Object.values(CHECKOUT_ROOT_CARRIERS)]
+  assert.deepEqual(builders.filter((fn) => !planted.includes(fn)), [], 'a function a root is built in has no plant')
+})
+
+test('plugin skill folders taken from the discovery and then mapped make the skill roots unreadable, naming them (martha#614, Neptunus on PR 893 r=3: the closed rule; mutant: the let not anchored on its end)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.skill_folders
+  const text = files[path] ?? ''
+  const taken = `${CHECKOUT_ROOT_CARRIERS.plugin_skill_dirs}(working_dir, config)`
+  assert.equal(text.split(`${taken};`).length, 2, 'the tree has no one place the plugin folders are taken')
+  const mapped = text.replace(`${taken};`, `${taken}.into_iter().map(|(_, scope)| (PathBuf::from("/srv"), scope)).collect::<Vec<_>>();`)
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: mapped }))
+  assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'])
+  assert.ok((unreadable[0]?.why ?? '').includes(`the plugin folders ${SKILL_ROOT_READERS.skill_folders} takes`), unreadable[0]?.why ?? '')
+})
+
+test('skill folders given back beside the list the function gathers make the skill roots unreadable, naming the list (martha#614 Done-when 6, mutant: the end not read)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.skill_folders
+  const text = files[path] ?? ''
+  const end = '    dirs\n}\n'
+  assert.equal(text.split(end).length, 2, 'the tree has no one end of the skill folders function')
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: text.replace(end, '    [dirs, cursor_dirs()].concat()\n}\n') }))
+  assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'])
+  assert.ok((unreadable[0]?.why ?? '').startsWith(`${path} builds a folder in ${SKILL_ROOT_READERS.skill_folders} from dirs, used`), unreadable[0]?.why ?? '')
+})
+
+test('the working directory taken anywhere in the skills file but as the root itself makes the skill roots unreadable by name (martha#614 Done-when 6, mutant: the file not read)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const path = ENGINE_PLACES.skill_folders
+  const text = files[path] ?? ''
+  const at = '    dirs\n}\n'
+  assert.equal(text.split(at).length, 2, 'the tree has no one end of the skill folders function to plant after')
+  const planted = text.replace(at, `${at}\nfn another_root() -> Option<PathBuf> {\n    std::env::current_dir().ok()\n}\n`)
+  const { unreadable } = engineFactsIn(anEngineSourceSaying({ ...files, [path]: planted }))
+  assert.deepEqual(unreadable.map(({ part }) => part), ['checkout skill roots'])
+  assert.ok((unreadable[0]?.why ?? '').startsWith(`${path} takes the working directory 1 times outside ${WORKING_DIRECTORY_AS_THE_ROOT}'s fallback`), unreadable[0]?.why ?? '')
+})
+
+test('the bases the engine builds its folders from are read as known: each shape the real engine writes stands in the tree and reads clean (martha#614 Done-when 6, mutant: a base dropped)', () => {
+  const files = engineFilesSaying(RECORDED_FACTS)
+  const shapes = [
+    [ENGINE_PLACES.skill_folders, new RegExp(`fn ${WORKING_DIRECTORY_AS_THE_ROOT}\\([\\s\\S]*current_dir\\(\\)`), 'the working directory as the root itself'],
+    [ENGINE_PLACES.skill_folders, /let home = dirs::home_dir\(\);\s+if let Some\(h\) = home\.as_ref\(\)/, 'the home'],
+    [ENGINE_PLACES.skill_folders, /Paths::config_dir\(\)\.join\(/, 'the config folder'],
+    [ENGINE_PLACES.skill_folders, /for path in \[h\.join\(/, 'a for list under the home'],
+    [ENGINE_PLACES.skill_folders, /\.filter\(\|\(_, scope\)\| \*scope == PluginScope::Project\)\.map\(\|\(path, _\)\|/, 'the project plugin skill folders'],
+    [ENGINE_PLACES.plugin_discovery, /let user_plugins_dir = plugin_install_dir\(\);/, 'the user plugin folder'],
+    [ENGINE_PLACES.plugin_discovery, /if let Some\(path\) = user_settings_path\(\)/, 'the user settings file'],
+    [ENGINE_PLACES.plugin_discovery, /let file = if local \{\s*"/, 'the settings file choice'],
+    [ENGINE_PLACES.plugin_skill_dirs, /let plugin_dir = plugin\.root;[\s\S]*\.filter\(\|\(path, _\)\| seen\.insert\(path\.clone\(\)\)\)/, 'each plugin\'s own folders, seen once'],
+  ] as const
+  for (const [path, shape, what] of shapes) assert.match(files[path] ?? '', shape, `the tree has no ${what}, so this test would prove nothing`)
+  const { facts, unreadable } = engineFactsIn(anEngineSourceSaying(files))
+  assert.deepEqual(unreadable, [])
+  assert.deepEqual(facts.checkout_skill_roots, RECORDED_FACTS.checkout_skill_roots)
 })

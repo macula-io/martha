@@ -83,6 +83,7 @@
       "src/keep_martha_state_outside_the_checkout",
       "src/keep_where_owners_acts_were_typed",
       "src/keep_the_relays_journal",
+      "src/keep_the_transcripts_of_a_launch",
       "src/keep_what_the_owner_signed",
       "src/launch_a_claude_code_member",
       "src/launch_a_goose_member",
