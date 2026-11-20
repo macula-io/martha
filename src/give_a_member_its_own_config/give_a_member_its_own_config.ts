@@ -78,20 +78,21 @@ export function theMembersHostRecord(checkout: string, billedKey: string | undef
   return { [FIRST_RUN_DONE_KEY]: true, ...answered, projects: Object.fromEntries([...new Set([checkout, realpathSync(checkout)])].map((path) => [path, trusted])) }
 }
 
-/**
- * The credentials each billing hands a member: the variables that carry them to the host (martha#916). A bearer token
- * bills the API as a key does, and the host takes it over the owner's sign-in unasked (seen live on 2.1.329, r=3).
- */
+/** The credentials each billing hands a member: the variables that carry them to the host (martha#916). */
 const THE_CREDENTIALS_OF: Readonly<Record<Billing, readonly string[]>> = {
   [BILLED_BY_SUBSCRIPTION]: [CLAUDE_CODE_SIGN_IN_STORE_VARIABLE],
-  [BILLED_BY_API_KEY]: [API_KEY_VARIABLE, AUTH_TOKEN_VARIABLE],
+  [BILLED_BY_API_KEY]: [API_KEY_VARIABLE],
 }
 
 /**
- * The variables no billed member is given, whichever its billing (martha#916 r=4): each moves the host onto a cloud
- * provider, off the owner's sign-in and off the launcher's key alike. Read from the recorded host, never typed.
+ * The variables no billed member is given, whichever its billing (martha#916 r=3, r=4), since each takes the host off
+ * the one credential its billing chooses:
+ *   - the bearer token, which neither billing chooses: the host takes it over the owner's sign-in unasked, and beside a
+ *     key it warns that both are set and bills by the token through a gateway (seen live on 2.1.329);
+ *   - the provider switches, read from the recorded host, never typed: each moves the host onto a gateway or a cloud
+ *     provider.
  */
-const NEVER_GIVEN: readonly string[] = CLAUDE_CODE_PROVIDER_SWITCH_VARIABLES
+const NEVER_GIVEN: readonly string[] = [AUTH_TOKEN_VARIABLE, ...CLAUDE_CODE_PROVIDER_SWITCH_VARIABLES]
 
 /** The variables a member billed by `billing` is never given, whatever it inherits: the other billing's credentials, and NEVER_GIVEN. */
 export function notGivenUnder(billing: Billing): readonly string[] {
