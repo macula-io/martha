@@ -18,7 +18,7 @@
 
 import { sameMemberName, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { A_PAGE } from '../spend_the_github_budget/spend_the_github_budget.ts'
-import type { ProcessOutcome } from '../host_contract/host_contract.ts'
+import type { ProcessOutcome, Refused } from '../host_contract/host_contract.ts'
 
 /** The labels that mark an issue as work a member could take. */
 export const WORK_LABELS = ['work-package', 'backlog'] as const
@@ -160,17 +160,19 @@ const theFailureOf = (said: ProcessOutcome): string => {
 
 /**
  * Reads the backlog of the declared places, page after page up to BACKLOG_PAGES_MOST: the issues, oldest first, and
- * whether a deeper backlog was cut. A page GitHub refused or answered with something unreadable fails the whole read,
- * so a partial list is never kept as if it were the whole one.
+ * whether a deeper backlog was cut. A page GitHub refused, the run refused before asking (the crew's budget at its
+ * floor, martha#947) or GitHub answered with something unreadable fails the whole read, so a partial list is never kept
+ * as if it were the whole one. The run is told which page it reads, counted from 1.
  */
 export async function readTheBacklog(
-  run: (args: readonly string[]) => Promise<ProcessOutcome>,
+  run: (args: readonly string[], page: number) => Promise<ProcessOutcome | Refused>,
   places: readonly string[],
 ): Promise<ABacklogRead | { readonly error: string }> {
   const issues: AnIssue[] = []
   let after: string | null = null
   for (let page = 0; page < BACKLOG_PAGES_MOST; page += 1) {
-    const said = await run(thePageArgs(places, after))
+    const said = await run(thePageArgs(places, after), page + 1)
+    if ('refusal' in said) return { error: said.refusal }
     if (said.exit_code !== 0) return { error: theFailureOf(said) }
     const read = aPageIn(said.stdout)
     if (read === undefined) return { error: 'GitHub answered the backlog search with something this cannot read' }

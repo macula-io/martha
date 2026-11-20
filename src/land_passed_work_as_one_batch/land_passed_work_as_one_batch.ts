@@ -37,6 +37,7 @@ import { PackagePaused, RecoveryDecided, sendAnActOnEveryPackageAndRecover, type
 import { noteMilestone, readLedger, type LedgerHost, type LedgerRow } from '../log_ledger/log_ledger.ts'
 import { readTheOriginACloneHas, type TheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { aConflictMarkerNotice, theMarkersAt } from '../find_a_committed_conflict_marker/find_a_committed_conflict_marker.ts'
 import { mergedInMemory, whatEachPathClashesWith, type AFirstParent, type AStep } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
 import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { OWNER_YES, branchOf, theLandingNamesOneThingEach, theYesALandingStandsOn, type TheApprovingDeclaration, type ALandingAskedAbout } from './the_owners_yes_to_a_landing.ts'
@@ -503,6 +504,8 @@ function withTheCloneBack(landing: Landing, back: Step<true>): Landing {
 async function pushTheBatch(host: LandingHost, member: string, cut: TheCutBatch, merged: TheMerges): Promise<Landing> {
   const tip = await gitSaid(host, cut.batch.path, ['rev-parse', 'HEAD'])
   if (tip === undefined) return no(`${cut.branch} holds no commit git will name.`)
+  const markers = await theMarkersAt(host, cut.batch.path, tip)
+  if ('refused' in markers) return markers
   const landed = merged.landed.map((one) => thePullRequestOf(one) === undefined ? one.package : `${one.package} (PR ${String(one.pr)})`).join(', ')
   const what = `the batch ${cut.branch} of ${landed}`
   const packages = merged.landed.map((one) => one.package)
@@ -512,7 +515,10 @@ async function pushTheBatch(host: LandingHost, member: string, cut: TheCutBatch,
     look: () => theBranchOnOriginIsAt(host, cut.batch.path, cut.branch, tip),
   })
   if ('refused' in sent) return sent
-  return { told: `${sent.sent}. The range the owner says yes to is ${cut.base}..${tip}, over ${landed}.` }
+  const notice = aConflictMarkerNotice(tip, markers.ok)
+  const told = `${sent.sent}. The range the owner says yes to is ${cut.base}..${tip}, over ${landed}.`
+  // A committed marker is said beside the landing, never a refusal: the refusal cut took it so (martha#601, #968).
+  return { told: notice === undefined ? told : `${told}\nnotice: ${notice}` }
 }
 
 /** Pushes one branch to the origin's same name; throws what git said when it will not. */

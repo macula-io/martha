@@ -131,7 +131,7 @@ const without = (key: string, from: Record<string, unknown>) =>
 test('a solo declaration gives typed settings', async () => {
   const settings = await declare(solo).settings
   assert.equal(settings.owner, 'Ann')
-  assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null, host: null, parked: false }])
+  assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null, host: null, parked: false, billing: null }])
   assert.equal(settings.mode.name, SOLO_MODE)
   for (const act of ACTS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
   assert.deepEqual(settings.paths, {
@@ -185,6 +185,7 @@ test('a root that is not absolute, an empty list and a root named twice are refu
   await refusedWith({ ...solo, [VOLATILE_PATHS]: ['scratch'] }, `${VOLATILE_PATHS}[0]`)
   await refusedWith({ ...solo, [VOLATILE_PATHS]: ['/var/scratch', '/var/scratch/'] }, `${VOLATILE_PATHS}[1]`)
 })
+
 
 test('the mode is data: a mode of any name reads exactly as the same table named team', async () => {
   const renamed = { ...team, mode: { ...team.mode, name: 'pairing' } }
@@ -431,7 +432,7 @@ test('two members whose names differ only in case are one name twice', async () 
 
 test('a model of null is the host\'s own model, the same as leaving the key out', async () => {
   const settings = await declare({ ...team, members: [{ name: 'Lead', role: 'builder', model: null }] }).settings
-  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null, host: null, parked: false }])
+  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null, host: null, parked: false, billing: null }])
 })
 
 test('the owner\'s name is trimmed', async () => {
