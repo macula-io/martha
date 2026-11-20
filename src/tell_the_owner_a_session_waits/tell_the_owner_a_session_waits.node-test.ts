@@ -25,6 +25,7 @@ import {
   type RaisingADialog,
 } from './tell_the_owner_a_session_waits.ts'
 import { EDIT_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 
 function row(at = 100): DashboardRow {
   return {
@@ -128,10 +129,10 @@ test('the words are cut at the last word that fits, never in the middle of one',
 
 test('every notification the host can send is named, and the ones another event already says are not the owner\'s (test 5)', () => {
   for (const notification_type of ['permission_prompt', 'idle_prompt', 'auth_success', 'elicitation_dialog']) {
-    assert.equal(theOwnerIsToldOf(notification_type), false, `${notification_type} is not the owner's news twice`)
+    assert.equal(theOwnerIsToldOf(notification_type, OWNER_NOTICES_WHEN_UNNAMED.show), false, `${notification_type} is not the owner's news twice`)
   }
-  assert.equal(theOwnerIsToldOf('agent_needs_input'), true, 'a notification that is its own news is the owner\'s')
-  assert.equal(theOwnerIsToldOf('one-no-host-sends'), false, 'a name the table does not hold is shown to nobody, and the coverage check says so first')
+  assert.equal(theOwnerIsToldOf('agent_needs_input', OWNER_NOTICES_WHEN_UNNAMED.show), true, 'a notification that is its own news is the owner\'s')
+  assert.equal(theOwnerIsToldOf('one-no-host-sends', OWNER_NOTICES_WHEN_UNNAMED.show), false, 'a name the table does not hold is shown to nobody, and the coverage check says so first')
 })
 
 test('every notification the recorded host can send is named in the table, by the host\'s own name (test 5)', () => {

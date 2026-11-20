@@ -87,7 +87,8 @@ import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/ref
 import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE, SKILLS_KIND } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { theTranscriptBoundsOf, whatALaunchKeeps } from './launch_a_claude_code_member.ts'
+import { theScreenALaunchSees, theShownNoticesOf, theTranscriptBoundsOf, whatALaunchKeeps } from './launch_a_claude_code_member.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
 
 // --- the run this file is (martha#559) --------------------------------------------
@@ -4683,4 +4684,16 @@ test('#931 B: a launch keeps its member\'s transcripts to its crew\'s declared b
   const where = { places: { state_root: '/state' }, place: { launch_dir: '/project' } } as unknown as Parameters<typeof whatALaunchKeeps>[0]
   assert.deepEqual(whatALaunchKeeps({ ...where, crew_settings: crew }, '/the-members-folder', '/snapshots/launch-7', 'the-key').transcripts, declared, 'the launch\'s end does not keep to the crew\'s declared bounds')
   assert.deepEqual(whatALaunchKeeps(where, '/the-members-folder', '/snapshots/launch-7', 'the-key').transcripts, TRANSCRIPTS_WHEN_UNNAMED, 'a launch with no crew does not keep to the defaults')
+})
+
+test('#931 C: a launch\'s owner\'s screen is told of its crew\'s declared notices, and of the defaults with no crew', () => {
+  // A list that is not the default: one notice the table shows as a dialog, and one it does not.
+  const declared = ['agent_completed', 'idle_prompt']
+  assert.notDeepEqual(declared, OWNER_NOTICES_WHEN_UNNAMED.show)
+  const crew = { owner_notices: { show: declared } } as unknown as CrewSettings
+  assert.deepEqual(theShownNoticesOf({ crew_settings: crew }), declared)
+  assert.deepEqual(theShownNoticesOf({}), OWNER_NOTICES_WHEN_UNNAMED.show)
+  const where = { member_name: 'Vesta', places: { dashboard: '/the-rows' }, owner_bell: undefined, stdio: 'pipe' } as unknown as Parameters<typeof theScreenALaunchSees>[0]
+  assert.deepEqual(theScreenALaunchSees({ ...where, crew_settings: crew }, () => false).shown_notices, declared, 'the owner\'s screen is not told of the crew\'s declared notices')
+  assert.deepEqual(theScreenALaunchSees(where, () => false).shown_notices, OWNER_NOTICES_WHEN_UNNAMED.show, 'a launch with no crew is not told of the defaults')
 })

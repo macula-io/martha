@@ -124,6 +124,7 @@ import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_cre
 import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_served/watch_the_crew_tools_a_launch_served.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { TRANSCRIPTS_WHEN_UNNAMED, type CrewTranscripts } from '../declare_crew/the_crews_transcripts.ts'
+import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TheLeftoversALaunchKeeps } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
@@ -161,7 +162,7 @@ import { makeEmptyDirectory } from '../empty_directory_of_a_launch/empty_directo
 import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { keptBeatingWhileItRuns } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { theOwnersScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
+import { theOwnersScreenOfALaunch, type TheScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { recordTheLauncher, sweepLeftoverLaunchDirectories } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { copyTheRelay, RELAY_COPY_NAME } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -341,6 +342,24 @@ export type MemberStarted =
  * (martha#122 r=2). A member runs ungated for at most this long after the write.
  */
 export const HOOK_SETTINGS_CHECK_MS = 1_000
+
+/**
+ * The host's notifications a launch tells its owner of (martha#931 C): its crew's declared owner_notices.show, or the
+ * declaration's default for a launch that carries no crew (a test's launch).
+ */
+export const theShownNoticesOf = (launch: { readonly crew_settings?: CrewSettings }): readonly string[] => launch.crew_settings?.owner_notices.show ?? OWNER_NOTICES_WHEN_UNNAMED.show
+
+/** What a launch's owner's screen is made from: its row, its bells, its terminal, and the notices its crew shows. */
+export const theScreenALaunchSees = (launch: Pick<ClaudeCodeMemberLaunch, 'member_name' | 'places' | 'owner_bell' | 'stdio'> & { readonly crew_settings?: CrewSettings }, muted: () => boolean): TheScreenOfALaunch => ({
+  member: launch.member_name,
+  beats: dashboardRowsIn(launch.places.dashboard),
+  declared_bells: launch.owner_bell,
+  muted,
+  on_the_owners_terminal: isOnTheOwnersTerminal(launch.stdio),
+  environment: process.env,
+  write: (bytes) => void process.stdout.write(bytes),
+  shown_notices: theShownNoticesOf(launch),
+})
 
 /** A launch the gate allowed, with what the member's environment is built from. */
 export interface ReadyLaunch {
@@ -578,7 +597,7 @@ function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch, hearing: (journal: Re
   return {
     journal,
     telling: theMembersTelling({ member: launch.member_name, dashboard: launch.places.dashboard, rows: launch.places.rows, journal }),
-    screen: theOwnersScreenOfALaunch({ member: launch.member_name, beats: dashboardRowsIn(launch.places.dashboard), declared_bells: launch.owner_bell, muted: () => mute().muted, on_the_owners_terminal: isOnTheOwnersTerminal(launch.stdio), environment: process.env, write: (bytes) => void process.stdout.write(bytes) }),
+    screen: theOwnersScreenOfALaunch(theScreenALaunchSees(launch, () => mute().muted)),
   }
 }
 

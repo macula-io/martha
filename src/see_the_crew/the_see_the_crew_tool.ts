@@ -79,7 +79,7 @@ async function whatEndsAWaitIn(asked: SeeTheCrewAsked, messages: readonly SentMe
   const landings = await landingsOf(asked.ledger, packagesNamedIn(messages))
   const recorded = theClosesRecorded(asked.stores.crew.place(GITHUB_BUDGET_PLACE))
   if (asked.processes === undefined) return { landings, recorded }
-  const spender = theGithubSpenderOf({ stores: asked.stores, root: asked.root, processes: asked.processes, clock: asked.ledger.clock, github: asked.settings.github })
+  const spender = theGithubSpenderOf({ stores: asked.stores, root: asked.root, processes: asked.processes, clock: asked.ledger.clock, github: asked.settings.github, clock_zone: asked.settings.clock_zone })
   return { landings, recorded, read: (packages) => theClosesOfTheWaits(spender, packages) }
 }
 
@@ -90,7 +90,7 @@ async function whatEndsAWaitIn(asked: SeeTheCrewAsked, messages: readonly SentMe
  */
 async function theHeadsOfTheWaiters(asked: SeeTheCrewAsked, waits: readonly { readonly package: string }[]): Promise<Readonly<Record<string, AHead>>> {
   if (asked.processes === undefined || waits.length === 0) return {}
-  const spender = theGithubSpenderOf({ stores: asked.stores, root: asked.root, processes: asked.processes, clock: asked.ledger.clock, github: asked.settings.github })
+  const spender = theGithubSpenderOf({ stores: asked.stores, root: asked.root, processes: asked.processes, clock: asked.ledger.clock, github: asked.settings.github, clock_zone: asked.settings.clock_zone })
   const heads = await theHeadsOfTheWaits(spender, waits.map((wait) => wait.package))
   return 'refusal' in heads ? {} : heads
 }

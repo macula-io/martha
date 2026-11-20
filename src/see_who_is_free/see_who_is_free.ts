@@ -18,7 +18,7 @@
 
 import { progressStaleMsOf, type CrewThresholds } from '../declare_crew/the_crews_thresholds.ts'
 import type { ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
-import { theCrewToolsFlag, type CrewRow } from '../see_the_crew/see_the_crew.ts'
+import { type CrewRow } from '../see_the_crew/see_the_crew.ts'
 import { IDLE, OFFLINE, type ShownState } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 
@@ -92,7 +92,7 @@ function flagsOf(row: CrewRow, park: ThePark, reported_ago: number | null, thres
     row.state === 'needs-you' ? 'needs-you' : null,
     atTheLimit(row, thresholds) ? `context ${String(row.host.contextPercent)}%` : null,
     staleProgress(row, reported_ago, thresholds) ? `progress ${minutesOf(reported_ago ?? 0)} old` : null,
-    theCrewToolsFlag(row),
+    row.tools_flag,
   ]
   return flags.filter((flag): flag is string => flag !== null)
 }
