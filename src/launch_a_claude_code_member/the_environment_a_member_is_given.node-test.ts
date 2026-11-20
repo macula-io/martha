@@ -122,7 +122,8 @@ test("martha#916: with no billing declared, the host is asked whether the owner 
 })
 
 test("martha#916: with no billing and no sign-in, the member is billed by the launcher's key, and by the subscription when it carries none", async (t) => {
-  const notSignedIn = [`printf '%s' '${NOT_SIGNED_IN_ANSWER}'`]
+  // As the host answers it in a fresh home: the answer, and exit 1 (seen in CI, PR 920).
+  const notSignedIn = [`printf '%s' '${NOT_SIGNED_IN_ANSWER}'`, 'exit 1']
   const byKey = await billedBy(t, notSignedIn, { [API_KEY_VARIABLE]: A_LAUNCHERS_KEY })
   assert.equal(byKey.billed.billing, BILLED_BY_API_KEY)
   assert.match(byKey.billed.told ?? '', new RegExp(`not signed in, so the member is billed by ${BILLED_BY_API_KEY}`))
@@ -131,7 +132,8 @@ test("martha#916: with no billing and no sign-in, the member is billed by the la
 
 test('martha#916: a sign-in the host cannot tell (an exit that is not 0, an answer that is not JSON or says nothing of loggedIn, a host that is not there) bills the member by the subscription, and the owner is told why', async (t) => {
   const withKey = { [API_KEY_VARIABLE]: A_LAUNCHERS_KEY }
-  for (const lines of [['exit 3'], [`printf 'not json'`], [`printf '%s' '${JSON.stringify({ authMethod: 'none' })}'`]]) {
+  // A signed-in answer on an exit that is not 0 is no answer either: only "not signed in" is read from one.
+  for (const lines of [['exit 3'], [`printf 'not json'`], [`printf '%s' '${JSON.stringify({ authMethod: 'none' })}'`], [`printf '%s' '${SIGNED_IN_ANSWER}'`, 'exit 1']]) {
     const asked = await billedBy(t, lines, withKey)
     assert.equal(asked.billed.billing, BILLED_BY_SUBSCRIPTION, lines.join(' '))
     assert.match(asked.billed.told ?? '', /could not say/)

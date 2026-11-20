@@ -106,8 +106,9 @@ export function apiKeyAnsweredYes(key: string): { readonly approved: readonly st
 
 /**
  * The question that asks the host whether it is signed in (martha#916): `auth status --json`, seen on Claude Code
- * 2.1.329 to answer `{"loggedIn": true, "authMethod": "claude.ai", ...}` for a subscription sign-in, `"none"` when it
- * has none, and `"api_key"` when a key is in its environment. It starts no session and no model call.
+ * 2.1.329 to answer `{"loggedIn": true, "authMethod": "claude.ai", ...}` and exit 0 for a subscription sign-in,
+ * `{"loggedIn": false, "authMethod": "none", ...}` and exit 1 when it has none (seen in CI's fresh home, PR 920), and
+ * `"api_key"` when a key is in its environment. It starts no session and no model call.
  */
 export const SIGN_IN_QUESTION_ARGS = ['auth', 'status', '--json'] as const
 
@@ -138,8 +139,10 @@ export function theSignInIn(stdout: string): TheSignIn {
 export async function theSignInTheHostSays(binary: string, env: NodeJS.ProcessEnv, cwd: string): Promise<TheSignIn> {
   const ran = await ranHost(binary, SIGN_IN_QUESTION_ARGS, env, cwd)
   if (ran.failure !== undefined) return { untold: ran.failure }
-  if (ran.status !== 0) return { untold: `it exited ${String(ran.status)}` }
-  return theSignInIn(ran.stdout)
+  const said = theSignInIn(ran.stdout)
+  if (ran.status === 0) return said
+  // The host exits 1 when it is not signed in, and says so: only that answer is read from an exit that is not 0.
+  return 'signed_in' in said && !said.signed_in ? said : { untold: `it exited ${String(ran.status)}` }
 }
 
 /**
