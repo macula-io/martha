@@ -25,6 +25,7 @@ import { beginSession, type SessionRecordStore } from '../take_in_a_turn/take_in
 import { CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
 import { HANDOVERS_PLACE, THE_HANDOVER_WRITTEN, THE_REFRESH_DECLINED, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { keepThePackageContract } from '../keep_the_package_contract/keep_the_package_contract.ts'
+import { BRIEFS_PLACE, theBriefFile } from '../read_a_members_brief/read_a_members_brief.ts'
 import { REFRESH_MARGIN_PERCENT, keepTheFlow, aFlowStarting, refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import { crewToolsOver, CREW_TOOL_NAMES, REFRESH_THIS_SESSION, type CrewTools } from './a_crews_tools.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
@@ -437,4 +438,45 @@ test('#255: a decline at the limit is said once, and a later decline at the limi
   assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 2), CARRY_A_TEXT, 'a finished task past the limit did not ask again')
   assert.equal(await crew.ask('a-session', HANDOVER_LIMIT_PERCENT + 2, `${THE_REFRESH_DECLINED} it cannot reach a safe point at all`), 'none')
   assert.equal((await crew.saidInTheChannel()).length, 1, 'the second decline at the limit sent another line')
+})
+
+/** Keeps a brief for `member` in the crew's briefs place, as the Supervisor writes one (martha#999 package 1). */
+function keepABriefIn(crew: string, member: string, text: string): string {
+  const place = keepTheCrewsFilesAsDirectories(crew).place(BRIEFS_PLACE)
+  assert.ok(!('refusal' in place), 'the crew store refused its briefs place')
+  const file = theBriefFile(member, '2026-11-20')
+  assert.equal(place.keep(file, text), undefined)
+  return join(place.path, file)
+}
+
+test('martha#999 package 1: a handover is checked against the packages the newest brief names, not only the row\'s, and one it leaves out is sent back', async () => {
+  const { tools, crew, clock } = await aCrewOfTools('builder')
+  keepABriefIn(crew, 'builder', 'Your packages: synthetic-owner/repo#7 and synthetic-owner/repo#8.')
+  const place = refreshesPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
+  assert.ok(!('refusal' in place))
+  const flow = aFlowStarting({ trigger: 'after_a_task', reason: 'its task finished', at: clock.at, started_at_percent: 10, percent: 80, asked_on: '', refreshed_at: [] })
+  assert.equal(keepTheFlow(place, 'builder', flow), undefined)
+  clock.at += 1_000
+  assert.deepEqual(await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'synthetic-owner/repo#7: branch b, nothing committed, next build it' }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
+  const answered = await tools.answer(THE_REFRESH_ASK, questionOf(80, null, 't-9', THE_HANDOVER_WRITTEN), 'a-session')
+  assert.ok('answer' in answered)
+  const act = JSON.parse(answered.answer) as { readonly carry?: unknown; readonly text?: string }
+  assert.equal(act.carry, CARRY_A_TEXT, 'a handover that left out a package of the brief cleared the session')
+  assert.match(act.text ?? '', /no line naming synthetic-owner\/repo#8/)
+})
+
+test('martha#999 package 1: the successor is pointed at its newest brief, which is its assignment unless the handover says it is done', async () => {
+  const crew = await aCrewOfTools('builder', { refresh_between_tasks: true, sessions: ['a-session', 'b-session'] })
+  const brief = keepABriefIn(crew.crew, 'builder', 'Your package: synthetic-owner/repo#7.')
+  assert.equal(await crew.openTheSession('a-session', 10), 'none')
+  await crew.report('task x', 1, 1, 'synthetic-owner/repo#7')
+  assert.equal(await crew.ask('a-session', 40), CARRY_A_TEXT)
+  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'synthetic-owner/repo#7: branch b, nothing committed, next build it' }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
+  assert.equal(await crew.ask('a-session', 41, THE_HANDOVER_WRITTEN), CARRY_THE_CLEAR)
+  crew.clock.at += MINUTE_MS
+  const resumed = await crew.tools.answer(THE_REFRESH_ASK, questionOf(5, null, '', ''), 'b-session')
+  assert.ok('answer' in resumed)
+  const order = JSON.parse(resumed.answer) as { readonly carry: string; readonly text?: string }
+  assert.equal(order.carry, CARRY_A_TEXT)
+  assert.ok((order.text ?? '').includes(`Read your brief ${brief}: it is your current assignment unless the handover says it is done.`), `the resume did not name the brief: ${order.text ?? ''}`)
 })

@@ -1008,6 +1008,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     row_model: state.row_model,
     began_at: state.began_at,
     ends: state.ends,
+    ...(places.processes === undefined ? {} : { processes: places.processes }),
   }
 }
 
