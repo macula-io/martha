@@ -132,6 +132,19 @@ function withTheLineHanded(passed: unknown, line: string): Readonly<Record<strin
   return { ...rest, additionalContext: [...already, line] }
 }
 
+/**
+ * A ran tool's answer with the launcher's line beside it (martha#980): the host hands a tool call's `context` to the
+ * model with the answer, one entry per line, so an answer that already carries some keeps them and the line goes last.
+ * A port of crew-code's note on a send (its `withNote`). An answer that is not an object is handed back as it is: the
+ * line is never bought by losing the answer.
+ */
+function withALineBesideTheAnswer<Answer>(answer: Answer, line: string): Answer {
+  if (typeof answer !== 'object' || answer === null || Array.isArray(answer)) return answer
+  const rest = answer as Record<string, unknown>
+  const already = Array.isArray(rest['context']) ? (rest['context'] as unknown[]) : []
+  return { ...rest, context: [...already, line] } as Answer
+}
+
 /** Posts one event to the launcher and hears its answer; never rejects. */
 export async function relay($: RelayEngine, event: RelayEvent, body: Readonly<Record<string, unknown>>, hear: (status: number, text: string) => Heard): Promise<Heard> {
   try {
@@ -287,7 +300,7 @@ export const register = (on: RelayOn): void => {
     if (!after.yes) return stopThisMember($, after.why)
     // The end of the running turn rides on the yes to the last call in flight (martha#311 ruling D): carried after it.
     if (after.end_turn !== undefined) await $.turn.abort({ turnId: after.end_turn }).catch(() => undefined)
-    return result
+    return after.handed === undefined ? result : withALineBesideTheAnswer(result, after.handed)
   }).catch(async ($, _e, next) =>
     next.called ? stopThisMember($, 'its relay failed after the tool ran') : { deny: refusal('its relay failed before the launcher answered') },
   )

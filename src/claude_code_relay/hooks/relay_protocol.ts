@@ -111,6 +111,8 @@ export interface Ran {
 export interface Taken {
   readonly taken: 1
   readonly end_turn?: string
+  /** A line the relay hands the model beside the ran tool's answer (martha#980): the volatile-path note on a send. */
+  readonly handed?: string
 }
 
 /**
@@ -196,15 +198,28 @@ export function answeredBody(session_id: string, call: unknown, answer: unknown)
   return body
 }
 
-/** A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the only yes. */
+/** The fields a taken answer may carry beside `taken`, each a line of text when it is there. */
+const WHAT_A_TAKEN_ANSWER_MAY_CARRY: readonly string[] = ['end_turn', 'handed']
+
+/**
+ * A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the only yes, and it may carry the turn to end
+ * (martha#311) and a line to hand the model beside a ran tool's answer (martha#980). Anything else is a no.
+ */
 export function heardTaken(status: number, text: string): Heard {
   if (status !== 200) return NO(`the launcher answered with status ${status}`)
   const value = jsonObjectOf(text)
   if (value === undefined) return NO(MALFORMED)
   if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
-  if (value.taken !== 1) return NO(MALFORMED)
-  if (exactKeys(value, ['taken'])) return YES
-  return exactKeys(value, ['taken', 'end_turn']) && isReason(value.end_turn) ? { yes: true, end_turn: value.end_turn } : NO(MALFORMED)
+  return value.taken === 1 ? whatATakenAnswerCarries(value) : NO(MALFORMED)
+}
+
+/** The yes of a taken answer, with what it carries beside `taken`; a field it may not carry, or one with no text, is a no. */
+function whatATakenAnswerCarries(value: Record<string, unknown>): Heard {
+  const carried = Object.keys(value).filter((key) => key !== 'taken')
+  if (carried.some((key) => !WHAT_A_TAKEN_ANSWER_MAY_CARRY.includes(key) || !isReason(value[key]))) return NO(MALFORMED)
+  if (carried.length === 0) return YES
+  const { end_turn, handed } = value as { readonly end_turn?: string; readonly handed?: string }
+  return { yes: true, ...(end_turn === undefined ? {} : { end_turn }), ...(handed === undefined ? {} : { handed }) }
 }
 
 /**

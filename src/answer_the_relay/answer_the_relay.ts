@@ -76,6 +76,8 @@ import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from '../launch_a_claude_code_member/remember_own_write_of_a_call.ts'
 import type { JournalAnswer, RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
+import { theTextASendMessageSends } from '../answer_a_tool_call/a_crew_line_goes_through_say_to_the_crew.ts'
+import { theVolatileNote, volatilePathsIn } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { theGitCallJudged, theRefTransactionJudged, type AGuardsAnswer } from '../guard_the_git_a_member_runs/judge_a_guards_question.ts'
 
@@ -151,6 +153,11 @@ export interface MemberRelayPlace {
    * bytes the owner approved. Empty or absent, a session is handed only the acts line, as it was before this existed.
    */
   readonly crew_text?: string
+  /**
+   * The roots a reboot deletes on this machine, the crew's declared ones with them (../tell_a_citer_of_a_volatile_path):
+   * a SendMessage that cites a path under one is told so beside its answer (martha#980). Absent, no send is told.
+   */
+  readonly volatile_roots?: readonly string[]
   /**
    * What this launch supplied a mesh answer, and which answer may be read as the member's own (martha#251). Absent,
    * no MCP answer is read that way and every one records on B2, as it did before this existed: a caller that cannot
@@ -549,7 +556,20 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   closeTheDialogsTheCallAnswered(place, session.id, body, call)
   const answer = await state.answers.aResultCame(aResultOfACallOf(body, call))
   if ('stop' in answer) return stopMember(place, answer.stop)
-  return answered(answer.end_turn === undefined ? TAKEN : { ...TAKEN, end_turn: answer.end_turn })
+  const note = theNoteOnASend(place, call, body.answer)
+  return answered({ ...TAKEN, ...(answer.end_turn === undefined ? {} : { end_turn: answer.end_turn }), ...(note === undefined ? {} : { handed: note }) })
+}
+
+/**
+ * The line a SendMessage the host ran is handed beside its answer when its message cites a path a reboot deletes
+ * (martha#980, a port of crew-code's note on a DM; say_to_the_crew already carries it). Nothing for any other call,
+ * for a send the host answered with an error, or for one that cites no such path.
+ */
+function theNoteOnASend(place: MemberRelayPlace, call: { readonly tool: string; readonly input: Body }, ran: unknown): string | undefined {
+  const text = theTextASendMessageSends(call.tool, call.input, place.names)
+  if (text === undefined || (isBody(ran) && ran['isError'] === true)) return undefined
+  const cited = volatilePathsIn(text, place.volatile_roots ?? [])
+  return cited.length === 0 ? undefined : theVolatileNote(cited)
 }
 
 /**

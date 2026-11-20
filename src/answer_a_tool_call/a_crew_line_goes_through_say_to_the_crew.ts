@@ -52,3 +52,14 @@ function theLineNamed(line: string, number: number | undefined): string {
   const written = `${where}: ${JSON.stringify(line.trim())}`
   return problem === undefined ? `${written}.` : `${written} does not read either, and ${SAY_TO_THE_CREW} would say so: ${problem}`
 }
+
+/**
+ * The text a call of the host's SendMessage sends, or undefined for any other call: what the volatile-path note on a
+ * send reads (martha#980, a port of crew-code's note on a DM; say_to_the_crew carries its own).
+ */
+export function theTextASendMessageSends(tool: string, input: Readonly<Record<string, unknown>> | undefined, names: ToolNames): string | undefined {
+  const own = names.ownNameOf(tool)
+  if (own !== CLAUDE_CODE_SEND_MESSAGE_TOOL) return undefined
+  const text = input?.[THE_TEXT_OF_A_MESSAGING_TOOL[own] ?? '']
+  return typeof text === 'string' ? text : undefined
+}

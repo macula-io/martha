@@ -94,9 +94,11 @@
 
 import { randomUUID } from 'node:crypto'
 import { rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
+import { machineRootsFrom, theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
@@ -603,6 +605,10 @@ function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch, hearing: (journal: Re
   }
 }
 
+/** The roots a reboot deletes on this machine, with those the crew declares (../tell_a_citer_of_a_volatile_path). */
+const theVolatileRootsOf = (launch: { readonly crew_settings?: CrewSettings }): readonly string[] =>
+  theRootsInForce(launch.crew_settings?.volatile_paths ?? [], machineRootsFrom(tmpdir(), process.env['XDG_RUNTIME_DIR']))
+
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
 async function servedRelay(
   launch: ClaudeCodeMemberLaunch,
@@ -644,6 +650,8 @@ async function servedRelay(
     ...crewOf(launch, sessions, ready, watched.watch),
     // The crew text this launch hands every session it starts (martha#306), composed once from the approved bytes.
     crew_text: ready.crew_text,
+    // What a reboot deletes on this machine, with the roots the crew declares: a SendMessage citing one is told (martha#980).
+    volatile_roots: theVolatileRootsOf(launch),
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
     ...thePlacesOfItsOwn(launch, watched.journalOver),
