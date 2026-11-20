@@ -71,6 +71,7 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     backlog: null,
     volatile_paths: [],
     engine_endpoint: null,
+    confinement: null,
     thresholds: THRESHOLDS_WHEN_UNNAMED,
     github: GITHUB_WHEN_UNNAMED,
     transcripts: TRANSCRIPTS_WHEN_UNNAMED,

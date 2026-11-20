@@ -3,6 +3,7 @@
 
 import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
+import { SYSTEMD_WEIGHT_MOST } from '../declare_crew/the_crews_confinement.ts'
 
 /**
  * Why `model` is written by literal beside the settings key of the same spelling (martha#359): the key a restore may
@@ -14,4 +15,7 @@ export const THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE = 'a word of its own that t
 
 export const COINCIDENCES: readonly Exception[] = [
   { value: CARRY_A_MODEL, file: 'put_the_owners_model_back/the_owners_settings_file.ts', reason: THE_OWNERS_FILES_MODEL_KEY_IS_NOT_THESE },
+  // How long a settings save is waited for is this slice's own number; the bound systemd puts on a cgroup weight is the
+  // same number by coincidence, and the coincidences check compares values without the words they carry (martha#989).
+  { value: SYSTEMD_WEIGHT_MOST, file: 'put_the_owners_model_back/put_the_owners_model_back.ts', reason: 'how long the save of the switched model is waited for, which the bound systemd puts on a cgroup weight happens to share' },
 ]
