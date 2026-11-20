@@ -255,11 +255,14 @@ async function theDefaultBranchHolds(
   if (ancestor.exit_code === 0) return { holds: true, differs: [] }
   const base = await gitSaid(host, clone, ['merge-base', commit, default_branch])
   if (base === undefined) return { holds: false, differs: [] }
-  const changed = await gitSaid(host, clone, ['diff', '--name-only', base, commit])
+  // Every path, as git holds it: `--no-renames` names both sides of a rename, so a default that took only the new name
+  // is not taken as holding the old one gone; `-z` hands each path unquoted, so a name git would quote still matches
+  // itself below rather than matching nothing (review r=1).
+  const changed = await gitSaid(host, clone, ['diff', '--no-renames', '-z', '--name-only', base, commit])
   if (changed === undefined) return { holds: false, differs: [] }
+  const files = changed.split('\0').filter((file) => file !== '')
   // A commit that changed no file of its own has nothing left to prove, and nothing that could be lost with it.
-  if (changed === '') return { holds: true, differs: [] }
-  const files = changed.split('\n')
+  if (files.length === 0) return { holds: true, differs: [] }
   const same = await git(host, clone, ['diff', '--quiet', default_branch, commit, '--', ...files])
   return same.exit_code === 0 ? { holds: true, differs: [] } : { holds: false, differs: files }
 }
