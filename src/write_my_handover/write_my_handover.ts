@@ -209,21 +209,28 @@ export function whatBecameOfTheHandover(reading: TheHandoverRead): HandoverVerdi
 }
 
 /**
+ * The line a resume names the member's newest brief with, as crew-code's resume does (hooks/register.tsx:3064): a brief
+ * sent just before the refresh is the assignment, so it is never lost with the chat (martha#999 package 1).
+ */
+export const theBriefLine = (brief: string): string => `Read your brief ${brief}: it is your current assignment unless the handover says it is done.`
+
+/**
  * The prompt the successor resumes on: its handover's file, the acts of its package that were sent and never concluded —
  * so it checks them instead of sending them twice (martha#254's read) — and the package's contract, which it is handed
  * again because a successor is held to the same version its predecessor was (martha#513). The file is named, never
  * quoted. `telling` is what a killed run left, from the one function both resume prompts read it from (#693).
  */
-export function theResumePrompt(resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined; readonly telling?: string | undefined }): string {
+export function theResumePrompt(resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined; readonly telling?: string | undefined; readonly brief?: string | undefined }): string {
   const acts =
     resuming.acts.length === 0
       ? ''
       : ` Before you send anything again, check what became of these acts of your package, which were sent and never concluded: ${resuming.acts.join('; ')}.`
   const contract = resuming.contract === undefined ? '' : `\n\n${resuming.contract}`
   const telling = resuming.telling === undefined ? '' : `\n\n${resuming.telling}`
+  const brief = resuming.brief === undefined ? '' : ` ${theBriefLine(resuming.brief)}`
   return (
     `You are ${resuming.member}. Martha just refreshed this session. Read your handover at ${resuming.file}: it is what ` +
-    `your predecessor left you, and it is the only place your work stands. Then carry on with the packages it names.${acts}${contract}${telling}`
+    `your predecessor left you, and it is the only place your work stands.${brief} Then carry on with the packages it names.${acts}${contract}${telling}`
   )
 }
 
@@ -232,10 +239,10 @@ export function theResumePrompt(resuming: { readonly member: string; readonly fi
  * from the one function both resume prompts read it from, so a caller hands in the crew's store and the clock alone.
  */
 export function theResumePromptWithItsTelling(
-  resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined; readonly crew: CrewStore; readonly now_ms: number },
+  resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined; readonly brief?: string | undefined; readonly crew: CrewStore; readonly now_ms: number },
 ): string {
   const telling = theTellingOnTheNextStart({ crew: resuming.crew, member: resuming.member, now_ms: resuming.now_ms })
-  return theResumePrompt({ member: resuming.member, file: resuming.file, acts: resuming.acts, contract: resuming.contract, telling: telling.telling })
+  return theResumePrompt({ member: resuming.member, file: resuming.file, acts: resuming.acts, contract: resuming.contract, telling: telling.telling, brief: resuming.brief })
 }
 
 /**
