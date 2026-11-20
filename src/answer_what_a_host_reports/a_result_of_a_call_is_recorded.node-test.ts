@@ -55,6 +55,7 @@ interface TheLaunchDoes {
   readonly no_crew?: boolean
   readonly nowhere_to_record?: boolean
   readonly note?: string
+  readonly note_fails?: boolean
 }
 
 function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
@@ -79,7 +80,10 @@ function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
     theSpendInForce: async () => undefined,
     noteTheCallCounted: async () => undefined,
     theReviewModelOfTheCall: async () => null,
-    theNoteAfterACall: async () => does.note ?? '',
+    theNoteAfterACall: async () => {
+      if (does.note_fails === true) throw new Error('the briefs place could not be read')
+      return does.note ?? ''
+    },
     theReviewModel: async () => THE_REVIEWER_MODEL,
     noteTheCallsAnswer: (call) => void seen.steps.push(`menu answer noted ${call.tool}`),
     refusesTheSubagent: async () => undefined,
@@ -339,4 +343,10 @@ test('#999 package 2b: the crew\'s note after a call rides on a taken result onl
   const plain = anEntry(t, {})
   await started(plain.answers)
   assert.deepEqual(await plain.answers.aResultCame(aResult()), { taken: 1 })
+})
+
+test('#999 package 2b: a note the crew could not make is no note, and the result is still taken (mutant: drop the catch)', async (t) => {
+  const failing = anEntry(t, { note_fails: true })
+  await started(failing.answers)
+  assert.deepEqual(await failing.answers.aResultCame(aResult()), { taken: 1 })
 })
