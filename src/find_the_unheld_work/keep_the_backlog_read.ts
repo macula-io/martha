@@ -86,10 +86,13 @@ export function theReadAfter(kept: TheKeptRead | undefined, tried: Awaited<Retur
   return { tried_at: now, read_at: now, issues: tried.issues, cut: tried.cut, error: null }
 }
 
-/** What reading the backlog needs: the place to keep it in, how `gh` runs (none outside a launcher), and the time. */
+/**
+ * What reading the backlog needs: the place to keep it in, how `gh` runs (none outside a launcher), and the time. A run
+ * may refuse a page without calling GitHub, as the crew's budget does at its floor (martha#947).
+ */
 export interface TheBacklogReader {
   readonly place: CrewPlace | Refused
-  readonly run: ((args: readonly string[]) => Promise<ProcessOutcome>) | undefined
+  readonly run: ((args: readonly string[], page: number) => Promise<ProcessOutcome | Refused>) | undefined
   readonly now: number
 }
 

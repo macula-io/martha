@@ -13,11 +13,12 @@ import { lstatSync, readFileSync, type Stats } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 import { THE_HOMES_PREFIX, writtenOut } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
+import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS, THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
@@ -40,7 +41,7 @@ import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reachi
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { ownerMemoryPlaces, userScopeUnder } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import type { SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { dropInFiles, hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { dropInFiles } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { theOwnersScreenOfALaunch, type TheScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
@@ -98,20 +99,25 @@ const NOTHING_REPORTED: TheServedToolsWatch = {
 }
 
 /**
- * What the launch is given before anything is made: the member's model at the crew's endpoint, the owner's settings
- * file, and the owner's Claude Code settings watch, the same one a Claude Code launch runs (design r=4 R2): a setting
- * that turns hooks off already refuses the start, and the launch runs it first in every re-check. Or why not.
+ * What the launch is given before anything is made: the member's model at the crew's endpoint, and the owner's Claude Code
+ * user settings file. The owner's Claude Code settings watch is not run here (martha#601 row 174): those are Claude Code's
+ * own files, which an engine member never reads, so a setting that turns hooks off neither refuses an engine start nor
+ * stops it while it works. A CLAUDE_CONFIG_DIR that cannot be resolved is still refused: the owner's user settings file is
+ * not one file, it places the owner's whole Claude config folder (`ownerMemoryPlaces` builds that folder's settings,
+ * CLAUDE.md, rules and output styles from it), and an unresolvable value would leave all of it unguarded for a member's
+ * writes — a leak, which is one of the three a refusal stays for. Or why the launch cannot start at all.
  */
 function whatTheLaunchIsGiven(start: AStartOnItsHost) {
   const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited, readTheKeyFile: (key_file) => theKeyInTheOwnersFile(key_file, start.home) })
   if ('refusal' in model) return model
   const user = userSettingsPath(start.inherited)
   if ('refusal' in user) return user
-  const managed = RECORDED_HOST.managed_settings
-  const owners = hookSettingsWatch({ user: user.path, home: start.home, approved: undefined, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
-  const already = owners.check()
-  if (already !== undefined) return { refusal: already }
-  return { model, user, managed, owners }
+  return { model, managed: RECORDED_HOST.managed_settings, owners_settings_file: user.path }
+}
+
+/** The owner's settings files a member's writes are held away from: the host's managed ones, and the user's own file. */
+function theOwnersSettingsFiles(managed: ManagedSettingsPlace, owners_settings_file: string): readonly string[] {
+  return [join(managed.dir, managed.file), ...dropInFiles(join(managed.dir, managed.drop_in)), owners_settings_file]
 }
 
 /**
@@ -153,10 +159,10 @@ export async function startOnTheEngine(start: AStartOnItsHost, shared: TheShared
   const notStarted = (why: string): MemberStarted => ({ started: false, refusal: `${NOT_STARTED}: ${why}` })
   const before = whatTheLaunchIsGiven(start)
   if ('refusal' in before) return notStarted(before.refusal)
-  const { model, user, managed, owners } = before
+  const { model, managed, owners_settings_file } = before
 
   const token = mintALaunchToken()
-  const launch = await launchTheGooseEngine({ facts, binary: start.command, place: shared.place, relay_root: start.places.relay_root, model, tool_server: { token }, owners_settings: () => owners.check() })
+  const launch = await launchTheGooseEngine({ facts, binary: start.command, place: shared.place, relay_root: start.places.relay_root, model, tool_server: { token } })
   if ('refusal' in launch) return { started: false, refusal: launch.refusal }
   const ending = async (why: string): Promise<MemberStarted> => {
     await launch.end()
@@ -171,14 +177,14 @@ export async function startOnTheEngine(start: AStartOnItsHost, shared: TheShared
     facts,
     root: launch.places.root,
     home: start.home,
-    owners_settings_file: user.path,
+    owners_settings_file,
     owner_memory: ownerMemoryPlaces({
       launcher_env: start.inherited,
       member_env: start.inherited,
       home: start.home,
       launch_dir: start.root,
       martha_state_root: start.state.state_root,
-      settings_files: [join(managed.dir, managed.file), ...dropInFiles(join(managed.dir, managed.drop_in)), user.path],
+      settings_files: theOwnersSettingsFiles(managed, owners_settings_file),
       user_scope: userScopeUnder(start.home),
     }),
     launcher_env: start.inherited,

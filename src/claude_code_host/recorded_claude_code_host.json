@@ -1996,6 +1996,15 @@
     ".config.json"
   ],
   "sign_in_store_variable": "CLAUDE_SECURESTORAGE_CONFIG_DIR",
+  "provider_switch_variables": [
+    "CLAUDE_CODE_USE_GATEWAY",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+    "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
+    "CLAUDE_CODE_USE_MANTLE",
+    "CLAUDE_CODE_USE_VERTEX"
+  ],
   "file_permission_rules": {
     "matcher": "let g=a.toolName===\"Write\"||a.toolName===\"NotebookEdit\"||a.toolName===\"MultiEdit\"?\"Edit\":a.toolName===\"Glob\"?\"Read\":void 0;"
   },
