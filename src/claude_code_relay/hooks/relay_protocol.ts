@@ -196,7 +196,10 @@ export function answeredBody(session_id: string, call: unknown, answer: unknown)
   return body
 }
 
-/** A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the only yes. */
+/**
+ * A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the yes, which may carry the turn a ran tool's report
+ * ends (martha#311) or, on a prompt, the crew's state the turn is handed (martha#984).
+ */
 export function heardTaken(status: number, text: string): Heard {
   if (status !== 200) return NO(`the launcher answered with status ${status}`)
   const value = jsonObjectOf(text)
@@ -204,6 +207,7 @@ export function heardTaken(status: number, text: string): Heard {
   if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
   if (value.taken !== 1) return NO(MALFORMED)
   if (exactKeys(value, ['taken'])) return YES
+  if (exactKeys(value, ['taken', 'handed'])) return isReason(value.handed) ? { yes: true, handed: value.handed } : NO(MALFORMED)
   return exactKeys(value, ['taken', 'end_turn']) && isReason(value.end_turn) ? { yes: true, end_turn: value.end_turn } : NO(MALFORMED)
 }
 

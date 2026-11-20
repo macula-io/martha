@@ -20,7 +20,6 @@
 // the launcher hands in.
 
 import { theContractACrewHolds, type CoreToolAnswer, type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
-import { THE_CREW_STATE_ASK } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 import { answerToolCall, whatTheCrewRefusesOfACall, type ApprovedLaunch, type ToolCall } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { startSessionAs } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
@@ -226,6 +225,12 @@ export interface TheAnswersOfOneLaunch {
   aSessionStarted(start: AStartingSession): Promise<TheAnswerToAStart>
   /** A turn: kept in its session's record, a session the crew refreshed taken in first (martha#255), or refused and why. */
   aTurnArrived(session_id: unknown, turn: ArrivingTurn): Promise<TheAnswerToATurn>
+  /**
+   * The crew's state a prompted turn of this session is handed (martha#984), once the turn is kept: taken into the
+   * session's record on its own source BEFORE it is answered, and undefined when there is none, it is the copy this
+   * session was last handed, or it could not be read or recorded. A host whose turns are prompted asks it.
+   */
+  theCrewStateToHand(session_id: string): Promise<string | undefined>
   /** A review the host saw fail (martha#390), named on the row and to the member, for a session this launch holds. */
   aReviewTheHostSawFail(report: AReviewTheHostSawFail): Promise<void>
   /**
@@ -301,7 +306,7 @@ export function answersOver(
     }
   }
 
-  const held: TheSessionsHeld = { places, sessions, broken, keep, vouchFor, approved_start, notices_said: new Set<string>() }
+  const held: TheSessionsHeld = { places, sessions, broken, keep, vouchFor, approved_start, notices_said: new Set<string>(), crew_states_handed: new Map<string, string>() }
 
   return {
     records: places.records,
@@ -318,6 +323,7 @@ export function answersOver(
     approved_start,
     aSessionStarted: async (start) => aSessionStartedIn(held, start),
     aTurnArrived: async (session_id, turn) => aTurnArrivedIn(held, session_id, turn),
+    theCrewStateToHand: async (session_id) => theCrewStateToHandIn(held, session_id),
     aReviewTheHostSawFail: async (report) => aReviewTheHostSawFailIn(held, report),
     aToolCalled: async (call) => aToolCalledIn(held, call),
     aResultCame: async (result) => aResultCameIn(held, result),
@@ -343,6 +349,11 @@ interface TheSessionsHeld {
    * on every call past the wall would feed the member a turn for each call it makes.
    */
   readonly notices_said: Set<string>
+  /**
+   * The crew's state each session was last handed (martha#984): an unchanged state is not handed again, and every start
+   * of the session drops it, as a compaction leaves the conversation without the copy.
+   */
+  readonly crew_states_handed: Map<string, string>
 }
 
 /** The session a clear was told in, when this id is the one the crew is waiting for: the crew's own answer, or none. */
@@ -376,6 +387,7 @@ async function takeInARefreshedSessionIn(held: TheSessionsHeld, session_id: stri
 async function aSessionStartedIn(held: TheSessionsHeld, start: AStartingSession): Promise<TheAnswerToAStart> {
   const lost = held.broken.get(start.session_id)
   if (lost !== undefined) return { refused: lost }
+  held.crew_states_handed.delete(start.session_id)
   // A second start of a session this launch already holds changes nothing: re-beginning it would wipe the record the
   // first one kept, which is exactly the wipe a `clear` after a refresh would be (martha#255).
   if (held.sessions.has(start.session_id)) return { taken: '' }
@@ -669,27 +681,36 @@ async function aCrewToolAskedIn(held: TheSessionsHeld, ask: ACrewToolAsked): Pro
   if (crew === undefined) return { refused: NO_CREW_TOOLS }
   const why = await takeInARefreshedSessionIn(held, ask.session_id)
   if (why !== undefined) return { refused: why }
-  if (ask.tool === THE_CREW_STATE_ASK) return aCrewStateAskedIn(held, crew, ask.session_id)
   return crew.answer(ask.tool, ask.args, ask.session_id)
 }
 
 /**
- * The crew's state a turn of this session is handed (martha#984): built by the crew for this launch's own member, and
- * taken into the session's record on its own source BEFORE the text is answered, so the shell gate stands behind every
- * word the mod puts in the prompt. A session this launch does not hold, a record that cannot be kept, or a crew that
- * cannot say, is answered with no text: the mod then adds no section, and never an old one.
+ * The crew's state a prompted turn of this session is handed (martha#984): built by the crew for this launch's own
+ * member, and taken into the session's record on its own source BEFORE it is answered, so the shell gate stands behind
+ * every word the turn is handed. Nothing is handed when the crew has no state, the session was last handed the same
+ * text, or the state could not be read or recorded: the turn itself is kept either way, and a failure is noted.
  */
-async function aCrewStateAskedIn(held: TheSessionsHeld, crew: CrewTools, session_id: string): Promise<CoreToolAnswer> {
-  const session = sessionNamed(session_id, held.sessions, held.broken)
-  if (typeof session === 'string') return { refused: session }
+async function theCrewStateToHandIn(held: TheSessionsHeld, session_id: string): Promise<string | undefined> {
+  const crew = held.places.crew
+  const session = held.sessions.get(session_id)
+  if (crew === undefined || session === undefined) return undefined
   const state = await theCrewStateOrWhy(crew)
-  if (state === null) return { answer: '' }
-  if ('why' in state) return { refused: state.why }
+  if (state === null) return undefined
+  if ('why' in state) {
+    held.places.note?.(state.why)
+    return undefined
+  }
+  if (held.crew_states_handed.get(session_id) === state.line) return undefined
   const why = await held.keep(state.taken_in.reduce((taken, source) => takeInTurn(taken, { source }, held.places.binder), session))
-  return why === undefined ? { answer: state.line } : { refused: why }
+  if (why !== undefined) {
+    held.places.note?.(`the crew's state was not handed: ${why}`)
+    return undefined
+  }
+  held.crew_states_handed.set(session_id, state.line)
+  return state.line
 }
 
-/** The crew's state, or why the crew could not say it: a read that throws hands nothing, and says so to the mod. */
+/** The crew's state, or why the crew could not say it: a read that throws hands nothing, and says why in a note. */
 async function theCrewStateOrWhy(crew: CrewTools): Promise<TheStartLine | null | { readonly why: string }> {
   try {
     return await crew.theCrewStateOfATurn()

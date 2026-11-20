@@ -70,6 +70,6 @@
   {
     "file": "src/drive_the_recorded_host/the_crew_state_on_the_recorded_host.node-test.ts",
     "cases": 3,
-    "proves": "the member who assigns work reads the crew state in its system prompt on every request, replaced on each render and never kept in the conversation; a member granted no work is handed none (martha#984)"
+    "proves": "the member who assigns work is handed the crew state with its next prompted turn, not again while it is unchanged; a member granted no work is handed none (martha#984)"
   }
 ]

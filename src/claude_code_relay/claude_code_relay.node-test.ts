@@ -165,6 +165,23 @@ test('a session start the launcher answers in a shape the relay does not know is
   assert.deepEqual(answer, { text: 'the rest of the chain' }, 'an empty line is not one this relay hands, so the start carries nothing')
 })
 
+test("a prompt the launcher hands the crew's state to carries it in the context the host hands the turn, after any already there (martha#984)", async () => {
+  const state = "Standing items (1), recorded by this crew's members: held the-landing"
+  const prompt = { ...PROMPT, context: ['a hook before this one'] }
+  const handed = next<typeof prompt>({ text: PROMPT.text })
+  await hooksOfTheRelay().get('prompt.submit')?.hook(fakeEngine(answering(200, JSON.stringify({ taken: 1, handed: state }))).$, prompt, handed.fn)
+  assert.deepEqual(handed.calls, [{ ...prompt, context: ['a hook before this one', state] }])
+
+  const plain = next<typeof PROMPT>({ text: PROMPT.text })
+  await hooksOfTheRelay().get('prompt.submit')?.hook(fakeEngine(sayYes).$, PROMPT, plain.fn)
+  assert.deepEqual(plain.calls, [PROMPT], 'a launcher with nothing to hand leaves the prompt as the host raised it')
+
+  const empty = next<typeof PROMPT>({ text: PROMPT.text })
+  const dropped = await hooksOfTheRelay().get('prompt.submit')?.hook(fakeEngine(answering(200, '{"taken":1,"handed":""}')).$, PROMPT, empty.fn)
+  assert.equal(empty.calls.length, 0, 'an empty hand is a shape the relay does not know, so the prompt is not entered')
+  assert.ok(typeof dropped === 'object' && dropped !== null && 'drop' in dropped, JSON.stringify(dropped))
+})
+
 test('the relay sends the engine fields unchanged: the start whole, the origin whole, the call with its answer', async () => {
   const fake = fakeEngine(sayYes)
   const start = { session_id: SESSION, source: 'fork', transcript_path: '/t', hook_event_name: 'SessionStart' }
@@ -392,10 +409,7 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   // same way. It decides nothing of its own (martha#255): the pane's lines, how it opens and the order a session is
   // given all come from the launcher's answer, and the reading of those answers is the one file below (r=2 R1, R2),
   // so the mod itself holds no parser and no rule.
-  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_command.ts', './crew_channel_reading.ts', './crew_turn_beat.ts', './crew_state_section.ts', './crew_answers.ts'])
-  // The crew's state on every render of the prompt (martha#984): where the section goes and when none is added, read
-  // over the launcher's answer in the reader's own shape, so a test drives it with a timer of its own.
-  assert.deepEqual(specifiers('crew_state_section.ts'), ['./crew_command.ts'])
+  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_command.ts', './crew_channel_reading.ts', './crew_turn_beat.ts', './crew_answers.ts'])
   // The owner's `/crew` (martha#927): what it asks and prints, read with the pane's own reader and nothing else, so a
   // test drives it with the launcher's own answers.
   assert.deepEqual(specifiers('crew_command.ts'), ['./crew_answers.ts'])

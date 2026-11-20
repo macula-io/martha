@@ -14,7 +14,6 @@ import { heardToolAnswer, PANE, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } f
 import { theCrewCommandAnswers, theCrewCommandResult, type Heard } from './crew_command.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
-import { theCrewStateHeardWithin, withTheCrewState } from './crew_state_section.ts'
 import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
 
 /** Why a tool call has no answer: Martha did not launch this session (it was started by hand), or the launcher could not be heard. */
@@ -81,12 +80,6 @@ const THE_MODEL_REPORT = 'note_the_model_the_session_runs'
  * out as the host's command name, the way `clear` is above: a hooks module imports only its own files.
  */
 const THE_MODEL_COMMAND = 'model'
-
-/**
- * What the mod asks the launcher for on every render of the member's prompt (martha#984): the crew's state, built by the
- * launcher for its own member and taken into the session's record before it answers.
- */
-const THE_CREW_STATE = 'crew_state_asked'
 
 /** What the mod asks the launcher for: the owner's to-do list, as the pane draws it (martha#316). */
 const THE_OWNERS_TODO = 'the_owners_todo'
@@ -381,32 +374,6 @@ async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
   )
 }
 
-/**
- * Every render of the member's prompt (martha#984): what the host composed, with the crew's state the launcher answers
- * added as one `session` section. A session Martha did not launch, a launcher not heard in time, or no text, adds none:
- * ./crew_state_section.ts rules it, and nothing is kept from one render to the next.
- */
-async function composeWithTheCrewState($: CrewEngine, e: unknown, next: CrewNext): Promise<unknown> {
-  const composed = await next(e)
-  return withTheCrewState(composed, await theCrewStateHeardWithin(() => hearTheLauncher($, THE_CREW_STATE, {}), (ms, fn) => $.clock.after(ms, fn)))
-}
-
-/**
- * A session's start: the crew's tools and both commands registered, the pane opened when the declaration switched the
- * dashboard on, the channel read, and the launcher asked what this session should do now.
- */
-async function startTheSession($: CrewEngine, e: unknown, next: CrewNext): Promise<unknown> {
-  for (const tool of await toolsFromTheLauncher($)) await $.tool.register(tool)
-  // Both commands are registered, or the host answers "Unknown command" and never reaches the hooks below (martha#927).
-  await $.command.register({ name: PANE, description: "Open the crew's pane" })
-  await $.command.register({ name: CREW_COMMAND, description: 'See your crew, or say one thing to one member', argumentHint: '[<member> <text>]' })
-  const first = await askTheLauncher($, 'see_the_crew', {})
-  if (paneIn(first)?.open_at_start === true) await openThePane($)
-  await startReadingTheChannel($)
-  await takeTheAct($, e)
-  return next(e)
-}
-
 /** The crew's tools registered with this host, and the pane drawn. */
 export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
   // Every tool is named in full here, because the host refuses a hook that builds its name; the manifest holds the
@@ -449,7 +416,6 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('command.run', { command: PANE }, async ($: CrewEngine) => { await openThePane($); return { text: '' } })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, drawThePane)
-  on('prompt.compose', composeWithTheCrewState)
 
   // The owner's `/crew` (martha#927): answered here without `next`, so no command runs beneath it, and shown to the
   // owner alone, so the model takes no turn. What it asks and prints is ./crew_command.ts's.
@@ -457,7 +423,17 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
 
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.
-  on('session.start', startTheSession)
+  on('session.start', async ($: CrewEngine, e: unknown, next: CrewNext) => {
+    for (const tool of await toolsFromTheLauncher($)) await $.tool.register(tool)
+    // Both commands are registered, or the host answers "Unknown command" and never reaches the hooks below (martha#927).
+    await $.command.register({ name: PANE, description: "Open the crew's pane" })
+    await $.command.register({ name: CREW_COMMAND, description: 'See your crew, or say one thing to one member', argumentHint: '[<member> <text>]' })
+    const first = await askTheLauncher($, 'see_the_crew', {})
+    if (paneIn(first)?.open_at_start === true) await openThePane($)
+    await startReadingTheChannel($)
+    await takeTheAct($, e)
+    return next(e)
+  })
 
   // A turn is running from `turn.start` until it ends, and the channel is read only outside one: a submit made while
   // the session is idle is queued into the next main turn, and that turn's start is what counts the message taken in.

@@ -1,10 +1,11 @@
 // The crew's state a turn of the member who assigns work is handed (martha#984, gap 5 of martha#957): the Supervisor's
-// standing items and the crew's nudges, rebuilt for every render of that member's prompt rather than once at its start.
+// standing items and the crew's nudges, rebuilt for each turn that member is prompted, rather than once at its start.
 //
 // This lives beside the start line (./the_start_line.ts) because it is the same text handed again, for the same member,
 // under the same gate: only a member the table lets assign work is handed anything, and the nudge part only when the
-// crew turned nudges on. The crew's mod (../claude_code_relay/hooks/crew.tsx) asks for it by THE_CREW_STATE_ASK and puts
-// the answer in one `session` section of the system prompt; the mod decides nothing, and builds no text of its own.
+// crew turned nudges on. It rides each prompted turn (design r=2): the relay's prompt.submit hook adds it to the context
+// the host hands the turn, as the host composes the system prompt once per session; the entry hands it only when it
+// changed since the copy this session was last handed (../answer_what_a_host_reports).
 //
 // A turn reads only what is recorded (martha#984 design, point 2): the standing stream, the channel, the ledgers, the
 // closes and the backlog read the crew already keeps. No GitHub call is made and nothing is written: the nudges come
@@ -20,9 +21,6 @@ import { theNudgesPartLines } from '../nudge_the_supervisor/nudge_the_supervisor
 import { SEE_THE_CREW_TOOL, theNudgesOfATurn } from '../see_the_crew/the_see_the_crew_tool.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import type { TheStartLine } from './the_start_line.ts'
-
-/** What the crew's mod asks the launcher for, on every render of a member's prompt (martha#984): the crew's state. */
-export const THE_CREW_STATE_ASK = 'crew_state_asked'
 
 /** The source the crew's state is taken in on, on a turn (martha#984): its own inbound path, beside the start's A20. */
 export const CREW_STATE_SOURCE: TurnSource = 'crew_state'

@@ -16,7 +16,6 @@ import type { CrewTools, TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { holdingTheEnds } from '../end_a_running_turn/hold_the_end.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
-import { THE_CREW_STATE_ASK } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -128,7 +127,7 @@ interface AnEntry {
   readonly failing: FailingOnce
 }
 
-function anEntry(t: TestContext, says: TheCrewSays = {}): AnEntry {
+function anEntry(t: TestContext, says: TheCrewSays = {}, also: { readonly note?: (line: string) => void } = {}): AnEntry {
   const home = mkdtempSync(join(tmpdir(), 'martha-541-1b-entry-'))
   t.after(() => removeTheTree(home))
   const checkout = join(home, 'checkout')
@@ -156,6 +155,7 @@ function anEntry(t: TestContext, says: TheCrewSays = {}): AnEntry {
     names: { ownNameOf: (called) => called },
     refusesAWriteToTheOwnersSettings: () => undefined,
     refusesAWriteToTheOwnersMemory: () => undefined,
+    ...also,
   })
   return { answers, told, reviews, failing }
 }
@@ -322,37 +322,51 @@ test('#541 1b: a record that can no longer be vouched for breaks its session, so
 const THE_CREW_STATE = 'Standing items (1): hold the landing for the owner.'
 const THE_STATE_CARRIES: TurnSource = 'crew_state'
 
-test("martha#984: the crew's state is taken in on its own source before its text is answered, for a session the entry holds (mutant: answered without the take-in)", async (t) => {
+test("martha#984: the crew's state a turn is handed is taken in on its own source before it is answered (mutant: handed without the take-in)", async (t) => {
   const { answers } = anEntry(t, { crew_state: { line: THE_CREW_STATE, taken_in: [THE_STATE_CARRIES] } })
   await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
 
-  const answer = await answers.aCrewToolAsked({ session_id: 'session-a', tool: THE_CREW_STATE_ASK, args: {} })
-
-  assert.deepEqual(answer, { answer: THE_CREW_STATE })
+  assert.equal(await answers.theCrewStateToHand('session-a'), THE_CREW_STATE)
   assert.deepEqual(pathsIn(answers, 'session-a'), [PATH_OF_SOURCE.server_instructions, PATH_OF_SOURCE.crew_state])
 })
 
-test("martha#984: no crew state is an empty answer and takes nothing in; a session the entry does not hold is refused, and the crew is not asked", async (t) => {
+test("martha#984: no crew state hands nothing and takes nothing in; a session the entry does not hold is handed nothing, and the crew is not asked", async (t) => {
   const { answers } = anEntry(t, { crew_state: null })
   await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
-  assert.deepEqual(await answers.aCrewToolAsked({ session_id: 'session-a', tool: THE_CREW_STATE_ASK, args: {} }), { answer: '' })
+  assert.equal(await answers.theCrewStateToHand('session-a'), undefined)
   assert.deepEqual(pathsIn(answers, 'session-a'), [PATH_OF_SOURCE.server_instructions])
 
   const stranger = anEntry(t, { crew_state: new Error('the crew was asked for a session the launch does not hold') })
-  const refused = await stranger.answers.aCrewToolAsked({ session_id: 'session-x', tool: THE_CREW_STATE_ASK, args: {} })
-  assert.ok('refused' in refused, `a session the entry never started was handed the crew's state: ${JSON.stringify(refused)}`)
-  assert.ok(!refused.refused.includes('the crew was asked'), refused.refused)
+  assert.equal(await stranger.answers.theCrewStateToHand('session-x'), undefined)
 })
 
-test("martha#984: a crew state whose record could not be kept, or that the crew could not read, hands no text (mutant: the text answered when the keep failed)", async (t) => {
-  const entry = anEntry(t, { crew_state: { line: THE_CREW_STATE, taken_in: [THE_STATE_CARRIES] } })
+test("martha#984: a crew state whose record could not be kept, or that the crew could not read, is not handed, and says why in a note (mutant: handed when the keep failed)", async (t) => {
+  const notes: string[] = []
+  const entry = anEntry(t, { crew_state: { line: THE_CREW_STATE, taken_in: [THE_STATE_CARRIES] } }, { note: (line: string) => void notes.push(line) })
   await entry.answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
   entry.failing.flush.add('session-a')
-  const kept = await entry.answers.aCrewToolAsked({ session_id: 'session-a', tool: THE_CREW_STATE_ASK, args: {} })
-  assert.ok('refused' in kept && !JSON.stringify(kept).includes(THE_CREW_STATE), `the crew's state was handed though its record was not kept: ${JSON.stringify(kept)}`)
+  assert.equal(await entry.answers.theCrewStateToHand('session-a'), undefined, "the crew's state was handed though its record was not kept")
 
-  const unread = anEntry(t, { crew_state: new Error('the standing stream is gone') })
+  const unread = anEntry(t, { crew_state: new Error('the standing stream is gone') }, { note: (line: string) => void notes.push(line) })
   await unread.answers.aSessionStarted({ session_id: 'session-b', outcome: 'fresh' })
-  const said = await unread.answers.aCrewToolAsked({ session_id: 'session-b', tool: THE_CREW_STATE_ASK, args: {} })
-  assert.deepEqual(said, { refused: "the crew's state could not be read (the standing stream is gone)" })
+  assert.equal(await unread.answers.theCrewStateToHand('session-b'), undefined)
+  assert.equal(notes.length, 2, notes.join('\n'))
+  assert.ok(notes[0]?.startsWith("the crew's state was not handed: "), String(notes[0]))
+  assert.equal(notes[1], "the crew's state could not be read (the standing stream is gone)")
+})
+
+test("martha#984: a state handed once is not handed again while it is unchanged; a changed one is, and a new start of the session hands it again", async (t) => {
+  const says: { crew_state: TheStartLine } = { crew_state: { line: THE_CREW_STATE, taken_in: [THE_STATE_CARRIES] } }
+  const { answers } = anEntry(t, says)
+  await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+  assert.equal(await answers.theCrewStateToHand('session-a'), THE_CREW_STATE)
+  assert.equal(await answers.theCrewStateToHand('session-a'), undefined, 'the unchanged state was handed again')
+
+  const CHANGED = 'Standing items (2): hold the landing for the owner; await the review.'
+  says.crew_state = { line: CHANGED, taken_in: [THE_STATE_CARRIES] }
+  assert.equal(await answers.theCrewStateToHand('session-a'), CHANGED)
+
+  // A compaction is a start of the same session: the conversation no longer holds the copy.
+  await answers.aSessionStarted({ session_id: 'session-a', outcome: 'same_id' })
+  assert.equal(await answers.theCrewStateToHand('session-a'), CHANGED, 'a new start of the session was not handed the state again')
 })

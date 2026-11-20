@@ -52,8 +52,6 @@ export const RELAY_FILES = [
   'hooks/crew_turn_beat.ts',
   // The owner's `/crew` (martha#927): crew.tsx imports what it asks and prints, so a copy without it is refused.
   'hooks/crew_command.ts',
-  // The crew's state as a section of every render (martha#984): crew.tsx imports it, so a copy without it is refused.
-  'hooks/crew_state_section.ts',
 ] as const
 
 /** The copy's name inside a launch's relay directory. */
