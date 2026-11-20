@@ -85,14 +85,17 @@ test("martha#916: a member billed by the key starts with the launcher's key and 
 /** A token the launcher's environment carries in these tests: no real token, and no constant's value. */
 const A_LAUNCHERS_TOKEN = 'a-token-the-owners-shell-carries-916'
 
-test("martha#916 r=3: a member billed by the subscription is not handed the launcher's auth token, which moves the host off the sign-in, and one billed by the key keeps it", (t) => {
+test("martha#916 r=3, r=4: no billed member is handed the launcher's auth token, which neither billing chooses", (t) => {
   // Seen live on 2.1.329: a planted ANTHROPIC_AUTH_TOKEN turned a subscription member's banner to "API Usage Billing".
   const bySubscription = aStart(t, BILLED_BY_SUBSCRIPTION, { [AUTH_TOKEN_VARIABLE]: A_LAUNCHERS_TOKEN })
   assert.notEqual(typeof bySubscription.started, 'string', `the start was refused: ${String(bySubscription.started)}`)
   assert.ok(!(AUTH_TOKEN_VARIABLE in (bySubscription.started as Record<string, string>)), `the member's environment holds ${AUTH_TOKEN_VARIABLE}`)
   const byKey = aStart(t, BILLED_BY_API_KEY, { [API_KEY_VARIABLE]: A_LAUNCHERS_KEY, [AUTH_TOKEN_VARIABLE]: A_LAUNCHERS_TOKEN })
   assert.notEqual(typeof byKey.started, 'string', `the start was refused: ${String(byKey.started)}`)
-  assert.equal((byKey.started as Record<string, string>)[AUTH_TOKEN_VARIABLE], A_LAUNCHERS_TOKEN, "the key's member lost the launcher's token")
+  // Seen live on 2.1.329: a key member handed the token too warns "Both ANTHROPIC_AUTH_TOKEN and ANTHROPIC_API_KEY set",
+  // and with CLAUDE_CODE_USE_GATEWAY and a base URL beside it runs on "Cloud gateway", billed by the token.
+  assert.ok(!(AUTH_TOKEN_VARIABLE in (byKey.started as Record<string, string>)), `the key's member's environment holds ${AUTH_TOKEN_VARIABLE}`)
+  assert.equal((byKey.started as Record<string, string>)[API_KEY_VARIABLE], A_LAUNCHERS_KEY, "the key's member lost the launcher's key")
 })
 
 /** Every variable that switches the host off its own API, set as the launcher's shell might carry them. */

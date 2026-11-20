@@ -78,7 +78,7 @@ test("the member's environment names its own folder and the owner's default sign
 test("martha#916: a member billed by the key is handed its own folder and no sign-in store, and each billing leaves the other's credential out", () => {
   assert.deepEqual(theMembersConfigEnvironment('/a/members/folder', BILLED_BY_API_KEY), { [CONFIG_DIR_VARIABLE]: '/a/members/folder' })
   assert.deepEqual(notGivenUnder(BILLED_BY_SUBSCRIPTION), [API_KEY_VARIABLE, AUTH_TOKEN_VARIABLE, ...RECORDED_HOST.provider_switch_variables])
-  assert.deepEqual(notGivenUnder(BILLED_BY_API_KEY), [RECORDED_HOST.sign_in_store_variable, ...RECORDED_HOST.provider_switch_variables])
+  assert.deepEqual(notGivenUnder(BILLED_BY_API_KEY), [RECORDED_HOST.sign_in_store_variable, AUTH_TOKEN_VARIABLE, ...RECORDED_HOST.provider_switch_variables])
 })
 
 test('martha#916: a key billed is answered yes by its tail alone, and an empty one is not answered', (t) => {
