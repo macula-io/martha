@@ -439,6 +439,7 @@ export type TurnSource =
   | 'subagent'
   | 'standing_items'
   | 'package_contract'
+  | 'crew_state'
 
 /**
  * What a host attests about who sent one delivery: the sending process, as the

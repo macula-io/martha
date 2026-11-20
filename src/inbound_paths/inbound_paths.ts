@@ -478,6 +478,13 @@ export const INBOUND_PATHS: readonly InboundPath[] = [
     attestation: 'none',
   },
   {
+    id: 'A28',
+    what: "the crew's state the member who assigns work is handed on every render of its prompt (martha#984): the Supervisor's standing items, as A20 hands them at the start, and the crew's nudges, as see_the_crew prints them, in one `session` section of the system prompt that the host replaces on each render. The crew's mod asks the launcher for it and builds none of it; the launcher reads only what the crew recorded (the standing stream, the channel, the ledgers, the closes and the backlog read it keeps), never GitHub, writes nothing, and hands it only to a member the table lets assign work, the nudge part only when house_rules.nudges is on. A nudge line names a declared member, a package that parses as one, a kind and a time, and the unheld kind only a count, never an issue's or a message's text. The source is taken into the session's record before the answer goes back, so the shell gate stands behind what was handed. Not closed: a process of the same OS user can append to the streams it is read from (martha#1 decision 2's residual), which is why the text is taken in rather than exempt",
+    klass: 'delivered',
+    control: { kind: 'shell-gate' },
+    attestation: 'none',
+  },
+  {
     id: 'A24',
     what: `a turn the launcher sends the engine over ACP (martha#541, shape 2): text whose first non-blank character is ${THE_COMMAND_STARTS.join(' or ')} is a command the engine runs rather than a turn for its model, so the client refuses it before it is sent (startsACommand, ../speak_acp_to_an_agent), whichever path it arrived on — a room, a ring, another session or the owner's own paste. Not closed: a command the member writes into a shell of its own, which is A13's path and the shell gate's; and a host the owner starts by hand (C1, C2)`,
     klass: 'delivered',

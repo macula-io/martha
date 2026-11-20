@@ -16,6 +16,7 @@ import type { CrewTools, TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { holdingTheEnds } from '../end_a_running_turn/hold_the_end.ts'
 import { PATH_OF_SOURCE } from '../take_in_a_turn/take_in_a_turn.ts'
+import { THE_CREW_STATE_ASK } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -67,6 +68,8 @@ interface TheCrewSays {
   readonly asked?: string[]
   /** Every start the crew was told of, in order: the session's id, and whether its start was taken (martha#658). */
   readonly starts?: { session: string; taken: boolean }[]
+  /** The crew's state a turn is handed (martha#984), or a read that throws when it is an Error. */
+  readonly crew_state?: TheStartLine | null | Error
 }
 
 function aCrew(says: TheCrewSays): CrewTools {
@@ -79,6 +82,10 @@ function aCrew(says: TheCrewSays): CrewTools {
     theLineToHandAtStart: async (session_id) => {
       says.asked?.push(session_id)
       return says.line ?? null
+    },
+    theCrewStateOfATurn: async () => {
+      if (says.crew_state instanceof Error) throw says.crew_state
+      return says.crew_state ?? null
     },
     noteTheStart: (session_id, taken) => void says.starts?.push({ session: session_id, taken }),
     ends: holdingTheEnds(),
@@ -310,4 +317,42 @@ test('#541 1b: a record that can no longer be vouched for breaks its session, so
 
   assert.equal(entry.answers.brokenBecause('session-a'), why, 'the session stayed live after its record was found untrustworthy')
   assert.deepEqual(await entry.answers.aTurnArrived('session-a', { text: 'hello', arrival: { source: 'owner_typed' } }), { refused: why })
+})
+
+const THE_CREW_STATE = 'Standing items (1): hold the landing for the owner.'
+const THE_STATE_CARRIES: TurnSource = 'crew_state'
+
+test("martha#984: the crew's state is taken in on its own source before its text is answered, for a session the entry holds (mutant: answered without the take-in)", async (t) => {
+  const { answers } = anEntry(t, { crew_state: { line: THE_CREW_STATE, taken_in: [THE_STATE_CARRIES] } })
+  await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+
+  const answer = await answers.aCrewToolAsked({ session_id: 'session-a', tool: THE_CREW_STATE_ASK, args: {} })
+
+  assert.deepEqual(answer, { answer: THE_CREW_STATE })
+  assert.deepEqual(pathsIn(answers, 'session-a'), [PATH_OF_SOURCE.server_instructions, PATH_OF_SOURCE.crew_state])
+})
+
+test("martha#984: no crew state is an empty answer and takes nothing in; a session the entry does not hold is refused, and the crew is not asked", async (t) => {
+  const { answers } = anEntry(t, { crew_state: null })
+  await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+  assert.deepEqual(await answers.aCrewToolAsked({ session_id: 'session-a', tool: THE_CREW_STATE_ASK, args: {} }), { answer: '' })
+  assert.deepEqual(pathsIn(answers, 'session-a'), [PATH_OF_SOURCE.server_instructions])
+
+  const stranger = anEntry(t, { crew_state: new Error('the crew was asked for a session the launch does not hold') })
+  const refused = await stranger.answers.aCrewToolAsked({ session_id: 'session-x', tool: THE_CREW_STATE_ASK, args: {} })
+  assert.ok('refused' in refused, `a session the entry never started was handed the crew's state: ${JSON.stringify(refused)}`)
+  assert.ok(!refused.refused.includes('the crew was asked'), refused.refused)
+})
+
+test("martha#984: a crew state whose record could not be kept, or that the crew could not read, hands no text (mutant: the text answered when the keep failed)", async (t) => {
+  const entry = anEntry(t, { crew_state: { line: THE_CREW_STATE, taken_in: [THE_STATE_CARRIES] } })
+  await entry.answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+  entry.failing.flush.add('session-a')
+  const kept = await entry.answers.aCrewToolAsked({ session_id: 'session-a', tool: THE_CREW_STATE_ASK, args: {} })
+  assert.ok('refused' in kept && !JSON.stringify(kept).includes(THE_CREW_STATE), `the crew's state was handed though its record was not kept: ${JSON.stringify(kept)}`)
+
+  const unread = anEntry(t, { crew_state: new Error('the standing stream is gone') })
+  await unread.answers.aSessionStarted({ session_id: 'session-b', outcome: 'fresh' })
+  const said = await unread.answers.aCrewToolAsked({ session_id: 'session-b', tool: THE_CREW_STATE_ASK, args: {} })
+  assert.deepEqual(said, { refused: "the crew's state could not be read (the standing stream is gone)" })
 })

@@ -71,6 +71,7 @@ function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
     },
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    theCrewStateOfATurn: async () => null,
     noteTheStart: () => undefined,
     ends: {
       ...ends,

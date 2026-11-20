@@ -20,6 +20,7 @@
 // the launcher hands in.
 
 import { theContractACrewHolds, type CoreToolAnswer, type CrewTools, type TheStartLine } from '../a_crews_tools/a_crews_tools.ts'
+import { THE_CREW_STATE_ASK } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 import { answerToolCall, whatTheCrewRefusesOfACall, type ApprovedLaunch, type ToolCall } from '../answer_a_tool_call/answer_a_tool_call.ts'
 import type { Binder } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { startSessionAs } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
@@ -668,7 +669,33 @@ async function aCrewToolAskedIn(held: TheSessionsHeld, ask: ACrewToolAsked): Pro
   if (crew === undefined) return { refused: NO_CREW_TOOLS }
   const why = await takeInARefreshedSessionIn(held, ask.session_id)
   if (why !== undefined) return { refused: why }
+  if (ask.tool === THE_CREW_STATE_ASK) return aCrewStateAskedIn(held, crew, ask.session_id)
   return crew.answer(ask.tool, ask.args, ask.session_id)
+}
+
+/**
+ * The crew's state a turn of this session is handed (martha#984): built by the crew for this launch's own member, and
+ * taken into the session's record on its own source BEFORE the text is answered, so the shell gate stands behind every
+ * word the mod puts in the prompt. A session this launch does not hold, a record that cannot be kept, or a crew that
+ * cannot say, is answered with no text: the mod then adds no section, and never an old one.
+ */
+async function aCrewStateAskedIn(held: TheSessionsHeld, crew: CrewTools, session_id: string): Promise<CoreToolAnswer> {
+  const session = sessionNamed(session_id, held.sessions, held.broken)
+  if (typeof session === 'string') return { refused: session }
+  const state = await theCrewStateOrWhy(crew)
+  if (state === null) return { answer: '' }
+  if ('why' in state) return { refused: state.why }
+  const why = await held.keep(state.taken_in.reduce((taken, source) => takeInTurn(taken, { source }, held.places.binder), session))
+  return why === undefined ? { answer: state.line } : { refused: why }
+}
+
+/** The crew's state, or why the crew could not say it: a read that throws hands nothing, and says so to the mod. */
+async function theCrewStateOrWhy(crew: CrewTools): Promise<TheStartLine | null | { readonly why: string }> {
+  try {
+    return await crew.theCrewStateOfATurn()
+  } catch (error) {
+    return { why: `the crew's state could not be read (${error instanceof Error ? error.message : String(error)})` }
+  }
 }
 
 /**

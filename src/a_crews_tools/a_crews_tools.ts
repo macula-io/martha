@@ -18,6 +18,7 @@ import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { theLineToHandAtStart, type TheStartLine } from '../hand_a_member_its_crew_text/the_start_line.ts'
+import { theCrewStateOfATurn } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 import type { DocumentStore, HandoverStampStore, HostContract, Refused, TheCrewFilesStores, ToolNames } from '../host_contract/host_contract.ts'
 import { VERIFY_RANGE_TOOL, verifyTheRangeOver } from '../check_a_range_before_the_owner_says_yes/the_verify_range_tool.ts'
 import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
@@ -271,6 +272,12 @@ export interface CrewTools extends TheReviewRule {
    */
   theLineToHandAtStart(session_id: string): Promise<TheStartLine | null>
   /**
+   * The crew's state a turn of this member is handed (martha#984): the standing items and the nudges, read from what the
+   * crew recorded and nothing else, when the table lets this member assign work. Null when nothing is handed. `taken_in`
+   * names the source the session's record takes in before the text is answered.
+   */
+  theCrewStateOfATurn(): Promise<TheStartLine | null>
+  /**
    * The start whose line that call built has been answered (martha#658 Done-when 4): a taken start marks the window
    * that hand read as handed to a successor, and a refused one drops the record unmarked, so the next start is handed
    * the beats. Either way nothing is kept for that session afterwards.
@@ -489,6 +496,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     },
     startSweeping: () => sweepTheOwnersList(held),
     theLineToHandAtStart: (session_id) => theStartLineOf(held, state, session_id),
+    theCrewStateOfATurn: () => theCrewStateOf(held),
     noteTheStart: (session_id, taken) => noteTheStartIn(held, state, session_id, taken),
     thePredecessorOf: (session_id) => thePredecessorOf(held, session_id),
     theSpendInForce: (session_id) => budget.theSpendInForce(session_id),
@@ -641,6 +649,13 @@ async function theStartLineOf(places: CrewToolPlaces, state: SessionState, sessi
   if (handed.beats_read === undefined) state.start_hands.delete(session_id)
   else state.start_hands.set(session_id, handed.beats_read)
   return handed.line
+}
+
+/** The crew's state this member's turn is handed (martha#984): the pane's own reading, with no processes to ask with. */
+async function theCrewStateOf(places: CrewToolPlaces): Promise<TheStartLine | null> {
+  const settings = await theSettingsOrRefusal(places)
+  const rows = 'refused' in settings ? {} : beatsOf(places.beats, settings)
+  return theCrewStateOfATurn({ ledger: places.ledger, stores: places.stores, root: places.root, member: places.member, settings, rows, now: places.ledger.clock.now() })
 }
 
 /**

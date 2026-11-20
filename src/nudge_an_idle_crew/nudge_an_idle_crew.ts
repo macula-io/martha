@@ -103,6 +103,11 @@ export interface UnheldNudgesAsked {
   readonly receivers: readonly string[]
   /** How quiet a row must be to read offline, as the crew's nudge windows hold it. */
   readonly offline_ms: number
+  /**
+   * Whether this look keeps the clock (martha#984): the pane's look does, and a turn's look does not, because a turn reads
+   * only what is recorded and writes nothing. A turn's look reads the clock the last kept look left.
+   */
+  readonly keeps_the_clock: boolean
 }
 
 /**
@@ -118,6 +123,6 @@ export async function theUnheldNudgesFor(asked: UnheldNudgesAsked): Promise<read
   const unheld = read === undefined ? 0 : theSplitOf(read.issues, asked.members).unheld.length
   const input = { rows: asked.rows, parked: asked.parked, receivers: asked.receivers, unheld, now: asked.reader.now, offline_ms: asked.offline_ms }
   const clock = theIdleClockAfter(kept, input)
-  if (keepTheIdleClock(asked.reader.place, clock) !== undefined) return []
+  if (asked.keeps_the_clock && keepTheIdleClock(asked.reader.place, clock) !== undefined) return []
   return unheldNudges(clock, asked.backlog.idle_minutes, unheld, asked.reader.now)
 }
