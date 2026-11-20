@@ -6,9 +6,10 @@
 //
 // The state root and each project's directory are made mode 0700. Every file in them is mode 0600, written
 // whole under a staging name and renamed into place, or (the approvals) appended to. Each time it
-// is opened, the directory is refused unless it is a real directory, not a link, owned by this user and written by
-// no one else; each file is refused unless it is a regular file owned by this user that no one else may read or
-// write. A file that does not parse is refused whole, never read in part.
+// is opened, a directory that is a link, not this user's, or written by anyone else is said in one line and used
+// anyway (martha#601); each file that is not this user's own, or that others may read or write, is said in one line
+// and read or written anyway. A file that is broken — not a regular file, unreadable, or not one whole record — is
+// still refused whole, never read in part.
 //
 // A launch's own writes are one file per launch, under OWN_WRITES_PLACE (martha#162), and each file keeps one line
 // for each path that launch wrote (martha#157): a write replaces the line for its own path, so a launch that writes
@@ -141,10 +142,15 @@ function unsafeDirectory(path: string): string | undefined {
   return undefined
 }
 
-/** Makes `path` mode 0700 when it is missing, then checks it; why it may not hold state, or undefined. */
+/** Makes `path` mode 0700 when it is missing, then checks it; why it is not safe to hold state, or undefined. */
 function closedDirectory(path: string): string | undefined {
   if (fs.lstatSync(path, { throwIfNoEntry: false }) === undefined) fs.mkdirSync(path, { recursive: true, mode: STATE_DIRECTORY_MODE })
   return unsafeDirectory(path)
+}
+
+/** Tells the owner why a directory the state uses is not as safe as it should be, then it is used anyway (martha#601). */
+const noteAnUnsafeDirectory = (note: (line: string) => void, said: string, unsafe: string | undefined): void => {
+  if (unsafe !== undefined) note(`${said}: ${unsafe}.`)
 }
 
 /**
@@ -156,18 +162,21 @@ export function projectStateDirectory(state_root: string, root: string): string 
   return join(state_root, createHash('sha256').update(fs.realpathSync(root)).digest('hex'))
 }
 
-/** The state directory of the project at `root`, under `state_root`: made when missing, refused when unsafe. */
-export function openState(state_root: string, root: string): MarthaState | Refused {
+/**
+ * The state directory of the project at `root`, under `state_root`: made when missing. A directory that is a link,
+ * not this user's, or written by others is said in one line and used anyway (martha#601).
+ */
+export function openState(state_root: string, root: string, note: (line: string) => void = () => {}): MarthaState | Refused {
   const directory = projectStateDirectory(state_root, root)
-  const unsafe = closedDirectory(state_root) ?? closedDirectory(directory)
-  return unsafe === undefined ? { directory, state_root } : { refusal: `Martha keeps no state there: ${unsafe}.` }
+  noteAnUnsafeDirectory(note, 'Martha keeps state there anyway', closedDirectory(state_root) ?? closedDirectory(directory))
+  return { directory, state_root }
 }
 
-/** A directory inside the state, made mode 0700 when missing; why it may not be used, or its path. */
-export function stateSubdirectory(state: MarthaState, name: string): { readonly path: string } | Refused {
+/** A directory inside the state, made mode 0700 when missing; an unsafe one is said in one line and used (martha#601). */
+export function stateSubdirectory(state: MarthaState, name: string, note: (line: string) => void = () => {}): { readonly path: string } | Refused {
   const path = join(state.directory, name)
-  const unsafe = closedDirectory(path)
-  return unsafe === undefined ? { path } : { refusal: `Martha keeps no state there: ${unsafe}.` }
+  noteAnUnsafeDirectory(note, 'Martha keeps state there anyway', closedDirectory(path))
+  return { path }
 }
 
 /** The directory under the state root that holds each crew's place, one per repository (martha#254). */
@@ -193,27 +202,26 @@ export const CREW_ROW_PLACE = 'row'
  * directories above it are made mode 0700 and refused when they are not this user's own (the same speed bump the
  * rest of this module takes, martha#1 decision 2).
  */
-export function crewStateDirectory(state_root: string, root: string): { readonly path: string } | Refused {
+export function crewStateDirectory(state_root: string, root: string, note: (line: string) => void = () => {}): { readonly path: string } | Refused {
   const crews = join(state_root, CREWS_PLACE)
-  const unsafe = closedDirectory(state_root) ?? closedDirectory(crews)
-  if (unsafe !== undefined) return { refusal: `Martha keeps no crew state there: ${unsafe}.` }
+  noteAnUnsafeDirectory(note, 'Martha keeps crew state there anyway', closedDirectory(state_root) ?? closedDirectory(crews))
   const directory = join(crews, crewKeyOf(root))
-  const unclosed = closedDirectory(directory)
-  return unclosed === undefined ? { path: directory } : { refusal: `Martha keeps no crew state there: ${unclosed}.` }
+  noteAnUnsafeDirectory(note, 'Martha keeps crew state there anyway', closedDirectory(directory))
+  return { path: directory }
 }
 
 /** A directory inside one crew's place, made mode 0700 when missing (martha#254 R1). */
-export function crewSubdirectory(state_root: string, root: string, name: string): { readonly path: string } | Refused {
-  const crew = crewStateDirectory(state_root, root)
+export function crewSubdirectory(state_root: string, root: string, name: string, note: (line: string) => void = () => {}): { readonly path: string } | Refused {
+  const crew = crewStateDirectory(state_root, root, note)
   if ('refusal' in crew) return crew
   const inside = join(crew.path, name)
-  const unsafe = closedDirectory(inside)
-  return unsafe === undefined ? { path: inside } : { refusal: `Martha keeps no crew state there: ${unsafe}.` }
+  noteAnUnsafeDirectory(note, 'Martha keeps crew state there anyway', closedDirectory(inside))
+  return { path: inside }
 }
 
 /** The directory one crew's streams live in, `<crew>/rows`, made mode 0700 when missing (martha#254 R1). */
-export function crewRowsDirectory(state_root: string, root: string): { readonly path: string } | Refused {
-  return crewSubdirectory(state_root, root, CREW_ROWS_PLACE)
+export function crewRowsDirectory(state_root: string, root: string, note: (line: string) => void = () => {}): { readonly path: string } | Refused {
+  return crewSubdirectory(state_root, root, CREW_ROWS_PLACE, note)
 }
 
 /**
@@ -240,8 +248,12 @@ function gitCommonDirectoryOf(root: string): string {
   return fs.realpathSync(root)
 }
 
-/** A state file's text, '' when it is missing, or why it may not be read. */
-export function readStateFile(path: string): { readonly text: string } | Refused {
+/**
+ * A state file's text, '' when it is missing, or why it may not be read. A file others may write (or that is
+ * another user's) is said in one line and read anyway (martha#601); one that is not a regular file, or cannot be
+ * opened, is still refused: it is broken, not merely untrusted.
+ */
+export function readStateFile(path: string, note: (line: string) => void = () => {}): { readonly text: string } | Refused {
   let descriptor: number
   try {
     descriptor = fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
@@ -251,9 +263,11 @@ export function readStateFile(path: string): { readonly text: string } | Refused
   }
   try {
     const found = fs.fstatSync(descriptor)
-    if (!found.isFile() || found.uid !== getuid?.() || (found.mode & OPEN_TO_OTHERS) !== 0) {
-      return { refusal: `${path} is not a file only this user may read and write, so Martha does not trust it.` }
+    if (found.isFile() && (found.uid !== getuid?.() || (found.mode & OPEN_TO_OTHERS) !== 0)) {
+      note(`${path} is not a file only this user may read and write, so Martha does not trust it; reading it anyway.`)
+      return { text: fs.readFileSync(descriptor, 'utf8') }
     }
+    if (!found.isFile()) return { refusal: `${path} is not a file only this user may read and write, so Martha does not trust it.` }
     return { text: fs.readFileSync(descriptor, 'utf8') }
   } finally {
     fs.closeSync(descriptor)
@@ -279,8 +293,8 @@ const isNodeIds = (value: unknown): value is Record<string, string> =>
   !Array.isArray(value) &&
   Object.values(value).every((id) => typeof id === 'string' && NODE_ID.test(id) && id === id.toLowerCase())
 
-function readNodeIds(path: string): { readonly ids: Record<string, string> } | Refused {
-  const read = readStateFile(path)
+function readNodeIds(path: string, note: (line: string) => void): { readonly ids: Record<string, string> } | Refused {
+  const read = readStateFile(path, note)
   if ('refusal' in read) return read
   if (read.text === '') return { ids: {} }
   try {
@@ -295,9 +309,13 @@ function readNodeIds(path: string): { readonly ids: Record<string, string> } | R
  * The node id of each named member: the one kept for it, or 32 random bytes made now and kept. The owner never
  * types one. In solo mode a node id only names a member in its launch record; nothing signs with it.
  */
-export function nodeIdsFor(state: MarthaState, names: readonly string[]): { readonly ids: Readonly<Record<string, string>> } | Refused {
+export function nodeIdsFor(
+  state: MarthaState,
+  names: readonly string[],
+  note: (line: string) => void = () => {},
+): { readonly ids: Readonly<Record<string, string>> } | Refused {
   const path = join(state.directory, MEMBERS_FILE)
-  const kept = readNodeIds(path)
+  const kept = readNodeIds(path, note)
   if ('refusal' in kept) return kept
   const missing = names.filter((name) => !Object.hasOwn(kept.ids, name))
   if (missing.length === 0) return kept
@@ -351,9 +369,9 @@ function approvalOf(line: string): Approval | undefined {
 }
 
 /** Every approval the owner gave for this project, in the order given; or why the file is not trusted. */
-export function readApprovals(state: MarthaState): { readonly approvals: readonly Approval[] } | Refused {
+export function readApprovals(state: MarthaState, note: (line: string) => void = () => {}): { readonly approvals: readonly Approval[] } | Refused {
   const path = join(state.directory, APPROVALS_FILE)
-  const read = readStateFile(path)
+  const read = readStateFile(path, note)
   if ('refusal' in read) return read
   const lines = read.text.split('\n').filter((line) => line !== '')
   const approvals = lines.map(approvalOf)
@@ -369,8 +387,12 @@ const NEWLINE_BYTE = NEWLINE.charCodeAt(0)
 
 const APPEND = fs.constants.O_RDWR | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW
 
-/** A state file opened to append, or why it may not be: a link, or anything that is not a file only this user may read and write. */
-function openForAppend(path: string, what: string): { readonly descriptor: number } | Refused {
+/**
+ * A state file opened to append, or why it may not be. A file others may write (or that is another user's) is said
+ * in one line and appended to anyway (martha#601); one that is not a regular file, or cannot be opened, is still
+ * refused: it is broken, not merely untrusted.
+ */
+function openForAppend(path: string, what: string, note: (line: string) => void): { readonly descriptor: number } | Refused {
   let descriptor: number
   try {
     descriptor = fs.openSync(path, APPEND, STATE_FILE_MODE)
@@ -380,6 +402,10 @@ function openForAppend(path: string, what: string): { readonly descriptor: numbe
   }
   const found = fs.fstatSync(descriptor)
   if (found.isFile() && found.uid === getuid?.() && (found.mode & OPEN_TO_OTHERS) === 0) return { descriptor }
+  if (found.isFile()) {
+    note(`${path} is not a file only this user may read and write, so Martha does not trust it; appending anyway.`)
+    return { descriptor }
+  }
   fs.closeSync(descriptor)
   return { refusal: `${path} is not a file only this user may read and write, so Martha keeps no ${what} in it.` }
 }
@@ -406,8 +432,8 @@ function cutOffAnUnfinishedLine(descriptor: number): void {
  * here, so a short write never leaves half a record for the next read to trip over. The path is the caller's rather
  * than `state.directory` plus a name, so a caller that keeps its file elsewhere, as the own writes once did, can.
  */
-export function appendStateLine(path: string, line: string, what: string): Refused | undefined {
-  const opened = openForAppend(path, what)
+export function appendStateLine(path: string, line: string, what: string, note: (line: string) => void = () => {}): Refused | undefined {
+  const opened = openForAppend(path, what, note)
   if ('refusal' in opened) return opened
   const { descriptor } = opened
   try {
@@ -441,8 +467,8 @@ function writtenBy(write: () => number): number | string {
 }
 
 /** Keeps one more approval, as one line at the end of the file; or why it could not be kept. */
-export function appendApproval(state: MarthaState, approval: Approval): Refused | undefined {
-  return appendStateLine(join(state.directory, APPROVALS_FILE), JSON.stringify(approval), 'approval')
+export function appendApproval(state: MarthaState, approval: Approval, note: (line: string) => void = () => {}): Refused | undefined {
+  return appendStateLine(join(state.directory, APPROVALS_FILE), JSON.stringify(approval), 'approval', note)
 }
 
 /** What one own write is called in a refusal. */
@@ -451,9 +477,10 @@ const ONE_OWN_WRITE = 'own write'
 /** An own write kept under no launch at all, which is no place to keep one. */
 const NOT_UNDER_A_LAUNCH = 'An own write is kept under the launch that made it, and an empty name is not a launch.'
 
-/** The own writes' directory in this project's state, made mode 0700 when missing; or why it may not be used. */
-function ownWritesDirectory(state: MarthaState): { readonly path: string } | Refused {
-  return stateSubdirectory(state, OWN_WRITES_PLACE)
+/** The own writes' directory in this project's state, made mode 0700 when missing; an unsafe one is said and used. */
+function ownWritesDirectory(state: MarthaState, note: (line: string) => void = () => {}): { readonly path: string } {
+  const place = stateSubdirectory(state, OWN_WRITES_PLACE, note)
+  return 'path' in place ? place : { path: join(state.directory, OWN_WRITES_PLACE) }
 }
 
 /** The name one launch's own writes are kept under: never a path, and never a dot a person or git could steer with. */
@@ -516,8 +543,8 @@ function recordsOf(text: string): RecordsOfText {
  * newline the disk did not take, and dropped when the write was cut short (martha#157): it can only ever be the
  * last, so what was finished before it is read as it was.
  */
-function readOwnWritesOf(path: string, remedy: string): OwnWrites {
-  const read = readStateFile(path)
+function readOwnWritesOf(path: string, remedy: string, note: (line: string) => void): OwnWrites {
+  const read = readStateFile(path, note)
   if ('refusal' in read) return read
   const { writes, badLine } = recordsOf(read.text)
   if (badLine !== undefined) return untrusted(path, `line ${badLine} is not an ${ONE_OWN_WRITE}`, remedy)
@@ -530,8 +557,8 @@ function readOwnWritesOf(path: string, remedy: string): OwnWrites {
  * that launch's writes asks for. The file is written whole under a staging name and renamed into place, so a write
  * the disk does not take leaves the file as it was, and a file that cannot be trusted is refused, never rewritten.
  */
-function keepOwnWriteAt(path: string, write: OwnWrite, what: string): Refused | undefined {
-  const read = readStateFile(path)
+function keepOwnWriteAt(path: string, write: OwnWrite, what: string, note: (line: string) => void): Refused | undefined {
+  const read = readStateFile(path, note)
   if ('refusal' in read) return read
   const { writes, badLine } = recordsOf(read.text)
   if (badLine !== undefined) return { refusal: `${path} line ${badLine} is not an ${ONE_OWN_WRITE}, so Martha keeps no ${what} in it.` }
@@ -575,26 +602,25 @@ function keepStaged(staged: string, text: string, path: string, what: string): R
 }
 
 /** Keeps one own write in the file its launch keeps (martha#162, #157); or why it could not be kept. */
-function appendOwnWriteOf(directory: string, write: OwnWrite): string | undefined {
+function appendOwnWriteOf(directory: string, write: OwnWrite, note: (line: string) => void): string | undefined {
   const name = ownWritesFileNameOf(write.launch)
   if (name === undefined) return NOT_UNDER_A_LAUNCH
-  return keepOwnWriteAt(join(directory, name), write, ONE_OWN_WRITE)?.refusal
+  return keepOwnWriteAt(join(directory, name), write, ONE_OWN_WRITE, note)?.refusal
 }
 
 /**
  * The own writes of one launch, kept one line for each path it wrote in a file of that launch's own: the only file a
  * recheck of the launch reads, and the only one a bad line in it can refuse (martha#162, #157).
  */
-export function ownWritesKeptForLaunch(state: MarthaState, launch: string): OwnWritesStore {
-  const directory = ownWritesDirectory(state)
+export function ownWritesKeptForLaunch(state: MarthaState, launch: string, note: (line: string) => void = () => {}): OwnWritesStore {
+  const directory = ownWritesDirectory(state, note)
   const name = ownWritesFileNameOf(launch)
-  if ('refusal' in directory) return { append: () => directory.refusal, all: () => directory }
   if (name === undefined) return { append: () => NOT_UNDER_A_LAUNCH, all: () => ({ refusal: NOT_UNDER_A_LAUNCH }) }
   const path = join(directory.path, name)
   return {
     append: (write) =>
-      write.launch === launch ? keepOwnWriteAt(path, write, ONE_OWN_WRITE)?.refusal : `An own write of another launch is not kept in ${path}.`,
-    all: () => readOwnWritesOf(path, START_AGAIN),
+      write.launch === launch ? keepOwnWriteAt(path, write, ONE_OWN_WRITE, note)?.refusal : `An own write of another launch is not kept in ${path}.`,
+    all: () => readOwnWritesOf(path, START_AGAIN, note),
   }
 }
 
@@ -607,13 +633,10 @@ export function ownWritesKeptForLaunch(state: MarthaState, launch: string): OwnW
  * other launches and names the file it passed over. Nothing that launch's member wrote is an own write then, so a
  * path behind one of those writes refuses by name, and the owner can approve the tree and run.
  */
-export function ownWritesKeptForTheHistory(state: MarthaState): OwnWritesHistoryStore {
+export function ownWritesKeptForTheHistory(state: MarthaState, note: (line: string) => void = () => {}): OwnWritesHistoryStore {
   return {
-    append: (write) => {
-      const directory = ownWritesDirectory(state)
-      return 'refusal' in directory ? directory.refusal : appendOwnWriteOf(directory.path, write)
-    },
-    all: () => readOwnWritesKeptForTheHistory(state),
+    append: (write) => appendOwnWriteOf(ownWritesDirectory(state, note).path, write, note),
+    all: () => readOwnWritesKeptForTheHistory(state, note),
   }
 }
 
@@ -623,9 +646,8 @@ interface LaunchOwnWrites {
   readonly writes: readonly OwnWrite[]
 }
 
-function readOwnWritesKeptForTheHistory(state: MarthaState): OwnWritesOfTheHistory {
-  const directory = ownWritesDirectory(state)
-  if ('refusal' in directory) return directory
+function readOwnWritesKeptForTheHistory(state: MarthaState, note: (line: string) => void): OwnWritesOfTheHistory {
+  const directory = ownWritesDirectory(state, note)
   let names: string[]
   try {
     names = fs.readdirSync(directory.path)
@@ -636,7 +658,7 @@ function readOwnWritesKeptForTheHistory(state: MarthaState): OwnWritesOfTheHisto
   const unread: string[] = []
   for (const [name, launch] of names.sort().map((name) => [name, launchOfOwnWritesFileName(name)] as const)) {
     if (launch === undefined) continue
-    const read = readOwnWritesOf(join(directory.path, name), WHAT_A_SIGNED_RUN_NEEDS)
+    const read = readOwnWritesOf(join(directory.path, name), WHAT_A_SIGNED_RUN_NEEDS, note)
     if ('refusal' in read) {
       unread.push(read.refusal)
       continue
@@ -655,7 +677,6 @@ function readOwnWritesKeptForTheHistory(state: MarthaState): OwnWritesOfTheHisto
  */
 export function pruneOwnWritesOfOldLaunches(state: MarthaState): readonly string[] {
   const directory = ownWritesDirectory(state)
-  if ('refusal' in directory) return [directory.refusal]
   let names: string[]
   try {
     names = fs.readdirSync(directory.path).filter((name) => launchOfOwnWritesFileName(name) !== undefined)
