@@ -114,11 +114,17 @@ function signInStoreVariableOf(recording: RecordedHost): string {
   return recording.sign_in_store_variable
 }
 
-export function recordedHostFrom(text: string): RecordedHost {
-  const recording = JSON.parse(text) as RecordedHost
-  if (!Array.isArray(recording.provider_switch_variables) || recording.provider_switch_variables.length === 0 || recording.provider_switch_variables.some((name) => typeof name !== 'string' || name === '')) {
+/** The recorded provider switches, or a refusal when the recording holds none or a name that is not one (martha#916). */
+function providerSwitchVariablesOf(recording: RecordedHost): readonly string[] {
+  const names: unknown = recording.provider_switch_variables
+  if (!Array.isArray(names) || names.length === 0 || names.some((name) => typeof name !== 'string' || name === '')) {
     throw new Error('The recording does not hold the variables that switch the host off its own API, so which of them a member must not be given cannot be told (martha#916).')
   }
+  return names as readonly string[]
+}
+
+export function recordedHostFrom(text: string): RecordedHost {
+  const recording = JSON.parse(text) as RecordedHost
   if (!Array.isArray(recording.classic_hook_events) || recording.classic_hook_events.length === 0) {
     throw new Error("The recording does not hold the hook events the host offers a module, so which dialogs reach the owner's row cannot be told (martha#313).")
   }
@@ -134,6 +140,7 @@ export function recordedHostFrom(text: string): RecordedHost {
     throw new Error("The recording does not hold the global config file the host prefers over .claude.json, so the file the owner's user MCP servers are read from cannot be told (martha#187).")
   }
   signInStoreVariableOf(recording)
+  providerSwitchVariablesOf(recording)
   theSkillsLoaderHolds(recording)
   ruleMatchersIn(filePermissionRulesOf(recording).matcher)
   failedAgentsReportOf(recording)
