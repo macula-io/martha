@@ -163,7 +163,7 @@ test('#601 row 110: a call outside the contract is told, in one notice, which ac
   assert.equal(
     told,
     "Notice: this call pushes, and package synthetic-owner/repo#7's contract (version 3) allows handoff, land only, so push is not in it. " +
-      "The call runs; say so in your hand-off, and a landing still waits for the owner's yes.",
+      "The call runs; say so in your hand-off.",
   )
   // Both acts named when the command is both, and each of them missing is named.
   const both = theNoticeOfACallOutsideTheContract(aShellCall('git push --tags'), aContract(['handoff']))

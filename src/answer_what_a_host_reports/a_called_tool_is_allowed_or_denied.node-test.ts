@@ -311,6 +311,32 @@ test('#601 rows 110 and 112: a call past its package\'s budget and outside its c
   assert.ok(seen.steps.filter((step) => step.startsWith('told the member call-1: Notice: ')).length === 2)
 })
 
+test('#601 row 112: a member told once that its spend could not be read is still told when the spend is read and found spent', async (t) => {
+  const unreadable: ASpendInForce = { package: A_PACKAGE, version: 2, units: [], why_unreadable: 'a row the test could not read' }
+  const spent: ASpendInForce = { package: A_PACKAGE, version: 2, units: [{ unit: 'tool calls', spent: 3, limit: 3 }] }
+  const does: { spend?: ASpendInForce } = { spend: unreadable }
+  const { answers, seen } = anEntry(t, does)
+  await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })
+  const own = A_MADE_UP_HOSTS_NAMES.ownNameOf
+
+  await answers.aToolCalled(aCall({ call_id: 'call-1' }))
+  await answers.aToolCalled(aCall({ call_id: 'call-2' }))
+  does.spend = spent
+  await answers.aToolCalled(aCall({ call_id: 'call-3' }))
+  await answers.aToolCalled(aCall({ call_id: 'call-4' }))
+
+  assert.deepEqual(
+    seen.steps.filter((step) => step.startsWith('told the member ')),
+    [
+      `told the member call-1: ${String(theNoticeOfACallPastTheBudget({ tool: ITS_SHELL }, unreadable, own))}`,
+      `told the member call-3: ${String(theNoticeOfACallPastTheBudget({ tool: ITS_SHELL }, spent, own))}`,
+    ],
+  )
+  // Two different lines, each a real notice: the comparison above cannot pass on two empty or equal ones.
+  const [first, second] = [theNoticeOfACallPastTheBudget({ tool: ITS_SHELL }, unreadable, own), theNoticeOfACallPastTheBudget({ tool: ITS_SHELL }, spent, own)]
+  assert.ok(first?.startsWith('Notice: ') === true && second?.startsWith('Notice: ') === true && first !== second)
+})
+
 test('#541 2: a held end of the turn denies the call last, after the gate, and the call is not counted', async (t) => {
   const { answers, seen } = anEntry(t, { end_held_for: 'session-a' })
   await answers.aSessionStarted({ session_id: 'session-a', outcome: 'fresh' })

@@ -1,9 +1,11 @@
 // What a member is told when a call does an act its package's contract leaves out (martha#513 slice 2, martha#511).
 //
-// This was a refusal; under the owner's cut of 2026-11-20 (martha#601, rows 109-116) it is a notice. A contract stops
-// none of the three harms a refusal is kept for: a leaked key or token, lost work, or a push to main without the
-// owner's yes, and a landing still needs that yes wherever it happens. So the call runs, and the member is told in one
-// line which act the contract left out, so it can say so in its hand-off.
+// This was a refusal; under the owner's cut of 2026-11-20 (martha#601, rows 109-116) it is a notice. The crew's
+// landing tools ask for the owner's yes themselves (../land_passed_work_as_one_batch), so the contract is not what
+// stands between them and main. Said plainly: a member's own `git push` to the default branch is no landing tool, and
+// with this refusal gone nothing in Martha refuses it; the workspace guard never refuses a member's own push (owner's
+// ruling, 2026-11-17), and before the cut only a bounded contract that left `push` out stopped it. So the call runs,
+// and the member is told in one line which act the contract left out, so it can say so in its hand-off.
 //
 // A package with no contract, or one the ledger could not read back, is told nothing: there is no list to compare the
 // call with (rows 109 and 111, removed).
@@ -52,7 +54,7 @@ const theIsOrAre = (acts: readonly AContractAct[]): string => (acts.length === 1
 const theNoticeSaid = (acts: readonly AContractAct[], contract: TheContractInForce): string =>
   `Notice: this call ${theVerbsOf(acts)}, and package ${contract.package}'s contract (version ${String(contract.version)}) allows ` +
   `${theAllowedSaid(contract)}, so ${acts.join(' and ')} ${theIsOrAre(acts)} not in it. The call runs; ` +
-  'say so in your hand-off, and a landing still waits for the owner\'s yes.'
+  'say so in your hand-off.'
 
 /**
  * The notice this call gets from the package's contract, or undefined when there is none to give: no contract, an

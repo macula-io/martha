@@ -465,9 +465,13 @@ interface ANotice {
   readonly line: string | undefined
 }
 
-/** The budget's notice and the contract's for this call, each keyed by its package, version and, for a contract, acts. */
+/**
+ * The budget's notice and the contract's for this call, each keyed by its package, version and, for a contract, acts.
+ * The budget's key says which of its two notices it is, so a member told its spend could not be read is still told
+ * when the spend is read and found spent.
+ */
 function theNoticesOf(call: ACalledTool, spend: ASpendInForce | undefined, contract: TheContractHanded, own: (called: string) => string): readonly ANotice[] {
-  const budget: ANotice = { about: `budget ${spend?.package ?? ''} ${String(spend?.version)}`, line: theNoticeOfACallPastTheBudget({ tool: call.tool }, spend, own) }
+  const budget: ANotice = { about: `budget ${spend?.package ?? ''} ${String(spend?.version)} ${spend?.why_unreadable === undefined ? 'spent' : 'unreadable'}`, line: theNoticeOfACallPastTheBudget({ tool: call.tool }, spend, own) }
   if (contract === undefined) return [budget]
   const acts = theActsNotAllowed({ tool: call.tool, input: call.input }, contract, own)
   return [budget, { about: `contract ${contract.package} ${String(contract.version)} ${acts.join(',')}`, line: theNoticeOfACallOutsideTheContract({ tool: call.tool, input: call.input }, contract, own) }]
