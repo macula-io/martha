@@ -20,7 +20,9 @@ import { DECLARATION_DIRECTORY, DECLARATION_FILE, ENGINE_ENDPOINT, HOST, SOLO_ME
 import { THE_EXTENSION_A_MEMBER_KEEPS, THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { crewSubdirectory, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { THE_ROOT_OF_A_LAUNCH, THE_STORES_PERMISSIONS_KEY, theConfigFileOf, thePermissionStoreOf } from '../launch_a_goose_member/launch_a_goose_member.ts'
 import { ALREADY_ANSWERED, type AnOpenAsk } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
@@ -46,6 +48,17 @@ import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_noti
 
 const FACTS = RECORDED_GOOSE_ENGINE
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
+
+/** Where the owner's Claude Code user settings file sits in this home: the folder Claude Code reads, its settings file. */
+const ownerSettingsIn = (home: string): string => join(home, CLAUDE_FOLDER, USER_SETTINGS_FILE)
+
+/** Writes the owner's Claude Code settings, as a Claude Code member's launch reads them and an engine member's never does. */
+function writeTheOwnersSettings(home: string, settings: unknown): string {
+  const at = ownerSettingsIn(home)
+  mkdirSync(dirname(at), { recursive: true })
+  writeFileSync(at, `${JSON.stringify(settings)}\n`)
+  return at
+}
 const documents = { read: (path: string) => readFile(path, 'utf8') }
 const yes = { is_terminal: true, ask: () => Promise.resolve('yes') }
 
@@ -128,8 +141,12 @@ const THE_SESSIONS_ROW: AStandInsSessionRow = {
   },
 }
 
-/** The owner's start of the member, with the engine's path first and the key in the environment. */
-async function started(place: Place, engine: { readonly dir: string }, lines: string[], owners_lines?: NodeJS.ReadableStream): Promise<MemberStarted> {
+/**
+ * The owner's start of the member, with the engine's path first and the key in the environment. `owners_lines` types into
+ * the member's terminal (martha#927 part 2), and `environment` adds a variable to the launch's own (row 174's case reads
+ * a CLAUDE_CONFIG_DIR that cannot be resolved).
+ */
+async function started(place: Place, engine: { readonly dir: string }, lines: string[], owners_lines?: NodeJS.ReadableStream, environment: Readonly<Record<string, string>> = {}): Promise<MemberStarted> {
   await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   const places = launcherPlacesOf(place.state, place.relay_root, place.root)
   assert.ok('rows' in places, 'refusal' in places ? places.refusal : '')
@@ -141,7 +158,7 @@ async function started(place: Place, engine: { readonly dir: string }, lines: st
     is_terminal: true,
     state: place.state,
     places,
-    inherited: { PATH: `${engine.dir}:${process.env['PATH'] ?? ''}`, HOME: place.home, [A_KEY_VARIABLE]: 'a-key-a-test-names' },
+    inherited: { PATH: `${engine.dir}:${process.env['PATH'] ?? ''}`, HOME: place.home, [A_KEY_VARIABLE]: 'a-key-a-test-names', ...environment },
     stdio: 'ignore',
     documents,
     initial_prompt: THE_START_PROMPT,
@@ -189,6 +206,25 @@ test('#541 package A: a declaration naming the engine starts through the table; 
   const prompts = requests.filter((request) => request.method === 'session/prompt')
   assert.equal(prompts.length, 1)
   assert.ok(theTextOf(prompts[0]?.params ?? {}).endsWith(THE_START_PROMPT), theTextOf(prompts[0]?.params ?? {}))
+})
+
+test("#601 row 174: an owner's Claude Code settings that turn hooks off do not refuse an engine member's start: its session opens and the start prompt reaches its engine (mutant: the settings watch put back in the start)", async (t) => {
+  const place = aPlace(t)
+  writeTheOwnersSettings(place.home, { disableAllHooks: true })
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  await untilTheEngineHeard(engine.heard, 'session/prompt')
+})
+
+test("#601 row 174: the watch is gone but a CLAUDE_CONFIG_DIR that cannot be resolved still refuses an engine member's start, since it places the owner's whole Claude config folder (mutant: that refusal dropped with the watch)", async (t) => {
+  const place = aPlace(t)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const start = await started(place, engine, [], undefined, { CLAUDE_CONFIG_DIR: 'a-folder-not-absolute' })
+  assert.equal(start.started, false, 'an engine member was started with a CLAUDE_CONFIG_DIR that cannot be resolved')
+  assert.match(start.started ? '' : start.refusal, /CLAUDE_CONFIG_DIR is "a-folder-not-absolute", not an absolute directory/)
+  assert.equal(existsSync(engine.heard), false, 'no engine was started')
 })
 
 for (const [mode, says] of [['auto', 'auto'], [undefined, 'undefined']] as const) {
@@ -554,4 +590,19 @@ test('#931 C: an engine member\'s owner\'s screen is told of the notices its cre
   assert.notDeepEqual(declared, OWNER_NOTICES_WHEN_UNNAMED.show)
   const start = { member: MEMBER, places: { dashboard: '/the-rows' }, settings: { house_rules: { owner_bell: undefined }, owner_notices: { show: declared } }, stdio: 'pipe' } as unknown as Parameters<typeof theScreenAnEngineStartSees>[0]
   assert.deepEqual(theScreenAnEngineStartSees(start, () => false).shown_notices, declared, 'the owner\'s screen is not told of the crew\'s declared notices')
+})
+
+test("#601 row 174: a write to the owner's Claude Code settings while the ask waits stops nothing: the crew's next message still reaches the engine (mutant: the settings watch put back in the re-check)", async (t) => {
+  const place = aPlace(t)
+  readingEverySecond(place)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[A_SHELL_CALL], [{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  const ask = await untilAnAskIsOpen(place)
+  writeTheOwnersSettings(place.home, { disableAllHooks: true })
+  assert.equal((await theOwnerAnswers(place, ask.key, 'allow')).code, 0)
+  await appendToTheChannel(theChannelOf(place), { from: A_CREW_MATE, to: [MEMBER], text: A_CREW_MESSAGE, sent_at: Date.now() })
+  const prompts = await untilTheEngineHeardPrompts(engine.heard, 2)
+  assert.ok(theTextOf(prompts[1]?.params ?? {}).includes(A_CREW_MESSAGE), theTextOf(prompts[1]?.params ?? {}))
 })

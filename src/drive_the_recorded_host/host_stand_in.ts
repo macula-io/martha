@@ -12,6 +12,7 @@ import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, RECORDED_HO
 import { NOT_MATCHED_MARK } from '../claude_code_host/file_permission_rules.ts'
 import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RELAY_MANIFEST } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { SIGN_IN_QUESTION_ARGS, SIGNED_IN_BY_SUBSCRIPTION } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 
 /** The folder a stand-in's session init reports for the owner's user output styles, unless a test gives another (#154). */
 export const STAND_IN_OUTPUT_STYLES_DIR = `/home/probe/${CLAUDE_FOLDER}/output-styles`
@@ -61,6 +62,8 @@ export interface HostAnswers {
    * own rules.
    */
   readonly namesAnOwnersTwinDead?: boolean
+  /** What `auth status --json` prints (martha#916); a subscription sign-in, SIGNED_IN_ANSWER, unless given. */
+  readonly signInAnswer?: string
 }
 
 /** The key that turns hooks off from any settings file, as the recording spells it: the stand-in reads it, never types it. */
@@ -117,6 +120,13 @@ function namesAnOwnersTwinDead(): string {
 /** The lines a host that complains about the owner's dead rule says before it answers, or nothing when it says nothing. */
 const anOwnersDeadRule = (answers: HostAnswers): string => (answers.namesAnOwnersTwinDead === true ? `${namesAnOwnersTwinDead()}; ` : '')
 
+/** The answer of a host signed in on a subscription to the sign-in question (martha#916), in the shape 2.1.329 prints. */
+export const SIGNED_IN_ANSWER = JSON.stringify({ loggedIn: true, authMethod: SIGNED_IN_BY_SUBSCRIPTION })
+
+/** The line that answers the sign-in question (martha#916): SIGNED_IN_ANSWER unless the test gives another. */
+const signInLine = (answers: HostAnswers): string =>
+  `if [ "$1" = ${SIGN_IN_QUESTION_ARGS[0]} ]; then printf '%s\\n' ${quoted(answers.signInAnswer ?? SIGNED_IN_ANSWER)}; exit 0; fi`
+
 /** The shell lines a stand-in `claude` starts with, right after its #! line. */
 export function hostAnswers(answers: HostAnswers = {}): string[] {
   const report = answers.report ?? LOADS_THE_RELAY
@@ -128,6 +138,9 @@ export function hostAnswers(answers: HostAnswers = {}): string[] {
   const deadRule = aDeadRule(answers)
   const ownersDeadRule = anOwnersDeadRule(answers)
   return [
+    // The sign-in question comes before the calls are kept (martha#916), so a test that counts the host's runs counts
+    // the ones it counted before a launch asked it.
+    signInLine(answers),
     ...(answers.callsFile === undefined ? [] : [`printf '%s %s\\n' "$0" "$1" >> ${quoted(answers.callsFile)}`]),
     ...(answers.validatedFile === undefined
       ? []
