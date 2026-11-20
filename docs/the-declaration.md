@@ -30,8 +30,8 @@ page does not name.
 | `providers` | no | The providers a profile may name (below). | none |
 | `profiles` | no | Named model, harness and provider sets a member may name (below). | none |
 | `clock_zone` | no | The time zone the crew's clock reads in. Checked as text; read by no part of Martha today. | none |
-| `github` | no | GitHub limits (below). Read by no part of Martha today. | none |
-| `transcripts` | no | How much of each launch's transcript is kept (below). Read by no part of Martha today. | none |
+| `github` | no | How the crew spends its GitHub allowance (below). | the values below |
+| `transcripts` | no | How many launches' transcripts are kept, and how large (below). | the values below |
 | `owner_notices` | no | Which of the host's notices reach the owner (below). Read by no part of Martha today. | none |
 
 ## `members[]`
@@ -166,16 +166,18 @@ One entry per profile, by a name the crew picks.
 
 ## `github`
 
-| Field | Required | What it holds |
+| Field | What it holds | When left out |
 |---|---|---|
-| `budget_floor` | no | A whole number, 0 or more. |
+| `budget_floor` | The calls GitHub says are left at or below which the crew makes no more until the window resets: a whole number, 0 or more. | 500 |
 
 ## `transcripts`
 
-| Field | Required | What it holds |
+Martha keeps each ended launch's transcripts, redacted, so the owner can read what a member's session did.
+
+| Field | What it holds | When left out |
 |---|---|---|
-| `launches_kept` | no | A whole number, at least 1. |
-| `megabytes_kept` | no | A whole number, at least 1. |
+| `launches_kept` | How many launches' transcripts are kept, newest first; older launches are removed. A whole number, at least 1. | 64 |
+| `megabytes_kept` | The most one transcript, and one launch's transcripts together, may hold, in whole megabytes (at least 1). A file past it is kept as one line naming the bound. | 16 |
 
 ## `owner_notices`
 

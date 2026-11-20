@@ -82,11 +82,13 @@ import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_ru
 import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { MINUTE_MS, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { CLAUDE_CODE_BARE_MODE_VARIABLE, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE, SKILLS_KIND } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { theTranscriptBoundsOf, whatALaunchKeeps } from './launch_a_claude_code_member.ts'
+import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.ts'
 
 // --- the run this file is (martha#559) --------------------------------------------
 
@@ -4671,4 +4673,14 @@ test('T7, T9a: an inherited host skill catalog and an inherited bare mode never 
   assert.equal(Object.hasOwn(env, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE), false, 'the host skill catalog is dropped')
   started.stop('the test is over')
   await started.stopped
+})
+
+test('#931 B: a launch keeps its member\'s transcripts to its crew\'s declared bounds, and to the defaults with no crew', () => {
+  const declared = { launches_kept: 2, megabytes_kept: 1 }
+  const crew = { transcripts: declared } as unknown as CrewSettings
+  assert.deepEqual(theTranscriptBoundsOf({ crew_settings: crew }), declared)
+  assert.deepEqual(theTranscriptBoundsOf({}), TRANSCRIPTS_WHEN_UNNAMED)
+  const where = { places: { state_root: '/state' }, place: { launch_dir: '/project' } } as unknown as Parameters<typeof whatALaunchKeeps>[0]
+  assert.deepEqual(whatALaunchKeeps({ ...where, crew_settings: crew }, '/the-members-folder', '/snapshots/launch-7', 'the-key').transcripts, declared, 'the launch\'s end does not keep to the crew\'s declared bounds')
+  assert.deepEqual(whatALaunchKeeps(where, '/the-members-folder', '/snapshots/launch-7', 'the-key').transcripts, TRANSCRIPTS_WHEN_UNNAMED, 'a launch with no crew does not keep to the defaults')
 })

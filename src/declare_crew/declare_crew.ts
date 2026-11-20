@@ -25,6 +25,8 @@ import { hostRuns, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 
 export type { ModelVocabulary } from './a_hosts_model_vocabulary.ts'
 import { memberNameKey } from './member_names.ts'
+import { GITHUB, GITHUB_KEYS, githubOf, type CrewGithub } from './the_crews_github.ts'
+import { TRANSCRIPTS, TRANSCRIPTS_KEYS, transcriptsOf, type CrewTranscripts } from './the_crews_transcripts.ts'
 import { THRESHOLDS, THRESHOLDS_KEYS, thresholdsOf, type CrewThresholds } from './the_crews_thresholds.ts'
 import { PROFILE, PROFILE_BLOCK_FIELDS, PROFILE_TOP_LEVEL_KEYS, profilesOf, theProfileOfAMember, type TheProfiles } from './the_crews_profiles.ts'
 import { ENGINE_ENDPOINT, ENGINE_ENDPOINT_OPTIONAL_KEYS, ENGINE_ENDPOINT_REQUIRED_KEYS, theEnginesEndpointOf, type EngineEndpoint } from './the_engines_endpoint.ts'
@@ -408,6 +410,10 @@ export interface CrewSettings {
   readonly engine_endpoint: EngineEndpoint | null
   /** The crew's thresholds (martha#931 A): see ./the_crews_thresholds; each field the declaration leaves out reads today's value. */
   readonly thresholds: CrewThresholds
+  /** The crew's GitHub block (martha#931 B): see ./the_crews_github. */
+  readonly github: CrewGithub
+  /** The crew's transcript bounds (martha#931 B): see ./the_crews_transcripts. */
+  readonly transcripts: CrewTranscripts
   /** The crew's name and the terminal its members open in (martha#932): see ./the_crews_workspace's whereTheCrewOpens. */
   readonly opens: WhereTheCrewOpens
 }
@@ -425,7 +431,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS, ...WORKSPACE_TOP_LEVEL_KEYS, ...PROFILE_TOP_LEVEL_KEYS] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS, GITHUB, TRANSCRIPTS, ...WORKSPACE_TOP_LEVEL_KEYS, ...PROFILE_TOP_LEVEL_KEYS] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 /** The member key `martha up` reads to leave a declared member down (martha#511). */
 export const PARKED = 'parked'
@@ -469,6 +475,8 @@ export const DECLARATION_FIELDS: Readonly<Record<string, readonly string[]>> = {
   [BACKLOG]: BACKLOG_KEYS,
   [ENGINE_ENDPOINT]: [...ENGINE_ENDPOINT_REQUIRED_KEYS, ...ENGINE_ENDPOINT_OPTIONAL_KEYS],
   [THRESHOLDS]: THRESHOLDS_KEYS,
+  [GITHUB]: GITHUB_KEYS,
+  [TRANSCRIPTS]: TRANSCRIPTS_KEYS,
   ...WORKSPACE_BLOCK_FIELDS,
   ...PROFILE_BLOCK_FIELDS,
 }
@@ -610,6 +618,8 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
     channel_read_seconds: channelReadSecondsOf(refuse, value['channel_read_seconds']),
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
     thresholds: thresholdsOf(value[THRESHOLDS], (field, why) => refuse.at(field, why)),
+    github: githubOf(value[GITHUB], (field, why) => refuse.at(field, why)),
+    transcripts: transcriptsOf(value[TRANSCRIPTS], (field, why) => refuse.at(field, why)),
     backlog: backlogOf(refuse, value[BACKLOG]),
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
     engine_endpoint: theEnginesEndpointOf(said, value, profiles),
