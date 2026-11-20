@@ -1,9 +1,11 @@
 // An owner's own act, refused when it is typed from inside a member (martha#619).
 //
-// `martha approve`, `release`, `bells <member> muted|heard`, `pin-key`, `keep-shapes` and `start` are the owner's
-// alone, and each already asks for a terminal. A member's shell can make one (`script -qc`), so this asks two more
-// things before the act is made: whether the process carries a member's own environment, and whether a member's host,
-// as its launch record names it, is among the processes above this one. Either is a refusal naming the member.
+// Of the owner's acts, one is still refused here: `martha answer` (martha#601). A member answering the owner's ask is
+// a push to main without the owner's yes, and that is the one harm this keeps. The rest — `approve`, `release`,
+// `bells <member> muted|heard`, `pin-key`, `keep-shapes`, `start` and the others — go ahead where a member types them,
+// each already asking for its own terminal. So this asks two things about an `answer`: whether the process carries a
+// member's own environment, and whether a member's host, as its launch record names it, is among the processes above
+// this one. Either is a refusal naming the member.
 //
 // What this is, said plainly (Raf, 2026-11-18, "Speed bumps, said plainly"): a member runs as the owner's own OS user.
 // Martha refuses an owner-only act typed from inside a member, and records where every owner-only act was typed, but
@@ -45,9 +47,16 @@ export const NOT_A_WALL =
 
 const theOwnersOwn = (act: string): string => `martha ${act} is the owner's own act`
 
+/** The one owner's act still refused from inside a member (martha#601): a member answering the owner's ask is a push to main without the yes. */
+const THE_ANSWER = 'answer'
+
+/** Whether this act is still refused when it runs inside a member; only the act above is (martha#601). */
+export const isStillRefusedFromInsideAMember = (act: string): boolean => act === THE_ANSWER
+
 /** Why `act` is not made here, inside a member; or undefined when nothing this can see says it is. */
 export function whyAnOwnersActIsRefusedInsideAMember(where: WhereAnOwnersActRuns): string | undefined {
   const { act, env, member_marks: marks } = where
+  if (!isStillRefusedFromInsideAMember(act)) return undefined
   const socket = env[marks.relay_socket_variable]
   if (socket !== undefined && socket !== '') {
     return `${theOwnersOwn(act)}, and this runs with a member's relay socket in its environment (${marks.relay_socket_variable}): type it in your own terminal, not a member's. ${NOT_A_WALL}`

@@ -20,16 +20,18 @@ import {
   keepTheBudget,
   keepTheGreen,
   readTheRunsOn,
+  readTheRun,
   theBudgetIn,
   theEndOfTheWait,
   theGreenRecorded,
   theReadsOn,
+  theRunKey,
   theWaitOn,
   type ARun,
   type TheBudget,
   type TheGithubSpender,
 } from '../spend_the_github_budget/spend_the_github_budget.ts'
-import { clockOf } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 import type { CrewPlace } from '../host_contract/host_contract.ts'
 
 /** The tool a member calls to read the CI on a sha. */
@@ -38,17 +40,32 @@ export const WAIT_FOR_CI = 'wait_for_ci'
 /** A commit, as a wait names one: the forty hex digits of a sha. */
 export const A_COMMIT = /^[0-9a-f]{40}$/
 
+/** A run id, as a wait names one: the digits GitHub gave it (martha#976). */
+export const A_RUN_ID = /^\d+$/
+
 /** What `wait_for_ci` says it is for, as the launcher answers the mod's ask. */
 export const WAIT_FOR_CI_DESCRIPTION =
-  'Reads the CI runs on one sha of a repository, through the crew’s own GitHub budget. Answers green (with the runs' +
-  ' seen, and whether the answer was already kept for this crew), red, still running with the moment another read may' +
-  ' be spent, or that this wait has spent its reads. It never holds the turn for the length of a run.'
+  'Reads the CI runs on one sha of a repository, or one run by its id, through the crew’s own GitHub budget. Answers' +
+  ' green (with the runs seen, and whether the answer was already kept for this crew), red, still running with the' +
+  ' moment another read may be spent, or that this wait has spent its reads. It never holds the turn for the length of' +
+  ' a run.'
 
-/** What a wait was asked for: the repository, and the sha whose runs count. */
-export interface TheCiWait {
-  readonly repo: string
-  readonly sha: string
-}
+/**
+ * What a wait was asked for: the repository, and the commit whose runs count or the one run named instead (martha#976).
+ * Exactly one of the two is set; `theCiWaitACallNames` refuses a call that names both, and one that names neither.
+ */
+export type TheCiWait =
+  | { readonly repo: string; readonly sha: string; readonly run_id?: undefined }
+  | { readonly repo: string; readonly run_id: number; readonly sha?: undefined }
+
+/**
+ * The key a wait is filed under (martha#976): the commit itself for a wait on a commit, and `run-<id>` for a wait on one
+ * run, which is the key crew-code files its own record under, so the budget keeps the two forms apart.
+ */
+const theKeyOf = (wait: TheCiWait): string => (typeof wait.sha === 'string' ? wait.sha : theRunKey(wait.run_id))
+
+/** How a wait names itself in the words a member reads: a commit's first seven, or the run's own id (martha#976). */
+export const theNameOf = (wait: TheCiWait): string => (typeof wait.sha === 'string' ? wait.sha.slice(0, 7) : `run ${String(wait.run_id)}`)
 
 /** What one read of the CI came to. */
 export type CiOutcome =
@@ -74,58 +91,60 @@ export async function waitForCi(spender: TheGithubSpender, wait: TheCiWait): Pro
   if ('refusal' in place) return { kind: 'out_of_budget', refusal: place.refusal }
   const held = theBudgetIn(place)
   if ('refusal' in held) return { kind: 'out_of_budget', refusal: held.refusal }
-  const green = theGreenRecorded(held, wait.sha)
+  const key = theKeyOf(wait)
+  const green = theGreenRecorded(held, key)
   if (green !== undefined) return { kind: 'green', run_ids: green.run_ids, reused: true }
-  if (theReadsOn(held, wait.sha) >= CALLS_PER_WAIT) return { kind: 'over_its_reads', refusal: overItsReads(wait.sha) }
-  const read = await readTheRunsOn(spender, { repo: wait.repo, sha: wait.sha })
+  if (theReadsOn(held, key) >= CALLS_PER_WAIT) return { kind: 'over_its_reads', refusal: overItsReads(theNameOf(wait)) }
+  const read = typeof wait.sha === 'string' ? await readTheRunsOn(spender, { repo: wait.repo, sha: wait.sha }) : await readTheRun(spender, { repo: wait.repo, run_id: wait.run_id })
   if (read.kind === 'out_of_budget') return read
   const made = theBudgetIn(place)
-  const counted = afterAReadOf('refusal' in made ? held : made, wait.sha)
+  const counted = afterAReadOf('refusal' in made ? held : made, key)
   keepTheBudget(place, counted)
-  return read.kind === 'cannot_tell' ? read : theAnswerTo(place, counted, wait.sha, read.runs, spender.clock.now())
+  return read.kind === 'cannot_tell' ? read : theAnswerTo(place, counted, key, read.runs, spender.clock.now())
 }
 
 /** The answer one read leaves: green kept for the crew, the wait over in either case, or the moment to read again. */
 function theAnswerTo(
   place: CrewPlace,
   budget: TheBudget,
-  sha: string,
+  key: string,
   runs: readonly ARun[],
   now: number,
 ): CiOutcome {
   const notEnded = runs.filter((run) => run.status !== 'completed')
   if (runs.length === 0 || notEnded.length > 0) {
-    const wait = theWaitOn(budget, sha)
+    const wait = theWaitOn(budget, key)
     return { kind: 'still_running', ended: runs, read_again_at: wait.last_at + wait.wait_ms }
   }
   const notGreen = runs.filter((run) => run.conclusion !== 'success')
   if (notGreen.length > 0) {
-    keepTheBudget(place, theEndOfTheWait(budget, sha))
+    keepTheBudget(place, theEndOfTheWait(budget, key))
     return { kind: 'red', ended: notGreen }
   }
   const run_ids = runs.map((run) => run.id)
-  keepTheBudget(place, keepTheGreen(budget, sha, run_ids, now))
+  keepTheBudget(place, keepTheGreen(budget, key, run_ids, now))
   return { kind: 'green', run_ids, reused: false }
 }
 
 /** Why a wait may not read again: it has spent the reads one wait is given, and something else must change first. */
-const overItsReads = (sha: string): string =>
-  `this wait on ${sha.slice(0, 7)} has spent the ${String(CALLS_PER_WAIT)} reads one wait is given; ask again once the branch or the run has changed.`
+const overItsReads = (name: string): string =>
+  `this wait on ${name} has spent the ${String(CALLS_PER_WAIT)} reads one wait is given; ask again once the branch or the run has changed.`
 
 /**
  * What a wait answers, in the words a member reads. A green names how many runs it saw and whether the crew already
- * knew it; a red names the runs that did not pass; a wait still running names the moment its next read may be spent.
+ * knew it; a red names the runs that did not pass; a wait still running names the moment its next read may be spent, in
+ * the crew's clock_zone (martha#931 C). A wait on one run names that run, by its id (martha#976).
  */
-export function theAnswerOf(outcome: CiOutcome, sha: string): string {
+export function theAnswerOf(outcome: CiOutcome, name: string, zone: string): string {
   if (outcome.kind === 'green') {
     const known = outcome.reused ? ' (already kept for this crew, so no call was made)' : ''
-    return `green: ${String(outcome.run_ids.length)} run(s) on ${sha.slice(0, 7)} all succeeded${known}.`
+    return `green: ${String(outcome.run_ids.length)} run(s) on ${name} all succeeded${known}.`
   }
   if (outcome.kind === 'red') return `red: ${outcome.ended.map(theRunEnd).join('; ')}.`
   if (outcome.kind === 'still_running') {
     const ends = outcome.ended.map(theRunEnd).join('; ')
     const waiting = ends === '' ? 'no run answers to it yet' : ends
-    return `still running: ${waiting}. Another read may be spent at ${clockOf(outcome.read_again_at)}.`
+    return `still running: ${waiting}. Another read may be spent at ${theClockOf(outcome.read_again_at, zone)}.`
   }
   return outcome.refusal
 }

@@ -3,8 +3,8 @@
 // This exists so a default branch moves only on a yes Martha recorded, never on a member's word that it heard one. The
 // declaration's table says who may approve a landing (APPROVE_LANDING, read as every act is read: an act the table leaves
 // out is the owner's alone). When it grants the act to the caller's role, the caller's own call is the yes. When it grants
-// it to the owner, the yes is an ask the owner said yes to in the owner's ask queue (../queue_the_owners_asks), the same
-// record an unbounded contract stands on (martha#513). Otherwise nobody the call can name may approve, and it is refused.
+// it to the owner, the yes is an ask the owner said yes to in the owner's ask queue (../queue_the_owners_asks).
+// Otherwise nobody the call can name may approve, and it is refused.
 //
 // An owner's yes counts only for the landing it was asked about: the ask's question must be, exactly, the question this
 // slice builds for the landing (the repository, its default branch, the full tip and every package). `verify_range`
@@ -103,6 +103,9 @@ export interface TheYesAsked {
 /** What the yes came to: what the landing stands on, as its ledger rows say it; or why there is none. */
 export type TheYes = { readonly stood_on: string } | { readonly refused: string }
 
+/** What a landing on the owner's yes to ask `ask` says it stood on: its ledger note ends with these words (martha#639). */
+export const theOwnersYesTo = (ask: number): string => `the owner's yes to ask ${String(ask)}`
+
 /**
  * The yes this landing stands on, or why it has none. Reads the owner's asks only when the table grants the act to the
  * owner and not to the caller's role; writes nothing.
@@ -132,11 +135,9 @@ async function theOwnersYes(host: LedgerHost, asked: TheYesAsked): Promise<TheYe
     return { refused: `the owner's asks could not be read, so no yes can be found: ${error instanceof Error ? error.message : String(error)}. Nothing was pushed.` }
   }
   const answered = said_yes.find((ask) => ask.id === asked.owner_yes)
-  if (answered === undefined) {
-    return { refused: `the owner has not said yes to ask ${String(asked.owner_yes)}, and only the owner's yes lands on this crew. Nothing was pushed.` }
-  }
+  if (answered === undefined) return { refused: `the owner has not said yes to ask ${String(asked.owner_yes)}, and only the owner's yes lands on this crew. Nothing was pushed.` }
   if (answered.question !== question) {
     return { refused: `the owner said yes to ask ${String(asked.owner_yes)}, which asked ${JSON.stringify(answered.question)}; this landing asks ${JSON.stringify(question)}, and a yes counts only for the landing it was asked about. Nothing was pushed.` }
   }
-  return { stood_on: `the owner's yes to ask ${String(asked.owner_yes)}` }
+  return { stood_on: theOwnersYesTo(asked.owner_yes) }
 }

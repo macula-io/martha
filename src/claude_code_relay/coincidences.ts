@@ -1,7 +1,7 @@
 // The coincidences of claude_code_relay: words its own files spell like a constant held elsewhere, meaning something
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { REFRESH_THIS_SESSION, THE_MODEL_REPORT_ASK, THE_TOOLS_ASK } from '../a_crews_tools/a_crews_tools.ts'
 import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { CARRY_THE_END } from '../end_a_running_turn/end_the_running_turn.ts'
@@ -19,9 +19,11 @@ import { PARK_A_MEMBER, WAKE_A_MEMBER } from '../park_and_wake_a_member/the_park
 import { LIST_ASKS, QUEUE_ASK, SETTLE_ASKS, TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { CARRY_A_MODEL, CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_member/the_refresh_flow.ts'
+import { THE_BUDGET_ASK } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import { WHO_IS_FREE } from '../see_who_is_free/who_is_free_tool.ts'
 import { UNHELD_WORK } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_message_became.ts'
 import { RESTART_A_MEMBER } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
@@ -45,6 +47,7 @@ export const COINCIDENCES: readonly Exception[] = [
   // value, so the value is written as the constant that holds it: a literal here
   // would be the same copy the rule exists to catch, in the very file that excuses it.
   { value: THE_REFRESH_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
+  { value: THE_BUDGET_ASK, file: 'claude_code_relay/hooks/crew.tsx', reason: `the ask this mod puts to the launcher when the owner types /crew-budget (martha#990); ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   { value: WRITE_MY_HANDOVER_TOOL, file: 'claude_code_relay/hooks/crew.tsx', reason: `the name of a tool this mod answers and registers; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
   // The five landing tools' hooks (martha#256): a hooks module runs with no Node and may import only its own files,
   // so the slice's own constant is not reachable there, and the host's plugin validator refuses a tool named by
@@ -61,6 +64,12 @@ export const COINCIDENCES: readonly Exception[] = [
   // by a literal for the same reason as the entries above.
   { value: KEEP_THE_PACKAGE_CONTRACT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: SAY_TO_THE_CREW, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  // The owner's `/crew` (martha#927) asks the launcher under the tool's own name, as the model's call of it does.
+  { value: SAY_TO_THE_CREW, file: 'claude_code_relay/hooks/crew_command.ts', reason: `the tool /crew sends through; ${A_HOOKS_MODULE_CANNOT_IMPORT}` },
+  // The command's name is the crew's own word, which the channel also uses for "every member": the same spelling, and
+  // not the same thing. A send from /crew names one member, never the whole crew.
+  { value: THE_WHOLE_CREW, file: 'claude_code_relay/hooks/crew_command.ts', reason: 'the /crew command the owner types (martha#927), not the channel\'s word for every member' },
+  { value: THE_WHOLE_CREW, file: 'claude_code_relay/hooks/crew.tsx', reason: 'the name of the /crew command the owner types (martha#927), not the channel\'s word for every member' },
   // The release act (#693 r=2): the refusal names it and the mod answers it, each by a literal.
   { value: THE_RELEASE_ACT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: READ_THE_RECEIPTS, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },

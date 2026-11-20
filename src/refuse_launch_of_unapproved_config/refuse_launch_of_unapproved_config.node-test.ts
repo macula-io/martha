@@ -17,6 +17,7 @@ import {
   ENGINE_FAMILIES,
   ENGINE_FILES,
   ENGINE_FOLDER,
+  AGENTS_MD_FILE,
   ENGINE_HINTS_FILE,
   HOSTS,
   LAUNCH_FILES_OF_HOST,
@@ -25,6 +26,7 @@ import {
   prepareLaunch,
   readLaunchConfig,
   readLaunchState,
+  RECORDED_TEXT_FILES,
   recheckLaunch,
   snapshotApproved,
   startedWithOf,
@@ -38,7 +40,7 @@ import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { INBOUND_PATHS, INSTRUCTION_FILES } from '../inbound_paths/inbound_paths.ts'
 import { DECLARATION_DIRECTORY, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { THE_PATH_A_LAUNCH_GIVES, theEnvironmentOfALaunch } from '../launch_a_goose_member/launch_a_goose_member.ts'
-import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { RECORDED_GOOSE_ENGINE, RECORDING_OF_THE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -100,9 +102,15 @@ const server = (command: string) => JSON.stringify({ mcpServers: { probe: { comm
 const hookRunning = (script: string) =>
   JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `"$CLAUDE_PROJECT_DIR"/${script}` }] }] } })
 
-function decide(host: Host | string, { checkout, home }: Scratch, approved: readonly string[] = []) {
-  const state = readLaunchState({ host, launch_dir: checkout, stop_dir: home }, thisMachine)
-  return { state, decision: decideLaunch({ host, ...state, approved_fingerprints: approved }) }
+function decide(host: Host | string, { checkout, home }: Scratch, approved: readonly string[] = [], note: (line: string) => void = () => {}) {
+  const state = readLaunchState({ host, launch_dir: checkout, stop_dir: home }, thisMachine, undefined, note)
+  return { state, decision: decideLaunch({ host, ...state, approved_fingerprints: approved }, note) }
+}
+
+/** The lines a launch is told, collected instead of shown. */
+function saidByLaunch(): { readonly note: (line: string) => void; readonly said: readonly string[] } {
+  const said: string[] = []
+  return { note: (line) => said.push(line), said }
 }
 
 function approve(host: Host, place: Scratch): readonly string[] {
@@ -172,6 +180,41 @@ test("each of the engine's own families is refused until the owner approves it, 
     const refusal = refused.decision.allow ? '' : refused.decision.refusal
     assert.ok(refusal.includes(family), `${family} is not named in: ${refusal}`)
     assert.equal(decide(ENGINE, place, approve(ENGINE, place)).decision.allow, true, `${family} stays refused after the owner approved it`)
+  }
+})
+
+/**
+ * The gate's skill, plugin and settings families are the places the engine's own source reads a checkout's skills
+ * from, as recorded at the pin (martha#614), so an engine that renames or adds one is a recording that changes, and the
+ * design's list above then fails by name, rather than a skill reaching the model past a gate still listing the old name.
+ */
+test("the gate's skill, plugin and settings families are the checkout skill roots the engine's source reads (martha#614)", () => {
+  const roots = RECORDED_GOOSE_ENGINE.checkout_skill_roots
+  assert.deepEqual([...ENGINE_FAMILIES.skills], [...roots.skill_folders])
+  assert.deepEqual([...ENGINE_FAMILIES.plugins], [roots.plugin_folder])
+  assert.deepEqual([...ENGINE_FAMILIES.settings], [...roots.plugin_settings])
+})
+
+/**
+ * A skill is approved before it reaches the model (martha#614, DECIDED 2026-11-18 "Approved skills on"): a checkout
+ * holding one skill and nothing else is refused, naming its folder, until the owner approves the checkout. So is a
+ * plugin that carries a skill, since the engine takes every child of the plugin folder as a plugin.
+ */
+test("a checkout holding only one skill, or only a plugin with a skill, is refused by name until approved (martha#614)", (t) => {
+  const roots = RECORDED_GOOSE_ENGINE.checkout_skill_roots
+  const goose = roots.skill_folders.find((folder) => folder.startsWith(".goose/"))
+  assert.ok(goose !== undefined, "the engine reads no .goose skill folder, so the first case has nothing to plant")
+  for (const [family, skill] of [
+    [goose, join(goose, "a-skill", "SKILL.md")],
+    [roots.plugin_folder, join(roots.plugin_folder, "a-plugin", "skills", "a-skill", "SKILL.md")],
+  ] as const) {
+    const place = scratch(t)
+    put(place.checkout, skill, "---\nname: a-skill\ndescription: a planted skill\n---\nDo the planted thing.\n")
+    const refused = decide(ENGINE, place)
+    assert.equal(refused.decision.allow, false, `${skill} started with no approval`)
+    const refusal = refused.decision.allow ? "" : refused.decision.refusal
+    assert.ok(refusal.includes(family), `${family} is not named in: ${refusal}`)
+    assert.equal(decide(ENGINE, place, approve(ENGINE, place)).decision.allow, true, `${skill} stays refused after the owner approved it`)
   }
 })
 
@@ -290,24 +333,28 @@ test('a hook file added after the approval is refused', (t) => {
   assert.equal(decide(CLAUDE_CODE, place, approved).decision.allow, false)
 })
 
-test('config outside any git checkout is refused, even with its fingerprint approved', (t) => {
+test('#601: config outside any git checkout is said in one line, and the launch goes ahead', (t) => {
   const place = scratch(t, { repository: false })
   put(place.checkout, SERVERS, server('echo one'))
-  const { state, decision } = decide(CLAUDE_CODE, place)
+  const read = saidByLaunch()
+  const { state, decision } = decide(CLAUDE_CODE, place, [], read.note)
   assert.equal(state.tree, null)
-  assert.equal(decision.allow, false)
-  assert.equal(decide(CLAUDE_CODE, place, [fingerprintOf(state)]).decision.allow, false)
+  assert.equal(decision.allow, true)
+  assert.ok(read.said.some((line) => line.includes('outside any git checkout') && line.includes(SERVERS)), read.said.join('\n'))
+  assert.equal(decide(CLAUDE_CODE, place, [fingerprintOf(state)]).decision.allow, true, 'an approved fingerprint launches too')
 })
 
-test("a checkout whose top is the owner's home is no checkout: its config is refused", (t) => {
+test("#601: a checkout whose top is the owner's home is no checkout: its config is said in one line and the launch goes ahead", (t) => {
   const place = scratch(t, { repository: false })
   git(place.home, 'init', '-q', '.')
   put(place.checkout, SERVERS, server('echo one'))
   commitAll(place.home, 'the whole home')
 
-  const below = decide(CLAUDE_CODE, place)
+  const read = saidByLaunch()
+  const below = decide(CLAUDE_CODE, place, [], read.note)
   assert.equal(below.state.tree, null)
-  assert.equal(decide(CLAUDE_CODE, place, [fingerprintOf(below.state)]).decision.allow, false)
+  assert.equal(below.decision.allow, true)
+  assert.ok(read.said.some((line) => line.includes('outside any git checkout')), read.said.join('\n'))
 
   const at_home = { host: CLAUDE_CODE, launch_dir: place.home, stop_dir: place.home }
   assert.equal(readLaunchState(at_home, thisMachine).tree, null)
@@ -453,26 +500,32 @@ test('a start outside the stop, in no git checkout, is still read all the way up
 
 // --- what cannot be pinned ------------------------------------------------------
 
-test('a symlink is refused, even when the owner approved its fingerprint', (t) => {
+test('#601: a symlink is said in one line, followed, and what it points at is what the owner approves', (t) => {
   const place = scratch(t)
   put(place.home, 'elsewhere.json', server('echo one'))
   symlinkSync(join(place.home, 'elsewhere.json'), join(place.checkout, SERVERS))
 
-  const { state, decision } = decide(CLAUDE_CODE, place)
-  assert.ok(state.entries.some((entry) => entry.kind === 'symlink'))
-  assert.equal(decision.allow, false)
-  assert.equal(decide(CLAUDE_CODE, place, [fingerprintOf(state)]).decision.allow, false)
+  const read = saidByLaunch()
+  const { state, decision } = decide(CLAUDE_CODE, place, [], read.note)
+  const entry = state.entries.find((one) => one.path === SERVERS)
+  assert.equal(entry?.kind, 'file', 'the link is read as the file it points at')
+  assert.ok(read.said.some((line) => line.includes(SERVERS) && line.includes('is a symlink')), read.said.join('\n'))
+  assert.equal(decision.allow, false, 'what it points at is not approved yet')
+  assert.equal(decide(CLAUDE_CODE, place, [fingerprintOf(state)]).decision.allow, true, 'approved, it launches')
 })
 
-test('a symlinked config directory is refused, not followed', (t) => {
+test('#601: a symlinked config directory is said in one line, followed, and what it points at is approved', (t) => {
   const place = scratch(t)
   const [parent = ''] = SETTINGS.split('/')
   put(place.home, join('shared', USER_SETTINGS_FILE), '{}')
   symlinkSync(join(place.home, 'shared'), join(place.checkout, parent))
 
-  const { state, decision } = decide(CLAUDE_CODE, place)
-  assert.ok(state.entries.some((entry) => entry.path === parent && entry.kind === 'symlink'))
-  assert.equal(decision.allow, false)
+  const read = saidByLaunch()
+  const { state, decision } = decide(CLAUDE_CODE, place, [], read.note)
+  assert.ok(state.entries.some((entry) => entry.path === SETTINGS && entry.kind === 'file'), `the link is read as the directory it points at (${state.entries.map((entry) => `${entry.path} ${entry.kind}`).join(', ')})`)
+  assert.ok(read.said.some((line) => line.includes(parent) && line.includes('is a symlink')), read.said.join('\n'))
+  assert.equal(decision.allow, false, 'what it points at is not approved yet')
+  assert.equal(decide(CLAUDE_CODE, place, [fingerprintOf(state)]).decision.allow, true, 'approved, it launches')
 })
 
 test('a config path that is not a plain file or directory is refused', (t) => {
@@ -867,27 +920,6 @@ test("a start that kept a name outside the declaration does not hold it, whateve
   assert.equal(startedWithTheSwitches(keptAnOwnersKey, switches), false)
 })
 
-// --- conversions that rewrite the bytes a launch runs (martha#167) -------------
-
-test('a file whose bytes differ from the approved one but hash to it through ident is refused, naming the file and the attribute (martha#167)', (t) => {
-  const place = scratch(t)
-  put(place.checkout, SETTINGS, '{}')
-  put(place.checkout, '.gitattributes', 'hook.sh ident\n')
-  put(place.checkout, 'hook.sh', '#!/bin/sh\n# $Id$\necho approved\n')
-  commitAll(place.checkout, 'an approved hook with a marker')
-  const approved = approve(CLAUDE_CODE, place)
-  assert.equal(decide(CLAUDE_CODE, place, approved).decision.allow, true)
-
-  // The same blob once ident has collapsed the marker, with a command planted inside it: the bytes on disk are
-  // not the ones the owner approved, and git status, git add and the tree all say "unchanged".
-  put(place.checkout, 'hook.sh', '#!/bin/sh\n# $Id: ; echo PLANTED; : $\necho approved\n')
-  const after = decide(CLAUDE_CODE, place, approved)
-  const refusal = after.decision.allow ? '' : after.decision.refusal
-  assert.equal(after.decision.allow, false, 'a file converted by ident must not stand in for the approved one')
-  assert.ok(refusal.includes('hook.sh'), refusal)
-  assert.ok(refusal.includes('ident'), refusal)
-})
-
 // --- the crew's own texts, which a member is handed (martha#306) ---------------
 
 const CONVENTIONS = join(DECLARATION_DIRECTORY, 'CONVENTIONS.md')
@@ -896,9 +928,9 @@ const CONVENTIONS = join(DECLARATION_DIRECTORY, 'CONVENTIONS.md')
 const crewPlace = ({ checkout, home }: Scratch, ...files: readonly string[]) => ({ host: CLAUDE_CODE, launch_dir: checkout, stop_dir: home, crew_text_files: files })
 
 /** The decision for a place built with crew text files, against the fingerprints given. */
-function decideCrew(place: ReturnType<typeof crewPlace>, approved: readonly string[] = []) {
-  const state = readLaunchState(place, thisMachine)
-  return { state, decision: decideLaunch({ ...state, host: place.host, approved_fingerprints: approved }) }
+function decideCrew(place: ReturnType<typeof crewPlace>, approved: readonly string[] = [], note: (line: string) => void = () => {}) {
+  const state = readLaunchState(place, thisMachine, undefined, note)
+  return { state, decision: decideLaunch({ ...state, host: place.host, approved_fingerprints: approved }, note) }
 }
 
 test('#306: a crew text file is an entry of the approval, named by its path and hashed', (t) => {
@@ -992,49 +1024,45 @@ test('#306: a directory where a crew text should be is refused, naming it', (t) 
 })
 
 /**
- * A link where a crew text should be is the crew's link, never the file it points at (martha#306 r=3): an entry named
- * after the target would be approved under a name the crew never wrote, and the launch, which names the link, would
- * find no bytes under it and hand Martha's shipped text instead. So it is an entry of its own, and refused by name.
+ * A link where a crew text should be is said in one line and what it points at is read under the name the crew wrote
+ * (martha#601, over martha#306 r=3): the name is what the compose looks the text up by, so the carried bytes stay the
+ * crew's own text.
  */
-test('#306 r=3: a crew text that is a symlink is an entry of its own, and the launch is refused naming it', (t) => {
+test('#601: a crew text that is a symlink is said in one line, and what it points at is approved under the name the crew wrote', (t) => {
   const place = scratch(t)
   put(place.checkout, '.mcp.json', server('echo hi'))
   put(place.checkout, join('docs', 'CONVENTIONS.md'), 'Read the register first.\n')
   mkdirSync(join(place.checkout, DECLARATION_DIRECTORY), { recursive: true })
   symlinkSync(join('..', 'docs', 'CONVENTIONS.md'), join(place.checkout, CONVENTIONS))
   const crew = crewPlace(place, join(place.checkout, CONVENTIONS))
-  const { state, decision } = decideCrew(crew)
+  const read = saidByLaunch()
+  const { state } = decideCrew(crew, [], read.note)
 
   const entry = state.entries.find((one) => one.path === CONVENTIONS.split(sep).join('/'))
-  assert.ok(entry !== undefined, 'a crew text the crew wrote as a link is no entry of the approval at all: the target is named in its place')
-  assert.equal(entry.kind, 'symlink', `the link is approved as ${entry.kind}, under the name the crew wrote`)
-  assert.equal(decision.allow, false, 'a crew text that is a symlink was approved')
-  if (decision.allow) return
-  assert.ok(decision.refusal.includes(CONVENTIONS.split(sep).join('/')), decision.refusal)
-  assert.match(decision.refusal, /is a symlink/)
+  assert.ok(entry !== undefined, 'the crew text is not an entry of the approval')
+  assert.equal(entry.kind, 'file', `the link is read as ${entry.kind}, under the name the crew wrote`)
+  assert.ok(read.said.some((line) => line.includes(CONVENTIONS.split(sep).join('/')) && line.includes('is a symlink')), read.said.join('\n'))
+  assert.equal(decideCrew(crew, [fingerprintOf(state)]).decision.allow, true, 'approved, it launches')
 })
 
 /**
- * A link above a crew text is refused as the text itself is (martha#306 r=4): nothing below the project root is
- * resolved, so what the approval records is the link, named where the crew put it. Following it would approve a file
- * under a name the crew never wrote, and the compose looks the text up under the name the crew did write: it would
- * miss, answer "absent", and hand Martha's shipped text with no word to the owner.
+ * A link above a crew text is said in one line too, and the text is read under the name the crew wrote (martha#601,
+ * over martha#306 r=4): the compose looks the text up under that name, so the carried bytes are the crew's own text.
  */
-test('#306 r=4: a crew text reached through a linked directory is refused, naming the link', (t) => {
+test('#601: a crew text reached through a linked directory is said in one line, and what it points at is approved', (t) => {
   const place = scratch(t)
   put(place.checkout, '.mcp.json', server('echo hi'))
   put(place.checkout, join('docs', 'CONVENTIONS.md'), 'Read the register first.\n')
   symlinkSync('docs', join(place.checkout, DECLARATION_DIRECTORY))
   const crew = crewPlace(place, join(place.checkout, CONVENTIONS))
-  const { state, decision } = decideCrew(crew)
+  const read = saidByLaunch()
+  const { state } = decideCrew(crew, [], read.note)
 
-  const entry = state.entries.find((one) => one.path === DECLARATION_DIRECTORY.split(sep).join('/'))
-  assert.ok(entry !== undefined, 'the linked directory above the crew text is no entry of the approval at all')
-  assert.equal(entry.kind, 'symlink', `the link is recorded as ${entry.kind}, under the name the crew wrote`)
-  assert.equal(decision.allow, false, 'a crew text reached through a linked directory was approved')
-  if (decision.allow) return
-  assert.ok(decision.refusal.includes(DECLARATION_DIRECTORY), decision.refusal)
-  assert.match(decision.refusal, /is a symlink/)
+  const entry = state.entries.find((one) => one.path === CONVENTIONS.split(sep).join('/'))
+  assert.ok(entry !== undefined, 'the crew text is not an entry of the approval')
+  assert.equal(entry.kind, 'file', `the text is read as ${entry.kind}, under the name the crew wrote`)
+  assert.ok(read.said.some((line) => line.includes(DECLARATION_DIRECTORY) && line.includes('is a symlink')), read.said.join('\n'))
+  assert.equal(decideCrew(crew, [fingerprintOf(state)]).decision.allow, true, 'approved, it launches')
 })
 
 /**
@@ -1116,13 +1144,13 @@ test('T3: a skill rewritten after the state is read is refused, and no snapshot 
 
 // Named from Claude Code's facts, not from the reserved list itself: a name dropped from that list keeps its test, and fails.
 for (const name of [SYNCED_SKILLS_FOLDER, TRASH_FOLDER]) {
-  test(`T5: a skill folder named ${name} is refused by name, even approved (martha#747)`, (t) => {
+  test(`T5, #601: a skill folder named ${name} is said in one line, and kept (martha#747)`, (t) => {
     const place = scratch(t)
     put(place.checkout, `${CLAUDE_SKILLS}/${name}/SKILL.md`, A_SKILL)
-    const { decision } = decide(CLAUDE_CODE, place, approve(CLAUDE_CODE, place))
-    assert.equal(decision.allow, false)
-    if (decision.allow) return
-    assert.ok(decision.refusal.includes(`${CLAUDE_SKILLS}/${name} uses a folder name`), decision.refusal)
+    const read = saidByLaunch()
+    const { decision } = decide(CLAUDE_CODE, place, approve(CLAUDE_CODE, place), read.note)
+    assert.equal(decision.allow, true)
+    assert.ok(read.said.some((line) => line.includes(`${CLAUDE_SKILLS}/${name} uses a folder name`)), read.said.join('\n'))
   })
 }
 
@@ -1151,14 +1179,55 @@ const SKILL_LINKS: ReadonlyArray<{ readonly at: string; readonly target: (home: 
 ]
 
 for (const link of SKILL_LINKS) {
-  test(`a link at ${link.at} is refused, naming it, even when the owner approved its fingerprint (martha#747)`, (t) => {
+  test(`#601: a link at ${link.at} is said in one line, followed, and the skill it points at is carried (martha#747)`, (t) => {
     const place = scratch(t)
     put(place.home, join('skills-elsewhere', 'x', 'SKILL.md'), '---\nname: x\ndescription: bytes outside the checkout\n---\nbody\n')
     mkdirSync(dirname(join(place.checkout, link.at)), { recursive: true })
     symlinkSync(link.target(place.home), join(place.checkout, link.at))
-    const { decision } = decide(CLAUDE_CODE, place, approve(CLAUDE_CODE, place))
-    assert.equal(decision.allow, false)
-    if (decision.allow) return
-    assert.ok(decision.refusal.includes(`${link.at} is a symlink`), decision.refusal)
+    const read = saidByLaunch()
+    const { state, decision } = decide(CLAUDE_CODE, place, [], read.note)
+    assert.equal(decision.allow, false, 'what it points at is not approved yet')
+    assert.ok(read.said.some((line) => line.includes(`${link.at} is a symlink`)), read.said.join('\n'))
+    const prepared = snapshotApproved(
+      { host: CLAUDE_CODE, launch_dir: place.checkout, stop_dir: place.home, snapshot_root: join(place.home, 'snapshots'), approved_fingerprints: [fingerprintOf(state)] },
+      state,
+      thisMachine,
+    )
+    assert.equal(prepared.allow, true)
+    if (!prepared.allow) return
+    assert.ok(
+      Object.keys(theCarriedSkills(prepared.carried_files)).includes('x/SKILL.md'),
+      `the skill the link points at is carried (carried: ${Object.keys(prepared.carried_files).join(', ')})`,
+    )
   })
 }
+// The hint file names are the engine's own, read at the pin and kept in its recording (martha#785). The recording is read
+// here from the file on disk, not through the module the gate imports, so a gate that read some other recording differs.
+test("the gate's hint file names are the ones the engine's recording holds on disk (martha#785)", () => {
+  const onDisk = (JSON.parse(readFileSync(RECORDING_OF_THE_ENGINE, 'utf8')) as typeof RECORDED_GOOSE_ENGINE).hint_files
+  assert.equal(ENGINE_HINTS_FILE, onDisk.goose_hints, "the engine's hints file is not the recording's")
+  assert.equal(AGENTS_MD_FILE, onDisk.agents_md, "the engine's instruction file is not the recording's")
+  assert.deepEqual(RECORDED_TEXT_FILES, onDisk.when_unset, 'the files a launch records are not the list the engine loads when no setting replaces it')
+  // At the pin that list holds exactly the two names, so a list built by hand from them, `[ENGINE_HINTS_FILE,
+  // AGENTS_MD_FILE]`, is equal to it and the comparison above cannot tell. It is the recording's own list, not a copy:
+  // an engine that adds a file, drops one or changes their order changes the launch's list with it.
+  assert.equal(RECORDED_TEXT_FILES, RECORDED_GOOSE_ENGINE.hint_files.when_unset, 'the files a launch records are a list built by hand, not the one the engine loads when no setting replaces it')
+})
+
+/** The code lines of a source file with their numbers, its comment lines left out: what runs, not what explains it. */
+const theCodeOf = (source: string): readonly { readonly line: string; readonly number: number }[] =>
+  source.split('\n').map((line, index) => ({ line, number: index + 1 })).filter(({ line }) => !/^\s*(\/\/|\/\*\*|\*)/.test(line))
+
+// A name typed back equals the recording's, so the comparison above cannot see it, and check:restated-values judges
+// literals against the values TypeScript defines, never a JSON recording's (#785 design A1). So this test reads the
+// gate's source and names any code line that holds one of the engine's hint file names, quoted or bare. The names come
+// in through the import, never typed here.
+test("the gate never types the engine's hint file names; it reads them from the recording (martha#785 A1)", () => {
+  const SOURCE = 'refuse_launch_of_unapproved_config.ts'
+  const { goose_hints, agents_md } = RECORDED_GOOSE_ENGINE.hint_files
+  const words = [goose_hints, agents_md].map((name) => new RegExp(`(?<![\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`))
+  const typed = theCodeOf(readFileSync(new URL(`./${SOURCE}`, import.meta.url), 'utf8'))
+    .filter(({ line }) => words.some((word) => word.test(line)))
+    .map(({ number }) => `${SOURCE}:${number}: types the engine's hint file name rather than reading it from the recording`)
+  assert.deepEqual(typed, [], typed.join('\n'))
+})

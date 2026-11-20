@@ -100,6 +100,7 @@ function aCrewWhoseReviewsRunOnItsReviewerModel(): CrewTools {
     theContractInForce: async () => undefined,
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    noteTheStart: () => undefined,
     ends: holdingTheEnds(),
     thePredecessorOf: async () => null,
     theSpendInForce: async () => undefined,

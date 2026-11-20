@@ -11,6 +11,7 @@
 
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, PANE, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
+import { theCrewCommandAnswers, theCrewCommandResult, type Heard } from './crew_command.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
 import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
@@ -31,7 +32,7 @@ interface CrewEngine {
   readonly turn: { abort(input: { readonly turnId: string }): Promise<unknown> }
   readonly tool: { register(tool: ALaunchersTool & { description: string }): Promise<unknown> }
   /** `run` runs one of the host's own commands in this session: the refresh flow's clear is that one (martha#255). */
-  readonly command: { register(command: { name: string; description: string }): Promise<unknown>; run(command: { command: string; args?: string }): Promise<unknown> }
+  readonly command: { register(command: { name: string; description: string; argumentHint?: string }): Promise<unknown>; run(command: { command: string; args?: string }): Promise<unknown> }
   /**
    * `invalidate` asks the host to draw a hook's view again; it caches one `ui.render` until a plugin invalidates it
    * (martha#254).
@@ -48,6 +49,15 @@ interface CrewEngine {
 }
 
 type CrewNext = (event: unknown) => Promise<unknown>
+
+/** The command the owner types at a member's tab to see the crew or say one thing to a member (martha#927). */
+const CREW_COMMAND = 'crew'
+
+/** The command the owner types to see the crew's budget, or set the reviewer model's gauge (martha#990). */
+const BUDGET_COMMAND = 'crew-budget'
+
+/** What the mod asks the launcher when the owner types `/crew-budget`: never a model's tool (martha#990). */
+const THE_BUDGET_QUESTION = 'the_crews_budget'
 
 /** The event whose view the pane asks the host to draw again, as the host names it. */
 const THE_PANES_RENDER = 'ui.render'
@@ -193,9 +203,6 @@ function textIn(e: unknown, field: 'turnId' | 'text' | 'answer'): string {
   return typeof held === 'string' ? held : ''
 }
 
-/** What the launcher heard, or why it could not be heard: the two are not the same, and only one of them is an answer. */
-type Heard = { readonly said: string } | { readonly why: string }
-
 /**
  * Asks the launcher for a core tool's answer. A launcher that cannot be heard is not a yes: the caller is told which
  * of the two happened, so a pane can say a read failed instead of drawing an empty crew (martha#254 part 2 r=2 R2).
@@ -338,6 +345,21 @@ const answerStanding = ($: CrewEngine, e: Record<string, unknown>): Promise<unkn
 const answerWaitForCi = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'wait_for_ci')
 const answerReleaseTheFiles = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'release_the_files_a_killed_run_left')
 
+/** The owner's `/crew` (martha#927): what follows the name, asked of the launcher as the model's own calls are. */
+async function answerTheCrewCommand($: CrewEngine, e: { readonly args?: unknown }): Promise<unknown> {
+  const args = typeof e.args === 'string' ? e.args : ''
+  return theCrewCommandResult(await theCrewCommandAnswers(args, (tool, asked) => hearTheLauncher($, tool, asked)))
+}
+
+/**
+ * The owner's `/crew-budget` (martha#990): what the owner typed goes to the launcher as it was typed, and its answer is
+ * shown to the owner alone, as `/crew`'s is, so the model takes no turn and never reads it.
+ */
+async function answerTheBudgetCommand($: CrewEngine, e: { readonly args?: unknown }): Promise<unknown> {
+  const heard = await hearTheLauncher($, THE_BUDGET_QUESTION, { typed: typeof e.args === 'string' ? e.args : '' })
+  return theCrewCommandResult('said' in heard ? heard.said : heard.why)
+}
+
 /**
  * The pane as the host draws it: the crew's rows, then the owner's list (martha#316). When the read failed it says it
  * could not read the crew, and why: drawing `0/0 online` and "no one has reported" over a broken answer tells the owner
@@ -365,6 +387,13 @@ async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
       {list === undefined ? null : theOwnersListBlock($, views, list)}
     </Box>
   )
+}
+
+/** The owner's commands, each registered, or the host answers "Unknown command" and never reaches its hook (martha#927). */
+async function registerTheCommands($: CrewEngine): Promise<void> {
+  await $.command.register({ name: PANE, description: "Open the crew's pane" })
+  await $.command.register({ name: CREW_COMMAND, description: 'See your crew, or say one thing to one member', argumentHint: '[<member> <text>]' })
+  await $.command.register({ name: BUDGET_COMMAND, description: "Show the crew's budget, or set the reviewer model's gauge", argumentHint: '[<reviewer model> <percent>|off]' })
 }
 
 /** The crew's tools registered with this host, and the pane drawn. */
@@ -410,10 +439,18 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
 
   on('ui.render', { component: 'Pane', requestId: PANE }, drawThePane)
 
+  // The owner's `/crew` (martha#927): answered here without `next`, so no command runs beneath it, and shown to the
+  // owner alone, so the model takes no turn. What it asks and prints is ./crew_command.ts's.
+  on('command.run', { command: CREW_COMMAND }, answerTheCrewCommand)
+
+  // The owner's `/crew-budget` (martha#990): shown to the owner alone, as `/crew` is.
+  on('command.run', { command: BUDGET_COMMAND }, answerTheBudgetCommand)
+
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.
   on('session.start', async ($: CrewEngine, e: unknown, next: CrewNext) => {
     for (const tool of await toolsFromTheLauncher($)) await $.tool.register(tool)
+    await registerTheCommands($)
     const first = await askTheLauncher($, 'see_the_crew', {})
     if (paneIn(first)?.open_at_start === true) await openThePane($)
     await startReadingTheChannel($)

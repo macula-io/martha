@@ -93,17 +93,20 @@ through it.
 ## Install
 
 Martha runs on Node, from the version its `engines` field sets, and starts one
-coding tool, whose version the Claude Code adapter records. These two commands,
-run from a Martha checkout, print both:
+coding tool, whose version the Claude Code adapter records. Its second host, the
+engine built on Goose, is recorded the same way, at the commit its recorder read.
+These three commands, run from a Martha checkout, print all of them:
 
 ```sh
 node -p "require('./package.json').engines.node"
 node -p "require('./src/claude_code_host/recorded_claude_code_host.json').host_version"
+node -p "require('./src/know_the_goose_engines_facts/recorded_goose_engine.json').engine_version"
 ```
 
 Those files are where the versions are set: upgrade Node to the one the first
 names, and sign in to the coding tool the second names (`claude --version` is
-what you have).
+what you have). The third is the engine's pin, read from the engine's own source
+and re-taken only by its recorder, so no version is written on this page.
 
 Install one of two ways: from the signed package, when you want to run Martha,
 or from a checkout, when you are working on Martha itself.
@@ -119,6 +122,53 @@ npx -y --ignore-scripts @macula-io/martha@<exact version>
 Name the installer's exact version: npm never lets a published version be
 replaced, so that line is what you trust. What the installer checks before it
 writes anything is in [the installer's README](installer/README.md).
+
+### On Windows: inside WSL2 (Ubuntu)
+
+Martha runs on Linux x86_64. On an x86_64 Windows PC, run it inside WSL2 with
+Ubuntu. Every step after the first is typed in the Ubuntu shell, not in
+PowerShell or cmd.
+
+1. In PowerShell, as administrator, install Ubuntu under WSL2. Restart if
+   Windows asks, then open Ubuntu from the Start menu and create your Linux
+   user:
+
+   ```powershell
+   wsl --install -d Ubuntu
+   ```
+
+2. In the Ubuntu shell, install Node from nodejs.org's Linux x64 build, at the
+   version Martha's `engines` field names (above). Ubuntu's own `nodejs` package
+   is older than that.
+
+   ```sh
+   NODE_VERSION=<the version engines names>
+   curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz"
+   mkdir -p ~/.local/node
+   tar -xzf "node-v${NODE_VERSION}-linux-x64.tar.gz" -C ~/.local/node --strip-components=1
+   echo 'export PATH="$HOME/.local/node/bin:$HOME/.local/bin:$PATH"' >> ~/.bashrc
+   export PATH="$HOME/.local/node/bin:$HOME/.local/bin:$PATH"
+   ```
+
+3. Still in the Ubuntu shell, install Martha with the same line as above, and
+   check it:
+
+   ```sh
+   npx -y --ignore-scripts @macula-io/martha@<exact version>
+   martha --version
+   ```
+
+4. Install Claude Code inside Ubuntu as well, at the version the recording names
+   (above), and sign in there. Martha starts the `claude` it finds on Ubuntu's
+   `PATH`, never a Windows one.
+
+   ```sh
+   npm install -g @anthropic-ai/claude-code@<the recorded version>
+   claude --version
+   ```
+
+Keep your projects in Ubuntu's own file system (under `~`), not on a Windows
+drive under `/mnt/c`. Martha is only tested on a Linux file system.
 
 ### From a checkout
 

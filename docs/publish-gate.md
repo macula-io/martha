@@ -1239,7 +1239,7 @@ Slices only read the records. The contract types `stores.launches` as
 time either. The writable `KeyedRowStore` is the launcher's own seam: the adapter
 that launches members holds it and passes it to `recordMemberLaunch` and
 `recordMemberStopped`; it is not part of `HostContract`. As a second line,
-`prove_the_core/only_the_launcher_writes_launch_records.ts` names any slice but
+`prove_the_core/one_place_does_it/only_the_launcher_writes_launch_records.ts` names any slice but
 the binder's that writes the store or reaches `stores.launches` for anything but
 reading, names any slice that imports host glue, and refuses a `martha.hostGlue`
 entry that is not exactly `src/<one directory>`. A slice writing the records'

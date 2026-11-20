@@ -1,6 +1,8 @@
-# Host drift (martha#139): the committed recording of the Claude Code host is of the version members run, npm's
-# `latest` release, and that version's code still reads as recorded. Any difference fails, the version alone
-# included, naming the field.
+# Host drift (martha#139): the committed recording of the Claude Code host still says what the version members run,
+# npm's `latest` release, says. Any fact that differs fails, naming the field. A release whose facts are all the
+# recorded ones once the minifier's names are taken out passes on its version alone, with a notice (a run annotation
+# and a job summary line) that a routine re-record is due; the notice fails after 7 days or at the 5th newer release
+# (martha#811).
 #
 # When it runs: daily, by hand, on every push to main, and on PRs that touch the recording, its readers or this
 # check. Not on every PR: a release is an event in nobody's change, and it must not turn every open PR red. A PR that
@@ -19,7 +21,8 @@
 # the re-recorder needs the answers. The harness never rewrites the recording: a re-record stays a PR, and
 # claude_code_host.node-test.ts fails, naming both versions, until the two recordings name one host.
 #
-# A failed scheduled or main run stays red, and that is the whole signal: it names the versions and the fields that
+# A green run with a notice is the signal a re-record is due; the Supervisor routes it as a package. A failed
+# scheduled or main run stays red, and that is the whole signal: it names the versions and the fields that
 # differ, and the Supervisor routes the re-record. The job opens no issue and writes nothing: its token is read-only.
 #
 # That the check can fail at all is proven on every PR, with no npm, by ci.yml's `drift-bites` job.
@@ -38,9 +41,9 @@ on:
       - 'src/record_claude_code_host/**'
       - 'prove_the_recorded_host_is_current/**'
       - 'prove_the_relay_loads/prove_the_order_of_the_dialogs.mjs'
-      - 'prove_the_relay_loads/prove_the_bash_answers.mjs'
+      - 'prove_the_relay_loads/prove_the_bash_answers/prove_the_bash_answers.mjs'
       - 'prove_the_relay_loads/the_wait_a_probe_gives_a_screen.mjs'
-      - 'prove_the_relay_loads/the_recorded_host_installed.sh'
+      - 'prove_the_relay_loads/prove_the_bash_answers/the_recorded_host_installed.sh'
       - '.github/workflows/host-drift.yml'
 
 permissions:
@@ -72,10 +75,10 @@ jobs:
       # recording check failed: a new release fails it on its version alone, and its answers are what the re-record needs.
       - name: the recorded release, to prove the harness on a known host
         if: ${{ !cancelled() }}
-        run: prove_the_relay_loads/the_recorded_host_installed.sh "${{ runner.temp }}/the-recorded-host"
+        run: prove_the_relay_loads/prove_the_bash_answers/the_recorded_host_installed.sh "${{ runner.temp }}/the-recorded-host"
       - name: the Bash answers on the recorded release (the control)
         if: ${{ !cancelled() }}
-        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-recorded-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_bash_answers.mjs "${{ runner.temp }}/bash-answers-control"
+        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-recorded-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_bash_answers/prove_the_bash_answers.mjs "${{ runner.temp }}/bash-answers-control"
       - name: the Bash answers on this release
         if: ${{ !cancelled() }}
-        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_bash_answers.mjs "${{ runner.temp }}/bash-answers"
+        run: MARTHA_RECORDED_HOST="${{ runner.temp }}/the-host/node_modules/.bin/claude" node prove_the_relay_loads/prove_the_bash_answers/prove_the_bash_answers.mjs "${{ runner.temp }}/bash-answers"

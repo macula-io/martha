@@ -8,7 +8,7 @@
 // then the chat), so the measurement is the real one and no Goose build is needed.
 
 import assert from 'node:assert/strict'
-import { execFile } from 'node:child_process'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -20,6 +20,8 @@ import { THE_LAUNCH_BOUND_KEY } from './the_cap_a_line_gets/the_cap_a_line_gets.
 import { THE_ROOM_THE_END_OF_A_LAUNCH_NEEDS_MS } from './drive_the_trial.ts'
 import { NOT_OBSERVED, THE_TRANSCRIPT } from './the_evidence_it_keeps/the_evidence_says_why.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { skillsSwitchFilesSaying } from '../src/know_the_goose_engines_facts/an_engine_source_from_its_facts.ts'
+import { RECORDED_GOOSE_ENGINE } from '../src/know_the_goose_engines_facts/recorded_goose_engine.ts'
 
 const theDriverRun = promisify(execFile)
 
@@ -213,8 +215,9 @@ createInterface({ input: process.stdin }).on('line', (line) => {
 })
 `
 
-/** The engine source the launch config is read from: Developer, which the launch keeps, and Skills as an extension. */
+/** The engine source the launch config is read from: Developer, which the launch keeps, Skills as an extension, and both skills switches (martha#614). */
 const AN_ENGINE_SOURCE: Readonly<Record<string, string>> = {
+  ...skillsSwitchFilesSaying(RECORDED_GOOSE_ENGINE),
   'crates/goose/src/agents/platform_extensions/mod.rs': [
     "pub fn platform_extensions() -> HashMap<&'static str, PlatformExtensionDef> {",
     '    map.insert(',
@@ -424,6 +427,197 @@ test('a run ends red, naming the line, when its evidence holds a not-observed li
     })
     assert.ok(existsSync(join(evidence, 'line-1', 'result.json')), 'the line this run drove left its result')
     assert.match(refused, /line 2: not-observed, and no ACP transcript was kept, so the run cannot say why \(line-2\)/)
+  } finally {
+    await model.stop()
+  }
+})
+
+/**
+ * A launch must not outlive its verdict (martha#725). On the fork every launch that reached `not-observed` lived on for
+ * six more minutes and ended only because the runner's `timeout` sent SIGTERM at the ten-minute bound, which it reports
+ * as status 124. Two things in the driver held the process open, and both are checked here by running the real driver
+ * and watching the process itself, not by reading the code.
+ *
+ * What node says it still holds is its own diagnostic report, asked for with `--report-on-signal`: its `libuv` list
+ * names every active, referenced handle. That is how a failing case says WHICH handle held the launch, not only that
+ * it was held.
+ */
+const ENDS_WITHIN_MS = 5_000
+
+/** What a watched driver did: whether it ended, how long after its result, and what node said still held it. */
+interface Watched {
+  readonly evidence: string
+  readonly pid: number
+  readonly endedByItself: boolean
+  readonly outlivedMs: number
+  readonly whatHeldIt: readonly string[]
+}
+
+/**
+ * An engine whose survivor holds its output (martha#725): it answers the handshake and the prompt, and on the prompt
+ * starts a process in a session of its own that inherits this engine's stdout and stderr, as a builtin extension's
+ * subagent does. The launch kills the engine's own group, which is not that process's, so the engine's output stays
+ * open after the group is dead — and a pipe node still holds is a handle that keeps the driver alive.
+ */
+const AN_ENGINE_WHOSE_SURVIVOR_HOLDS_ITS_OUTPUT = `#!${process.execPath}
+import { spawn } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { createInterface } from 'node:readline'
+
+const root = process.env.GOOSE_PATH_ROOT ?? ''
+let base = 'http://127.0.0.1:11434'
+try {
+  const config = readFileSync(join(root, 'config', 'config.yaml'), 'utf8')
+  base = /OLLAMA_HOST:\\s*(\\S+)/.exec(config)?.[1] ?? base
+} catch {}
+
+const post = (path, body) => fetch(new URL(path, base), {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+})
+const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n')
+const result = (id, value) => send({ jsonrpc: '2.0', id, result: value })
+
+createInterface({ input: process.stdin }).on('line', (line) => {
+  let message
+  try { message = JSON.parse(line) } catch { return }
+  if (message.method === 'initialize') return result(message.id, { protocolVersion: 1 })
+  if (message.method === 'session/new') {
+    return result(message.id, { sessionId: 'a-stand-in-session', modes: { currentModeId: 'approve' } })
+  }
+  if (message.method !== 'session/prompt') return
+  const survivor = spawn(process.execPath, ['-e', 'setTimeout(() => undefined, 30000)'], {
+    detached: true, stdio: ['ignore', 'inherit', 'inherit'],
+  })
+  survivor.unref()
+  try { writeFileSync(join(root, 'survivor.pid'), String(survivor.pid)) } catch {}
+  Promise.resolve()
+    .then(() => post('/api/show', { model: 'a-model' }))
+    .then(() => post('/v1/chat/completions', { model: 'a-model', messages: [] }))
+    .then(() => {
+      send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'a-stand-in-session', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'the stand-in engine answered' } } } })
+      result(message.id, { stopReason: 'end_turn' })
+    })
+})
+`
+
+/** A fork that declares no skills switch, so the launch's config cannot be written and the launch never starts. */
+function aForkSayingNothingOfSkills(minutes: string): string {
+  const fork = aForkSaying(minutes)
+  removeTheTree(join(fork, 'crates', 'goose', 'src', 'skills'))
+  writeFileSync(
+    join(fork, 'crates', 'goose', 'src', 'agents', 'platform_extensions', 'mod.rs'),
+    ["pub fn platform_extensions() -> HashMap<&'static str, PlatformExtensionDef> {", '    map.insert(', '        developer::EXTENSION_NAME,', '        PlatformExtensionDef {', '            default_enabled: true,', '            hidden: false,', '        },', '    );', '    map', '}', ''].join('\n'),
+  )
+  return fork
+}
+
+/** The handles node says it still holds, from its own report: only the active and referenced ones keep a process up. */
+function heldHandlesIn(reportPath: string): string[] {
+  if (!existsSync(reportPath)) return ['node wrote no report']
+  const report = JSON.parse(readFileSync(reportPath, 'utf8')) as {
+    libuv?: readonly { readonly type: string; readonly is_active?: boolean; readonly is_referenced?: boolean; readonly fd?: number; readonly stdio?: string }[]
+  }
+  return (report.libuv ?? [])
+    .filter((handle) => handle.is_active === true && handle.is_referenced === true)
+    .map((handle) => (handle.fd === undefined ? handle.type : `${handle.type} fd ${String(handle.fd)}${handle.stdio === undefined ? '' : ` (${handle.stdio})`}`))
+}
+
+/** The longest a case waits for the line's result before it treats the launch as one that never wrote it. */
+const THE_RESULT_WAIT_MS = 90_000
+/** How long node gets to write the diagnostic report the signal asks for. */
+const THE_REPORT_WAIT_MS = 3_000
+/** How often a wait looks again. */
+const THE_POLL_MS = 50
+/** Where in the driver's own working directory node writes the report, named in the arguments that start it. */
+const THE_REPORT = 'the-report.json'
+
+/** True once `done` answers yes, or false when `ms` runs out first. */
+async function waitedFor(done: () => boolean, ms: number): Promise<boolean> {
+  const began = Date.now()
+  while (!done() && Date.now() - began < ms) await new Promise((settle) => setTimeout(settle, THE_POLL_MS))
+  return done()
+}
+
+/** The driver started against the stand-ins, its own working directory made, with node asked for a report. */
+function theDriverStarted(line: number, about: {
+  readonly fork: string
+  readonly modelUrl: string
+  readonly engineSource: string
+}): { readonly work: string; readonly evidence: string; readonly child: ChildProcess } {
+  const work = aFreshDirectory()
+  const engine = join(work, 'a-stand-in-engine.mjs')
+  writeFileSync(engine, about.engineSource)
+  chmodSync(engine, 0o755)
+  const evidence = join(work, 'evidence')
+  const home = join(work, 'home')
+  mkdirSync(home, { recursive: true })
+  const child: ChildProcess = spawn('node', [
+    '--report-on-signal', '--report-signal=SIGUSR2', `--report-directory=${work}`, `--report-filename=${THE_REPORT}`,
+    DRIVER, '--goose', engine, '--goose-source', about.fork, '--model', 'a-model',
+    '--evidence', evidence, '--launch', join(work, 'launches'), '--line', String(line), '--ollama', about.modelUrl,
+  ], { cwd: ROOT, env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] })
+  child.stdout?.resume()
+  child.stderr?.resume()
+  return { work, evidence, child }
+}
+
+/** A driver still running is asked for node's report and killed, so the case can name every handle it still held. */
+async function theHandlesThatHeldIt(child: ChildProcess, work: string): Promise<string[]> {
+  child.kill('SIGUSR2')
+  const reportPath = join(work, THE_REPORT)
+  await waitedFor(() => existsSync(reportPath), THE_REPORT_WAIT_MS)
+  const held = heldHandlesIn(reportPath)
+  child.kill('SIGKILL')
+  return held
+}
+
+/** The survivor is the case's own doing: it keeps writing nothing, but it holds the engine's output until it is gone. */
+function theSurvivorGone(work: string, line: number): void {
+  const survivorPid = join(work, 'launches', `line-${String(line)}`, 'goose-root', 'survivor.pid')
+  if (!existsSync(survivorPid)) return
+  try { process.kill(Number(readFileSync(survivorPid, 'utf8').trim()), 'SIGKILL') } catch { /* it had already gone */ }
+}
+
+/**
+ * The driver run and watched (martha#725): the test waits for the line's result and then for the process to end by
+ * itself. A driver still running then is asked for a diagnostic report and killed, so the case can name what held it
+ * — the process id, how many milliseconds past its result, and every handle node still held.
+ */
+async function theDriverWatched(line: number, fork: string, modelUrl: string, engineSource: string): Promise<Watched> {
+  const { work, evidence, child } = theDriverStarted(line, { fork, modelUrl, engineSource })
+  let ended = false
+  child.once('exit', () => { ended = true })
+  const resultPath = join(evidence, `line-${String(line)}`, 'result.json')
+  await waitedFor(() => existsSync(resultPath) || ended, THE_RESULT_WAIT_MS)
+  const wroteAt = Date.now()
+  await waitedFor(() => ended, ENDS_WITHIN_MS)
+  const outlivedMs = Date.now() - wroteAt
+  const whatHeldIt = ended ? [] : await theHandlesThatHeldIt(child, work)
+  theSurvivorGone(work, line)
+  return { evidence, pid: child.pid ?? 0, endedByItself: ended, outlivedMs, whatHeldIt }
+}
+
+test('a launch whose verdict is written ends by itself, though a process the group kill never reached holds its engine\'s output (martha#725)', async () => {
+  const model = await aStandInModel(100)
+  try {
+    const watched = await theDriverWatched(1, aForkSaying('1'), model.url, AN_ENGINE_WHOSE_SURVIVOR_HOLDS_ITS_OUTPUT)
+    assert.ok(existsSync(join(watched.evidence, 'line-1', 'result.json')), 'the launch wrote its verdict')
+    assert.equal(watched.endedByItself, true,
+      `pid ${String(watched.pid)} was still running ${String(watched.outlivedMs)} ms after it wrote its result, held open by: ${watched.whatHeldIt.join(', ')}`)
+  } finally {
+    await model.stop()
+  }
+})
+
+test('a launch that never got as far as its line ends by itself, rather than leaving its proxy listening (martha#725)', async () => {
+  const model = await aStandInModel(100)
+  try {
+    const watched = await theDriverWatched(1, aForkSayingNothingOfSkills('1'), model.url, A_STAND_IN_ENGINE)
+    const result = JSON.parse(readFileSync(join(watched.evidence, 'line-1', 'result.json'), 'utf8')) as { verdict: string; say: string }
+    assert.equal(result.verdict, 'fail', 'a launch whose config could not be written says so')
+    assert.equal(watched.endedByItself, true,
+      `pid ${String(watched.pid)} was still running ${String(watched.outlivedMs)} ms after it wrote its result, held open by: ${watched.whatHeldIt.join(', ')}`)
   } finally {
     await model.stop()
   }

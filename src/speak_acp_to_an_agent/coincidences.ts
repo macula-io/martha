@@ -2,7 +2,7 @@
 // something else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never
 // run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { WHOLE_FILE_CONTENT } from '../claude_code_host/claude_code_file_tools.ts'
 import { THE_FAILED_TASK_STATUS } from '../read_what_claude_code_says_of_an_agent/read_a_failed_agents_report.ts'
 
@@ -13,5 +13,7 @@ const ACPS_TOOL_CALL_FIELD = "the field of an ACP tool-call update that carries 
 
 export const COINCIDENCES: readonly Exception[] = [
   { value: THE_FAILED_TASK_STATUS, file: 'speak_acp_to_an_agent/the_acp_client.node-test.ts', reason: ACPS_TOOL_CALL_STATUS },
+  // The client now holds ACP's tool-call statuses by name (TOOL_CALL_STATUS), the one place rule (a) reads them from.
+  { value: THE_FAILED_TASK_STATUS, file: 'speak_acp_to_an_agent/the_acp_client.ts', reason: ACPS_TOOL_CALL_STATUS },
   { value: WHOLE_FILE_CONTENT, file: 'speak_acp_to_an_agent/the_acp_client.ts', reason: ACPS_TOOL_CALL_FIELD },
 ]

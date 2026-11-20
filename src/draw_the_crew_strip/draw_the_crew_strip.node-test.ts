@@ -5,9 +5,12 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { NO_MEMBER_HAS_REPORTED, READER_BEAT_MS, seeTheCrew, thePaneHeader, thePaneLine } from '../see_the_crew/see_the_crew.ts'
-import { OFFLINE, OFFLINE_AFTER_MS, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
+import { OFFLINE, type DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { theTabTitle } from '../title_a_members_tab/title_a_members_tab.ts'
 import { drawOnce, drawTheStrip, NOTHING_DRAWN, theStripFrame, type TheStripsSeam } from './draw_the_crew_strip.ts'
+import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const OFFLINE_AFTER_MS = offlineAfterMsOf(THRESHOLDS_WHEN_UNNAMED)
 
 const CREW = { members: [{ name: 'Vesta' }, { name: 'Uranus' }] }
 const NOW = 1_762_900_000_000

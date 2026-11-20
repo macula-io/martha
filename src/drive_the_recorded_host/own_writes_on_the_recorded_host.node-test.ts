@@ -158,7 +158,7 @@ test("a member's own CRLF Write where git normalises line ends as it adds (text=
   assert.equal(readFileSync(join(project.checkout, 'notes.txt'), 'utf8'), 'one\r\ntwo\r\n')
 })
 
-test("one ordinary turn runs under the deny of Martha's state root, and a Write into that root is refused by name (martha#619)", { skip: RECORDED_HOST_SKIP }, async (t) => {
+test("one ordinary turn runs under the deny of Martha's state root, and a Write into that root is stopped by the host's own rule (martha#619)", { skip: RECORDED_HOST_SKIP }, async (t) => {
   const project = approvedProject(t)
   const planted = join(stateRootOf(project.home, undefined), 'approvals-a-member-planted.jsonl')
   const ran = await run(project, 4, ({ number }) =>
@@ -171,8 +171,11 @@ test("one ordinary turn runs under the deny of Martha's state root, and a Write 
   // The ordinary turn: the member's own Write and its shell command, with its host keeping its own folder as it goes.
   assert.equal(ran.exit_code, 0, flat(ran.shown))
   assert.equal(git(project.checkout, 'log', '-1', '--format=%s', 'first-task'), 'the hello note')
-  // The write into Martha's state is refused, the model is told which rule refused it, and nothing was written.
+  // The write into Martha's state is stopped, and the model is told the directory is denied. martha#601 cut the gate's
+  // refusal of that root to one line (the notice the guard's own test pins, refuse_a_member_writing_owner_memory), so
+  // what stops a member's file tool there in a live session is the host's own `permissions.deny` rule, unchanged
+  // (martha#226). Nothing was written.
   const fourth = JSON.stringify(ran.requests[3]?.body['messages'] ?? null)
-  assert.ok(fourth.includes('martha#619'), fourth.slice(-2000))
+  assert.ok(fourth.includes(planted) && fourth.includes('denied'), fourth.slice(-2000))
   assert.equal(existsSync(planted), false, "a member's Write landed in Martha's state")
 })

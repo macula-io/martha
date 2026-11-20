@@ -2,8 +2,9 @@
 // before and after it, and the log beside them. Every decision is ../record_where_an_owners_act_was_typed's; this
 // reads and writes the project's own state and hands the lines over.
 //
-// The record is written by the act first; the entries are appended after it, only for an act that ended done, one per
-// line the act added. A crash between the two leaves those lines reading "written without the martha command".
+// The record is written by the act first; the entries are appended after it, one per line the act added, whether the
+// act ended done or not (an answer kept before its launch refused it is still the owner's, #541 9a). A crash between
+// the two leaves those lines reading "written without the martha command".
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -11,6 +12,7 @@ import process from 'node:process'
 
 import { APPROVALS_FILE, appendStateLine, crewSubdirectory, readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { COMMAND_SHAPES_FILE, OWNER_KEYS_FILE } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
+import { THE_OWNERS_ANSWERS_FILE } from '../serve_the_owners_answers/the_owners_answer_route.ts'
 import { THE_BELLS_FILE, THE_BELLS_PLACE } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { PROC_ROOT, whereItIsTypedUnder } from '../linux_process_identity/process_identity_from_proc.ts'
 import {
@@ -43,6 +45,7 @@ export function theRecordFilesOf(place: TheOwnersActsPlace): Readonly<Record<str
     approve: join(place.state.directory, APPROVALS_FILE),
     'pin-key': join(place.state.directory, OWNER_KEYS_FILE),
     'keep-shapes': join(place.state.directory, COMMAND_SHAPES_FILE),
+    answer: join(place.state.directory, THE_OWNERS_ANSWERS_FILE),
     ...('path' in bells ? { bells: join(bells.path, THE_BELLS_FILE) } : {}),
   }
 }

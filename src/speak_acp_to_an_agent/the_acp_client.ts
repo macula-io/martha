@@ -15,7 +15,10 @@
 // - when the agent's output ends, every request still waiting fails by name, so no turn waits forever;
 // - a cancelled turn runs no further call: every permission request still waiting on the gate is answered cancelled at
 //   once (ACP: the client MUST), the gate's late decision is dropped so each request has one answer, and a request
-//   that arrives after the cancel, while the turn still runs, is cancelled without asking the gate.
+//   that arrives after the cancel, while the turn still runs, is cancelled without asking the gate;
+// - a request the gate has not decided when its turn ends, or when the agent's output ends, has its one answer then
+//   (cancelled), and the decision still running is told so through its `withdrawn` signal: a decision that waits on the
+//   owner (../hear_an_acp_agents_asks) puts its ask away instead of keeping a row that no answer can reach.
 
 import type { ChildProcess } from 'node:child_process'
 import type { Readable, Writable } from 'node:stream'
@@ -38,18 +41,29 @@ export const ACP = {
 /** The session updates a turn reads; every other kind is left for a later reader. */
 export const UPDATE = { toolCall: 'tool_call', toolCallUpdate: 'tool_call_update', messageChunk: 'agent_message_chunk' } as const
 
+/** A tool call's statuses, in the protocol's own words (ACP `ToolCallStatus`). */
+export const TOOL_CALL_STATUS = { pending: 'pending', inProgress: 'in_progress', completed: 'completed', failed: 'failed' } as const
+
+/** The field of any ACP object that carries an agent's own extensions. */
+export const ACP_META = '_meta'
+
 /** JSON-RPC's code for a method the receiver does not have. */
 export const METHOD_NOT_FOUND = -32601
 
 /** The characters that, first in a turn, make the engine run a command instead of handing the text to the model. */
 export const THE_COMMAND_STARTS: readonly string[] = ['!', '/']
 
-/** A permission request as the gate is asked it. */
+/**
+ * A permission request as the gate is asked it. `heard` is what the turn's updates said of the same call before it was
+ * asked, when they said anything: an engine may name the call there and nowhere in the request (Goose puts its own
+ * tool name only in the `tool_call` update's `_meta`, martha#541 part C4).
+ */
 export interface APermissionRequest {
   readonly sessionId: string
   readonly toolCallId: string
   readonly title: string
   readonly rawInput: unknown
+  readonly heard?: AToolCall
 }
 
 /** A permission request, and the outcome the client sent back. */
@@ -67,6 +81,8 @@ export interface AToolCall {
   readonly rawInput?: unknown
   readonly rawOutput?: unknown
   readonly content?: unknown
+  /** The update's `_meta`, passed as the agent sent it: only an engine's own adapter reads inside it. */
+  readonly meta?: unknown
 }
 
 /** A turn as it ended: why the agent stopped, the text the model streamed, its tool calls and what was asked. */
@@ -83,8 +99,19 @@ export interface ASession {
   readonly currentModeId: string | undefined
 }
 
-/** The gate's decision for one call. It may be slow; a throw or a rejection is a refusal. */
-export type Decide = (request: APermissionRequest) => ADecision | Promise<ADecision>
+/**
+ * The gate's decision for one call. It may be slow; a throw or a rejection is a refusal. `withdrawn` is aborted when the
+ * request has had its one answer without this decision (a cancel, the turn's end, the end of the agent's output), so a
+ * decision still waiting knows its answer will be dropped.
+ */
+export type Decide = (request: APermissionRequest, withdrawn: AbortSignal) => ADecision | Promise<ADecision>
+
+/**
+ * A listener for every `session/update` the agent sends, inside a turn or not (#541 package A, design R4): called with
+ * the session id and the update as sent, before the turn's own record reads it. A listener that throws is noted, and
+ * the client goes on.
+ */
+export type HearAnUpdate = (sessionId: string, update: unknown) => void
 
 interface Pending {
   readonly method: string
@@ -97,6 +124,8 @@ interface AWaitingRequest {
   readonly id: unknown
   readonly request: APermissionRequest
   readonly offered: readonly string[]
+  /** Aborted when the request is answered without its decision. */
+  readonly withdrawn: AbortController
   answered: boolean
 }
 
@@ -118,10 +147,11 @@ const objectOf = (value: unknown): Json => (isObject(value) ? value : {})
 export const startsACommand = (text: string): boolean => THE_COMMAND_STARTS.includes(text.trimStart().charAt(0))
 
 /** The fields of a tool-call update the agent sent, with only the ones it named. */
-function toolCallFields(update: Json): Partial<AToolCall> {
+export function toolCallFields(update: Json): Partial<AToolCall> {
   const fields: Record<string, unknown> = {}
   for (const key of ['title', 'kind', 'status'] as const) if (typeof update[key] === 'string') fields[key] = update[key]
   for (const key of ['rawInput', 'rawOutput', 'content'] as const) if (key in update) fields[key] = update[key]
+  if (ACP_META in update) fields['meta'] = update[ACP_META]
   return fields as Partial<AToolCall>
 }
 
@@ -144,15 +174,17 @@ export class AcpClient {
   readonly notes: string[] = []
   readonly #to: Writable
   readonly #decide: Decide
+  readonly #hearAnUpdate: HearAnUpdate | undefined
   readonly #pending = new Map<number, Pending>()
   readonly #turns = new Map<string, ATurnBeingHeard>()
   #nextId = 1
   #buffered = ''
   #ended: string | undefined
 
-  constructor(from: Readable, to: Writable, decide: Decide) {
+  constructor(from: Readable, to: Writable, decide: Decide, hearAnUpdate?: HearAnUpdate) {
     this.#to = to
     this.#decide = decide
+    this.#hearAnUpdate = hearAnUpdate
     from.setEncoding('utf8')
     from.on('data', (chunk: string) => this.#read(chunk))
     from.on('end', () => this.#end('the agent\'s output ended'))
@@ -161,9 +193,9 @@ export class AcpClient {
   }
 
   /** A client over a child's stdio, which the launcher started with both piped. */
-  static overAChild(child: ChildProcess, decide: Decide): AcpClient {
+  static overAChild(child: ChildProcess, decide: Decide, hearAnUpdate?: HearAnUpdate): AcpClient {
     if (child.stdout === null || child.stdin === null) throw new Error('the agent was started without piped stdio')
-    return new AcpClient(child.stdout, child.stdin, decide)
+    return new AcpClient(child.stdout, child.stdin, decide, hearAnUpdate)
   }
 
   /** Opens the connection: this client's version, and no file or terminal capability, so the agent asks for none. */
@@ -197,6 +229,10 @@ export class AcpClient {
       return { stopReason: textOf(answer['stopReason']), text: turn.text, toolCalls: [...turn.toolCalls.values()], asked: turn.asked }
     } finally {
       this.#turns.delete(sessionId)
+      // A turn that ended with a request still undecided: the agent has stopped waiting for it, so it is answered
+      // cancelled now and its decision is withdrawn. The end of the agent's output comes here too: #end fails the
+      // prompt, which ends the turn.
+      for (const waiting of turn.waiting) this.#withdraw(turn, waiting)
     }
   }
 
@@ -210,7 +246,7 @@ export class AcpClient {
     const turn = this.#turns.get(sessionId)
     if (turn === undefined) return
     turn.cancelled = true
-    for (const waiting of turn.waiting) this.#answer(turn, waiting, { outcome: 'cancelled' })
+    for (const waiting of turn.waiting) this.#withdraw(turn, waiting)
   }
 
   /** Ends the agent's input: the launcher's way of saying the connection is over. */
@@ -256,7 +292,22 @@ export class AcpClient {
     if (!isObject(message)) this.notes.push(`not a JSON-RPC message: ${line.slice(0, 200)}`)
     else if (typeof message['method'] !== 'string') this.#settle(message)
     else if ('id' in message) void this.#answerTheAgent(message['id'], message['method'], objectOf(message['params']))
-    else if (message['method'] === ACP.update) this.#hear(objectOf(message['params']))
+    else if (message['method'] === ACP.update) {
+      const params = objectOf(message['params'])
+      // Every update reaches the listener first, a turn open or not: #hear's record is the turn's own and returns early
+      // outside one (design R4).
+      this.#tell(textOf(params['sessionId']), params['update'])
+      this.#hear(params)
+    }
+  }
+
+  #tell(sessionId: string, update: unknown): void {
+    if (this.#hearAnUpdate === undefined) return
+    try {
+      this.#hearAnUpdate(sessionId, update)
+    } catch (error) {
+      this.notes.push(`the listener for updates failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   #settle(message: Json): void {
@@ -294,26 +345,34 @@ export class AcpClient {
 
   /** One permission request answered once: the gate's decision as a once-answer, a cancel for anything unread. */
   async #answerPermission(id: unknown, params: Json): Promise<void> {
-    const request = requestOf(params)
-    const turn = request === undefined ? undefined : this.#turns.get(request.sessionId)
-    if (request === undefined || turn === undefined) {
+    const named = requestOf(params)
+    const turn = named === undefined ? undefined : this.#turns.get(named.sessionId)
+    if (named === undefined || turn === undefined) {
       this.notes.push(`a permission request outside a turn, or naming no call, was cancelled: ${JSON.stringify(params).slice(0, 200)}`)
       this.#send({ jsonrpc: '2.0', id, result: { outcome: { outcome: 'cancelled' } } })
       return
     }
+    const heard = turn.toolCalls.get(named.toolCallId)
+    const request: APermissionRequest = heard === undefined ? named : { ...named, heard }
     const offeredOptions = optionsOf(params)
-    const waiting: AWaitingRequest = { id, request, offered: offeredOptions.map((option) => textOf(option.optionId)), answered: false }
+    const waiting: AWaitingRequest = { id, request, offered: offeredOptions.map((option) => textOf(option.optionId)), withdrawn: new AbortController(), answered: false }
     if (turn.cancelled) {
       this.#answer(turn, waiting, { outcome: 'cancelled' })
       return
     }
     turn.waiting.add(waiting)
-    const decision = await this.#decided(request)
+    const decision = await this.#decided(request, waiting.withdrawn.signal)
     if (waiting.answered) {
       this.notes.push(`the decision for ${request.toolCallId} came after its turn was cancelled, and was dropped`)
       return
     }
     this.#answer(turn, waiting, answerOnce(offeredOptions, decision))
+  }
+
+  /** A waiting request answered cancelled, and its decision told it is withdrawn. */
+  #withdraw(turn: ATurnBeingHeard, waiting: AWaitingRequest): void {
+    this.#answer(turn, waiting, { outcome: 'cancelled' })
+    waiting.withdrawn.abort()
   }
 
   /** Sends a permission request its one answer, and keeps it in the turn's record. */
@@ -324,9 +383,9 @@ export class AcpClient {
     this.#send({ jsonrpc: '2.0', id: waiting.id, result: { outcome: answered } })
   }
 
-  async #decided(request: APermissionRequest): Promise<ADecision> {
+  async #decided(request: APermissionRequest, withdrawn: AbortSignal): Promise<ADecision> {
     try {
-      return (await this.#decide(request)) === 'allow' ? 'allow' : 'reject'
+      return (await this.#decide(request, withdrawn)) === 'allow' ? 'allow' : 'reject'
     } catch (error) {
       this.notes.push(`the decision for ${request.toolCallId} failed, so the call is refused: ${(error as Error).message}`)
       return 'reject'

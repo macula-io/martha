@@ -11,6 +11,8 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { removeTheTree } from '../../src/serve_the_relay_to_a_launch/relay_copy.ts'
+import { RECORDING_OF_THE_HOST } from '../../src/record_claude_code_host/the_file_that_holds_the_recording.ts'
+import { RECORDING_OF_THE_ENGINE } from '../../src/know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { readSigners } from '../verify_the_release_signature/verify_the_release_signature.mjs'
 import { NAMES } from './names.mjs'
 
@@ -290,6 +292,68 @@ test('the guard-input reader bites: a planted prefix is read as planted', () => 
   const planted = workflow.release.replace(/tag-prefix: v\n/, 'tag-prefix: x\n')
   assert.equal(callInputs(planted, 'release-guard.yml')['tag-prefix'], 'x')
   assert.equal(basename(INSTALLER), INSTALLER_DIR)
+})
+
+/**
+ * Every version the README prints, as the command that prints it: the file the command reads and the fields it
+ * names there. The README writes no version itself (martha#541 package 11): each one is read out of the file that
+ * holds it, so the page cannot drift from the tree.
+ * @param {string} text
+ * @returns {{ path: string, fields: string[], line: string }[]}
+ */
+export function theVersionLinesOfTheReadme (text) {
+  const printed = []
+  for (const match of text.matchAll(/node -p "require\('\.\/([^']+)'\)((?:\.[A-Za-z_$][\w$]*)+)"/g)) {
+    printed.push({ path: String(match[1]), fields: String(match[2]).slice(1).split('.'), line: String(match[0]) })
+  }
+  return printed
+}
+
+/**
+ * What is wrong with the version lines a page prints: a file that is not in the tree, or one that holds no such
+ * string. Each is named, so a renamed recording or a moved field fails a build rather than printing `undefined`.
+ * @param {string} text
+ * @param {string} [page]
+ * @returns {string[]}
+ */
+export function theWrongVersionLinesOf (text, page = 'README.md') {
+  return theVersionLinesOfTheReadme(text).flatMap(({ path, fields, line }) => {
+    const file = join(ROOT, path)
+    if (!existsSync(file)) return [`${page}: '${line}' reads ${path}, which is not in the tree`]
+    /** @type {unknown} */
+    const held = fields.reduce((at, field) => (/** @type {any} */ (at))?.[field], /** @type {unknown} */ (JSON.parse(readFileSync(file, 'utf8'))))
+    return typeof held === 'string' && held.length > 0 ? [] : [`${page}: '${line}' names ${fields.join('.')}, and ${path} holds no such string`]
+  })
+}
+
+test('every version the README prints is read from a file in the tree that holds it', () => {
+  const printed = theVersionLinesOfTheReadme(read('README.md'))
+  assert.deepEqual(theWrongVersionLinesOf(read('README.md')), [])
+  assert.ok(printed.length >= 3, 'the Install block prints the Node, the host and the engine versions')
+  const engineRecording = relative(ROOT, fileURLToPath(RECORDING_OF_THE_ENGINE))
+  assert.ok(printed.some(({ path }) => path === engineRecording), `README.md prints the engine's version from ${engineRecording}`)
+})
+
+test('the Install block prints each version from the exact file and field that holds it', () => {
+  // A line that reads a string but the wrong one (a `_why`, a package `name`, the engine file on the host line)
+  // passes the check above; each line is held here to its own file and field (martha#541 package 11, review r=1).
+  const printed = theVersionLinesOfTheReadme(read('README.md')).map(({ path, fields }) => ({ path, fields }))
+  assert.deepEqual(printed, [
+    { path: 'package.json', fields: ['engines', 'node'] },
+    { path: relative(ROOT, fileURLToPath(RECORDING_OF_THE_HOST)), fields: ['host_version'] },
+    { path: relative(ROOT, fileURLToPath(RECORDING_OF_THE_ENGINE)), fields: ['engine_version'] }
+  ])
+})
+
+test('the reader of the README version lines bites: a file that is gone and a field it does not hold are both named', () => {
+  const planted = [
+    'node -p "require(\'./no-such-recording.json\').engine_version"',
+    'node -p "require(\'./package.json\').engines.nope"'
+  ].join('\n')
+  const problems = theWrongVersionLinesOf(planted)
+  assert.equal(problems.length, 2, problems.join('; '))
+  assert.match(problems[0] ?? '', /no-such-recording\.json, which is not in the tree/)
+  assert.match(problems[1] ?? '', /names engines\.nope, and package\.json holds no such string/)
 })
 
 test('the workflow that publishes the installer is a file of this repository, and cuts its tag as the names say', () => {

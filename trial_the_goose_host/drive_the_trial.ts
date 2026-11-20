@@ -20,7 +20,7 @@ import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSyn
 import { userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
-import { HOME_MARKERS, CHECKOUT_MARKERS, aPlaceFor, plant, writeTheConfig, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
+import { HOME_MARKERS, CHECKOUT_MARKERS, THE_APPROVED_SKILLS_FILE, aPlaceFor, plant, writeTheConfig, type Place } from './a_launch_the_trial_writes/a_launch_the_trial_writes.ts'
 import { NoAnswerInTime, promptOver, setTheCapInHand, withTimeout } from './the_engine_over_acp/a_turn_with_goose.ts'
 import { findingsIn, pathsIn, type TraceFindings } from './the_evidence_it_keeps/read_the_trace.ts'
 import { RecordingProxy } from './the_engine_over_acp/record_what_goose_sends.ts'
@@ -28,7 +28,7 @@ import { GooseOverAcp, type Exchange } from './the_engine_over_acp/speak_acp_to_
 import { TheModelPace, theCapFor, theLaunchesBoundMs, whyTheBoundCannotFit, type TheCapALineGets, type TheCapMadeOf } from './the_cap_a_line_gets/the_cap_a_line_gets.ts'
 import { refusalsIn, THE_ENGINE_LOGS, THE_TRANSCRIPT, theVerdictKeptWithItsExchange } from './the_evidence_it_keeps/the_evidence_says_why.ts'
 import {
-  lineEight, lineFive, lineFour, lineNine, lineOne, lineSix, lineThree, lineTwo, sevenAfterTheKill,
+  lineEight, lineFive, lineFour, lineNine, lineOne, lineSix, lineThree, lineTwoAtTheGate, sevenAfterTheKill,
   type Line, type Observation, type Trial,
 } from './the_nine_lines.ts'
 
@@ -101,9 +101,12 @@ export interface Running {
   readonly cap: TheCapALineGets
 }
 
-/** The lines that ask the session something; line 7 is the kill, and the driver runs it. */
+/**
+ * The lines that ask the session something; line 7 is the kill, and the driver runs it. Line 2 is the launch gate's,
+ * observed before anything starts (martha#614), so it has no launch and no entry here.
+ */
 const LINES: Readonly<Record<number, Line>> = {
-  1: lineOne, 2: lineTwo, 3: lineThree, 4: lineFour, 5: lineFive, 6: lineSix, 8: lineEight, 9: lineNine,
+  1: lineOne, 3: lineThree, 4: lineFour, 5: lineFive, 6: lineSix, 8: lineEight, 9: lineNine,
 }
 
 function optionsFrom(argv: readonly string[]): Options {
@@ -193,7 +196,7 @@ async function handOver(acp: GooseOverAcp, place: Place, remaining: () => number
 async function startARun(line: number, options: Options, launchedAt: number): Promise<Running> {
   const place = aPlaceFor(line, options.evidence, options.launch)
   if (line === 1) plant(place.ownerHome, HOME_MARKERS)
-  if (line === 2) plant(place.checkout, CHECKOUT_MARKERS)
+  if (line === 9) plant(place.checkout, [THE_APPROVED_SKILLS_FILE])
   const evidenceForLine = join(options.evidence, `line-${line}`)
   mkdirSync(evidenceForLine, { recursive: true })
   // The model's pace is measured from the proxy's chat answers, into the launch's own evidence, and becomes the
@@ -204,39 +207,59 @@ async function startARun(line: number, options: Options, launchedAt: number): Pr
   const cap = theCapFor(pace, remaining)
   const proxy = new RecordingProxy(options.ollama, { into: evidenceForLine, pace })
   const port = await proxy.start()
-  writeTheConfig(place, options.model, `http://127.0.0.1:${port}`, options.gooseSource)
-  const tracePath = join(evidenceForLine, 'trace.log')
-  // The exchange is kept as it crosses, one line per message, in the launch's own evidence directory
-  // (martha#694). Written empty first: a launch killed before its first message still leaves the file the
-  // verdict is checked against, rather than a directory that looks as if nothing was asked for.
-  const transcriptPath = join(evidenceForLine, THE_TRANSCRIPT)
-  writeFileSync(transcriptPath, '')
-  const keep = (exchange: Exchange): void => {
-    appendFileSync(transcriptPath, `${JSON.stringify(exchange)}\n`)
-  }
-  // Recorded before the engine starts, so a launch killed during the handshake still has its logs kept; the
-  // exchange joins it once it exists, so the SIGTERM path can keep what arrived before the kill (martha#694).
-  theLaunchInHand = { root: place.root, into: evidenceForLine }
-  const child = startGoose(place, options, line, tracePath)
-  const acp = new GooseOverAcp(child, keep)
-  theLaunchInHand = { root: place.root, into: evidenceForLine, child, close: () => acp.closeTheExchange() }
+  // Everything after the proxy listens is inside this try: a throw between the port and the handshake would otherwise
+  // leave the proxy's server listening, and a server is a handle the driver is kept alive for (martha#725).
+  let child: ChildProcess | undefined
+  let acp: GooseOverAcp | undefined
   try {
+    writeTheConfig(place, options.model, `http://127.0.0.1:${port}`, options.gooseSource)
+    const tracePath = join(evidenceForLine, 'trace.log')
+    // The exchange is kept as it crosses, one line per message, in the launch's own evidence directory
+    // (martha#694). Written empty first: a launch killed before its first message still leaves the file the
+    // verdict is checked against, rather than a directory that looks as if nothing was asked for.
+    const transcriptPath = join(evidenceForLine, THE_TRANSCRIPT)
+    writeFileSync(transcriptPath, '')
+    const keep = (exchange: Exchange): void => {
+      appendFileSync(transcriptPath, `${JSON.stringify(exchange)}\n`)
+    }
+    // Recorded before the engine starts, so a launch killed during the handshake still has its logs kept; the
+    // exchange joins it once it exists, so the SIGTERM path can keep what arrived before the kill (martha#694).
+    theLaunchInHand = { root: place.root, into: evidenceForLine }
+    child = startGoose(place, options, line, tracePath)
+    acp = new GooseOverAcp(child, keep)
+    theLaunchInHand = { root: place.root, into: evidenceForLine, child, close: () => acp?.closeTheExchange() }
     const { sessionId, currentMode } = await handOver(acp, place, remaining)
     return { line, options, place, proxy, acp, child, tracePath, sessionId, currentMode, pace, cap }
   } catch (error) {
-    // A launch with no handshake leaves nothing of its own behind: not its group, not the proxy's port, and its
-    // engine's logs go into this line's evidence rather than being lost with the root (martha#737). The order is the
-    // signal path's — close, kill, copy — and the explicit close is the fallback for the pipe's `end` (martha#694).
-    // A launch a signal is already ending has had all three done for it, and a second kill would be the same end twice.
-    if (!anEndIsUnderwayOnSignal) {
-      acp.closeTheExchange()
-      await killTheGroup(child).catch(() => undefined)
-      keepTheEngineLogs(place.root, evidenceForLine)
-      theLaunchInHand = undefined
-    }
-    await proxy.stop().catch(() => undefined)
+    await theLaunchThatNeverRan({ place, evidenceForLine, proxy, child, acp })
     throw error
   }
+}
+
+/**
+ * What a launch leaves behind when it never got as far as its line: nothing of its own — not its group, not the
+ * proxy's port — with its engine's logs kept in the line's evidence rather than lost with the root (martha#737).
+ *
+ * The order is the signal path's — close, kill, copy — and the close is the fallback for the pipe's `end`
+ * (martha#694). A launch a signal is already ending has had all three done for it, and a second kill would be the
+ * same end twice. The proxy is stopped either way: its server was listening before any of this ran (martha#725).
+ */
+async function theLaunchThatNeverRan({
+  place, evidenceForLine, proxy, child, acp,
+}: {
+  readonly place: Place
+  readonly evidenceForLine: string
+  readonly proxy: RecordingProxy
+  readonly child: ChildProcess | undefined
+  readonly acp: GooseOverAcp | undefined
+}): Promise<void> {
+  if (!anEndIsUnderwayOnSignal) {
+    acp?.close()
+    if (child !== undefined) await killTheGroup(child).catch(() => undefined)
+    keepTheEngineLogs(place.root, evidenceForLine)
+    theLaunchInHand = undefined
+  }
+  await proxy.stop().catch(() => undefined)
 }
 
 function trialOf(running: Running): Trial {
@@ -377,9 +400,11 @@ function onTheRunnersTerm(): void {
 
 async function endARun(running: Running): Promise<{ trace: TraceFindings; groupLeft: string[]; engineLogs: number }> {
   const groupLeft = await killTheGroup(running.child)
-  // The fallback for the pipe's own `end` event, which normally has flushed the last partial message already: a
-  // launch whose stdout ended before any listener could run still keeps what crossed (martha#694). Keeps nothing twice.
-  running.acp.closeTheExchange()
+  // The exchange's rest is kept and the engine's three pipes are closed (martha#725): a process the group kill did not
+  // reach — a builtin extension's own session — can still hold the engine's output open, and a pipe the driver holds
+  // keeps node alive six minutes past a verdict it has already written. The close is also the fallback for the pipe's
+  // own `end` event, which normally has flushed the last partial message already (martha#694). Keeps nothing twice.
+  running.acp.close()
   await running.proxy.stop()
   const engineLogs = keepTheEngineLogs(running.place.root, join(running.options.evidence, `line-${running.line}`))
   theLaunchInHand = undefined
@@ -413,9 +438,19 @@ export function theObservationOfALineThatThrew(error: unknown): Observation {
   return { verdict: 'fail', say: `the line could not be run: ${error instanceof Error ? error.message : String(error)}`, evidence: {} }
 }
 
+/** Line 2 at the launch gate (martha#614): the unapproved checkout is planted, the gate asked, and nothing started. */
+function runLineTwoAtTheGate(options: Options, evidenceForLine: string): void {
+  const place = aPlaceFor(2, options.evidence, options.launch)
+  plant(place.checkout, CHECKOUT_MARKERS)
+  const observation = lineTwoAtTheGate(place)
+  writeFileSync(join(evidenceForLine, 'result.json'), JSON.stringify({ line: 2, ...observation }, null, 2))
+  console.log(`line 2: ${observation.verdict} — ${observation.say}`)
+}
+
 async function runLine(line: number, options: Options, launchedAt: number): Promise<void> {
   const evidenceForLine = join(options.evidence, `line-${line}`)
   mkdirSync(evidenceForLine, { recursive: true })
+  if (line === 2) return runLineTwoAtTheGate(options, evidenceForLine)
   let running: Running
   try {
     running = await startARun(line, options, launchedAt)

@@ -2,7 +2,7 @@
 // something else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never
 // run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_checkout/coincidences.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { ANSWER_MILLISECONDS } from '../record_mesh_answers/ask_a_mesh_server_a_tool.ts'
@@ -30,6 +30,9 @@ const A_STAND_PAST_A_RETURN = 'how far past a tool\'s return a case stands to be
 /** Why the shell tool's limit a recorded case asks of the host is not a trust deadline (martha#441): it lets a long call finish, and no host asks its owner to trust anything here. */
 const THE_HOSTS_OWN_CALL_LIMIT = 'the shell tool\'s own limit a recorded case asks the host for, so a long call finishes; the owner\'s deadline to answer a trust question is the same ten minutes and is never spent here'
 
+/** Why a case's margin inside the driver's open-call budget is not the launcher's save wait (martha#891): it ends a tool before the driver gives up on it, and no save is waited for here. */
+const A_MARGIN_INSIDE_THE_DRIVERS_BUDGET = 'how far inside the driver\'s budget for an open call a case\'s long tool ends, so it has returned before the driver names it stuck; the launcher\'s wait for the host\'s save is the same ten seconds and is never spent here'
+
 export const COINCIDENCES: readonly Exception[] = [
   // A git subcommand, in a test that makes a throwaway repository (martha#315). The constant of that name is the file a
   // git directory keeps its configuration in, which this test neither reads nor writes.
@@ -42,9 +45,12 @@ export const COINCIDENCES: readonly Exception[] = [
   // The same git subcommand, in the recorded end's throwaway repository (martha#311): martha init reads its owner there.
   { value: CONFIG, file: 'drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: CONFIG, file: 'drive_the_recorded_host/own_writes_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'drive_the_recorded_host/a_stale_clone_note_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_stale_clone_note_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
   { value: CONFIG, file: 'drive_the_recorded_host/run_nothing_a_checkout_planted.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   // The same git subcommand, in the muted bell's throwaway repository (martha#371).
   { value: CONFIG, file: 'drive_the_recorded_host/a_muted_bell_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
+  { value: CONFIG, file: 'drive_the_recorded_host/the_crew_command_on_the_recorded_host.node-test.ts', reason: A_TOOLS_OWN_SUBCOMMAND },
   { value: STATE_ROOT_NAME, file: 'drive_the_recorded_host/drive_the_recorded_host.ts', reason: THE_REPOSITORYS_OWN_NAME },
   // Bounds the recorded-host cases put on their own waits, and ages they make up for a journal entry (martha#441):
   // each is the same figure as a duration the tree names, and none of them is that duration.
@@ -56,6 +62,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: ANSWER_MILLISECONDS, file: 'drive_the_recorded_host/a_silent_host_fails_by_name.node-test.ts', reason: AN_AGE_THE_CASE_MAKES_UP },
   { value: THE_SAVE_WAIT_MS, file: 'drive_the_recorded_host/a_silent_host_fails_by_name.node-test.ts', reason: A_STAND_PAST_A_RETURN },
   { value: TRUST_ANSWER_DEADLINE_MS, file: 'drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts', reason: THE_HOSTS_OWN_CALL_LIMIT },
+  { value: THE_SAVE_WAIT_MS, file: 'drive_the_recorded_host/an_end_on_the_recorded_host.node-test.ts', reason: A_MARGIN_INSIDE_THE_DRIVERS_BUDGET },
   // The act the owner types, spelled like the Goose engine's mode that asks its client (martha#541).
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_menu_answer_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_muted_bell_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
@@ -65,4 +72,6 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_switch_does_not_move_the_owners_default.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/a_switch_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/own_writes_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'drive_the_recorded_host/the_crew_command_on_the_recorded_host.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  // The owner's /crew (martha#927) is typed as the command's own name, which the channel also spells for every member.
 ]

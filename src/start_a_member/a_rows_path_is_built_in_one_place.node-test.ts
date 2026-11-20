@@ -10,7 +10,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { coreSources } from '../../prove_the_core/core_sources.ts'
+import { coreSources } from '../../prove_the_core/read_the_manifest_and_the_linter/core_sources.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
 /** The one file allowed to name the rows directory's own name: the place that defines it. */

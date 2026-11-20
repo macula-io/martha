@@ -2,7 +2,7 @@
 // meaning something else by them, each with its reason (martha#289). Read by the check itself as a syntax tree,
 // never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { EDIT_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 /** Why `'Edit'` is written by literal in a planted case's expected line (martha#776). */

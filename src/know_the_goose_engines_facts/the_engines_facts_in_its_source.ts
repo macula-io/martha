@@ -3,7 +3,8 @@
 // This exists so a member can work in Goose with nothing about the engine typed by hand: the launcher writes the
 // engine's config root from these facts (which extension keys to switch off, which mode to pin, which variable moves
 // the config root), the adapter answers permission requests from the kinds the engine offers, and the model stand-in
-// listens on the path the engine's OpenAI provider posts to. Each fact is read from the place in the engine's source
+// listens on the path the engine's OpenAI provider posts to. The crew's tool server is written into the config root
+// as the engine's own stdio entry, and answers each call in the session the engine names in the call's meta. Each fact is read from the place in the engine's source
 // that decides it, so a change there is a difference the drift check names, never a launch that quietly trusts an
 // old list.
 //
@@ -11,6 +12,11 @@
 // naming what it could not find. The recorder (src/record_the_goose_engine/) does the reading from disk.
 
 import { dirname, join } from 'node:path'
+
+import { captured, fileOf, type EngineSource } from './read_an_engines_source.ts'
+import { checkoutSkillRootsIn, SKILL_ROOT_PLACES, type CheckoutSkillRoots } from './the_checkout_skill_roots_in_its_source.ts'
+export type { EngineSource } from './read_an_engines_source.ts'
+export { CHECKOUT_ROOT_CARRIERS, SKILL_ROOT_READERS, WORKING_DIRECTORY_AS_THE_ROOT, type CheckoutSkillRoots } from './the_checkout_skill_roots_in_its_source.ts'
 
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, vocabularyOf, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 
@@ -44,8 +50,16 @@ export interface EngineFacts {
   readonly platform_extensions: readonly PlatformExtension[]
   /** The answers the engine's ACP server offers a client for a tool call, as their wire ids, in its order. */
   readonly permission_options: readonly string[]
-  /** The OpenAI provider: its name, the settings it reads, and the path it posts to under a host. */
-  readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string }
+  /**
+   * The OpenAI provider: its name, the settings it reads, the path it posts to under a host, and the settings it reads
+   * as secrets (#541 package A): those come from the environment or the secret storage, never from the config file.
+   */
+  readonly openai_provider: { readonly name: string; readonly settings: readonly string[]; readonly default_base_path: string; readonly secrets: readonly string[] }
+  /**
+   * Where the engine keeps secrets when its keyring is off (#541 package A): the config setting that switches the
+   * system keyring off, and the file beside the config file the secrets are then read from.
+   */
+  readonly secret_storage: SecretStorage
   /** The model names the delegate tool takes: closed when its schema lists them, open when it takes any text (#541 package 6). */
   readonly subagent_models: ModelVocabulary
   /**
@@ -54,12 +68,165 @@ export interface EngineFacts {
    * its order. A launch records exactly these, so none is typed by hand.
    */
   readonly hint_files: { readonly setting: string; readonly goose_hints: string; readonly agents_md: string; readonly when_unset: readonly string[] }
+  /** The entry a config's `extensions` holds to start a tool server on stdio (#541 part C, C1). */
+  readonly stdio_extension: StdioExtension
+  /** The key of a tool call's `_meta` the engine names the calling session under, so a tool server answers in that session. */
+  readonly tool_call_session_key: string
+  /**
+   * The setting that opts the engine into sending usage events to its makers, and what an unset one means (#541,
+   * Jupiter's row 6): read from the function the engine asks before it sends anything, so a launch writes it off by name.
+   */
+  readonly telemetry: ATelemetrySwitch
+  /** The setting that offers the model skills at all (`load_skill` and the list in the prompt), and its unset default (martha#839). */
+  readonly skills_advertised: ASkillsSwitch
+  /** The setting that offers the model the engine's compiled-in skills on their own, and its unset default (martha#839). */
+  readonly builtin_skills_advertised: ASkillsSwitch
+  /**
+   * How the engine names a called tool to its client (#541 part C4): the path under a `tool_call` update's `_meta` that
+   * holds the tool's name (its permission request carries only a title made for people), the separator between an
+   * extension's name and its tool's own name, and the end of the name the engine splits at.
+   */
+  readonly tool_naming: ToolNaming
+  /**
+   * The own name of the shell tool of the extension a member keeps (#541 part C4): the tool the Developer extension
+   * lists on its shell parameters and runs a command for, the name the shell hold reads while an agent runs (martha#562).
+   */
+  readonly shell_tool: string
+  /**
+   * Every tool the Developer extension lists, in its order (#541 package A, design G1): the tool's name, the parameters
+   * it is parsed into, and the argument that names what it reads, writes or runs, which is the first text field of those
+   * parameters. The launch's decisions over a member's calls take their names from here, never from a list in the code.
+   */
+  readonly developer_tools: readonly DeveloperTool[]
+  /**
+   * How the Developer extension's file tools turn the path they are given into the file they touch (#541 package A,
+   * design r=4 R3): the launch's guards resolve a member's path the same way, so a path that reaches the owner's file
+   * for the engine reaches it for the guard too.
+   */
+  readonly path_resolution: PathResolution
+  /**
+   * The store the engine keeps a session's row in and loads again before every step (#541 package A, design r=5 R1'):
+   * the file under its data folder, the journal mode it opens the file in, the columns of the sessions table, and the
+   * keys its extension states are stored under in `extension_data`. The launch reads the gate fields of its row back
+   * by these names, so a column the engine renames turns the drift check red rather than a read-back that reads nothing.
+   */
+  readonly session_store: SessionStore
+  /**
+   * The calls the engine's approve mode runs without asking the client (#541 package A, design r=6 R1''): the user
+   * permission levels its approve arm turns into an allow, and the function whose `false` keeps a call out of the
+   * inspection, which the approval then allows unasked. The launch stops a member on any call it was not asked about,
+   * so these are what that stop catches; a new way to go unasked turns the drift check red.
+   */
+  readonly approve_mode_unasked: ApproveModeUnasked
+  /**
+   * The folders the engine keeps for itself (#541 package A, design G1 and r=4 R1), by the kind its paths module names
+   * them with: under a path root, the folders it joins to the root; without one, where the platform layout puts them,
+   * as the layout's own function or a folder under the home. The launch refuses a member's write into either, so a
+   * folder the engine moves turns the drift check red rather than a guard that watches the old place.
+   */
+  readonly engine_folders: EngineFolders
+  /**
+   * The places in the checkout it starts in that the engine reads skills and plugins from (martha#614): its skill
+   * folders, its project plugin folder (every child of it is a plugin, enabled unless a settings file says otherwise),
+   * and the two project settings files that switch plugins. The gate reads its families from these, so a folder the
+   * engine renames or adds is a drift the check names, never a skill that reaches the model past the gate.
+   */
+  readonly checkout_skill_roots: CheckoutSkillRoots
 }
 
-/** Reads one checkout of the engine: a file's text, or undefined when there is none; a directory's entries, or []. */
-export interface EngineSource {
-  readonly read: (path: string) => string | undefined
-  readonly list: (directory: string) => readonly string[]
+/** Each folder kind of the engine: the folders joined to a path root, and the place it takes without one. */
+export interface EngineFolders {
+  readonly under_root: Readonly<Record<string, readonly string[]>>
+  readonly without_root: Readonly<Record<string, EngineFolderWithoutRoot>>
+}
+
+/** A folder the engine takes without a path root: the platform layout's own folder of a kind, or a folder under the home. */
+export type EngineFolderWithoutRoot = { readonly layout: string } | { readonly home: readonly string[] }
+
+/** What approve mode runs unasked: the user permission levels that allow, and the filter that lets an uninspected call run. */
+export interface ApproveModeUnasked {
+  readonly user_permissions: readonly string[]
+  readonly unadvertised: string
+}
+
+/** The engine's session store: its file, its journal mode, its sessions table's columns, and its extension state keys. */
+export interface SessionStore {
+  readonly file: string
+  readonly journal_mode: string
+  readonly table: string
+  readonly columns: readonly string[]
+  readonly extension_states: readonly string[]
+}
+
+/**
+ * The engine's `resolve_path`: an absolute path used as given; a relative one joined to the first of `bases` there is
+ * (the session's working directory, the process's, then `.`); whether the text is trimmed first, and whether a `~` is
+ * read as the home folder.
+ */
+export interface PathResolution {
+  readonly absolute: 'as_given'
+  readonly bases: readonly string[]
+  readonly trims: boolean
+  readonly expands_home: boolean
+}
+
+/** One tool of the Developer extension: its name, its parameters, the argument that names its file, command or source, and the hints it is annotated with. */
+export interface DeveloperTool {
+  readonly name: string
+  readonly params: string
+  readonly argument: string
+  readonly hints: DeveloperToolHints
+}
+
+/**
+ * What the engine annotates one of its tools with (#541 package A, design G1): whether it only reads, whether it may
+ * change what it touches, and whether it reaches past the machine. The launch places a tool's result by these, the
+ * engine's own words, so no tool's name is typed in the code.
+ */
+export interface DeveloperToolHints {
+  readonly read_only: boolean
+  readonly destructive: boolean
+  readonly open_world: boolean
+}
+
+/** The hints `ToolAnnotations::from_raw` takes after the title, in its order; the idempotent one is not read. */
+export const ANNOTATION_HINTS = ['read_only', 'destructive', 'idempotent', 'open_world'] as const
+
+/** The engine's naming of a called tool: where a client reads it, and how it splits into an extension's and a tool's own name. */
+export interface ToolNaming {
+  readonly meta_path: readonly string[]
+  readonly separator: string
+  readonly split_at: 'first' | 'last'
+}
+
+/**
+ * How the engine reads an entry that starts a tool server on stdio: the key its variant is tagged by and the value that
+ * picks this variant, every key the variant reads, and the environment names the engine drops from the entry's `envs`
+ * with only a warning, so a variable the launcher needs the server to see is never one the engine silently removes.
+ */
+export interface StdioExtension {
+  readonly tag: string
+  readonly type: string
+  readonly keys: readonly string[]
+  readonly disallowed_env: readonly string[]
+}
+
+/** The engine's secret storage with its keyring off: the switch a config file turns it off with, and the file it reads instead. */
+export interface SecretStorage {
+  readonly keyring_switch: string
+  readonly file: string
+}
+
+/** A switch the engine reads with `get_param::<bool>` through a constant: the setting it names, and what an unset one means. */
+export interface ASkillsSwitch {
+  readonly setting: string
+  readonly when_unset: boolean
+}
+
+/** The engine's telemetry opt-in: the setting its choice is read from, and what the engine does when no choice is set. */
+export interface ATelemetrySwitch {
+  readonly setting: string
+  readonly when_unset: boolean
 }
 
 /** Where in the engine each fact is decided, relative to the checkout. A file that moves makes its part unreadable. */
@@ -74,9 +241,41 @@ export const ENGINE_PLACES = {
   platform_extensions: 'crates/goose/src/agents/platform_extensions/mod.rs',
   acp_server: 'crates/goose/src/acp/server.rs',
   openai_provider: 'crates/goose-providers/src/openai.rs',
+  openai_secrets: 'crates/goose/src/providers/openai_def.rs',
+  secret_storage: 'crates/goose/src/config/base.rs',
   delegate_tool: 'crates/goose/src/agents/platform_extensions/summon.rs',
   hint_files: 'crates/goose/src/hints/load_hints.rs',
+  stdio_extension: 'crates/goose-agent/src/extension.rs',
+  session_context: 'crates/goose/src/session_context.rs',
+  telemetry: 'crates/goose/src/posthog.rs',
+  skills_advertised: 'crates/goose/src/agents/services.rs',
+  builtin_skills_advertised: 'crates/goose/src/skills/mod.rs',
+  tool_call_meta: 'crates/goose/src/acp/server/tool_calls/conversion.rs',
+  tool_name_parts: 'crates/goose-provider-types/src/conversation/tool_request.rs',
+  shell_tool: 'crates/goose/src/agents/platform_extensions/developer/mod.rs',
+  ...SKILL_ROOT_PLACES,
+  path_resolution: 'crates/goose/src/agents/platform_extensions/developer/edit.rs',
+  session_store: 'crates/goose/src/session/session_manager.rs',
+  extension_states: 'crates/goose/src/session/extension_data.rs',
+  context_relevance: 'crates/goose/src/agents/state_machine/ops_context_relevance.rs',
+  permission_inspector: 'crates/goose/src/permission/permission_inspector.rs',
+  tool_approval: 'crates/goose/src/agents/state_machine/tool_approval.rs',
 } as const
+
+/**
+ * The folder the Developer extension's files sit in (#541 package A): its tools' parameters are declared across them,
+ * one struct per file or several, so the reader looks in every file there rather than a file of its own.
+ */
+export const DEVELOPER_DIR = 'crates/goose/src/agents/platform_extensions/developer'
+
+/** The function that reads each skills switch, in the file ENGINE_PLACES names for it (martha#839). */
+export const SKILLS_SWITCH_READERS = { skills_advertised: 'skills_advertised', builtin_skills_advertised: 'builtin_skills_advertised' } as const
+
+/**
+ * The two functions the engine's telemetry is decided by, in the file ENGINE_PLACES names: the one every send asks,
+ * which falls back to a default, and the one it asks in turn, which reads the setting.
+ */
+export const TELEMETRY_READERS = { enabled: 'is_telemetry_enabled', choice: 'get_telemetry_choice' } as const
 
 /** The constants the engine declares its two hint file names as, in the file that reads them (martha#785). */
 export const HINT_FILE_CONSTANTS = { goose_hints: 'GOOSE_HINTS_FILENAME', agents_md: 'AGENTS_MD_FILENAME' } as const
@@ -98,21 +297,36 @@ export const ENGINE_PARTS: ReadonlyArray<{ readonly part: string; readonly read:
   { part: 'openai provider', read: (source) => ({ openai_provider: openaiProviderIn(source) }) },
   { part: 'subagent models', read: (source) => ({ subagent_models: subagentModelsIn(source) }) },
   { part: 'hint files', read: (source) => ({ hint_files: hintFilesIn(source) }) },
+  { part: 'stdio extension', read: (source) => ({ stdio_extension: stdioExtensionIn(source) }) },
+  { part: 'tool call session key', read: (source) => ({ tool_call_session_key: toolCallSessionKeyIn(source) }) },
+  { part: 'telemetry switch', read: (source) => ({ telemetry: telemetryIn(source) }) },
+  { part: 'skills switch', read: (source) => ({ skills_advertised: skillsSwitchIn(source, 'skills_advertised') }) },
+  { part: 'built-in skills switch', read: (source) => ({ builtin_skills_advertised: skillsSwitchIn(source, 'builtin_skills_advertised') }) },
+  { part: 'tool naming', read: (source) => ({ tool_naming: toolNamingIn(source) }) },
+  { part: 'shell tool', read: (source) => ({ shell_tool: shellToolIn(source) }) },
+  { part: 'developer tools', read: (source) => ({ developer_tools: developerToolsIn(source) }) },
+  { part: 'path resolution', read: (source) => ({ path_resolution: pathResolutionIn(source) }) },
+  { part: 'session store', read: (source) => ({ session_store: sessionStoreIn(source) }) },
+  { part: 'approve mode unasked', read: (source) => ({ approve_mode_unasked: approveModeUnaskedIn(source) }) },
+  { part: 'engine folders', read: (source) => ({ engine_folders: engineFoldersIn(source) }) },
+  { part: 'secret storage', read: (source) => ({ secret_storage: secretStorageIn(source) }) },
+  { part: 'checkout skill roots', read: (source) => ({ checkout_skill_roots: checkoutSkillRootsIn(source) }) },
 ]
 
-/** A file the part needs, or a throw that names it. */
-function fileOf(source: EngineSource, path: string): string {
-  const text = source.read(path)
-  if (text === undefined) throw new Error(`no ${path}`)
-  return text
-}
+/** The function that builds a tool call's `_meta`, and the maps it fills from the outside in, in the file that builds it. */
+export const TOOL_CALL_META = { builder: 'goose_tool_call_meta', maps: ['meta', 'goose_meta', 'tool_call_meta'] } as const
 
-/** The first group `pattern` captures in `text`, or a throw naming what was looked for and where. */
-function captured(text: string, pattern: RegExp, what: string, path: string): string {
-  const found = pattern.exec(text)?.[1]
-  if (found === undefined) throw new Error(`${path} says nothing of ${what}`)
-  return found
-}
+/** Where the Developer extension names its shell tool: the function that lists its tools, and the parameters the shell's are. */
+export const SHELL_TOOL = { lister: 'get_tools', params: 'ShellParams' } as const
+
+/** The functions of the engine's config module that decide its secret storage with the keyring off (#541 package A). */
+export const SECRET_STORAGE = { switch_in_config: 'keyring_disabled_in_config', switch_value: 'keyring_disabled_value', file: 'secrets_file_path_in' } as const
+
+/** How the engine reads a switched-off keyring's value: a YAML `true` counts, which is what a launch writes. */
+export const A_TRUE_SWITCH_COUNTS = 'value.as_bool().unwrap_or(false)'
+
+/** The two ways Rust's `str` splits once, by the end it splits at. */
+export const SPLITS_ONCE = { first: 'split_once', last: 'rsplit_once' } as const
 
 function engineNameIn(source: EngineSource): string {
   const path = ENGINE_PLACES.engine_name
@@ -214,7 +428,51 @@ function openaiProviderIn(source: EngineSource): EngineFacts['openai_provider'] 
     name: captured(text, /pub const OPEN_AI_PROVIDER_NAME: &str = "([^"]+)"/, 'the provider name', path),
     settings,
     default_base_path: captured(text, /pub const OPEN_AI_DEFAULT_BASE_PATH: &str = "([^"]+)"/, 'the default base path', path),
+    secrets: openaiSecretsIn(source, settings),
   }
+}
+
+/**
+ * The settings the OpenAI provider reads as secrets (#541 package A), from its one `get_secrets` call: the first named
+ * and the list after it. A second call, a call in another shape, or a secret that is none of the provider's settings
+ * is unreadable, never a shorter list: a secret missed here would be admitted into the config file, where the engine
+ * never reads it.
+ */
+function openaiSecretsIn(source: EngineSource, settings: readonly string[]): readonly string[] {
+  const path = ENGINE_PLACES.openai_secrets
+  const text = fileOf(source, path)
+  const calls = [...text.matchAll(/\.get_secrets\(\s*"([^"]+)",\s*&\[([^\]]*)\]\s*,?\s*\)/g)]
+  const written = text.split('.get_secrets(').length - 1
+  const [call] = calls
+  if (written !== 1 || calls.length !== 1 || call?.[1] === undefined || call[2] === undefined) {
+    throw new Error(`${path} reads secrets ${String(written)} times and ${String(calls.length)} are in a shape this reader knows, not once`)
+  }
+  const others = [...call[2].matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? '')
+  if (call[2].split(',').filter((entry) => entry.trim() !== '').length !== others.length) throw new Error(`${path} lists secrets in a shape this reader does not know`)
+  const secrets = [call[1], ...others]
+  const unknown = secrets.find((secret) => !settings.includes(secret))
+  if (unknown !== undefined) throw new Error(`${path} reads a secret ${unknown} that is none of the provider's settings in ${ENGINE_PLACES.openai_provider}`)
+  return secrets
+}
+
+/** The body of the function `name` in `text`, from its opening brace to the brace that closes it at the start of a line. */
+function bodyOf(text: string, name: string, path: string): string {
+  return captured(text, new RegExp(`fn ${name}\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`), `the function ${name}`, path)
+}
+
+/**
+ * The engine's secret storage with its keyring off (#541 package A): the setting a config file switches the keyring off
+ * with, which must be read through the value function that takes a YAML `true`, and the file the secrets are then read
+ * from beside the config file. A switch read another way is unreadable, never a name a launch writes and the engine ignores.
+ */
+function secretStorageIn(source: EngineSource): SecretStorage {
+  const path = ENGINE_PLACES.secret_storage
+  const text = fileOf(source, path)
+  const inConfig = bodyOf(text, SECRET_STORAGE.switch_in_config, path)
+  const keyring_switch = captured(inConfig, new RegExp(`\\.get\\("([^"]+)"\\)\\.map\\(${SECRET_STORAGE.switch_value}\\)`), 'the setting that switches the keyring off', path)
+  if (!bodyOf(text, SECRET_STORAGE.switch_value, path).includes(A_TRUE_SWITCH_COUNTS)) throw new Error(`${path} no longer reads a true ${keyring_switch} as off in ${SECRET_STORAGE.switch_value}`)
+  const file = captured(bodyOf(text, SECRET_STORAGE.file, path), /^\s*config_dir\.join\("([^"]+)"\)\s*$/, 'the secrets file beside the config file', path)
+  return { keyring_switch, file }
 }
 
 /**
@@ -256,6 +514,274 @@ function hintFilesIn(source: EngineSource): EngineFacts['hint_files'] {
     agents_md: valueOf(HINT_FILE_CONSTANTS.agents_md),
     when_unset: constants.map(valueOf),
   }
+}
+
+/** Rust text with its attributes and line comments taken out: what is left of a field is its name and its type. */
+const withoutAttributesOrComments = (text: string): string => text.replace(/#\[[^\]]*\]/g, '').replace(/\/\/[^\n]*/g, '')
+
+/**
+ * The stdio variant of the engine's extension config: the serde tag of the enum, the name the variant is renamed to on
+ * the wire, the field names it reads, and the list of environment names `Envs` drops. The list's declared length is
+ * held against the names read, so a name in a shape this reader misses is unreadable, never a shorter list.
+ */
+function stdioExtensionIn(source: EngineSource): StdioExtension {
+  const path = ENGINE_PLACES.stdio_extension
+  const text = fileOf(source, path)
+  const tag = captured(text, /#\[serde\(tag = "([^"]+)"\)\]\s*pub enum ExtensionConfig\b/, 'the tag of the extension config', path)
+  const variant = /#\[serde\(rename = "([^"]+)"\)\]\s*Stdio\s*\{([\s\S]*?)\n {4}\},/.exec(text)
+  if (variant?.[1] === undefined || variant[2] === undefined) throw new Error(`${path} says nothing of the stdio variant`)
+  const keys = [...withoutAttributesOrComments(variant[2]).matchAll(/^\s*(\w+)\s*:/gm)].map((found) => found[1] ?? '')
+  if (keys.length === 0) throw new Error(`${path} gives the stdio variant no field`)
+  const listed = /const DISALLOWED_KEYS: \[&'static str; (\d+)\] = \[([\s\S]*?)\];/.exec(text)
+  if (listed?.[1] === undefined || listed[2] === undefined) throw new Error(`${path} says nothing of the disallowed environment names`)
+  const disallowed_env = [...withoutAttributesOrComments(listed[2]).matchAll(/"([^"]+)"/g)].map((found) => found[1] ?? '')
+  if (disallowed_env.length !== Number(listed[1])) {
+    throw new Error(`${path} declares ${listed[1]} disallowed environment names and ${String(disallowed_env.length)} are in a shape this reader knows`)
+  }
+  return { tag, type: variant[1], keys, disallowed_env }
+}
+
+function toolCallSessionKeyIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.session_context
+  return captured(fileOf(source, path), /pub const SESSION_ID_HEADER: &str = "([^"]+)"/, "the session key of a tool call's meta", path)
+}
+
+/**
+ * The telemetry opt-in, read as the engine decides it: the default comes from the function every send asks, and only
+ * when that function falls back on the choice function; the setting comes from the constant the choice function passes,
+ * never from the first constant in the file.
+ */
+function telemetryIn(source: EngineSource): ATelemetrySwitch {
+  const path = ENGINE_PLACES.telemetry
+  const text = fileOf(source, path)
+  const { enabled, choice } = TELEMETRY_READERS
+  const enabledBody = captured(text, new RegExp(`pub fn ${enabled}\\(\\)\\s*->\\s*bool\\s*\\{([^}]*)\\}`), `the function ${enabled}`, path)
+  const when_unset = captured(enabledBody, new RegExp(`${choice}\\(\\)\\s*\\.unwrap_or\\((true|false)\\)`), `the default ${enabled} gives when ${choice} has none`, path)
+  const choiceBody = captured(text, new RegExp(`pub fn ${choice}\\(\\)\\s*->\\s*Option<bool>\\s*\\{([\\s\\S]*?)\\n\\}`), `the function ${choice}`, path)
+  const constant = captured(choiceBody, /get_param::<bool>\((\w+)\)/, `the constant ${choice} reads`, path)
+  return {
+    setting: captured(text, new RegExp(`pub const ${constant}: &str = "([^"]+)";`), `the value of ${constant}`, path),
+    when_unset: when_unset === 'true',
+  }
+}
+
+/**
+ * A skills switch (martha#839): the body of the function that reads it, the constant it passes to `get_param::<bool>`,
+ * that constant's value in the same file, and the default `unwrap_or` gives an unset one.
+ */
+function skillsSwitchIn(source: EngineSource, which: keyof typeof SKILLS_SWITCH_READERS): ASkillsSwitch {
+  const path = ENGINE_PLACES[which]
+  const text = fileOf(source, path)
+  const reader = SKILLS_SWITCH_READERS[which]
+  const body = captured(text, new RegExp(`pub fn ${reader}\\(config: &Config\\)\\s*->\\s*bool\\s*\\{([^}]*)\\}`), `the ${reader} switch`, path)
+  const constant = captured(body, /get_param::<bool>\((\w+)\)/, `the constant ${reader} reads`, path)
+  return {
+    setting: captured(text, new RegExp(`pub const ${constant}: &str = "([^"]+)";`), `the value of ${constant}`, path),
+    when_unset: captured(body, /unwrap_or\((true|false)\)/, `the default of ${reader}`, path) === 'true',
+  }
+}
+
+/**
+ * The engine's naming of a called tool (#541 part C4). The path is read from the function that builds a tool call's
+ * `_meta`: the first key each of its maps is filled under, from the outside in. The split is read from how the engine
+ * parts a name, `split_once` (at the first separator) or `rsplit_once` (at the last).
+ */
+function toolNamingIn(source: EngineSource): ToolNaming {
+  const metaPath = ENGINE_PLACES.tool_call_meta
+  const builder = captured(fileOf(source, metaPath), new RegExp(`fn ${TOOL_CALL_META.builder}\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`), `the function ${TOOL_CALL_META.builder}`, metaPath)
+  const meta_path = TOOL_CALL_META.maps.map((map) => captured(builder, new RegExp(`\\b${map}\\.insert\\(\\s*"([^"]+)"`), `the key ${map} is filled under`, metaPath))
+  const partsPath = ENGINE_PLACES.tool_name_parts
+  const parting = captured(fileOf(source, partsPath), /for ToolNameParts<'a> \{([\s\S]*?)\n\}/, 'how a tool name is parted', partsPath)
+  const split = /\bname\.(r?split_once)\("([^"]+)"\)/.exec(parting)
+  if (split?.[1] === undefined || split[2] === undefined) throw new Error(`${partsPath} says nothing of where a tool name is split`)
+  return { meta_path, separator: split[2], split_at: split[1] === SPLITS_ONCE.last ? 'last' : 'first' }
+}
+
+/**
+ * The own name of the Developer extension's shell tool (#541 part C4): the one tool its lister builds on the shell's
+ * parameters, which must be the one name its call dispatch parses those parameters for. No such tool, two, or a list
+ * and a dispatch that disagree, is unreadable by name, never a name guessed.
+ */
+function shellToolIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.shell_tool
+  const text = fileOf(source, path)
+  const listing = captured(text, new RegExp(`fn ${SHELL_TOOL.lister}\\(\\)[^{]*\\{([\\s\\S]*?)\\n {4}\\}`), `the function ${SHELL_TOOL.lister}`, path)
+  const listed = [...listing.matchAll(/Tool::new\(\s*"([^"]+)"\.to_string\(\),([\s\S]*?)(?=Tool::new\(|$)/g)]
+    .filter((found) => (found[2] ?? '').includes(`schema::<${SHELL_TOOL.params}>`))
+    .map((found) => found[1] ?? '')
+  const dispatched = [...text.matchAll(new RegExp(`"([^"]+)"\\s*=>\\s*match\\s+Self::parse_args::<${SHELL_TOOL.params}>`, 'g'))].map((found) => found[1] ?? '')
+  const [name] = listed
+  if (listed.length !== 1 || name === undefined) throw new Error(`${path} lists ${String(listed.length)} tools on ${SHELL_TOOL.params} in ${SHELL_TOOL.lister}, not one shell tool`)
+  if (dispatched.length !== 1 || dispatched[0] !== name) throw new Error(`${path} lists the shell tool as ${name} but runs ${SHELL_TOOL.params} for ${JSON.stringify(dispatched)}`)
+  return name
+}
+
+/**
+ * Every tool the Developer extension lists (#541 package A, design G1), in the order its lister gives them: each one's
+ * name and the parameters its schema is built on, which the call dispatch must parse for that same name, and the first
+ * text field of those parameters, found in the one file of the extension's folder that declares them. A tool the
+ * dispatch runs on other parameters, parameters declared in no file or in two, or parameters with no text field are
+ * unreadable, never a tool with a guessed argument: a wrong argument would let a write pass the owner's guards unread.
+ */
+function developerToolsIn(source: EngineSource): readonly DeveloperTool[] {
+  const path = ENGINE_PLACES.shell_tool
+  const text = fileOf(source, path)
+  const listing = captured(text, new RegExp(`fn ${SHELL_TOOL.lister}\\(\\)[^{]*\\{([\\s\\S]*?)\\n {4}\\}`), `the function ${SHELL_TOOL.lister}`, path)
+  const segments = listing.split('Tool::new(').slice(1)
+  const listed = segments.map((segment) => {
+    const found = /^\s*"([^"]+)"\.to_string\(\),[\s\S]*?schema::<(\w+)>/.exec(segment)
+    if (found === null) throw new Error(`${path} lists a tool in ${SHELL_TOOL.lister} in a shape this reader does not know`)
+    return { name: found[1] ?? '', params: found[2] ?? '', hints: hintsOf(segment, found[1] ?? '', path) }
+  })
+  if (listed.length === 0) throw new Error(`${path} lists no tool in ${SHELL_TOOL.lister}`)
+  const files = source.list(DEVELOPER_DIR).filter((name) => name.endsWith('.rs')).map((name) => `${DEVELOPER_DIR}/${name}`)
+  return listed.map(({ name, params, hints }) => {
+    const dispatched = [...text.matchAll(new RegExp(`"${name}"\\s*=>\\s*match\\s+Self::parse_args::<(\\w+)>`, 'g'))].map((found) => found[1] ?? '')
+    if (dispatched.length !== 1 || dispatched[0] !== params) throw new Error(`${path} lists the tool ${name} on ${params} but runs it on ${JSON.stringify(dispatched)}`)
+    return { name, params, argument: firstTextFieldOf(source, files, params), hints }
+  })
+}
+
+/** The hints one listed tool is annotated with: each one `Some(true)` or `Some(false)`, or the tool is unreadable by name. */
+function hintsOf(segment: string, name: string, path: string): DeveloperToolHints {
+  const raw = /\.annotate\(ToolAnnotations::from_raw\(\s*Some\("[^"]*"\.to_string\(\)\),((?:\s*Some\((?:true|false)\),){4})\s*\)\)/.exec(segment)?.[1]
+  if (raw === undefined) throw new Error(`${path} lists the tool ${name} without the hints this reader knows`)
+  const said = [...raw.matchAll(/Some\((true|false)\)/g)].map((found) => found[1] === 'true')
+  const hint = (which: (typeof ANNOTATION_HINTS)[number]): boolean => said[ANNOTATION_HINTS.indexOf(which)] === true
+  return { read_only: hint('read_only'), destructive: hint('destructive'), open_world: hint('open_world') }
+}
+
+/** The first `pub <field>: String` of the struct `params`, in the one file of `files` that declares it. */
+function firstTextFieldOf(source: EngineSource, files: readonly string[], params: string): string {
+  const declaring = files.filter((file) => new RegExp(`pub struct ${params}\\s*\\{`).test(source.read(file) ?? ''))
+  const [file] = declaring
+  if (declaring.length !== 1 || file === undefined) throw new Error(`${DEVELOPER_DIR} declares ${params} in ${String(declaring.length)} files, not one`)
+  const body = captured(fileOf(source, file), new RegExp(`pub struct ${params}\\s*\\{([^}]*)\\}`), `the struct ${params}`, file)
+  return captured(body, /pub (\w+): String,/, `the first text field of ${params}`, file)
+}
+
+/** The function the Developer extension's file tools resolve a path with (#541 package A). */
+export const PATH_RESOLVER = 'resolve_path'
+
+/** The places a relative path may be joined to, by the words the engine's resolver names them with, in no order. */
+export const RESOLUTION_BASES = { 'working_dir': 'working_dir', 'std::env::current_dir()': 'current_dir', 'PathBuf::from(".")': '.' } as const
+
+/**
+ * The engine's path resolution (#541 package A, design r=4 R3), from the body of `resolve_path`: an absolute path must be
+ * returned as given, the relative one is joined to the places the chain after `else` names, in its order, and the
+ * body is searched for a trim and a `~`. A body in any other shape is unreadable, never a resolution the guard assumes.
+ */
+function pathResolutionIn(source: EngineSource): PathResolution {
+  const path = ENGINE_PLACES.path_resolution
+  const body = bodyOf(fileOf(source, path), PATH_RESOLVER, path)
+  const flat = body.replace(/\s+/g, ' ').trim()
+  if (!/if path\.is_absolute\(\) \{ path \} else \{/.test(flat)) throw new Error(`${path} ${PATH_RESOLVER} does not return an absolute path as given`)
+  const chain = captured(flat, /\} else \{ (.*)\.join\(path\) \}$/, `the places ${PATH_RESOLVER} joins a relative path to`, path)
+  const named = Object.keys(RESOLUTION_BASES).map((words) => ({ words, at: chain.indexOf(words) })).filter(({ at }) => at >= 0).sort((a, b) => a.at - b.at)
+  if (named.length === 0 || !chain.startsWith(named[0]?.words ?? '')) throw new Error(`${path} ${PATH_RESOLVER} joins a relative path to ${chain}, which names no place this reader knows first`)
+  return {
+    absolute: 'as_given',
+    bases: named.map(({ words }) => RESOLUTION_BASES[words as keyof typeof RESOLUTION_BASES]),
+    trims: /\.trim/.test(body),
+    expands_home: /"~|'~'|home_dir/.test(body),
+  }
+}
+
+/**
+ * The engine's session store (#541 package A, design r=5 R1''), read from its session manager: the file named by
+ * `DB_NAME`, the one journal mode its pool is opened in, and the columns the schema creates the sessions table with; and
+ * the keys its extension states are stored under, each `name.version`, from every `ExtensionState` the session module
+ * declares and the turn notes the context relevance step keeps. A second journal mode, no sessions table, or a state
+ * declared in another shape is unreadable, never a store the read-back half reads.
+ */
+function sessionStoreIn(source: EngineSource): SessionStore {
+  const path = ENGINE_PLACES.session_store
+  const text = fileOf(source, path)
+  const modes = [...text.matchAll(/\.journal_mode\(sqlx::sqlite::SqliteJournalMode::(\w+)\)/g)].map((found) => found[1] ?? '')
+  const [journal_mode] = modes
+  if (modes.length !== 1 || journal_mode === undefined) throw new Error(`${path} opens its store in ${String(modes.length)} journal modes, not one`)
+  // The one table the engine keeps a row per session in, by the name its schema creates it under: said here only.
+  const found = /CREATE TABLE IF NOT EXISTS (sessions) \(([^;]*?)\n\s*\)\n/.exec(text)
+  const [, table, schema] = found ?? []
+  if (table === undefined || schema === undefined) throw new Error(`no sessions table in ${path}`)
+  const columns = schema.split(',').map((line) => line.trim().split(/\s+/)[0] ?? '').filter((column) => column !== '')
+  return {
+    file: captured(text, /pub const DB_NAME: &str = "([^"]+)";/, 'the store file', path),
+    journal_mode,
+    table,
+    columns,
+    extension_states: [...extensionStatesIn(source), contextRelevanceIn(source)],
+  }
+}
+
+/** Every `ExtensionState` the session module declares, as the key it is stored under. */
+function extensionStatesIn(source: EngineSource): readonly string[] {
+  const path = ENGINE_PLACES.extension_states
+  const text = fileOf(source, path)
+  const declared = text.split('impl ExtensionState for ').length - 1
+  const read = [...text.matchAll(/impl ExtensionState for \w+ \{\s*const EXTENSION_NAME: &'static str = "([^"]+)";\s*const VERSION: &'static str = "([^"]+)";/g)].map((found) => `${found[1] ?? ''}.${found[2] ?? ''}`)
+  if (declared === 0 || read.length !== declared) throw new Error(`${path} declares ${String(declared)} extension states and ${String(read.length)} are in a shape this reader knows`)
+  return read
+}
+
+/** The key the context relevance step stores its turn notes under. */
+function contextRelevanceIn(source: EngineSource): string {
+  const path = ENGINE_PLACES.context_relevance
+  const text = fileOf(source, path)
+  const name = captured(text, /pub\(super\) const NAME: &str = "([^"]+)";/, 'the context relevance state name', path)
+  return `${name}.${captured(text, /pub\(super\) const VERSION: &str = "([^"]+)";/, 'the context relevance state version', path)}`
+}
+
+/**
+ * What the engine's approve mode runs unasked (#541 package A, design r=6 R1''), read from the arm of the permission
+ * check that approve mode shares with smart approve, and from the approval that filters calls before the check. The arm
+ * allows a call where a user permission level says so, or where the condition names smart approve alone; any other
+ * allow there is a way to go unasked this reader does not know, so the part is unreadable. The approval must still
+ * allow every call it filtered out, or the filter is not a way to go unasked and the part is unreadable too.
+ */
+function approveModeUnaskedIn(source: EngineSource): ApproveModeUnasked {
+  const inspector = ENGINE_PLACES.permission_inspector
+  const arm = captured(fileOf(source, inspector), /GooseMode::Approve \| GooseMode::SmartApprove => \{([\s\S]*?)\n\s*let reason/, 'the arm approve mode runs', inspector)
+  const user_permissions = [...arm.matchAll(/PermissionLevel::(\w+) => InspectionAction::Allow\b/g)].map((found) => snakeCase(found[1] ?? ''))
+  const smartOnly = [...arm.matchAll(/else if goose_mode == GooseMode::SmartApprove\b[^{]*\{\s*InspectionAction::Allow\b/g)].length
+  const unknown = [...arm.matchAll(/InspectionAction::Allow\b/g)].length - user_permissions.length - smartOnly
+  if (unknown !== 0) throw new Error(`${inspector} allows calls in approve mode ${String(unknown)} ways this reader does not know`)
+  const approval = ENGINE_PLACES.tool_approval
+  const text = fileOf(source, approval)
+  const unadvertised = captured(text, /\.filter\(\|request\| (\w+)\(messages, request\)\)/, 'the filter before the check', approval)
+  if (!/if to_inspect\.is_empty\(\) \{\s*return Ok\(requests\.iter\(\)\.map\(\|_\| ApprovalDecision::Allow\)/.test(text)) throw new Error(`${approval} no longer allows the calls ${unadvertised} keeps out of the check`)
+  return { user_permissions, unadvertised }
+}
+
+/** The function of the paths module that picks each folder, and the arm a path root takes. */
+export const FOLDER_PICKER = { function: 'get_dir', with_root: 'if let Some(base) = Self::path_root()' } as const
+
+/**
+ * The engine's own folders (#541 package A), read from the paths module's `get_dir`: the arm a path root takes joins
+ * each kind to the root, and the arm after its `else` takes the platform layout's folder or one under the home. A kind
+ * the two arms do not both name, or a line in another shape, is unreadable, never a folder the guard leaves out.
+ */
+function engineFoldersIn(source: EngineSource): EngineFolders {
+  const path = ENGINE_PLACES.paths
+  const body = bodyOf(fileOf(source, path), FOLDER_PICKER.function, path)
+  const at = body.indexOf(FOLDER_PICKER.with_root)
+  const otherwise = body.indexOf('} else {', at)
+  if (at < 0 || otherwise < 0) throw new Error(`${path} ${FOLDER_PICKER.function} takes no path root arm and another`)
+  const kinds = (arm: string): ReadonlyArray<readonly [string, string]> => [...arm.matchAll(/DirType::(\w+) => ([^,]+),/g)].map((found) => [snakeCase(found[1] ?? ''), (found[2] ?? '').replace(/\s+/g, '')])
+  const joined = (chain: string): readonly string[] => [...chain.matchAll(/\.join\("([^"]+)"\)/g)].map((found) => found[1] ?? '')
+  const under_root = Object.fromEntries(kinds(body.slice(at, otherwise)).map(([kind, chain]) => {
+    if (!new RegExp(`^base(\\.join\\("[^"]+"\\))+$`).test(chain)) throw new Error(`${path} puts ${kind} under a path root as ${chain}, in a shape this reader does not know`)
+    return [kind, joined(chain)]
+  }))
+  const without_root = Object.fromEntries(kinds(body.slice(otherwise)).map(([kind, chain]): readonly [string, EngineFolderWithoutRoot] => {
+    const layout = /^strategy\.(\w+)\(\)(\.unwrap_or\(strategy\.\w+\(\)\))?$/.exec(chain)?.[1]
+    if (layout !== undefined && layout !== 'home_dir') return [kind, { layout }]
+    if (/^strategy\.home_dir\(\)(\.join\("[^"]+"\))+$/.test(chain)) return [kind, { home: joined(chain) }]
+    throw new Error(`${path} puts ${kind} without a path root as ${chain}, in a shape this reader does not know`)
+  }))
+  const named = (folders: object): string => Object.keys(folders).sort().join(' ')
+  if (Object.keys(under_root).length === 0 || named(under_root) !== named(without_root)) throw new Error(`${path} names ${named(under_root)} under a path root and ${named(without_root)} without one`)
+  return { under_root, without_root }
 }
 
 /** What one checkout says, part by part, and the parts that could not be read with why. */

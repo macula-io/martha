@@ -30,11 +30,11 @@ npm run lint           # the structural floor
 The installer is a project of its own, and CI runs it as a job of its own. So
 that a suite green here is green there, `npm test` runs that job's steps too,
 read from `.github/workflows/ci.yml`, before its parallel run
-(`prove_the_core/run_the_installer_job.ts`); without the installer's
+(`prove_the_core/the_release_is_proven/run_the_installer_job.ts`); without the installer's
 dependencies it fails, naming the line to run. It also holds
 what the clean-install proof loads out of the installed release by name to the
 tree: each file it loads is there and exports every name it reads
-(`prove_the_core/what_the_clean_install_loads_is_there.ts`).
+(`prove_the_core/the_release_is_proven/what_the_clean_install_loads_is_there.ts`).
 
 `npm test` ends on its own. A test that runs longer than the test script's
 `--test-timeout` fails by name, and `--test-force-exit` ends each test file's
@@ -45,8 +45,8 @@ the test script in package.json.
 To run one file, or one named case, through those same bounds:
 
 ```bash
-npm run test:file -- prove_the_core/parse_a_source.node-test.ts
-npm run test:file -- '--test-name-pattern=a source that parses' prove_the_core/parse_a_source.node-test.ts
+npm run test:file -- prove_the_core/read_a_source/parse_a_source.node-test.ts
+npm run test:file -- '--test-name-pattern=a source that parses' prove_the_core/read_a_source/parse_a_source.node-test.ts
 ```
 
 It is the run `npm test` makes of its files, with the six globs replaced by the
@@ -95,7 +95,7 @@ check:no-launcher-outlives-its-run` is what finds those afterwards ([#724],
 [#737]: https://github.com/macula-io/martha/issues/737
 
 Ending a file's process must not hide what it left behind, so the script also
-loads `prove_the_core/fail_a_test_file_that_leaves_something_running.ts` into
+loads `prove_the_core/a_test_run_ends/fail_a_test_file_that_leaves_something_running.ts` into
 every test file's process. A test file that leaves a server, socket, timer or
 child process running after its tests fails by name, with what it left:
 
@@ -105,7 +105,7 @@ src/x/x.node-test.ts left running after its tests: a listening TCP server (TCPSe
 
 Stop what a test starts in `t.after`, registered before the first assert, and
 wait for it to stop (a server's `close` callback, a child's `exit`). A check
-(`prove_the_core/every_test_run_ends.ts`) fails when the script loses any of
+(`prove_the_core/a_test_run_ends/every_test_run_ends.ts`) fails when the script loses any of
 the three.
 
 What a test leaves on disk fails the same way. Each file's process is handed a
@@ -119,12 +119,12 @@ src/x/x.node-test.ts left behind in the temp directory after its tests: martha-4
 A `tmpdir()` a test calls, or a sibling it starts calls, answers the file's own
 directory, and it goes with the file whether the file passed or failed. Those
 directories sit in two roots `npm test` makes for each stage and removes when the
-stage ends (`prove_the_core/keep_a_test_run_in_one_temporary_root.ts`), so an
+stage ends (`prove_the_core/a_test_run_keeps_one_temporary_root/keep_a_test_run_in_one_temporary_root.ts`), so an
 interrupted run leaves nothing in `/tmp` for the next one to guess at, and a
 scratch a test forgets is never another run's to delete.
 
 No test prints your environment. `npm test`, here and in `installer/`, runs
-node --test through `prove_the_core/no_test_output_carries_the_environment.ts`,
+node --test through `prove_the_core/no_test_reaches_a_secret/no_test_output_carries_the_environment.ts`,
 which plants a fresh secret-looking value in `MARTHA_PLANTED_SECRET` and fails
 the run when that value appears anywhere in its output, even though every
 test passed. A test that starts a child which reports its environment captures
@@ -135,7 +135,7 @@ assertion message.
 `npm run lint` holds every function to the structural floor: no block nested
 deeper than an `if` inside an `if`, a cyclomatic complexity of at most 9, and at
 most 60 lines, blank lines and comments aside. The caps are named once, in
-`eslint.config.mjs`, and `prove_the_core/structure_stays_flat.node-test.ts`
+`eslint.config.mjs`, and `prove_the_core/read_the_manifest_and_the_linter/structure_stays_flat.node-test.ts`
 plants a function over each to prove they bite. There is no baseline and no
 exception: an `eslint-disable` comment is ignored, with a warning, and the run
 allows none. A function over a cap is split into named steps.

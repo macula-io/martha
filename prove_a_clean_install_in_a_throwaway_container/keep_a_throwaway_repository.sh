@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # keep_a_throwaway_repository.sh open <run folder>
+#                                 read-back <run folder>
 #                                 close <run folder>
 #                                 round-trip <run folder>
 #                                 --self-test
 #
-# The nightly live run's throwaway repository, made and removed on the crew host (martha#639, sections 4 and 5).
+# The live run's throwaway repository, made and removed on the crew host (martha#639, sections 4 and 5).
 #
-# A night lands one small real package in a private repository that exists for that night alone. The repository
+# A live run lands one small real package in a private repository that exists for that live run alone. The repository
 # belongs to a separate bot account that holds nothing else (DECIDED by the owner, 2026-11-18: "Separate bot
 # account"), and every GitHub call made here uses the bot's token alone:
 #
@@ -15,17 +16,20 @@
 #   GH_TOKEN or GITHUB_TOKEN in the caller's shell never reaches gh (gh prefers those to any config folder). Before
 #   anything is made, the guards on main (src/land_a_package_on_a_throwaway_repository) read GitHub's answers: the token's
 #   expiry, that the calls answer as the bot recorded at setup, and that every repository they can see is the bot's.
-#   Any repository the bot holds at all is a leftover of an earlier night, and stops the run naming it: the run never
+#   Any repository the bot holds at all is a leftover of an earlier live run, and stops the run naming it: the run never
 #   deletes what it did not make. Then the repository is made (`POST /user/repos`, private), its record written before
 #   anything else is done with it, the first commit pushed over https through gh's own credential helper (no token in
-#   a URL), and issue #1 opened with the night's package. The run's login stays in the run folder (mode 0700) for
-#   the close that follows.
+#   a URL), and issue #1 opened with the live run's package. The run's login stays in the run folder (mode 0700) for
+#   the read-back and the close that follow.
+# - read-back: GitHub's own record of the landing, read with the run's login before the close: the live run's pull
+#   request (its head, whether it merged, its state), main's head and its message, and whether main holds the pull
+#   request's head, written as one JSON file in the run folder for the live run's claims (section 6, row 7).
 # - close: the repository read by the numeric id the create answered, the delete guard holding on every field, the
 #   delete sent to the full name the guard read, and the same id read again: only GitHub's 404 says it is gone. A
 #   refusal or a repository still there fails by name and leaves it for the operator. The run's GitHub login is removed
 #   whatever happens.
 # - round-trip: open, then close in the EXIT trap, so an interrupted run still deletes what it made. It is the first
-#   night's own check that GitHub takes the bot's token for `POST /user/repos`, before any member is involved.
+#   live run's own check that GitHub takes the bot's token for `POST /user/repos`, before any member is involved.
 #
 # The setup files live outside every repository, in MARTHA_LIVE_DIR (default ~/.config/martha-live): `token`, mode
 # 0600, and `owner.json`, the bot's login and numeric id. Nothing here prints the token, and no argument carries it.
@@ -43,7 +47,7 @@ TOKEN_FILE="${LIVE_DIR}/token"
 OWNER_FILE="${LIVE_DIR}/owner.json"
 # The only mode the token file may have: the owner's read and write, nobody else's.
 TOKEN_MODE='600'
-# What every repository a night makes is called, before the run's stamp, and the stamp's own shape.
+# What every repository a live run makes is called, before the run's stamp, and the stamp's own shape.
 NAME_PREFIX='martha-live-'
 STAMP_FORMAT='+%Y%m%d-%H%M%S'
 # The first commit: its author (no person's), its branch, and its two files. The package's test script is node's own
@@ -53,7 +57,7 @@ AUTHOR_EMAIL='owner@example.invalid'
 BRANCH='main'
 README_TEXT='# A throwaway repository
 
-Made by one night of the nightly live run, and deleted at its end.
+Made by one live run, and deleted at its end.
 '
 PACKAGE_JSON='{
   "name": "greet",
@@ -63,19 +67,23 @@ PACKAGE_JSON='{
   "scripts": { "test": "node --test" }
 }
 '
-# Issue #1: the night's package, the one the builder is given.
+# Issue #1: the live run's package, the one the builder is given.
 ISSUE_NUMBER=1
 ISSUE_TITLE='Add greet(name)'
 ISSUE_BODY='Add `greet(name)` in `greet.js`, returning `Hello, <name>!`, with a `node --test` test that pins the exact string, a name with a space included.'
 # GitHub's answer to the same id once the repository is gone, as gh prints its status line.
 GONE_STATUS='404'
 # The run folder's parts: the run's own GitHub login (never kept), the record the delete guard reads, and what the
-# night reads of the repository it made.
+# live run reads of the repository it made.
 PRIVATE_PART='private'
 MADE_PART='made.json'
 REPOSITORY_PART='repository.env'
+# GitHub's record of the landing, as the read-back writes it; a compare of the head against main answers one of these
+# when main holds it.
+LANDED_PART='landed.json'
+HELD_STATUSES='ahead identical'
 
-USAGE='usage: keep_a_throwaway_repository.sh open|close|round-trip <run folder> | --self-test'
+USAGE='usage: keep_a_throwaway_repository.sh open|read-back|close|round-trip <run folder> | --self-test'
 
 RUN_DIR=''
 PRIVATE=''
@@ -156,7 +164,7 @@ check_before_making() {
   guard reach "${OWNER_ID}" < "${RUN_DIR}/reach.json" || { failed reach 'the calls reach beyond the bot'; return 1; }
   leftovers="$(node -e 'const pages = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")); console.log(pages.flat().map((r) => r.full_name).join(" "))' "${RUN_DIR}/reach.json")"
   if [ -n "${leftovers}" ]; then
-    failed leftover "the bot holds ${leftovers}, left by an earlier night: delete it in GitHub, then run again"
+    failed leftover "the bot holds ${leftovers}, left by an earlier live run: delete it in GitHub, then run again"
     return 1
   fi
   ok reach 'every repository the calls see is the bot'"'"'s, and the bot holds none'
@@ -206,13 +214,30 @@ fill_the_repository() {
 # The open half: the setup read, the run's login made, the guards, then the repository made and filled.
 open_it() {
   read_the_setup || return $?
-  [ ! -e "$1" ] || { failed open "$1 is there already: a run folder is one night's"; return 2; }
+  [ ! -e "$1" ] || { failed open "$1 is there already: a run folder is one live run's"; return 2; }
   mkdir -m 700 -p "$1"
   name_the_places "$1"
   log_in || return 1
   check_before_making || return 1
   make_the_repository || return 1
   fill_the_repository || return 1
+}
+
+# The read-back: the live run's one pull request, main's head, and whether main holds the pull request's head, from
+# GitHub through the run's login, written as one JSON file the live run reads. Nothing is judged here.
+read_back() {
+  local full_name pulls main head compare status held=false
+  full_name="$(sed -n 's/^FULL_NAME=//p' "${RUN_DIR}/${REPOSITORY_PART}")"
+  [ -n "${full_name}" ] || { failed 'read back' "${RUN_DIR}/${REPOSITORY_PART} names no repository"; return 1; }
+  pulls="$(as_the_bot gh api "repos/${full_name}/pulls?state=all")" || { failed 'read back' "GitHub did not list ${full_name}'s pull requests"; return 1; }
+  head="$(json_text_field 0.head.sha <<< "${pulls}")" || { failed 'read back' "${full_name} has no pull request"; return 1; }
+  main="$(as_the_bot gh api "repos/${full_name}/commits/${BRANCH}")" || { failed 'read back' "GitHub did not read ${full_name}'s ${BRANCH}"; return 1; }
+  compare="$(as_the_bot gh api "repos/${full_name}/compare/${head}...${BRANCH}")" || { failed 'read back' "GitHub did not compare ${head} with ${BRANCH}"; return 1; }
+  status="$(json_text_field status <<< "${compare}" || true)"
+  case " ${HELD_STATUSES} " in *" ${status} "*) held=true ;; esac
+  node -e 'const [file, pulls, main, held] = process.argv.slice(1); const p = JSON.parse(pulls)[0]; const m = JSON.parse(main); require("node:fs").writeFileSync(file, JSON.stringify({ pull: { number: p.number, head: p.head.sha, merged: p.merged_at !== null, state: p.state }, main: { sha: m.sha, message: m.commit.message }, tip_on_main: held === "true" }) + "\n")' \
+    "${RUN_DIR}/${LANDED_PART}" "${pulls}" "${main}" "${held}"
+  ok 'read back' "${full_name}'s pull request at ${head}, ${BRANCH} at $(json_text_field sha <<< "${main}"), ${BRANCH} $( [ "${held}" = true ] && echo holds || echo 'does not hold') the head"
 }
 
 # The status line gh prints for a GET of the repository's id.
@@ -250,7 +275,7 @@ main() {
   local verb="${1:-}" dir="${2:-}" status=0
   case "${verb}" in
     --self-test) self_test; return $? ;;
-    open | close | round-trip) [ -n "${dir}" ] && [ "$#" -eq 2 ] || { echo "${USAGE}" >&2; return 2; } ;;
+    open | read-back | close | round-trip) [ -n "${dir}" ] && [ "$#" -eq 2 ] || { echo "${USAGE}" >&2; return 2; } ;;
     *) echo "${USAGE}" >&2; return 2 ;;
   esac
   case "${verb}" in
@@ -258,6 +283,12 @@ main() {
       # An open that fails part-way leaves a record for close; the login goes either way only once close has run.
       open_it "${dir}" || status=$?
       return "${status}"
+      ;;
+    read-back)
+      read_the_setup || return $?
+      name_the_places "${dir}"
+      if [ ! -d "${PRIVATE}/gh" ]; then log_in || return 1; fi
+      read_back
       ;;
     close)
       read_the_setup || return $?
@@ -310,6 +341,9 @@ case "$*" in
   'api -X DELETE repos/'*) touch "${case_dir}/deleted"; answer delete.status > /dev/null || exit 1 ;;
   'api -i repositories/'*) if [ -e "${case_dir}/deleted" ] && [ ! -e "${case_dir}/still-there" ]; then printf 'HTTP/2.0 404 Not Found\r\n'; exit 1; fi; printf 'HTTP/2.0 200 OK\r\n\r\n'; by_id ;;
   'api repositories/'*) by_id ;;
+  'api repos/'*'/pulls?state=all') answer pulls.json ;;
+  'api repos/'*'/commits/main') answer main.json ;;
+  'api repos/'*'/compare/'*) answer compare.json ;;
   *) echo "stand-in gh: no answer for: $*" >&2; exit 1 ;;
 esac
 GH
@@ -326,7 +360,7 @@ GIT
   chmod +x "${dir}/gh" "${dir}/git"
 }
 
-# One case: the setup files of a bot with id 4242, the token a word nobody else holds, and GitHub's answers for a night
+# One case: the setup files of a bot with id 4242, the token a word nobody else holds, and GitHub's answers for a live run
 # that goes right. A case changes one answer.
 a_case() {
   local dir="$1" token="$2"
@@ -340,6 +374,9 @@ a_case() {
   printf '{"id":77,"full_name":"synthetic-bot/the-made-one","private":true}' > "${dir}/create.json"
   printf '{"number":1}' > "${dir}/issue.json"
   printf '0' > "${dir}/delete.status"
+  printf '[{"number":2,"head":{"sha":"%s"},"merged_at":"2026-11-19T01:00:00Z","state":"closed"}]' "$(printf b%.0s {1..40})" > "${dir}/pulls.json"
+  printf '{"sha":"%s","commit":{"message":"synthetic-bot/the-made-one#1 landed"}}' "$(printf c%.0s {1..40})" > "${dir}/main.json"
+  printf '{"status":"ahead"}' > "${dir}/compare.json"
 }
 
 # A run of the script against a case, its output and status kept. The caller's shell carries a GH_TOKEN the run must
@@ -368,8 +405,8 @@ self_test() {
   made_nothing() { [ ! -e "$1/created" ] || fail "$1 made a repository"; }
   deleted_nothing() { [ ! -e "$1/deleted" ] || fail "$1 deleted a repository"; }
 
-  # A night that goes right: made, filled, and deleted, the id answering 404 after; open and close run apart, as a
-  # night runs them.
+  # A live run that goes right: made, filled, and deleted, the id answering 404 after; open and close run apart, as a
+  # live run runs them.
   case="${root}/pass"; a_case "${case}" "${token}"
   run_a_case "${case}" open
   status_is "${case}" 0
@@ -388,6 +425,22 @@ self_test() {
   grep -q 'private=true' "${case}/calls" || fail 'the repository was not asked for private'
   grep -q "PACKAGE=synthetic-bot/the-made-one#1" "${case}/run/${REPOSITORY_PART}" || fail 'the run did not record the package it made'
 
+  # The read-back: GitHub's record of the landing written for the live run, through the run's own login, before the close;
+  # a head main does not hold is written as such, never judged here.
+  case="${root}/read-back"; a_case "${case}" "${token}"
+  run_a_case "${case}" open
+  run_a_case "${case}" read-back
+  status_is "${case}" 0
+  [ "$(node -e 'const l = require(process.argv[1]); process.stdout.write([l.pull.head, l.pull.merged, l.pull.state, l.main.sha, l.main.message, l.tip_on_main].join(" "))' "${case}/run/${LANDED_PART}")" \
+    = "$(printf b%.0s {1..40}) true closed $(printf c%.0s {1..40}) synthetic-bot/the-made-one#1 landed true" ] || fail 'the read-back did not write the pull request and main as GitHub answered them'
+  grep -q '^api repos/synthetic-bot/the-made-one/compare/b\{40\}\.\.\.main$' "${case}/calls" || fail "the read-back did not compare the pull request's head with main"
+  printf '{"status":"diverged"}' > "${case}/compare.json"
+  run_a_case "${case}" read-back
+  status_is "${case}" 0
+  [ "$(json_field "${case}/run/${LANDED_PART}" tip_on_main)" = false ] || fail 'a head main does not hold was read back as held'
+  run_a_case "${case}" close
+  status_is "${case}" 0
+
   # R1: the calls answer as another account: refused before anything is made.
   case="${root}/who"; a_case "${case}" "${token}"
   printf '{"login":"the-owner","id":99,"type":"User"}' > "${case}/user.json"
@@ -400,11 +453,11 @@ self_test() {
   run_a_case "${case}" round-trip
   status_is "${case}" 1; said "${case}" "reach synthetic-someone/real, which is not the throwaway owner's"; made_nothing "${case}"
 
-  # A leftover of an earlier night: named, never deleted, and nothing made.
+  # A leftover of an earlier live run: named, never deleted, and nothing made.
   case="${root}/leftover"; a_case "${case}" "${token}"
   printf '[[{"full_name":"synthetic-bot/martha-live-20260101-000000","owner":{"id":4242}}]]' > "${case}/repos.json"
   run_a_case "${case}" round-trip
-  status_is "${case}" 1; said "${case}" 'synthetic-bot/martha-live-20260101-000000, left by an earlier night'; made_nothing "${case}"; deleted_nothing "${case}"
+  status_is "${case}" 1; said "${case}" 'synthetic-bot/martha-live-20260101-000000, left by an earlier live run'; made_nothing "${case}"; deleted_nothing "${case}"
 
   # An expired token: refused before anything is made.
   case="${root}/expired"; a_case "${case}" "${token}"
@@ -432,7 +485,7 @@ self_test() {
   run_a_case "${case}" close
   status_is "${case}" 1; said "${case}" 'still answers'
 
-  # A create GitHub made public: the night fails, and the round trip still deletes it.
+  # A create GitHub made public: the live run fails, and the round trip still deletes it.
   case="${root}/public"; a_case "${case}" "${token}"
   printf '{"id":77,"full_name":"synthetic-bot/the-made-one","private":false}' > "${case}/create.json"
   run_a_case "${case}" open

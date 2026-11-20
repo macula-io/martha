@@ -81,6 +81,26 @@ test('a delegate tool whose models change kind fails by subagent_models, so a cr
   assert.match(ran.stdout, /\ndiffers: subagent_models\n$/)
 })
 
+test('a shell tool the engine renames fails by shell_tool, so the shell hold never silently matches nothing (#541 part C4)', (t) => {
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, shell_tool: `${RECORDED_FACTS.shell_tool}_renamed` }))
+  assert.equal(ran.status, 1)
+  // The shell is one of the Developer tools (#541 package A), so its rename differs in both facts.
+  assert.match(ran.stdout, /\ndiffers: developer_tools, shell_tool\n$/)
+})
+
+test('an environment name the engine starts dropping from a tool server entry fails by stdio_extension, so no variable the server needs is silently removed', (t) => {
+  const stdio = RECORDED_FACTS.stdio_extension
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, stdio_extension: { ...stdio, disallowed_env: [...stdio.disallowed_env, 'A_NAME_NOW_DROPPED'] } }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: stdio_extension\n$/)
+})
+
+test("a session key the engine moves in a tool call's meta fails by tool_call_session_key, so the server never answers in no session", (t) => {
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, tool_call_session_key: `${RECORDED_FACTS.tool_call_session_key}-moved` }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: tool_call_session_key\n$/)
+})
+
 test('two facts that differ are both named, in order', (t) => {
   const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, acp_command: `${RECORDED_FACTS.acp_command}x`, path_root_variable: `${RECORDED_FACTS.path_root_variable}_X` }))
   assert.equal(ran.status, 1)
@@ -99,4 +119,16 @@ test('a call with no commit, or one that is not 40 hex, is refused before anythi
   const checkout = aCheckoutSaying(t, RECORDED_FACTS)
   assert.equal(spawnSync(process.execPath, [RECORDER, CHECK, checkout], { encoding: 'utf8' }).status, 2)
   assert.equal(check(checkout, RECORDED_COMMIT.slice(1)).status, 2)
+})
+
+test('a secret the provider stops reading fails by openai_provider, so a secret is never admitted into the config file (#541 package A)', (t) => {
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, openai_provider: { ...RECORDED_FACTS.openai_provider, secrets: RECORDED_FACTS.openai_provider.secrets.slice(0, 1) } }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: openai_provider\n$/)
+})
+
+test('a keyring switch the engine renames fails by secret_storage, so the key never goes to the keyring (#541 package A)', (t) => {
+  const ran = check(aCheckoutSaying(t, { ...RECORDED_FACTS, secret_storage: { ...RECORDED_FACTS.secret_storage, keyring_switch: `${RECORDED_FACTS.secret_storage.keyring_switch}_RENAMED` } }))
+  assert.equal(ran.status, 1)
+  assert.match(ran.stdout, /\ndiffers: secret_storage\n$/)
 })

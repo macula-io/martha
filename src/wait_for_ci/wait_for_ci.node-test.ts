@@ -17,20 +17,13 @@ import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_direc
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import {
-  A_FRESH_BUDGET,
-  BACKOFF_MAX_MS,
-  BACKOFF_MIN_MS,
-  CALLS_PER_WAIT,
-  GITHUB_BUDGET_PLACE,
-  THE_BUDGET_FILE,
-  THE_FLOOR,
-  theBudgetIn,
-  theHeadsOfTheWaits,
-  theTextOf,
-  type TheGithubSpender,
-} from '../spend_the_github_budget/spend_the_github_budget.ts'
+import { A_FRESH_BUDGET, BACKOFF_MAX_MS, BACKOFF_MIN_MS, CALLS_PER_WAIT, GITHUB_BUDGET_PLACE, THE_BUDGET_FILE, theBudgetIn, theHeadsOfTheWaits, theTextOf, type TheGithubSpender } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { waitForCi } from './wait_for_ci.ts'
+import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
+import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
+import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from './the_ci_wait_tool.ts'
+/** The crew's default, as a declaration that names no block reads it (martha#931 B). */
+const THE_FLOOR = GITHUB_WHEN_UNNAMED.budget_floor
 
 const A_SHA = 'e'.repeat(40)
 const A_REPO = 'macula-io/martha'
@@ -94,7 +87,7 @@ const aRunner = (
 const theReadsOf = (asked: readonly (readonly string[])[]): readonly (readonly string[])[] => asked.filter((args) => !asksWhatIsLeft(args))
 
 /** A spender over the place and the runner the test gives it, with a window the test wrote or none. */
-const aSpender = (place: CrewPlace, clock: { now: () => number }, run: (args: readonly string[]) => Promise<ProcessOutcome>): TheGithubSpender => ({ place, clock, run })
+const aSpender = (place: CrewPlace, clock: { now: () => number }, run: (args: readonly string[]) => Promise<ProcessOutcome>): TheGithubSpender => ({ place, clock, run, floor: THE_FLOOR, zone: CLOCK_ZONE_WHEN_UNNAMED })
 
 /** The budget a test starts from: a window with plenty left and the wait before a call over. */
 const withRoom = (now: number): typeof A_FRESH_BUDGET => ({ ...A_FRESH_BUDGET, remaining: THE_FLOOR * 10, resets_at: now + A_HOUR })
@@ -239,3 +232,143 @@ test('#320 B: a run that was cancelled or timed out answers red, never green', a
     assert.equal(held.greens[A_SHA], undefined, `a ${conclusion} run was kept as a green for the whole crew`)
   }
 })
+
+test('#931 C: a wait still running names the moment of its next read in the spender\'s declared zone', async () => {
+  const zone = 'Asia/Kolkata'
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  const runner = aRunner([theRuns(aRun(1, 'in_progress', null))])
+  const answered = await theCiWaitOver({ ...aSpender(place, clock, runner.run), zone }, { repo: A_REPO, sha: A_SHA })
+  assert.ok('answer' in answered)
+  assert.ok(answered.answer.endsWith(`may be spent at ${theClockOf(clock.now() + BACKOFF_MIN_MS, zone)}.`), `the next read's moment is not in the declared zone: ${answered.answer}`)
+})
+
+/** A run of GitHub's, as a wait on one run names it (martha#976). */
+const A_RUN = 44773705880
+
+/** What GitHub answers for one run: the run itself, not a page of runs (martha#976). */
+const theOneRun = (run: Record<string, unknown>): ProcessOutcome => ({ exit_code: 0, stdout: JSON.stringify(run), stderr: '' })
+
+/** The read a wait on one run makes, as the words `gh` was given name it. */
+const theOneRunRead = (run_id: number): readonly string[] => ['api', `repos/${A_REPO}/actions/runs/${String(run_id)}`]
+
+/** The key the crew files a run's green under, as crew-code files its record (martha#976). */
+const theRunKey = (run_id: number): string => `run-${String(run_id)}`
+
+test('#976: a wait on one run answers green with that run, spends one read, and keeps the green under the run', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  const runner = aRunner([theOneRun(aRun(A_RUN, 'completed', 'success'))])
+  const outcome = await waitForCi(aSpender(place, clock, runner.run), { repo: A_REPO, run_id: A_RUN })
+  assert.deepEqual(outcome, { kind: 'green', run_ids: [A_RUN], reused: false }, 'one run that succeeded did not answer green with that run')
+  assert.deepEqual(theReadsOf(runner.asked), [theOneRunRead(A_RUN)], 'the read was not the one run named')
+  const held = theBudgetIn(place)
+  assert.ok(!('refusal' in held), 'the budget could not be read back')
+  assert.deepEqual(held.greens[theRunKey(A_RUN)]?.run_ids, [A_RUN], 'the green was not kept under the run')
+  assert.equal(held.greens[A_SHA], undefined, 'the green was filed under a commit nobody named')
+})
+
+test('#976: a second wait on a green run makes no call at all', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  const runner = aRunner([theOneRun(aRun(A_RUN, 'completed', 'success'))])
+  const spender = aSpender(place, clock, runner.run)
+  await waitForCi(spender, { repo: A_REPO, run_id: A_RUN })
+  const again = await waitForCi(spender, { repo: A_REPO, run_id: A_RUN })
+  assert.deepEqual(again, { kind: 'green', run_ids: [A_RUN], reused: true }, 'the green kept for the run was not answered')
+  assert.deepEqual(theReadsOf(runner.asked), [theOneRunRead(A_RUN)], 'a call was spent on a run the crew already knew was green')
+})
+
+test('#976: a run that has not ended answers still running, naming that run', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf(withRoom(clock.now())))
+  const runner = aRunner([theOneRun(aRun(A_RUN, 'in_progress', null))])
+  const outcome = await waitForCi(aSpender(place, clock, runner.run), { repo: A_REPO, run_id: A_RUN })
+  assert.equal(outcome.kind, 'still_running', 'a run that has not ended did not answer still running')
+  assert.deepEqual(outcome.kind === 'still_running' ? outcome.ended.map((run) => run.id) : [], [A_RUN], 'the run named was not the one asked after')
+  assert.equal(outcome.kind === 'still_running' ? outcome.read_again_at : 0, clock.now() + BACKOFF_MIN_MS, 'the moment of the next read was not the wait the call began')
+})
+
+test('#976: a run that ended red answers red, naming that run, and never a green', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  const runner = aRunner([theOneRun(aRun(A_RUN, 'completed', 'failure'))])
+  const outcome = await waitForCi(aSpender(place, clock, runner.run), { repo: A_REPO, run_id: A_RUN })
+  assert.equal(outcome.kind, 'red', 'a failed run did not answer red')
+  assert.deepEqual(outcome.kind === 'red' ? outcome.ended.map((run) => run.id) : [], [A_RUN], 'the run that failed was not the one named')
+  const held = theBudgetIn(place)
+  assert.ok(!('refusal' in held), 'the budget could not be read back')
+  assert.equal(held.greens[theRunKey(A_RUN)], undefined, 'a failed run was kept as a green for the whole crew')
+})
+
+test('#976: a call that names both forms, and one that names neither, are each refused by name', async () => {
+  const both = theCiWaitACallNames({ repo: A_REPO, sha: A_SHA, run_id: A_RUN })
+  assert.ok('refused' in both && /either a commit.*or a run id, not both/.test(both.refused), `naming both was not refused by name: ${JSON.stringify(both)}`)
+  const neither = theCiWaitACallNames({ repo: A_REPO })
+  assert.ok('refused' in neither && /either a commit, as forty hex digits, or a run id/.test(neither.refused), `naming neither was not refused by name: ${JSON.stringify(neither)}`)
+  const notANumber = theCiWaitACallNames({ repo: A_REPO, run_id: 'a-run' })
+  assert.ok('refused' in notANumber && /a run id is a whole number/.test(notANumber.refused), `a run id that is not a number was not refused by name: ${JSON.stringify(notANumber)}`)
+  const named = theCiWaitACallNames({ repo: A_REPO, run_id: String(A_RUN) })
+  assert.ok('ok' in named && named.ok.run_id === A_RUN, `a run id was not read as one: ${JSON.stringify(named)}`)
+})
+
+test('#976 review r=1: a run id too long to be held exactly is refused, never read as the run it rounds to', async () => {
+  // Past the largest whole number a JavaScript number holds exactly, two ids round to one: the wait would read, and keep
+  // a green for, a run nobody named.
+  const tooLong = (BigInt(Number.MAX_SAFE_INTEGER) + 2n).toString()
+  assert.notEqual(String(Number(tooLong)), tooLong, 'the planted id is held exactly, so it proves nothing')
+  const asked = theCiWaitACallNames({ repo: A_REPO, run_id: tooLong })
+  assert.ok('refused' in asked && /a run id is a whole number/.test(asked.refused), `a run id that rounds was read as another: ${JSON.stringify(asked)}`)
+})
+
+test('#976 review r=2: the tool asks for a run id as text, so a caller cannot round it on the way in', () => {
+  // The schema is what a caller reads before it writes the number: a number here is rounded by JSON before the guard.
+  assert.equal(WAIT_FOR_CI_TOOL.inputSchema.properties.run_id.type, 'string', 'the tool still asks for a run id as a number, which JSON rounds before it arrives')
+})
+
+test('#976 review r=2: a call that sends its run id as a number is refused by name, saying why', () => {
+  const asked = theCiWaitACallNames({ repo: A_REPO, run_id: A_RUN })
+  assert.ok('refused' in asked && /as text, never as a number/.test(asked.refused), `a run id sent as a number was not refused by name: ${JSON.stringify(asked)}`)
+})
+
+test('#976: a run GitHub does not answer for is cannot tell, never green', async () => {
+  for (const answer of [{ exit_code: 1, stdout: '', stderr: 'gh: Not Found (HTTP 404)' }, { exit_code: 0, stdout: '{"no_run": true}', stderr: '' }]) {
+    const place = aPlace()
+    const clock = aClock(Date.now())
+    const runner = aRunner([answer])
+    const outcome = await waitForCi(aSpender(place, clock, runner.run), { repo: A_REPO, run_id: A_RUN })
+    assert.equal(outcome.kind, 'cannot_tell', `an answer that is not a run was read as one: ${JSON.stringify(outcome)}`)
+    const held = theBudgetIn(place)
+    assert.ok(!('refusal' in held), 'the budget could not be read back')
+    assert.equal(held.greens[theRunKey(A_RUN)], undefined, 'an answer this could not read was kept as a green')
+  }
+})
+
+test('#976: a green kept for a commit never answers a wait on a run, nor the other way round', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf({ ...withRoom(clock.now()), greens: { [A_SHA]: { run_ids: [1, 2], at: clock.now() } } }))
+  const runner = aRunner([theOneRun(aRun(A_RUN, 'completed', 'success'))])
+  const outcome = await waitForCi(aSpender(place, clock, runner.run), { repo: A_REPO, run_id: A_RUN })
+  assert.equal(outcome.kind, 'green', 'the wait on the run was not read')
+  assert.deepEqual(theReadsOf(runner.asked), [theOneRunRead(A_RUN)], 'the green kept for a commit was served to a wait on a run')
+  const held = theBudgetIn(place)
+  assert.ok(!('refusal' in held), 'the budget could not be read back')
+  assert.deepEqual(held.greens[A_SHA]?.run_ids, [1, 2], 'the commit\'s own green was overwritten by a run\'s')
+})
+
+test('#976: a wait on a run names the run, not seven characters of a commit, in its answer', async () => {
+  const place = aPlace()
+  const clock = aClock(Date.now())
+  place.keep(THE_BUDGET_FILE, theTextOf({ ...withRoom(clock.now()), reads: { [theRunKey(A_RUN)]: CALLS_PER_WAIT } }))
+  const runner = aRunner([])
+  const spender = aSpender(place, clock, runner.run)
+  const spent = await waitForCi(spender, { repo: A_REPO, run_id: A_RUN })
+  assert.equal(spent.kind, 'over_its_reads', 'a wait on a run past its reads was read anyway')
+  const answered = await theCiWaitOver(spender, { repo: A_REPO, run_id: A_RUN })
+  assert.ok('answer' in answered && answered.answer.includes(`run ${String(A_RUN)}`), `the answer does not name the run: ${JSON.stringify(answered)}`)
+  assert.ok('answer' in answered && answered.answer.endsWith('.') && !answered.answer.includes('run-run'), `the answer's name is not the run's: ${JSON.stringify(answered)}`)
+})
+

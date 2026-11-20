@@ -60,6 +60,7 @@ import {
   type AReadableCall,
 } from '../refuse_calls_outside_the_package_contract/the_acts_of_a_call.ts'
 import type { TheContractHanded } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
+import { THE_BUDGET_ASK, keepTheWeekly, theBudgetCommandAnswer, theBudgetCommandIn } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import {
   THE_REFRESH_ASK,
   aSwitchMayFollow,
@@ -99,7 +100,7 @@ import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
-import { theBeatOverTheCrewTools, withTheOwedLine, withTheOwedLineOnAReturn, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
+import { theBeatOverTheCrewTools, theBeatsMarkedOn, withTheOwedLine, withTheTimesLineOnAReturn, type AHandedWindow, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
@@ -172,6 +173,11 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * those five by name rather than pretending to act.
    */
   readonly processes?: HostContract['processes']
+  /**
+   * The sink a line about an act the tools carried on past is said through (martha#601): the launcher's writer to the
+   * process's own error output. Absent, nothing is said.
+   */
+  readonly note?: ((line: string) => void) | undefined
   /**
    * Where a restart is asked of a member's launcher (martha#312): the crew's lifecycle requests, the launch records and
    * the ledger. A launch given none refuses `restart_a_member` by name.
@@ -261,9 +267,16 @@ export interface CrewTools extends TheReviewRule {
    * The line a session is handed, once, at its start: the Supervisor's standing items, when the table lets this member
    * assign work (martha#317), then every act of the package this member holds that was sent with no outcome recorded,
    * oldest first (martha#254 design, test 10). Null when there is neither. `taken_in` names the sources the line
-   * carries that the session's record must take in, so the shell gate stands behind what the line handed.
+   * carries that the session's record must take in, so the shell gate stands behind what the line handed. The starting
+   * session's id is the host's own start event's, never the id of the last session that answered a tool (martha#658).
    */
-  theLineToHandAtStart(): Promise<TheStartLine | null>
+  theLineToHandAtStart(session_id: string): Promise<TheStartLine | null>
+  /**
+   * The start whose line that call built has been answered (martha#658 Done-when 4): a taken start marks the window
+   * that hand read as handed to a successor, and a refused one drops the record unmarked, so the next start is handed
+   * the beats. Either way nothing is kept for that session afterwards.
+   */
+  noteTheStart(session_id: string, taken: boolean): void
   /**
    * The session a clear was told in, when the crew's flow is waiting for its successor and this id is it (martha#255):
    * the launcher starts that session as a `martha_refresh` with this predecessor, whichever of the host's two events
@@ -279,7 +292,7 @@ export interface CrewTools extends TheReviewRule {
   theSpendInForce(session_id: string): Promise<ASpendInForce | undefined>
   /**
    * One more call counted against that package's budget, before the call runs (martha#513, slice 3): undefined when it
-   * was kept, and the reason when it was not — a call nobody counted is a budget a member can walk around.
+   * was kept, and the reason when it was not, for the launch's journal: the call runs either way (martha#601, row 113).
    */
   noteTheCallCounted(session_id: string, own_name: string): Promise<string | undefined>
   /**
@@ -295,9 +308,9 @@ export interface CrewTools extends TheReviewRule {
   readonly ends: TheEndsHold
   /**
    * What the package this member holds says about this call (martha#513 slice 2): the package its own row holds, then
-   * that package's newest contract in the ledger — read only for a call that is an act at all, since a contract can
-   * refuse nothing else. Undefined when it holds none, the package has no contract, or the call is no act; a contract
-   * the ledger cannot read back comes back as that, so the act is refused and every other call still runs.
+   * that package's newest contract in the ledger — read only for a call that is an act at all, since a contract has
+   * nothing to say of any other. Undefined when it holds none, the package has no contract or one the ledger cannot read
+   * back, or the call is no act. A call outside it runs, with a notice to its member (martha#601, row 110).
    */
   theContractInForce(call: AReadableCall, names: ToolNames): Promise<TheContractHanded>
   /**
@@ -399,11 +412,16 @@ interface SessionState {
   owner_needs: TheOwnersDefaultTold | null
   /** The one hold on the end of a running turn this launch keeps (martha#311). */
   readonly ends: TheEndsHold
+  /**
+   * The window each start's hand read, by the starting session's id (martha#658 Done-when 4): the beats are marked handed
+   * only once the start is taken, and the record is dropped then, or dropped unmarked when the start is refused.
+   */
+  readonly start_hands: Map<string, AHandedWindow>
 }
 
 /**
  * What the package this member holds says about this call, or none when the launch has no crew to ask (martha#513
- * slice 2): the relay hands it to the gate, which refuses nothing without one.
+ * slice 2): the relay reads it after the gate, for the notice of an act the contract leaves out (martha#601, row 110).
  */
 export async function theContractACrewHolds(
   crew: CrewTools | undefined,
@@ -437,6 +455,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     ends: holdingTheEnds(),
     guarded: null,
     owner_needs: null,
+    start_hands: new Map<string, AHandedWindow>(),
   }
   const handlers = handlersOver(held, state)
   // One budget over this launch's places (martha#513, slice 3): it reads a package's spend once per session and keeps
@@ -470,7 +489,8 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
       return () => clearInterval(timer)
     },
     startSweeping: () => sweepTheOwnersList(held),
-    theLineToHandAtStart: () => theStartLineOf(held, state),
+    theLineToHandAtStart: (session_id) => theStartLineOf(held, state, session_id),
+    noteTheStart: (session_id, taken) => noteTheStartIn(held, state, session_id, taken),
     thePredecessorOf: (session_id) => thePredecessorOf(held, session_id),
     theSpendInForce: (session_id) => budget.theSpendInForce(session_id),
     noteTheCallCounted: (session_id, own_name) => budget.noteTheCallCounted(session_id, own_name),
@@ -486,16 +506,12 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
 }
 
 /**
- * What the package this member holds says about this call (martha#513 slice 2, martha#597), read from the two places
+ * What the package this member holds says about this call (martha#513 slice 2, martha#601), read from the two places
  * that already know it: the member's own dashboard row says which package it holds, and the package's ledger says which
  * contract it is on.
  *
- * A package with no version at all answers "none recorded", whatever the call is: none of its work runs until a
- * contract is kept (martha#597), so the act table is not consulted first for it — a call that is no act is refused too.
- * A ledger that cannot answer for the contract comes back as that rather than as a throw, and keeps slice 2's rule: one
- * unreadable row refuses the act it cannot judge and never the member's every call, its handover among them. For a
- * readable ledger, the acts are read first and the version's own acts are answered only for an act: a contract refuses
- * nothing that is no act.
+ * The acts are read first, so a call that is no act reads no ledger. A package with no version, or a ledger that cannot
+ * answer for it, comes back as none (martha#601, rows 109 and 111): the call runs, with nothing to notice.
  */
 async function theContractTheMemberHolds(
   places: CrewToolPlaces,
@@ -504,13 +520,12 @@ async function theContractTheMemberHolds(
 ): Promise<TheContractHanded> {
   const held_package = places.beats.read(places.member)?.holds ?? ''
   if (held_package === '') return undefined
-  const read = await theNewestContractOrWhy(places.ledger, held_package)
-  if ('why' in read) {
-    return theActsOfACall(call, held_package, names.ownNameOf).length === 0 ? undefined : { package: held_package, why: read.why }
-  }
-  const newest = read.newest
-  if (newest === undefined) return { package: held_package }
   if (theActsOfACall(call, held_package, names.ownNameOf).length === 0) return undefined
+  // No contract, or one the ledger could not read back, gives nothing to compare the call with (martha#601, rows 109
+  // and 111): the call runs and no notice is said.
+  const read = await theNewestContractOrWhy(places.ledger, held_package)
+  const newest = 'why' in read ? undefined : read.newest
+  if (newest === undefined) return undefined
   const { version, contract } = newest
   const allowed: readonly AContractAct[] = contract.kind === 'bounded' ? CONTRACT_ACTS.filter((act) => contract.allowed.includes(act)) : []
   return { package: held_package, version, kind: contract.kind, allowed }
@@ -536,7 +551,17 @@ async function answerAnAskOfTheMods(
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
+  if (name === THE_BUDGET_ASK) return await theBudgetAsked(places, args)
   return undefined
+}
+
+/** `/crew-budget` as the owner typed it at this session's tab (martha#990): the line shown, or the reviewer gauge set. */
+async function theBudgetAsked(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const command = theBudgetCommandIn(args)
+  if (typeof command === 'string') return { refused: command }
+  const settings = await theSettingsOrRefusal(places)
+  if ('refused' in settings) return settings
+  return { answer: theBudgetCommandAnswer(places.stores.crew, command, settings.house_rules.review_model, places.ledger.clock.now()) }
 }
 
 /** The owner's list as the pane draws it (martha#316), with `focus` the row the owner's keyboard is on. */
@@ -573,6 +598,9 @@ async function theSessionsAct(
 ): Promise<CoreToolAnswer> {
   const question = theQuestionIn(args, from)
   if (typeof question === 'string') return { refused: question }
+  // The crew's newest weekly reading (martha#990): kept whatever the flow orders; a store that will not keep it leaves
+  // the reading before it, which the next turn's end replaces.
+  if (question.weekly !== null) keepTheWeekly(places.stores.crew, question.weekly)
   // A switch whose report never came (martha#359): the mod reports the host's command before it asks this question
   // again, so a guard still open here is one no session is coming back for. It is closed without waiting — the host's
   // save may still land, and the record it leaves is what the next launch finishes.
@@ -614,15 +642,30 @@ function theNeedsAfter(state: SessionState, row: DashboardRow): string {
  * The line this member's session starts on: what the member's own row says it holds, and every act of that package
  * that was sent with no outcome recorded (martha#254 design line 53, test 10). Null when nothing is handed.
  */
-async function theStartLineOf(places: CrewToolPlaces, state: SessionState): Promise<TheStartLine | null> {
-  // What a successor owes for its member's open window follows the line (martha#658).
-  return withTheOwedLine(places, await theLineToHandAtStart({
+async function theStartLineOf(places: CrewToolPlaces, state: SessionState, session_id: string): Promise<TheStartLine | null> {
+  // What a successor owes for its member's window follows the line (martha#658): the window this hand read is kept until
+  // the start is answered, because the beats are marked only once it is taken.
+  const handed = withTheOwedLine(places, session_id, await theLineToHandAtStart({
     ledger: places.ledger,
     member: places.member,
     settings: await theSettingsOrRefusal(places),
     held: state.held ?? places.beats.read(places.member),
     now: places.ledger.clock.now(),
   }))
+  if (handed.beats_read === undefined) state.start_hands.delete(session_id)
+  else state.start_hands.set(session_id, handed.beats_read)
+  return handed.line
+}
+
+/**
+ * The answer to a start whose line was built (martha#658 Done-when 4): a taken start marks the window that hand read as
+ * handed, and a refused one marks nothing. The record is dropped either way, so no later start's note can carry it.
+ */
+function noteTheStartIn(places: CrewToolPlaces, state: SessionState, session_id: string, taken: boolean): void {
+  const read = state.start_hands.get(session_id)
+  state.start_hands.delete(session_id)
+  if (read === undefined || !taken) return
+  theBeatsMarkedOn(places, read)
 }
 
 /**
@@ -719,6 +762,19 @@ const declaring =
   }
 
 /**
+ * A tool that reads its call's own words before the crew's declaration, and the place after both: a call that names
+ * nothing it can ask is refused in its own words whatever the launch holds (martha#931 B: wait_for_ci now reads the
+ * declaration's github.budget_floor, and the arguments-first rule still holds).
+ */
+const namedThenDeclaring =
+  <Named>(places: CrewToolPlaces, name: (args: Readonly<Record<string, unknown>>) => AnAsked<Named>, act: (declared: CrewDeclared, named: AnAsked<Named>) => Promise<CoreToolAnswer>): AHandler =>
+  async (args) => {
+    const named = name(args)
+    if ('refused' in named) return { refused: named.refused }
+    return declaring(places, async (declared) => act(declared, named))(args)
+  }
+
+/**
  * What a park or a wake is asked, read once for both (martha#255): the crew's own store, this member, the declaration's
  * table and the call's own words, so the two tools differ only in which of the two acts they run.
  */
@@ -758,15 +814,15 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
   }
   return {
     [REPORT_PROGRESS_TOOL.name]: declaring(places, async (declared, args) =>
-      withTheOwedLineOnAReturn(places, await reportProgressOver(theProgressAsked(places, state, declared), args))),
+      withTheTimesLineOnAReturn(places, state.session, await reportProgressOver(theProgressAsked(places, state, declared), args))),
     [RELEASE_THE_FILES_TOOL.name]: async (args) => releaseTheFilesAKilledRunLeft({ crew: places.stores.crew, member: places.member, paths: thePathsOf(args['paths']) }),
     [LOG_A_MILESTONE_TOOL.name]: async (args) => logTheMilestone(ledger, { package: textOf(args['package']), event: args['event'], note: args['note'] }, async () => whoMayResume(places)),
     [WHAT_WAS_SENT_TOOL.name]: async (args) => whatTheMemberSent(ledger, textOf(args['package'])),
     [NOTE_WHAT_BECAME_TOOL.name]: async (args) => noteTheActsOutcome(ledger, { package: textOf(args['package']), announced_at: args['announced_at'], succeeded: args['succeeded'], detail: args['detail'] }),
-    [KEEP_THE_CONTRACT_TOOL.name]: declaring(places, async (declared, args) => keepTheContract({ ...ledger, documents: places.documents, settings: declared.settings }, args)),
+    [KEEP_THE_CONTRACT_TOOL.name]: async (args) => keepTheContract({ ...ledger, documents: places.documents }, args),
     [SEE_THE_CREW_TOOL.name]: declaring(places, async (declared) => seeTheCrewOver(thePaneAsked(places, declared.settings))),
     [WHO_IS_FREE_TOOL.name]: declaring(places, async (declared, args) => whoIsFreeOver(theWhoIsFreeAsked(places, declared.settings, args))),
-    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn(places) })),
+    [UNHELD_WORK_TOOL.name]: declaring(places, async (declared) => unheldWorkOver({ settings: declared.settings, asker: places.member, reader: theBacklogReaderIn({ ...places, github: declared.settings.github, clock_zone: declared.settings.clock_zone }) })),
     [SAY_TO_THE_CREW_TOOL.name]: declaring(places, async (declared, args) => sayToTheCrewOver(theSendAsked(places, state, declared.settings, args))),
     [READ_THE_RECEIPTS_TOOL.name]: declaring(places, async (declared) => theReceiptsOver(theReceiptsAsked(places, declared.settings))),
     [PARK_A_MEMBER_TOOL.name]: declaring(places, (declared, args) => parked(declared, args, parkAMember)),
@@ -779,9 +835,9 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [REFRESH_THIS_SESSION]: async (args) => theRefreshAskedOf(places, args),
     [VERIFY_RANGE_TOOL.name]: (args) =>
       actingOn(theRangeACallNames(args), async (on, asked) =>
-        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), { member: places.member, declaration: on.settings }, asked)),
+        on.settings === undefined ? { refused: NO_ACTING_PLACE } : verifyTheRangeOver(actingHost(on), asked, places.note)),
     [LAND_BATCH_TOOL.name]: (args) =>
-      actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry)),
+      actingOn(theLandingACallNames(args), (on, asked) => landTheBatchOver(actingHost(on), places.member, asked.batch, asked.dry, places.note)),
     [FAST_FORWARD_TOOL.name]: (args) =>
       actingOn(theFastForwardACallNames(args), async (on, asked) =>
         on.settings === undefined ? { refused: NO_ACTING_PLACE } : fastForwardOntoTheApprovedTipOver(actingHost(on), places.member, asked, on.settings)),
@@ -796,8 +852,9 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [STANDING_ADD_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => recordAStandingItem(places.ledger, args, places.member))),
     [STANDING_CLOSE_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => closeAStandingItem(places.ledger, args, places.member))),
     [STANDING_TOOL.name]: async () => theStandingToolOver({ ledger: places.ledger, now: places.ledger.clock.now() }),
-    [WAIT_FOR_CI_TOOL.name]: (args) =>
-      actingOn(theCiWaitACallNames(args), (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock }), asked)),
+    [WAIT_FOR_CI_TOOL.name]: namedThenDeclaring(places, theCiWaitACallNames, async (declared, named) =>
+      actingOn(named, (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock, github: declared.settings.github, clock_zone: declared.settings.clock_zone }), asked)),
+    ),
   }
 }
 
@@ -944,6 +1001,7 @@ function refreshPlacesOf(places: CrewToolPlaces, state: SessionState): TheRefres
     documents: places.documents,
     models: places.models ?? NO_MODEL_NAMED,
     ledger: places.ledger,
+    row_model: state.row_model,
     began_at: state.began_at,
     ends: state.ends,
   }

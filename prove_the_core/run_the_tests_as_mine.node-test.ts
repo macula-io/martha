@@ -24,8 +24,8 @@ import { test, type TestContext } from 'node:test'
 import { PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
-import { manifestOf } from './declared_in_package_json.ts'
-import { testRunFlagsOf, withoutTheTestContext } from './every_test_run_ends.ts'
+import { manifestOf } from './read_the_manifest_and_the_linter/declared_in_package_json.ts'
+import { testRunFlagsOf, withoutTheTestContext } from './a_test_run_ends/every_test_run_ends.ts'
 import { RECORDS_DIRECTORY, RECORD_FILE, type TheRecordOfATestRun } from './the_record_of_a_test_run.ts'
 
 const NAME = 'run_the_tests_as_mine'
@@ -48,8 +48,8 @@ const THE_FILES_THE_RUN_READS = [
   THE_RUNNER,
   THE_STOPPER,
   'prove_the_core/the_record_of_a_test_run.ts',
-  'prove_the_core/declared_in_package_json.ts',
-  'prove_the_core/the_words_one_run_gets.ts',
+  'prove_the_core/read_the_manifest_and_the_linter/declared_in_package_json.ts',
+  'prove_the_core/a_test_run_ends/the_words_one_run_gets.ts',
   'src/linux_process_identity/files_and_processes_on_this_machine.ts',
   'src/linux_process_identity/process_identity_from_proc.ts',
   'src/host_contract/host_contract.ts',

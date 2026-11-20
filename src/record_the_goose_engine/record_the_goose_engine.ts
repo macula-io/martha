@@ -15,39 +15,19 @@
 // Standard output carries versions, commits and the names of facts and parts only, since the drift job's log is
 // public; why a part could not be read goes to standard error.
 
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { argv, exit, stderr, stdout } from 'node:process'
 
-import { engineFactsIn, type EngineFacts, type EngineSource } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
+import { engineFactsIn, type EngineFacts } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { RECORDING_OF_THE_ENGINE, type RecordedEngine } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { NOTE } from '../record_claude_code_host/carry_over_what_is_restated_by_hand.ts'
+import { anEngineCheckoutOnDisk } from './an_engine_checkout_on_disk.ts'
 
 const CHECK = '--check'
 const COMMIT = /^[0-9a-f]{40}$/
 /** The recording's own fields that are not facts of the engine: why it exists, and where it was read. */
 const NOT_FACTS: readonly string[] = [NOTE, 'engine_commit']
 const WHY = 'What the Goose engine says about itself, read from its source so the launcher and the adapter derive from the engine and not from a list typed by hand (macula-io/martha#541). Re-record with: npm run record:goose-engine -- <engine checkout> <its commit>.'
-
-/** A checkout on disk, read the way the parts ask: a missing file or directory is an absence, never a throw. */
-function sourceAt(checkout: string): EngineSource {
-  return {
-    read: (path) => {
-      try {
-        return readFileSync(join(checkout, path), 'utf8')
-      } catch {
-        return undefined
-      }
-    },
-    list: (directory) => {
-      try {
-        return readdirSync(join(checkout, directory))
-      } catch {
-        return []
-      }
-    },
-  }
-}
 
 /** The facts whose values differ between the recording and a checkout, in a stable order. */
 function factsThatDiffer(recorded: Readonly<Record<string, unknown>>, read: Readonly<Record<string, unknown>>): readonly string[] {
@@ -63,7 +43,7 @@ if (checkout === undefined || commit === undefined || !COMMIT.test(commit)) {
 }
 
 const recorded = JSON.parse(readFileSync(RECORDING_OF_THE_ENGINE, 'utf8')) as RecordedEngine
-const { facts, unreadable } = engineFactsIn(sourceAt(checkout))
+const { facts, unreadable } = engineFactsIn(anEngineCheckoutOnDisk(checkout))
 for (const { part, why } of unreadable) stderr.write(`${part}: ${why}\n`)
 const parts = unreadable.map(({ part }) => part)
 

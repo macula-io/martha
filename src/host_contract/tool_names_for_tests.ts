@@ -7,7 +7,9 @@
 // tests, so a slice is proved against both forms, not only the one it was
 // written for.
 
-import type { ToolNames } from './host_contract.ts'
+import { resolve } from 'node:path'
+
+import type { HostFileTools, ToolNames } from './host_contract.ts'
 
 /** The separator Claude Code puts around the server's name: `mcp__<server>__<tool>`. */
 const CLAUDE_CODE_SEPARATOR = '__'
@@ -40,3 +42,16 @@ export const openCodeToolNames = (servers: readonly string[]): ToolNames => {
     },
   }
 }
+
+/**
+ * A host's file tools named unlike Claude Code's, for the tests of the decisions that take a host's (#541 package A,
+ * design G1): one writing tool on one argument, no whole-file check, and a resolver that joins every path to `cwd` as
+ * written, with no trim and no `~`. A decision that judged with Claude Code's names or resolver instead fails them.
+ */
+export const OTHER_HOSTS_FILE_TOOLS: HostFileTools = Object.freeze({
+  writing_tools: Object.freeze(['a_writer']),
+  file_arguments: Object.freeze(['a_path']),
+  own_writes: Object.freeze({ a_writer: 'a_path' }),
+  whole_file: undefined,
+  resolve: (value: string, cwd: string) => resolve(cwd, value),
+})

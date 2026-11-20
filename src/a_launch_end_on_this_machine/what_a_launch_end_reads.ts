@@ -2,7 +2,7 @@
 //
 // A host adapter, not glue and not a slice: it reads /proc and the clock, which a slice may not, and it composes the
 // slices that decide — ../end_a_launch asks for the machine here, and ../tell_a_member_what_its_relaunch_killed decides
-// what an end's findings mean. One adapter per concern keeps each host directory under its ceiling (martha#322), which
+// what an end's findings mean. One adapter per concern keeps each adapter small, which
 // is why the boot reader lives here rather than in ../linux_process_identity. The group reader stays there, beside the
 // other stat fields: the stop tool is copied into a planted repository with exactly those files and may import no
 // other, so the one definition has to be one of theirs (martha#802).
@@ -12,6 +12,7 @@
 
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { constants } from 'node:os'
 import process from 'node:process'
 
 import type { CrewStore, FileTree, Processes } from '../host_contract/host_contract.ts'
@@ -153,20 +154,39 @@ export function keepWhatTheRunLeft(launch: WhatAnEndKeepsOfALaunch, group: numbe
 const LAUNCHER_END_SIGNALS: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT']
 
 /**
+ * The end signals whose default action dumps core, so the launcher exits with the status a shell reports for a death by
+ * the signal rather than raising it again (martha#845). A core holds the launcher's whole memory, and where the host
+ * pipes cores to a handler, as systemd-coredump does, the handler records the process's whole environment in the
+ * journal even with the core limit at 0. An exit never enters the kernel's core path, so neither is written, and the
+ * owner's shell still sees the status it would have. A signal added to the end signals that dumps core belongs here.
+ */
+const LAUNCHER_END_SIGNALS_THAT_DUMP_CORE: readonly NodeJS.Signals[] = ['SIGQUIT']
+
+/** What a shell adds to a signal's number to report a death by it as an exit status. */
+const SHELL_STATUS_OF_A_SIGNAL = 128
+
+/**
  * Kills the member's group and removes both directories if the launcher exits
  * first, or is ended by SIGTERM or SIGINT; returns what takes those handlers off.
+ *
+ * `kills` is the group kill, handed in so a test can hold the order without signalling a group: a reaped pid's group
+ * may belong to another process by the time a test calls it (martha#646 r=1, nit 2).
  */
-export function cleanUpIfTheLauncherEnds(pid: number, made: LaunchMade): () => void {
+export function cleanUpIfTheLauncherEnds(pid: number, made: LaunchMade, kills: (pid: number) => void = killGroup): () => void {
   const onLauncherExit = (): void => {
-    killGroup(pid)
+    kills(pid)
     made.relayDirectory.remove()
+    // Before the snapshot goes, what the member's host wrote of its session is kept (martha#646): this handler runs in
+    // `exit`, so the keep is synchronous and bounded, and a failure in it never stops the two removals below.
+    made.keepTranscripts()
     made.removeSnapshot()
   }
   process.once('exit', onLauncherExit)
   // SIGTERM and SIGINT end the process without 'exit', so each cleans up too.
   // The signal is raised again once this launcher's handlers are off, unless
   // some other part of the process still listens for it, so it still ends the
-  // launcher the way it would have.
+  // launcher the way it would have. A signal that dumps core is not raised
+  // again: the launcher exits with the status a shell gives a death by it.
   const onLauncherSignal = (signal: NodeJS.Signals): void => {
     offLauncherEnd()
     onLauncherExit()
@@ -174,7 +194,9 @@ export function cleanUpIfTheLauncherEnds(pid: number, made: LaunchMade): () => v
     // when this runs, so it counts as 0 here: the signal is raised again before
     // that listener's own asynchronous shutdown can finish. A part of the
     // process that needs one must keep listening with `on`.
-    if (process.listenerCount(signal) === 0) process.kill(process.pid, signal)
+    if (process.listenerCount(signal) !== 0) return
+    if (LAUNCHER_END_SIGNALS_THAT_DUMP_CORE.includes(signal)) process.exit(SHELL_STATUS_OF_A_SIGNAL + constants.signals[signal])
+    else process.kill(process.pid, signal)
   }
   const offLauncherEnd = (): void => {
     process.off('exit', onLauncherExit)

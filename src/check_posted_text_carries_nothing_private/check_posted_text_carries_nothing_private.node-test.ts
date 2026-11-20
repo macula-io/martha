@@ -47,7 +47,7 @@ const FORMS = 'see /home/<user>, /home/test, /home/probe, /home/x, /home/ops, /h
 const REPO = 'macula-io/martha'
 const CLEAN = 'ran the suite; see martha#14'
 const HOME_PATH = '/home/synthetic/notes'
-const HOME_HIT = 'a home directory (/home/synthetic)'
+const HOME_HIT = 'a home directory (value withheld)'
 
 // A commit id drawn at run time: an id written here would be read by the tree
 // scan, and a drawn one is a value no reader can confuse with a real node id.
@@ -144,7 +144,7 @@ test('the forms a public tree may write pass beside a real-shaped value that is 
   // what passes above passed because the allowance is on, not because it passed unseen.
   assert.deepEqual(
     (await hitsOf(answersWith('issue comment', FORMS))).map((hit) => hit.what),
-    ['a lab hostname (value withheld)', 'a home directory (/home/synthetic)', 'a private address (192.168.255.7)'],
+    ['a lab hostname (value withheld)', 'a home directory (value withheld)', 'a private address (value withheld)'],
   )
 })
 

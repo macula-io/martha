@@ -32,7 +32,7 @@
 import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 
-import { FILE_PATH_ARGUMENT, NOTEBOOK_PATH_ARGUMENT, asTheHostResolves } from '../claude_code_host/claude_code_file_tools.ts'
+import type { HostFileTools } from '../host_contract/host_contract.ts'
 import type { HookSwitches, ManagedSettingsPlace, SafeMode } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import {
   hooksAndPluginsDeclaredIn,
@@ -298,16 +298,13 @@ export function realPathOf(path: string): string {
   }
 }
 
-/** The tool call arguments that name the file a file tool reads or writes. */
-export const FILE_ARGUMENTS = [FILE_PATH_ARGUMENT, NOTEBOOK_PATH_ARGUMENT] as const
-
-/** Why a tool call names the owner's user settings file, or undefined. */
-export function namesTheOwnersSettings(input: Readonly<Record<string, unknown>>, owners_file: string, cwd: string, home: string): string | undefined {
+/** Why a tool call names the owner's user settings file, or undefined: each argument the host's file tools name a file in, resolved as that host resolves it. */
+export function namesTheOwnersSettings(input: Readonly<Record<string, unknown>>, owners_file: string, cwd: string, home: string, tools: HostFileTools): string | undefined {
   const owners = realPathOf(owners_file)
-  for (const argument of FILE_ARGUMENTS) {
+  for (const argument of tools.file_arguments) {
     const value = input[argument]
     if (typeof value !== 'string' || value.trim() === '') continue
-    if (realPathOf(asTheHostResolves(value, cwd, home)) === owners) {
+    if (realPathOf(tools.resolve(value, cwd, home)) === owners) {
       return `${value} is the owner's Claude Code user settings file (${owners_file}), which a member does not touch: a key in it can turn off the hooks Martha's gates run in, for this member and every member after it`
     }
   }

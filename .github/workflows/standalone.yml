@@ -1,5 +1,6 @@
-# Standalone Martha (martha#547, package S3): Martha runs from one download with its own Node, on Linux and macOS,
-# with no Node on the user's machine.
+# Standalone Martha (martha#547, package S3): Martha runs from one download with its own Node, on Linux, with no
+# Node on the user's machine. Martha is built for Linux only (DECIDED 2026-11-19 "we build for linux, not windows or
+# macOS").
 #
 # On each platform a standalone release is assembled from the commit under test (carry_marthas_own_node/
 # assemble_a_standalone_martha.ts: the tree, the pinned Node held to nodejs.org's sha256, and the command), and
@@ -34,8 +35,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # linux-x64, linux-arm64, darwin-arm64, darwin-x64: the four platforms of carry_marthas_own_node/the_node_runtime.ts.
-        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel]
+        # linux-x64: the one platform of carry_marthas_own_node/the_node_runtime.ts.
+        runner: [ubuntu-latest]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

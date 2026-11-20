@@ -36,6 +36,8 @@ import {
 } from '../vouch_for_the_agents_a_session_started/vouch_for_the_agents_a_session_started.ts'
 import type { TheJournalsRecordOfACall } from '../end_a_running_turn/hold_the_end.ts'
 import { noteTheCallCounted, theSpendACrewHolds } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
+import { theNoticeOfACallPastTheBudget, type ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
+import { theActsNotAllowed, theNoticeOfACallOutsideTheContract, type TheContractHanded } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 import type {
   ACalledTool,
   ACrewToolAsked,
@@ -103,6 +105,11 @@ export interface ThePlacesAHostReportsOver {
   readonly failed_review_report?: TheReportTheHostWrites | undefined
   /** Where a line about a failed review goes (martha#390): the owner's row and the member. Absent, nothing is told. */
   readonly told?: WhereTheFailedReviewIsTold | undefined
+  /**
+   * The sink a line about a call the gate carried on past is said through (martha#601): the adapter's writer to the
+   * process's own error output. Absent, nothing is said.
+   */
+  readonly note?: ((line: string) => void) | undefined
   /**
    * The agents the host started under this launch's sessions (martha#170). One table, made once by the launcher: a
    * called tool writes it here, and an agent's start, stop and result read it here too.
@@ -293,7 +300,7 @@ export function answersOver(
     }
   }
 
-  const held: TheSessionsHeld = { places, sessions, broken, keep, vouchFor, approved_start }
+  const held: TheSessionsHeld = { places, sessions, broken, keep, vouchFor, approved_start, notices_said: new Set<string>() }
 
   return {
     records: places.records,
@@ -329,6 +336,12 @@ interface TheSessionsHeld {
   vouchFor(session: HostSession): Promise<HostSession | string>
   /** The checkout's tree when the owner approved this start state, or `null` (martha#127): what a read is exempt against. */
   readonly approved_start: string | null
+  /**
+   * The notices this launch has told its member, by what they are about (martha#601, rows 110 and 112): each is told
+   * once, because every notice reaches the member as a crew message and so as a turn of its own, and a notice repeated
+   * on every call past the wall would feed the member a turn for each call it makes.
+   */
+  readonly notices_said: Set<string>
 }
 
 /** The session a clear was told in, when this id is the one the crew is waiting for: the crew's own answer, or none. */
@@ -367,8 +380,11 @@ async function aSessionStartedIn(held: TheSessionsHeld, start: AStartingSession)
   if (held.sessions.has(start.session_id)) return { taken: '' }
   await held.places.records.load(start.session_id)
   const started = startSessionAs(held.places.records.store, await asTheCrewsRefresh(held, start))
-  const line = await theLineThisSessionStartsOn(held.places.crew)
+  const line = await theLineThisSessionStartsOn(held.places.crew, start.session_id)
   const why = await held.keep(handedAtStart(held.places, started, line))
+  // The beats a hand carried are marked only once the start is taken, and dropped unmarked when it is refused, so a
+  // refused start leaves the next one the beats (martha#658 Done-when 4).
+  held.places.crew?.noteTheStart(start.session_id, why === undefined)
   return why === undefined ? { taken: handedAtThisStart(held.places.crew_text, line?.line ?? null) } : { refused: why }
 }
 
@@ -404,10 +420,10 @@ async function aReviewTheHostSawFailIn({ places, sessions }: TheSessionsHeld, re
 
 /**
  * A called tool, decided before it runs (martha#541, PR 2): the session named and vouched for, the agent's call noted on
- * its run, then every refusal in its order. An allowed call is counted against the package's spend before it runs
- * (martha#513, slice 3), so a call whose row cannot be kept does not run and a member cannot spend where nothing counts
- * it. Only then is it noted as a signed run, a review it lets through remembered, and its turn's end told it is in
- * flight.
+ * its run, then every refusal in its order. An allowed call is counted against the package's spend (martha#513, slice
+ * 3), after a call past the package's contract or budget is told so in a notice to its member (martha#601, rows 110 and
+ * 112); a row the store could not keep is written in the journal and the call runs (row 113). Then it is noted as a
+ * signed run, a review it lets through remembered, and its turn's end told it is in flight.
  */
 async function aToolCalledIn(held: TheSessionsHeld, call: ACalledTool): Promise<TheAnswerToACall> {
   const { places } = held
@@ -418,12 +434,52 @@ async function aToolCalledIn(held: TheSessionsHeld, call: ACalledTool): Promise<
   noteTheAgentsCall(places.agents, session, call)
   const denial = await theDenialOfACall(places, session, call)
   if (denial !== undefined) return { denied: denial }
+  // The notice reads the spend before this call is counted, so the call that spends the last unit is not told it is over.
+  await noticeACallPastItsPackage(places, held.notices_said, session, call)
   const uncounted = await noteTheCallCounted(places.crew, session.id, places.names.ownNameOf(call.tool))
-  if (uncounted !== undefined) return { denied: uncounted }
+  if (uncounted !== undefined) places.journal?.noted(A_CALL_NOT_COUNTED, uncounted, call.call_id)
   places.signed_runs?.callAllowed(call.tool, call.input)
   await noteTheReviewThisLaunchLetThrough(places, call)
   places.crew?.ends.aCallAllowed(session.id, call.call_id ?? '')
   return { allowed: 1 }
+}
+
+/** The journal's own name for a call the store could not count against its package's budget (martha#601, row 113). */
+export const A_CALL_NOT_COUNTED = 'a call not counted against its budget'
+
+/**
+ * Tells the member, in one line each, that its allowed call does an act its package's contract leaves out or runs past
+ * a spent budget (martha#601, rows 110 and 112): the call runs either way. Each is told once a launch, by what it is
+ * about: the package and contract version, and for the contract the acts. A launch with no crew, or none to tell, says
+ * nothing.
+ */
+async function noticeACallPastItsPackage(places: ThePlacesAHostReportsOver, said: Set<string>, session: HostSession, call: ACalledTool): Promise<void> {
+  if (places.told === undefined) return
+  const spend = await theSpendACrewHolds(places.crew, session.id)
+  const contract = await theContractACrewHolds(places.crew, { tool: call.tool, input: call.input }, places.names)
+  for (const { about, line } of theNoticesOf(call, spend, contract, places.names.ownNameOf)) {
+    if (line === undefined || said.has(about)) continue
+    said.add(about)
+    await places.told.theMember(line, call.call_id ?? '')
+  }
+}
+
+/** A notice this call may be told, with what it is about: the key a launch tells it once under. */
+interface ANotice {
+  readonly about: string
+  readonly line: string | undefined
+}
+
+/**
+ * The budget's notice and the contract's for this call, each keyed by its package, version and, for a contract, acts.
+ * The budget's key says which of its two notices it is, so a member told its spend could not be read is still told
+ * when the spend is read and found spent.
+ */
+function theNoticesOf(call: ACalledTool, spend: ASpendInForce | undefined, contract: TheContractHanded, own: (called: string) => string): readonly ANotice[] {
+  const budget: ANotice = { about: `budget ${spend?.package ?? ''} ${String(spend?.version)} ${spend?.why_unreadable === undefined ? 'spent' : 'unreadable'}`, line: theNoticeOfACallPastTheBudget({ tool: call.tool }, spend, own) }
+  if (contract === undefined) return [budget]
+  const acts = theActsNotAllowed({ tool: call.tool, input: call.input }, contract, own)
+  return [budget, { about: `contract ${contract.package} ${String(contract.version)} ${acts.join(',')}`, line: theNoticeOfACallOutsideTheContract({ tool: call.tool, input: call.input }, contract, own) }]
 }
 
 /** A call an agent made, noted on its run as one of the calls "every call it made" counts; the member's own note nothing. */
@@ -450,9 +506,7 @@ async function theDenialOfACall(places: ThePlacesAHostReportsOver, session: Host
     agents_running: agentsToHold(places.agents, session.id, call.agent_id),
     ...(places.gate === undefined ? {} : { gate: places.gate }),
     audit: places.audit,
-    contract: await theContractACrewHolds(places.crew, { tool: call.tool, input: call.input }, places.names),
-    spend: await theSpendACrewHolds(places.crew, session.id),
-  })?.deny
+  }, places.note ?? (() => {}))?.deny
   if (verdict !== undefined) return verdict
   return whatTheCrewRefusesOfACall(places.crew, call, session.id)
 }
@@ -620,12 +674,13 @@ async function aCrewToolAskedIn(held: TheSessionsHeld, ask: ACrewToolAsked): Pro
 /**
  * The line this session is handed as it starts (martha#254 test 10): the acts of the package this member holds that
  * were sent with no outcome recorded. Null when the member holds no package, nothing of it is waiting, or the ledger
- * cannot be read: a start the ledger could not be read for is still a start.
+ * cannot be read: a start the ledger could not be read for is still a start. The session's id is the host's own start
+ * event's, and it is that id the crew's window hand guards on (martha#658 Done-when 4).
  */
-async function theLineThisSessionStartsOn(crew: CrewTools | undefined): Promise<TheStartLine | null> {
+async function theLineThisSessionStartsOn(crew: CrewTools | undefined, session_id: string): Promise<TheStartLine | null> {
   if (crew === undefined) return null
   try {
-    return await crew.theLineToHandAtStart()
+    return await crew.theLineToHandAtStart(session_id)
   } catch {
     return null
   }

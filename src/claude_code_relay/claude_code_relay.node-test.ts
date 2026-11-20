@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-import { moduleReferencesOf } from '../../prove_the_core/parse_a_source.ts'
+import { moduleReferencesOf } from '../../prove_the_core/read_a_source/parse_a_source.ts'
 import {
   processGroupOf,
   relay,
@@ -320,6 +320,25 @@ test('#311 ruling D: a report answered with a turn to end that names none is no 
   assert.deepEqual([fake.ran[0], fake.aborted], [['kill', '-s', 'KILL', '--', '-4242'], []], 'the member was not stopped, or a turn was ended')
 })
 
+test('#969: a report the launcher answers yes with a note hands the tool\'s result back with the note added to its context, and stops nothing (mutant: drop the note)', async () => {
+  const note = 'note: the clone /w/acme/widget is 1 commit behind origin/main.'
+  const noting: Launcher = async ({ url }) =>
+    ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? JSON.stringify({ taken: 1, note }) : yesTo(url.slice(RELAY_ORIGIN.length)) })
+  const fake = fakeEngine(noting)
+  const call = await callThrough(fake)
+  assert.deepEqual(await call.answer, { ...RESULT, context: [note] }, 'the note was not added to the result')
+  assert.deepEqual([fake.ran, fake.aborted], [[], []], 'a note stopped the member or ended its turn')
+})
+
+test('#969: a report answered with an empty note, or a key the relay does not know, is no yes, and the member is stopped (mutant: read any taken as a yes)', async () => {
+  for (const answered of [{ taken: 1, note: '' }, { taken: 1, said: 'x' }, { taken: 1, end_turn: 't', note: 3 }]) {
+    const fake = fakeEngine(async ({ url }) => ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? JSON.stringify(answered) : yesTo(url.slice(RELAY_ORIGIN.length)) }))
+    const call = await callThrough(fake)
+    assert.equal(await settled(call.answer as Promise<unknown>), 'pending', `${JSON.stringify(answered)} was read as a yes`)
+    assert.deepEqual(fake.ran[0], ['kill', '-s', 'KILL', '--', '-4242'], `the member was not stopped for ${JSON.stringify(answered)}`)
+  }
+})
+
 test('a hook that failed: its catch drops or denies before the tool ran, and stops the member after', async () => {
   const hooks = hooksOfTheRelay()
   const fake = fakeEngine(sayYes)
@@ -392,7 +411,10 @@ test('the relay imports only its protocol, and the protocol imports nothing', ()
   // same way. It decides nothing of its own (martha#255): the pane's lines, how it opens and the order a session is
   // given all come from the launcher's answer, and the reading of those answers is the one file below (r=2 R1, R2),
   // so the mod itself holds no parser and no rule.
-  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_channel_reading.ts', './crew_turn_beat.ts', './crew_answers.ts'])
+  assert.deepEqual(specifiers('crew.tsx'), ['./crew_tools_answer.ts', './relay_protocol.ts', './crew_command.ts', './crew_channel_reading.ts', './crew_turn_beat.ts', './crew_answers.ts'])
+  // The owner's `/crew` (martha#927): what it asks and prints, read with the pane's own reader and nothing else, so a
+  // test drives it with the launcher's own answers.
+  assert.deepEqual(specifiers('crew_command.ts'), ['./crew_answers.ts'])
   // The beat a running main turn is asked about on (martha#311): a plain file with no imports, as the channel's rule is.
   assert.deepEqual(specifiers('crew_turn_beat.ts'), [])
   // The rule for when a session reads its crew's channel (martha#253 r=2): also a plain file with no imports, so a

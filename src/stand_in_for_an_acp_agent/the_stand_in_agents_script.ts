@@ -11,12 +11,16 @@ import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_
 /** One step of a scripted turn. */
 export type AStep =
   | { readonly say: string }
-  | { readonly call: { readonly id: string; readonly title: string; readonly input: unknown }; readonly options?: readonly unknown[] }
+  | { readonly call: { readonly id: string; readonly title: string; readonly input: unknown; readonly name?: string }; readonly options?: readonly unknown[] }
   | { readonly ask: string }
   | { readonly line: string }
   | { readonly echo: 1 }
   | { readonly capabilities: 1 }
   | { readonly exit: 1 }
+  /** A `session/update` sent as written: a call the engine reports and never asks about, or a status of its own. */
+  | { readonly update: Readonly<Record<string, unknown>> }
+  /** Steps played after the turn's prompt is answered, outside any turn (#541 package A, design R4). */
+  | { readonly after_the_answer: readonly AStep[] }
 
 /** What the stand-in answers: its version and mode, and one list of steps per prompt, in order. */
 export interface AnAgentScript {
@@ -24,10 +28,33 @@ export interface AnAgentScript {
   readonly currentModeId?: string
   readonly turns: readonly (readonly AStep[])[]
   readonly stopReason?: string
+  /**
+   * The session row the engine writes into its store when it opens a session (#541 package A), so a start that reads
+   * the store back reads what an engine wrote: the store under the folder the named variable holds, in WAL mode, the
+   * table with the columns given, and one row with the stand-in's session id, the working folder it was asked for, and
+   * the fields given. The writer is held open while the stand-in runs, as the engine holds its own.
+   */
+  readonly session_row?: AStandInsSessionRow
+}
+
+/** Where and what the stand-in writes as its session's row. */
+export interface AStandInsSessionRow {
+  readonly root_variable: string
+  readonly path: readonly string[]
+  readonly table: string
+  readonly columns: readonly string[]
+  readonly fields: Readonly<Record<string, string>>
 }
 
 /** The engine's own permission options, as it builds them: its kind as its id and its name, in the engine's order. */
 export const THE_ENGINES_OPTIONS = RECORDED_GOOSE_ENGINE.permission_options.map((kind) => ({ optionId: kind, name: kind, kind }))
+
+/**
+ * The `_meta` the engine puts on a call's `tool_call` update to name its tool, at the path the recording holds
+ * (`tool_naming.meta_path`, read from goose_tool_call_meta); the permission request itself carries only a title made for people.
+ */
+export const theEnginesNamingOf = (name: string): Record<string, unknown> =>
+  RECORDED_GOOSE_ENGINE.tool_naming.meta_path.reduceRight<unknown>((inner, key) => ({ [key]: inner }), name) as Record<string, unknown>
 
 /** The session id the stand-in opens. */
 export const STAND_IN_SESSION = 'stand-in-session'

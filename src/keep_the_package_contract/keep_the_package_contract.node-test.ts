@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { SOLO_MEMBERS, soloDeclaration } from '../declare_crew/declare_crew.ts'
+import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { readLedger, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { OWNER_ASKS_STREAM, ASK_QUEUED, ASKS_SETTLED, OWNER_YES } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
@@ -28,15 +28,6 @@ import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_wor
 
 // Synthetic names, never a real one: this repository is public.
 const PACKAGE = 'synthetic-owner/repo#7'
-
-/** The declaration a test keeps a contract under: one role may assign work, the other may not. */
-const A_TEAM = {
-  members: [
-    { name: SUPERVISOR, role: 'lead' },
-    { name: 'member-one', role: 'builder' },
-  ],
-  mode: { may: { assign_work: ['lead'] } },
-}
 
 /** The lines a bounded contract's block says, in the order a Supervisor writes them. */
 const A_BLOCK: readonly string[] = [
@@ -227,28 +218,13 @@ test('a package name that is not one is refused, and so is a brief this slice ca
   )
 })
 
-test('a package is marked unbounded only on the owner\'s yes to the ask it names', async () => {
+test('#601 row 115: an unbounded contract is kept on its own words, whether or not the owner answered the ask it names', async () => {
   const host = aHostKeeping()
-  // An ask was put about this package and the owner has not answered it: nothing is kept.
   const unanswered = await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: `is ${PACKAGE} unbounded?`, asked_by: SUPERVISOR, since: 0 })
-  const brief = theBriefWithBlock(anUnboundedBlock(unanswered))
-  assert.match(refusalBy(await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief })), new RegExp(`the owner has not said yes to ask ${String(unanswered)}`))
-
-  // Then the owner says yes to that ask, and the same brief is kept as the unbounded contract it says.
-  await host.host.stores.rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [unanswered] })
-  const kept = await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief })
+  const kept = await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: theBriefWithBlock(anUnboundedBlock(unanswered)) })
   assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')
   const newest = await theNewestContractOf(host.host, PACKAGE)
   assert.deepEqual(newest?.contract, { kind: 'unbounded', reason: 'the owner asked for a spike', owner_yes: unanswered })
-})
-
-test('a yes to an ask about something else does not mark this package unbounded', async () => {
-  const host = aHostKeeping()
-  const ask = await anAskSaidYesTo(host, 'may I delete the stale branch a member left on origin?')
-  const refused = await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: theBriefWithBlock(anUnboundedBlock(ask)) })
-  assert.match(refusalBy(refused), /which asked "may I delete the stale branch a member left on origin\?"/)
-  assert.match(refusalBy(refused), new RegExp(`their word about ${PACKAGE.replace('#', '\\#')} is what marks it unbounded`))
-  assert.equal((await theContractVersionsOf(host.host, PACKAGE)).length, 0)
 })
 
 /** What a call refused, failing the test when it kept something. */
@@ -257,31 +233,13 @@ const refusalBy = (answered: { readonly answer: string } | { readonly refused: s
   return answered.refused
 }
 
-test('a yes about another package marks nothing, whether it says "unbounded" or names a package whose name runs on', async () => {
-  const host = aHostKeeping()
-  // A question saying "unbounded" about a package that is not this one says nothing about this one.
-  const another_package = await anAskSaidYesTo(host, 'is synthetic-owner/other#9 unbounded?')
-  assert.match(
-    refusalBy(await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: theBriefWithBlock(anUnboundedBlock(another_package)) })),
-    /did not ask about it/,
-  )
-  // And a name that merely opens with this package's is another package: the package numbered 70 is not the one
-  // numbered 7 (martha#513 r=3).
-  const longer_name = await anAskSaidYesTo(host, 'may synthetic-owner/repo#70 skip its contract?')
-  assert.match(
-    refusalBy(await keepThePackageContract(host.host, { package: PACKAGE, member: SUPERVISOR, brief: theBriefWithBlock(anUnboundedBlock(longer_name)) })),
-    /did not ask about it/,
-  )
-  assert.equal((await theContractVersionsOf(host.host, PACKAGE)).length, 0)
-})
-
 // --- the contract a session is handed --------------------------------------------
 
-test('a package with no contract says none of its work runs, and names the tool that records one (martha#597)', () => {
-  const said = theContractPart(PACKAGE, undefined)
-  assert.match(said, /has no package contract recorded/)
-  assert.match(said, /none of its work runs/)
-  assert.match(said, new RegExp(KEEP_THE_PACKAGE_CONTRACT))
+test('#601 row 109: a package with no contract is told nothing is noticed against one, and the tool that records one', () => {
+  assert.equal(
+    theContractPart(PACKAGE, undefined),
+    `${PACKAGE} has no package contract recorded, so no act of its work is noticed against one. Its Supervisor may keep one with the ${KEEP_THE_PACKAGE_CONTRACT} tool.`,
+  )
 })
 
 test('the part handed names the version, the goal, every criterion with its evidence, the actions, the budget and done', async () => {
@@ -386,20 +344,17 @@ test('a package with no contract is said so, never counted as met, and an unboun
 
 // --- the tool ---------------------------------------------------------------------
 
-test('a member the table does not let assign work may not record a contract, and nothing is written', async () => {
+test('#601 row 114: a member the table does not let assign work records a contract too', async () => {
   const host = aHostKeeping()
-  const refused = await keepTheContract(
-    { ledger: host.host, documents: { read: async () => aBrief() }, settings: A_TEAM, member: 'member-one' },
-    { package: PACKAGE, brief: '/somewhere/BRIEF.md' },
-  )
-  assert.match(refusalBy(refused), /may not record a package's contract/)
-  assert.equal((await theContractVersionsOf(host.host, PACKAGE)).length, 0)
+  const kept = await keepTheContract({ ledger: host.host, documents: { read: async () => aBrief() }, member: 'member-one' }, { package: PACKAGE, brief: '/somewhere/BRIEF.md' })
+  assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')
+  assert.equal((await theNewestContractOf(host.host, PACKAGE))?.member, 'member-one')
 })
 
 test('the Supervisor records the contract of the brief it names, read through the host\'s own reader', async () => {
   const host = aHostKeeping()
   const kept = await keepTheContract(
-    { ledger: host.host, documents: { read: async (path) => { assert.equal(path, '/somewhere/BRIEF.md'); return aBrief() } }, settings: A_TEAM, member: SUPERVISOR },
+    { ledger: host.host, documents: { read: async (path) => { assert.equal(path, '/somewhere/BRIEF.md'); return aBrief() } }, member: SUPERVISOR },
     { package: PACKAGE, brief: '/somewhere/BRIEF.md' },
   )
   assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')
@@ -409,23 +364,22 @@ test('the Supervisor records the contract of the brief it names, read through th
 test('a call that names no brief, or a brief the host cannot read, keeps nothing and says which', async () => {
   const host = aHostKeeping()
   const nothingNamed = await keepTheContract(
-    { ledger: host.host, documents: { read: async () => aBrief() }, settings: A_TEAM, member: SUPERVISOR },
+    { ledger: host.host, documents: { read: async () => aBrief() }, member: SUPERVISOR },
     { package: PACKAGE },
   )
   assert.match(refusalBy(nothingNamed), /named none: give the path of the brief file/)
   const unreadable = await keepTheContract(
-    { ledger: host.host, documents: { read: async () => { throw new Error('ENOENT: no such document') } }, settings: A_TEAM, member: SUPERVISOR },
+    { ledger: host.host, documents: { read: async () => { throw new Error('ENOENT: no such document') } }, member: SUPERVISOR },
     { package: PACKAGE, brief: '/nowhere/BRIEF.md' },
   )
   assert.match(refusalBy(unreadable), /could not be read/)
 })
 
-test('every member of a solo crew keeps a contract, because its table lets the owner alone assign work', async () => {
+test('a member of a solo crew keeps a contract', async () => {
   const host = aHostKeeping()
-  const solo = soloDeclaration('an owner')
   const member = SOLO_MEMBERS[0].name
   const kept = await keepTheContract(
-    { ledger: host.host, documents: { read: async () => aBrief() }, settings: solo, member },
+    { ledger: host.host, documents: { read: async () => aBrief() }, member },
     { package: PACKAGE, brief: '/somewhere/BRIEF.md' },
   )
   assert.ok('answer' in kept, 'refused' in kept ? kept.refused : '')

@@ -5,16 +5,32 @@
 // ref-transaction hook (both ../guard_the_git_a_member_runs), all of them through
 // ../ask_git_what_a_member_is_about_to_change, which is the slice those seams call for the facts git alone can say.
 //
-// Three rules, and no more. A clone stays on its default branch, so where the work of a branch belongs is a worktree
-// (the first rule, and the second, which the first holds). And another member's worktree or branch is theirs: no member
-// removes or moves one, and no role is exempt, the Supervisor included. The branch a clone starts on is one of the facts
-// git hands in, so a call that puts a drifted clone back on it — the drift check's own advice — is not refused.
+// Two rules refuse, and no more. Another member's worktree or branch is theirs: no member removes or moves one, and no
+// role is exempt, the Supervisor included. A push or a prune that deletes or moves a branch nobody named is refused with
+// them.
 //
-// The rule that the owner ruled on, 2026-11-17: **layout only**. This guard refuses a call that breaks where the work
-// goes and a call that touches another member's worktree or branch. It never refuses a member's own push, and it never
-// refuses a call that is merely sloppy: a clone off its default branch that git did not see being moved, a worktree
-// outside the place the crew named, a repository cloned twice — those are tree facts, and the scan
-// (../check_the_workspace_matches_its_layout) reports them.
+// Two more are notices (martha#601): a call that takes a clone off its default branch prints one line and runs as asked,
+// and a worktree made inside a clone prints one line and is made. The branch a clone starts on is one of the facts git
+// hands in, so a call that puts a drifted clone back on it — the drift check's own advice — says nothing.
+//
+// The rule that the owner ruled on, 2026-11-17: **layout only**. This guard refuses a call that touches another
+// member's worktree or branch, and prints one line about a call that breaks where the work goes. It never refuses a
+// member's own push, and it never refuses a call that is merely sloppy: a clone off its default branch that git did not
+// see being moved, a worktree outside the place the crew named, a repository cloned twice — those are tree facts, and
+// the scan (../check_the_workspace_matches_its_layout) reports them.
+//
+// One push is refused, by the owner's ruling of 2026-11-20 on martha#601 ("Yes, list then cut (Recommended)": a push to
+// main without the owner's yes is among what still stops): a push whose target is the default branch, as git names
+// that branch for the origin (martha#925). Main moves through the landing tools only, whose fast-forward waits for the
+// owner's yes. The rule reads the target each refspec names — `main`, `HEAD:main`, `+x:refs/heads/main`, `:main`, a
+// `--delete` of it — on whatever remote the line names, since a URL is the same origin by another spelling. A target the
+// line leaves to git is read too (martha#925 r=1): in a clone, which stays on its default branch and which nothing stops
+// a member committing in, a push naming no refspec, or naming `HEAD` or `@`, writes that branch, so it is refused (a
+// `--tags` with no refspec writes the tags alone, and passes); a
+// clone a member drifted off it is refused the same, as the clone is no place a branch's work is pushed from. From a
+// worktree the same words write the worktree's own branch and pass. A push of every branch (`--all`, `--branches`,
+// `--mirror`) writes the default branch with the rest, and is refused from anywhere. Like the switch rule, it fails open
+// when git cannot name the default branch, and Martha's own git runs, which carry its settings, pass the shim as before.
 //
 // The places come from the declaration's `house_rules`, and the members from its `members`; nothing here restates
 // either. Everything a call is read from is the call's own words, read once by
@@ -35,6 +51,7 @@
 
 import { sameMemberName, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { AGitCall } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
+import { FAST_FORWARD_AFTER_THE_OWNERS_YES, LAND_BATCH } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { isAbsolute, join, resolve, sep } from 'node:path'
 
 /** The places a crew declared, and the member names it declares: the declaration's own `house_rules` and `members`. */
@@ -95,6 +112,18 @@ const PRUNE = '--prune'
 /** The refspec a push deletes a remote ref with: an empty source, `git push origin :gone`, and nothing before the colon. */
 const A_DELETED_REFSPEC = ':'
 
+/** The mark a refspec forces its update with, `+HEAD:main`, which names the same target as the plain one. */
+const A_FORCED_REFSPEC = '+'
+
+/** The refspecs that name what is checked out, and so leave the target to the branch the call runs on. */
+const THE_CHECKED_OUT = new Set(['HEAD', '@'])
+
+/** The option a push writes the tags with, and with no refspec beside it nothing else: no branch at all. */
+const PUSH_THE_TAGS = '--tags'
+
+/** The options a push writes every local branch with, the default branch among them. */
+const PUSH_EVERY_BRANCH = new Set(['--all', '--branches', '--mirror'])
+
 /** The commands whose words this guard reads, each named here rather than spelled at every use. */
 const CHECKOUT = 'checkout'
 const SWITCH = 'switch'
@@ -107,13 +136,22 @@ const REMOVE = 'remove'
 const MOVE = 'move'
 const WORKTREE_PRUNE = 'prune'
 
-/** What a call is told when it would make a clone stop being a clone of its default branch. */
+/**
+ * What a call is told when it would make a clone stop being a clone of its default branch: a notice, and the call runs
+ * as asked (martha#601).
+ */
 const A_CLONE_IS_NO_PLACE_TO_BRANCH =
-  'this is a clone, and a clone stays on its default branch. Open a worktree with worktree_open and do the branch work there.'
+  'this is a clone, and a clone stays on its default branch, so open a worktree with worktree_open for branch work; the call ran as asked'
 
-/** What a call is told when it would put a worktree inside a clone, where the next fetch would sweep it. */
+/** What a call is told when it would put a worktree inside a clone, where the next fetch would sweep it: a notice (martha#601). */
 const A_WORKTREE_IS_NOT_MADE_IN_A_CLONE =
-  'a worktree is not made inside a clone: open one with worktree_open, which puts it in the place this crew declared.'
+  'a worktree made inside a clone may be swept by the next fetch, so open one with worktree_open in the place this crew declared; the call ran as asked'
+
+/** One line about the call Martha carried on past, said through the sink its composition root passed (martha#601). */
+const sayTheNotice = (where: string, what: string, note: (line: string) => void): undefined => {
+  note(`notice: ${where}: ${what}`)
+  return undefined
+}
 
 /** Whether a word is an option rather than git's argument: `-d`, `--prune`, `--` alone included. */
 const isAnOption = (word: string): boolean => word.startsWith('-')
@@ -122,7 +160,8 @@ const isAnOption = (word: string): boolean => word.startsWith('-')
 const theWordsNotOptions = (words: readonly string[]): readonly string[] => words.filter((word) => !isAnOption(word))
 
 /** Whether a directory is a place or stands under it: the place itself, or a path past the separator that ends it. */
-const isUnder = (directory: string, place: string): boolean => directory === place || directory.startsWith(`${place}${sep}`)
+/** Whether `directory` is `place` or under it: the one test of a place both the guard and the stale-clone note use. */
+export const isUnder = (directory: string, place: string): boolean => directory === place || directory.startsWith(`${place}${sep}`)
 
 /** The clone a directory lands in, as `worktree_open` lays one out: `<clones>/<org>/<repo>`, the first two words past it. */
 export function theCloneOf(directory: string | null, clones: string | null): string | null {
@@ -224,35 +263,37 @@ const refusalOfTheBranches = (branches: readonly string[], workspace: TheWorkspa
 }
 
 /** A call that makes a branch where the work of a branch does not belong: a clone, whose place is no place to branch. */
-function refusalOfASwitchInAClone(command: string, args: readonly string[], facts: TheFacts, where: string): string | undefined {
-  if (args.some((word) => (command === CHECKOUT ? MAKE_A_BRANCH : SWITCH_TO_A_NEW_BRANCH).has(word))) return `${where}: ${A_CLONE_IS_NO_PLACE_TO_BRANCH}`
+function refusalOfASwitchInAClone(command: string, args: readonly string[], facts: TheFacts, where: string, note: (line: string) => void): string | undefined {
+  if (args.some((word) => (command === CHECKOUT ? MAKE_A_BRANCH : SWITCH_TO_A_NEW_BRANCH).has(word))) {
+    return sayTheNotice(where, A_CLONE_IS_NO_PLACE_TO_BRANCH, note)
+  }
   // A switch back to the branch the clone starts on is the call that puts a drifted clone right, and is what the drift
   // check asks for: it is not the rule's. One the rule cannot read the default branch for fires nothing, as it cannot
   // tell a way off from a way back.
   const switching = theWordsNotOptions(args).find((word) => facts.branches.includes(word))
   const leavesTheDefault = facts.defaultBranch !== null && switching !== undefined && switching !== facts.defaultBranch
-  return leavesTheDefault ? `${where}: ${A_CLONE_IS_NO_PLACE_TO_BRANCH}` : undefined
+  return leavesTheDefault ? sayTheNotice(where, A_CLONE_IS_NO_PLACE_TO_BRANCH, note) : undefined
 }
 
-/** The refusal a `branch` call in a clone is, when it makes a branch rather than reading one: `-a`, `--list` read. */
-const refusalOfABranchInAClone = (args: readonly string[], where: string): string | undefined => {
+/** The notice a `branch` call in a clone prints, when it makes a branch rather than reading one: `-a`, `--list` read. */
+const refusalOfABranchInAClone = (args: readonly string[], where: string, note: (line: string) => void): string | undefined => {
   const reading = args.every((word) => isAnOption(word)) || args[0]?.startsWith('--') === true
   const deletesOrMoves = args.some((word) => DELETE_A_BRANCH.has(word) || MOVE_A_BRANCH.has(word))
-  return reading || deletesOrMoves ? undefined : `${where}: ${A_CLONE_IS_NO_PLACE_TO_BRANCH}`
+  return reading || deletesOrMoves ? undefined : sayTheNotice(where, A_CLONE_IS_NO_PLACE_TO_BRANCH, note)
 }
 
-/** The refusal a `worktree add` is, when the path it names stands inside a clone. */
-function refusalOfAWorktreeInAClone(args: readonly string[], call: AGitCall, workspace: TheWorkspace): string | undefined {
+/** The notice a `worktree add` prints, when the path it names stands inside a clone: the worktree is made anyway (martha#601). */
+function refusalOfAWorktreeInAClone(args: readonly string[], call: AGitCall, workspace: TheWorkspace, note: (line: string) => void): string | undefined {
   const path = args.find((word) => !isAnOption(word) && word !== ADD)
   const place = path === undefined ? null : thePlaceOf(path, call.directory)
   const inside = place !== null && workspace.clones !== null && isUnder(place, workspace.clones)
-  return inside ? A_WORKTREE_IS_NOT_MADE_IN_A_CLONE : undefined
+  return inside ? sayTheNotice(place, A_WORKTREE_IS_NOT_MADE_IN_A_CLONE, note) : undefined
 }
 
 /** What one call does inside a clone, by its command word: the place a branch's work belongs read as the only place. */
-function refusalInsideAClone(call: AGitCall, facts: TheFacts, where: string): string | undefined {
-  if (call.command === CHECKOUT || call.command === SWITCH) return refusalOfASwitchInAClone(call.command, call.args, facts, where)
-  if (call.command === BRANCH) return refusalOfABranchInAClone(call.args, where)
+function refusalInsideAClone(call: AGitCall, facts: TheFacts, where: string, note: (line: string) => void): string | undefined {
+  if (call.command === CHECKOUT || call.command === SWITCH) return refusalOfASwitchInAClone(call.command, call.args, facts, where, note)
+  if (call.command === BRANCH) return refusalOfABranchInAClone(call.args, where, note)
   return undefined
 }
 
@@ -279,13 +320,45 @@ function theRefsAPushDeletes(args: readonly string[]): readonly string[] {
   return words.slice(1).map((word) => (word.startsWith(A_DELETED_REFSPEC) ? word.slice(A_DELETED_REFSPEC.length) : word)).filter((ref) => ref !== '')
 }
 
+/** The branch one refspec of a push writes on the remote: the part past its colon, or the whole when it has none. */
+function theTargetOfARefspec(refspec: string): string {
+  const plain = refspec.startsWith(A_FORCED_REFSPEC) ? refspec.slice(A_FORCED_REFSPEC.length) : refspec
+  const colon = plain.indexOf(A_DELETED_REFSPEC)
+  return theBranchOf(colon === -1 ? plain : plain.slice(colon + A_DELETED_REFSPEC.length))
+}
+
 /**
- * The refusal a push is, when it prunes a remote's refs nobody named, or deletes another member's branch there. A prune
- * takes every remote branch the push does not name, and the line names none of them, so it is refused outright.
+ * Whether a push leaves its target to the branch checked out where it runs: no refspec past the remote, or one naming
+ * `HEAD` or `@` without a colon (martha#925 r=1). A push of the tags with no refspec writes the tags alone.
  */
-function refusalOfAPush(args: readonly string[], request: AGuardedCall): string | undefined {
+function leavesTheTargetToGit(refspecs: readonly string[], args: readonly string[]): boolean {
+  if (refspecs.length === 0) return !args.includes(PUSH_THE_TAGS)
+  return refspecs.some((refspec) => THE_CHECKED_OUT.has(refspec.startsWith(A_FORCED_REFSPEC) ? refspec.slice(A_FORCED_REFSPEC.length) : refspec))
+}
+
+/**
+ * The refusal a push onto the default branch is (martha#925): undefined when git names none, or the push writes it
+ * neither by name, nor as the clone's own branch, nor among every branch.
+ */
+function refusalOfAPushOntoTheDefault(args: readonly string[], facts: TheFacts, inAClone: boolean): string | undefined {
+  const theDefault = facts.defaultBranch
+  if (theDefault === null) return undefined
+  const refspecs = theWordsNotOptions(args).slice(1)
+  const writesIt = refspecs.map(theTargetOfARefspec).includes(theDefault) || args.some((word) => PUSH_EVERY_BRANCH.has(word)) || (inAClone && leavesTheTargetToGit(refspecs, args))
+  return writesIt
+    ? `${theDefault} is the default branch, and a push onto it waits for the owner's yes: land the work with ${LAND_BATCH}, then ${FAST_FORWARD_AFTER_THE_OWNERS_YES} once the owner said yes. Nothing was pushed.`
+    : undefined
+}
+
+/**
+ * The refusal a push is, when it prunes a remote's refs nobody named, deletes another member's branch there, or
+ * targets the default branch. A prune takes every remote branch the push does not name, and the line names none of
+ * them, so it is refused outright.
+ */
+function refusalOfAPush(call: AGitCall, request: AGuardedCall): string | undefined {
+  const args = call.args
   if (args.includes(PRUNE)) return `a push that prunes takes every remote branch it does not name, another member's among them: push the one ref you mean, or delete your own by name.`
-  return refusalOfTheBranches(theRefsAPushDeletes(args), request.workspace, request.member)
+  return refusalOfTheBranches(theRefsAPushDeletes(args), request.workspace, request.member) ?? refusalOfAPushOntoTheDefault(args, request.facts, isInAClone(call, request.workspace))
 }
 
 /** The refusal a `branch` call is when it deletes or moves a branch: none when it only reads or makes one. */
@@ -306,20 +379,26 @@ function refusalOfAnotherMembers(call: AGitCall, request: AGuardedCall): string 
   if (call.command === BRANCH) return refusalOfABranchDeleteOrMove(call.args, request)
   if (call.command === UPDATE_REF) return call.args.includes('-d') ? refusalOfTheBranches(theWordsNotOptions(call.args), request.workspace, request.member) : undefined
   if (call.command === WORKTREE) return refusalOfAWorktreeCall(call, request)
-  return call.command === PUSH ? refusalOfAPush(call.args, request) : undefined
+  return call.command === PUSH ? refusalOfAPush(call, request) : undefined
 }
 
+/** Whether a call runs inside the crew's clone place. */
+const isInAClone = (call: AGitCall, workspace: TheWorkspace): boolean => call.directory !== null && workspace.clones !== null && isUnder(call.directory, workspace.clones)
+
 /** The first refusal one call meets: where it makes a branch, then whose worktree or branch it touches. */
-function refusalOfACall(call: AGitCall, request: AGuardedCall): string | undefined {
-  const inAClone = call.directory !== null && request.workspace.clones !== null && isUnder(call.directory, request.workspace.clones)
+function refusalOfACall(call: AGitCall, request: AGuardedCall, note: (line: string) => void): string | undefined {
+  const inAClone = isInAClone(call, request.workspace)
   const addsAWorktree = call.command === WORKTREE && call.args[0] === ADD
-  const inside = addsAWorktree ? refusalOfAWorktreeInAClone(call.args, call, request.workspace) : inAClone ? refusalInsideAClone(call, request.facts, `a call in ${call.directory}`) : undefined
+  const inside = addsAWorktree ? refusalOfAWorktreeInAClone(call.args, call, request.workspace, note) : inAClone ? refusalInsideAClone(call, request.facts, `a call in ${call.directory}`, note) : undefined
   return inside ?? refusalOfAnotherMembers(call, request)
 }
 
-/** The refusal this call meets, or undefined when the workspace's layout says nothing against it. */
-export function refuseACallInTheWorkspace(request: AGuardedCall): string | undefined {
-  const refusals = request.calls.map((call) => refusalOfACall(call, request))
+/**
+ * The refusal this call meets, or undefined when the workspace's layout says nothing against it. The note sink is the
+ * composition root's: a call the layout only notices is said in one line there and runs as asked (martha#601).
+ */
+export function refuseACallInTheWorkspace(request: AGuardedCall, note: (line: string) => void = () => {}): string | undefined {
+  const refusals = request.calls.map((call) => refusalOfACall(call, request, note))
   return refusals.find((refusal) => refusal !== undefined)
 }
 

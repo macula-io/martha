@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import process from 'node:process'
+import { PassThrough } from 'node:stream'
 import { test } from 'node:test'
 
 import { AcpClient, METHOD_NOT_FOUND, type ATurn, type Decide } from './the_acp_client.ts'
@@ -90,10 +91,11 @@ test('a refused call is answered reject_once, and the call does not run', async 
   assert.equal(turn.toolCalls[0]?.status, 'failed')
 })
 
-test('the gate is asked with the session, the call and its input', async () => {
+test('the gate is asked with the session, the call, its input and what the updates said of it first', async () => {
   const seen: unknown[] = []
   await oneTurn({ turns: [[{ call: A_CALL }]] }, (request) => { seen.push(request); return 'allow' })
-  assert.deepEqual(seen, [{ sessionId: STAND_IN_SESSION, toolCallId: A_CALL.id, title: A_CALL.title, rawInput: A_CALL.input }])
+  const heard = { toolCallId: A_CALL.id, title: A_CALL.title, kind: 'other', status: 'pending', rawInput: A_CALL.input }
+  assert.deepEqual(seen, [{ sessionId: STAND_IN_SESSION, toolCallId: A_CALL.id, title: A_CALL.title, rawInput: A_CALL.input, heard }])
 })
 
 test('a decision that throws, or that rejects, refuses the call and says why', async () => {
@@ -240,4 +242,123 @@ test('a request cancelled while the gate decides gets one answer, never a second
     await drained()
     assert.equal(answers.length, 1)
   })
+})
+
+/** A gate that never decides, keeping each request's withdrawn signal, with a wait for the first request. */
+function aGateThatNeverDecides(): { decide: Decide; signals: AbortSignal[]; askedNow: Promise<void> } {
+  const signals: AbortSignal[] = []
+  let asked!: () => void
+  const askedNow = new Promise<void>((settle) => (asked = settle))
+  const decide: Decide = (_request, withdrawn) => {
+    signals.push(withdrawn)
+    asked()
+    return new Promise<never>(() => undefined)
+  }
+  return { decide, signals, askedNow }
+}
+
+test('a decision still running is told it is withdrawn when its turn is cancelled', async () => {
+  const gate = aGateThatNeverDecides()
+  await withTheAgent({ turns: [[{ call: A_CALL }]] }, gate.decide, async (client) => {
+    const { sessionId } = await client.newSession('/')
+    const turn = client.prompt(sessionId, 'go')
+    await gate.askedNow
+    assert.equal(gate.signals[0]?.aborted, false, 'not withdrawn while it waits')
+    client.cancel(sessionId)
+    assert.equal(gate.signals[0]?.aborted, true)
+    assert.deepEqual(heardFor(await turn), { heard: 'cancelled', runs: 0, saves: 0 })
+  })
+})
+
+test('a decision still running is told it is withdrawn when the agent\'s output ends, and the turn says the request was cancelled', async () => {
+  const gate = aGateThatNeverDecides()
+  await withTheAgent({ turns: [[{ call: A_CALL }]] }, gate.decide, async (client) => {
+    const { sessionId } = await client.newSession('/')
+    const turn = client.prompt(sessionId, 'go')
+    await gate.askedNow
+    client.end()
+    await assert.rejects(turn, /never answered/)
+    assert.equal(gate.signals[0]?.aborted, true)
+  })
+})
+
+test('a turn the agent ends with a request still undecided answers it cancelled and withdraws its decision', async () => {
+  // An agent written here, over in-memory pipes: it asks about one call and ends the turn in the same breath, without
+  // waiting for the answer, which the stand-in never does.
+  const toClient = new PassThrough()
+  const fromClient = new PassThrough()
+  const sent: { id?: unknown; method?: unknown; result?: unknown }[] = []
+  const gate = aGateThatNeverDecides()
+  const client = new AcpClient(toClient, fromClient, gate.decide)
+  const say = (message: object): void => void toClient.write(`${JSON.stringify(message)}\n`)
+  fromClient.setEncoding('utf8')
+  fromClient.on('data', (chunk: string) => {
+    for (const line of chunk.split('\n').filter((one) => one !== '')) {
+      const message = JSON.parse(line) as { id?: unknown; method?: unknown; params?: unknown; result?: unknown }
+      sent.push(message)
+      if (message.method === 'initialize') say({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: 1 } })
+      if (message.method === 'session/new') say({ jsonrpc: '2.0', id: message.id, result: { sessionId: 's-1' } })
+      if (message.method === 'session/prompt') {
+        say({ jsonrpc: '2.0', id: 'ask-1', method: 'session/request_permission', params: { sessionId: 's-1', toolCall: { toolCallId: A_CALL.id, title: A_CALL.title, rawInput: A_CALL.input }, options: THE_ENGINES_OPTIONS } })
+        void gate.askedNow.then(() => say({ jsonrpc: '2.0', id: message.id, result: { stopReason: 'end_turn' } }))
+      }
+    }
+  })
+  await client.initialize()
+  const { sessionId } = await client.newSession('/')
+  const turn = await client.prompt(sessionId, 'go')
+  assert.equal(gate.signals[0]?.aborted, true)
+  assert.deepEqual(turn.asked.map((asked) => asked.answered), [{ outcome: 'cancelled' }])
+  await drained()
+  assert.deepEqual(sent.filter((message) => message.id === 'ask-1').map((message) => message.result), [{ outcome: { outcome: 'cancelled' } }])
+  client.end()
+  toClient.end()
+})
+
+/** How long a test waits for updates the stand-in sends after a turn's answer: far longer than its own pause. */
+const THE_LATE_UPDATES_ARRIVE_WITHIN_MS = 5_000
+
+test('every update reaches the listener, one after its turn was answered included: a late chunk and a late result (#541 package A, design R4; mutant: the listener after the turn lookup)', async () => {
+  const late = [
+    { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'after the answer' } },
+    { sessionUpdate: 'tool_call_update', toolCallId: A_CALL.id, status: 'completed', rawOutput: 'late' },
+  ]
+  const heard: unknown[] = []
+  let allHeard: () => void = () => undefined
+  const both = new Promise<void>((settle) => (allHeard = settle))
+  const child = spawn(process.execPath, [STAND_IN, JSON.stringify({ turns: [[{ say: 'in the turn' }, { after_the_answer: late.map((update) => ({ update })) }]] })], { stdio: ['pipe', 'pipe', 'inherit'] })
+  const exited = new Promise<void>((settle) => child.once('exit', () => settle()))
+  const client = AcpClient.overAChild(child, allow, (sessionId, update) => {
+    heard.push({ sessionId, update })
+    if (heard.length === 1 + late.length) allHeard()
+  })
+  try {
+    await client.initialize()
+    const { sessionId } = await client.newSession('/')
+    await client.prompt(sessionId, 'go')
+    await Promise.race([both, new Promise<void>((settle) => setTimeout(settle, THE_LATE_UPDATES_ARRIVE_WITHIN_MS).unref())])
+    assert.deepEqual(heard.slice(1), late.map((update) => ({ sessionId, update })))
+  } finally {
+    client.end()
+    if (child.exitCode === null) child.kill()
+    await exited
+  }
+})
+
+test('a listener that throws is noted, and the turn goes on (#541 package A, design R4)', async () => {
+  const child = spawn(process.execPath, [STAND_IN, JSON.stringify({ turns: [[{ say: 'still heard' }]] })], { stdio: ['pipe', 'pipe', 'inherit'] })
+  const exited = new Promise<void>((settle) => child.once('exit', () => settle()))
+  const client = AcpClient.overAChild(child, allow, () => {
+    throw new Error('a listener that fails')
+  })
+  try {
+    await client.initialize()
+    const { sessionId } = await client.newSession('/')
+    assert.equal((await client.prompt(sessionId, 'go')).text, 'still heard')
+    assert.ok(client.notes.some((note) => note.includes('a listener that fails')), JSON.stringify(client.notes))
+  } finally {
+    client.end()
+    if (child.exitCode === null) child.kill()
+    await exited
+  }
 })

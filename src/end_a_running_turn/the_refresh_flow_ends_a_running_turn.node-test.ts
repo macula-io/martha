@@ -28,11 +28,14 @@ import { CARRY_A_TEXT, CARRY_THE_CLEAR, THE_REFRESH_ASK } from '../refresh_a_mem
 import { A_TOOL_WAS_STILL_RUNNING, CARRY_THE_END, THE_TURN_ENDED } from './end_the_running_turn.ts'
 import { A_TOOL_WHILE_THE_END_IS_HELD } from './hold_the_end.ts'
 import { THE_HANDOVER_WRITTEN, WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
-import { HANDOVER_LIMIT_PERCENT, refreshesPlace, theFlowOf, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
+import { refreshesPlace, theFlowOf, type ARefresh } from '../refresh_a_member/refresh_a_member.ts'
 import { FORCED_ENDS } from './end_a_running_turn.ts'
 import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+/** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
+const HANDOVER_LIMIT_PERCENT = THRESHOLDS_WHEN_UNNAMED.handover_percent
 
 const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: ['opus', 'fable'] }
 const MEMBER = 'builder'
@@ -90,18 +93,18 @@ async function aMemberHandingOver(options: ACrewOptions) {
   /** The order the mod is answered with, for the question put at `minute` after the ask. */
   const ask = async (minute: number, question: Readonly<Record<string, unknown>>, session = SESSION): Promise<Record<string, unknown>> => {
     clock.at = asked_at + minute * MINUTE_MS
-    const answered = await tools.answer(THE_REFRESH_ASK, { usage: { context: { percent: PAST_THE_LIMIT }, cost: { usd: null } }, turn_id: THE_TURN, answer: '', ...question }, session)
+    const answered = await tools.answer(THE_REFRESH_ASK, { usage: { startedAt: 0, context: { percent: PAST_THE_LIMIT }, cost: { usd: null } }, turn_id: THE_TURN, answer: '', ...question }, session)
     assert.ok('answer' in answered, `the flow refused the question: ${'refused' in answered ? answered.refused : ''}`)
     return JSON.parse(answered.answer) as Record<string, unknown>
   }
 
   // The session opens low, and its next turn is past the limit: the flow asks for the handover, at minute 0.
-  const opened = await tools.answer(THE_REFRESH_ASK, { usage: { context: { percent: 10 }, cost: { usd: null } }, turn_id: '', answer: '' }, SESSION)
+  const opened = await tools.answer(THE_REFRESH_ASK, { usage: { startedAt: 0, context: { percent: 10 }, cost: { usd: null } }, turn_id: '', answer: '' }, SESSION)
   assert.ok('answer' in opened, 'the session\'s first question was refused')
   if (options.holds !== undefined) beats.change(MEMBER, (row) => (row === null ? null : { ...row, holds: options.holds ?? '' }))
   clock.at += MINUTE_MS
   const asked_at = clock.at
-  const started = await tools.answer(THE_REFRESH_ASK, { usage: { context: { percent: PAST_THE_LIMIT }, cost: { usd: null } }, turn_id: 'the-asking-turn', answer: '' }, SESSION)
+  const started = await tools.answer(THE_REFRESH_ASK, { usage: { startedAt: 0, context: { percent: PAST_THE_LIMIT }, cost: { usd: null } }, turn_id: 'the-asking-turn', answer: '' }, SESSION)
   assert.ok('answer' in started && (JSON.parse(started.answer) as { carry: string }).carry === CARRY_A_TEXT, 'the flow did not ask for the handover')
 
   return {

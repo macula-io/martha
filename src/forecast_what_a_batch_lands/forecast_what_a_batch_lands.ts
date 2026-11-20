@@ -5,12 +5,9 @@
 // head is merged in order in memory (`git merge-tree --write-tree`), each result chained on with `git commit-tree` into a
 // commit no ref names. It writes no branch, no index and no working file, pushes nothing and adds no ledger row.
 //
-// Each path a merge clashes in is classified by the redo program itself (`redo:generated -- --classify`), the one place
-// its rule is spelled, run through npm in the clone because a slice may not import a program. Each pull request gets one
-// of these answers:
-// - lands: a forecast, since the merged tree is never on disk here and the landing still holds it to its ceilings;
-// - lands, redone: the redo's words for what it would redo. This is a forecast: the redraw, the ceilings check, and the
-//   type check and the suite before the push still run on the real landing;
+// A landing settles no clash: every path a merge clashes in is its builder's to settle. Each pull request gets one of
+// these answers:
+// - lands: it merges cleanly;
 // - clashes by hand: the paths, and what each clashes with: an earlier pull request of the batch, or the landing on the
 //   default branch that brought it (../find_where_a_merge_clashes);
 // - left out with another: its head holds the head of a pull request that clashes by hand, so landing it would land that
@@ -18,55 +15,39 @@
 //
 // A pull request that clashes by hand is left out of the chain, as the real landing leaves it out. The rule that leaves a
 // head out with another, the words that name a clash and the length of a sha are the landing's own, imported, never
-// spelled again here (martha#423). Told when every one lands; refused, naming each that does not, otherwise.
+// spelled again here (martha#423). Told with one line per pull request, whatever each one lands as.
 
 import { findTheWorkTheseVerdictsPassed, type LandedWork } from '../find_the_work_a_verdict_passed/find_the_work_a_verdict_passed.ts'
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import {
   mergedInMemory,
   whatEachPathClashesWith,
-  type AMergeInMemory,
   type AStep,
-  type TheStages,
 } from '../find_where_a_merge_clashes/find_where_a_merge_clashes.ts'
 import {
-  NO_CEILINGS_AHEAD,
   SHORT_SHA,
-  THE_CEILINGS_STILL_AHEAD,
-  THE_REDO_SCRIPT,
   aFirstParentNamed,
   theBatchMayStart,
-  theChecksTheTreeHolds,
   theCloneSaysWhoCommits,
   theClashesSaid,
   theLeftOutHeadItHolds,
   type LandingHost,
   type Landing,
   type TheBatch,
-  type TheRepositorysChecks,
 } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import { readTheOriginACloneHas } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
-import { GIT, NPM } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
-
-/** What a stage the classifier is handed reads when that side has no such file. */
-const NO_STAGE = '-'
+import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 
 /** What the dry run says it did not do, at the head of every answer. */
 const NOTHING_WRITTEN = 'nothing was merged, written or pushed'
-
-/** What a forecast of a redone landing still has ahead of it. */
-const STILL_AHEAD = 'a forecast: the redraw, the ceilings check, and the type check and the suite still run before the push'
-
-/** What a forecast of a redone landing still has ahead of it where the tree holds no ceilings check (martha#604). */
-const STILL_AHEAD_WITHOUT_CEILINGS = 'a forecast: the redraw, and the type check and the suite still run before the push'
 
 type Step<T> = { readonly ok: T } | { readonly refused: string }
 
 /** One pull request's answer in the dry run. */
 type AForecast =
-  | { readonly lands: LandedWork; readonly redone: readonly string[] }
-  | { readonly clashes: LandedWork; readonly with: ReadonlyMap<string, string>; readonly redone: readonly string[] }
+  | { readonly lands: LandedWork }
+  | { readonly clashes: LandedWork; readonly with: ReadonlyMap<string, string> }
   | { readonly left_out: LandedWork; readonly inside: LandedWork }
 
 /** The chain as far as it has been merged: its tip, the steps a clash is traced along, and the heads left out. */
@@ -83,31 +64,29 @@ interface TheClone {
 }
 
 /** The dry run of a batch: what each passed pull request would do, merged in order, and nothing written. */
-export async function forecastWhatABatchLands(host: LandingHost, batch: TheBatch): Promise<Landing> {
+export async function forecastWhatABatchLands(host: LandingHost, batch: TheBatch, note: (line: string) => void = () => {}): Promise<Landing> {
   const started = await theBatchMayStart(host, batch)
   if ('refused' in started) return started
   const origin = await readTheOriginACloneHas(host, batch.path)
   if ('refused' in origin) return origin
   const identity = await theCloneSaysWhoCommits(host, batch.path)
   if ('refused' in identity) return identity
-  const work = await findTheWorkTheseVerdictsPassed(host, { packages: batch.packages, repo: origin.origin.repo, cwd: batch.path })
+  const work = await findTheWorkTheseVerdictsPassed(host, { packages: batch.packages, repo: origin.origin.repo, cwd: batch.path }, note)
   if ('refused' in work) return work
   const base = await gitSaid(host, batch.path, ['rev-parse', '--verify', '--quiet', origin.origin.default_branch])
   if (base === undefined) return { refused: `${batch.path} cannot read ${origin.origin.default_branch}: fetch there, then try again.` }
-  // The landing runs the checks the tree holds, and the dry run says which of them will run (martha#604).
-  const checks = await theChecksTheTreeHolds(host, batch.path, base)
   const clone: TheClone = { path: batch.path, default_branch: origin.origin.default_branch }
-  const forecasts = await everyForecast(host, clone, base, work.work, checks)
-  if ('refused' in forecasts) return forecasts
-  return theAnswer(clone, base, forecasts.ok, checks)
+  const forecasts = await everyForecast(host, clone, base, work.work)
+  if ('refused' in forecasts) return { told: forecasts.refused }
+  return theAnswer(clone, base, forecasts.ok)
 }
 
 /** Each pull request's forecast, in the batch's order, each merged onto the chain the ones before it left. */
-async function everyForecast(host: LandingHost, clone: TheClone, base: string, work: readonly LandedWork[], checks: TheRepositorysChecks): Promise<Step<readonly AForecast[]>> {
+async function everyForecast(host: LandingHost, clone: TheClone, base: string, work: readonly LandedWork[]): Promise<Step<readonly AForecast[]>> {
   let chain: TheChain = { tip: base, steps: [{ commit: base, label: `${clone.default_branch} at ${short(base)}` }], left_out: [] }
   const forecasts: AForecast[] = []
   for (const one of work) {
-    const next = await theForecastOf(host, clone, chain, one, checks)
+    const next = await theForecastOf(host, clone, chain, one)
     if ('refused' in next) return next
     forecasts.push(next.ok.forecast)
     chain = next.ok.chain
@@ -116,84 +95,38 @@ async function everyForecast(host: LandingHost, clone: TheClone, base: string, w
 }
 
 /** One pull request merged onto the chain in memory: its forecast, and the chain it leaves for the next. */
-async function theForecastOf(host: LandingHost, clone: TheClone, chain: TheChain, one: LandedWork, checks: TheRepositorysChecks): Promise<Step<{ readonly forecast: AForecast; readonly chain: TheChain }>> {
+async function theForecastOf(host: LandingHost, clone: TheClone, chain: TheChain, one: LandedWork): Promise<Step<{ readonly forecast: AForecast; readonly chain: TheChain }>> {
   const inside = await theLeftOutHeadItHolds(host, clone.path, chain.left_out, one)
   if (inside !== undefined) return { ok: { forecast: { left_out: one, inside }, chain } }
   const merged = await mergedInMemory(host, clone.path, chain.tip, one.head)
   if ('refused' in merged) return merged
-  const sorted = await theClashSorted(host, clone.path, merged.ok, checks.redo)
-  if ('refused' in sorted) return sorted
-  if (sorted.ok.by_hand.length === 0) return theChainGrown(host, clone.path, chain, one, merged.ok, sorted.ok.redone)
-  const traced = await whatEachPathClashesWith(host, clone.path, one.head, chain.steps, sorted.ok.by_hand, aFirstParentNamed)
+  if (merged.ok.clashed.size === 0) return theChainGrown(host, clone.path, chain, one, merged.ok.tree)
+  const traced = await whatEachPathClashesWith(host, clone.path, one.head, chain.steps, [...merged.ok.clashed.keys()], aFirstParentNamed)
   if ('refused' in traced) return traced
-  return { ok: { forecast: { clashes: one, with: traced.ok, redone: sorted.ok.redone }, chain: { ...chain, left_out: [...chain.left_out, one] } } }
+  return { ok: { forecast: { clashes: one, with: traced.ok }, chain: { ...chain, left_out: [...chain.left_out, one] } } }
 }
 
-/**
- * The paths a merge clashed in, split by the redo program: its words for each it redoes, and those it does not. A tree
- * that holds no redo settles no clash, so every path is the builders' own and nothing of that repository is run — not
- * even to classify one, or the dry run would both run a stranger's own script here and forecast a redo the landing
- * will not make (martha#604 r=2).
- */
-async function theClashSorted(host: LandingHost, path: string, merged: AMergeInMemory, redo: boolean): Promise<Step<{ readonly redone: readonly string[]; readonly by_hand: readonly string[] }>> {
-  if (!redo) return { ok: { redone: [], by_hand: [...merged.clashed.keys()] } }
-  const redone: string[] = []
-  const by_hand: string[] = []
-  for (const [clashed, stages] of merged.clashed) {
-    const classified = await classify(host, path, clashed, stages)
-    if ('refused' in classified) return classified
-    if (classified.ok.redone === undefined) by_hand.push(clashed)
-    else redone.push(classified.ok.redone)
-  }
-  return { ok: { redone, by_hand } }
-}
-
-/** The redo program's answer on one clashed path: its words when it redoes it, none when the clash is by hand. */
-async function classify(host: LandingHost, path: string, clashed: string, stages: TheStages): Promise<Step<{ readonly redone: string | undefined }>> {
-  const blobs = [stages.base, stages.ours, stages.theirs].map((blob) => blob ?? NO_STAGE)
-  const ran = await host.processes.run({ command: NPM, args: ['run', '--silent', THE_REDO_SCRIPT, '--', '--classify', clashed, ...blobs], cwd: path })
-  if (ran.exit_code === 0) return { ok: { redone: ran.stdout.trim() } }
-  if (ran.exit_code === 1) return { ok: { redone: undefined } }
-  return { refused: `${THE_REDO_SCRIPT} could not classify ${clashed}: ${saidBy(ran)}.` }
-}
-
-/**
- * The chain grown by a pull request that lands: a commit no ref names, over the merged tree. When the redo would redo
- * something, the chain takes the earlier side of each redone path (`-X ours`), which is what the next merge is classified
- * against: package.json is the same on both sides outside its ceilings, so the earlier side stands until the redo sums
- * the raises. Nothing else is redone — since martha#627 a C4 picture is drawn at release, and a clash in one is by hand.
- */
-async function theChainGrown(host: LandingHost, path: string, chain: TheChain, one: LandedWork, merged: AMergeInMemory, redone: readonly string[]): Promise<Step<{ readonly forecast: AForecast; readonly chain: TheChain }>> {
-  const settled = redone.length === 0 ? { ok: merged } : await mergedInMemory(host, path, chain.tip, one.head, ['-X', 'ours'])
-  if ('refused' in settled) return settled
-  const made = await git(host, path, ['commit-tree', settled.ok.tree, '-p', chain.tip, '-p', one.head, '-m', `the dry run of PR ${String(one.pr)}`])
+/** The chain grown by a pull request that lands: a commit no ref names, over the merged tree. */
+async function theChainGrown(host: LandingHost, path: string, chain: TheChain, one: LandedWork, tree: string): Promise<Step<{ readonly forecast: AForecast; readonly chain: TheChain }>> {
+  const made = await git(host, path, ['commit-tree', tree, '-p', chain.tip, '-p', one.head, '-m', `the dry run of PR ${String(one.pr)}`])
   if (made.exit_code !== 0) return { refused: `the dry run could not chain PR ${String(one.pr)}: ${saidBy(made)}.` }
   const tip = made.stdout.trim()
-  return { ok: { forecast: { lands: one, redone }, chain: { ...chain, tip, steps: [...chain.steps, { commit: tip, label: `PR ${String(one.pr)}` }] } } }
+  return { ok: { forecast: { lands: one }, chain: { ...chain, tip, steps: [...chain.steps, { commit: tip, label: `PR ${String(one.pr)}` }] } } }
 }
 
-/** The dry run's answer: one line per pull request, told when every one lands and refused when one does not. */
-function theAnswer(clone: TheClone, base: string, forecasts: readonly AForecast[], checks: TheRepositorysChecks): Landing {
+/** The dry run's answer: one line per pull request, an ordinary result even when one of them does not land. */
+function theAnswer(clone: TheClone, base: string, forecasts: readonly AForecast[]): Landing {
   const head = `The dry run of ${String(forecasts.length)} package(s) onto ${clone.default_branch} at ${short(base)} (${NOTHING_WRITTEN}):`
-  const lines = [head, ...forecasts.map((forecast) => aLine(forecast, checks))].join('\n')
-  const not_landing = forecasts.filter((forecast) => !('lands' in forecast))
-  return not_landing.length === 0 ? { told: lines } : { refused: lines }
+  const lines = [head, ...forecasts.map((forecast) => aLine(forecast))].join('\n')
+  return { told: lines }
 }
 
 /** One pull request's line. */
-function aLine(forecast: AForecast, checks: TheRepositorysChecks): string {
-  if ('lands' in forecast) {
-    const named = theWork(forecast.lands)
-    if (forecast.redone.length === 0) return `- lands: ${named} (${checks.ceilings ? THE_CEILINGS_STILL_AHEAD : NO_CEILINGS_AHEAD})`
-    return `- lands, redone: ${named}: ${forecast.redone.join('; ')} (${checks.ceilings ? STILL_AHEAD : STILL_AHEAD_WITHOUT_CEILINGS})`
-  }
-  if ('clashes' in forecast) {
-    const redone = forecast.redone.length === 0 ? '' : ` (it would redo ${forecast.redone.join('; ')})`
-    return `- clashes by hand: ${theWork(forecast.clashes)}: ${theClashesSaid(forecast.with)}${redone}`
-  }
+function aLine(forecast: AForecast): string {
+  if ('lands' in forecast) return `- lands: ${theWork(forecast.lands)}`
+  if ('clashes' in forecast) return `- clashes by hand: ${theWork(forecast.clashes)}: ${theClashesSaid(forecast.with)}`
   return `- left out with PR ${String(forecast.inside.pr)}: ${theWork(forecast.left_out)} holds its head, so it would land that one's clash too`
 }
-
 
 /** A pull request as an answer names it. */
 const theWork = (one: LandedWork): string => `${one.package} (PR ${String(one.pr)})`

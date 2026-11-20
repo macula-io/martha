@@ -15,7 +15,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { WORKFLOW } from '../../prove_the_core/the_installer_jobs_steps.ts'
+import { WORKFLOW } from '../../prove_the_core/the_release_is_proven/the_installer_jobs_steps.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CHECK_PREFIX, judgeTheChecks, type Judged } from './judge_the_checks.ts'
 import { readAWorkflow } from './read_a_workflow.ts'

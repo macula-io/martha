@@ -26,7 +26,7 @@ import { test, type TestContext } from 'node:test'
 import { linuxProcessIdentities, PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
 import { removeTheTree } from '../src/serve_the_relay_to_a_launch/relay_copy.ts'
 
-import { withoutTheTestContext } from './every_test_run_ends.ts'
+import { withoutTheTestContext } from './a_test_run_ends/every_test_run_ends.ts'
 import { aNewToken, readTheRecord, removeTheRecord, theGroupIsGone, writeTheRecord, type TheRecordOfATestRun } from './the_record_of_a_test_run.ts'
 
 const NAME = 'stop_my_run'
@@ -35,7 +35,7 @@ const NAME = 'stop_my_run'
 const THE_STOPPER = join(import.meta.dirname, 'stop_my_run.ts')
 
 /** The suite's guard, which ends a test file's process once the run that started it is gone. */
-const THE_GUARD = pathToFileURL(join(import.meta.dirname, 'every_test_run_ends.ts')).href
+const THE_GUARD = pathToFileURL(join(import.meta.dirname, 'a_test_run_ends', 'every_test_run_ends.ts')).href
 
 /** How long a plant gets to appear, and how long a killed group gets to go. */
 const A_PLANT_APPEARS_WITHIN_MS = 20_000

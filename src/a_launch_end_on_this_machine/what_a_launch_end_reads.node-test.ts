@@ -8,8 +8,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
+import type { LaunchMade } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { bootTimeMsUnder, processesInGroupUnder, startedAtMs } from './what_a_launch_end_reads.ts'
+import { bootTimeMsUnder, cleanUpIfTheLauncherEnds, processesInGroupUnder, startedAtMs } from './what_a_launch_end_reads.ts'
 
 /** A synthetic start, never a real one: this repository is public. */
 const STARTED = '900100'
@@ -63,4 +64,27 @@ test('#693: the boot moment and a start in ticks make a moment on the machine cl
   const ticks_per_second = 100
   assert.equal(startedAtMs(String(ticks_per_second), BOOT_SECONDS * 1000, ticks_per_second), (BOOT_SECONDS + 1) * 1000)
   assert.equal(bootTimeMsUnder(join(tmpdir(), 'no-proc-at-all-of-ours')), null)
+})
+
+test('a launcher that exits first keeps the member\'s transcripts after the relay and before the snapshot (martha#646, D1)', () => {
+  const order: string[] = []
+  const made = {
+    relayDirectory: { remove: (): void => void order.push('relay-directory') },
+    keepTranscripts: (): void => void order.push('keep-transcripts'),
+    removeSnapshot: (): void => void order.push('snapshot'),
+  } as unknown as LaunchMade
+  // The group kill is handed in: a reaped pid's group can belong to another process by the time this runs, and killing
+  // it would signal a group that is nobody's here (martha#646 r=1, nit 2).
+  const before = new Set(process.listeners('exit'))
+  const off = cleanUpIfTheLauncherEnds(4242, made, (killed) => void order.push(`killed ${String(killed)}`))
+  const added = process.listeners('exit').filter((one) => !before.has(one))
+  try {
+    assert.equal(added.length, 1, 'the launcher\'s end registered no exit handler, or more than one')
+    added[0]!(0)
+    assert.deepEqual(order, ['killed 4242', 'relay-directory', 'keep-transcripts', 'snapshot'],
+      'the keep does not sit between the relay and the snapshot, so the snapshot goes with what the host wrote still in it')
+  } finally {
+    off()
+  }
+  assert.deepEqual(process.listeners('exit').filter((one) => !before.has(one)), [], 'the handler was left registered')
 })

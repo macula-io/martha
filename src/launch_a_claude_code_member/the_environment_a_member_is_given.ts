@@ -8,15 +8,39 @@
 // how a home's state root is found, and which sessions the crew has recorded: one append-only stream per session under
 // its rows place, named and decoded by the row store's own names (../row_streams_directory).
 //
-// The environment is built in this order: what it inherits without the crew's state, the gate's switches, the member's
+// It is handed no variable kitty sets for the programs it starts either (#572 T6, #547 S6): a member run in a kitty tab
+// must not find that kitty's remote-control line or window. And it is handed one credential, the one its billing picks
+// (martha#916, ../give_a_member_its_own_config): the other is taken out last, so no inherited value, switch or later
+// layer puts it back.
+//
+// When the crew declares no billing, the launch asks the host whether the owner is signed in, before anything of the
+// member is made: the host binary the command resolves to on the launcher's PATH, asked `auth status --json` in the
+// launcher's environment without the key and with the sign-in store variable set and empty (what a member billed by
+// the subscription is handed), and a config folder of the question's own, made new and removed after, which is also
+// the folder it runs in: it is asked before the launch gate has judged the checkout. A host that
+// cannot be found, an exit that is not 0, an answer that does not come within the host's answer timeout, or one that
+// does not parse, is an untold sign-in, and the member is billed by the subscription. The owner is told the billing
+// and why whenever it is not the usual one, a signed-in owner's subscription.
+//
+// Nor the folders of plugins the launcher's own host loads (martha#511, #601 row 72): a crew-code session or the
+// owner's shell may set CLAUDE_CODE_PLUGIN_DIRS, and a member started with it would run those plugins' hooks with
+// nothing recorded (martha#121). The launch drops it and tells the owner so, instead of refusing the start.
+//
+// The environment is built in this order: what it inherits without the crew's state or kitty's, the gate's switches, the member's
 // own config folder, and the launcher's own state home last, so neither an inherited value nor a switch can point a
 // member at another state root.
 
-import { readdirSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { API_KEY_VARIABLE, resolvedHostCommand, theSignInTheHostSays, type TheSignIn } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, sameMemberName, type Billing, type CrewSettings } from '../declare_crew/declare_crew.ts'
+
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
-import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
+import { withoutKittysVariables } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
+import { loadsPlugins, PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
+import { makeTheMembersConfig, notGivenUnder, theBillingAMemberGets, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { streamOfDirectoryName } from '../row_streams_directory/row_streams_directory.ts'
 import { SESSION_RECORD_STREAM } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -56,6 +80,18 @@ function theCrewsStateKnownTo(state_root: string, rows: string, named_root: stri
   return [state_root, rows, named_root, join(named_root, CREWS_PLACE)]
 }
 
+/** The environment without the plugin folders the launcher's own host loads, as the header says. */
+export function withoutThePluginFolders(env: Readonly<Record<string, string | undefined>>): Record<string, string | undefined> {
+  const { [PLUGIN_DIRS_VARIABLE]: _dropped, ...kept } = env
+  return kept
+}
+
+/** The line the owner is told when a member is not handed the launcher's plugin folders; none when none was set. */
+export function theDroppedPluginsLines(member: string, inherited: Readonly<Record<string, string | undefined>>): readonly string[] {
+  if (!loadsPlugins(inherited[PLUGIN_DIRS_VARIABLE])) return []
+  return [`${member} is not handed ${PLUGIN_DIRS_VARIABLE} from this shell, so the plugins it names do not load in the member (martha#121).`]
+}
+
 /** Everything the environment of a member is built from: what it inherits, the gate's switches, the crew's state, its config folder. */
 export interface AMembersEnvironment {
   readonly inherited: Readonly<Record<string, string | undefined>>
@@ -63,6 +99,8 @@ export interface AMembersEnvironment {
   readonly crew: TheCrewsState
   readonly member_config: string
   readonly host: Host
+  /** The credential the member is billed by (martha#916). */
+  readonly billing: Billing
 }
 
 /** The environment a member is handed (martha#683), composed as the header says. */
@@ -72,9 +110,85 @@ export function theEnvironmentAMemberIsGiven(asking: AMembersEnvironment): Recor
     places: theCrewsStateKnownTo(asking.crew.state_root, asking.crew.rows, named),
     session_ids: sessionIdsRecordedIn(asking.crew.rows),
   })
-  return {
-    ...launchEnvironment(kept, asking.switches, asking.host),
-    ...theMembersConfigEnvironment(asking.member_config),
+  const composed = {
+    ...launchEnvironment(withoutThePluginFolders(withoutKittysVariables(kept)), asking.switches, asking.host),
+    ...theMembersConfigEnvironment(asking.member_config, asking.billing),
     ...theCrewsStateAMemberIsGiven(asking.crew.state_root),
   }
+  const notGiven = notGivenUnder(asking.billing)
+  return Object.fromEntries(Object.entries(composed).filter(([name]) => !notGiven.includes(name)))
+}
+
+/** What a member starts with beside its environment: the approved checkout it works in, and the skills that checkout carries. */
+export interface AMembersStart extends AMembersEnvironment {
+  readonly checkout: string
+  readonly skills: Readonly<Record<string, Uint8Array>>
+}
+
+/**
+ * The environment a member is handed, with its own config folder made for it; or why not: a member billed by the key
+ * whose launcher carries none, or a folder that could not be made.
+ */
+export function giveAMemberItsStart(asking: AMembersStart): Record<string, string> | string {
+  const env = theEnvironmentAMemberIsGiven(asking)
+  const billedKey = asking.billing === BILLED_BY_API_KEY ? env[API_KEY_VARIABLE] : undefined
+  if (asking.billing === BILLED_BY_API_KEY && (billedKey === undefined || billedKey === '')) {
+    return `the crew bills its members by ${BILLED_BY_API_KEY}, and the launcher's environment carries no ${API_KEY_VARIABLE}`
+  }
+  const made = makeTheMembersConfig(asking.member_config, asking.checkout, billedKey, asking.skills)
+  return made.made ? env : made.refusal
+}
+
+/** What the billing of a launch is read from: the crew's declared billing, the launcher's environment and command. */
+export interface ALaunchesBilling {
+  readonly declared: Billing | null
+  readonly inherited: Readonly<Record<string, string | undefined>>
+  readonly command: string
+  readonly cwd: string
+}
+
+/** The billing a launch gives its member, and the line the owner is told when the crew declares none. */
+export interface TheBillingOfALaunch {
+  readonly billing: Billing
+  readonly told: string | undefined
+}
+
+/** Asks the host the command resolves to whether the owner is signed in, as the header says; never rejects. */
+async function theOwnersSignIn(asking: ALaunchesBilling): Promise<TheSignIn> {
+  const resolved = resolvedHostCommand(asking.command, asking.inherited.PATH, asking.cwd)
+  if ('refusal' in resolved) return { untold: resolved.refusal }
+  const folder = mkdtempSync(join(tmpdir(), 'martha-sign-in-question-'))
+  try {
+    // Asked as a member billed by the subscription is started: without the credentials it is never given (martha#916 r=3).
+    const notGiven = notGivenUnder(BILLED_BY_SUBSCRIPTION)
+    const kept = Object.entries(asking.inherited).filter((entry): entry is [string, string] => entry[1] !== undefined && !notGiven.includes(entry[0]))
+    const env = { ...Object.fromEntries(kept), ...theMembersConfigEnvironment(folder, BILLED_BY_SUBSCRIPTION) }
+    // Asked in its own folder, not the checkout: the question runs before the launch gate has judged the checkout's
+    // config, so no project folder of the checkout's is in reach of it.
+    return await theSignInTheHostSays(resolved.binary, env, folder)
+  } finally {
+    rmSync(folder, { recursive: true, force: true })
+  }
+}
+
+/**
+ * The billing the declaration names for the member a launch starts (martha#916): its profile's provider's, read from the
+ * crew's members by the member's name; null when the launch has no declaration, names a member it does not hold, or that
+ * member names none.
+ */
+export function theDeclaredBillingOf(settings: Pick<CrewSettings, 'members'> | undefined, member: string): Billing | null {
+  return settings?.members.find((one) => sameMemberName(one.name, member))?.billing ?? null
+}
+
+/** The billing of a launch (martha#916): the declared one, else the one the owner's sign-in and the launcher's key give. */
+export async function theBillingOfALaunch(asking: ALaunchesBilling): Promise<TheBillingOfALaunch> {
+  if (asking.declared !== null) return { billing: asking.declared, told: undefined }
+  const signIn = await theOwnersSignIn(asking)
+  const key = asking.inherited[API_KEY_VARIABLE]
+  const billing = theBillingAMemberGets(null, signIn, key !== undefined && key !== '')
+  // The usual start -- a signed-in owner, billed by the subscription -- is told nothing; a member billed by the key,
+  // or a sign-in the host could not tell, is.
+  if ('signed_in' in signIn && signIn.signed_in) return { billing, told: undefined }
+  const why = 'untold' in signIn ? `the host could not say whether the owner is signed in (${signIn.untold})` : 'the owner is not signed in'
+  return { billing, told: `The crew declares no billing; ${why}, so the member is billed by ${billing}.` }
 }

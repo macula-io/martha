@@ -1,4 +1,4 @@
-// The nightly live run's guards for its throwaway repository, as the run's bash calls them (martha#639):
+// The live run's guards for its throwaway repository, as the run's bash calls them (martha#639):
 //
 //   node src/land_a_package_on_a_throwaway_repository/main.ts expiry <now, ISO 8601>  < the expiry header's value, empty when GitHub sent none
 //   node src/land_a_package_on_a_throwaway_repository/main.ts who <owner id>         < GET /user's answer
@@ -7,6 +7,31 @@
 //   node src/land_a_package_on_a_throwaway_repository/main.ts clean-start <start.json> < every path under the home, one per line
 //   node src/land_a_package_on_a_throwaway_repository/main.ts redact <token file>     < a transcript bound for the kept record
 //   node src/land_a_package_on_a_throwaway_repository/main.ts screen <placed|not-placed> < a member's screen bound for the kept record
+//   node src/land_a_package_on_a_throwaway_repository/main.ts claims <live_run.json>     < nothing (the live run file names both transcripts)
+//
+// `claims` reads the live run's package, range, builder and reviewer, and the two members' transcript paths, from the
+// live run file (package, range, builder, reviewer, builder_transcript, reviewer_transcript), and exits 1 naming the first
+// of section 6's four crew rows the transcripts do not show.
+//
+//   node src/land_a_package_on_a_throwaway_repository/main.ts watch <watch.json>      < every byte the proof's read-only client on the builder's session was sent
+//
+// `watch` reads the package, the builder, the session's client listing at the ring and the pid of the proof's own client
+// from the watch file (package, builder, clients, recorder), and exits 1 naming the first watch row (martha#843) the
+// bytes and the listing do not show. Only its verdict is kept: the bytes are a member's screen, never kept once the
+// token is placed.
+//
+//   node src/land_a_package_on_a_throwaway_repository/main.ts landing <live_run.json>    < nothing
+//
+// `landing` reads the same four live run fields, the builder's transcript, the crew's rows folder and when the owner's
+// attach command was printed (builder_transcript, rows_folder, attach_printed_at), and exits 1 naming the first of
+// section 6's landing rows (5 to 7) they do not show.
+//
+//   node src/land_a_package_on_a_throwaway_repository/main.ts asked <live_run.json>      < nothing
+//
+// `asked` reads the same four live run fields, the range's tip left empty since the pull request is not read yet, the
+// builder's transcript and the crew's rows folder, and exits 0 once the builder has queued the landing's ask (a
+// verify_range answer's question, queued word for word after it, in the owner's asks), and 1 while it has not: the
+// live run waits on it before it prints the owner's second command. Any other ask is not the landing's.
 //
 // Exit 0 the guard holds, 1 it refuses, naming why on standard error, 2 it could not look. `redact` writes the text,
 // redacted, to standard output either way, and exits 1 when a token had reached it. `expiry` exits 0 with a note on
@@ -21,6 +46,12 @@ import { readFileSync } from 'node:fs'
 import { whatTheStartWouldLoad, type TheStart } from './a_clean_start.ts'
 import { whatTheRunMadeIn, whyNotDelete } from './the_delete_guard.ts'
 import { keepAScreen, redactTheToken, THE_TOKEN_REACHED_THE_RECORD, TOKEN_NOT_PLACED, TOKEN_PLACED } from './the_kept_record.ts'
+import { whichCrewClaimFails, type TheLiveRun } from './the_live_runs_claims.ts'
+import { whichLandingClaimFails, whyTheLandingIsNotAsked } from './the_live_runs_landing.ts'
+import { whichWatchClaimFails } from './the_owners_watch.ts'
+import { ledgerStreamOf, type LedgerRow } from '../log_ledger/log_ledger.ts'
+import { OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { theTokensExpiry } from './the_tokens_expiry.ts'
 import { whyTheCallsAreNotTheBots, whyTheCallsReachTooFar } from './the_tokens_reach.ts'
 
@@ -92,13 +123,93 @@ const screen = (argument: string, input: string): Said => {
   return { code: 0, out: keepAScreen(input, argument === TOKEN_PLACED).text }
 }
 
-const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact, screen }
+/** The fields every live run file carries, each a non-empty string. */
+const LIVE_RUN_FIELDS = ['package', 'range', 'builder', 'reviewer'] as const
+/** The live run file's field the landing verb reads the attach command's time from, ms since the epoch, as digits. */
+const ATTACH_PRINTED_AT = 'attach_printed_at'
+
+/** A live run file read: the live run, and each further field the verb named, or the could-not-look that says why not. */
+function theLiveRunFile(argument: string, more: readonly string[]): { readonly liveRun: TheLiveRun; readonly field: (name: string) => string } | Said {
+  const read = readJson(readFileSync(argument, 'utf8'))
+  if (typeof read !== 'object' || read === null) return couldNotLook(`${argument} is not a live run's JSON object`)
+  const value = (name: string): unknown => (read as Record<string, unknown>)[name]
+  const missing = [...LIVE_RUN_FIELDS, ...more].filter((name) => typeof value(name) !== 'string' || value(name) === '')
+  if (missing.length > 0) return couldNotLook(`${argument} names no ${missing.join(', ')}`)
+  const field = (name: string): string => value(name) as string
+  return { liveRun: { package: field('package'), range: field('range'), builder: field('builder'), reviewer: field('reviewer') }, field }
+}
+
+/** Section 6's four crew rows, read from the two transcripts the live run file names. Nothing on standard input is read. */
+const claims = (argument: string): Said => {
+  const file = theLiveRunFile(argument, ['builder_transcript', 'reviewer_transcript'])
+  if ('code' in file) return file
+  return verdictOf(whichCrewClaimFails(file.liveRun, readFileSync(file.field('builder_transcript'), 'utf8'), readFileSync(file.field('reviewer_transcript'), 'utf8')))
+}
+
+/** The watch file's fields, each a non-empty string. */
+const WATCH_FIELDS = ['package', 'builder', 'clients', 'recorder'] as const
+
+/** The watch rows (martha#843), read from the bytes on standard input and the watch file's listing. */
+const watch = (argument: string, input: string): Said => {
+  const read = readJson(readFileSync(argument, 'utf8'))
+  if (typeof read !== 'object' || read === null) return couldNotLook(`${argument} is not a watch's JSON object`)
+  const value = (name: string): unknown => (read as Record<string, unknown>)[name]
+  const missing = WATCH_FIELDS.filter((name) => typeof value(name) !== 'string' || value(name) === '')
+  if (missing.length > 0) return couldNotLook(`${argument} names no ${missing.join(', ')}`)
+  const field = (name: (typeof WATCH_FIELDS)[number]): string => value(name) as string
+  return verdictOf(whichWatchClaimFails({ package: field('package'), builder: field('builder') }, input, field('clients'), field('recorder')))
+}
+
+/**
+ * Section 6's landing rows (5 to 7), read from the builder's transcript and the crew's rows folder the live run file names,
+ * through the rows store's own reader. Nothing on standard input is read.
+ */
+export async function landing(argument: string): Promise<Said> {
+  try {
+    const file = theLiveRunFile(argument, ['builder_transcript', 'rows_folder', ATTACH_PRINTED_AT])
+    if ('code' in file) return file
+    const attachPrintedAt = Number(file.field(ATTACH_PRINTED_AT))
+    if (!/^\d+$/.test(file.field(ATTACH_PRINTED_AT))) return couldNotLook(`${argument} names ${ATTACH_PRINTED_AT} '${file.field(ATTACH_PRINTED_AT)}', not a time in ms`)
+    const rows = rowStreamsDirectory(file.field('rows_folder'))
+    const asks = await rows.read(OWNER_ASKS_STREAM)
+    const ledger = (await rows.read(ledgerStreamOf(file.liveRun.package))).map(({ row }) => row as unknown as LedgerRow)
+    return verdictOf(whichLandingClaimFails(file.liveRun, { builderTranscript: readFileSync(file.field('builder_transcript'), 'utf8'), asks, ledger, attachPrintedAt }))
+  } catch (error) {
+    return couldNotLook(error instanceof Error ? error.message : String(error))
+  }
+}
+
+const GUARDS: Readonly<Record<string, (argument: string, input: string) => Said>> = { expiry, who, reach, delete: deleteGuard, 'clean-start': cleanStart, redact, screen, claims, watch }
+/** The guards that read a store, and so answer later. */
+const LANDING = 'landing'
+const ASKED = 'asked'
+
+/**
+ * Whether the builder has queued the landing's ask, read from the live run file's builder transcript and rows folder; its
+ * range is the base the live run started on, with the tip not known yet. Any other ask is not it. Nothing on standard
+ * input is read.
+ */
+export async function asked(argument: string): Promise<Said> {
+  try {
+    const file = theLiveRunFile(argument, ['builder_transcript', 'rows_folder'])
+    if ('code' in file) return file
+    const [base] = file.liveRun.range.split('..')
+    if (base === undefined || base === '') return couldNotLook(`${argument} names no base in its range '${file.liveRun.range}'`)
+    const asks = await rowStreamsDirectory(file.field('rows_folder')).read(OWNER_ASKS_STREAM)
+    return verdictOf(whyTheLandingIsNotAsked(base, file.liveRun.builder, { builderTranscript: readFileSync(file.field('builder_transcript'), 'utf8'), asks }))
+  } catch (error) {
+    return couldNotLook(error instanceof Error ? error.message : String(error))
+  }
+}
+
+/** The guards that read a store, by name. */
+const STORE_GUARDS: Readonly<Record<string, (argument: string) => Promise<Said>>> = { [LANDING]: landing, [ASKED]: asked }
 
 /** What the guard named by `args` says of `input`. Anything it cannot read is exit 2, never a pass. */
 export function runTheGuard(args: readonly string[], input: string): Said {
   const [name, argument] = args
   const guard = name === undefined ? undefined : GUARDS[name]
-  if (guard === undefined || argument === undefined || args.length !== 2) return couldNotLook(`usage: main.ts <${Object.keys(GUARDS).join('|')}> <argument>`)
+  if (guard === undefined || argument === undefined || args.length !== 2) return couldNotLook(`usage: main.ts <${[...Object.keys(GUARDS), ...Object.keys(STORE_GUARDS)].join('|')}> <argument>`)
   try {
     return guard(argument, input)
   } catch (error) {
@@ -107,7 +218,9 @@ export function runTheGuard(args: readonly string[], input: string): Said {
 }
 
 if (import.meta.main) {
-  const said = runTheGuard(process.argv.slice(2), readFileSync(0, 'utf8'))
+  const args = process.argv.slice(2)
+  const store = args[0] === undefined ? undefined : STORE_GUARDS[args[0]]
+  const said = store !== undefined && args.length === 2 && args[1] !== undefined ? await store(args[1]) : runTheGuard(args, readFileSync(0, 'utf8'))
   if (said.out !== undefined) process.stdout.write(said.out)
   if (said.err !== undefined) process.stderr.write(`${NAME}: ${said.err}\n`)
   process.exitCode = said.code

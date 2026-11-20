@@ -4,8 +4,8 @@
 //
 // Host adapter, and no decision of its own. The places are this machine's directories, read through the stores the
 // launcher writes; what a member is, and how a stop or a restart is asked and carried out, are
-// ../stop_and_restart_a_member's. It sits here rather than in ../run_the_martha_command because that adapter has a
-// ceiling and composes slices, so this wiring has a directory of its own, declared in package.json as an adapter.
+// ../stop_and_restart_a_member's. It sits here rather than in ../run_the_martha_command because that adapter
+// composes slices, so this wiring has a directory of its own, declared in package.json as an adapter.
 
 import { randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
@@ -16,7 +16,7 @@ import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { OWNER } from '../declare_crew/declare_crew.ts'
 import { readingOnly, type CrewPlace, type Refused } from '../host_contract/host_contract.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { drawTheStrip } from '../draw_the_crew_strip/draw_the_crew_strip.ts'
+import { drawTheStrip, type TheStripsSeam } from '../draw_the_crew_strip/draw_the_crew_strip.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
 import { launchRecordsDirectory } from '../linux_process_identity/launch_records_directory.ts'
 import { parkedPlace, theParkOf, type ThePark } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
@@ -80,15 +80,21 @@ export function theCrewListed(places: TheCrewsPlaces, now: number): readonly str
   return listed.map(theListLine)
 }
 
-/** `martha crew` (martha#572): the strip over the launchers' rows, drawn through `draw` until `stopped` is aborted. */
-export function drawTheCrewStrip(places: TheCrewsPlaces, draw: (frame: readonly string[]) => void, stopped: AbortSignal): Promise<void> {
+/** `martha crew` (martha#572): the strip over the launchers' rows, drawn through `draw` until `stopped` is aborted; `title` sets its kitty tab's title (#547 S6). */
+export function drawTheCrewStrip(places: TheCrewsPlaces, draw: (frame: readonly string[]) => void, stopped: AbortSignal, title?: TheStripsSeam['title']): Promise<void> {
   const rows = dashboardRowsIn(places.launcher.dashboard)
   const wait = (ms: number): Promise<void> => after(ms, undefined, { signal: stopped }).catch((error: unknown) => {
     if (!stopped.aborted) throw error
   })
-  return drawTheStrip({ crew: places.settings, beats: () => rows.all(), clock: { now: () => Date.now() }, draw, wait }, stopped)
+  return drawTheStrip({ crew: places.settings, beats: () => rows.all(), clock: { now: () => Date.now() }, draw, wait, ...(title === undefined ? {} : { title }) }, stopped)
 }
 
+
+/** Whether `member` is running, as `martha stop` reads it: the one reading, so `martha crew remove` cannot read another (martha#307). */
+export function isRunning(places: TheCrewsPlaces, member: string): boolean {
+  const host = stoppingHostOn(places)
+  return theRunningLaunchOf(host.launches(), host.processes, member) !== undefined
+}
 
 /**
  * Stops `member`, or, with none named, every declared member that is running (crew-code's `down`), one after another;
@@ -98,7 +104,7 @@ export async function stopTheCrew(places: TheCrewsPlaces, member: string | undef
   const host = stoppingHostOn(places)
   const names = places.settings.members.map((one) => one.name)
   if (member !== undefined && !names.includes(member)) return [{ kind: 'refused', told: `${member} is not on this crew (its members are ${names.join(', ')}).` }]
-  const asked = member === undefined ? names.filter((name) => theRunningLaunchOf(host.launches(), host.processes, name) !== undefined) : [member]
+  const asked = member === undefined ? names.filter((name) => isRunning(places, name)) : [member]
   if (asked.length === 0) return [{ kind: 'not_running', told: 'no member of this crew is running, so nothing was stopped.' }]
   const stopped: Stopped[] = []
   for (const name of asked) stopped.push(await stopAMember(host, { member: name, by: OWNER, reason: OWNERS_STOP_REASON, id: randomUUID() }))

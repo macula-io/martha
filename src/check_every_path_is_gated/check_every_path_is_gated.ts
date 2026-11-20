@@ -34,7 +34,7 @@ import { MAX_ASK, type AnAsk } from '../queue_the_owners_asks/queue_the_owners_a
 import { PATH_OF_SOURCE, REGISTRY_ROWS_THAT_ARE_NOT_TURN_SOURCES } from '../take_in_a_turn/take_in_a_turn.ts'
 import type { Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { RECORDED_RING_RESULT_KEYS, RING_RESULT_KEYS } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
-import { THE_MODELS_SWITCH, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
+import { THE_MODELS_SWITCH, THE_RESUME_SWITCH, type ArgumentGate } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { THE_COMMAND_STARTS } from '../speak_acp_to_an_agent/the_acp_client.ts'
 import type { DeliveryGate, RoomMessage, RoomRosters } from '../admit_a_room_message/admit_a_room_message.ts'
 import {
@@ -264,15 +264,34 @@ function gatedPathRowGap(
 ): string | undefined {
   const gate = gates.path[control.gate]
   if (gate === undefined) return `names a path gate nobody has built: ${control.gate}`
-  const failed = PATH_PROBES.find((probe) => gate(probe) !== probe.admits)
-  if (failed !== undefined) {
-    return failed.admits ? `the gate ${control.gate} refuses ${failed.what}` : `the gate ${control.gate} admits ${failed.what}`
+  for (const probe of PATH_PROBES) {
+    const failed = theGatesAnswer(probe, (note) => gate(probe, note), `the gate ${control.gate}`)
+    if (failed !== undefined) return failed
   }
   // A gate's questions about a path it is given are not every question it answers:
   // these two shapes need a configuration on disk to mean anything (martha#192).
   const configFailed = standIn === undefined ? undefined : gapsInConfigPathCoverage(gate, standIn)
   if (configFailed !== undefined) return `the gate ${control.gate} ${configFailed.replace(/^the gate /, '')}`
   return control.also.map((also) => gapOfRow({ ...path, control: also }, gateRefuses, gates, standIn)).find((why) => why !== undefined)
+}
+
+/** The lines a gate says while it is asked one question, read from the gate itself (martha#601). */
+function theLinesWhileAsking(ask: (note: (line: string) => void) => boolean): { readonly answer: boolean; readonly said: readonly string[] } {
+  const said: string[] = []
+  return { answer: ask((line) => said.push(line)), said }
+}
+
+/**
+ * Why a gate's answer to one probe is a gap, or undefined when it answers as the probe declares AND, where the probe
+ * names a line, says it (martha#601): a place the owner cut from a refusal to a notice is admitted with one line, and a
+ * gate that admits it in silence has no control on it at all.
+ */
+function theGatesAnswer(probe: { readonly admits: boolean; readonly what: string; readonly says?: string }, ask: (note: (line: string) => void) => boolean, who: string): string | undefined {
+  const { answer, said } = theLinesWhileAsking(ask)
+  const says = probe.says
+  if (answer !== probe.admits) return `${who} ${answer ? 'admits' : 'refuses'} ${probe.what}`
+  if (says !== undefined && !said.some((line) => line.includes(says))) return `${who} admits ${probe.what}, and says nothing about it`
+  return undefined
 }
 
 /** Why a row naming an argument gate is a gap: it is not delivered text, or its gate fails a question. */
@@ -330,6 +349,11 @@ export interface ArgumentProbe {
 export interface PathProbe {
   readonly admits: boolean
   readonly what: string
+  /**
+   * The line the gate must say when it admits this path (martha#601): a place the owner cut from a refusal to a
+   * notice is admitted, and admitting it silently is a gap the same way a wrong answer is.
+   */
+  readonly says?: string
   /** The path the member's Write names. */
   readonly path: string
   /** The member's working directory: the checkout a git dir is found from. */
@@ -344,7 +368,7 @@ export interface PathProbe {
  * it: a slice may import no adapter, so the check takes the gate as an argument
  * rather than naming a function it cannot reach.
  */
-export type PathGate = (probe: PathProbe) => boolean
+export type PathGate = (probe: PathProbe, note?: (line: string) => void) => boolean
 
 /** The home and the checkout the path-gate probes stand in: neither exists on any machine, so the answer rests on the names alone. */
 const PROBE_HOME = '/an-owners-home'
@@ -357,11 +381,20 @@ const PROBE_CHECKOUT = '/the/checkout'
  * reads it, and the owner's own git configuration. The first is admitted, so a
  * gate that refuses everything is caught.
  */
+/**
+ * The questions every path gate is asked, one per class of path a member's file
+ * tool can name: an ordinary file in the checkout it stands in, the checkout's
+ * own git directory, a `.git` a member would add under `src` spelled as macOS
+ * reads it, and the owner's own git configuration. The first is admitted, so a
+ * gate that refuses everything is caught. The other three are admitted too, since
+ * martha#601 cut those refusals to a notice, and each one must be SAID: a gate
+ * that admits them silently is a gap, so the line is what still stands on them.
+ */
 export const PATH_PROBES: readonly PathProbe[] = [
   { admits: true, what: 'an ordinary file in the checkout', path: join(PROBE_CHECKOUT, 'src', 'a.ts'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
-  { admits: false, what: "the checkout's own git directory", path: join(PROBE_CHECKOUT, '.git', 'hooks', 'pre-commit'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
-  { admits: false, what: 'a .git a member would add, spelled as a case-insensitive disk reads it', path: join(PROBE_CHECKOUT, 'src', '.GIT'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
-  { admits: false, what: "the owner's own git configuration", path: join(PROBE_HOME, '.gitconfig'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
+  { admits: true, says: 'which git takes for the .git directory', what: "the checkout's own git directory", path: join(PROBE_CHECKOUT, '.git', 'hooks', 'pre-commit'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
+  { admits: true, says: 'which git takes for the .git directory', what: 'a .git a member would add, spelled as a case-insensitive disk reads it', path: join(PROBE_CHECKOUT, 'src', '.GIT'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
+  { admits: true, says: 'git configuration files the owner', what: "the owner's own git configuration", path: join(PROBE_HOME, '.gitconfig'), cwd: PROBE_CHECKOUT, home: PROBE_HOME },
 ]
 
 /**
@@ -374,6 +407,8 @@ export interface ConfigPathProbe {
   /** Whether the gate must admit the write. */
   readonly admits: boolean
   readonly what: string
+  /** The line the gate must say when it admits this write (martha#601), as a path probe's is. */
+  readonly says?: string
   /** The lines the checkout's `.git/config` holds when the gate is asked. */
   readonly config: readonly string[]
   /** The path the member's Write names, relative to the checkout's top. */
@@ -384,12 +419,15 @@ export interface ConfigPathProbe {
  * The questions a gate that reads a checkout's configuration must answer: an
  * ordinary file admitted beside the values, and the two shapes a value names —
  * a hooks folder and a program — refused. The first is admitted, so a gate that
- * refuses every write into any checkout is caught.
+ * refuses every write into any checkout is caught. The two a value names are
+ * admitted as well, since martha#601 cut those refusals to a notice, and each one
+ * must be said: the configuration is read at each call, and the line is what says
+ * so to the owner.
  */
 export const CONFIG_PATH_PROBES: readonly ConfigPathProbe[] = [
   { admits: true, what: 'an ordinary file in a checkout whose config names a tree hooks folder', config: ['[core]', '\thooksPath = .husky'], writes: join('src', 'a.ts') },
-  { admits: false, what: 'the hooks folder a tree config names', config: ['[core]', '\thooksPath = .husky'], writes: join('.husky', 'pre-commit') },
-  { admits: false, what: 'the program a tree config names through an alias', config: ['[alias]', '\tfmt = !tools/x.sh'], writes: join('tools', 'x.sh') },
+  { admits: true, says: 'and the write went ahead', what: 'the hooks folder a tree config names', config: ['[core]', '\thooksPath = .husky'], writes: join('.husky', 'pre-commit') },
+  { admits: true, says: 'and the write went ahead', what: 'the program a tree config names through an alias', config: ['[alias]', '\tfmt = !tools/x.sh'], writes: join('tools', 'x.sh') },
 ]
 
 /**
@@ -398,9 +436,12 @@ export const CONFIG_PATH_PROBES: readonly ConfigPathProbe[] = [
  * and says where the member stands in it.
  */
 export function gapsInConfigPathCoverage(gate: PathGate, standIn: (probe: ConfigPathProbe) => PathProbe): string | undefined {
-  const failed = CONFIG_PATH_PROBES.find((probe) => gate(standIn(probe)) !== probe.admits)
-  if (failed === undefined) return undefined
-  return failed.admits ? `the gate refuses ${failed.what}` : `the gate admits ${failed.what}`
+  for (const probe of CONFIG_PATH_PROBES) {
+    const path = standIn(probe)
+    const failed = theGatesAnswer(probe, (note) => gate(path, note), 'the gate')
+    if (failed !== undefined) return failed
+  }
+  return undefined
 }
 
 /**
@@ -414,14 +455,14 @@ export function gapsInConfigPathCoverage(gate: PathGate, standIn: (probe: Config
 export const ARGUMENT_PROBES: readonly ArgumentProbe[] = [
   { passes: true, what: 'no arguments at all', args: [] },
   { passes: true, what: 'a model to run', args: [THE_MODELS_SWITCH, 'a-model'] },
-  { passes: false, what: 'a prompt on the command line', args: ['a prompt'] },
+  { passes: false, what: 'a first prompt as a bare word, a turn no host stamps as the owner\'s (martha#919; --prompt types it in)', args: ['a prompt'] },
   { passes: false, what: 'a settings file or JSON', args: ['--settings', '{}'] },
   { passes: false, what: 'which settings sources load', args: ['--setting-sources', 'user,project'] },
   { passes: false, what: 'a tool-server config', args: [MCP_CONFIG_SWITCH, 'servers.json'] },
   { passes: false, what: 'a plugin directory', args: ['--plugin-dir', 'plugin'] },
   { passes: false, what: 'skipping every permission check', args: ['--dangerously-skip-permissions'] },
   { passes: false, what: 'a permission mode', args: ['--permission-mode', 'bypassPermissions'] },
-  { passes: false, what: 'a session brought back', args: ['--resume', 'a-session'] },
+  { passes: true, what: 'a session brought back (martha#511)', args: [THE_RESUME_SWITCH, 'a-session'] },
   { passes: false, what: 'a switch carried as another switch\'s value', args: [THE_MODELS_SWITCH, '--settings', '{}'] },
   { passes: false, what: 'a switch nobody has read', args: ['--a-switch-a-later-host-adds'] },
   { passes: false, what: 'a prompt by its short switch', args: ['-p', 'a prompt'] },
@@ -503,6 +544,8 @@ const APPROVED = [fingerprintOf({ entries: SERVERS_ONLY, tree: TREE })]
 export interface LaunchProbe {
   readonly admits: boolean
   readonly what: string
+  /** The line the gate must say when it admits this request (martha#601), as a path probe's is. */
+  readonly says?: string
   readonly request: LaunchRequest
 }
 
@@ -534,7 +577,8 @@ export const LAUNCH_PROBES: readonly LaunchProbe[] = [
     request: { host: PROBE_HOST, entries: SERVERS_ONLY, tree: PULLED, approved_fingerprints: APPROVED },
   },
   {
-    admits: false,
+    admits: true,
+    says: 'outside any git checkout',
     what: 'config outside any git checkout, even with its fingerprint approved',
     request: {
       host: PROBE_HOST,
@@ -589,9 +633,8 @@ function launchGateGap(name: string, gate: LaunchGate | undefined): string | und
   if (gate === undefined) return `names a launch gate nobody has built: ${name}`
 
   for (const probe of LAUNCH_PROBES) {
-    if (gate(probe.request) !== probe.admits) {
-      return probe.admits ? `the gate ${name} refuses ${probe.what}` : `the gate ${name} admits ${probe.what}`
-    }
+    const failed = theGatesAnswer(probe, (note) => gate(probe.request, note), `the gate ${name}`)
+    if (failed !== undefined) return failed
   }
 
   return undefined

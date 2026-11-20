@@ -1,7 +1,7 @@
 // The coincidences of run_reviews_on_the_review_model: words its own files spell like a constant held elsewhere, meaning something
 // else by them, each with its reason (martha#289). Read by the restated-values check as a syntax tree, never run.
 
-import type { Exception } from '../../prove_the_core/no_literal_restates_a_value.ts'
+import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { THE_HOSTS_OWN_MODEL_FIELD } from '../claude_code_host/coincidences.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'

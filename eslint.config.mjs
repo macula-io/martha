@@ -1,12 +1,16 @@
 // The structural floor (martha#87, the one every live Macula code repo is held to): a function that nests
 // too deep, branches too much or runs too long cannot reach main. The caps are named here and nowhere else:
-// prove_the_core/structure_stays_flat.node-test.ts reads them from this file and plants a function one step over
+// prove_the_core/read_the_manifest_and_the_linter/structure_stays_flat.node-test.ts reads them from this file and plants a function one step over
 // each. Every cap is at or tighter than the shared floor: a repo may tighten that floor, never relax it.
 //
 // - max-depth 2: eslint counts the blocks inside a function and not the function body itself, so 2 is an `if`
 //   inside an `if`, no deeper.
 // - complexity 9: cyclomatic, branch points + 1.
 // - max-lines-per-function 60: lines of a function, blank lines and comments not counted.
+// - max-lines 1105: lines of a source file, every line counted, as `wc -l` counts them. It replaces the per-directory
+//   ceilings package.json kept (owner's decision 2026-11-19 "Per-folder size ceilings (Recommended)"). The number is
+//   the largest source file on the day it came in, src/refuse_a_member_writing_owner_memory/
+//   refuse_a_member_writing_owner_memory.ts; the next were 1001 and 969. A test file is not held to it.
 //
 // No baseline and no exception in the code: an `eslint-disable` comment is refused, not obeyed (noInlineConfig).
 // eslint warns that it was ignored, and `npm run lint` allows no warning, so the comment itself fails the run.
@@ -27,6 +31,10 @@ export const STRUCTURAL_CAPS = {
   complexity: ['error', { max: 9 }],
   'max-lines-per-function': ['error', { max: 60, skipBlankLines: true, skipComments: true }],
 }
+
+/** The per-file line cap, and the files it does not hold: a test file plants its cases whole. */
+export const FILE_LINE_CAP = { 'max-lines': ['error', { max: 1105 }] }
+export const TEST_FILES = ['**/*.node-test.ts', '**/*.node-test.mjs']
 
 /** eslint's settings for the unused rule (martha#171). tsc never reads this file's export: its half is the two
  * compiler flags in each tsconfig, which have no ignore pattern of their own, so there a `_` prefix exempts a
@@ -49,6 +57,11 @@ export default [
     languageOptions: { parser: tseslint.parser, ecmaVersion: 'latest', sourceType: 'module' },
     linterOptions: { noInlineConfig: true },
     rules: STRUCTURAL_CAPS,
+  },
+  {
+    files: ['**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}'],
+    ignores: TEST_FILES,
+    rules: FILE_LINE_CAP,
   },
   {
     files: ['**/*.{ts,mts,cts,tsx}'],

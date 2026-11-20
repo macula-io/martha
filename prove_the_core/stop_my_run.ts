@@ -37,7 +37,7 @@ import process from 'node:process'
 
 import { signalAGroupOnThisMachine } from '../src/linux_process_identity/files_and_processes_on_this_machine.ts'
 import { groupIn, linuxProcessIdentities, PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
-import { manifestOf, testCommandsOf } from './declared_in_package_json.ts'
+import { manifestOf, testCommandsOf } from './read_the_manifest_and_the_linter/declared_in_package_json.ts'
 import {
   everyRecord,
   readTheRecord,
@@ -45,7 +45,7 @@ import {
   theGroupIsGone,
   type TheRecordOfATestRun,
 } from './the_record_of_a_test_run.ts'
-import { THE_RUNNER_WORD, theSuiteCommandOf } from './the_words_one_run_gets.ts'
+import { THE_RUNNER_WORD, theSuiteCommandOf } from './a_test_run_ends/the_words_one_run_gets.ts'
 
 const NAME = 'stop_my_run'
 
