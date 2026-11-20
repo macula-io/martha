@@ -9,7 +9,7 @@
 // owner watches the dashboard and should not have to ask whether a refresh is in flight.
 
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
-import { declareCrew, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { declareCrew, OWNER_ITEMS, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { CrewPlace, DocumentStore, HandoverStampStore, HostContract, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { theNewestBriefOf, thePackagesABriefNames, thePackagesAMemberHolds, type ABrief } from '../read_a_members_brief/read_a_members_brief.ts'
 import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_budget.ts'
@@ -262,7 +262,7 @@ function startTheFlow(
   if (due.trigger === 'asked') consumeTheAsk(place, places.member, now)
   return {
     act: 'prompt',
-    text: theHandoverPrompt({ at_limit: due.trigger === 'at_the_limit', percent: question.percent, limit_percent: opened.settings.thresholds.handover_percent }),
+    text: theHandoverPrompt({ at_limit: due.trigger === 'at_the_limit', percent: question.percent, limit_percent: opened.settings.thresholds.handover_percent, owner_items: theOwnerItemsOf(opened.settings) }),
     refresh: { phase: 'handing_over', reason: starting.reason },
   }
 }
@@ -327,14 +327,14 @@ async function carryTheHandover(
 
 /** A handover the member says it wrote: accepted and cleared, sent back once, or abandoned. */
 async function theWrittenHandover(places: TheRefreshPlaces, place: CrewPlace, flow: ARefresh, question: TheSessionsQuestion, settings: CrewSettings, now: number): Promise<TheAct> {
-  const judged = theJudgementOf(places, flow, await thePackagesHeld(places, settings))
+  const judged = theJudgementOf(places, flow, await thePackagesHeld(places, settings), theOwnerItemsOf(settings))
   if (judged.kind === 'sent_back') return sentBack(places, place, flow, judged.missing, now)
   if (judged.kind === 'not_written') return sentBackOnceOrAbandoned(places, place, flow, judged.why, now, settings)
   return clearTheSession(places, place, flow, question, settings, judged.missing, now)
 }
 
 /** What the handover the member just wrote is: accepted, sent back with what was missing, or cleared anyway. */
-function theJudgementOf(places: TheRefreshPlaces, flow: ARefresh, holds: readonly string[]): HandoverVerdict {
+function theJudgementOf(places: TheRefreshPlaces, flow: ARefresh, holds: readonly string[], owner_items: string | undefined): HandoverVerdict {
   const newest = theMembersNewestHandover(places)
   const unread = newest === undefined || 'refusal' in newest
   return whatBecameOfTheHandover({
@@ -342,6 +342,7 @@ function theJudgementOf(places: TheRefreshPlaces, flow: ARefresh, holds: readonl
     text: unread ? '' : newest.content,
     asked_at: flow.asked_at,
     holds,
+    owner_items,
     sent_back: flow.sent_back,
     at_limit: flow.trigger === 'at_the_limit',
   })
@@ -515,6 +516,9 @@ async function thePackagesHeld(places: TheRefreshPlaces, settings: CrewSettings)
   const spender = theGithubSpenderOf({ stores: places.stores, root: places.root, processes: places.processes, clock: places.ledger.clock, github: settings.github, clock_zone: settings.clock_zone })
   return await thePackagesAMemberHolds(spender, brief.text, places.member)
 }
+
+/** The owner whose items a handover must mark: the crew's owner when it switches `owner_items` on (crew-code reg:3755). */
+const theOwnerItemsOf = (settings: CrewSettings): string | undefined => (settings.house_rules[OWNER_ITEMS] ? settings.owner : undefined)
 
 /** The packages the member's row says it holds: the lines a handover must carry when it has no brief. */
 function holdsOf(places: TheRefreshPlaces): readonly string[] {

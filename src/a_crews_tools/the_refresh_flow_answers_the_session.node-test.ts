@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { keepTheCrewsFilesAsDirectories, handoverStampsIn } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, MINUTE_MS, OWNER_ITEMS } from '../declare_crew/declare_crew.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { CREW_ROWS_PLACE, openState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -76,6 +76,8 @@ interface ACrewOptions {
   readonly volatile_roots?: readonly string[]
   /** The declaration's thresholds block (martha#931 A), written into the file as the owner would. */
   readonly thresholds?: Readonly<Record<string, number>>
+  /** Whether the declaration switches `owner_items` on (martha#999 package 2). */
+  readonly owner_items?: boolean
 }
 
 /** One crew the test made: its member's tools, where its own store is, and the session that member's launcher holds. */
@@ -111,7 +113,7 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
   assert.ok(!('refusal' in state), `the test could not open Martha's state: ${'refusal' in state ? state.refusal : ''}`)
   const declared = await declareSoloCrew({ root, owner: 'an owner', origin: null, state, documents, models: HOST_MODELS, host: CLAUDE_CODE })
   assert.ok(declared.declared, `the test could not declare a crew: ${declared.declared ? '' : declared.refusal}`)
-  if (options.refresh_between_tasks === true || options.supervisor === true || options.thresholds !== undefined) switchOnInTheDeclaration(root, options)
+  if (changesTheDeclaration(options)) switchOnInTheDeclaration(root, options)
   const records = aSessionStore()
   const held = new Map((options.sessions ?? ['a-session']).map((id) => [id, beginSession(records, id)] as const))
   const ledger = { clock: { now: () => clock.at }, stores: { rows } }
@@ -154,6 +156,10 @@ async function aCrewOfTools(member: string, options: ACrewOptions = {}): Promise
   }
 }
 
+/** Whether the options ask for anything the declared solo crew does not already say. */
+const changesTheDeclaration = (options: ACrewOptions): boolean =>
+  options.refresh_between_tasks === true || options.supervisor === true || options.thresholds !== undefined || options.owner_items === true
+
 /** The declaration as a test needs it to read: the after-a-task trigger on, or a member whose role is `supervisor`. */
 function switchOnInTheDeclaration(root: string, options: ACrewOptions): void {
   const file = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
@@ -164,6 +170,7 @@ function switchOnInTheDeclaration(root: string, options: ACrewOptions): void {
     declared.mode.roles = [...declared.mode.roles, SUPERVISOR]
   }
   if (options.refresh_between_tasks === true) declared.house_rules = { ...(declared.house_rules ?? {}), refresh_between_tasks: true }
+  if (options.owner_items === true) declared.house_rules = { ...(declared.house_rules ?? {}), [OWNER_ITEMS]: true }
   writeFileSync(file, `${JSON.stringify(declared, null, 2)}\n`)
 }
 
@@ -351,7 +358,7 @@ test('#513: a successor is handed its package contract in the resume prompt the 
   assert.equal(await crew.openTheSession('a-session', 10), 'none')
   await crew.report('task x', 1, 1, work_package)
   assert.equal(await crew.ask('a-session', 40), CARRY_A_TEXT)
-  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: `first rules; what runs; holding ${work_package}` }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
+  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: `first rules; what runs\n- ${work_package} · branch b · sha nothing committed · next build it` }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
   assert.equal(await crew.ask('a-session', 41, THE_HANDOVER_WRITTEN), CARRY_THE_CLEAR)
 
   // The successor's first question is the one the flow's own resume answers: the prompt carries the contract the package's
@@ -457,12 +464,12 @@ test('martha#999 package 1: a handover is checked against the packages the newes
   const flow = aFlowStarting({ trigger: 'after_a_task', reason: 'its task finished', at: clock.at, started_at_percent: 10, percent: 80, asked_on: '', refreshed_at: [] })
   assert.equal(keepTheFlow(place, 'builder', flow), undefined)
   clock.at += 1_000
-  assert.deepEqual(await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'synthetic-owner/repo#7: branch b, nothing committed, next build it' }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
+  assert.deepEqual(await tools.answer(WRITE_MY_HANDOVER_TOOL, { content: '- synthetic-owner/repo#7 · branch b · sha nothing committed · next build it' }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
   const answered = await tools.answer(THE_REFRESH_ASK, questionOf(80, null, 't-9', THE_HANDOVER_WRITTEN), 'a-session')
   assert.ok('answer' in answered)
   const act = JSON.parse(answered.answer) as { readonly carry?: unknown; readonly text?: string }
   assert.equal(act.carry, CARRY_A_TEXT, 'a handover that left out a package of the brief cleared the session')
-  assert.match(act.text ?? '', /no line naming synthetic-owner\/repo#8/)
+  assert.match(act.text ?? '', /synthetic-owner\/repo#8 is missing branch, sha, next step/)
 })
 
 test('martha#999 package 1: the successor is pointed at its newest brief, which is its assignment unless the handover says it is done', async () => {
@@ -471,7 +478,7 @@ test('martha#999 package 1: the successor is pointed at its newest brief, which 
   assert.equal(await crew.openTheSession('a-session', 10), 'none')
   await crew.report('task x', 1, 1, 'synthetic-owner/repo#7')
   assert.equal(await crew.ask('a-session', 40), CARRY_A_TEXT)
-  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: 'synthetic-owner/repo#7: branch b, nothing committed, next build it' }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
+  assert.deepEqual(await crew.tools.answer(WRITE_MY_HANDOVER_TOOL, { content: '- synthetic-owner/repo#7 · branch b · sha nothing committed · next build it' }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
   assert.equal(await crew.ask('a-session', 41, THE_HANDOVER_WRITTEN), CARRY_THE_CLEAR)
   crew.clock.at += MINUTE_MS
   const resumed = await crew.tools.answer(THE_REFRESH_ASK, questionOf(5, null, '', ''), 'b-session')
@@ -479,4 +486,34 @@ test('martha#999 package 1: the successor is pointed at its newest brief, which 
   const order = JSON.parse(resumed.answer) as { readonly carry: string; readonly text?: string }
   assert.equal(order.carry, CARRY_A_TEXT)
   assert.ok((order.text ?? '').includes(`Read your brief ${brief}: it is your current assignment unless the handover says it is done.`), `the resume did not name the brief: ${order.text ?? ''}`)
+})
+
+/** The flow a test drives to a written handover: the answer the session reads once the handover holds `content`. */
+async function theAnswerToAHandover(options: ACrewOptions, content: string): Promise<{ readonly carry?: unknown; readonly text?: string }> {
+  const { tools, crew, clock } = await aCrewOfTools('builder', options)
+  keepABriefIn(crew, 'builder', 'Your package: synthetic-owner/repo#7.')
+  const place = refreshesPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew) } })
+  assert.ok(!('refusal' in place))
+  const flow = aFlowStarting({ trigger: 'after_a_task', reason: 'its task finished', at: clock.at, started_at_percent: 10, percent: 80, asked_on: '', refreshed_at: [] })
+  assert.equal(keepTheFlow(place, 'builder', flow), undefined)
+  clock.at += 1_000
+  assert.deepEqual(await tools.answer(WRITE_MY_HANDOVER_TOOL, { content }, 'a-session'), { answer: THE_HANDOVER_WRITTEN })
+  const answered = await tools.answer(THE_REFRESH_ASK, questionOf(80, null, 't-9', THE_HANDOVER_WRITTEN), 'a-session')
+  assert.ok('answer' in answered)
+  return JSON.parse(answered.answer) as { readonly carry?: unknown; readonly text?: string }
+}
+
+const A_FULL_LINE = '- synthetic-owner/repo#7 · branch b · sha nothing committed · next build it'
+
+test('martha#999 package 2: with owner_items on, a handover carrying the owner\'s words unmarked is sent back, as crew-code sends it back', async () => {
+  const unmarked = await theAnswerToAHandover({ owner_items: true }, `${A_FULL_LINE}\n- an owner wants the register flipped.`)
+  assert.equal(unmarked.carry, CARRY_A_TEXT, 'a handover with an unmarked owner item cleared the session')
+  assert.match(unmarked.text ?? '', /these lines carry an owner's words with no marker: "line 2: an owner wants the register flipped\."/)
+  const marked = await theAnswerToAHandover({ owner_items: true }, `${A_FULL_LINE}\n- an owner wants the register flipped: DECIDED 2026-11-20 "flip it".`)
+  assert.equal(marked.carry, CARRY_THE_CLEAR, 'a handover whose owner item is marked DECIDED was sent back')
+})
+
+test('martha#999 package 2: with owner_items off, the owner\'s words are not read', async () => {
+  const off = await theAnswerToAHandover({}, `${A_FULL_LINE}\n- an owner wants the register flipped.`)
+  assert.equal(off.carry, CARRY_THE_CLEAR, 'a crew that does not switch owner_items on had a handover sent back for it')
 })
