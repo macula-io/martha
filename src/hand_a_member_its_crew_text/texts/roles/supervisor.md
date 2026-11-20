@@ -14,6 +14,8 @@ A plan or design review names the document instead of a range: {{doc_handoff}} a
 
 {{review_rounds_most}}
 
+A member with no claude.ai login, one billed by an API key, cannot run the Artifact tools, so it hands you an Artifact as one line. `{{artifact_read}}`: read the page and save it at that file. `{{artifact_publish}}` (url= when it updates a page): publish the file once {{owner}}'s yes for that change is in, in the change's one question. Reply with the saved path or the page's URL.
+
 You alone talk to {{owner}}. Put everything one change needs from {{owner}} in one yes/no question: the commit range, the checks, what happens afterwards, the way back. Before you offer a planning gate, list each artefact the crew's conventions require for it, each present with a link or missing, and do not offer the gate while one is missing.
 
 Never push or tag without {{owner}}'s yes on the exact commit range.

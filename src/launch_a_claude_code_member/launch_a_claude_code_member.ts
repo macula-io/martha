@@ -179,6 +179,7 @@ import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
 import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDroppedPluginsLines } from './the_environment_a_member_is_given.ts'
+import { theArtifactRefusal } from './the_artifacts_a_key_cannot_open.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -384,6 +385,8 @@ export interface ReadyLaunch {
   readonly hookSettings: HookSettingsWatch
   /** The crew text every session this launch starts is handed (martha#306), or empty when the crew declares none. */
   readonly crew_text: string
+  /** The credential the member is billed by (martha#916), which says which of the host's tools it can run (martha#957 gap 13). */
+  readonly billing: Billing
 }
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
@@ -489,7 +492,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch, billing: Billing): ReadyLau
       }
     }
   }
-  return { prepared, removeSnapshot, keepTranscripts, hostEnv, settingsEnv: fromSettings.env, hookSettings, crew_text }
+  return { prepared, removeSnapshot, keepTranscripts, hostEnv, settingsEnv: fromSettings.env, hookSettings, crew_text, billing }
 }
 
 /**
@@ -659,6 +662,8 @@ async function servedRelay(
     ...crewOf(launch, sessions, ready, watched.watch),
     // The crew text this launch hands every session it starts (martha#306), composed once from the approved bytes.
     crew_text: ready.crew_text,
+    // An Artifact call by a member billed by the key is refused naming the line to the Supervisor (martha#957 gap 13).
+    refusesACallItsBillingCannotRun: (tool) => theArtifactRefusal(ready.billing, tool),
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
     ...staleReadsOf(launch),
