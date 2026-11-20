@@ -3,9 +3,9 @@
 // one credential its billing picks, never both (martha#916). Everything a test makes is removed after it.
 
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import process from 'node:process'
 import { test, type TestContext } from 'node:test'
 
@@ -121,7 +121,9 @@ test("martha#916: with no billing declared, the host is asked whether the owner 
   assert.equal(key, 'unset', 'the key reached the sign-in question')
   assert.equal(store, '', 'the sign-in store was not handed to the sign-in question')
   assert.ok(folder !== undefined && folder !== '' && !existsSync(folder), "the question's own config folder is left behind")
-  assert.equal(ran_in, folder, 'the sign-in question ran in the checkout, not in its own folder')
+  // The shell reports the folder it runs in by its real path, and the question's folder is gone by now: compare it with
+  // the real path of the folder it was made in, which a temporary folder reached through a link does not equal.
+  assert.equal(ran_in, join(realpathSync(dirname(folder)), basename(folder)), 'the sign-in question ran in the checkout, not in its own folder')
   assert.equal(asked.billed.told, undefined, "the usual start is told")
 })
 
