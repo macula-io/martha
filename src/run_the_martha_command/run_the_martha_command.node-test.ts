@@ -19,7 +19,7 @@ import { KITTEN, KITTY, NO_DESKTOP_SESSION } from '../open_the_crew_in_kitty/the
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { CLAUDE_SWITCH, CLEAR_THE_TERMINAL, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, UP, USAGE } from './run_the_martha_command.ts'
-import { CLAUDE_CODE_TEAM, declareTheTeam, BUILDER_ROLE } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
+import { A_WORKSPACES_CLONES, CLAUDE_CODE_TEAM, declareTheTeam, BUILDER_ROLE } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
 import { SESSION_FILE, KITTY_PLACE } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
 import { THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
@@ -216,7 +216,7 @@ test('bare martha start on a terminal, with a crew declared and no desktop sessi
 /** A workspace as the owner keeps one: no git checkout, a clones folder, and the owner's name in their git config. */
 function aWorkspace(t: TestContext): Place {
   const place = placeFor(t, { checkout: false })
-  mkdirSync(join(place.root, 'github.com'))
+  mkdirSync(join(place.root, A_WORKSPACES_CLONES))
   writeFileSync(join(place.home, '.gitconfig'), '[user]\n\tname = Ada Owner\n')
   return place
 }

@@ -14,7 +14,7 @@
 // It never writes over a declaration it did not read: the first write is O_EXCL, and each added member is written only
 // while the file still holds the bytes it was changed from (../declare_a_solo_crew/write_a_changed_declaration.ts).
 
-import fs from 'node:fs'
+import fs, { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -44,12 +44,18 @@ import { declarationDirectory, NO_OWNER, writeOnce } from '../declare_a_solo_cre
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { nodeIdsFor, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
+
+/** The team `up --claude` declares, as data (./the_claude_code_team.json). */
+const THE_CLAUDE_CODE_TEAM: { readonly mode: string; readonly model: string; readonly workers: number } = JSON.parse(
+  readFileSync(new URL('./the_claude_code_team.json', import.meta.url), 'utf8'),
+)
 
 /** The mode a team is declared in: a name for people to read. */
-export const TEAM_MODE = 'team'
+export const TEAM_MODE = THE_CLAUDE_CODE_TEAM.mode
 
 /** The team's roles: the one that hands out work and speaks to the owner, the ones that build, the ones that review. */
-export const TEAM_ROLES = ['supervisor', 'builder', 'reviewer'] as const
+export const TEAM_ROLES = [SUPERVISOR, 'builder', 'reviewer'] as const
 export const [SUPERVISOR_ROLE, BUILDER_ROLE, REVIEWER_ROLE] = TEAM_ROLES
 
 /**
@@ -71,10 +77,10 @@ export interface TeamMember {
 }
 
 /** The model the Claude Code members run (martha#511): Opus, by the alias Claude Code's own vocabulary spells. */
-export const CLAUDE_CODE_TEAM_MODEL = 'opus'
+export const CLAUDE_CODE_TEAM_MODEL = THE_CLAUDE_CODE_TEAM.model
 
 /** How many Claude Code workers `martha up --claude` adds beside its Supervisor. */
-export const CLAUDE_CODE_WORKERS = 3
+export const CLAUDE_CODE_WORKERS = THE_CLAUDE_CODE_TEAM.workers
 
 /** The prefix a Claude Code worker's name takes before its number. */
 export const CLAUDE_CODE_WORKER_PREFIX = `${CLAUDE_CODE_TEAM_MODEL}-`

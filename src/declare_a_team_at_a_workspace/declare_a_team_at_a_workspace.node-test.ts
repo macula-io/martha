@@ -59,7 +59,7 @@ test('#511: up --claude declares a team at a folder that is no checkout: a Super
   const settings = await declareCrewOnHosts(documents, root, THE_VOCABULARIES_OF_HOST)
   assert.equal(settings.owner, 'Ada Owner')
   assert.equal(settings.mode.name, TEAM_MODE)
-  assert.deepEqual(settings.members.map((member) => member.name), ['supervisor', 'opus-1', 'opus-2', 'opus-3'])
+  assert.deepEqual(settings.members.map((member) => member.name), [SUPERVISOR_ROLE, 'opus-1', 'opus-2', 'opus-3'])
   assert.equal(settings.members.filter((member) => member.role === SUPERVISOR_ROLE).length, 1)
   assert.equal(settings.members.filter((member) => member.role === BUILDER_ROLE).length, CLAUDE_CODE_WORKERS)
   for (const member of settings.members) {
