@@ -1776,6 +1776,24 @@ test('a member whose relay reports its session start in time is not stopped by t
   assert.equal(isAlive(started.pid), true, 'the member still runs')
 })
 
+test('#919: the launch tells its start each time the relay reports the session started, and the host is started with no prompt of the owner\'s', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  let heard = 0
+  const started = await aMemberStartedIn(t, place, { ...memberLaunch(place, fake.command), hearSessionStart: () => void (heard += 1) })
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to start', () => existsSync(fake.envFile) && readFileSync(fake.envFile, 'utf8') !== '', t)
+  assert.equal(heard, 0, 'the start was told of a session the relay never reported')
+  const socketPath = readFileSync(fake.envFile, 'utf8')
+  for (const source of ['startup', 'clear']) {
+    await fetchOverSocket(`${RELAY_ORIGIN}${RELAY_PATHS.session_started}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(start(source)), socketPath })
+  }
+  assert.equal(heard, 2, 'each reported start is told, so the start that types a first prompt decides to type it once')
+  assert.equal(readFileSync(fake.argsFile, 'utf8').split('\n').some((word) => word.includes('first prompt')), false)
+  started.stop('the test is over')
+  await started.stopped
+})
+
 test('an approved config that installs a mesh server version nobody recorded starts nothing, naming both versions', async (t) => {
   const unrecorded = '999.0.0'
   const place = placeFor(t, meshServerAt(unrecorded))

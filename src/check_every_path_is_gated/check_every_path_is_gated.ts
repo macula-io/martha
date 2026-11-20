@@ -414,7 +414,7 @@ export function gapsInConfigPathCoverage(gate: PathGate, standIn: (probe: Config
 export const ARGUMENT_PROBES: readonly ArgumentProbe[] = [
   { passes: true, what: 'no arguments at all', args: [] },
   { passes: true, what: 'a model to run', args: [THE_MODELS_SWITCH, 'a-model'] },
-  { passes: true, what: 'a first prompt on the command line (martha#511)', args: ['a prompt'] },
+  { passes: false, what: 'a first prompt as a bare word, a turn no host stamps as the owner\'s (martha#919; --prompt types it in)', args: ['a prompt'] },
   { passes: false, what: 'a settings file or JSON', args: ['--settings', '{}'] },
   { passes: false, what: 'which settings sources load', args: ['--setting-sources', 'user,project'] },
   { passes: false, what: 'a tool-server config', args: [MCP_CONFIG_SWITCH, 'servers.json'] },

@@ -36,9 +36,12 @@ test("T9b: the host's bare-mode switch, as its recorded bare-mode test spells it
   assert.equal(passesOnlySwitchesThatLoadNoConfig(['--verbose', bare]), false)
 })
 
-test('#511: a first prompt passes, alone or after a switch that passes', () => {
-  assert.equal(unpassedOwnerArgument(['read the brief and start']), undefined)
-  assert.equal(unpassedOwnerArgument(['--verbose', 'read the brief and start']), undefined)
+test('#919: a word that is no switch is refused by name, alone or after a switch that passes, and the refusal names --prompt', () => {
+  for (const args of [['read the brief and start'], ['--verbose', 'read the brief and start'], ['/hello']]) {
+    const why = unpassedOwnerArgument(args) ?? ''
+    assert.ok(why.startsWith(`${args.at(-1)!} is no switch`), why)
+    assert.ok(why.includes('A first prompt is given before --, as --prompt <text>.'), why)
+  }
 })
 
 test('#511: --resume passes, with the session it names and without one', () => {
@@ -49,6 +52,6 @@ test('#511: --resume passes, with the session it names and without one', () => {
 
 test('#511: the permission bypass is still refused by name, before a prompt or after --resume', () => {
   const bypass = '--dangerously-skip-permissions'
-  assert.ok((unpassedOwnerArgument(['a prompt', bypass]) ?? '').startsWith(`${bypass} `))
+  assert.ok((unpassedOwnerArgument([bypass, 'a prompt']) ?? '').startsWith(`${bypass} `))
   assert.ok((unpassedOwnerArgument([THE_RESUME_SWITCH, bypass]) ?? '').startsWith(`${bypass} `))
 })

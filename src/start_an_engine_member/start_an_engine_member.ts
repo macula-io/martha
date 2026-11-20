@@ -20,7 +20,7 @@ import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST }
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS, THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
-import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import { crewTextToHand, noCrewTextFor } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import { theOwnersAsks, type TheOwnersAsks } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
 import type { TurnSource } from '../host_contract/host_contract.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
@@ -141,7 +141,7 @@ function theCrewTextOfALaunchHeldToItsModel(start: AStartOnItsHost, launch: AGoo
   const another = whyTheConfigRunsAnotherModel(readFileSync(launch.config_at, 'utf8'), launch.config_at, model)
   if (another !== undefined) return { refusal: another }
   const crew = crewTextToHand(start.settings, start.member, launch.carried_files, thisMachine.stores.files)
-  return 'refusal' in crew ? { refusal: `${crew.refusal}, so ${start.member} is handed no crew text` } : crew
+  return 'refusal' in crew ? { refusal: noCrewTextFor(start.member, crew.refusal) } : crew
 }
 
 /** The engine's entry in the start table: one engine member started, or why not. */

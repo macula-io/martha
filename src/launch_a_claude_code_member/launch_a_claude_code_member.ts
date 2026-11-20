@@ -125,7 +125,7 @@ import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_serv
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { TRANSCRIPTS_WHEN_UNNAMED, type CrewTranscripts } from '../declare_crew/the_crews_transcripts.ts'
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
-import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import { crewTextToHand, noCrewTextFor } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TheLeftoversALaunchKeeps } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -308,6 +308,8 @@ export interface ClaudeCodeMemberLaunch {
    * launch gives none.
    */
   readonly hearRelayPlace?: (place: MemberRelayPlace) => void
+  /** Called each time the relay reports the session's start (martha#919): where the owner's first prompt is typed in. */
+  readonly hearSessionStart?: () => void
   /**
    * The crew's own store and the layout it declared, so this launch's end keeps what a killed command left in the
    * member's trees (#693): the record the member's next start is told from, and the two refusals judge. A launch given
@@ -436,7 +438,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   const crew = crewTextToHand(launch.crew_settings, launch.member_name, prepared.carried_files, thisMachine.stores.files)
   if ('refusal' in crew) {
     removeSnapshot()
-    return `${NOT_STARTED}: ${crew.refusal}, so ${launch.member_name} is handed no crew text`
+    return `${NOT_STARTED}: ${noCrewTextFor(launch.member_name, crew.refusal)}`
   }
   const crew_text = crew.text
   const unproved = meshServerUnproved(prepared.carried_files[CLAUDE_SERVERS])
@@ -653,7 +655,10 @@ async function servedRelay(
   const relay: MemberRelay = {
     ...answering,
     answer: (event, body) => {
-      if (event === 'session_started') sessionReported()
+      if (event === 'session_started') {
+        sessionReported()
+        launch.hearSessionStart?.()
+      }
       return answering.answer(event, body)
     },
   }

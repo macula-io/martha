@@ -127,6 +127,8 @@ export interface MemberStartRequest {
    * measured through the launcher rather than inferred from the line that passes it. A real start gives none.
    */
   readonly hear_relay_place?: (place: MemberRelayPlace) => void
+  /** Called each time the member's relay reports its session started (martha#919): where a first prompt is typed in. */
+  readonly hear_session_start?: () => void
   tellOwner(line: string): void
 }
 
@@ -242,6 +244,7 @@ export async function startMember(request: MemberStartRequest): Promise<MemberSt
     command: ready.command,
     channel,
     ...(request.hear_relay_place === undefined ? {} : { hear_relay_place: request.hear_relay_place }),
+    ...(request.hear_session_start === undefined ? {} : { hear_session_start: request.hear_session_start }),
     tellOwner: (line) => request.tellOwner(line),
   })
   if (started.started) watchForAStopOf(request, started, channel)
