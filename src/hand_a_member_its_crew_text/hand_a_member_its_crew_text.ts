@@ -24,7 +24,7 @@ import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf, DeclarationRefused, declareCrew, DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 export { crewTextFilesOf }
 import type { DocumentStore, FileTree } from '../host_contract/host_contract.ts'
-import { CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
+import { ARTIFACT_LINES, CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { OFFER_OWNER_ASKS, whoTheTableGrants } from '../declare_crew/declare_crew.ts'
 import { thePortedRules, type WhatThePortedRulesRead } from './the_ported_rules.ts'
@@ -163,11 +163,14 @@ export async function crewTextFilesToApprove(documents: DocumentStore, root: str
 
 /** The placeholders a text may carry, in the words the crew's own texts use. The owner's is the word the declaration
  * names the owner by, so a text and a declaration cannot come to spell the same person two ways. */
-export const PLACEHOLDERS = [OWNER, 'handoff', 'doc_handoff', 'verdict', 'doc_verdict'] as const
+export const PLACEHOLDERS = [OWNER, 'handoff', 'doc_handoff', 'verdict', 'doc_verdict', 'artifact_read', 'artifact_publish'] as const
 export type Placeholder = (typeof PLACEHOLDERS)[number]
 
+/** The placeholders that stand for a line that hands an Artifact to the Supervisor (martha#957 gap 13), which the line reader does not read. */
+export type ArtifactPlaceholder = 'artifact_read' | 'artifact_publish'
+
 /** The placeholders that stand for a line a member sends. */
-export type LinePlaceholder = Exclude<Placeholder, typeof OWNER>
+export type LinePlaceholder = Exclude<Placeholder, typeof OWNER | ArtifactPlaceholder>
 
 /**
  * The lines the section teaches, keyed by the placeholder a text names them with, generated from the same definitions
@@ -290,7 +293,7 @@ function theLinesTaughtText(): string {
 
 /** What each placeholder stands for, from the declaration and the lines the reader accepts. */
 function placeholdersFor(texts: TheTextsAMemberReads): Readonly<Record<Placeholder, string>> {
-  return { [OWNER]: texts.owner, ...theLinesTaught() }
+  return { [OWNER]: texts.owner, ...theLinesTaught(), artifact_read: ARTIFACT_LINES.read, artifact_publish: ARTIFACT_LINES.publish }
 }
 
 /**

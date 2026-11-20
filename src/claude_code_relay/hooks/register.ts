@@ -111,6 +111,16 @@ export interface PromptSubmitted {
 
 export type PromptAnswer = { readonly drop: string } | Readonly<Record<string, unknown>>
 
+/**
+ * A prompt with the crew's state added to the context the host hands its turn (martha#984): the host takes a list of
+ * texts there, so the state is one more entry after any a hook before this one added. The host composes the system
+ * prompt once per session, so the turn is where a state that changes can reach the member.
+ */
+function withTheCrewState(e: PromptSubmitted, line: string): PromptSubmitted {
+  const already = Array.isArray(e['context']) ? (e['context'] as unknown[]) : []
+  return { ...e, context: [...already, line] }
+}
+
 /** A tool call as the engine raises it: the tool's name and its input fields. */
 export type ToolCalled = { readonly tool: string; readonly [field: string]: unknown }
 
@@ -242,7 +252,8 @@ export const register = (on: RelayOn): void => {
     const session_id = await $.session.id()
     const marks = { ...(e.command === undefined ? {} : { command: e.command }), ...(e.isMeta === undefined ? {} : { isMeta: e.isMeta }) }
     const heard = await relay($, 'prompt_submitted', { session_id, text: e.text, origin: e.origin, ...marks }, heardTaken)
-    return heard.yes ? next(e) : { drop: refusal(heard.why) }
+    if (!heard.yes) return { drop: refusal(heard.why) }
+    return next(heard.handed === undefined ? e : withTheCrewState(e, heard.handed))
   }).catch(async (_$, e, next) => (next.called ? next(e) : { drop: refusal('its relay failed before the launcher answered') }))
 
   // An agent the host starts under this session, and its stop (martha#170). The stop is the only report of a
