@@ -52,7 +52,7 @@ page does not name.
 |---|---|---|
 | `name` | yes | The mode's name, for people to read (`solo`, `team`). |
 | `roles` | yes | The role names members may hold. |
-| `may` | yes | For each act, the roles that may do it, and `owner` for the owner. The acts are `assign_work`, `approve_landing`, `resume_parked_work`, `offer_owner_asks`, `restart_member` and `hold_reviews`. An act the table leaves out is the owner's. |
+| `may` | yes | For each act, the roles that may do it, and `owner` for the owner. The acts are `assign_work`, `approve_landing`, `resume_parked_work`, `offer_owner_asks`, `restart_member`, `hold_reviews` and `finish_a_members_worktree`. An act the table leaves out is the owner's. |
 
 ## `house_rules`
 

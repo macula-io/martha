@@ -101,6 +101,7 @@ so no message, ring or name read out of text can change who is asking.
 | `resume_parked_work` | park and wake a member |
 | `offer_owner_asks` | take and settle the owner's asks |
 | `restart_member` | restart a member |
+| `finish_a_members_worktree` | finish a worktree or a branch of a member other than the caller, which that member closes itself and which a member whose role the table names closes for it with `owner_ok=1` (martha#962) |
 
 An act the table does not name is the owner's alone. A check drives each of
 these through its real tool and fails by name when a handler stops refusing,
