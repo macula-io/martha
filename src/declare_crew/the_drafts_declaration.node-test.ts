@@ -197,6 +197,7 @@ test('#942: a key pasted into a provider\'s account is refused at that field, an
     ['a known key prefix, short', ['hf', 'a1b2c3'].join('_')],
     ['a long unbroken run, as a key with no known prefix is', ['sk', 'a1b2c3d4e5f6'.repeat(3)].join('-')],
     ['white space a pasted key brings', 'ann@example.org\n'],
+    ['a UUID-length run that is not a UUID', 'a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6x'],
   ] as const
   for (const [shape, value] of pasted) {
     await assert.rejects(declare(account(value)), (error: unknown) => {
@@ -207,7 +208,7 @@ test('#942: a key pasted into a provider\'s account is refused at that field, an
       return true
     })
   }
-  for (const value of ['ann.with.a.long.name.of.her.own@example.org', 'a-team-account', 'Ann']) {
+  for (const value of ['ann.with.a.long.name.of.her.own@example.org', 'a-team-account', 'Ann', '3f2b8c1e-9a4d-4e7f-b6c2-5d8e1a0f7c93', '3F2B8C1E-9A4D-4E7F-B6C2-5D8E1A0F7C93']) {
     assert.ok((await declare(account(value))).members.length > 0, `an account written ${value} is read`)
   }
 })
