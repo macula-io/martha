@@ -22,6 +22,16 @@ const [SUBSCRIPTION, METERED, UNKNOWN_BILLING] = BILLINGS
 /** The rate-limit windows that appear only on a subscription. */
 const SUBSCRIPTION_WINDOWS: readonly string[] = ['five_hour', 'seven_day']
 
+/** The subscription's weekly window, which the crew's budget gauge reads (martha#990). */
+const THE_WEEKLY_WINDOW = 'seven_day'
+
+/** The share of the weekly window used, and when the window resets (martha#990). */
+export interface TheWeekly {
+  readonly percent: number
+  /** When the window resets, in milliseconds since the epoch. */
+  readonly resets_at: number
+}
+
 /** The rate-limit window a gateway keeps: its own estimate, which says nothing of a plan. */
 const A_GATEWAYS_WINDOW = 'spend_limit'
 
@@ -36,10 +46,12 @@ export interface AHostsReading {
   /** 1 once the cost includes a model with no known price. */
   readonly unknown_price: 0 | 1
   readonly billing: Billing
+  /** The weekly window, or null when the host gives none, or gives one with no reset (martha#990, as crew-code reads it). */
+  readonly weekly: TheWeekly | null
 }
 
 /** What a host that says nothing at all is read as. */
-export const NOTHING_REPORTED: AHostsReading = { percent: 0, cost_usd: null, started_at: null, unknown_price: 0, billing: UNKNOWN_BILLING }
+export const NOTHING_REPORTED: AHostsReading = { percent: 0, cost_usd: null, started_at: null, unknown_price: 0, billing: UNKNOWN_BILLING, weekly: null }
 
 type Fields = Readonly<Record<string, unknown>>
 
@@ -58,6 +70,14 @@ const USAGE_FIELDS: readonly ((usage: Fields) => string | undefined)[] = [
       : 'the host\'s usage carries rate limits that are not a list of named windows'
   },
   (usage) => {
+    // The weekly window (martha#990): a share that is no number, or a reset that is no time, is refused by name.
+    const weekly = theWeeklyWindowIn(usage)
+    if (weekly === undefined) return undefined
+    if (!Number.isFinite(weekly['percentUsed'])) return `the host's ${THE_WEEKLY_WINDOW} window carries a share used that is not a number`
+    const resets = weekly['resetsAt']
+    return resets === undefined || (typeof resets === 'string' && Number.isFinite(Date.parse(resets))) ? undefined : `the host's ${THE_WEEKLY_WINDOW} window carries a reset that is not a time`
+  },
+  (usage) => {
     const usd = anObjectAt(usage, 'cost')?.['usd']
     return usd === undefined || usd === null || Number.isFinite(usd) ? undefined : 'the host\'s usage carries a cost that is neither a number nor null'
   },
@@ -66,6 +86,20 @@ const USAGE_FIELDS: readonly ((usage: Fields) => string | undefined)[] = [
     return cost === undefined || cost['hasUnknownPrice'] === undefined || cost['hasUnknownPrice'] === true ? undefined : 'the host\'s usage marks an unknown price with something other than true'
   },
 ]
+
+/** The host's weekly window, when its rate limits are a list that holds one. */
+function theWeeklyWindowIn(usage: Fields): Fields | undefined {
+  const limits = usage['rateLimits']
+  if (!Array.isArray(limits)) return undefined
+  return (limits as readonly unknown[]).find((one): one is Fields => isAnObject(one) && one['kind'] === THE_WEEKLY_WINDOW)
+}
+
+/** The weekly window as a reading, once the fields are held: null when there is none, or it names no reset. */
+function theWeeklyOf(usage: Fields): TheWeekly | null {
+  const weekly = theWeeklyWindowIn(usage)
+  if (weekly === undefined || weekly['resetsAt'] === undefined) return null
+  return { percent: weekly['percentUsed'] as number, resets_at: Date.parse(weekly['resetsAt'] as string) }
+}
 
 /**
  * How the session is billed: a subscription's windows say so, and a list holding none says "off one" only after a
@@ -99,5 +133,6 @@ export function theHostsReadingIn(usage: unknown): AHostsReading | string {
     ...theCostIn(anObjectAt(usage, 'cost')),
     started_at: usage['startedAt'] as number,
     billing: theBillingOf(usage, answered),
+    weekly: theWeeklyOf(usage),
   }
 }

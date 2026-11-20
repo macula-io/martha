@@ -290,6 +290,32 @@ lines and receipt. It takes nothing else yet: any other command is refused in
 one line, and so is plain text, because typing a turn to an engine member is not
 there yet (martha#953). Nothing you type there reaches the engine.
 
+## The crew's budget
+
+In a Claude Code member's tab, type:
+
+```text
+/crew-budget
+```
+
+It prints the crew's budget line: how much of the weekly window is used and
+when it resets, and, when the pace so far would use it up first, when it runs
+out. Every member's session reads the window at the end of each turn, and the
+crew keeps the newest reading. The same line is drawn under the members in the
+`/martha` pane.
+
+The reviewer model's window is one Claude Code does not report, so you set its
+gauge yourself when the crew declares `house_rules.review_model`:
+
+```text
+/crew-budget fable 56
+/crew-budget fable off
+```
+
+The budget is a measurement for you. Nothing in Martha parks a member or slows
+the crew by it; pacing the crew is your call. Like `/crew`, the command takes
+no turn of the member's model.
+
 ## Parking a member, and waking it
 
 A member can park itself when it has nothing to do, so it is not refreshed and
