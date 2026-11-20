@@ -2,5 +2,11 @@
   "_why": "The workers plain `martha up` declares at a workspace (martha#511, DECIDED 2026-11-20 \"3 DeepSeek Flash martha-engine workers\"): the model each runs, as DeepSeek's own GET /models lists it, the word each worker's name opens with, and how many there are. Kept as data beside the Claude Code team's, so the declaration's words are read from one place.",
   "model": "deepseek-flash",
   "name": "flash",
-  "workers": 3
+  "workers": 3,
+  "_why_endpoint": "Where the workers reach their model when the crew declares no engine_endpoint (martha#511, Supervisor's ruling (c) under Raf's \"no buts\"): the provider's URL, and the variable its own documentation names for the key. When that variable is unset, plain `martha up` asks the owner once for the file the key is in. The key itself is never written in the declaration.",
+  "endpoint": {
+    "provider": "DeepSeek",
+    "host": "https://api.deepseek.com",
+    "key_variable": "DEEPSEEK_API_KEY"
+  }
 }

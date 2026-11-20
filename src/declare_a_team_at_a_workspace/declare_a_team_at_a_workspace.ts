@@ -93,9 +93,22 @@ export const CLAUDE_CODE_TEAM: readonly TeamMember[] = [
 ]
 
 /** The workers plain `up` declares, as data (./the_engine_team.json). */
-const THE_ENGINE_TEAM: { readonly model: string; readonly name: string; readonly workers: number } = JSON.parse(
+const THE_ENGINE_TEAM: { readonly model: string; readonly name: string; readonly workers: number; readonly endpoint: TheEngineTeamsEndpoint } = JSON.parse(
   readFileSync(new URL('./the_engine_team.json', import.meta.url), 'utf8'),
 )
+
+/** Where the engine's workers reach their model when the crew declares no endpoint: the provider, its URL and its key's variable. */
+export interface TheEngineTeamsEndpoint {
+  readonly provider: string
+  readonly host: string
+  readonly key_variable: string
+}
+
+/** The endpoint plain `martha up` declares when the crew has none (martha#511 part B, ruling (c)). */
+export const ENGINE_TEAM_ENDPOINT: TheEngineTeamsEndpoint = THE_ENGINE_TEAM.endpoint
+
+/** What plain `martha up` asks the owner, once, when the key's variable is unset: the file the key is in. */
+export const THE_KEY_FILE_QUESTION = `Where is your ${ENGINE_TEAM_ENDPOINT.provider} key file? `
 
 /** The model the engine's workers run (martha#511): DeepSeek Flash, as the provider's own model list names it. */
 export const ENGINE_TEAM_MODEL = THE_ENGINE_TEAM.model

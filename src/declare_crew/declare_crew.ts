@@ -605,7 +605,11 @@ function theKeysPlaceOf(refuse: Refuse, value: Readonly<Record<string, unknown>>
 
 /** Whether a value is absent or a key file's path: absolute, or under the owner's home, with no `..` part. */
 function isAbsentOrAKeyFilesPath(value: unknown): value is string | undefined {
-  if (value === undefined) return true
+  return value === undefined || isAKeyFilesPath(value)
+}
+
+/** Whether a value is a key file's path: absolute, or under the owner's home, with no `..` part. */
+export function isAKeyFilesPath(value: unknown): value is string {
   if (!isText(value) || !(value.startsWith('/') || value.startsWith(THE_HOMES_PREFIX))) return false
   return !value.split('/').includes('..')
 }

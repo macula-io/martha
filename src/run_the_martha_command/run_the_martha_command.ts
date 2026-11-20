@@ -28,8 +28,10 @@ import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../appro
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
-import { declareCrew, ENGINE_ENDPOINT, OWNER_BELL, sameMemberName, THE_ENGINES_HOST, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
+import { declareCrew, OWNER_BELL, sameMemberName, THE_ENGINES_HOST, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
 import { CLAUDE_CODE_TEAM, declareTheTeam, ENGINE_TEAM, type TeamMember } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
+import { declareTheEnginesEndpoint } from '../declare_a_team_at_a_workspace/declare_the_engines_endpoint.ts'
+import { theKeyInAFile } from '../start_an_engine_member/start_an_engine_member.ts'
 import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
@@ -327,13 +329,8 @@ async function openTheCrew(io: CommandIo, places: Places, which: (settings: Crew
 export const UP = 'up'
 export const CLAUDE_SWITCH = '--claude'
 
-/**
- * Why plain `martha up` opens no engine member: the crew names no endpoint for the engine to reach its model at. The
- * owner writes it once in the declaration, with the key's file, never the key (martha#511 part B).
- */
-export const theEngineEndpointMissing = (declaration: string): string =>
-  `the crew declares no ${ENGINE_ENDPOINT}, so its engine members have no model to reach. Add it to ${declaration} once, ` +
-  `naming the provider and the file your key is in, never the key: "${ENGINE_ENDPOINT}": {"host": "<the provider's URL>", "key_file": "~/<the file holding your key>"}`
+/** The refusal of a key file's check, or undefined when it held a key: the key itself is dropped here. */
+const whyNotAKey = (read: { readonly key: string } | { readonly refusal: string }): string | undefined => ('refusal' in read ? read.refusal : undefined)
 
 /**
  * `martha up --claude` and plain `martha up` (martha#511): the team declared at this folder, or this host's missing
@@ -347,7 +344,11 @@ async function up(io: CommandIo, places: Places, claude: boolean): Promise<numbe
   if (!declared.declared) return refused(io, declared.refusal)
   if (declared.wrote) io.out(`Declared a team in ${declared.declaration}: ${declared.added.join(', ')}.`)
   else if (declared.added.length > 0) io.out(`Added to the team in ${declared.declaration}: ${declared.added.join(', ')}.`)
-  if (!claude && declared.settings.engine_endpoint === null) return refused(io, theEngineEndpointMissing(declared.declaration))
+  if (!claude && declared.settings.engine_endpoint === null) {
+    const endpoint = await declareTheEnginesEndpoint({ root: places.root, documents, env: io.env, ask: io.terminal.ask, whyNotTheOwnersKeyFile: (key_file) => whyNotAKey(theKeyInAFile(key_file, places.home)) })
+    if ('refusal' in endpoint) return refused(io, endpoint.refusal)
+    io.out(endpoint.told)
+  }
   return openTheCrew(io, places, (settings, member) => theHostOfMember(settings, member) === host)
 }
 

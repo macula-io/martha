@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -18,8 +18,9 @@ import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/sta
 import { KITTEN, KITTY, NO_DESKTOP_SESSION } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLAUDE_SWITCH, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, theEngineEndpointMissing, UP, USAGE } from './run_the_martha_command.ts'
-import { A_WORKSPACES_CLONES, CLAUDE_CODE_TEAM, declareTheTeam, BUILDER_ROLE, ENGINE_TEAM } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
+import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLAUDE_SWITCH, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, UP, USAGE } from './run_the_martha_command.ts'
+import { NOT_A_KEY_FILES_PATH } from '../declare_a_team_at_a_workspace/declare_the_engines_endpoint.ts'
+import { A_WORKSPACES_CLONES, CLAUDE_CODE_TEAM, declareTheTeam, BUILDER_ROLE, ENGINE_TEAM, ENGINE_TEAM_ENDPOINT, THE_KEY_FILE_QUESTION } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
 import { SESSION_FILE, KITTY_PLACE } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
 import { ENGINE_ENDPOINT, HOST, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
@@ -313,15 +314,71 @@ function withAnEngineEndpoint(place: Place): void {
 /** The tabs a kitty session file opens, by the member each one starts. */
 const theTabsIn = (session: string): string[] => session.split('\n').filter((line) => line.startsWith('new_tab ')).map((line) => line.slice('new_tab '.length))
 
-test('#511 part B: plain martha up adds the engine\'s workers, and with no engine endpoint refuses, saying what to add and that the key stays out', (t) => {
+/** The engine endpoint the declaration at `place` holds now, or undefined when it holds none. */
+const theEndpointDeclared = (place: Place): unknown =>
+  (JSON.parse(readFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as Record<string, unknown>)[ENGINE_ENDPOINT]
+
+/** A key file under the place's home, with `mode`; its path as the owner types it, under `~/`. */
+function aKeyFile(place: Place, mode: number): string {
+  const typed = '~/keys-a-test-made/the-key'
+  const at = join(place.home, 'keys-a-test-made', 'the-key')
+  mkdirSync(join(place.home, 'keys-a-test-made'), { mode: 0o700 })
+  writeFileSync(at, 'a-key-a-test-made\n', { mode })
+  chmodSync(at, mode)
+  return typed
+}
+
+const ON_A_DESKTOP = { WAYLAND_DISPLAY: 'wayland-511' }
+
+test('#511 part B: plain martha up adds the engine\'s workers, and with no key variable asks once for the key file; an answer that is no path is refused unechoed, and nothing is written', (t) => {
   const place = aWorkspace(t)
   const kitty = kittyThatAnswers(place)
-  const run = marthaOnATerminal(place, { ...kitty.env, WAYLAND_DISPLAY: 'wayland-511' }, UP)
+  const pasted = 'sk-a-key-the-owner-pasted-by-mistake'
+  const run = marthaOnATerminalTyping(`${pasted}\n`, place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
   const declaration = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
   assert.equal(run.status, EXIT_REFUSED, run.said)
   assert.ok(run.said.includes(`Declared a team in ${declaration}: ${ENGINE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
-  assert.ok(run.said.includes(theEngineEndpointMissing(declaration)), run.said)
+  assert.ok(run.said.includes(THE_KEY_FILE_QUESTION.trim()), run.said)
+  // The terminal shows what the owner types; no line of Martha's own says it back.
+  assert.equal(run.said.split('\n').filter((line) => line.startsWith(SAID_BY) && line.includes(pasted)).length, 0, `the answer was said back: ${run.said}`)
+  assert.ok(run.said.includes(NOT_A_KEY_FILES_PATH), run.said)
+  assert.equal(theEndpointDeclared(place), undefined)
   assert.equal(existsSync(kitty.started), false, 'kitty was started for members with no model to reach')
+})
+
+test('#511 part B: plain martha up writes the key file the owner names, when only the owner may read it, says so, and never asks again', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const env = { ...kitty.env, ...ON_A_DESKTOP }
+  const typed = aKeyFile(place, 0o600)
+  const run = marthaOnATerminalTyping(`${typed}\n`, place, env, UP)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.deepEqual(theEndpointDeclared(place), { host: ENGINE_TEAM_ENDPOINT.host, key_file: typed })
+  assert.ok(run.said.includes(`${ENGINE_ENDPOINT} written`), run.said)
+  assert.equal(run.said.includes('a-key-a-test-made'), false, run.said)
+  assert.ok(existsSync(kitty.started), 'kitty was not started')
+  const again = marthaOnATerminal(place, env, UP)
+  assert.equal(again.status, EXIT_DONE, again.said)
+  assert.equal(again.said.includes(THE_KEY_FILE_QUESTION.trim()), false, again.said)
+})
+
+test('#511 part B: a key file the group or others may read is refused by plain martha up, and nothing is written', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const run = marthaOnATerminalTyping(`${aKeyFile(place, 0o644)}\n`, place, { ...kitty.env, ...ON_A_DESKTOP }, UP)
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.equal(theEndpointDeclared(place), undefined)
+  assert.equal(existsSync(kitty.started), false, 'kitty was started for members with no model to reach')
+})
+
+test('#511 part B: with the provider\'s key variable set, plain martha up writes key_from and asks nothing', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const run = marthaOnATerminal(place, { ...kitty.env, ...ON_A_DESKTOP, [ENGINE_TEAM_ENDPOINT.key_variable]: 'a-key-a-test-names' }, UP)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.deepEqual(theEndpointDeclared(place), { host: ENGINE_TEAM_ENDPOINT.host, key_from: ENGINE_TEAM_ENDPOINT.key_variable })
+  assert.equal(run.said.includes(THE_KEY_FILE_QUESTION.trim()), false, run.said)
+  assert.equal(run.said.includes('a-key-a-test-names'), false, run.said)
 })
 
 test('#511 part B: martha up --claude then martha up is one crew of seven, and plain up opens a tab for each engine worker and none for Claude Code\'s', (t) => {
