@@ -33,7 +33,7 @@
 //      tree lacks is not found above it or under HOME (martha#73). The file is the one the version's
 //      record gives its server bin (`server_bin`, martha#49); an entry naming any
 //      other bin is refused, whatever the launch gate let through.
-//   4. BUILD its environment: a host starts a server with its own environment
+//   4. BUILD its environment (and, for a team member, pin its key last: martha#1016): a host starts a server with its own environment
 //      under the entry's `env`, so whatever the launcher hands the host would
 //      reach the server: a NODE_OPTIONS preload, a library for libc to preload,
 //      a <NAME>_PREBUILD directory a dependency loads a native addon from. So the
@@ -226,12 +226,28 @@ function pinOf(entry: Entry): { readonly pkg: string; readonly version: string; 
   return { pkg: spec.slice(0, at), version: spec.slice(at + 1), bin }
 }
 
-/** The server's environment: every host variable emptied but SERVER_NEEDS, then the entry's own approved settings. */
-function builtEnvironment(host: Readonly<Record<string, string | undefined>>, own: unknown): Record<string, string> {
+/** The mesh server's setting that names the key it signs with (martha#1016). */
+export const IDENTITY_SETTING = 'MACULA_MCP_IDENTITY'
+/** The mesh server's setting that names an agent key of its own under HOME: set empty beside a pinned identity, as crew-code unsets it. */
+export const AGENT_SETTING = 'MACULA_MCP_AGENT'
+
+/**
+ * The settings a team member's key pins into its mesh server (martha#1016): the key's path, and no agent key name, so
+ * neither an entry's own settings nor the owner's shell can put another identity in its place (T5 of the design).
+ */
+export function thePinnedIdentity(identity: string): Readonly<Record<string, string>> {
+  return { [IDENTITY_SETTING]: identity, [AGENT_SETTING]: '' }
+}
+
+/**
+ * The server's environment: every host variable emptied but SERVER_NEEDS, then the entry's own approved settings, then
+ * a team member's pinned key last, so nothing before it names another (martha#1016).
+ */
+function builtEnvironment(host: Readonly<Record<string, string | undefined>>, own: unknown, identity: string | undefined): Record<string, string> {
   const emptied = Object.fromEntries(Object.keys(host).map((name) => [name, '']))
   const kept = Object.fromEntries(SERVER_NEEDS.flatMap((name) => (host[name] === undefined ? [] : [[name, host[name]]])))
   const settings = typeof own === 'object' && own !== null ? (own as Record<string, string>) : {}
-  return { ...emptied, ...kept, ...settings }
+  return { ...emptied, ...kept, ...settings, ...(identity === undefined ? {} : thePinnedIdentity(identity)) }
 }
 
 /**
@@ -242,7 +258,7 @@ function builtEnvironment(host: Readonly<Record<string, string | undefined>>, ow
  * second copy of this rule (martha#251). Only entries that pin an exact release of the mesh server are here: every
  * other server's environment is not this module's business.
  */
-export function meshServerEnvironments(placement: Pick<MeshServerPlacement, 'serverConfig' | 'hostEnvironment'>): Readonly<Record<string, Readonly<Record<string, string>>>> {
+export function meshServerEnvironments(placement: Pick<MeshServerPlacement, 'serverConfig' | 'hostEnvironment' | 'identity'>): Readonly<Record<string, Readonly<Record<string, string>>>> {
   let config: { mcpServers?: Record<string, Entry> }
   try {
     config = JSON.parse(placement.serverConfig) as typeof config
@@ -252,7 +268,7 @@ export function meshServerEnvironments(placement: Pick<MeshServerPlacement, 'ser
   const built: Record<string, Readonly<Record<string, string>>> = {}
   for (const [name, entry] of Object.entries(config.mcpServers ?? {})) {
     if (!isExactMeshServerPin(pinOf(entry))) continue
-    built[name] = builtEnvironment(placement.hostEnvironment, entry.env)
+    built[name] = builtEnvironment(placement.hostEnvironment, entry.env, placement.identity)
   }
   return built
 }
@@ -264,6 +280,8 @@ export interface MeshServerPlacement {
   readonly root: string
   /** Every variable the launcher hands the host, which the host would pass on to the server. */
   readonly hostEnvironment: Readonly<Record<string, string | undefined>>
+  /** A team member's mesh key, pinned into each mesh server entry it starts (martha#1016); absent for a solo crew's member. */
+  readonly identity?: string
   readonly recording?: MeshTreeRecording
   /** The recorded versions, each naming its server bin; the reviewed records unless a test gives its own. */
   readonly servers?: readonly RecordedMeshServer[]
@@ -329,7 +347,7 @@ function placedEntry(
   const packageDir = join(proved.dir, DEPENDENCIES, MESH_SERVER_PACKAGE)
   const file = join(packageDir, binFile)
   if (relative(packageDir, file).startsWith('..')) return { refusal: `its server ${name}: the bin of ${MESH_SERVER_PACKAGE} points outside the package` }
-  return { entry: { ...entry, command: process.execPath, args: confinedStart(proved.dir, file), env: builtEnvironment(placement.hostEnvironment, entry.env) } }
+  return { entry: { ...entry, command: process.execPath, args: confinedStart(proved.dir, file), env: builtEnvironment(placement.hostEnvironment, entry.env, placement.identity) } }
 }
 
 /** Why a proved tree may not run (martha#72): its reads are not the recorded ones, or one is not reviewed; or undefined. */
@@ -349,6 +367,42 @@ function serverBinFileOf(name: string, pin: Pin, record: RecordedMeshServer): st
   const binFile = record.bins[record.server_bin]
   if (binFile === undefined) return { refusal: `the record of ${MESH_SERVER_PACKAGE} ${pin.version} names the server bin ${record.server_bin}, which is none of its bins.` }
   return binFile
+}
+
+/** The mesh server's own bin that prints the node id a key gives, and never touches the mesh (martha#1016). */
+export const NODE_ID_BIN = 'macula-mcp-node-id'
+
+/** Where to start one recorded bin of the mesh server, and from which tree. */
+export interface ARecordedBinStart {
+  readonly bin: string
+  /** Where the recorded trees are installed: a directory only the launcher writes, as for a placement. */
+  readonly root: string
+  readonly recording?: MeshTreeRecording
+  readonly servers?: readonly RecordedMeshServer[]
+}
+
+/**
+ * How to start one bin of the newest recorded mesh server confined to its proved tree, as a placed server starts
+ * (martha#1016: the roster's node ids, from NODE_ID_BIN): this node, the confining hook, the bin's file. Refused when no
+ * version is recorded, the bin is not one of its bins, the tree is not the recorded one, or its reads are not reviewed.
+ */
+export function startOfARecordedBin(asked: ARecordedBinStart): { readonly command: string; readonly args: readonly string[] } | { readonly refusal: string } {
+  const recording = asked.recording ?? MESH_TREE_RECORDING
+  const records = asked.servers ?? RECORDED_MESH_SERVERS
+  const record = records.at(-1)
+  if (record === undefined) return { refusal: `no version of ${MESH_SERVER_PACKAGE} is recorded, so ${asked.bin} cannot be started from a proved tree` }
+  const tree = recording.versions.find((recorded) => recorded.server_version === record.server_version)
+  if (tree === undefined) return { refusal: `${MESH_SERVER_PACKAGE} ${record.server_version}'s tree is not recorded, so ${asked.bin} cannot be started from a proved tree` }
+  const binFile = record.bins[asked.bin]
+  if (binFile === undefined) return { refusal: `${asked.bin} is none of the bins recorded for ${MESH_SERVER_PACKAGE} ${record.server_version}` }
+  const proved = provedTreeOf(tree, asked.root, recording.registry)
+  if ('refusal' in proved) return { refusal: `${asked.bin}: ${proved.refusal}` }
+  const unreviewed = refusalOfTreeReads(asked.bin, { pkg: MESH_SERVER_PACKAGE, version: record.server_version, bin: asked.bin }, proved.dir, tree, recording)
+  if (unreviewed !== undefined) return unreviewed
+  const packageDir = join(proved.dir, DEPENDENCIES, MESH_SERVER_PACKAGE)
+  const file = join(packageDir, binFile)
+  if (relative(packageDir, file).startsWith('..')) return { refusal: `${asked.bin} of ${MESH_SERVER_PACKAGE} points outside the package` }
+  return { command: process.execPath, args: confinedStart(proved.dir, file) }
 }
 
 // --- recording a version's tree --------------------------------------------------

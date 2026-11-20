@@ -41,6 +41,27 @@ export const MESH_KEYS = ['realm', 'keys'] as const
 export const MESH_SERVICES = ['mail', 'memory', 'graph', 'kanban'] as const
 export const MESH_SERVICE_KEYS = ['service', 'on'] as const
 
+/**
+ * Where the crew's member keys are declared to sit (martha#1016): the mesh block's `keys` folder as written, and each
+ * member's own `mesh_key` as written, by the member's name key (./member_names.ts). Neither is resolved here: the slice
+ * that reads a key (../read_a_members_mesh_key) resolves both against the owner's home and the project root.
+ */
+export interface TheCrewsMeshKeys {
+  readonly folder: string | null
+  readonly named: Readonly<Record<string, string>>
+}
+
+/** The keys a declaration that names no mesh key declares: none. */
+export const NO_MESH_KEYS: TheCrewsMeshKeys = { folder: null, named: {} }
+
+/** The mesh block's `keys` folder as written, from a declaration theWorkspacesClonesOf has already checked; null when it names none. */
+export function theMeshKeysFolderOf(declaration: Block): string | null {
+  const mesh = declaration[MESH]
+  if (!isBlock(mesh)) return null
+  const keys = mesh['keys']
+  return isText(keys) ? keys.trim() : null
+}
+
 /** A realm, as the mesh names one: 64 hex characters. */
 export const A_REALM = /^[0-9a-f]{64}$/
 

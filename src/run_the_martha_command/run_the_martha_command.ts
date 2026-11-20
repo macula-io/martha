@@ -28,17 +28,19 @@ import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../appro
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, OWNER_BELL, sameMemberName, THE_ENGINES_HOST, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, isATeamMode, OWNER_BELL, sameMemberName, THE_ENGINES_HOST, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
 import { noCrewDeclaredAt, upStarts } from '../bring_up_the_declared_crew/bring_up_the_declared_crew.ts'
 import { declareTheEnginesEndpoint } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import { theKeyInAFile } from '../start_an_engine_member/start_an_engine_member.ts'
 import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
-import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
+import { placeOfAWrittenKey, seeAKeyFileOnDisk, THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
+import { theCrewsRoster, ROSTER_FILE, rosterText, type TheRosterAsked } from '../write_the_crews_roster/write_the_crews_roster.ts'
+import { NODE_ID_BIN, startOfARecordedBin } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { appendStateLine, crewRowsDirectory, crewStateDirectory, nodeIdsFor, openState, readApprovals, readStateFile, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, keepStateFile, nodeIdsFor, openState, readApprovals, readStateFile, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
 import { OWNER_TODO_STREAM, theListForTheTerminal, theOpenRows } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
@@ -428,7 +430,57 @@ async function up(io: CommandIo, places: Places, prompt?: string): Promise<numbe
     if ('refusal' in endpoint) return refused(io, endpoint.refusal)
     io.out(endpoint.told)
   }
+  keepTheCrewsRoster({ settings: crew.settings, home: places.home, state: places.state, mesh_servers: crew.launcher.mesh_servers, tell: tellOwnerOn(io) })
   return opensInTmux(crew.settings.opens.terminal) ? openTheCrewInTmuxHere(io, places, crew, prompt) : openTheCrewInKittyHere(io, places, crew.settings, prompt)
+}
+
+/** What `martha up` writes the crew's roster from (martha#1016). */
+export interface TheRosterWrite {
+  readonly settings: CrewSettings
+  readonly home: string
+  readonly state: MarthaState
+  /** Where the recorded mesh server's trees are installed, as a launch places them. */
+  readonly mesh_servers: string
+  readonly tell: (line: string) => void
+  /** The node id a key gives; by default the recorded `macula-mcp-node-id`, started confined with that key alone. */
+  readonly nodeIdOf?: TheRosterAsked['nodeIdOf'] | { readonly refusal: string }
+  readonly see?: TheRosterAsked['see']
+}
+
+/** How long the node id bin may take for one key: it reads a file and prints a line. */
+const A_NODE_ID_TAKES_MS = 15_000
+
+/** The recorded node id bin, run on one key with nothing of the owner's environment but PATH and HOME; or why it cannot start. */
+function theRecordedNodeIdOf(home: string, mesh_servers: string): TheRosterAsked['nodeIdOf'] | { readonly refusal: string } {
+  const start = startOfARecordedBin({ bin: NODE_ID_BIN, root: mesh_servers })
+  if ('refusal' in start) return start
+  return (path) => {
+    const run = spawnSync(start.command, [...start.args], { encoding: 'utf8', timeout: A_NODE_ID_TAKES_MS, env: { PATH: process.env['PATH'] ?? '', HOME: home, MACULA_MCP_IDENTITY: path } })
+    return run.status === 0 ? { id: run.stdout } : { refusal: `${NODE_ID_BIN} gave no node id (${run.error?.message ?? run.stderr.trim().slice(0, 200)})` }
+  }
+}
+
+/**
+ * The crew's roster (martha#1016 (d)): for a team crew, each member's node id from its own key, kept whole and owner-only
+ * in Martha's state for this checkout, and every member left out told by name. A solo crew gets none. A roster that
+ * cannot be made is told and never stops `up`: the members start on their keys either way.
+ */
+export function keepTheCrewsRoster(write: TheRosterWrite): void {
+  if (!isATeamMode(write.settings.mode.name)) return
+  const nodeIdOf = write.nodeIdOf ?? theRecordedNodeIdOf(write.home, write.mesh_servers)
+  if (typeof nodeIdOf !== 'function') return write.tell(`No roster was written: ${nodeIdOf.refusal}`)
+  const roster = theCrewsRoster({
+    team: true,
+    keys: write.settings.mesh_keys,
+    members: write.settings.members.map((member) => member.name),
+    placeOf: placeOfAWrittenKey(write.home, write.settings.paths.root),
+    uid: process.getuid?.() ?? -1,
+    see: write.see ?? seeAKeyFileOnDisk,
+    nodeIdOf,
+  })
+  if ('none' in roster) return
+  for (const line of roster.left_out) write.tell(line)
+  keepStateFile(write.state, ROSTER_FILE, rosterText(roster.ids))
 }
 
 /** Why `martha up`'s first prompt cannot be typed in (martha#919), or undefined when it can or none was given. */

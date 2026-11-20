@@ -18,7 +18,7 @@
 import { randomUUID } from 'node:crypto'
 import fs, { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { delimiter, dirname, join } from 'node:path'
+import { delimiter, dirname, isAbsolute, join, normalize } from 'node:path'
 import process from 'node:process'
 
 import type { StdioOptions } from 'node:child_process'
@@ -26,7 +26,9 @@ import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_too
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { BILLED_BY_SUBSCRIPTION, OWNER_BELL, THE_ENGINES_HOST, type CrewSettings, type Member, type TheVocabulariesOfHost } from '../declare_crew/declare_crew.ts'
+import { BILLED_BY_SUBSCRIPTION, isATeamMode, OWNER_BELL, SOLO_MODE, THE_ENGINES_HOST, type CrewSettings, type Member, type TheVocabulariesOfHost } from '../declare_crew/declare_crew.ts'
+import { theMeshKeyOf, type AKeyFileSeen, type AMembersKey } from '../read_a_members_mesh_key/read_a_members_mesh_key.ts'
+import { writtenOut } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
@@ -336,10 +338,12 @@ export function theSharedOfAStart(start: AStartOnItsHost): TheSharedOfAStart {
  * swap the whole host launcher, so nothing else reads what a real start hands on: without this, any field below could
  * be replaced by a literal at the call site with every test green.
  */
-export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeMemberLaunch {
+export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost, key: AMembersKey = { none: SOLO_MODE }): ClaudeCodeMemberLaunch {
   return {
     member_name: start.member,
     node_id: start.node_id,
+    // A team member's own key, pinned into its mesh server (martha#1016); a solo crew's member has none.
+    ...('path' in key ? { mesh_identity: key.path } : {}),
     place: { host: CLAUDE_CODE, launch_dir: start.root, stop_dir: start.home, snapshot_root: start.snapshot_root, crew_text_files: crewTextFilesOf(start.settings), ...approvedPlace(start.member, start.approval, start.state) },
     policy: { may_send_executable_text: [] },
     crew_settings: start.settings,
@@ -377,6 +381,43 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeM
 
 /** The Claude Code entry: today's launch, unchanged in behaviour, behind the table. */
 async function startOnClaudeCode(start: AStartOnItsHost): Promise<MemberStarted> {
+  // A team member whose key cannot be read is not started at all (martha#1016 T1): never on an identity its server makes up.
+  const key = theMeshKeyOfAStart(start)
+  if ('refusal' in key) {
+    const refusal = `${NOT_STARTED}: ${key.refusal}`
+    start.tellOwner(refusal)
+    return { started: false, refusal }
+  }
   await finishAnySwitchBeforeTheHostStarts(start)
-  return launchClaudeCodeMember(theLaunchOfAClaudeCodeStart(start))
+  return launchClaudeCodeMember(theLaunchOfAClaudeCodeStart(start, key))
+}
+
+/** What a key's path is on this disk, as ../read_a_members_mesh_key asks it: lstat, never following a link; null when absent. */
+export function seeAKeyFileOnDisk(path: string): AKeyFileSeen | null {
+  try {
+    const seen = fs.lstatSync(path)
+    const kind = seen.isSymbolicLink() ? 'link' : seen.isFile() ? 'file' : 'other'
+    return { kind, uid: seen.uid, mode: seen.mode, real: kind === 'file' ? fs.realpathSync(path) : path }
+  } catch {
+    // Nothing there, or a folder this user cannot look into: either way there is no key to read.
+    return null
+  }
+}
+
+/** Where a key path written in the declaration sits: under the owner's home for `~/`, itself when absolute, else under the project root. */
+export const placeOfAWrittenKey = (home: string, root: string) => (written: string): string => {
+  const out = writtenOut(written, home)
+  return normalize(isAbsolute(out) ? out : join(root, out))
+}
+
+/** The key of the member a start is for, read on this disk under the owner's home and the project root (martha#1016). */
+export function theMeshKeyOfAStart(start: Pick<AStartOnItsHost, 'member' | 'settings' | 'home'>, see: (path: string) => AKeyFileSeen | null = seeAKeyFileOnDisk): AMembersKey {
+  return theMeshKeyOf(start.member, {
+    team: isATeamMode(start.settings.mode.name),
+    keys: start.settings.mesh_keys,
+    members: start.settings.members.map((member) => member.name),
+    placeOf: placeOfAWrittenKey(start.home, start.settings.paths.root),
+    uid: process.getuid?.() ?? -1,
+    see,
+  })
 }

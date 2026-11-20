@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -16,9 +16,11 @@ import { NOT_A_TERMINAL } from '../approve_a_checkouts_config/approve_a_checkout
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/start_a_member.ts'
 import { KITTEN, KITTY, NO_DESKTOP_SESSION } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
-import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
+import { SOLO_MEMBERS, SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, aFirstPromptNeedsMarthasTmux, startedLine, UP, USAGE } from './run_the_martha_command.ts'
+import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, aFirstPromptNeedsMarthasTmux, startedLine, UP, USAGE, keepTheCrewsRoster } from './run_the_martha_command.ts'
+import { ROSTER_FILE } from '../write_the_crews_roster/write_the_crews_roster.ts'
+import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { THE_FIRST_PROMPT_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { THE_COMPOSER_SETTLES_MS } from '../open_the_crew_in_tmux/open_the_crew_in_tmux.ts'
 import { NOT_A_KEY_FILES_PATH } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
@@ -1271,4 +1273,43 @@ test('#619: martha bells shows each flip the owner typed with its terminal, and 
   assert.match(listed.out, /line 1: history before /, listed.out)
   assert.match(listed.out, /line 2: typed at \/dev\/pts\/\d+ \(session \d+\)/, listed.out)
   assert.match(listed.out, /line 3: WRITTEN WITHOUT THE MARTHA COMMAND/, listed.out)
+})
+
+/** A crew of two in the given mode, with its keys folder and a key for the first member only, under a place of this test's own. */
+function aRosterWrite(t: TestContext, mode: string, nodeIdOf: NonNullable<Parameters<typeof keepTheCrewsRoster>[0]['nodeIdOf']>) {
+  const place = placeFor(t, { checkout: false })
+  const keys = join(place.home, 'keys')
+  mkdirSync(keys)
+  writeFileSync(join(keys, 'agent-venus.key'), 'a key', { mode: 0o600 })
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok('directory' in state)
+  mkdirSync(state.directory, { recursive: true })
+  const settings = { mode: { name: mode }, mesh_keys: { folder: keys, named: {} }, members: [{ name: 'Venus' }, { name: 'Terra' }], paths: { root: place.root } } as unknown as CrewSettings
+  const told: string[] = []
+  return { write: { settings, home: place.home, state, mesh_servers: join(place.home, 'mesh-servers'), tell: (line: string) => void told.push(line), nodeIdOf }, told, roster: join(state.directory, ROSTER_FILE) }
+}
+
+const A_NODE_ID = 'ef'.repeat(32)
+/** The team mode as the owner writes it in a declaration. */
+const A_TEAM = 'team'
+
+test('#1016: martha up keeps a team crew\'s roster whole and owner-only, and tells each member left out by name', (t) => {
+  const { write, told, roster } = aRosterWrite(t, A_TEAM, () => ({ id: A_NODE_ID }))
+  keepTheCrewsRoster(write)
+  assert.deepEqual(JSON.parse(readFileSync(roster, 'utf8')), { Venus: A_NODE_ID })
+  assert.equal(statSync(roster).mode & 0o777, 0o600)
+  assert.deepEqual(readdirSync(write.state.directory).filter((name) => name !== ROSTER_FILE), [], 'a staged roster was left behind')
+  assert.equal(told.length, 1)
+  assert.ok(told[0]!.startsWith("Terra is left out of the roster: Terra's mesh key: there is no key at"), String(told[0]))
+})
+
+test('#1016: martha up writes no roster for a solo crew, and a node id bin that cannot start is told and stops nothing', (t) => {
+  const solo = aRosterWrite(t, SOLO_MODE, () => assert.fail('a solo crew\'s key was read'))
+  keepTheCrewsRoster(solo.write)
+  assert.equal(existsSync(solo.roster), false)
+  assert.deepEqual(solo.told, [])
+  const refused = aRosterWrite(t, A_TEAM, { refusal: 'the bin is not recorded' })
+  assert.doesNotThrow(() => keepTheCrewsRoster(refused.write))
+  assert.equal(existsSync(refused.roster), false)
+  assert.deepEqual(refused.told, ['No roster was written: the bin is not recorded'])
 })

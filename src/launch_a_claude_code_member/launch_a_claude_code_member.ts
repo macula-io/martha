@@ -259,6 +259,8 @@ export const whatALaunchKeeps = (
 export interface ClaudeCodeMemberLaunch {
   readonly member_name: string
   readonly node_id: string
+  /** A team member's mesh key, pinned into its mesh server's entry (martha#1016); absent for a solo crew's member. */
+  readonly mesh_identity?: string
   /** Where the member starts and what the owner approved there, for `prepareLaunch`. */
   readonly place: SnapshotPlace
   readonly policy: Policy
@@ -570,7 +572,7 @@ function wordlessAnswersOf(
   const carried = ready.prepared.carried_files[CLAUDE_SERVERS]
   if (carried === undefined) return {}
   const environments = Object.values(
-    meshServerEnvironments({ serverConfig: new TextDecoder().decode(carried), hostEnvironment: { ...starting.env, ...ready.settingsEnv } }),
+    meshServerEnvironments({ serverConfig: new TextDecoder().decode(carried), hostEnvironment: { ...starting.env, ...ready.settingsEnv }, ...(launch.mesh_identity === undefined ? {} : { identity: launch.mesh_identity }) }),
   )
   return whatTheLaunchSupplied(environments, { node_id: launch.node_id, home: ready.hookSettings.home, host_version: RECORDED_HOST.host_version })
 }

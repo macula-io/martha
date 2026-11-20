@@ -44,7 +44,7 @@ export {
   isAKeyFilesPath,
   type EngineEndpoint,
 } from './the_engines_endpoint.ts'
-import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theWorkspacesClonesOf, whereTheCrewOpens, type WhereTheCrewOpens } from './the_crews_workspace.ts'
+import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theMeshKeysFolderOf, theWorkspacesClonesOf, whereTheCrewOpens, type TheCrewsMeshKeys, type WhereTheCrewOpens } from './the_crews_workspace.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -429,6 +429,8 @@ export interface CrewSettings {
   readonly clock_zone: string
   /** The crew's name and the terminal its members open in (martha#932): see ./the_crews_workspace's whereTheCrewOpens. */
   readonly opens: WhereTheCrewOpens
+  /** Where the members' mesh keys are declared to sit (martha#1016): read by ../read_a_members_mesh_key for a team crew. */
+  readonly mesh_keys: TheCrewsMeshKeys
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -450,7 +452,7 @@ const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 export const PARKED = 'parked'
 /**
  * The member key naming the file a member's mesh key is in (martha#931, DECIDED 2026-11-20 "ok we rely on the default"):
- * left out, the key is `<mesh.keys>/agent-<lowercased name>.key`. Checked as a path, read by no part of Martha today.
+ * left out, the key is `<mesh.keys>/agent-<lowercased name>.key`. Read for a team crew by ../read_a_members_mesh_key.
  */
 export const MESH_KEY = 'mesh_key'
 const OPTIONAL_MEMBER_KEYS = ['model', HOST, PARKED, PROFILE, MESH_KEY] as const
@@ -657,7 +659,17 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
     engine_endpoint: theEnginesEndpointOf(said, value, profiles, (field, why) => refuse.say(field, why)),
     opens: whereTheCrewOpens(value),
+    mesh_keys: { folder: theMeshKeysFolderOf(value), named: theNamedMeshKeysOf(members, value['members']) },
   }
+}
+
+/** Each member's own `mesh_key` as written, by its name key; a member that names none is not in it (martha#1016). */
+function theNamedMeshKeysOf(members: readonly Member[], declared: unknown): Record<string, string> {
+  if (!Array.isArray(declared)) return {}
+  return Object.fromEntries(members.flatMap((member, i) => {
+    const named: unknown = isObject(declared[i]) ? (declared[i] as Json)[MESH_KEY] : undefined
+    return isText(named) ? [[memberNameKey(member.name), named.trim()]] : []
+  }))
 }
 
 /**
@@ -766,6 +778,7 @@ function aModeByName(refuse: Refuse, name: string, members: unknown): Mode {
 /** The mode Martha keeps a team table for, and its supervisor's role: the declaration's own words, kept here alone. */
 const TEAM_MODE = 'team'
 const TEAM_SUPERVISOR_ROLE = 'supervisor'
+export const isATeamMode = (name: string): boolean => name === TEAM_MODE // a team crew's members carry their own mesh identity (martha#1016)
 
 /**
  * Martha's own team table (the Supervisor's ruling on PR 939, matching how this crew works today; Raf may overrule):

@@ -22,6 +22,11 @@
 // does not parse, is an untold sign-in, and the member is billed by the subscription. The owner is told the billing
 // and why whenever it is not the usual one, a signed-in owner's subscription.
 //
+// Nor a mesh identity (martha#1016 T5, crew-code #418): a team member's key is pinned into its own mesh server's entry
+// alone (../install_the_recorded_mesh_server), and nowhere else. A mesh server a plugin brings inherits the member's
+// environment, so an identity the owner's shell exports would start it on that key, and the station keeps one link per
+// key: two servers on one key drop each other's calls. Without one, such a server runs on an identity of its own.
+//
 // Nor the folders of plugins the launcher's own host loads (martha#511, #601 row 72): a crew-code session or the
 // owner's shell may set CLAUDE_CODE_PLUGIN_DIRS, and a member started with it would run those plugins' hooks with
 // nothing recorded (martha#121). The launch drops it and tells the owner so, instead of refusing the start.
@@ -52,6 +57,7 @@ import {
 } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
 
 import { launchEnvironment, type Host, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { AGENT_SETTING, IDENTITY_SETTING } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 
 /** The session id a stream directory under the crew's rows holds, or undefined for any other stream. */
 function theSessionIn(entry: string): string | undefined {
@@ -103,6 +109,9 @@ export interface AMembersEnvironment {
   readonly billing: Billing
 }
 
+/** The mesh identity a member's own environment never carries, as the header says (martha#1016). */
+export const NO_MESH_IDENTITY: readonly string[] = [IDENTITY_SETTING, AGENT_SETTING]
+
 /** The environment a member is handed (martha#683), composed as the header says. */
 export function theEnvironmentAMemberIsGiven(asking: AMembersEnvironment): Record<string, string> {
   const named = stateRootOf(asking.inherited.HOME ?? '', asking.inherited[STATE_HOME_VARIABLE])
@@ -115,7 +124,7 @@ export function theEnvironmentAMemberIsGiven(asking: AMembersEnvironment): Recor
     ...theMembersConfigEnvironment(asking.member_config, asking.billing),
     ...theCrewsStateAMemberIsGiven(asking.crew.state_root),
   }
-  const notGiven = notGivenUnder(asking.billing)
+  const notGiven = [...notGivenUnder(asking.billing), ...NO_MESH_IDENTITY]
   return Object.fromEntries(Object.entries(composed).filter(([name]) => !notGiven.includes(name)))
 }
 
