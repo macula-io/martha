@@ -12,6 +12,7 @@ import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.t
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { TRANSCRIPTS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { KITTY } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
+import { SYSTEMD_WEIGHT_MOST } from './the_crews_confinement.ts'
 
 /** Why `'owner'` is written by literal in the declaration (#289 part b). */
 const A_FIELD_OF_THE_DECLARATION = 'a field of the crew declaration, as its schema names it and as a refusal names the field'
@@ -23,6 +24,9 @@ export const A_ROLE_A_TEST_CREW_DECLARES = 'the role a test crew declares; a rol
 const THE_DECLARATIONS_MODEL_KEY = 'the key a member\'s own model is declared under, in the declaration this repository writes'
 
 export const COINCIDENCES: readonly Exception[] = [
+  // systemd's own upper weight is 10000, the number this tree happens to wait for a settings save with (martha#989):
+  // the two mean nothing to each other, and the coincidences check compares values without the words they carry.
+  { value: SYSTEMD_WEIGHT_MOST, file: 'declare_crew/the_crews_confinement.ts', reason: 'the bound systemd itself puts on a cgroup weight, nothing this crew sets' },
   // The offline time before martha#931, pinned as written so the default is checked against the old value rather than
   // read back from the code that defines it; the host's answer timeout is the same number for another reason.
   { value: HOST_ANSWER_TIMEOUT_MS, file: 'declare_crew/the_crews_thresholds.node-test.ts', reason: 'the offline time the code held before martha#931, pinned in milliseconds as written' },
