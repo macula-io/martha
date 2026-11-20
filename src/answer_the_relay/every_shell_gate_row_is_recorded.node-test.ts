@@ -47,6 +47,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { CLAUDE_CODE, CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { THE_CREW_STATE_ASK } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 
 /** The user-scope places the recording names, under a home the tests run in (martha#154). */
 const userScopeFor = (home: string): OwnerUserScope => ({
@@ -190,6 +191,11 @@ async function pathsTheLauncherRecords(t: TestContext): Promise<readonly string[
     await relay.answer('tool_answered', { session_id: id, call, answer })
   }
 
+  // The crew state a render of the prompt asks for (martha#984) is taken in on A28 before it is answered.
+  const stateAsked = await session('crew-state')
+  const state = await relay.answerTool({ session_id: stateAsked, tool: THE_CREW_STATE_ASK, args: {} })
+  assert.ok('answer' in state && state.answer !== '', 'refused' in state ? state.refused : 'the crew handed no state')
+
   const lasts = await Promise.all(sessions.map(async (id) => (await rows.read(sessionRecordStreamOf(id))).at(-1)))
   const recorded = lasts.flatMap((last) => (last === undefined ? [] : recordOf(last.row).ingested.map((ingest) => ingest.path)))
   return [...new Set(recorded)]
@@ -216,6 +222,12 @@ test('the drive is not vacuous: without the package contract the crew hands at s
   const recorded = await pathsTheLauncherRecords(t)
   const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.package_contract)).map((gap) => gap.path)
   assert.ok(named.includes(PATH_OF_SOURCE.package_contract), named.join(', '))
+})
+
+test('the drive is not vacuous: without the crew state a render of the prompt asks for, A28 is named', async (t) => {
+  const recorded = await pathsTheLauncherRecords(t)
+  const named = shellGateRowsNothingRecords(recorded.filter((path) => path !== PATH_OF_SOURCE.crew_state)).map((gap) => gap.path)
+  assert.ok(named.includes(PATH_OF_SOURCE.crew_state), named.join(', '))
 })
 
 /** What these launches started the host with: the arguments and environment the adapter's declaration names (martha#135). */
