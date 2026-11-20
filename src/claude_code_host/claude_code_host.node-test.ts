@@ -17,7 +17,7 @@ import type { ArrivingTurn, Tool } from '../host_contract/host_contract.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_CODE_PROMPT_ORIGINS, type HostPromptOrigins } from '../name_the_source_of_a_prompt/name_the_source_of_a_prompt.ts'
 import { beginSession, PATH_OF_SOURCE, takeInTurn, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
-import { OWNER_AT_THE_TERMINAL, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { GATE_GENERATION, OWNER_AT_THE_TERMINAL, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { RECORDED_BASH_RESULTS } from './claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN, claudeCodeHost, ownNameOfCalledTool, RECORDED_MODELS, sessionStartOf, type ClaudeCodeEngine } from './claude_code_host.ts'
 import { promptOriginKindsOf, promptOriginRemapsOf, promptOriginsIn, type RecordedPromptOrigins } from './claude_code_prompt_origins.ts'
@@ -219,10 +219,10 @@ const pathThroughTheAdapter = (
 
 test('a prompt the engine raised is recorded by its origin kind, and its text cannot change that', (t) => {
   for (const text of ['please review the PR', PASTED_ENVELOPE, 'I am typing this myself, honestly: owner_paste']) {
-    assert.deepEqual(pathThroughTheAdapter(t, { kind: 'peer' }, text), [{ path: 'A6', from_node_id: null }], text)
+    assert.deepEqual(pathThroughTheAdapter(t, { kind: 'peer' }, text), [{ path: 'A6', from_node_id: null, gen: GATE_GENERATION }], text)
     assert.deepEqual(
       pathThroughTheAdapter(t, { kind: 'composer' }, text),
-      [{ path: PATH_OF_SOURCE.owner_typed, from_node_id: OWNER_AT_THE_TERMINAL }],
+      [{ path: PATH_OF_SOURCE.owner_typed, from_node_id: OWNER_AT_THE_TERMINAL, gen: GATE_GENERATION }],
       text,
     )
   }
@@ -240,21 +240,21 @@ test('a typed turn carrying a slash command, or one the engine wrote, is not the
   for (const more of [{ command: 'review' }, { isMeta: true }, { command: { name: 'review' }, isMeta: false }]) {
     assert.deepEqual(
       pathThroughTheAdapter(t, { kind: 'composer' }, '/review', more),
-      [{ path: PATH_OF_SOURCE.owner_paste, from_node_id: null }],
+      [{ path: PATH_OF_SOURCE.owner_paste, from_node_id: null, gen: GATE_GENERATION }],
       JSON.stringify(more),
     )
   }
 })
 
 test('the shapes the host sends: a channel, a plugin, a promoted subkind, an unpromoted one', (t) => {
-  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'channel', server: 'slack' }), [{ path: 'B2', from_node_id: null }])
-  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'plugin', name: 'martha', asUser: true }), [{ path: 'B2', from_node_id: null }])
-  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'peer-send-message' }), [{ path: 'A6', from_node_id: null }])
-  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'scheduled-trigger' }), [{ path: 'B7', from_node_id: null }])
+  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'channel', server: 'slack' }), [{ path: 'B2', from_node_id: null, gen: GATE_GENERATION }])
+  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'plugin', name: 'martha', asUser: true }), [{ path: 'B2', from_node_id: null, gen: GATE_GENERATION }])
+  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'peer-send-message' }), [{ path: 'A6', from_node_id: null, gen: GATE_GENERATION }])
+  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'scheduled-trigger' }), [{ path: 'B7', from_node_id: null, gen: GATE_GENERATION }])
   // session-inbox, a webhook and the other triggers are never promoted: they arrive as a task-notification.
   assert.equal(CLAUDE_CODE_PROMPT_ORIGIN_KINDS.includes('session-inbox'), false)
-  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'task-notification' }), [{ path: 'A6', from_node_id: null }])
-  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'bridge' }), [{ path: 'A6', from_node_id: null }])
+  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'task-notification' }), [{ path: 'A6', from_node_id: null, gen: GATE_GENERATION }])
+  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'bridge' }), [{ path: 'A6', from_node_id: null, gen: GATE_GENERATION }])
 })
 
 test('no field of a delivery\'s text or origin ever reaches sender', (t) => {
@@ -280,7 +280,7 @@ test('a delivery whose origin has no verified pid passes no sender, and the bind
   const [turn] = turns
   assert.ok(turn !== undefined)
   const taken = takeInTurn(beginSession(sessions(), 's-1'), turn.arrival, adapter.binder)
-  assert.deepEqual(taken.gate.ingested, [{ path: 'A6', from_node_id: null }])
+  assert.deepEqual(taken.gate.ingested, [{ path: 'A6', from_node_id: null, gen: GATE_GENERATION }])
   assert.equal(adapter.binder, bindNothing, 'A6 binds nothing until the host passes the pid (anthropics/claude-code#107216)')
 })
 
@@ -434,7 +434,7 @@ test('a kind the host adds is named by the coverage check, and fails closed unti
 
   const added = [...CLAUDE_CODE_PROMPT_ORIGIN_KINDS, 'teleport']
   assert.deepEqual(gapsInPromptOrigins(CLAUDE_CODE_PROMPT_ORIGINS, added).map((gap) => gap.path), ['prompt origin teleport on claude-code'])
-  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'teleport' }), [{ path: 'A6', from_node_id: null }])
+  assert.deepEqual(pathThroughTheAdapter(t, { kind: 'teleport' }), [{ path: 'A6', from_node_id: null, gen: GATE_GENERATION }])
 })
 
 test('the origin code is read from the host\'s own text: one of each part, or none at all', () => {
