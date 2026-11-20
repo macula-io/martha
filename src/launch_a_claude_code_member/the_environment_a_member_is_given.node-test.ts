@@ -93,6 +93,9 @@ test('martha#916: a member billed by the key whose launcher carries none is refu
 /** What the stand-in host prints on the sign-in question for an owner who is not signed in, in the shape 2.1.329 prints. */
 const NOT_SIGNED_IN_ANSWER = JSON.stringify({ loggedIn: false, authMethod: 'none' })
 
+/** A signed-in answer by a method that is not the subscription's, as a later host may add one: never "not signed in". */
+const A_SIGN_IN_BY_ANOTHER_METHOD = JSON.stringify({ loggedIn: true, authMethod: 'a-method-this-test-made-up' })
+
 /** A stand-in host in a folder of the test's own that answers the sign-in question with `lines`, and the launch's billing asked of it. */
 async function billedBy(
   t: TestContext,
@@ -104,7 +107,7 @@ async function billedBy(
   t.after(() => removeTheTree(dir))
   const host = join(dir, 'a-host')
   const saw = join(dir, 'saw')
-  const sees = `printf '%s|%s|%s|%s\\n' "$*" "\${${API_KEY_VARIABLE}-unset}" "\${${CLAUDE_CODE_SIGN_IN_STORE_VARIABLE}-unset}" "$${CONFIG_DIR_VARIABLE}" > '${saw}'`
+  const sees = `printf '%s|%s|%s|%s|%s\\n' "$*" "\${${API_KEY_VARIABLE}-unset}" "\${${CLAUDE_CODE_SIGN_IN_STORE_VARIABLE}-unset}" "$${CONFIG_DIR_VARIABLE}" "$PWD" > '${saw}'`
   writeFileSync(host, ['#!/bin/sh', sees, ...lines, ''].join('\n'), { mode: 0o700 })
   const billed = await theBillingOfALaunch({ declared, inherited: { PATH: process.env.PATH ?? '', ...inherited }, command: host, cwd: dir })
   return { billed, saw: () => (existsSync(saw) ? readFileSync(saw, 'utf8') : '') }
@@ -113,11 +116,12 @@ async function billedBy(
 test("martha#916: with no billing declared, the host is asked whether the owner is signed in, without the key and with the sign-in store, and a signed-in owner's member is billed by the subscription", async (t) => {
   const asked = await billedBy(t, [`printf '%s' '${SIGNED_IN_ANSWER}'`], { [API_KEY_VARIABLE]: A_LAUNCHERS_KEY })
   assert.equal(asked.billed.billing, BILLED_BY_SUBSCRIPTION)
-  const [args, key, store, folder] = asked.saw().trim().split('|')
+  const [args, key, store, folder, ran_in] = asked.saw().trim().split('|')
   assert.equal(args, SIGN_IN_QUESTION_ARGS.join(' '))
   assert.equal(key, 'unset', 'the key reached the sign-in question')
   assert.equal(store, '', 'the sign-in store was not handed to the sign-in question')
   assert.ok(folder !== undefined && folder !== '' && !existsSync(folder), "the question's own config folder is left behind")
+  assert.equal(ran_in, folder, 'the sign-in question ran in the checkout, not in its own folder')
   assert.equal(asked.billed.told, undefined, "the usual start is told")
 })
 
@@ -133,7 +137,7 @@ test("martha#916: with no billing and no sign-in, the member is billed by the la
 test('martha#916: a sign-in the host cannot tell (an exit that is not 0, an answer that is not JSON or says nothing of loggedIn, a host that is not there) bills the member by the subscription, and the owner is told why', async (t) => {
   const withKey = { [API_KEY_VARIABLE]: A_LAUNCHERS_KEY }
   // A signed-in answer on an exit that is not 0 is no answer either: only "not signed in" is read from one.
-  for (const lines of [['exit 3'], [`printf 'not json'`], [`printf '%s' '${JSON.stringify({ authMethod: 'none' })}'`], [`printf '%s' '${SIGNED_IN_ANSWER}'`, 'exit 1']]) {
+  for (const lines of [['exit 3'], [`printf 'not json'`], [`printf '%s' '${JSON.stringify({ authMethod: 'none' })}'`], [`printf '%s' '${SIGNED_IN_ANSWER}'`, 'exit 1'], [`printf '%s' '${A_SIGN_IN_BY_ANOTHER_METHOD}'`]]) {
     const asked = await billedBy(t, lines, withKey)
     assert.equal(asked.billed.billing, BILLED_BY_SUBSCRIPTION, lines.join(' '))
     assert.match(asked.billed.told ?? '', /could not say/)

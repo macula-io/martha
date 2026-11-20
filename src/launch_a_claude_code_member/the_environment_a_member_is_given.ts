@@ -16,7 +16,8 @@
 // When the crew declares no billing, the launch asks the host whether the owner is signed in, before anything of the
 // member is made: the host binary the command resolves to on the launcher's PATH, asked `auth status --json` in the
 // launcher's environment without the key and with the sign-in store variable set and empty (what a member billed by
-// the subscription is handed), and a config folder of the question's own, made new and removed after. A host that
+// the subscription is handed), and a config folder of the question's own, made new and removed after, which is also
+// the folder it runs in: it is asked before the launch gate has judged the checkout. A host that
 // cannot be found, an exit that is not 0, an answer that does not come within the host's answer timeout, or one that
 // does not parse, is an untold sign-in, and the member is billed by the subscription. The owner is told the billing
 // and why whenever it is not the usual one, a signed-in owner's subscription.
@@ -143,7 +144,9 @@ async function theOwnersSignIn(asking: ALaunchesBilling): Promise<TheSignIn> {
   try {
     const kept = Object.entries(asking.inherited).filter((entry): entry is [string, string] => entry[1] !== undefined && entry[0] !== API_KEY_VARIABLE)
     const env = { ...Object.fromEntries(kept), ...theMembersConfigEnvironment(folder, BILLED_BY_SUBSCRIPTION) }
-    return await theSignInTheHostSays(resolved.binary, env, asking.cwd)
+    // Asked in its own folder, not the checkout: the question runs before the launch gate has judged the checkout's
+    // config, so no project folder of the checkout's is in reach of it.
+    return await theSignInTheHostSays(resolved.binary, env, folder)
   } finally {
     rmSync(folder, { recursive: true, force: true })
   }

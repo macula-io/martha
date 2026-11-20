@@ -132,7 +132,10 @@ export function theSignInIn(stdout: string): TheSignIn {
   }
   if (!isRecord(answer) || typeof answer.loggedIn !== 'boolean') return { untold: 'its answer says nothing of loggedIn' }
   if (!answer.loggedIn) return { signed_in: false }
-  return { signed_in: answer.authMethod === SIGNED_IN_BY_SUBSCRIPTION }
+  // Signed in by something that is not the subscription -- a method this release has not seen among them -- is no
+  // "not signed in": read as one, it would move a member onto the launcher's key.
+  if (answer.authMethod === SIGNED_IN_BY_SUBSCRIPTION) return { signed_in: true }
+  return { untold: `it is signed in by ${JSON.stringify(answer.authMethod)}, which is not the subscription's sign-in` }
 }
 
 /** Asks the host at `binary`, in `env`, whether it is signed in on a subscription; never rejects. */
