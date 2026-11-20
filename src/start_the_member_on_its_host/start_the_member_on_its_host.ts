@@ -26,7 +26,7 @@ import { crewToolsOver } from '../a_crews_tools/a_crews_tools.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
 import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
-import { OWNER_BELL, THE_ENGINES_HOST, type CrewSettings, type Member, type TheVocabulariesOfHost } from '../declare_crew/declare_crew.ts'
+import { BILLED_BY_SUBSCRIPTION, OWNER_BELL, THE_ENGINES_HOST, type CrewSettings, type Member, type TheVocabulariesOfHost } from '../declare_crew/declare_crew.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import { theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
 import { carryingTo } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
@@ -222,7 +222,8 @@ function settingsPlaceOf(env: Readonly<Record<string, string | undefined>>, star
  * the owner's file is read only at launch, to finish a switch a launch from before martha#602 left open.
  */
 const theMembersSwitchPlace = (start: AStartOnItsHost, config_dir: string): OwnersDefaultPlace | Refused =>
-  settingsPlaceOf(theMembersConfigEnvironment(config_dir), start)
+  // The config folder is the same under either billing (martha#916); only where the folder is is read here.
+  settingsPlaceOf(theMembersConfigEnvironment(config_dir, BILLED_BY_SUBSCRIPTION), start)
 
 /**
  * What the member is started on: the approval's fingerprint, and what its own writes are checked against while it

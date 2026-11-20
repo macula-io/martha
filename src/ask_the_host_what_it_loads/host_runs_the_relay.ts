@@ -105,6 +105,44 @@ export function apiKeyAnsweredYes(key: string): { readonly approved: readonly st
 }
 
 /**
+ * The question that asks the host whether it is signed in (martha#916): `auth status --json`, seen on Claude Code
+ * 2.1.329 to answer `{"loggedIn": true, "authMethod": "claude.ai", ...}` for a subscription sign-in, `"none"` when it
+ * has none, and `"api_key"` when a key is in its environment. It starts no session and no model call.
+ */
+export const SIGN_IN_QUESTION_ARGS = ['auth', 'status', '--json'] as const
+
+/** The `authMethod` the host answers when it runs on a subscription sign-in. */
+export const SIGNED_IN_BY_SUBSCRIPTION = 'claude.ai'
+
+/** The host's answer to the sign-in question: signed in on a subscription or not, or why that cannot be told. */
+export type TheSignIn = { readonly signed_in: boolean } | { readonly untold: string }
+
+/**
+ * What the host's answer to the sign-in question says: signed in only for `loggedIn` true with the subscription's
+ * `authMethod`, not signed in only for `loggedIn` false. Anything else -- output that is not JSON, or another shape --
+ * is untold, never read as either.
+ */
+export function theSignInIn(stdout: string): TheSignIn {
+  let answer: unknown
+  try {
+    answer = JSON.parse(stdout)
+  } catch {
+    return { untold: 'its answer is not JSON' }
+  }
+  if (!isRecord(answer) || typeof answer.loggedIn !== 'boolean') return { untold: 'its answer says nothing of loggedIn' }
+  if (!answer.loggedIn) return { signed_in: false }
+  return { signed_in: answer.authMethod === SIGNED_IN_BY_SUBSCRIPTION }
+}
+
+/** Asks the host at `binary`, in `env`, whether it is signed in on a subscription; never rejects. */
+export async function theSignInTheHostSays(binary: string, env: NodeJS.ProcessEnv, cwd: string): Promise<TheSignIn> {
+  const ran = await ranHost(binary, SIGN_IN_QUESTION_ARGS, env, cwd)
+  if (ran.failure !== undefined) return { untold: ran.failure }
+  if (ran.status !== 0) return { untold: `it exited ${String(ran.status)}` }
+  return theSignInIn(ran.stdout)
+}
+
+/**
  * Whether the host's own record says it trusts `folder` already, so it will not
  * ask. Read one way only: true only for the exact folder, by its path or its
  * real path, marked with the value true. A record that is missing, unreadable,

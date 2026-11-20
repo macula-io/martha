@@ -82,7 +82,7 @@ import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_ru
 import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { BILLED_BY_SUBSCRIPTION, MINUTE_MS } from '../declare_crew/declare_crew.ts'
 import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -2179,7 +2179,7 @@ for (const [shape, carried, kept] of [
     const settings = await settingsTheHostStartedWith(t, place, fake, launch)
     // The member's environment names its own config folder (martha#602, T2): the rules cover that folder's places
     // and the owner's alike, so nothing the member writes in its own folder runs as code either.
-    const member_env = { ...launch.inherited, ...theMembersConfigEnvironment(membersOwnConfig(place)) }
+    const member_env = { ...launch.inherited, ...theMembersConfigEnvironment(membersOwnConfig(place), BILLED_BY_SUBSCRIPTION) }
     // And Martha's own state root, whole (martha#619): the records of the owner's acts are no member's to write.
     const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home), martha_state_root: place.state_root })
     const ownersOnly = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) })

@@ -193,6 +193,19 @@ export const A_BACKLOG_PLACE = /^[A-Za-z0-9][A-Za-z0-9-]*(\/[A-Za-z0-9._-]+)?$/
  */
 export const VOLATILE_PATHS = 'volatile_paths'
 
+/**
+ * Which credential a Claude Code member is billed through (martha#916, DECIDED 2026-11-20 "Crew setting
+ * (Recommended)"): the top-level key, and its two values. Only the chosen credential reaches a member; the other is
+ * left out of its environment and its config. A declaration that names none reads as null, and the launch then picks
+ * the owner's subscription when the owner is signed in, else the key when the launcher carries one
+ * (../give_a_member_its_own_config). Any other value is refused by name, never read as that default.
+ */
+export const BILLING = 'billing'
+export const BILLED_BY_SUBSCRIPTION = 'subscription'
+export const BILLED_BY_API_KEY = 'api_key'
+export const BILLINGS = [BILLED_BY_SUBSCRIPTION, BILLED_BY_API_KEY] as const
+export type Billing = (typeof BILLINGS)[number]
+
 /** A declared backlog: the places to look in, and how long a member may sit idle beside unheld work before a nudge. */
 export interface Backlog {
   readonly places: readonly string[]
@@ -385,6 +398,8 @@ export interface CrewSettings {
    * own machine roots apply there. Read by ../tell_a_citer_of_a_volatile_path, which never writes a root of its own.
    */
   readonly volatile_paths: readonly string[]
+  /** Which credential a Claude Code member is billed through (martha#916); null when the declaration names none. */
+  readonly billing: Billing | null
 }
 
 /** Why a declaration is not one: the file, and the field when one is to blame. */
@@ -400,7 +415,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, BILLING] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 const OPTIONAL_MEMBER_KEYS = ['model', HOST] as const
 const MEMBER_KEYS = [...REQUIRED_MEMBER_KEYS, ...OPTIONAL_MEMBER_KEYS] as const
@@ -539,7 +554,16 @@ function settingsOf(refuse: Refuse, value: unknown, paths: Omit<CrewPaths, 'conv
     handover_ceiling_minutes: handoverCeilingOf(refuse, value['handover_ceiling_minutes']),
     backlog: backlogOf(refuse, value[BACKLOG]),
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
+    billing: billingOf(refuse, value[BILLING]),
   }
+}
+
+/** The declared billing, or null when the declaration names none; any other value is refused by name (martha#916). */
+function billingOf(refuse: Refuse, value: unknown): Billing | null {
+  if (value === undefined || value !== value) return null
+  return null
+  const billing = BILLINGS.find((known) => known === value)
+  return billing ?? refuse.at(BILLING, `is not one of ${BILLINGS.map((known) => JSON.stringify(known)).join(', ')}`)
 }
 
 /**

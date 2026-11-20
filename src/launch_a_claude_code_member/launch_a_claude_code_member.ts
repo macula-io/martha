@@ -55,8 +55,7 @@
 //      member's own config folder by `giveAMemberItsStart`
 //      (./the_environment_a_member_is_given.ts): what it inherits without the crew's
 //      state, the switches, the member's own config folder and the launcher's own
-//      state home, with no API key, since the member is handed the owner's sign-in
-//      (martha#916), then the settings that keep a checkout from running its hooks,
+//      state home, with the one credential its billing picks (martha#916), then the settings that keep a checkout from running its hooks,
 //      install scripts and .envrc through the member's own commands (martha#24),
 //      plus the socket's path. Its PATH starts with the launch's own `git` guard, and
 //      git is pointed at the guard's hooks (../guard_the_git_a_member_runs,
@@ -124,7 +123,7 @@ import {
 import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_served/watch_the_crew_tools_a_launch_served.ts'
-import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import type { Billing, CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TheLeftoversALaunchKeeps } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
@@ -173,7 +172,7 @@ import { isBelowACarriedFolder } from '../refuse_launch_of_unapproved_config/car
 import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
-import { giveAMemberItsStart } from './the_environment_a_member_is_given.ts'
+import { giveAMemberItsStart, theBillingOfALaunch } from './the_environment_a_member_is_given.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -353,7 +352,7 @@ export interface LaunchMade extends ReadyLaunch, WhatTheRunWatches {
  * owner's folder must still be told, since the places a member may not write are read from it (ownerMemoryOf). Or why
  * not.
  */
-function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extract<PreparedLaunch, { readonly allow: true }>): Record<string, string> | string {
+function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extract<PreparedLaunch, { readonly allow: true }>, billing: Billing): Record<string, string> | string {
   const owners = userSettingsPath(launch.inherited)
   if ('refusal' in owners) return owners.refusal
   const memberConfig = membersConfigFolderOf(prepared)
@@ -363,6 +362,7 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
     crew: { state_root: launch.places.state_root, rows: launch.places.rows },
     member_config: memberConfig,
     host: CLAUDE_CODE,
+    billing,
     checkout: launch.place.launch_dir,
     skills: theCarriedSkills(prepared.carried_files),
   })
@@ -372,7 +372,7 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
 const membersConfigFolderOf = (prepared: Extract<PreparedLaunch, { readonly allow: true }>): string => join(prepared.snapshot_dir, MEMBER_CONFIG_FOLDER)
 
 /** Step 1: the launch gate, the mesh server version, and the settings files' env; or the refusal. */
-function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
+function readyLaunch(launch: ClaudeCodeMemberLaunch, billing: Billing): ReadyLaunch | string {
   if (launch.place.host !== CLAUDE_CODE) return `${NOT_STARTED}: this launcher starts ${CLAUDE_CODE}, not ${launch.place.host}.`
 
   const prepared = prepareLaunch(launch.place, thisMachine)
@@ -392,7 +392,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
     removeSnapshot()
     return `${NOT_STARTED}: ${unproved}`
   }
-  const hostEnv = membersHostEnvironment(launch, prepared)
+  const hostEnv = membersHostEnvironment(launch, prepared, billing)
   if (typeof hostEnv === 'string') {
     removeSnapshot()
     return `${NOT_STARTED}: ${hostEnv}`
@@ -655,7 +655,15 @@ async function launching(launch: ClaudeCodeMemberLaunch, lifeline: TheRunsLifeli
     launch.tellOwner(refusal)
     return { started: false, refusal }
   }
-  const ready = readyLaunch(launch)
+  // Before anything of the member is made: which credential it is billed by (martha#916).
+  const billed = await theBillingOfALaunch({
+    declared: launch.crew_settings?.billing ?? null,
+    inherited: launch.inherited,
+    command: launch.command,
+    cwd: launch.place.launch_dir,
+  })
+  if (billed.told !== undefined) launch.tellOwner(billed.told)
+  const ready = readyLaunch(launch, billed.billing)
   if (typeof ready === 'string') return refuse(ready)
   const directories = launchDirectories(launch, ready)
   if (typeof directories === 'string') return refuse(directories)

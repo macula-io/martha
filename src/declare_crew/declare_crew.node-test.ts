@@ -9,6 +9,9 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import {
   ACTS,
   BACKLOG,
+  BILLED_BY_API_KEY,
+  BILLING,
+  BILLINGS,
   CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   CLONES,
   CREW_CODE_DECLARATION_DIRECTORY,
@@ -180,6 +183,15 @@ test('a root that is not absolute, an empty list and a root named twice are refu
   await refusedWith({ ...solo, [VOLATILE_PATHS]: [] }, VOLATILE_PATHS)
   await refusedWith({ ...solo, [VOLATILE_PATHS]: ['scratch'] }, `${VOLATILE_PATHS}[0]`)
   await refusedWith({ ...solo, [VOLATILE_PATHS]: ['/var/scratch', '/var/scratch/'] }, `${VOLATILE_PATHS}[1]`)
+})
+
+test('martha#916: a crew bills its members by the subscription or by the key as it declares, and by neither of its own choosing when it declares none', async () => {
+  assert.equal((await declare(solo).settings).billing, null)
+  for (const billing of BILLINGS) assert.equal((await declare({ ...solo, [BILLING]: billing }).settings).billing, billing)
+})
+
+test('martha#916: a billing that is not one of the two is refused by field, never read as none', async () => {
+  for (const billing of ['Subscription', 'key', '', null, true, [BILLED_BY_API_KEY]]) await refusedWith({ ...solo, [BILLING]: billing }, BILLING)
 })
 
 test('the mode is data: a mode of any name reads exactly as the same table named team', async () => {
