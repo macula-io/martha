@@ -122,19 +122,19 @@ const excerpt = (line: string) => {
 }
 
 // A line that needs a marker: the owner's words or act, or a DECIDED that carries neither day nor words.
-const needsMark = (line: string, speaks: RegExp, process: RegExp) =>
-  !marked(line) && (speaks.test(line.replace(process, ' ')) || BARE_DECIDED.test(line))
+const needsMark = (line: string, speaks: RegExp, yesRefs: RegExp) =>
+  !marked(line) && (speaks.test(line.replace(yesRefs, ' ')) || BARE_DECIDED.test(line))
 
 // The owner's items that carry neither marker, each with its line number, so a writer appending to an older
 // file sees which of its existing lines need the mark too (review r=1).
 export const unmarkedOwnerItems = (text: string, owner: string): string[] => {
   const speaks = ownerSpeaks(owner)
-  const process = processRefs(owner)
+  const yesRefs = processRefs(owner)
   const lines = text.split('\n')
   const fenced = fencedLines(lines)
   return lines.flatMap((line, at) => {
     if (fenced[at] || line.trim() === '') return []
-    return needsMark(line, speaks, process) ? [`line ${at + 1}: ${excerpt(line)}`] : []
+    return needsMark(line, speaks, yesRefs) ? [`line ${at + 1}: ${excerpt(line)}`] : []
   })
 }
 

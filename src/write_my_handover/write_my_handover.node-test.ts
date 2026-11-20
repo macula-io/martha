@@ -213,7 +213,7 @@ test('#255: a handover written before the flow asked for one is not this flow’
   assert.deepEqual(verdict, { kind: 'not_written', why: 'the handover was written before this session was asked for one' })
 })
 
-test('#999: a handover is judged by crew-code’s shape: each package it holds needs a branch, a sha and a next step', () => {
+test('#255: a handover missing the line of a package the row holds is sent back once, and clears on the second miss', () => {
   const asked = { stamp: { member: 'builder', predecessor_id: 'a-session', written_at: new Date(2_000).toISOString(), digest: 'x', record_length: 0, record_digest: 'y' }, text: 'a handover with no package in it', asked_at: 1_000, holds: ['synthetic-owner/repo#7'] }
   const none = ['synthetic-owner/repo#7 is missing branch, sha, next step']
   assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: false }), { kind: 'sent_back', missing: none })
