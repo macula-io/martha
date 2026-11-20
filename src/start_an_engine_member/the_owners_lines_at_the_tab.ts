@@ -13,7 +13,7 @@ const A_COMMAND_STARTS = '/'
 
 /** Why a command other than Martha's own was not sent: the engine's slash commands are off. */
 export const ONLY_THE_CREW_COMMAND = (typed: string): string =>
-  `Only ${THE_CREW_COMMAND} and ${THE_REFRESH_COMMAND} are taken at a martha-engine member's tab; ${typed} was not sent.`
+  `Only ${THE_CREW_COMMAND} and ${A_COMMAND_STARTS}${THE_REFRESH_COMMAND} are taken at a martha-engine member's tab; ${typed} was not sent.`
 
 /** Why a plain line was not sent: a typed turn to an engine member is not there yet (martha#953). */
 export const TYPED_TURNS_ARE_NOT_THERE_YET =
@@ -32,7 +32,7 @@ export async function whatTheOwnersLineGets(line: string, hear: HearTheLauncher,
   const command = gap === -1 ? typed : typed.slice(0, gap)
   const rest = gap === -1 ? '' : typed.slice(gap)
   // `/crew-refresh` (martha#999 package 3): the mode is kept for this member, and a refresh `now` starts at once.
-  if (command === THE_REFRESH_COMMAND) return await theRefreshCommandTold(rest, hear, refreshNow)
+  if (command === `${A_COMMAND_STARTS}${THE_REFRESH_COMMAND}`) return await theRefreshCommandTold(rest, hear, refreshNow)
   if (command !== THE_CREW_COMMAND) return ONLY_THE_CREW_COMMAND(command)
   return theCrewCommandAnswers(rest, hear)
 }

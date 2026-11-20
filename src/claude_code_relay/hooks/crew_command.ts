@@ -66,8 +66,12 @@ export async function theCrewCommandAnswers(args: string, hear: HearTheLauncher)
  */
 export const theCrewCommandResult = (text: string): { readonly text: string; readonly isTextDisplayOnly: true } => ({ text, isTextDisplayOnly: true })
 
-/** The owner's `/crew-refresh` on either host (martha#999 package 3): the engine's tab reads the same word. */
-export const THE_REFRESH_COMMAND = '/crew-refresh'
+/**
+ * The owner's refresh command on either host (martha#999 package 3), as the host registers it: Claude Code's relay
+ * registers this name, and the engine's tab reads it after the `/` a command starts with. Spelled as `/crew-budget`'s
+ * name is (martha#990), without the slash.
+ */
+export const THE_REFRESH_COMMAND = 'crew-refresh'
 
 /** What the mod asks the launcher when the owner types `/crew-refresh`: never a model's tool. */
 const THE_REFRESH_MODE_QUESTION = 'the_refresh_mode_typed'

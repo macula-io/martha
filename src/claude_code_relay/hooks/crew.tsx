@@ -11,7 +11,7 @@
 
 import { crewToolsIn, type ALaunchersTool } from './crew_tools_answer.ts'
 import { heardToolAnswer, PANE, RELAY_ORIGIN, TOOL_ANSWER_PATH, toolCallBody } from './relay_protocol.ts'
-import { theCrewCommandAnswers, theCrewCommandResult, theRefreshCommandAnswers, type Heard } from './crew_command.ts'
+import { THE_REFRESH_COMMAND, theCrewCommandAnswers, theCrewCommandResult, theRefreshCommandAnswers, type Heard } from './crew_command.ts'
 import { readingTheChannelWith } from './crew_channel_reading.ts'
 import { beatingTheTurnWith } from './crew_turn_beat.ts'
 import { orderIn, paneIn, PANE_CHROME_ROWS, switchTheModelOnTheHost, theOwnersListIn, type TheOrder, type TheOwnersListShown } from './crew_answers.ts'
@@ -55,9 +55,6 @@ const CREW_COMMAND = 'crew'
 
 /** The command the owner types to see the crew's budget, or set the reviewer model's gauge (martha#990). */
 const BUDGET_COMMAND = 'crew-budget'
-
-/** The command the owner types to set this member's refresh mode, refresh it now, or see its mode (martha#999). */
-const REFRESH_COMMAND = 'crew-refresh'
 
 /** What the mod asks the launcher when the owner types `/crew-budget`: never a model's tool (martha#990). */
 const THE_BUDGET_QUESTION = 'the_crews_budget'
@@ -407,7 +404,7 @@ async function drawThePane($: CrewEngine, e: unknown): Promise<unknown> {
 async function registerTheCommands($: CrewEngine): Promise<void> {
   await $.command.register({ name: PANE, description: "Open the crew's pane" })
   await $.command.register({ name: CREW_COMMAND, description: 'See your crew, or say one thing to one member', argumentHint: '[<member> <text>]' })
-  await $.command.register({ name: REFRESH_COMMAND, description: 'Refresh this session from a handover: after a task, or now', argumentHint: 'auto|on [percent]|off|now' })
+  await $.command.register({ name: THE_REFRESH_COMMAND, description: 'Refresh this session from a handover: after a task, or now', argumentHint: 'auto|on [percent]|off|now' })
   await $.command.register({ name: BUDGET_COMMAND, description: "Show the crew's budget, or set the reviewer model's gauge", argumentHint: '[<reviewer model> <percent>|off]' })
 }
 
@@ -469,7 +466,7 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   // `next`, so no command runs beneath them, and shown to the owner alone, so the model takes no turn.
   on('command.run', { command: CREW_COMMAND }, answerTheCrewCommand)
   on('command.run', { command: BUDGET_COMMAND }, answerTheBudgetCommand)
-  on('command.run', { command: REFRESH_COMMAND }, answerTheRefreshCommand)
+  on('command.run', { command: THE_REFRESH_COMMAND }, answerTheRefreshCommand)
 
   // Registration happens once this host shows the session, as the tools are the launcher's to name; the pane opens
   // by itself only when the crew's declaration switched the dashboard on.

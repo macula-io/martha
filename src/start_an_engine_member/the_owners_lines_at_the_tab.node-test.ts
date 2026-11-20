@@ -86,8 +86,8 @@ test('#999 package 3: /crew-refresh at an engine tab asks the launcher what a Cl
   const said = 'Refreshing Vesta now.'
   const nows: string[] = []
   const launcher = aLauncher({ [THE_REFRESH_MODE_ASK]: { said } })
-  assert.equal(await whatTheOwnersLineGets(`${THE_REFRESH_COMMAND}  on 61 `, launcher.hear, () => nows.push('on')), said)
-  assert.equal(await whatTheOwnersLineGets(`${THE_REFRESH_COMMAND} now`, launcher.hear, () => nows.push('now')), said)
+  assert.equal(await whatTheOwnersLineGets(`/${THE_REFRESH_COMMAND}  on 61 `, launcher.hear, () => nows.push('on')), said)
+  assert.equal(await whatTheOwnersLineGets(`/${THE_REFRESH_COMMAND} now`, launcher.hear, () => nows.push('now')), said)
   assert.deepEqual(launcher.asked, [
     { tool: THE_REFRESH_MODE_ASK, args: { typed: 'on 61' } },
     { tool: THE_REFRESH_MODE_ASK, args: { typed: 'now' } },
@@ -95,6 +95,6 @@ test('#999 package 3: /crew-refresh at an engine tab asks the launcher what a Cl
   assert.deepEqual(nows, ['now'], 'only a now starts a refresh')
   // A now the launcher refused starts nothing, and the owner reads why.
   const refusing = aLauncher({})
-  assert.equal(await whatTheOwnersLineGets(`${THE_REFRESH_COMMAND} now`, refusing.hear, () => nows.push('refused')), `nothing answers ${THE_REFRESH_MODE_ASK}`)
+  assert.equal(await whatTheOwnersLineGets(`/${THE_REFRESH_COMMAND} now`, refusing.hear, () => nows.push('refused')), `nothing answers ${THE_REFRESH_MODE_ASK}`)
   assert.deepEqual(nows, ['now'])
 })
