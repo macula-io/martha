@@ -27,6 +27,9 @@ jobs:
   posted:
     name: the text posted on GitHub carries nothing private
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 261 s at its longest in 5 green runs; 10 minutes is half again
+    # as much, rounded up to the next five, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 10
     permissions:
       contents: read
       issues: read

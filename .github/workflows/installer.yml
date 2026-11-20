@@ -40,6 +40,9 @@ jobs:
     needs: [guard, advisories]
     # npm trusted publishing takes its token from a GitHub-hosted runner only.
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 66 s at its longest in 5 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     permissions:
       contents: read
       id-token: write
