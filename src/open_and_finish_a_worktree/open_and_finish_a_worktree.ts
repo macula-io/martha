@@ -22,7 +22,7 @@
 
 import { join } from 'node:path'
 
-import { type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { FINISH_A_MEMBERS_WORKTREE, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
@@ -77,25 +77,44 @@ const no = (why: string): Refused => ({ refused: why })
 /** What `worktree_open` says it is for, as the launcher answers the mod's ask (martha#256). */
 export const WORKTREE_OPEN_DESCRIPTION = 'Makes a worktree for one package of a repository, on a new branch of your own, and answers where it is.'
 
-/** What `worktree_finish` says it is for (martha#256). */
+/** What `worktree_finish` says it is for (martha#256, martha#962). */
 export const WORKTREE_FINISH_DESCRIPTION =
-  'Removes a worktree and its branch once its work has landed, and names the package the deletion is kept under. Refused while it holds work no remote has.'
+  'Removes a worktree and its branch once its work has landed, and names the package the deletion is kept under. Refused while it holds work no remote has. ' +
+  'It takes a live worktree (repo and slug) or a branch whose worktree is already gone (repo and branch), and a member finishes its own without more; ' +
+  "another member's is closed on that member's word, by a session whose role the crew's table grants finish_a_members_worktree, with owner_ok=1."
+
+/** The repository a call names, as org/name, or why it names none. */
+function theRepoNamed(args: Readonly<Record<string, unknown>>): { readonly repo: string } | Refused {
+  const repo = args['repo']
+  if (typeof repo !== 'string' || !REPO.test(repo)) return no(`${JSON.stringify(repo)} is not a repository, as org/name.`)
+  return { repo }
+}
+
+/** The slug a call names, lowercase so one slug names one directory, or why it names none. */
+function theSlugNamed(args: Readonly<Record<string, unknown>>): { readonly slug: string } | Refused {
+  const slug = args['slug']
+  if (typeof slug !== 'string' || !SLUG.test(slug)) {
+    return no(`${JSON.stringify(slug)} is not a slug: lowercase letters, digits and hyphens, up to 64 of them.`)
+  }
+  return { slug }
+}
 
 /** The places one call works in, or why the crew and the arguments name none. */
 function placesOf(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Places | Refused {
   const { clones, worktrees } = request.settings.house_rules
   if (clones === null || worktrees === null) return no(NO_LAYOUT)
-  const repo = args['repo']
-  const slug = args['slug']
-  if (typeof repo !== 'string' || !REPO.test(repo)) return no(`${JSON.stringify(repo)} is not a repository, as org/name.`)
-  if (typeof slug !== 'string' || !SLUG.test(slug)) {
-    return no(`${JSON.stringify(slug)} is not a slug: lowercase letters, digits and hyphens, up to 64 of them.`)
-  }
+  const repo = theRepoNamed(args)
+  if ('refused' in repo) return repo
+  const slug = theSlugNamed(args)
+  if ('refused' in slug) return slug
   if (!request.settings.members.some((member) => member.name === request.member)) {
     return no(`${request.member} is not a member of this crew.`)
   }
-  return { clone: join(clones, repo), path: join(worktrees, `${repo.slice(repo.indexOf('/') + 1)}-${slug}`), branch: `${request.member}/${slug}` }
+  return { clone: join(clones, repo.repo), path: worktreePathIn(worktrees, repo.repo, slug.slug), branch: `${request.member}/${slug.slug}` }
 }
+
+/** A worktree's directory: the repository's own name and the slug, under the crew's worktrees place. */
+const worktreePathIn = (worktrees: string, repo: string, slug: string): string => join(worktrees, `${repo.slice(repo.indexOf('/') + 1)}-${slug}`)
 
 /** git run in `cwd`, with Martha's own settings in front of its arguments. */
 function git(host: WorktreesRequest['host'], cwd: string, args: readonly string[]): Promise<ProcessOutcome> {
@@ -133,16 +152,98 @@ export async function openAWorktree(request: WorktreesRequest, args: Readonly<Re
 }
 
 export async function finishAWorktree(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Promise<WorktreeAnswer> {
-  const places = placesOf(request, args)
-  if ('refused' in places) return places
+  if (!request.settings.members.some((member) => member.name === request.member)) {
+    return no(`${request.member} is not a member of this crew.`)
+  }
+  const form = theFinishForm(request, args)
+  if ('refused' in form) return form
   const package_name = packageOf(args)
   if ('refused' in package_name) return package_name
-  const { host } = request
-  const branch = await branchAt(host, places)
-  if ('refused' in branch) return branch
-  const held = await workNoOtherCopyHas(host, places)
-  if (held !== undefined) return held
-  return removeTheWorktree(host, places, branch.name, { package: package_name.name, member: request.member })
+  const work = { package: package_name.name, member: request.member }
+  return form.form === 'worktree' ? finishTheWorktree(request, form, work, args) : finishTheBranch(request, form, work, args)
+}
+
+/**
+ * The two shapes one finish takes (martha#962): a live worktree, named by its repository and slug, or a branch whose
+ * worktree is already gone, named by its repository and its own name. crew-code's tool takes a path or a branch
+ * (`hooks/register.tsx:7103-7107`); Martha's path is derived from the slug, so the slug is what the first shape names.
+ * Naming both, and naming neither, are each refused rather than guessed.
+ */
+type FinishForm =
+  | { readonly form: 'worktree'; readonly repo: string; readonly clone: string; readonly slug: string; readonly path: string }
+  | { readonly form: 'branch'; readonly repo: string; readonly clone: string; readonly branch: string }
+
+function theFinishForm(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): FinishForm | Refused {
+  const { clones, worktrees } = request.settings.house_rules
+  if (clones === null || worktrees === null) return no(NO_LAYOUT)
+  const repo = theRepoNamed(args)
+  if ('refused' in repo) return repo
+  const named = theNamedForm(args)
+  if ('refused' in named) return named
+  const clone = join(clones, repo.repo)
+  return named.form === 'worktree'
+    ? { form: 'worktree', repo: repo.repo, clone, slug: named.slug, path: worktreePathIn(worktrees, repo.repo, named.slug) }
+    : { form: 'branch', repo: repo.repo, clone, branch: named.branch }
+}
+
+/** Which of the two shapes a call names, read before the crew's places: a slug, or a branch, and never both or neither. */
+type ANamedForm = { readonly form: 'worktree'; readonly slug: string } | { readonly form: 'branch'; readonly branch: string }
+
+/** The one sentence both refusals open with, and the two ways a call can be wrong about it. */
+const NAME_A_FORM = 'name either a slug, for a live worktree, or a branch whose worktree is already gone'
+
+function theNamedForm(args: Readonly<Record<string, unknown>>): ANamedForm | Refused {
+  const namedSlug = typeof args['slug'] === 'string' && args['slug'] !== ''
+  const namedBranch = typeof args['branch'] === 'string' && args['branch'] !== ''
+  if (namedSlug === namedBranch) return no(namedSlug ? `${NAME_A_FORM}, not both.` : `${NAME_A_FORM}.`)
+  if (!namedSlug) {
+    const read = theBranchNamed(args)
+    return 'refused' in read ? read : { form: 'branch', branch: read.name }
+  }
+  const read = theSlugNamed(args)
+  return 'refused' in read ? read : { form: 'worktree', slug: read.slug }
+}
+
+/** What a branch name may be, given to the branch form: no white space, no `..`, nothing that walks out of a ref name. */
+const A_BRANCH = /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/
+
+/** The branch a branch-form call names, or why it names none: a member's branch, `<member>/<slug>` (martha#962). */
+function theBranchNamed(args: Readonly<Record<string, unknown>>): { readonly name: string } | Refused {
+  const branch = args['branch']
+  if (typeof branch !== 'string' || !A_BRANCH.test(branch) || branch.includes('..')) {
+    return no(`${JSON.stringify(branch)} is not a branch name of a member, like hygiea/183: no path, no rev expression.`)
+  }
+  return { name: branch }
+}
+
+/** The member a branch belongs to, by the name before its first `/`, or undefined when this crew names no such member. */
+function theOwnerOfBranch(branch: string, members: CrewSettings['members']): string | undefined {
+  const at = branch.indexOf('/')
+  if (at <= 0) return undefined
+  return members.find((member) => member.name === branch.slice(0, at))?.name
+}
+
+/** Whether this crew's table lets `member` close another member's worktree or branch: its own role is granted the act. */
+function mayCloseAnothersWorktree(settings: CrewSettings, member: string): boolean {
+  const role = settings.members.find((one) => one.name === member)?.role
+  return role !== undefined && settings.mode.may[FINISH_A_MEMBERS_WORKTREE].includes(role)
+}
+
+/**
+ * Whether this caller may close `branch`, whose owner is `owner` (martha#962): its own branch always, and another
+ * member's only with `owner_ok=1` from a session whose role the crew's table grants finish_a_members_worktree. That
+ * table is read as the team table reads every act: the owner alone is no member's role, so a crew that grants it to the
+ * owner and nobody else lets no member close another's — the reading offer_owner_asks gets, where every member acts as
+ * the owner's own session, would make the word meaningless here.
+ */
+function whoseItIs(request: WorktreesRequest, owner: string, branch: string, args: Readonly<Record<string, unknown>>): Refused | undefined {
+  if (owner === request.member) return undefined
+  if (args['owner_ok'] === 1 && mayCloseAnothersWorktree(request.settings, request.member)) return undefined
+  const granted = request.settings.mode.may[FINISH_A_MEMBERS_WORKTREE]
+  return no(
+    `${request.member} may not close branch "${branch}": it is ${owner}'s, and ${owner} closes it when the package is closed. ` +
+      `If ${owner} has said so, a member whose role this crew's table grants ${FINISH_A_MEMBERS_WORKTREE} (${granted.join(', ') || 'nobody'}) passes owner_ok=1; nothing else does.`,
+  )
 }
 
 /** The package a finish keeps its act's row under, or why the argument names none: an act is filed against one. */
@@ -154,26 +255,46 @@ function packageOf(args: Readonly<Record<string, unknown>>): { readonly name: st
   return { name: package_name }
 }
 
-/** The branch the worktree at `places.path` really has: the one Martha's own naming gives, or why it is not that. */
-async function branchAt(host: WorktreesRequest['host'], places: Places): Promise<{ readonly name: string } | Refused> {
-  const name = await gitSaid(host, places.path, ['symbolic-ref', '--short', 'HEAD'])
-  if (name === undefined) return no(`there is no worktree at ${places.path}.`)
-  if (name !== places.branch) return no(`${places.path} is on ${name}, not ${places.branch}: Martha removes only the worktree its own naming made.`)
+/** The branch the worktree at `path` really has, or why it has none. */
+async function branchAt(host: WorktreesRequest['host'], path: string): Promise<{ readonly name: string } | Refused> {
+  const name = await gitSaid(host, path, ['symbolic-ref', '--short', 'HEAD'])
+  if (name === undefined) return no(`there is no worktree at ${path}.`)
   return { name }
 }
 
+/**
+ * The live worktree of this call: the branch it holds must be a member's branch of this slug, so the Supervisor passes
+ * the same slug the member did, and the worktree is still one Martha's naming made (martha#962).
+ */
+async function finishTheWorktree(request: WorktreesRequest, form: Extract<FinishForm, { readonly form: 'worktree' }>, work: TheAct, args: Readonly<Record<string, unknown>>): Promise<WorktreeAnswer> {
+  const { host } = request
+  const path = form.path
+  const branch = await branchAt(host, path)
+  if ('refused' in branch) return branch
+  const owner = theOwnerOfBranch(branch.name, request.settings.members)
+  const theirs = `${owner ?? request.member}/${form.slug}`
+  if (owner === undefined || branch.name !== theirs) {
+    return no(`${path} is on ${branch.name}, not ${theirs}: Martha removes only the worktree its own naming made.`)
+  }
+  const allowed = whoseItIs(request, owner, branch.name, args)
+  if (allowed !== undefined) return allowed
+  const held = await workNoOtherCopyHas(host, path, branch.name)
+  if (held !== undefined) return held
+  return removeTheWorktree(host, { clone: form.clone, path }, branch.name, work)
+}
+
 /** Why the worktree's work must not be removed yet, or undefined when no other copy of it exists. */
-async function workNoOtherCopyHas(host: WorktreesRequest['host'], places: Places): Promise<Refused | undefined> {
-  const changes = await gitSaid(host, places.path, ['status', '--porcelain'])
-  if (changes === undefined) return no(`${places.path} could not be read: git would not say what it holds.`)
-  if (changes !== '') return no(`${places.path} has uncommitted changes (${changes.split('\n')[0] ?? ''}): commit them or remove them, then try again.`)
-  const count = await gitSaid(host, places.path, ['rev-list', '--count', 'HEAD', '--not', '--remotes'])
-  if (count === undefined) return no(`${places.path} could not be read: git would not say what it holds.`)
-  if (count !== '0') return no(`${places.path} holds ${count} commit(s) on no remote branch: push ${places.branch}, then try again.`)
+async function workNoOtherCopyHas(host: WorktreesRequest['host'], path: string, branch: string): Promise<Refused | undefined> {
+  const changes = await gitSaid(host, path, ['status', '--porcelain'])
+  if (changes === undefined) return no(`${path} could not be read: git would not say what it holds.`)
+  if (changes !== '') return no(`${path} has uncommitted changes (${changes.split('\n')[0] ?? ''}): commit them or remove them, then try again.`)
+  const count = await gitSaid(host, path, ['rev-list', '--count', 'HEAD', '--not', '--remotes'])
+  if (count === undefined) return no(`${path} could not be read: git would not say what it holds.`)
+  if (count !== '0') return no(`${path} holds ${count} commit(s) on no remote branch: push ${branch}, then try again.`)
   return undefined
 }
 
-async function removeTheWorktree(host: WorktreesRequest['host'], places: Places, branch: string, work: TheAct): Promise<WorktreeAnswer> {
+async function removeTheWorktree(host: WorktreesRequest['host'], places: { readonly clone: string; readonly path: string }, branch: string, work: TheAct): Promise<WorktreeAnswer> {
   const tip = await gitSaid(host, places.path, ['rev-parse', 'HEAD'])
   const removed = await git(host, places.clone, ['worktree', 'remove', places.path])
   if (removed.exit_code !== 0) return no(`${places.path} was not removed: ${saidBy(removed)}.`)
@@ -264,4 +385,109 @@ async function theBranchOnOrigin(host: WorktreesRequest['host'], clone: string, 
 function whatBecameOfTheDeletion(failure: unknown, branch: string): string {
   if (failure instanceof RecoveryDecided || failure instanceof PackagePaused) return failure.told
   return `${branch} stays on origin (${failure instanceof Error ? failure.message : String(failure)})`
+}
+
+/** What became of one side of a finished branch: gone, never there, or kept with the clause that says why (martha#962). */
+type ASideOfABranch = { readonly state: 'gone' | 'absent' } | { readonly state: 'kept'; readonly why: string }
+
+/**
+ * The live worktree of this clone that has `branch` checked out, by its path; `{ path: '' }` when none does. A record
+ * git calls prunable is not one: its directory is gone, which is the whole of the branch form (martha#962).
+ */
+async function theLiveWorktreeHolding(host: WorktreesRequest['host'], clone: string, branch: string): Promise<{ readonly path: string } | Refused> {
+  const listed = await gitSaid(host, clone, ['worktree', 'list', '--porcelain'])
+  if (listed === undefined) return no(`${clone} could not be read: git would not list its worktrees.`)
+  for (const block of listed.split('\n\n')) {
+    const lines = block.split('\n')
+    const at = lines.find((line) => line.startsWith('worktree '))?.slice('worktree '.length) ?? ''
+    const held = lines.find((line) => line.startsWith('branch '))?.slice('branch '.length) ?? ''
+    if (held === `refs/heads/${branch}` && !lines.some((line) => line.startsWith('prunable'))) return { path: at }
+  }
+  return { path: '' }
+}
+
+/**
+ * A branch whose worktree is already gone (martha#962, crew-code's branch form): the guards are the live form's, and the
+ * origin's copy and the clone's each go only when the origin's default branch holds what they hold. A branch kept on one
+ * side is never deleted from the other, because half a finish is not what the caller asked for.
+ */
+async function finishTheBranch(request: WorktreesRequest, form: Extract<FinishForm, { readonly form: 'branch' }>, work: TheAct, args: Readonly<Record<string, unknown>>): Promise<WorktreeAnswer> {
+  const { host } = request
+  const { clone, branch } = form
+  // Who may call is judged before anything is read, as crew-code's own finish does: a member's branch is closed by that
+  // member, or on their word by a role the table grants (martha#962).
+  const owner = theOwnerOfBranch(branch, request.settings.members)
+  if (owner !== undefined) {
+    const allowed = whoseItIs(request, owner, branch, args)
+    if (allowed !== undefined) return allowed
+  }
+  const default_branch = await defaultBranchIn(host, clone)
+  if (default_branch === undefined) return no(`${clone} cannot say which branch its origin's default is: run git remote set-head origin -a there, then try again.`)
+  if (branch === default_branch.replace(/^origin\//, '')) return no(`${branch} is the origin's default branch, and that is never removed.`)
+  if (owner === undefined) return no(`branch ${JSON.stringify(branch)} names no member of this crew, so it is not this tool's to remove.`)
+  const holding = await theLiveWorktreeHolding(host, clone, branch)
+  if ('refused' in holding) return holding
+  if (holding.path !== '') {
+    return no(`the worktree at ${holding.path} holds branch "${branch}"; finish it with its repo, its slug and the package, so its directory goes with the branch.`)
+  }
+  const remote = await theOriginSide(host, clone, branch, default_branch, work)
+  if (remote.state === 'kept') return no(`the origin still holds origin/${branch}, ${remote.why}; the clone's copy is untouched.`)
+  const local = await theCloneSide(host, clone, branch, default_branch)
+  return { told: branchFinishLine(branch, remote, local) }
+}
+
+/** The origin's copy of a finished branch, read afresh: gone when the default branch holds its tip, or kept with why. */
+async function theOriginSide(host: WorktreesRequest['host'], clone: string, branch: string, default_branch: string, work: TheAct): Promise<ASideOfABranch> {
+  // Read afresh, and pruned: the package may have landed since this clone last heard from origin, and a branch deleted
+  // on origin by someone else would still be remembered here, so the answer would read as a delete that failed.
+  const fetched = await git(host, clone, ['fetch', '--quiet', '--prune', 'origin'])
+  if (fetched.exit_code !== 0) return { state: 'kept', why: `since origin could not be read (${saidBy(fetched)})` }
+  const on_origin = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
+  if (on_origin === undefined) return { state: 'absent' }
+  const held = await git(host, clone, ['merge-base', '--is-ancestor', on_origin, default_branch])
+  if (held.exit_code !== 0) return { state: 'kept', why: `where it is at ${on_origin}, which the default branch does not hold` }
+  try {
+    await sendAnActAndRecover(
+      host,
+      { package: work.package, member: work.member, act: { kind: 'push', what: `origin ${branch}` } },
+      async () => {
+        const pushed = await git(host, clone, ['push', '--quiet', 'origin', '--delete', branch])
+        if (pushed.exit_code !== 0) throw new Error(saidBy(pushed))
+        return `removed ${branch} on origin`
+      },
+      async () => theBranchOnOrigin(host, clone, branch),
+    )
+    return { state: 'gone' }
+  } catch (failure) {
+    if (failure instanceof RecoveryDecided && failure.inspection.state === 'it_happened') return { state: 'gone' }
+    return { state: 'kept', why: whatBecameOfTheDeletion(failure, branch).replace(/^; /, '') }
+  }
+}
+
+/** The clone's own copy: gone only when the default branch holds its tip, since a copy that moved on is the only one it has. */
+async function theCloneSide(host: WorktreesRequest['host'], clone: string, branch: string, default_branch: string): Promise<ASideOfABranch> {
+  const tip = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
+  if (tip === undefined) return { state: 'absent' }
+  const held = await git(host, clone, ['merge-base', '--is-ancestor', tip, default_branch])
+  if (held.exit_code !== 0) return { state: 'kept', why: `where it is at ${tip}, which the default branch does not hold` }
+  const deleted = await git(host, clone, ['branch', '-D', branch])
+  if (deleted.exit_code === 0) return { state: 'gone' }
+  // `branch -D` refuses a branch a worktree record still names, and a record outlives its directory: dropping the ref is
+  // what `branch -D` would have done, and no `worktree prune` runs, since one would drop every other member's records.
+  const listed = (await gitSaid(host, clone, ['worktree', 'list', '--porcelain'])) ?? ''
+  const records = listed.split('\n\n').filter((block) => block.includes(`branch refs/heads/${branch}`))
+  if (records.length === 0 || records.some((block) => !block.split('\n').some((line) => line.startsWith('prunable')))) {
+    return { state: 'kept', why: `which git refused to delete (${saidBy(deleted)})` }
+  }
+  const dropped = await git(host, clone, ['update-ref', '-d', `refs/heads/${branch}`])
+  return dropped.exit_code === 0 ? { state: 'gone' } : { state: 'kept', why: `which git refused to delete (${saidBy(dropped)})` }
+}
+
+/** What finishing a branch says once the guards passed: each side named as it went, or as it stayed (martha#962). */
+function branchFinishLine(branch: string, remote: ASideOfABranch, local: ASideOfABranch): string {
+  if (remote.state === 'absent' && local.state === 'absent') return `Nothing to remove: neither the origin nor this clone holds ${branch}.`
+  const where = remote.state === 'gone' ? `Removed origin/${branch}` : `The origin holds no origin/${branch}`
+  if (local.state === 'absent') return remote.state === 'gone' ? `${where}; the clone held none.` : `${where}.`
+  if (local.state === 'kept') return `${where}; the clone still holds ${branch}, ${local.why}.`
+  return `${where}; the clone's copy went too.`
 }

@@ -38,14 +38,27 @@ export const WORKTREE_OPEN_TOOL = {
   },
 }
 
-/** What `worktree_finish` takes: the worktree, and the package it closes. */
+/** What `worktree_finish` takes: the worktree (or the branch a finished worktree left), and the package it closes (martha#962). */
 export const WORKTREE_FINISH_TOOL = {
   name: WORKTREE_FINISH,
   description: WORKTREE_FINISH_DESCRIPTION,
   inputSchema: {
     type: 'object',
-    properties: { repo: A_REPOSITORY, slug: A_SLUG, package: A_PACKAGE },
-    required: ['repo', 'slug', 'package'],
+    properties: {
+      repo: A_REPOSITORY,
+      slug: A_SLUG,
+      branch: {
+        type: 'string',
+        description: 'With repo, instead of slug: a branch whose worktree is already gone, like hygiea/183',
+      },
+      package: A_PACKAGE,
+      owner_ok: {
+        type: 'number',
+        description:
+          "1 when another member has said the package is closed, from a session whose role the crew's table grants finish_a_members_worktree: it closes that member's worktree or branch. Never set for one's own, and never by a member whose role the table does not grant it.",
+      },
+    },
+    required: ['repo', 'package'],
   },
 }
 

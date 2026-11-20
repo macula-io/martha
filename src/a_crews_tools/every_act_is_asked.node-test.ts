@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { ACTS, APPROVE_LANDING, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, HOLD_REVIEWS, OFFER_OWNER_ASKS, RESTART_MEMBER, declareCrew, type Act } from '../declare_crew/declare_crew.ts'
+import { ACTS, APPROVE_LANDING, CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, FINISH_A_MEMBERS_WORKTREE, HOLD_REVIEWS, OFFER_OWNER_ASKS, RESTART_MEMBER, WORKSPACE_LAYOUT, WORKTREES, declareCrew, type Act } from '../declare_crew/declare_crew.ts'
 import { NO_MODEL_NAMED } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
@@ -75,6 +75,8 @@ const teamFor = (act: Act) => ({
     { name: ANOTHER, role: BUILDER_ROLE, model: 'model-b' },
   ],
   mode: { name: 'team', roles: [SUPERVISOR, BUILDER_ROLE], may: Object.fromEntries(ACTS.map((one) => [one, [one === act ? SUPERVISOR : BUILDER_ROLE]])) },
+  // A crew with a workspace, so the worktree row reaches its grant instead of refusing a place nobody declared.
+  house_rules: { [WORKSPACE_LAYOUT]: true, [CLONES]: join(root, 'clones'), [WORKTREES]: join(root, 'worktrees') },
   channel_read_seconds: 30,
 })
 const documentsFor = (act: Act) => ({
@@ -157,6 +159,7 @@ const ROWS: readonly ARow[] = [
   { act: OFFER_OWNER_ASKS, handler: 'queue_the_owners_asks/queue_the_owners_asks', tool: TAKE_ASKS_TOOL.name, args: {} },
   { act: OFFER_OWNER_ASKS, handler: 'queue_the_owners_asks/queue_the_owners_asks', tool: SETTLE_ASKS_TOOL.name, args: {} },
   { act: RESTART_MEMBER, handler: 'stop_and_restart_a_member/restart_a_member', tool: RESTART_A_MEMBER_TOOL.name, args: { member: ANOTHER, reason: 'stalled' } },
+  { act: FINISH_A_MEMBERS_WORKTREE, handler: 'open_and_finish_a_worktree/open_and_finish_a_worktree', tool: WORKTREE_FINISH_TOOL.name, args: { repo: 'acme/widget', branch: `${ANOTHER}/183`, package: PACKAGE, owner_ok: 1 } },
 ]
 
 /** What a tool says that is a refusal for the grant: every handler's refusal opens with the caller's name and "may not". */
@@ -200,7 +203,7 @@ const EVERY_CREW_TOOL: Readonly<Record<string, ALedgerLine>> = {
   [LAND_BATCH_TOOL.name]: { ungated: 'pushes an integration branch, never a default branch; moving the default branch is the fast-forward, which asks approve_landing' },
   [FAST_FORWARD_TOOL.name]: { asks: [APPROVE_LANDING] },
   [WORKTREE_OPEN_TOOL.name]: { ungated: "opens a worktree under the declaration's worktree place, for the caller's own work" },
-  [WORKTREE_FINISH_TOOL.name]: { ungated: "removes a worktree on a branch Martha's own naming made; a convenience, not a guard (martha#256)" },
+  [WORKTREE_FINISH_TOOL.name]: { asks: [FINISH_A_MEMBERS_WORKTREE] },
   [OWNER_TODO_ADD_TOOL.name]: { asks: ['assign_work'] },
   [OWNER_TODO_DONE_TOOL.name]: { asks: ['assign_work'] },
   [QUEUE_ASK_TOOL.name]: { ungated: 'queues a question for the owner; taking and settling asks are gated' },
