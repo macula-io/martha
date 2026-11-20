@@ -150,7 +150,7 @@ One entry per provider, by a name the crew picks.
 | `endpoint` | no | Where its model is reached: a URL, or a bare host reached on `https:`. |
 | `key_from` | no | The name of the environment variable that holds the key. |
 | `key_file` | no | The file the key is in: absolute, or under `~/`. Never beside `key_from`, and never the key. |
-| `account` | no | The account it bills. |
+| `account` | no | The account it bills: an e-mail address or a short name. One that reads as a key is refused: white space, a known key prefix (`sk-ant-`, `ghp_`, …), or an unbroken run of more than 31 letters, digits, `-` and `_`. |
 | `billing` | no | `subscription`, `metered` or `unknown`. |
 
 ## `profiles`

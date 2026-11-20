@@ -9,6 +9,7 @@
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import { BILLINGS } from '../keep_what_a_session_spent/the_hosts_usage.ts'
+import { TOKEN_PREFIXES } from '../keep_the_owners_todo_list/token_prefixes.ts'
 
 /** The declaration's keys for the three blocks, read through the lists at the end of this file, and the member key that names a profile. */
 const HARNESSES = 'harnesses'
@@ -126,6 +127,7 @@ function aProviderOf(entry: Block, at: string, refuse: RefuseAProfile): Provider
     if (entry[key] !== undefined && !isText(entry[key])) refuse(`${at}.${key}`, 'is not text')
   }
   if (entry['billing'] !== undefined && !(BILLINGS as readonly unknown[]).includes(entry['billing'])) refuse(`${at}.billing`, `is not one of ${BILLINGS.join(', ')}`)
+  if (isText(entry['account']) && looksLikeAKey(entry['account'])) refuse(`${at}.account`, 'reads as a key, not an account name: the key itself never goes in the declaration')
   refuseTheKeysPlace(entry, at, refuse)
   return { endpoint: textOrNull(entry['endpoint']), key_from: textOrNull(entry['key_from']), key_file: textOrNull(entry['key_file']) }
 }
@@ -143,6 +145,23 @@ function refuseTheKeysPlace(entry: Block, at: string, refuse: RefuseAProfile): v
  * would bring. Whether it is absolute, or under the owner's home, is the start's to say: it writes the home out.
  */
 const isAKeyFilesPathAsWritten = (value: unknown): value is string => isText(value) && !/\s/.test(value) && !value.split('/').includes('..')
+
+/**
+ * The longest unbroken run of letters, digits, `-` and `_` an account name may hold (martha#942). An account is an
+ * e-mail address or a short name, whose `@`, `.` and words break the run; an API key is one long run, as
+ * `sk-` and 32 hex digits are, with or without a prefix Martha knows.
+ */
+const AN_ACCOUNTS_LONGEST_RUN = 31
+
+/**
+ * Whether an account, as written, reads as a key pasted in its place (martha#942): it holds white space, as a pasted
+ * key brings, or starts with a prefix the private scan refuses (TOKEN_PREFIXES), or holds an unbroken run of letters,
+ * digits, `-` and `_` longer than AN_ACCOUNTS_LONGEST_RUN. The refusal names the field, never the value.
+ */
+const looksLikeAKey = (account: string): boolean =>
+  /\s/.test(account) ||
+  TOKEN_PREFIXES.some((prefix) => account.startsWith(prefix)) ||
+  (account.match(/[A-Za-z0-9_-]+/g) ?? []).some((run) => run.length > AN_ACCOUNTS_LONGEST_RUN)
 
 const textOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null)
 

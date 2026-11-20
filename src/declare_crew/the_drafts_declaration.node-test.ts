@@ -48,7 +48,7 @@ const draft = {
   harnesses: { [CLAUDE]: { config: '~/a-config-folder' }, [THE_ENGINES_HOST]: {} },
   providers: {
     an_engine_provider: { endpoint: 'api.a-provider.test', key_file: '~/keys/a-key-file' },
-    an_account: { account: 'an account', key_file: '~/keys/another-key-file', billing: 'subscription' },
+    an_account: { account: 'ann@example.org', key_file: '~/keys/another-key-file', billing: 'subscription' },
   },
   profiles: {
     big: { model: 'model-big', harness: CLAUDE, provider: 'an_account', context_limit: 300000 },
@@ -167,6 +167,27 @@ test('#931: a provider names where its key is, never the key: a variable\'s name
   await refusedWith(provider({ billing: 'by the hour' }), 'providers.an_account.billing')
   await refusedWith(provider({ endpoint: 7 }), 'providers.an_account.endpoint')
   await refusedWith(provider({ token: 'x' }), 'providers.an_account.token')
+})
+
+test('#942: a key pasted into a provider\'s account is refused at that field, and the key is never in the refusal', async () => {
+  const account = (value: string) => ({ ...draft, providers: { ...draft.providers, an_account: { ...draft.providers.an_account, account: value } } })
+  const pasted = [
+    ['a known key prefix, short', ['hf', 'a1b2c3'].join('_')],
+    ['a long unbroken run, as a key with no known prefix is', ['sk', 'a1b2c3d4e5f6'.repeat(3)].join('-')],
+    ['white space a pasted key brings', 'ann@example.org\n'],
+  ] as const
+  for (const [shape, value] of pasted) {
+    await assert.rejects(declare(account(value)), (error: unknown) => {
+      assert.ok(error instanceof DeclarationRefused, `${shape}: expected a DeclarationRefused, got ${String(error)}`)
+      assert.equal(error.field, 'providers.an_account.account', shape)
+      assert.match(error.message, /the key itself never goes in the declaration/, shape)
+      assert.ok(!error.message.includes(value.trim()), `${shape}: the refusal holds the key's text`)
+      return true
+    })
+  }
+  for (const value of ['ann.with.a.long.name.of.her.own@example.org', 'a-team-account', 'Ann']) {
+    assert.ok((await declare(account(value))).members.length > 0, `an account written ${value} is read`)
+  }
 })
 
 test('#931: gate_enforce, as the draft spells it, is read as gate_enforces, and never beside it', async () => {
