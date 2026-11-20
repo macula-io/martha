@@ -20,7 +20,7 @@ import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
 import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLAUDE_SWITCH, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, UP, USAGE } from './run_the_martha_command.ts'
 import { NOT_A_KEY_FILES_PATH } from '../declare_a_team_at_a_workspace/declare_the_engines_endpoint.ts'
-import { A_WORKSPACES_CLONES, CLAUDE_CODE_TEAM, declareTheTeam, BUILDER_ROLE, ENGINE_TEAM, ENGINE_TEAM_ENDPOINT, THE_KEY_FILE_QUESTION } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
+import { A_WORKSPACES_CLONES, CLAUDE_CODE_TEAM, declareTheTeam, BUILDER_ROLE, ENGINE_TEAM, ENGINE_TEAM_ENDPOINT, SUPERVISOR_ROLE, THE_KEY_FILE_QUESTION } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
 import { SESSION_FILE, KITTY_PLACE } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
 import { ENGINE_ENDPOINT, HOST, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
@@ -412,7 +412,7 @@ test('#511: the declaration is the config: after the first run, up --claude open
   assert.equal(marthaOnATerminal(place, kitty.env, UP, CLAUDE_SWITCH).status, EXIT_REFUSED, 'the first run seeds the declaration and stops at kitty')
   // The owner's edit: two workers instead of three, both on another model the host runs.
   const declared = JSON.parse(readFileSync(file, 'utf8')) as { members: { name: string; model: string }[] }
-  const kept = declared.members.filter((member) => member.name !== 'opus-3').map((member) => (member.name === 'supervisor' ? member : { ...member, model: 'sonnet' }))
+  const kept = declared.members.filter((member) => member.name !== 'opus-3').map((member) => (member.name === SUPERVISOR_ROLE ? member : { ...member, model: 'sonnet' }))
   const edited = `${JSON.stringify({ ...declared, members: kept }, null, 2)}\n`
   writeFileSync(file, edited)
 
@@ -423,7 +423,7 @@ test('#511: the declaration is the config: after the first run, up --claude open
   assert.ok('directory' in state)
   const session = readFileSync(join(state.directory, KITTY_PLACE, SESSION_FILE), 'utf8')
   const tabs = session.split('\n').filter((line) => line.startsWith('new_tab ')).map((line) => line.slice('new_tab '.length))
-  assert.deepEqual(tabs, ['supervisor', 'opus-1', 'opus-2'])
+  assert.deepEqual(tabs, [SUPERVISOR_ROLE, 'opus-1', 'opus-2'])
 })
 
 test('#511 part B: the declaration is the config: plain martha up opens exactly the engine members it declares, on their own models, and adds no default back', (t) => {

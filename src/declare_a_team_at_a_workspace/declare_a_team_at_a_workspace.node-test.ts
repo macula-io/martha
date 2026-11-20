@@ -125,7 +125,7 @@ test('#511: a member the owner removed and a model the owner changed stay as the
   const again = await declareTheTeam(requestFor(root, state, CLAUDE_CODE_TEAM))
   assert.ok(again.declared, again.declared ? '' : again.refusal)
   assert.equal(readFileSync(file, 'utf8'), edited)
-  assert.deepEqual(again.settings.members.map((member) => [member.name, member.model]), [['supervisor', 'sonnet'], ['opus-1', 'sonnet'], ['opus-2', 'sonnet']])
+  assert.deepEqual(again.settings.members.map((member) => [member.name, member.model]), [[SUPERVISOR_ROLE, 'sonnet'], ['opus-1', 'sonnet'], ['opus-2', 'sonnet']])
 })
 
 test('#511: a first run seeded with both hosts\' members declares each on its own host', async (t) => {
