@@ -133,6 +133,26 @@ test('the crew\'s runtime place is left out when it lies inside the directory na
   assert.equal(hexOf(await lineOf(tree, state)), hexOf(await lineOf(without)), 'the state inside is not the work')
 })
 
+test('a runtime place whose name starts with two dots is inside, not above (mutant: `..` matched by prefix)', async (t) => {
+  const tree = aTree(t)
+  writeFileSync(join(tree, 'work.md'), 'the work\n')
+  const named = join(tree, '..held')
+  mkdirSync(named)
+  writeFileSync(join(named, 'a-row.json'), '{}\n')
+  const line = await lineOf(tree, named)
+  assert.equal(line, asCrewCodeDigestsWithout(String.raw`-path ./..held -prune -o`, tree), 'the same value as the pipeline with that place pruned')
+})
+
+/** crew-code's pipeline with one more prune, for a tree whose runtime place has a name of its own. */
+function asCrewCodeDigestsWithout(prune: string, directory: string): string {
+  const script = [
+    `modes="$(cd "$1" && find . ${prune} -type f -printf '%m %p\\n' | LC_ALL=C sort)"`,
+    `sums="$(cd "$1" && find . ${prune} -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum)"`,
+    `printf '%s@sha256:%s\\n' "$1" "$(printf '%s\\n${THE_MANIFEST_SEPARATOR}\\n%s\\n' "$modes" "$sums" | sha256sum | awk '{ print $1 }')"`,
+  ].join('\n')
+  return execFileSync('bash', ['-c', script, 'digest', directory], { encoding: 'utf8' }).trim()
+}
+
 test('martha digest prints the line and ends done', (t) => {
   const place = placeWithACheckout(t)
   const tree = aTree(t)

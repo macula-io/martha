@@ -96,7 +96,8 @@ async function thePlaceToSkip(directory: string, runtime_place: string | undefin
   const [real, place] = await Promise.all([realpath(directory).catch(() => undefined), realpath(runtime_place).catch(() => undefined)])
   if (real === undefined || place === undefined) return undefined
   const within = relative(real, place)
-  return within === '' || within.startsWith('..') || isAbsolute(within) ? undefined : place
+  const above = within === '..' || within.startsWith(`..${sep}`)
+  return within === '' || above || isAbsolute(within) ? undefined : place
 }
 
 /** The manifest's first half: each file's mode and path, in byte order of the line. */
