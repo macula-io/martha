@@ -103,6 +103,7 @@ const asked = (place: CrewPlace, now: number, changes: Partial<UnheldNudgesAsked
   rows: [row('Vesta', { at: now })],
   parked: [],
   receivers: ['Supervisor'],
+  keeps_the_clock: true,
   ...changes,
 })
 
@@ -123,4 +124,17 @@ test('#319 B: a crew with no backlog, or a window of 0, keeps no clock and asks 
   assert.deepEqual(await theUnheldNudgesFor(asked(place, NOW, { backlog: { places: ['macula-io'], idle_minutes: 0 }, reader: { place, run: counting, now: NOW } })), [])
   assert.equal(calls, 0)
   assert.equal(place.read(UNHELD_IDLE_FILE), undefined)
+})
+
+test("martha#984: a turn's look keeps no clock, and reads the clock the pane's last look kept (mutant: the clock kept on a turn)", async () => {
+  const place = aPlace()
+  // No clock kept yet: a turn's look writes none, so none is there after it.
+  assert.deepEqual(await theUnheldNudgesFor(asked(place, NOW, { keeps_the_clock: false, reader: { place, run: undefined, now: NOW } })), [])
+  assert.equal(place.read(UNHELD_IDLE_FILE), undefined, "a turn's look kept the idle clock")
+  // The pane looks and keeps the clock; a turn past the window reads it, from the read the pane kept, and keeps nothing new.
+  await theUnheldNudgesFor(asked(place, NOW))
+  const kept = place.read(UNHELD_IDLE_FILE)
+  const turn = await theUnheldNudgesFor(asked(place, NOW + WINDOW, { keeps_the_clock: false, reader: { place, run: undefined, now: NOW + WINDOW } }))
+  assert.deepEqual(turn, [{ kind: 'unheld', member: 'Vesta', package: '', since: NOW, unheld: 2 }])
+  assert.deepEqual(place.read(UNHELD_IDLE_FILE), kept, "a turn's look changed the idle clock")
 })
