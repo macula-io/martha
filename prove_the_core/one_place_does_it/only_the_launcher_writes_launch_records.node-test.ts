@@ -31,7 +31,7 @@ interface Planted {
 }
 const planted = JSON.parse(readFileSync(join(import.meta.dirname, 'planted_launch_record_writes.json'), 'utf8')) as Planted
 
-/** The host adapters package.json declares, in its order. */
+/** The host adapters package.json declares, in its order: directories under src/ that are not slices. */
 const THE_HOST_ADAPTERS = [
     'answer_the_relay',
     'approve_a_checkouts_config',
@@ -61,6 +61,7 @@ const THE_HOST_ADAPTERS = [
     'launch_a_goose_member',
     'list_stop_and_restart_the_crew',
     'load_the_hosts_markdown',
+    'open_the_crew_in_kitty',
     'place_the_hosts_settings',
     'read_a_kernel_and_a_home',
     'refuse_a_git_call_in_a_members_shell',
