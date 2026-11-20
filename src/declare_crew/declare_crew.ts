@@ -218,11 +218,14 @@ export interface Backlog {
   readonly idle_minutes: number
 }
 
+/** The house rule that has every owner's item in a handover or a brief marked DECIDED or IDEA (martha#999 package 2). */
+export const OWNER_ITEMS = 'owner_items'
+
 /** The house rule that turns a crew's workspace layout on (martha#256), which brings the two places below with it. */
 export const WORKSPACE_LAYOUT = 'workspace_layout'
 
 /** The house rules a crew can switch on. Each is off unless the declaration says true. */
-export const HOUSE_RULE_SWITCHES = ['owner_items', WORKSPACE_LAYOUT, 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES] as const
+export const HOUSE_RULE_SWITCHES = [OWNER_ITEMS, WORKSPACE_LAYOUT, 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES] as const
 export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
 
 /** The house rule that names a model rather than switching a rule on. */

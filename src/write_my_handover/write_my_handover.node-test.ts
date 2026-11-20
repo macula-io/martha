@@ -27,7 +27,9 @@ import {
   THE_HANDOVER_WRITTEN,
   handoversPlace,
   theHandoverFile,
+  ownerItemsMissingFrom,
   theHandoverPrompt,
+  theOwnerItemRule,
   theSendBackNote,
   whatBecameOfTheHandover,
   WRITE_MY_HANDOVER_TOOL,
@@ -35,6 +37,7 @@ import {
 } from './write_my_handover.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { theShapeLine } from './handover_shape.ts'
 /** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
 const HANDOVER_LIMIT_PERCENT = THRESHOLDS_WHEN_UNNAMED.handover_percent
 
@@ -210,13 +213,19 @@ test('#255: a handover written before the flow asked for one is not this flow’
   assert.deepEqual(verdict, { kind: 'not_written', why: 'the handover was written before this session was asked for one' })
 })
 
-test('#255: a handover missing the line of a package the row holds is sent back once, and clears on the second miss', () => {
+test('#999: a handover is judged by crew-code’s shape: each package it holds needs a branch, a sha and a next step', () => {
   const asked = { stamp: { member: 'builder', predecessor_id: 'a-session', written_at: new Date(2_000).toISOString(), digest: 'x', record_length: 0, record_digest: 'y' }, text: 'a handover with no package in it', asked_at: 1_000, holds: ['synthetic-owner/repo#7'] }
-  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: false }), { kind: 'sent_back', missing: ['no line naming synthetic-owner/repo#7'] })
-  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 1, at_limit: false }), { kind: 'cleared_anyway', missing: ['no line naming synthetic-owner/repo#7'] })
-  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: true }), { kind: 'cleared_anyway', missing: ['no line naming synthetic-owner/repo#7'] })
+  const none = ['synthetic-owner/repo#7 is missing branch, sha, next step']
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: false }), { kind: 'sent_back', missing: none })
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 1, at_limit: false }), { kind: 'cleared_anyway', missing: none })
+  assert.deepEqual(whatBecameOfTheHandover({ ...asked, sent_back: 0, at_limit: true }), { kind: 'cleared_anyway', missing: none })
   assert.deepEqual(
-    whatBecameOfTheHandover({ ...asked, text: 'it holds synthetic-owner/repo#7, at a branch and a sha', sent_back: 1, at_limit: false }),
+    whatBecameOfTheHandover({ ...asked, text: 'it holds synthetic-owner/repo#7, at a branch and a sha', sent_back: 0, at_limit: false }),
+    { kind: 'sent_back', missing: ['synthetic-owner/repo#7 is missing sha, next step'] },
+    'a line that only names the package was taken as its answer',
+  )
+  assert.deepEqual(
+    whatBecameOfTheHandover({ ...asked, text: '- synthetic-owner/repo#7 · branch builder/7-a-fix · sha nothing committed · next read the issue', sent_back: 1, at_limit: false }),
     { kind: 'accepted', missing: [] },
   )
 })
@@ -232,5 +241,15 @@ test('#255: the handover prompt names the limit and the tool, and asks for the w
   assert.ok(atTheLimit.includes(`${HANDOVER_LIMIT_PERCENT}%`), 'the prompt does not name the limit')
   assert.ok(atTheLimit.includes(WRITE_MY_HANDOVER_TOOL), 'the prompt does not name the tool that writes the handover')
   assert.ok(atTheLimit.includes(THE_HANDOVER_WRITTEN), 'the prompt does not name the word to answer with')
+  assert.ok(atTheLimit.includes(theShapeLine('<org/repo#n>')), 'the prompt does not give the line a package needs')
   assert.ok(!theHandoverPrompt({ at_limit: false, percent: 30, limit_percent: HANDOVER_LIMIT_PERCENT }).includes('handover limit'), 'a task’s end reads as the limit')
+})
+
+test('martha#999 package 2: the prompt carries crew-code’s fenced owner-items rule only when the crew switches it on, and the rule copied is no item', () => {
+  const asked = { at_limit: true, percent: HANDOVER_LIMIT_PERCENT + 2, limit_percent: HANDOVER_LIMIT_PERCENT }
+  const on = theHandoverPrompt({ ...asked, owner_items: 'Sam' })
+  assert.ok(on.includes(theOwnerItemRule('Sam')), 'the prompt does not carry the owner-items rule')
+  assert.ok(!theHandoverPrompt(asked).includes('Mark every item'), 'a crew without owner_items is told to mark items')
+  assert.deepEqual(ownerItemsMissingFrom(theOwnerItemRule('Sam'), 'Sam'), [], 'the rule copied into a handover was read as an unmarked item')
+  assert.deepEqual(ownerItemsMissingFrom('- Sam wants the register flipped.', undefined), [], 'owner items were read with the switch off')
 })
