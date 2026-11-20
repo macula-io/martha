@@ -123,7 +123,7 @@ import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import type { HoldingTheWatch, TheServedToolsWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import { watchTheCrewToolsServedBy } from '../watch_the_crew_tools_a_launch_served/watch_the_crew_tools_a_launch_served.ts'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
-import { crewTextToHand } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
+import { crewTextToHand, noCrewTextFor } from '../hand_a_member_its_crew_text/hand_a_member_its_crew_text.ts'
 import type { TheLeftoversALaunchKeeps } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import type { TurnRaising } from '../raise_a_turn_to_the_member/raise_a_turn_to_the_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
@@ -393,7 +393,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch): ReadyLaunch | string {
   const crew = crewTextToHand(launch.crew_settings, launch.member_name, prepared.carried_files, thisMachine.stores.files)
   if ('refusal' in crew) {
     removeSnapshot()
-    return `${NOT_STARTED}: ${crew.refusal}, so ${launch.member_name} is handed no crew text`
+    return `${NOT_STARTED}: ${noCrewTextFor(launch.member_name, crew.refusal)}`
   }
   const crew_text = crew.text
   const unproved = meshServerUnproved(prepared.carried_files[CLAUDE_SERVERS])
