@@ -1,6 +1,6 @@
-// The night reads a member's start by the words `martha start` prints (#639 night 1). The proof's bash spells those
+// The live run reads a member's start by the words `martha start` prints (#639 live run 1). The proof's bash spells those
 // words as STARTED_WORDS; this test holds them to the line the command itself makes, so a change to the producer
-// fails here by name instead of on the next live night.
+// fails here by name instead of on the next live run.
 
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'

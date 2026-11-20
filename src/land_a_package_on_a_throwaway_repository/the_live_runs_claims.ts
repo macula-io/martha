@@ -1,7 +1,7 @@
-// The night's crew claims (martha#639 section 6, the first four rows): the builder handed off, the handoff arrived, the
+// The live run's crew claims (martha#639 section 6, the first four rows): the builder handed off, the handoff arrived, the
 // reviewer gave a verdict, and the verdict arrived. Each is read from that member's own transcript, as JSON lines, one
 // record at a time: a tool call by its name and input, a turn by its role and text. Never a grep of one serialised
-// shape (the night's finding 2: a Read result carried line numbers the expected shape did not).
+// shape (the live run's finding 2: a Read result carried line numbers the expected shape did not).
 //
 // One member's lines never stand in for the other's: the builder's call is read only in the builder's transcript, and
 // the handoff's arrival only in the reviewer's. A record the host marks as a subagent's (`isSidechain`) is not the
@@ -12,8 +12,8 @@ import { FRAME_OPENING } from '../hand_a_crew_message_to_its_member/hand_a_crew_
 import { shapeOf, VALUE_SHAPES } from '../read_a_crew_line/crew_lines.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 
-/** The night's one package: its name, its range, and the two members who work it. */
-export interface TheNight {
+/** The live run's one package: its name, its range, and the two members who work it. */
+export interface TheLiveRun {
   readonly package: string
   readonly range: string
   readonly builder: string
@@ -26,43 +26,43 @@ export const HANDOFF_ARRIVED = 'the handoff arrived'
 export const VERDICT_SAID = 'the reviewer gave a verdict'
 export const VERDICT_ARRIVED = 'the verdict arrived'
 
-/** The night's package has no CI: its lines say so with the ids shape's own word for it (crew_lines.ts). */
+/** The live run's package has no CI: its lines say so with the ids shape's own word for it (crew_lines.ts). */
 export const NO_CI_RUN = 'none:paths'
-/** The one round a night runs, the verdict it expects, and the changes that verdict requires. */
+/** The one round a live run runs, the verdict it expects, and the changes that verdict requires. */
 export const THE_ROUND = '1'
 /**
  * The verdict word is the crew's own, never spelled here: the passing word, which the VERDICT shape lists first
- * (crew_lines.ts). The claims tests write the night's lines out with it, so a shape that reordered its words fails them.
+ * (crew_lines.ts). The claims tests write the live run's lines out with it, so a shape that reordered its words fails them.
  */
 const VERDICT_WORDS = shapeOf('VERDICT')?.parts.find((part) => 'oneOf' in part)
 export const THE_VERDICT: string = VERDICT_WORDS !== undefined && 'oneOf' in VERDICT_WORDS ? (VERDICT_WORDS.oneOf[0] ?? '') : ''
 export const NONE_REQUIRED = '0'
 
-/** The values the night's lines carry, by key. */
-const NIGHT_VALUES: Readonly<Record<string, string>> = { r: THE_ROUND, ci: NO_CI_RUN, req: NONE_REQUIRED }
+/** The values the live run's lines carry, by key. */
+const LIVE_RUN_VALUES: Readonly<Record<string, string>> = { r: THE_ROUND, ci: NO_CI_RUN, req: NONE_REQUIRED }
 
 /** The record type the host gives a request blob. */
 const REQUEST_BLOB = 'api-request-blob'
 
 /**
- * The exact line a member sends on the night's package for `verb`, built from the verb's shape: its parts in order,
- * then the keys a line on a range shows. A shape this night cannot fill throws: the definition moved, and the night's
+ * The exact line a member sends on the live run's package for `verb`, built from the verb's shape: its parts in order,
+ * then the keys a line on a range shows. A shape this live run cannot fill throws: the definition moved, and the live run's
  * claims must move with it.
  */
-export function theNightsLine(verb: string, night: TheNight): string {
+export function theLiveRunsLine(verb: string, liveRun: TheLiveRun): string {
   const shape = shapeOf(verb)
   if (shape === undefined) throw new Error(`${verb} is not a line a member sends`)
   const words = shape.parts.map((part) => {
     if ('word' in part) return part.word
     if ('oneOf' in part) {
-      if (!part.oneOf.includes(THE_VERDICT)) throw new Error(`${verb} takes none of ${part.oneOf.join('|')} the night expects`)
+      if (!part.oneOf.includes(THE_VERDICT)) throw new Error(`${verb} takes none of ${part.oneOf.join('|')} the live run expects`)
       return THE_VERDICT
     }
-    return part.value === 'package' ? night.package : night.range
+    return part.value === 'package' ? liveRun.package : liveRun.range
   })
   const keys = shape.shown.range.map((key) => {
-    const value = NIGHT_VALUES[key]
-    if (value === undefined) throw new Error(`${verb} shows ${key}, which the night gives no value`)
+    const value = LIVE_RUN_VALUES[key]
+    if (value === undefined) throw new Error(`${verb} shows ${key}, which the live run gives no value`)
     return `${key}=${value}`
   })
   return [verb, ...words, ...keys].join(' ')
@@ -89,7 +89,7 @@ interface Handed extends Seen {
 
 /**
  * The member's own records: every line of the transcript parsed, but a request blob and a subagent's record. A line
- * that is not JSON throws: a transcript the night cannot read is never read as one holding nothing.
+ * that is not JSON throws: a transcript the live run cannot read is never read as one holding nothing.
  */
 export function theMembersRecords(text: string): readonly TheRecord[] {
   const records: TheRecord[] = []
@@ -111,7 +111,7 @@ export function theMembersRecords(text: string): readonly TheRecord[] {
 
 const firstLineOf = (text: string): string => text.split('\n')[0] ?? ''
 
-/** When a record was written, or NaN when it carries no time the night can order by. */
+/** When a record was written, or NaN when it carries no time the live run can order by. */
 const whenOf = (record: TheRecord): number => (typeof record.timestamp === 'string' ? Date.parse(record.timestamp) : Number.NaN)
 
 /** What a content block says to the crew: the text of a `say_to_the_crew` call, or undefined for any other block. */
@@ -176,29 +176,29 @@ const firstSaying = <T extends Seen>(seen: readonly T[], line: string, after: nu
  * The first of the four rows that the two transcripts do not show, as `<row>: <why>`, or undefined when all four hold.
  * Each row must come after the one before it, by the times the host wrote.
  */
-export function whichCrewClaimFails(night: TheNight, builderTranscript: string, reviewerTranscript: string): string | undefined {
-  if (!VALUE_SHAPES.package.matches.test(night.package)) return `the night's package '${night.package}' is not ${VALUE_SHAPES.package.what}`
-  if (!VALUE_SHAPES.range.matches.test(night.range)) return `the night's range '${night.range}' is not ${VALUE_SHAPES.range.what}`
-  const handoff = theNightsLine('HANDOFF', night)
-  const verdict = theNightsLine('VERDICT', night)
+export function whichCrewClaimFails(liveRun: TheLiveRun, builderTranscript: string, reviewerTranscript: string): string | undefined {
+  if (!VALUE_SHAPES.package.matches.test(liveRun.package)) return `the live run's package '${liveRun.package}' is not ${VALUE_SHAPES.package.what}`
+  if (!VALUE_SHAPES.range.matches.test(liveRun.range)) return `the live run's range '${liveRun.range}' is not ${VALUE_SHAPES.range.what}`
+  const handoff = theLiveRunsLine('HANDOFF', liveRun)
+  const verdict = theLiveRunsLine('VERDICT', liveRun)
   const builder = theMembersRecords(builderTranscript)
   const reviewer = theMembersRecords(reviewerTranscript)
 
   const handedOff = firstSaying(theSays(builder), handoff, Number.NEGATIVE_INFINITY)
-  if (handedOff === undefined) return `${HANDOFF_SAID}: no ${SAY_TO_THE_CREW} call in ${night.builder}'s transcript opens with '${handoff}'`
+  if (handedOff === undefined) return `${HANDOFF_SAID}: no ${SAY_TO_THE_CREW} call in ${liveRun.builder}'s transcript opens with '${handoff}'`
   const arrived = firstSaying(
-    theHanded(reviewer).filter((one) => one.from === night.builder),
+    theHanded(reviewer).filter((one) => one.from === liveRun.builder),
     handoff,
     handedOff.at,
   )
-  if (arrived === undefined) return `${HANDOFF_ARRIVED}: no turn from ${night.builder} in ${night.reviewer}'s transcript opens with '${handoff}' after the builder's call`
+  if (arrived === undefined) return `${HANDOFF_ARRIVED}: no turn from ${liveRun.builder} in ${liveRun.reviewer}'s transcript opens with '${handoff}' after the builder's call`
   const gave = firstSaying(theSays(reviewer), verdict, arrived.at)
-  if (gave === undefined) return `${VERDICT_SAID}: no ${SAY_TO_THE_CREW} call in ${night.reviewer}'s transcript opens with '${verdict}' after the handoff arrived`
+  if (gave === undefined) return `${VERDICT_SAID}: no ${SAY_TO_THE_CREW} call in ${liveRun.reviewer}'s transcript opens with '${verdict}' after the handoff arrived`
   const back = firstSaying(
-    theHanded(builder).filter((one) => one.from === night.reviewer),
+    theHanded(builder).filter((one) => one.from === liveRun.reviewer),
     verdict,
     gave.at,
   )
-  if (back === undefined) return `${VERDICT_ARRIVED}: no turn from ${night.reviewer} in ${night.builder}'s transcript opens with '${verdict}' after the reviewer's call`
+  if (back === undefined) return `${VERDICT_ARRIVED}: no turn from ${liveRun.reviewer} in ${liveRun.builder}'s transcript opens with '${verdict}' after the reviewer's call`
   return undefined
 }
