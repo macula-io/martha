@@ -1,9 +1,9 @@
-// What the crew answers for a package whose contract the ledger cannot read back (martha#513 slice 2, round 2).
+// What the crew answers for a package whose contract the ledger cannot read back (martha#513 slice 2, martha#601 row 111).
 //
 // The rule is the slice's (../refuse_calls_outside_the_package_contract) and the wiring is the crew's
-// (./the_contract_a_member_is_held_to): this file pins the third case. One unreadable row must refuse the act it cannot
-// judge, and nothing else — not the member's other calls, and above all not its handover. And a call that is no act
-// reads no contract at all, so a ledger that cannot answer cannot cost a call that a contract would never judge.
+// (./the_contract_a_member_is_held_to): this file pins the third case. An unreadable row answers no contract at all,
+// for an act as for any other call, so the call runs with nothing to notice (row 111, removed). And a call that is no
+// act reads no contract at all.
 //
 // It keeps its own state: a broken row is a fact about one package's ledger, and a test that plants one must not leave
 // it where another test's package reads.
@@ -20,7 +20,6 @@ import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OFF
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { isAContractThatCannotBeRead } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 import { noteTheContract } from '../log_ledger/log_ledger.ts'
 import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
@@ -93,10 +92,7 @@ test('a call that is no act reads no contract at all, so an unreadable one canno
   assert.equal(await tools.theContractInForce({ tool: WRITE_MY_HANDOVER_TOOL, input: { content: 'my handover' } }, names), undefined)
 })
 
-test('a contract row the ledger cannot read back refuses that act alone, and says why', async () => {
+test('#601 row 111: a contract row the ledger cannot read back answers no contract for an act either, so the act runs unnoticed', async () => {
   const tools = await aCrewWithAnUnreadableContract()
-  const answered = await tools.theContractInForce(aCall('git push origin main'), names)
-  assert.ok(answered !== undefined && isAContractThatCannotBeRead(answered))
-  assert.equal(answered.package, PACKAGE)
-  assert.match(answered.why, /cannot be read back/)
+  assert.equal(await tools.theContractInForce(aCall('git push origin main'), names), undefined)
 })

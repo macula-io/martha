@@ -1,13 +1,13 @@
-// What a package's budget does to a member's calls (martha#513, slice 3).
+// What a package's budget does to a member's calls (martha#513, slice 3; a notice since martha#601 row 112).
 //
 // The count is the package's, not the session's: it is kept in a stream of its own beside the package's ledger, read once
 // a session, and never reset by a refresh, a restart or a new version of the contract. The clock is the package's too:
 // it starts once, at the first version that is bounded and names minutes, and time spent waiting counts.
 //
-// What these tests hold: a call is counted when it runs; at the limit every call is refused except the four that end the
-// package cleanly, matched by the host's own names; the count survives a successor session; the budget binds from the
+// What these tests hold: a call is counted when it runs; at the limit every call is told so in a notice, except the four
+// that end the package cleanly, matched by the host's own names; the count survives a successor session; the budget binds from the
 // call that names the package, however late in the session that is, and follows the member onto another package; an
-// unbounded package never stops; and a counted call reads neither the package's act ledger nor the spend stream more
+// unbounded package is never noticed; and a counted call reads neither the package's act ledger nor the spend stream more
 // than once a session.
 
 import assert from 'node:assert/strict'
@@ -25,7 +25,7 @@ import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
 
-import { THE_CALLS_THAT_END_A_PACKAGE, refuseACallPastTheBudget } from './refuse_a_call_past_the_budget.ts'
+import { THE_CALLS_THAT_END_A_PACKAGE, theNoticeOfACallPastTheBudget } from './refuse_a_call_past_the_budget.ts'
 import { SPEND_COUNTED, noteTheCallCounted as noteTheStreamRow, spendStreamOf, theSpendCounts } from './the_spend_stream.ts'
 import { theUncountableBudgetNote } from './the_spend_in_force.ts'
 import { theBudgetOver } from './the_budget_tools.ts'
@@ -128,7 +128,7 @@ test('a call that runs is one more tool call spent, kept so a successor reads it
   assert.deepEqual(await theSpendCounts(host, PACKAGE), { 'tool calls': 2 })
 })
 
-test('at the limit the next call is refused, named with what was spent and the four calls that end the package', async () => {
+test('#601 row 112: at the limit the next call is told, in one notice, what was spent and the four calls that end the package', async () => {
   const { host } = aHostForTheBudget()
   await keepTheContract(host, aBlock('2 tool calls'))
   const budget = theBudgetOver(placesOver(host, PACKAGE))
@@ -136,15 +136,17 @@ test('at the limit the next call is refused, named with what was spent and the f
   await budget.noteTheCallCounted(SESSION, 'some_working_tool')
   const spend = await budget.theSpendInForce(SESSION)
 
-  const refused = refuseACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf)
-  assert.ok(refused !== undefined)
-  assert.match(refused, /2 of 2 tool calls/)
-  assert.match(refused, new RegExp(PACKAGE.replace('#', '#')))
+  assert.equal(
+    theNoticeOfACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf),
+    `Notice: package ${PACKAGE}'s budget (contract version 1) is spent — 2 of 2 tool calls. The call runs; stop and ` +
+      `write your handover (${WRITE_MY_HANDOVER_TOOL}), say so to the crew (${SAY_TO_THE_CREW}), ` +
+      `report where the work stands (${REPORT_WHERE_THE_WORK_STANDS}) or be parked (${PARK_A_MEMBER}).`,
+  )
 
-  // The four that end the package stay open, under the names Claude Code calls them by.
+  // The four that end the package are told nothing, under the names Claude Code calls them by.
   for (const ending of [WRITE_MY_HANDOVER_TOOL, SAY_TO_THE_CREW, PARK_A_MEMBER, REPORT_WHERE_THE_WORK_STANDS]) {
     assert.equal(
-      refuseACallPastTheBudget(aCall(`mcp__martha__${ending}`), spend, CLAUDE_CODE.ownNameOf),
+      theNoticeOfACallPastTheBudget(aCall(`mcp__martha__${ending}`), spend, CLAUDE_CODE.ownNameOf),
       undefined,
       ending,
     )
@@ -158,12 +160,12 @@ test('the ending calls are the same calls without a server name, and a look-alik
   await budget.noteTheCallCounted(SESSION, 'some_working_tool')
   const spend = await budget.theSpendInForce(SESSION)
 
-  assert.equal(refuseACallPastTheBudget(aCall(WRITE_MY_HANDOVER_TOOL), spend, CLAUDE_CODE.ownNameOf), undefined)
-  // A name that merely ends with one is another call: it is refused like any other.
-  assert.notEqual(refuseACallPastTheBudget(aCall('mcp__martha__not_write_my_handover'), spend, CLAUDE_CODE.ownNameOf), undefined)
+  assert.equal(theNoticeOfACallPastTheBudget(aCall(WRITE_MY_HANDOVER_TOOL), spend, CLAUDE_CODE.ownNameOf), undefined)
+  // A name that merely ends with one is another call: it is told like any other.
+  assert.notEqual(theNoticeOfACallPastTheBudget(aCall('mcp__martha__not_write_my_handover'), spend, CLAUDE_CODE.ownNameOf), undefined)
 })
 
-test('a successor session reads the count from the stream and is refused on its first over-budget call', async () => {
+test('a successor session reads the count from the stream and is told on its first over-budget call', async () => {
   const { host } = aHostForTheBudget()
   await keepTheContract(host, aBlock('3 tool calls'))
   const first = theBudgetOver(placesOver(host, PACKAGE))
@@ -176,7 +178,7 @@ test('a successor session reads the count from the stream and is refused on its 
   const spend = await second.theSpendInForce('a-session-after')
   assert.ok(spend !== undefined)
   assert.deepEqual(spend.units, [{ unit: 'tool calls', spent: 3, limit: 3 }])
-  assert.notEqual(refuseACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined)
+  assert.notEqual(theNoticeOfACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined)
 })
 
 test('a session handed its package after its first call is held to it from the call that names it (r=1 R1)', async () => {
@@ -189,17 +191,17 @@ test('a session handed its package after its first call is held to it from the c
   assert.equal(await budget.theSpendInForce(SESSION), undefined)
   assert.equal(await budget.noteTheCallCounted(SESSION, 'some_working_tool'), undefined)
 
-  // The report names the package, and from the next call the budget holds: the first two calls run and count, the three
-  // after them are refused — five calls on a two-call budget are not five calls that run.
+  // The report names the package, and from the next call the budget holds: the first two calls are told nothing, the
+  // three after them are told the budget is spent.
   holding(PACKAGE)
   const ran: boolean[] = []
   for (let call = 0; call < 5; call += 1) {
     const spend = await budget.theSpendInForce(SESSION)
-    const refused = refuseACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf)
-    ran.push(refused === undefined)
-    if (refused === undefined) await budget.noteTheCallCounted(SESSION, 'some_working_tool')
+    const told = theNoticeOfACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf)
+    ran.push(told === undefined)
+    if (told === undefined) await budget.noteTheCallCounted(SESSION, 'some_working_tool')
   }
-  assert.deepEqual(ran, [true, true, false, false, false], 'the calls after the package was named were not held to its budget')
+  assert.deepEqual(ran, [true, true, false, false, false], 'the calls after the package was named were not told of its budget')
 
   // And the two that ran were counted: a successor reads them, not zero.
   const successor = await theBudgetOver(placesOver(host, PACKAGE)).theSpendInForce('a-session-after')
@@ -223,7 +225,7 @@ test('a member handed another package in the same session is held to the new one
   assert.deepEqual((await budget.theSpendInForce(SESSION))?.units, [{ unit: 'tool calls', spent: 0, limit: 1 }], 'the package the member left kept its budget in force')
   assert.equal(await budget.noteTheCallCounted(SESSION, 'some_working_tool'), undefined)
   const spend = await budget.theSpendInForce(SESSION)
-  assert.notEqual(refuseACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined, 'the new package had a call left and did not refuse one')
+  assert.notEqual(theNoticeOfACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined, 'the new package had a call left and its spent budget was not noticed')
 })
 
 test('a second session in the same launch counts from the stream, not from the tally the first one kept', async () => {
@@ -242,20 +244,20 @@ test('a second session in the same launch counts from the stream, not from the t
   )
 })
 
-test('an unbounded package counts nothing and never stops a call', async () => {
+test('an unbounded package counts nothing and notices no call', async () => {
   const { host } = aHostForTheBudget()
   const unbounded = ['unbounded: the owner said this one runs as long as it needs to', 'owner_yes: 12']
   await keepTheContract(host, unbounded)
   const budget = theBudgetOver(placesOver(host, PACKAGE))
 
   assert.equal(await budget.theSpendInForce(SESSION), undefined)
-  assert.equal(refuseACallPastTheBudget(aCall('some_working_tool'), await budget.theSpendInForce(SESSION), CLAUDE_CODE.ownNameOf), undefined)
+  assert.equal(theNoticeOfACallPastTheBudget(aCall('some_working_tool'), await budget.theSpendInForce(SESSION), CLAUDE_CODE.ownNameOf), undefined)
   // Nothing is counted either: an unbounded package spends nothing it is held to.
   assert.equal(await budget.noteTheCallCounted(SESSION, 'some_working_tool'), undefined)
   assert.deepEqual(await theSpendCounts(host, PACKAGE), {})
 })
 
-test('a member holding no package spends nothing, and neither does a package with no contract: the budget refuses nothing on its own (martha#597)', async () => {
+test('a member holding no package spends nothing, and neither does a package with no contract', async () => {
   const { host } = aHostForTheBudget()
   assert.equal(await theBudgetOver(placesOver(host, '')).theSpendInForce(SESSION), undefined)
 
@@ -263,8 +265,6 @@ test('a member holding no package spends nothing, and neither does a package wit
   const no_contract = theBudgetOver(placesOver(host, 'synthetic-owner/repo#99'))
   assert.equal(await no_contract.theSpendInForce(SESSION), undefined)
   assert.equal(await no_contract.noteTheCallCounted(SESSION, 'some_working_tool'), undefined)
-  // A package with no contract is refused by its contract, not by this slice: the gate's refusal is
-  // ../refuse_calls_outside_the_package_contract's, and it is pinned there (martha#597).
 })
 
 test('minutes spend a package with calls left, and they count while it waits', async () => {
@@ -278,7 +278,7 @@ test('minutes spend a package with calls left, and they count while it waits', a
     { unit: 'minutes', spent: 31, limit: 30 },
     { unit: 'tool calls', spent: 0, limit: 100 },
   ])
-  assert.notEqual(refuseACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined)
+  assert.notEqual(theNoticeOfACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined)
 })
 
 test('the clock starts at the first version that names minutes, so a package bounded late is not spent at once', async () => {
@@ -292,7 +292,7 @@ test('the clock starts at the first version that names minutes, so a package bou
   const spend = await theBudgetOver(placesOver(host, PACKAGE)).theSpendInForce(SESSION)
   assert.ok(spend !== undefined)
   assert.deepEqual(spend.units, [{ unit: 'minutes', spent: 0, limit: 30 }])
-  assert.equal(refuseACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined)
+  assert.equal(theNoticeOfACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined)
 })
 
 test('a session reads the spend stream and the contract once, and no call reads either again', async () => {
@@ -303,7 +303,7 @@ test('a session reads the spend stream and the contract once, and no call reads 
 
   // The first call of the session is the one that reads: the package's contract, then its spend.
   const first = await budget.theSpendInForce(SESSION)
-  assert.equal(refuseACallPastTheBudget(aCall('some_working_tool'), first, CLAUDE_CODE.ownNameOf), undefined)
+  assert.equal(theNoticeOfACallPastTheBudget(aCall('some_working_tool'), first, CLAUDE_CODE.ownNameOf), undefined)
   await budget.noteTheCallCounted(SESSION, 'some_working_tool')
   const read_at_the_first_call = streamsRead().slice(before)
   assert.deepEqual(read_at_the_first_call.sort(), [`ledger/${PACKAGE}`, spendStreamOf(PACKAGE)].sort())
@@ -311,24 +311,23 @@ test('a session reads the spend stream and the contract once, and no call reads 
   // Every call after it is answered from what was read: no stream is read again.
   for (let call = 0; call < 25; call += 1) {
     const spend = await budget.theSpendInForce(SESSION)
-    assert.equal(refuseACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined)
+    assert.equal(theNoticeOfACallPastTheBudget(aCall('some_working_tool'), spend, CLAUDE_CODE.ownNameOf), undefined)
     await budget.noteTheCallCounted(SESSION, 'some_working_tool')
   }
   assert.deepEqual(streamsRead().slice(before + read_at_the_first_call.length), [], 'no call after the first reads a stream')
 })
 
-test('a call whose row cannot be kept is not counted, and says why', async () => {
+test('#601 row 113: a call whose row cannot be kept is not counted, and says why for the journal', async () => {
   const { host, given } = aHostForTheBudget()
   await keepTheContract(host, aBlock('10 tool calls'))
   const budget = theBudgetOver(placesOver(host, PACKAGE))
 
   given.refuseNextAppend('the store is full')
-  const refused = await budget.noteTheCallCounted(SESSION, 'some_working_tool')
-  assert.ok(refused !== undefined)
-  assert.match(refused, /budget|spend/i)
+  const why = await budget.noteTheCallCounted(SESSION, 'some_working_tool')
+  assert.equal(why, `the store could not keep the row counting this call against ${PACKAGE}'s budget (the store refused the row: the store is full), so this call is not counted.`)
   assert.deepEqual(await theSpendCounts(host, PACKAGE), {})
 
-  // And a call after it still counts: the refusal was this row's, not the stream's.
+  // And a call after it still counts: the failure was this row's, not the stream's.
   assert.equal(await budget.noteTheCallCounted(SESSION, 'some_working_tool'), undefined)
   assert.deepEqual(await theSpendCounts(host, PACKAGE), { 'tool calls': 1 })
 })

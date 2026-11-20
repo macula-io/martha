@@ -52,7 +52,7 @@ export async function theLineToHandAtStart(asked: TheStartLineAsked): Promise<Th
   const held = asked.held?.holds ?? ''
   const contract = await theContractPartOf(asked.ledger, held)
   // What the package has spent of its budget, and the units this host cannot count (martha#513, slice 3): a session that
-  // starts at the wall is told so, rather than discovering it on its first call.
+  // starts past its budget is told so at once, rather than in a notice on its first call.
   const spend = await theSpendPartOfTheStart(asked.ledger, held, asked.now)
   const acts = await theOpenActsHanded(asked)
   const line = [contract, spend, standing, acts].filter((part) => part !== null && part !== undefined).join('\n\n')

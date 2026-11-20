@@ -1,10 +1,9 @@
-// A package with no contract is refused its first call, in a solo crew and in a team crew (martha#597).
+// A package with no contract runs its calls, in a solo crew and in a team crew (martha#601 row 109, which removed
+// martha#597's refusal).
 //
-// The rule is ../refuse_calls_outside_the_package_contract's and the wiring is ../a_crews_tools's; this file pins the
-// two crew shapes the owner can declare, because the rule must not depend on which one is in force. It is also why the
-// refusal is not in the launcher: a launch refusal needs an escape for the member that may keep a contract, and in a
-// solo crew every member may, so a launch gate would bite in a team crew and not in a solo one. Here both are refused
-// on the first working call, and the five calls that let someone save the work and fix the package stay open.
+// The wiring is ../a_crews_tools's: a member holding a package with no contract version is handed no contract, so the
+// gate lets its calls through and nothing is noticed against one. This file pins the two crew shapes the owner can
+// declare, because the answer must not depend on which one is in force.
 
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync } from 'node:fs'
@@ -19,15 +18,11 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { ACTS, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, OFFER_OWNER_ASKS, OWNER, SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import { claudeCodeToolNames } from '../host_contract/tool_names_for_tests.ts'
 import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
-import { KEEP_THE_CONTRACT_TOOL } from '../keep_the_package_contract/the_contract_tools.ts'
 import { CREW_ROWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
 import { REPORT_WHERE_THE_WORK_STANDS, SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
-import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE } from '../row_streams_directory/row_streams_directory.ts'
-import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 
@@ -79,13 +74,10 @@ function aPlaceWith(t: TestContext, solo: boolean): { readonly crew: CrewTools; 
   return { crew, launch }
 }
 
-/**
- * What the gate answers for a call, in the crew's shape: the crew is asked for the contract this member holds, and the
- * gate is handed its answer, as the relay hands it on every call.
- */
-async function theAnswer(place: { readonly crew: CrewTools; readonly launch: ApprovedLaunch }, tool: string, input: Readonly<Record<string, unknown>>, session_id: string): Promise<ToolCallAnswer> {
+/** What the gate answers for a call, and what the crew hands for the notice: the contract this member holds, if any. */
+async function theAnswer(place: { readonly crew: CrewTools; readonly launch: ApprovedLaunch }, tool: string, input: Readonly<Record<string, unknown>>, session_id: string): Promise<{ readonly answer: ToolCallAnswer; readonly contract: unknown }> {
   const contract = await place.crew.theContractInForce({ tool, input }, names)
-  return answerToolCall({
+  const answer = answerToolCall({
     names,
     tool,
     input,
@@ -93,37 +85,24 @@ async function theAnswer(place: { readonly crew: CrewTools; readonly launch: App
     policy: { may_send_executable_text: [] },
     launch: place.launch,
     host: thisMachine,
-    contract,
   })
-}
-
-/** The words of a refusal, which a call that runs does not have. */
-const theRefusalIn = (answer: ToolCallAnswer): string => {
-  assert.notEqual(answer, undefined, 'the call was allowed; it must be refused')
-  return (answer as { readonly deny: string }).deny
+  return { answer, contract }
 }
 
 for (const [shape, solo] of [[SOLO_MODE, true], ['team', false]] as const) {
-  test(`#597: in a ${shape} crew, a member holding a package with no contract is refused its first call, and the calls that end it stay open`, async (t) => {
+  test(`#601 row 109: in a ${shape} crew, a member holding a package with no contract runs its calls, and is handed no contract to be noticed against`, async (t) => {
     const place = aPlaceWith(t, solo)
-    // The report is one of the five that run, and it is the call that names the package on the member's row.
+    // The report is the call that names the package on the member's row.
     const reported = await place.crew.answer(REPORT_WHERE_THE_WORK_STANDS, { task: 'the work', step: 0, of: 1, package: PACKAGE }, 'session-1')
     assert.ok('answer' in reported, 'refused' in reported ? reported.refused : '')
 
-    // The first working call — an act or not — is refused, and the words name the tool that records a contract.
+    // A working call, an act or not, runs, and the crew hands no contract for it: there is nothing to notice.
     for (const [tool, input] of [
       [CLAUDE_CODE_SHELL_TOOL, { command: 'npm test' }],
       [CLAUDE_CODE_SHELL_TOOL, { command: 'git push origin main' }],
       ['Read', { file_path: 'a-file' }],
     ] as const) {
-      const said = theRefusalIn(await theAnswer(place, tool, input, 'session-1'))
-      assert.match(said, /has no contract recorded, so none of its work runs until one is kept/)
-      assert.match(said, new RegExp(`keeps it with ${KEEP_THE_CONTRACT_TOOL.name}`))
-    }
-
-    // The four that end a package, and the tool that records a contract, still run — under the names this host uses.
-    for (const own_name of [WRITE_MY_HANDOVER_TOOL, SAY_TO_THE_CREW, REPORT_WHERE_THE_WORK_STANDS, PARK_A_MEMBER, KEEP_THE_CONTRACT_TOOL.name]) {
-      assert.equal(await theAnswer(place, `mcp__martha__${own_name}`, {}, 'session-1'), undefined, own_name)
+      assert.deepEqual(await theAnswer(place, tool, input, 'session-1'), { answer: undefined, contract: undefined }, `${tool} ${JSON.stringify(input)}`)
     }
   })
 }
