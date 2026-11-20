@@ -16,7 +16,6 @@
 // refusal, answered `reject_once`, and the call does not run.
 
 import type { ACalledTool, TheAnswerToACall, ToolNames } from '../host_contract/host_contract.ts'
-import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import type { TheGate, WhatTheGateSaid } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
 import type { EngineFacts, ToolNaming } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
@@ -35,7 +34,7 @@ export const theGooseShellTool = (facts: Pick<EngineFacts, 'tool_naming' | 'shel
  * at the end the recording says, so with the first an own name may itself hold the separator. A name with no separator,
  * or with nothing after it, is its own name.
  */
-export function gooseToolNames(naming: ToolNaming): ToolNames {
+export function gooseToolNames(naming: ToolNaming, crew_server?: string): ToolNames {
   return {
     ownNameOf: (called) => {
       const at = naming.split_at === 'first' ? called.indexOf(naming.separator) : called.lastIndexOf(naming.separator)
@@ -43,8 +42,9 @@ export function gooseToolNames(naming: ToolNaming): ToolNames {
       const own = called.slice(at + naming.separator.length)
       return own === '' ? called : own
     },
-    // Martha's own crew tools are served under the extension key the launch writes (martha#987 slice 4).
-    marthasOwnToolCalled: (own) => `${THE_CREWS_TOOL_SERVER}${naming.separator}${own}`,
+    // Martha's own crew tools are served under the extension key the launch writes and hands here (martha#987 slice 4);
+    // with none handed, the host names no exact send and the gate makes no exception.
+    ...(crew_server === undefined ? {} : { marthasOwnToolCalled: (own: string) => `${crew_server}${naming.separator}${own}` }),
   }
 }
 

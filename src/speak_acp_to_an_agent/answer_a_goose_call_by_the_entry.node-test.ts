@@ -113,8 +113,12 @@ test('the Goose shell tool is the kept extension\'s, joined by the recorded sepa
 })
 
 test('#987: the engine calls Martha\'s own crew tool by the extension key its launch writes, and reads it back as that tool', () => {
-  const names = gooseToolNames(NAMING)
+  const names = gooseToolNames(NAMING, THE_CREWS_TOOL_SERVER)
   const called = names.marthasOwnToolCalled?.(SAY_TO_THE_CREW) ?? ''
   assert.equal(called, `${THE_CREWS_TOOL_SERVER}${NAMING.separator}${SAY_TO_THE_CREW}`)
   assert.equal(names.ownNameOf(called), SAY_TO_THE_CREW)
+})
+
+test('#987: an engine whose launch hands no server key names no exact send, so the gate makes no exception', () => {
+  assert.equal(gooseToolNames(NAMING).marthasOwnToolCalled, undefined)
 })
