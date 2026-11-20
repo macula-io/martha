@@ -35,9 +35,8 @@ import { readdirSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
 import { basename, join, relative } from 'node:path'
 import process from 'node:process'
 
-import { groupIn } from '../src/a_launch_end_on_this_machine/what_a_launch_end_reads.ts'
 import { signalAGroupOnThisMachine } from '../src/linux_process_identity/files_and_processes_on_this_machine.ts'
-import { linuxProcessIdentities, PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
+import { groupIn, linuxProcessIdentities, PROC_ROOT } from '../src/linux_process_identity/process_identity_from_proc.ts'
 import { manifestOf, testCommandsOf } from './declared_in_package_json.ts'
 import {
   everyRecord,

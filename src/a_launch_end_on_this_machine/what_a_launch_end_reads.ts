@@ -3,7 +3,9 @@
 // A host adapter, not glue and not a slice: it reads /proc and the clock, which a slice may not, and it composes the
 // slices that decide — ../end_a_launch asks for the machine here, and ../tell_a_member_what_its_relaunch_killed decides
 // what an end's findings mean. One adapter per concern keeps each host directory under its ceiling (martha#322), which
-// is why the group and boot readers live here rather than in ../linux_process_identity.
+// is why the boot reader lives here rather than in ../linux_process_identity. The group reader stays there, beside the
+// other stat fields: the stop tool is copied into a planted repository with exactly those files and may import no
+// other, so the one definition has to be one of theirs (martha#802).
 //
 // The group is read before the kill and never after: a killed process has nothing left to read, and the host's
 // background children are still alive when its own exit fires.
@@ -16,22 +18,10 @@ import type { CrewStore, FileTree, Processes } from '../host_contract/host_contr
 import type { TheWorkspace } from '../guard_workspace/guard_workspace.ts'
 import { killGroup } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
-import { PROC_ROOT, startTimeIn, textOrWhy } from '../linux_process_identity/process_identity_from_proc.ts'
+import { groupIn, PROC_ROOT, startTimeIn, textOrWhy } from '../linux_process_identity/process_identity_from_proc.ts'
 import type { LaunchMade } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import type { TheMachineAtAnEnd } from '../tell_a_member_what_its_relaunch_killed/the_end_on_this_machine.ts'
 import { keepWhatTheEndLeft, ticksPerSecondOnTheMachine } from '../tell_a_member_what_its_relaunch_killed/the_end_on_this_machine.ts'
-
-/** The group id's place among the fields that follow the command name (field 3 onwards): field 5. */
-const GROUP_AFTER_COMMAND = 5 - 3
-
-/** The group id in one /proc/<pid>/stat line, or null when the line is not one. */
-export function groupIn(stat: string): number | null {
-  const command_end = stat.lastIndexOf(')')
-  if (command_end === -1) return null
-
-  const group = stat.slice(command_end + 1).trim().split(/\s+/)[GROUP_AFTER_COMMAND]
-  return group !== undefined && /^\d+$/.test(group) ? Number(group) : null
-}
 
 /** One command a process group held when it was read: its pid, the line the machine held, and its start in ticks. */
 export interface ACommandInAGroup {

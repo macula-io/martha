@@ -30,6 +30,7 @@ import {
 } from './launch_records_directory.ts'
 import {
   ancestorsUnder,
+  groupIn,
   linuxProcessIdentities,
   parentIn,
   procProcessIdentities,
@@ -206,6 +207,15 @@ test('the start time is read after the command name, whatever the name holds', (
   assert.equal(startTimeIn(`${PLUTO.pid} (a) b (c) ${fields_after_command.join(' ')} 0 0`), STARTED)
   assert.equal(startTimeIn('not a stat line'), null)
   assert.equal(startTimeIn(`${PLUTO.pid} (short) R 1 2`), null)
+})
+
+test('the group is read after the command name, whatever the name holds, and a line holding none has none (martha#802)', () => {
+  const fields_after_command = Array.from({ length: 20 }, (_, index) => `${index + 3}`)
+  fields_after_command[2] = '777'
+
+  assert.equal(groupIn(`${PLUTO.pid} (a (shell)) ${fields_after_command.join(' ')}`), 777)
+  assert.equal(groupIn('not a stat line'), null)
+  assert.equal(groupIn(`${PLUTO.pid} ()`), null)
 })
 
 /** A /proc of our own: one process, one boot. */

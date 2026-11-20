@@ -9,10 +9,9 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { bootTimeMsUnder, groupIn, processesInGroupUnder, startedAtMs } from './what_a_launch_end_reads.ts'
+import { bootTimeMsUnder, processesInGroupUnder, startedAtMs } from './what_a_launch_end_reads.ts'
 
-/** A synthetic pid and start, never a real one: this repository is public. */
-const PLUTO = { pid: 4101 }
+/** A synthetic start, never a real one: this repository is public. */
 const STARTED = '900100'
 
 const scratch = (t: TestContext): string => {
@@ -64,11 +63,4 @@ test('#693: the boot moment and a start in ticks make a moment on the machine cl
   const ticks_per_second = 100
   assert.equal(startedAtMs(String(ticks_per_second), BOOT_SECONDS * 1000, ticks_per_second), (BOOT_SECONDS + 1) * 1000)
   assert.equal(bootTimeMsUnder(join(tmpdir(), 'no-proc-at-all-of-ours')), null)
-})
-
-test('#693: the group id is read after a command name that holds spaces and brackets, and a line with no command has none', () => {
-  const fields = Array.from({ length: 20 }, (_, index) => `${index + 3}`)
-  fields[2] = '777'
-  assert.equal(groupIn(`${PLUTO.pid} (a (shell)) ${fields.join(' ')}`), 777)
-  assert.equal(groupIn('not a stat line'), null)
 })

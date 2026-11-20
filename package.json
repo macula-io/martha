@@ -145,7 +145,7 @@
       "src/keep_what_the_owner_signed": 97,
       "src/launch_a_claude_code_member": 553,
       "src/launch_a_goose_member": 229,
-      "src/linux_process_identity": 332,
+      "src/linux_process_identity": 329,
       "src/list_stop_and_restart_the_crew": 99,
       "src/load_the_hosts_markdown": 427,
       "src/owners_settings_directory": 173,
@@ -165,7 +165,7 @@
       "src/sweep_leftover_launch_directories": 153,
       "src/ask_git_what_a_member_is_about_to_change": 78,
       "src/tell_the_member_a_line": 42,
-      "src/a_launch_end_on_this_machine": 119
+      "src/a_launch_end_on_this_machine": 112
     },
     "programParts": {
       "src/declare_a_launch_probe": "src/probe_launch_hosts",

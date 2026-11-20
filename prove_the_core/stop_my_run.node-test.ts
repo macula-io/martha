@@ -59,15 +59,21 @@ function aCheckout(at: string): string {
 /** The file a plant runs: one test that waits forever, a process that ends once the run that started it is gone, and,
  * when the case asks for it, a working directory it moves to and a SIGTERM it does not hear. A plant that does not hear
  * SIGTERM is not one that ends with its run: it is the case where the group outlives the signal, and only SIGKILL ends
- * it, which is what `--force` and the file's own cleanup send. */
-const thePlantedFile = (planted: { elsewhere?: string; deaf?: boolean }): string => `import { writeFileSync } from 'node:fs'
+ * it, which is what `--force` and the file's own cleanup send. A plant that survives does not end with its run either,
+ * and does hear SIGTERM: it is the group a member still has to stop once its leader died alone, and it cannot vanish on
+ * its own between the leader's end and the command that is about it. */
+const thePlantedFile = (planted: { elsewhere?: string; deaf?: boolean; survives?: boolean }): string => {
+  const endsWithTheRun = planted.deaf !== true && planted.survives !== true
+  return `import { writeFileSync } from 'node:fs'
 import { test } from 'node:test'
-${planted.deaf === true ? '' : `import { endWithTheRun } from ${JSON.stringify(THE_GUARD)}`}
+${endsWithTheRun ? `import { endWithTheRun } from ${JSON.stringify(THE_GUARD)}` : ''}
 ${planted.elsewhere === undefined ? '' : `process.chdir(${JSON.stringify(planted.elsewhere)})`}
-${planted.deaf === true ? "process.on('SIGTERM', () => undefined)" : 'endWithTheRun((code) => process.exit(code))'}
+${planted.deaf === true ? "process.on('SIGTERM', () => undefined)" : ''}
+${endsWithTheRun ? 'endWithTheRun((code) => process.exit(code))' : ''}
 if (process.env.THE_SEEN !== undefined) writeFileSync(process.env.THE_SEEN, JSON.stringify({ pid: process.pid, cwd: process.cwd() }))
 test('waits forever', () => new Promise(() => {}))
 `
+}
 
 /** A process of the suite's own shape, and where it was planted: the marker its file writes, and what it started. */
 interface APlant {
@@ -80,7 +86,7 @@ interface APlant {
  * A run of the suite: `node --test` over one planted file that waits forever, started in `where`. Detached, it leads a
  * group of its own and everything it starts joins that group; not detached, it joins the group this file runs in.
  */
-function aPlant(t: TestContext, where: string, planted: { detached?: boolean; elsewhere?: string; deaf?: boolean }): APlant {
+function aPlant(t: TestContext, where: string, planted: { detached?: boolean; elsewhere?: string; deaf?: boolean; survives?: boolean }): APlant {
   const folder = aScratch(t, 'run')
   const file = join(folder, 'a_suite_that_waits.node-test.mjs')
   writeFileSync(file, thePlantedFile(planted))
@@ -220,7 +226,7 @@ test('#802: a group that is already gone is reported by name, and its record rem
 
 test('#802: a run whose leader ended while its group still runs is stopped, not called gone', async (t) => {
   const where = realpathSync(aScratch(t, 'leader-ended'))
-  const plant = aPlant(t, where, {})
+  const plant = aPlant(t, where, { survives: true })
   assert.equal(await untilThePlantedFileLoaded(plant), true, `${NAME}: the planted run's file never loaded, so its group held only its leader and this case proves nothing`)
   const record = aPlantedRecord(t, plant.pid, where, linuxProcessIdentities.identityOf(plant.pid) ?? '')
   // The leader ends alone: what it started runs on in its group, and that is the run a member needs stopped.
