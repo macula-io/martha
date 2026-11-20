@@ -81,24 +81,26 @@ test('#511 part B: a turn the entry refused is counted taken in, so the same ref
   }
 })
 
-test('#511 part B: a read that lands while another is in flight does nothing, so one message is never queued twice (mutant: no in-flight guard)', async () => {
+test('#511 part B: a read that starts while another is still reading the channel does nothing, so one message is never queued twice (mutant: no in-flight guard)', async () => {
+  // The carrier marks a message handed only once its channel read has come back, so two reads begun before that both
+  // find nothing handed: only the reader's own guard keeps the second from handing the same message again.
   const channel = aChannel()
   await appendToTheChannel(channel, { from: A_MATE, to: [MEMBER], text: 'once', sent_at: 1 })
-  let finish: (did: WhatATurnDid) => void = () => {}
+  const finishes: ((did: WhatATurnDid) => void)[] = []
   const took: ATurnToSend[] = []
   const turns: TheEngineMembersTurns = {
     take: (turn) => {
       took.push(turn)
-      return new Promise((settle) => (finish = settle))
+      return new Promise((settle) => finishes.push(settle))
     },
   }
   const reader = theCrewsMessagesAsTurns({ carrierOf: () => carryingTo({ member: MEMBER, host: channel }), turns, every_ms: NEVER_BY_THE_TIMER })
   try {
-    const first = reader.readNow()
+    const both = [reader.readNow(), reader.readNow()]
     while (took.length === 0) await new Promise((settle) => setImmediate(settle))
-    await reader.readNow()
-    finish({ sent: 1 })
-    await first
+    for (let tick = 0; tick < 10; tick++) await new Promise((settle) => setImmediate(settle))
+    for (const finish of finishes) finish({ sent: 1 })
+    await Promise.all(both)
     assert.equal(took.length, 1)
   } finally {
     reader.stop()
