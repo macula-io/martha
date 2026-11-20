@@ -890,6 +890,7 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   to: args['to'],
   text: args['text'],
   volatile_roots: theRootsInForce(settings.volatile_paths, places.volatile_roots ?? []),
+  models: settings.members.map(({ name, model }) => ({ name, model })),
 })
 
 /** What the receipts are read over: the channel's ledger, the member that sent, and the crew it sent to. */
