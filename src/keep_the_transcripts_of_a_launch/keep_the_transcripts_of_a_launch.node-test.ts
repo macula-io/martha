@@ -10,6 +10,7 @@ import { test } from 'node:test'
 import { THE_MARK_FILE, TRANSCRIPTS_LAUNCHES_KEPT, TRANSCRIPTS_LAUNCH_BYTES_KEPT } from '../choose_the_transcripts_to_keep/choose_the_transcripts_to_keep.ts'
 import { openState, STATE_FILE_MODE, TRANSCRIPTS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { STAGING_PREFIX } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
+import { TOKEN_PREFIXES } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { keepTheTranscriptsOf, pruneTheLaunchesPastTheNewest } from './keep_the_transcripts_of_a_launch.ts'
 
@@ -45,12 +46,13 @@ const spacedTo = (path: string, bytes: number): void => {
 
 test('a transcript is kept with its token redacted, 0600, and the mark says which file held one (martha#646)', (t) => {
   const ending = aLaunchEnding(t)
-  aTranscriptIn(ending.config, 's-1.jsonl', '{"text":"git push with ghp_abcdefghijklmnop here"}\n')
+  const token = `${TOKEN_PREFIXES[0] ?? 'ghp_'}abcdefghijklmnop`
+  aTranscriptIn(ending.config, 's-1.jsonl', `{"text":"git push with ${token} here"}\n`)
   writeFileSync(join(ending.config, 'notes.txt'), '{"model":"sonnet"}')
   const trouble = keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKey: 'sk-ant-the-key' })
   assert.deepEqual(trouble, [], 'the keep said it could not keep what it should have')
   const keptText = readFileSync(ending.kept('s-1.jsonl'), 'utf8')
-  assert.equal(keptText.includes('ghp_abcdefghijklmnop'), false, 'the token was kept in the clear')
+  assert.equal(keptText.includes(token), false, 'the token was kept in the clear')
   assert.equal(statSync(ending.kept('s-1.jsonl')).mode & 0o777, STATE_FILE_MODE, 'the kept transcript is not 0600')
   assert.deepEqual(JSON.parse(readFileSync(join(ending.place, encodeURIComponent('launch-1'), THE_MARK_FILE), 'utf8')), { token_found_in: ['projects/the-project/s-1.jsonl'] })
   assert.equal(statSync(join(ending.place, encodeURIComponent('launch-1'), 'projects')).mode & 0o777, 0o700, 'the directory the transcripts sit in is not 0700')

@@ -20,6 +20,7 @@ reader where to look. A lab host name is a map of the network.
 | A private remote or repository name | `git@github.com:synthetic-owner/private-repo.git`, a constant holding `synthetic-owner/private-repo` | a fallback, a default, an install script |
 | An internal host name | a `*.lab` name | a log line, a comment, a test fixture |
 | A home directory, a private address, a private email, a real node id or key | a path under a real user's home, RFC 1918 addresses, a 64-hex id | the same classes the crew's note check and release scan already refuse |
+| A GitHub token | a classic `ghp_`, `gho_`, `ghu_`, `ghs_` or `ghr_` token, a fine-grained `github_pat_` one | a transcript, log or finding a member's `gh auth token` reached, posted from the live run's kept record (martha#904) |
 | A fact recorded from another checkout | a private remote, a `*.lab` name, a path under a home, held by the engine's own source | recorded rather than typed: `npm run record:goose-engine` reads an engine checkout and writes its facts to [`src/know_the_goose_engines_facts/recorded_goose_engine.json`](../src/know_the_goose_engines_facts/recorded_goose_engine.json), so a value can arrive from a tree this repository does not review |
 
 Each of those can enter through four paths:
@@ -34,7 +35,7 @@ Each of those can enter through four paths:
 4. **The check's own output.** A CI log of a public repository is public. No
    value a hit found is therefore ever printed, whatever its class: a lab
    hostname, a home directory, a private address, an email address, a 64-hex
-   id, and the name a repository hit or a shorthand hit read (martha#846,
+   id, a GitHub token, and the name a repository hit or a shorthand hit read (martha#846,
    martha#855). A hit names the file, the line and the class, and withholds the
    value: the log keeps it after the text it came from is edited. The path a
    hit is found at is printed, with each lab hostname in it replaced by
@@ -54,6 +55,14 @@ Out of reach of this check, and said here so nobody assumes otherwise:
   does not read them. A second check, `check_posted_text_carries_nothing_private`,
   does: every surface this repository posts on GitHub is read for the same
   classes, and a daily run fails by name when one is in it (see below).
+- **A GitHub token broken across lines.** The check reads one line at a time.
+  A token whose prefix sits on one line and its body on the next, or one cut
+  before `TOKEN_BODY` body characters, matches no line and passes. Joining
+  lines would change every class, so it stays a residual. It is bounded only
+  by the owner revoking the token and by the throwaway repository's deletion
+  each run (#888). The kept record's redactor takes line breaks out of a text
+  before it looks, so it catches a token wrapped in the text as written; #888
+  names where it still does not.
 - **A private fact said in plain words** ("the box in the cupboard") matches no
   shape. The check guards shapes; the rewrite rule below guards the rest.
 
@@ -103,6 +112,14 @@ Out of reach of this check, and said here so nobody assumes otherwise:
   class. The length and the digit set are defined once (`HEX_DIGIT`,
   `ID_HEX_DIGITS` in `public_text.ts`), and the shared pattern stays POSIX ERE,
   so a `grep -E` reader refuses any line that holds such a run.
+- **A GitHub token is one of its prefixes and a body long enough to be one** (martha#904).
+  The prefixes and the shortest body are defined once, by the owner's to-do list,
+  which refuses a token in a command (`GITHUB_TOKEN_PREFIXES`, `TOKEN_BODY` in
+  `keep_the_owners_todo_list.ts`), and the scan reads the same two. A word that only starts the
+  same way, a variable named `ghs_` say, is shorter and passes. The class has no
+  word boundary, as the hex class has none, so a token glued to the text before
+  it is still refused. It is the scan's own line behind the live run's kept-record
+  redactor, so a token that redactor misses is not posted.
 - **The text classes are one definition.** The patterns are the crew's own
   public-text classes, the same ones its note check and release scan hold to.
 
@@ -116,8 +133,8 @@ A test of a refusal has to state the value it refuses, and that test lives in
 this public tree, where the check reads it too. Each class therefore has one
 synthetic form that the tree scan accepts: a lab name ending `-synthetic` (`ci-synthetic.lab`), a machine
 number in the 90s, `/home/synthetic`, the `192.168.255.0/24` block, the
-`synthetic.invalid` email domain, the listed all-one-digit ids, and repository
-owners starting `synthetic-`. The unit tests prove each class refuses its own
+`synthetic.invalid` email domain, the listed all-one-digit ids, a GitHub token whose body starts
+`synthetic` (`ghp_synthetic...`), and repository owners starting `synthetic-`. The unit tests prove each class refuses its own
 synthetic form when the allowance is off, and a structural test holds every form
 to a whole-value match, so an allowance cannot swallow a real value that merely
 contains one.
@@ -169,6 +186,8 @@ Keep the reasoning, drop the link.
   address in the `192.168.255.0/24` block, an id of one repeated hex digit. An
   invented name is refused as a real one is, and brackets keep a path out of the
   class without making that name a form.
+- A GitHub token: never paste one. Revoke it first, then say a token was there;
+  a test that needs one writes the synthetic form, or draws one at run time.
 
 ## Running it
 
