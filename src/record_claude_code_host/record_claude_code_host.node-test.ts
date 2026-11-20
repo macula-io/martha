@@ -550,6 +550,20 @@ test('a host whose statements and sentence name different places, or that walks 
   }
 })
 
+// The minifier reuses a short name inside one module (martha#908): 2.1.329 names an empty array in its sandbox setup
+// `zn`, as the spread its protected array brings in. The spread is the one declared beside the Set the host walks, so
+// another array of that name elsewhere in the module changes nothing, and a spread declared anywhere else is not read.
+test('a host that names another array like the spread still reads, and one that declares the spread apart from its Set cannot be read (martha#908)', (t) => {
+  const places = PLACE_PARTS.protected_config_names ?? ''
+  const named = check(hostHolding(t, { ...RECORDED_PARTS, protected_config_names: `let spread=[],aSecondArray=[];${places}` }), RECORDED_HOST.host_version)
+  assert.equal(named.status, 0, named.stdout)
+  const apart = places.replace('],chosen=new Set(', '];let chosen=new Set(')
+  assert.notEqual(apart, places, 'the planted host declares the spread in a statement of its own')
+  const run = check(hostHolding(t, { ...RECORDED_PARTS, protected_config_names: apart }), RECORDED_HOST.host_version)
+  assert.equal(run.status, 1, run.stdout)
+  assert.equal(run.stdout, `recorded ${RECORDED_HOST.host_version}, host ${RECORDED_HOST.host_version}\nunreadable: protected config places\n`)
+})
+
 // Which rules the host's file permission checks match is what a launch writes its rules under and what it reads the
 // host's complaint against (martha#226): a host that maps a file tool's rules another way fails the check by that
 // field, rather than leaving the launch writing a rule the new host would ignore.
