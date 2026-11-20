@@ -28,8 +28,8 @@ import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../appro
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
-import { declareCrew, OWNER_BELL, sameMemberName, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
-import { CLAUDE_CODE_TEAM, declareTheTeam } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
+import { declareCrew, ENGINE_ENDPOINT, OWNER_BELL, sameMemberName, THE_ENGINES_HOST, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
+import { CLAUDE_CODE_TEAM, declareTheTeam, ENGINE_TEAM, type TeamMember } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
 import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
@@ -76,7 +76,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha up --claude | martha approve | martha todo | martha start [<member> [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha version | martha help'
+  'usage: martha init | martha up [--claude] | martha approve | martha todo | martha start [<member> [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha version | martha help'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -328,16 +328,27 @@ export const UP = 'up'
 export const CLAUDE_SWITCH = '--claude'
 
 /**
- * `martha up --claude` (martha#511): the team declared at this folder, or its missing Claude Code members added, then
- * every Claude Code member that is not running opened in a kitty tab of its own. Plain `martha up` is the engine's.
+ * Why plain `martha up` opens no engine member: the crew names no endpoint for the engine to reach its model at. The
+ * owner writes it once in the declaration, with the key's file, never the key (martha#511 part B).
  */
-async function up(io: CommandIo, places: Places): Promise<number> {
+export const theEngineEndpointMissing = (declaration: string): string =>
+  `the crew declares no ${ENGINE_ENDPOINT}, so its engine members have no model to reach. Add it to ${declaration} once, ` +
+  `naming the provider and the file your key is in, never the key: "${ENGINE_ENDPOINT}": {"host": "<the provider's URL>", "key_file": "~/<the file holding your key>"}`
+
+/**
+ * `martha up --claude` and plain `martha up` (martha#511): the team declared at this folder, or this host's missing
+ * members added, then every member of this host that is not running opened in a kitty tab of its own. `--claude` is
+ * Claude Code's Supervisor and workers; plain `up` is the engine's workers, which need the crew's engine endpoint.
+ */
+async function up(io: CommandIo, places: Places, claude: boolean): Promise<number> {
   if (!io.terminal.is_terminal) return refused(io, START_NEEDS_A_TERMINAL)
-  const declared = await declareTheTeam({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, state: places.state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host: CLAUDE_CODE, members: CLAUDE_CODE_TEAM })
+  const [host, members]: readonly [string, readonly TeamMember[]] = claude ? [CLAUDE_CODE, CLAUDE_CODE_TEAM] : [THE_ENGINES_HOST, ENGINE_TEAM]
+  const declared = await declareTheTeam({ root: places.root, owner: gitSays(places.root, 'config', 'user.name') ?? null, state: places.state, documents, vocabularies: THE_VOCABULARIES_OF_HOST, host, members })
   if (!declared.declared) return refused(io, declared.refusal)
   if (declared.wrote) io.out(`Declared a team in ${declared.declaration}: ${declared.added.join(', ')}.`)
   else if (declared.added.length > 0) io.out(`Added to the team in ${declared.declaration}: ${declared.added.join(', ')}.`)
-  return openTheCrew(io, places, (settings, member) => theHostOfMember(settings, member) === CLAUDE_CODE)
+  if (!claude && declared.settings.engine_endpoint === null) return refused(io, theEngineEndpointMissing(declared.declaration))
+  return openTheCrew(io, places, (settings, member) => theHostOfMember(settings, member) === host)
 }
 
 /**
@@ -502,6 +513,7 @@ export const UNKNOWN_COMMAND = 'unknown command:'
 export const HELP: readonly string[] = [
   'martha init                  declare a solo crew of a builder and a reviewer in this checkout',
   `martha ${UP} ${CLAUDE_SWITCH}           declare a team in this workspace and open its Claude Code members in kitty`,
+  `martha ${UP}                    add the engine's workers to that team and open them in kitty`,
   'martha approve               read the config your members start from, and approve it',
   'martha start [<member>]      start one member here, or open every member in kitty',
   'martha wake <member>         start a parked member on its newest handover',
@@ -554,8 +566,9 @@ export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: read
   [UP]: upOf,
 }
 
-/** `up --claude` (martha#511): the one switch; plain `up` is the engine's, which this release does not take yet. */
+/** `up --claude`, Claude Code's members, or plain `up`, the engine's (martha#511). */
 function upOf(act: string, argv: readonly string[]): Asked | undefined {
+  if (argv.length === 1) return { act, args: [] }
   return argv.length === 2 && argv[1] === CLAUDE_SWITCH ? { act, args: [CLAUDE_SWITCH] } : undefined
 }
 
@@ -695,7 +708,7 @@ const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Place
   'keep-shapes': (io, places, asked) => keepShapes(io, places, asked.args[0]!),
   approve: (io, places) => approve(io, places),
   release: (io, places, asked) => release(io, places, asked.args[0]!),
-  [UP]: (io, places) => up(io, places),
+  [UP]: (io, places, asked) => up(io, places, asked.args[0] === CLAUDE_SWITCH),
   answer: (io, places, asked) => answerInAProject(io, places, asked.member, asked.args),
 }
 

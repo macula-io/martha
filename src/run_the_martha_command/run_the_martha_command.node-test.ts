@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -18,10 +18,10 @@ import { NOT_A_TERMINAL as START_NOT_ON_A_TERMINAL } from '../start_a_member/sta
 import { KITTEN, KITTY, NO_DESKTOP_SESSION } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { SOLO_MEMBERS } from '../declare_crew/declare_crew.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLAUDE_SWITCH, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, UP, USAGE } from './run_the_martha_command.ts'
-import { A_WORKSPACES_CLONES, CLAUDE_CODE_TEAM, declareTheTeam, BUILDER_ROLE } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
+import { ACTS_ALONE, ACTS_OF_ONE, ACTS_OF_THEIR_OWN, CLAUDE_SWITCH, CLEAR_THE_TERMINAL, HELP, HELP_WORDS, UNKNOWN_COMMAND, OWNERS_ACT_NEEDS_A_TERMINAL, startedLine, theEngineEndpointMissing, UP, USAGE } from './run_the_martha_command.ts'
+import { A_WORKSPACES_CLONES, CLAUDE_CODE_TEAM, declareTheTeam, BUILDER_ROLE, ENGINE_TEAM } from '../declare_a_team_at_a_workspace/declare_a_team_at_a_workspace.ts'
 import { SESSION_FILE, KITTY_PLACE } from '../open_the_crew_in_kitty/open_the_crew_in_kitty.ts'
-import { THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
+import { ENGINE_ENDPOINT, HOST, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, SAID_BY } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
 import { MEMBER_SWITCH } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
@@ -254,13 +254,14 @@ function aWorkspace(t: TestContext): Place {
   return place
 }
 
-test('#511: martha up takes --claude and nothing else; plain up and any other word are usage errors', (t) => {
+test('#511: martha up takes --claude or nothing; any other word is a usage error', (t) => {
   const place = aWorkspace(t)
-  for (const words of [[UP], [UP, '--engine'], [UP, CLAUDE_SWITCH, 'extra']]) {
+  for (const words of [[UP, '--engine'], [UP, CLAUDE_SWITCH, 'extra']]) {
     const run = martha(place, ...words)
     assert.equal(run.status, EXIT_USAGE, `${words.join(' ')}: ${run.said}`)
   }
-  assert.ok(USAGE.includes(`martha ${UP} ${CLAUDE_SWITCH}`), USAGE)
+  assert.ok(USAGE.includes(`martha ${UP} [${CLAUDE_SWITCH}]`), USAGE)
+  assert.ok(HELP.some((line) => line.startsWith(`martha ${UP} `) && !line.includes(CLAUDE_SWITCH)), HELP.join('\n'))
 })
 
 test('#511: martha up --claude whose input is no terminal refuses, and declares nothing', (t) => {
@@ -300,6 +301,49 @@ test('#511: on a desktop, martha up --claude opens kitty with a tab for each Cla
   const tabs = session.split('\n').filter((line) => line.startsWith('new_tab ')).map((line) => line.slice('new_tab '.length))
   assert.deepEqual(tabs, CLAUDE_CODE_TEAM.map((member) => member.name))
   assert.ok(!session.includes(engine.name), session)
+})
+
+/** The declaration at `place`, with an engine endpoint of this test's own added: a made-up host and key file, never real. */
+function withAnEngineEndpoint(place: Place): void {
+  const at = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  const declared = JSON.parse(readFileSync(at, 'utf8')) as Record<string, unknown>
+  writeFileSync(at, `${JSON.stringify({ ...declared, [ENGINE_ENDPOINT]: { host: 'https://provider.invalid', key_file: '~/a-key-file' } }, null, 2)}\n`)
+}
+
+/** The tabs a kitty session file opens, by the member each one starts. */
+const theTabsIn = (session: string): string[] => session.split('\n').filter((line) => line.startsWith('new_tab ')).map((line) => line.slice('new_tab '.length))
+
+test('#511 part B: plain martha up adds the engine\'s workers, and with no engine endpoint refuses, saying what to add and that the key stays out', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const run = marthaOnATerminal(place, { ...kitty.env, WAYLAND_DISPLAY: 'wayland-511' }, UP)
+  const declaration = join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  assert.equal(run.status, EXIT_REFUSED, run.said)
+  assert.ok(run.said.includes(`Declared a team in ${declaration}: ${ENGINE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
+  assert.ok(run.said.includes(theEngineEndpointMissing(declaration)), run.said)
+  assert.equal(existsSync(kitty.started), false, 'kitty was started for members with no model to reach')
+})
+
+test('#511 part B: martha up --claude then martha up is one crew of seven, and plain up opens a tab for each engine worker and none for Claude Code\'s', (t) => {
+  const place = aWorkspace(t)
+  const kitty = kittyThatAnswers(place)
+  const env = { ...kitty.env, WAYLAND_DISPLAY: 'wayland-511' }
+  assert.equal(marthaOnATerminal(place, env, UP, CLAUDE_SWITCH).status, EXIT_DONE)
+  withAnEngineEndpoint(place)
+  rmSync(kitty.started, { force: true })
+
+  const run = marthaOnATerminal(place, env, UP)
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.ok(run.said.includes(`Added to the team in ${join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE)}: ${ENGINE_TEAM.map((member) => member.name).join(', ')}.`), run.said)
+  const written = JSON.parse(readFileSync(join(place.root, DECLARATION_DIRECTORY, DECLARATION_FILE), 'utf8')) as { members: { name: string; [HOST]: string; model: string }[] }
+  assert.deepEqual(
+    written.members.map((member) => [member.name, member[HOST], member.model]),
+    [...CLAUDE_CODE_TEAM, ...ENGINE_TEAM].map((member) => [member.name, member.host, member.model]),
+  )
+  assert.ok(existsSync(kitty.started), 'kitty was not started')
+  const state = openState(join(place.home, 'state', STATE_ROOT_NAME), place.root)
+  assert.ok('directory' in state)
+  assert.deepEqual(theTabsIn(readFileSync(join(state.directory, KITTY_PLACE, SESSION_FILE), 'utf8')), ENGINE_TEAM.map((member) => member.name))
 })
 
 // --- the owner's release and the gate (martha#321) -------------------------------

@@ -31,6 +31,7 @@ import {
   HOLD_REVIEWS,
   HOST,
   OWNER,
+  THE_ENGINES_HOST,
   WORKSPACE_LAYOUT,
   WORKTREES,
   WORKTREES_BESIDE_CLONES,
@@ -90,6 +91,22 @@ export const CLAUDE_CODE_TEAM: readonly TeamMember[] = [
   { name: SUPERVISOR_ROLE, role: SUPERVISOR_ROLE, model: CLAUDE_CODE_TEAM_MODEL, host: CLAUDE_CODE },
   ...Array.from({ length: CLAUDE_CODE_WORKERS }, (_, i) => ({ name: `${CLAUDE_CODE_WORKER_PREFIX}${i + 1}`, role: BUILDER_ROLE, model: CLAUDE_CODE_TEAM_MODEL, host: CLAUDE_CODE })),
 ]
+
+/** The workers plain `up` declares, as data (./the_engine_team.json). */
+const THE_ENGINE_TEAM: { readonly model: string; readonly name: string; readonly workers: number } = JSON.parse(
+  readFileSync(new URL('./the_engine_team.json', import.meta.url), 'utf8'),
+)
+
+/** The model the engine's workers run (martha#511): DeepSeek Flash, as the provider's own model list names it. */
+export const ENGINE_TEAM_MODEL = THE_ENGINE_TEAM.model
+
+/** The members plain `martha up` adds (martha#511): the engine's workers, each a builder on the engine. */
+export const ENGINE_TEAM: readonly TeamMember[] = Array.from({ length: THE_ENGINE_TEAM.workers }, (_, i) => ({
+  name: `${THE_ENGINE_TEAM.name}-${i + 1}`,
+  role: BUILDER_ROLE,
+  model: ENGINE_TEAM_MODEL,
+  host: THE_ENGINES_HOST,
+}))
 
 /**
  * The folder under a workspace that holds its clones, as `<clones>/<org>/<repo>`: a workspace that has one declares its
