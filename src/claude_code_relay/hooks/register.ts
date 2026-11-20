@@ -116,12 +116,6 @@ export type ToolCalled = { readonly tool: string; readonly [field: string]: unkn
 
 export type ToolAnswer = { readonly deny: string } | Readonly<Record<string, unknown>>
 
-/** A ran tool's answer with one more line in its `context`, the lines it already carried kept first (martha#999 package 2b). */
-export function withNote(result: ToolAnswer, note: string): ToolAnswer {
-  const before = (result as { readonly context?: unknown }).context
-  return { ...result, context: [...(Array.isArray(before) ? before : []), note] }
-}
-
 /** What prefixes every refusal the relay writes, so the owner and the model see whose it is. */
 export const REFUSED_BY_THE_RELAY = 'Martha refused this'
 
@@ -136,6 +130,16 @@ function withTheLineHanded(passed: unknown, line: string): Readonly<Record<strin
   const rest = typeof passed === 'object' && passed !== null && !Array.isArray(passed) ? (passed as Record<string, unknown>) : {}
   const already = Array.isArray(rest['additionalContext']) ? (rest['additionalContext'] as unknown[]) : []
   return { ...rest, additionalContext: [...already, line] }
+}
+
+/**
+ * A ran tool's result with the launcher's note added to what the model is told of it (martha#969): the host's own
+ * `context` list on a tool's answer, the one crew-code's stale-clone note used. The result itself is unchanged.
+ */
+function withTheNote(result: unknown, note: string): Readonly<Record<string, unknown>> {
+  const rest = typeof result === 'object' && result !== null && !Array.isArray(result) ? (result as Record<string, unknown>) : {}
+  const already = Array.isArray(rest['context']) ? (rest['context'] as unknown[]) : []
+  return { ...rest, context: [...already, note] }
 }
 
 /** Posts one event to the launcher and hears its answer; never rejects. */
@@ -293,10 +297,8 @@ export const register = (on: RelayOn): void => {
     if (!after.yes) return stopThisMember($, after.why)
     // The end of the running turn rides on the yes to the last call in flight (martha#311 ruling D): carried after it.
     if (after.end_turn !== undefined) await $.turn.abort({ turnId: after.end_turn }).catch(() => undefined)
-    // A note the launcher hands back rides in `context`, never in the result (martha#999 package 2b): the host checks a
-    // hook's answer against the tool's own record, and `context` is what the model reads after any tool's result, as
-    // crew-code's withNote leaves it (hooks/register.tsx:3593-3597).
-    return after.note === undefined ? result : withNote(result, after.note)
+    // A read in a clone behind its origin carries the launcher's note for the model (martha#969), and nothing else changes.
+    return after.note === undefined ? result : withTheNote(result, after.note)
   }).catch(async ($, _e, next) =>
     next.called ? stopThisMember($, 'its relay failed after the tool ran') : { deny: refusal('its relay failed before the launcher answered') },
   )

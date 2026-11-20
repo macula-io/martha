@@ -17,7 +17,6 @@ import {
   type RelayCatch,
   type RelayEngine,
   type RelayHook,
-  withNote,
 } from './hooks/register.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 // The core's root, not the relay's copy of it: the fake engine answers only under the root the core reads, so a relay
@@ -314,30 +313,30 @@ test('#311 ruling D: a report the launcher answers yes with a turn to end ends t
   assert.deepEqual(plain.aborted, [], 'a turn was ended on a yes that named none')
 })
 
-test('#999 package 2b: a report answered yes with a note hands the result back with the note in its context, after any context it had (mutant: drop the note; put it in the result)', async () => {
-  const noting: Launcher = async ({ url }) =>
-    ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? '{"taken":1,"note":"fix the brief"}' : yesTo(url.slice(RELAY_ORIGIN.length)) })
-  const fake = fakeEngine(noting)
-  const call = await callThrough(fake)
-  assert.deepEqual(await call.answer, { ...RESULT, context: ['fix the brief'] }, 'the note was not in the context')
-  assert.deepEqual(fake.ran, [], 'the member was stopped on a yes')
-  assert.deepEqual(withNote({ ...RESULT, context: ['first'] }, 'second'), { ...RESULT, context: ['first', 'second'] })
-})
-
-test('#999 package 2b: a report whose note is empty, or that carries a key the protocol does not name, is no yes, and the member is stopped', async () => {
-  for (const text of ['{"taken":1,"note":""}', '{"taken":1,"note":"x","other":"y"}']) {
-    const fake = fakeEngine(async ({ url }) => ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? text : yesTo(url.slice(RELAY_ORIGIN.length)) }))
-    const call = await callThrough(fake)
-    assert.equal(await settled(call.answer as Promise<unknown>), 'pending', `${text} was read as a yes`)
-    assert.deepEqual(fake.ran[0], ['kill', '-s', 'KILL', '--', '-4242'], `the member was not stopped on ${text}`)
-  }
-})
-
 test('#311 ruling D: a report answered with a turn to end that names none is no yes, and the member is stopped (mutant: read any end_turn as a yes)', async () => {
   const fake = fakeEngine(async ({ url }) => ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? '{"taken":1,"end_turn":""}' : yesTo(url.slice(RELAY_ORIGIN.length)) }))
   const call = await callThrough(fake)
   assert.equal(await settled(call.answer as Promise<unknown>), 'pending', 'a malformed end was read as a yes')
   assert.deepEqual([fake.ran[0], fake.aborted], [['kill', '-s', 'KILL', '--', '-4242'], []], 'the member was not stopped, or a turn was ended')
+})
+
+test('#969: a report the launcher answers yes with a note hands the tool\'s result back with the note added to its context, and stops nothing (mutant: drop the note)', async () => {
+  const note = 'note: the clone /w/acme/widget is 1 commit behind origin/main.'
+  const noting: Launcher = async ({ url }) =>
+    ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? JSON.stringify({ taken: 1, note }) : yesTo(url.slice(RELAY_ORIGIN.length)) })
+  const fake = fakeEngine(noting)
+  const call = await callThrough(fake)
+  assert.deepEqual(await call.answer, { ...RESULT, context: [note] }, 'the note was not added to the result')
+  assert.deepEqual([fake.ran, fake.aborted], [[], []], 'a note stopped the member or ended its turn')
+})
+
+test('#969: a report answered with an empty note, or a key the relay does not know, is no yes, and the member is stopped (mutant: read any taken as a yes)', async () => {
+  for (const answered of [{ taken: 1, note: '' }, { taken: 1, said: 'x' }, { taken: 1, end_turn: 't', note: 3 }]) {
+    const fake = fakeEngine(async ({ url }) => ({ status: 200, text: url.endsWith(RELAY_PATHS.tool_answered) ? JSON.stringify(answered) : yesTo(url.slice(RELAY_ORIGIN.length)) }))
+    const call = await callThrough(fake)
+    assert.equal(await settled(call.answer as Promise<unknown>), 'pending', `${JSON.stringify(answered)} was read as a yes`)
+    assert.deepEqual(fake.ran[0], ['kill', '-s', 'KILL', '--', '-4242'], `the member was not stopped for ${JSON.stringify(answered)}`)
+  }
 })
 
 test('a hook that failed: its catch drops or denies before the tool ran, and stops the member after', async () => {

@@ -73,16 +73,12 @@ test("on the recording, the folders compared whole are the root's config/ and .a
   assert.ok('refusal' in without && without.refusal.includes('agents_home'), JSON.stringify(without))
 })
 
-test('the watch takes its snapshot when it is made, and checks the owner, the files, then the folders, the first that fails saying why (#541 package A; mutants: snapshot taken late, order changed)', (t) => {
+test('the watch takes its snapshot when it is made, and checks the files, then the folders, the first that fails saying why (#541 package A; mutants: snapshot taken late, order changed; martha#601 row 174: no Claude Code setting is watched here)', (t) => {
   const { folder } = aFolderWithEntries(t)
-  let owners: string | undefined
   let files: string | undefined
-  const check = theRootsWatch({ owners_settings: () => owners, the_files_as_written: () => files, folders: [folder] })
+  const check = theRootsWatch({ the_files_as_written: () => files, folders: [folder] })
   writeFileSync(join(folder, 'after.yaml'), '')
-  owners = 'owner'
   files = 'files'
-  assert.equal(check(), 'owner')
-  owners = undefined
   assert.equal(check(), 'files')
   files = undefined
   assert.equal(check(), `the launch's engine root no longer holds what it wrote: ${join(folder, 'after.yaml')} was added after the launch wrote its root, and the engine reads its gates, prompt and providers from there`)

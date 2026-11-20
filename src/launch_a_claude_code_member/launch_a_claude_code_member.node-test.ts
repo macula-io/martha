@@ -34,7 +34,8 @@ import { recordMeshTree } from '../install_the_recorded_mesh_server/install_the_
 import type { MeshTreeRecording } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { CLAUDE_MEMORY_ELSEWHERE, CLAUDE_MEMORY_OFF, fingerprintOf, readLaunchState, startedWithOf, theRowOfHost, type StartedWith } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
 import { rowStreamsDirectory, STREAM_DIRECTORY_MODE, streamDirectoryNameOf } from '../row_streams_directory/row_streams_directory.ts'
-import { CREW_ROWS_PLACE, CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CREW_ROWS_PLACE, CREWS_PLACE, projectStateDirectory, TRANSCRIPTS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { REDACTED, redactTheTokens, theHostsTranscriptPath, TRANSCRIPTS_SUFFIX } from '../choose_the_transcripts_to_keep/choose_the_transcripts_to_keep.ts'
 import { STATE_HOME_VARIABLE } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
@@ -48,7 +49,7 @@ import { handedAtThisStart, memberRelay, NO_SIGNED_RUNS, type MemberRelay, type 
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
-import { HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { API_KEY_VARIABLE, HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
@@ -82,7 +83,7 @@ import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_ru
 import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { MINUTE_MS, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { BILLED_BY_SUBSCRIPTION, MINUTE_MS, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -2218,7 +2219,7 @@ for (const [shape, carried, kept] of [
     const settings = await settingsTheHostStartedWith(t, place, fake, launch)
     // The member's environment names its own config folder (martha#602, T2): the rules cover that folder's places
     // and the owner's alike, so nothing the member writes in its own folder runs as code either.
-    const member_env = { ...launch.inherited, ...theMembersConfigEnvironment(membersOwnConfig(place)) }
+    const member_env = { ...launch.inherited, ...theMembersConfigEnvironment(membersOwnConfig(place), BILLED_BY_SUBSCRIPTION) }
     // And Martha's own state root, whole (martha#619): the records of the owner's acts are no member's to write.
     const places = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home), martha_state_root: place.state_root })
     const ownersOnly = ownerMemoryPlaces({ launcher_env: launch.inherited, member_env: launch.inherited, home: place.home, launch_dir: place.checkout, settings_files: [], user_scope: userScopeFor(place.home) })
@@ -4713,6 +4714,49 @@ test('T7, T9a: an inherited host skill catalog and an inherited bare mode never 
   assert.equal(Object.hasOwn(env, CLAUDE_CODE_HOST_SKILL_CATALOG_VARIABLE), false, 'the host skill catalog is dropped')
   started.stop('the test is over')
   await started.stopped
+})
+
+// The launcher's key, in no token's shape, so only the redaction by the launch's own key can hide it (martha#916).
+const A_LAUNCHERS_KEY = 'a-launchers-key-916-not-token-shaped'
+
+test("martha#916: a member billed by the subscription, not handed the launcher's key, still has that key redacted from its kept transcript", async (t) => {
+  assert.equal(redactTheTokens(A_LAUNCHERS_KEY, '').found, false, 'the key is in no token shape, so the shape redaction cannot hide it')
+  const place = placeFor(t)
+  const transcript = theHostsTranscriptPath('a-project-key', `a-session${TRANSCRIPTS_SUFFIX}`)
+  const dir = join(place.home, 'fake-writes-a-transcript')
+  mkdirSync(dir)
+  const envFile = join(dir, 'env')
+  const command = join(dir, CLAUDE)
+  writeFileSync(
+    command,
+    [
+      '#!/bin/sh',
+      ...hostAnswers(),
+      `mkdir -p "$${CONFIG_DIR_VARIABLE}/${dirname(transcript)}"`,
+      `printf '%s\\n' '${JSON.stringify({ type: 'user', text: `the key is ${A_LAUNCHERS_KEY} here` })}' > "$${CONFIG_DIR_VARIABLE}/${transcript}"`,
+      // Written beside and moved into place, after the transcript, so the test never reads a dump that is half written.
+      `env > '${envFile}.being-written'`,
+      `mv '${envFile}.being-written' '${envFile}'`,
+      'exec sleep 600',
+      '',
+    ].join('\n'),
+    { mode: 0o700 },
+  )
+  const launch = memberLaunch(place, command, place.approved)
+  const started = await aMemberStartedIn(t, place, { ...launch, inherited: { ...launch.inherited, [API_KEY_VARIABLE]: A_LAUNCHERS_KEY } })
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write its transcript and what it was started with', () => existsSync(envFile), t)
+  const spawned = environmentOfDump(readFileSync(envFile, 'utf8'))
+  assert.equal(Object.hasOwn(spawned, API_KEY_VARIABLE), false, "the member billed by the subscription is not handed the launcher's key")
+  started.stop('the test is over')
+  await started.stopped
+
+  const keptPlace = join(projectStateDirectory(place.state_root, place.checkout), TRANSCRIPTS_PLACE)
+  const kept = readdirSync(keptPlace, { recursive: true, encoding: 'utf8' }).filter((path) => path.endsWith(transcript))
+  assert.equal(kept.length, 1, `the transcript is kept once under ${keptPlace}: ${kept.join(', ')}`)
+  const text = readFileSync(join(keptPlace, kept[0] ?? ''), 'utf8')
+  assert.equal(text.includes(A_LAUNCHERS_KEY), false, `the launcher's key survived in the kept transcript: ${text}`)
+  assert.ok(text.includes(REDACTED), `the key's place is marked redacted: ${text}`)
 })
 
 test('#931 B: a launch keeps its member\'s transcripts to its crew\'s declared bounds, and to the defaults with no crew', () => {

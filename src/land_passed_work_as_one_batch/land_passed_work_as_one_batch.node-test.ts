@@ -506,6 +506,22 @@ test('#601: a head no open pull request stands at, and a head two stand at, are 
   assert.doesNotMatch(two.answer.told, /PR 0/, `the landing named a pull request GitHub did not: ${two.answer.told}`)
 })
 
+test('#968: a batch whose tip holds a committed conflict marker is pushed anyway, its answer naming every marker line (mutant: no check before the push)', async (t) => {
+  const fixture = aRepository(t)
+  const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')
+  const work_package = `${fixture.repo}#968`
+  const head = aBranchWithOneCommit(fixture, 'marked', base, 'notes.md', 'a\n<<<<<<< HEAD\nours\n||||||| 895300e\n=======\ntheirs\n>>>>>>> origin/main\n')
+  const tests = aHostOver(aGithub(theAnswersFor(fixture.repo, new Map([[`repos/${fixture.repo}/commits/${head}/pulls`, anOpenPullRequest(968, head)]]))))
+  await aPassedVerdict(tests, work_package, base, head)
+
+  const landed = await landPassedWorkAsOneBatch(tests.host, MEMBER, { path: fixture.clone, packages: [work_package] })
+  assert.ok('told' in landed, `a batch carrying a conflict marker was refused: ${wordsOf(landed)}`)
+  const branch = theLandBranchesOnOrigin(fixture)[0] ?? assert.fail('the batch was not pushed')
+  const tip = inTheOrigin(fixture, 'rev-parse', `refs/heads/${branch}`)
+  const notices = landed.told.split('\n').filter((line) => line.includes('conflict marker'))
+  assert.deepEqual(notices, [`notice: the tree at ${tip} holds a committed conflict marker at notes.md:2, notes.md:4, notes.md:5, notes.md:7.`])
+})
+
 test('#256: a package is landed as the pull request its verdict passed, whose number is not the issue number', async (t) => {
   const fixture = aRepository(t)
   const base = gitIn(fixture.clone, 'rev-parse', 'origin/main')

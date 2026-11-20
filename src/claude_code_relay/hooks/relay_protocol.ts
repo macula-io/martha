@@ -111,7 +111,11 @@ export interface Ran {
 export interface Taken {
   readonly taken: 1
   readonly end_turn?: string
-  /** On a ran tool's report, the line the member reads after the tool's result (martha#999 package 2b). */
+  /**
+   * On a ran tool's report, the lines its result carries for the model: a read in a clone behind its origin (martha#969),
+   * and a brief the call wrote that breaks the owner-items rule (martha#999 package 2b). The relay adds them to the
+   * result and changes nothing else.
+   */
   readonly note?: string
 }
 
@@ -137,7 +141,8 @@ export const TAKEN: Taken = { taken: 1 }
 export const ALLOW: Verdict = { allow: 1 }
 
 /** What the relay acts on: the launcher's yes, or why not. A yes may carry the one line a session is handed as it
- * starts (martha#254 test 10), or the turn a ran tool's report ends (martha#311): nothing else but its verdict. */
+ * starts (martha#254 test 10), the turn a ran tool's report ends (martha#311), or the note a ran read's result carries
+ * (martha#969): nothing else but its verdict. */
 export type Heard = { readonly yes: true; readonly handed?: string; readonly end_turn?: string; readonly note?: string } | { readonly yes: false; readonly why: string }
 
 const NO = (why: string): Heard => ({ yes: false, why })
@@ -198,27 +203,29 @@ export function answeredBody(session_id: string, call: unknown, answer: unknown)
   return body
 }
 
-/** A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the only yes. */
+/** A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the yes, with an `end_turn` and a `note` it may carry. */
 export function heardTaken(status: number, text: string): Heard {
   if (status !== 200) return NO(`the launcher answered with status ${status}`)
   const value = jsonObjectOf(text)
   if (value === undefined) return NO(MALFORMED)
   if (exactKeys(value, ['refused']) && isReason(value.refused)) return NO(value.refused)
   if (value.taken !== 1) return NO(MALFORMED)
-  if (exactKeys(value, ['taken'])) return YES
-  return theYesOfARanToolsReport(value)
+  return exactKeys(value, ['taken']) ? YES : (theYesCarrying(value) ?? NO(MALFORMED))
 }
 
-/** The extras a ran tool's report may carry on its yes (martha#311, martha#999): the end of the turn, a note, or both. */
-const A_REPORTS_EXTRAS = ['end_turn', 'note'] as const
-
-/** A taken answer with extras, read as a yes only when each is one of a report's and says something. */
-function theYesOfARanToolsReport(value: Readonly<Record<string, unknown>>): Heard {
-  const extras = Object.keys(value).filter((key) => key !== 'taken')
-  if (!extras.every((key) => (A_REPORTS_EXTRAS as readonly string[]).includes(key) && isReason(value[key]))) return NO(MALFORMED)
-  const said = Object.fromEntries(extras.map((key) => [key, value[key] as string]))
-  return { yes: true, ...said }
+/** A yes with what a taken answer may carry beside it, each a reason; undefined for any other key or an empty one. */
+function theYesCarrying(value: Record<string, unknown>): Heard | undefined {
+  if (!Object.keys(value).every((key) => TAKEN_MAY_CARRY.includes(key))) return undefined
+  const carried = TAKEN_CARRIES.filter((key) => Object.hasOwn(value, key))
+  if (!carried.every((key) => isReason(value[key]))) return undefined
+  return { yes: true, ...Object.fromEntries(carried.map((key) => [key, value[key]])) }
 }
+
+/** What a taken answer may carry beside the yes: the turn a ran tool ends, and the note its result carries. */
+const TAKEN_CARRIES = ['end_turn', 'note'] as const
+
+/** The keys a taken answer may hold: the yes itself, and what it carries. */
+const TAKEN_MAY_CARRY: readonly string[] = ['taken', ...TAKEN_CARRIES]
 
 /**
  * A session's start, as the relay hears it: `{"taken":1}`, or `{"taken":1,"handed":"<line>"}` when the launcher hands
