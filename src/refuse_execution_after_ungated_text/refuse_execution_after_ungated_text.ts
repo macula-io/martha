@@ -45,7 +45,29 @@ export interface Ingestion {
    * leaving the member to guess. Never a party to the decision, only its wording.
    */
   readonly why?: string
+  /**
+   * The generation of the gate that recorded it (martha#987, crew-code's GATE_GENERATION): an arrival with none was
+   * recorded by a gate older than the stamp, generation UNSTAMPED_GENERATION. Never a party to the decision; it only
+   * lets the owner release, in one typed act, what an older gate recorded (`martha release --stale`).
+   */
+  readonly gen?: number
 }
+
+/**
+ * The gate's generation (martha#987, gap 15 of #957). Raise it when a change to what counts as text the crew can act
+ * on means an older gate's records may hold text this gate would not record: the owner can then release every arrival
+ * an older gate recorded in one typed act, while what this gate recorded stays. Martha's count is its own and is never
+ * aligned with crew-code's: 1 is every gate before the stamp, and 2 is the gate that stamps (martha#987), which also reads own_orgs.
+ */
+export const GATE_GENERATION = 2
+/** The generation of an arrival recorded before the stamp: the first gate's. */
+export const UNSTAMPED_GENERATION = 1
+
+/** The generation an arrival was recorded by. */
+export const generationOf = (ingest: Ingestion): number => ingest.gen ?? UNSTAMPED_GENERATION
+
+/** The arrival as this gate records it: stamped with this gate's generation. */
+const stamped = (ingest: Ingestion): Ingestion => ({ ...ingest, gen: GATE_GENERATION })
 
 /**
  * The identity a turn the owner typed at the member's own terminal carries
@@ -108,7 +130,7 @@ export function startFreshSession(): Session {
 
 /** The session after a turn, carrying what arrived in it. */
 export function recordIngestion(session: Session, arrived: readonly Ingestion[]): Session {
-  return { ingested: [...session.ingested, ...arrived] }
+  return { ingested: [...session.ingested, ...arrived.map(stamped)] }
 }
 
 /**

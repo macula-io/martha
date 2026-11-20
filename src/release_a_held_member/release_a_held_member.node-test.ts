@@ -10,9 +10,10 @@ import { test } from 'node:test'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type StoredRow } from '../host_contract/host_contract.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { recordOf, sessionRecordsIn, sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
-import { releaseStreamOf, releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
-import { OWNER_AT_THE_TERMINAL, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { A_RELEASE_NEEDS_THE_OWNERS_TERMINAL, releaseAHeldMember, toldOfARelease } from './release_a_held_member.ts'
+import { isStaleArrival, releaseStreamOf, releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
+import { GATE_GENERATION, OWNER_AT_THE_TERMINAL, UNSTAMPED_GENERATION, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
+import { A_RELEASE_NEEDS_THE_OWNERS_TERMINAL, releaseAHeldMember, releaseEveryMembersStale, toldOfARelease } from './release_a_held_member.ts'
 
 const MEMBER = 'builder'
 const SESSION = 'the-live-session'
@@ -158,4 +159,98 @@ test('#424: the release clears the record the launcher wrote, because both name 
   assert.equal(release.released, true, `the release read another stream than the launcher wrote: ${toldOfARelease(release)}`)
   if (!release.released) return
   assert.equal(release.cleared, 1)
+})
+
+// `martha release --stale` (martha#987, gap 15 of #957): only what an older gate recorded, as a prefix mark that counts
+// from where the owner's newest release stands, and never a lost record's mark.
+
+/** An arrival the first gate recorded, before the stamp: it carries no generation. */
+const unstamped = (path: string): Ingestion => ({ path, from_node_id: null })
+/** An arrival a gate of `gen` recorded. */
+const stampedBy = (gen: number, path: string): Ingestion => ({ path, from_node_id: null, gen })
+/** The arrivals the record holds after every release kept for the session. */
+async function heldAfter(rows: ReturnType<typeof rowsInMemory>): Promise<readonly Ingestion[]> {
+  const raw = recordOf((rows.kept.get(sessionRecordStreamOf(SESSION)) ?? []).at(-1)!).ingested
+  const marks = await releaseMarksIn(rows, SESSION)
+  const newest = marks.at(-1)
+  return newest === undefined ? raw : raw.slice(newest.through)
+}
+
+test('#987: --stale clears what an older gate recorded at the head of the record, and keeps what this gate recorded', async () => {
+  const rows = rowsHolding([unstamped('A2'), stampedBy(UNSTAMPED_GENERATION, 'B3'), stampedBy(GATE_GENERATION, 'A6')])
+  const release = await releaseAHeldMember(asked(rows, { stale: true }))
+  assert.deepEqual(release, { released: true, member: MEMBER, session: SESSION, cleared: 2, still_held: 1 })
+  assert.deepEqual((await heldAfter(rows)).map((ingest) => ingest.path), ['A6'])
+  assert.equal(toldOfARelease(release), `Released what an older gate recorded for ${MEMBER}: cleared 2 arrivals; 1 arrival this gate recorded still holds it.`)
+})
+
+test('#987: --stale releases nothing when this gate recorded the head of the record, and writes no mark', async () => {
+  const rows = rowsHolding([stampedBy(GATE_GENERATION, 'A2'), unstamped('B3')])
+  const release = await releaseAHeldMember(asked(rows, { stale: true }))
+  assert.equal(release.released, false)
+  assert.equal(rows.kept.has(releaseStreamOf(SESSION)), false, 'a release that cleared nothing wrote a mark')
+})
+
+test('#987: a stale arrival after one this gate recorded stays held, because a mark clears a prefix only', async () => {
+  const rows = rowsHolding([unstamped('A2'), stampedBy(GATE_GENERATION, 'A6'), unstamped('B3')])
+  const release = await releaseAHeldMember(asked(rows, { stale: true }))
+  assert.equal(release.released && release.cleared, 1)
+  assert.deepEqual((await heldAfter(rows)).map((ingest) => ingest.path), ['A6', 'B3'])
+})
+
+test('#987: --stale counts from the owner\'s newest release, so it never holds again what a whole release cleared', async () => {
+  const before = [stampedBy(GATE_GENERATION, 'A2'), stampedBy(GATE_GENERATION, 'B3')]
+  const rows = rowsHolding(before)
+  assert.equal((await releaseAHeldMember(asked(rows))).released, true)
+  const grown = [...before, unstamped('B5'), stampedBy(GATE_GENERATION, 'A6')]
+  rows.kept.set(sessionRecordStreamOf(SESSION), [{ ingested: grown as unknown as Row[] } as Row])
+  const release = await releaseAHeldMember(asked(rows, { stale: true }))
+  assert.equal(release.released && release.cleared, 1)
+  assert.equal((await releaseMarksIn(rows, SESSION)).at(-1)?.through, 3, 'the stale mark counts from the whole release, which cleared 2')
+  assert.deepEqual((await heldAfter(rows)).map((ingest) => ingest.path), ['A6'])
+})
+
+test('#987: --stale refuses when the earlier releases cannot be read, since it could undo one', async () => {
+  const rows = rowsHolding([unstamped('A2')])
+  const unreadable: RowStore = {
+    read: async (stream) => {
+      if (stream === releaseStreamOf(SESSION)) throw Object.assign(new Error('no'), { code: 'EACCES' })
+      return rows.read(stream)
+    },
+    append: rows.append,
+  }
+  const release = await releaseAHeldMember(asked(unreadable, { stale: true }))
+  assert.equal(release.released, false)
+  assert.ok(!release.released && release.refusal.includes('EACCES'), 'the refusal names why')
+  assert.equal(rows.kept.has(releaseStreamOf(SESSION)), false)
+})
+
+test('#987: a lost record is never released by --stale, though its mark carries no generation', async () => {
+  const rows = rowsHolding([unstamped('A2'), RECORD_LOST])
+  const release = await releaseAHeldMember(asked(rows, { stale: true }))
+  assert.equal(release.released, false)
+  assert.equal(rows.kept.has(releaseStreamOf(SESSION)), false)
+  assert.equal(isStaleArrival(RECORD_LOST, GATE_GENERATION + 1), false, 'the lost mark is never stale, whatever the generation')
+})
+
+test('#987: --stale with no terminal is refused, for one member and for all', async () => {
+  const rows = rowsHolding([unstamped('A2')])
+  assert.deepEqual(await releaseAHeldMember(asked(rows, { stale: true, onATerminal: false })), { released: false, refusal: A_RELEASE_NEEDS_THE_OWNERS_TERMINAL })
+  const all = await releaseEveryMembersStale({ members: MEMBERS, rows, onATerminal: false, rowOf: () => rowIn(SESSION), gateOf: () => 'enforced' })
+  assert.deepEqual(all, [{ released: false, refusal: A_RELEASE_NEEDS_THE_OWNERS_TERMINAL }])
+  assert.equal(rows.kept.has(releaseStreamOf(SESSION)), false)
+})
+
+test('#987: --stale for every member answers once per member, and releases the one an older gate holds', async () => {
+  const rows = rowsHolding([unstamped('A2'), stampedBy(GATE_GENERATION, 'A6')])
+  const all = await releaseEveryMembersStale({
+    members: MEMBERS,
+    rows,
+    onATerminal: true,
+    rowOf: (member) => (member === MEMBER ? rowIn(SESSION) : null),
+    gateOf: () => 'enforced',
+  })
+  assert.equal(all.length, MEMBERS.length)
+  assert.deepEqual(all.map((answer) => answer.released), [true, false])
+  assert.deepEqual((await heldAfter(rows)).map((ingest) => ingest.path), ['A6'])
 })
