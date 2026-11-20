@@ -165,6 +165,29 @@ test("martha#925: a push onto the default branch from a member's worktree is ref
   assert.equal(await refusalOf(fixture, 'git push origin HEAD:main', fixture.worktree_of_member), undefined)
 })
 
+test("martha#925 r=1: a push from the clone that leaves its target to git writes the default branch, and is refused as one", async (t) => {
+  const fixture = aCrew(t)
+  // A clone stays on its default branch, and nothing refuses a commit in it: a push that names no target, or names
+  // HEAD, then writes the default branch. Git is shown doing so first, so the refusal below is of a push that lands.
+  writeFileSync(join(fixture.clone, 'README.md'), '# widget, changed in the clone\n')
+  commitIn(fixture.clone, 'a commit in the clone')
+  const theCommit = gitIn(fixture.clone, 'rev-parse', 'HEAD')
+  for (const line of ['git push', 'git push origin', 'git push origin HEAD', 'git push --force origin @']) {
+    assert.match((await refusalOf(fixture, line, fixture.clone)) ?? '', /main is the default branch/, line)
+  }
+  gitIn(fixture.clone, 'push', '--quiet')
+  assert.equal(gitIn(fixture.clone, 'rev-parse', 'origin/main'), theCommit, "the bare push the guard refuses is one git lands on main")
+  // From a member's worktree the same words write the member's own branch, and are not refused.
+  for (const line of ['git push', 'git push origin HEAD']) assert.equal(await refusalOf(fixture, line, fixture.worktree_of_member), undefined, line)
+})
+
+test("martha#925 r=1: a push of every branch writes the default branch with them, and is refused from anywhere", async (t) => {
+  const fixture = aCrew(t)
+  for (const line of ['git push --all origin', 'git push --mirror origin', 'git push --branches origin']) {
+    assert.match((await refusalOf(fixture, line, fixture.worktree_of_member)) ?? '', /main is the default branch/, line)
+  }
+})
+
 test('a call nowhere near a repository is asked nowhere, and refused by nothing it could not look at', async (t) => {
   const fixture = aCrew(t)
   // No directory: no clone to ask for its branches, so the branch rule cannot fire and the call goes through.
