@@ -8,7 +8,9 @@
 //   never queued behind another of its own and the engine reads the crew in the channel's order;
 // - a message is counted taken in once its turn ran, or once the entry refused it (a refusal is the gate's answer, and
 //   handing the same text again gets the same answer);
-// - a turn the engine failed is not counted: the carrier is begun again, so the next read hands that message again.
+// - a turn the engine failed is not counted: the carrier is begun again, so the next read hands that message again;
+// - a read that throws (the channel could not be read) counts nothing either, and ends quietly: the timer leaves its
+//   promise unhandled, and a rejection there would end the launcher that drives the member.
 
 import { type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import type { Arrival } from '../host_contract/host_contract.ts'
@@ -50,6 +52,10 @@ export function theCrewsMessagesAsTurns(asked: TheCrewsMessagesAsked): TheCrewsM
       // A failed turn, or a count the store did not keep, leaves the message untaken: a fresh carrier hands it again.
       const counted = 'failed' in did ? null : await carrier.aTurnStarted()
       if (counted === null) carrier = asked.carrierOf()
+    } catch {
+      // The timer starts each read with `void`, so a rejection here would go unhandled and end the launch's process. A
+      // read that failed counted nothing: a fresh carrier hands the same message on the next read, late and not lost.
+      carrier = asked.carrierOf()
     } finally {
       reading = false
     }

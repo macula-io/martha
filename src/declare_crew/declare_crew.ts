@@ -218,7 +218,10 @@ export interface EngineEndpoint {
   readonly host: string
   readonly base_path: string | null
   readonly key_from: string | null
-  /** The file the key is in, absolute or under the owner's home (`~/…`); the start reads it, and only the start. */
+  /**
+   * The file the key is in, by its absolute path: a `~/…` the owner types at `martha up` is written out against their
+   * home before it lands here, and the reader refuses any other. The start reads it, and only the start.
+   */
   readonly key_file: string | null
 }
 

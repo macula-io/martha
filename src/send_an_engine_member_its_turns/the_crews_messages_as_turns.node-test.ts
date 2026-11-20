@@ -107,6 +107,28 @@ test('#511 part B: a read that starts while another is still reading the channel
   }
 })
 
+test('#511 part B r=1: a channel read that fails ends the read quietly, never as a rejection the timer leaves unhandled, and the next read hands the message (mutant: no catch)', async () => {
+  // The timer starts each read with `void`, so a read that rejects is an unhandled rejection, which ends node's process:
+  // the launch that drives the member. A read that fails is late, never lost and never the launcher's end.
+  const channel = aChannel()
+  const position = await appendToTheChannel(channel, { from: A_MATE, to: [MEMBER], text: 'after a failed read', sent_at: 1 })
+  let fails = 1
+  const carrierOf = () => {
+    const carrier = carryingTo({ member: MEMBER, host: channel })
+    return { ...carrier, next: () => (fails-- > 0 ? Promise.reject(new Error('the rows could not be read')) : carrier.next()) }
+  }
+  const turns = turnsAnswering({ sent: 1 })
+  const reader = theCrewsMessagesAsTurns({ carrierOf, turns, every_ms: NEVER_BY_THE_TIMER })
+  try {
+    await reader.readNow()
+    assert.deepEqual(turns.took, [])
+    await reader.readNow()
+    assert.deepEqual(turns.took, [{ text: framed(position, A_MATE, 'after a failed read'), arrival: THE_ARRIVAL_OF_A_CREW_MESSAGE }])
+  } finally {
+    reader.stop()
+  }
+})
+
 test('#511 part B: a stopped reader reads nothing more', async () => {
   const channel = aChannel()
   await appendToTheChannel(channel, { from: A_MATE, to: [MEMBER], text: 'late', sent_at: 1 })
