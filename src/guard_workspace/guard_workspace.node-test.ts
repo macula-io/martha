@@ -28,9 +28,11 @@ import {
   type CrewSettings,
 } from '../declare_crew/declare_crew.ts'
 import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { theWorkspacesClonesOf } from '../declare_crew/the_crews_workspace.ts'
 import {
   refuseACallInTheWorkspace,
   refuseARefUpdate,
+  theCloneOf,
   theWorkspaceTheCrewDeclared,
   type TheFacts,
   type TheWorkspace,
@@ -39,6 +41,9 @@ import {
 /** The crew's places: two directories nothing else in the tree names, so a test never borrows a constant's words. */
 const CLONES = '/place/a'
 const WORKTREES = '/place/b'
+
+/** The folder a declaration's `workspace.root` is read against: the crew's project root, absolute. */
+const A_PROJECT_ROOT = '/place'
 
 /** A crew of three members, the Supervisor among them, so a test can hold the rule to no role being exempt. */
 const WORKSPACE: TheWorkspace = { clones: CLONES, worktrees: WORKTREES, members: ['Hygiea', 'Uranus', 'Supervisor'] }
@@ -66,7 +71,6 @@ const refusedWith = (line: string, directory: string | null, member: string, say
 }
 
 // A crew declared at a workspace, as `martha up` reads it (martha#958): a root the project holds, and no house rules.
-const A_PROJECT_ROOT = '/martha-project'
 const DECLARED_AT = join(A_PROJECT_ROOT, DECLARATION_DIRECTORY, DECLARATION_FILE)
 
 /** The answer, and everything written to the process's own error output while the call is judged (martha#601). */
@@ -309,4 +313,19 @@ test('a workspace_layout switch beside a root is not read: false there is accept
     worktrees: join(A_PROJECT_ROOT, WORKTREES_BESIDE_CLONES),
     members: ['Hygiea', 'Uranus', 'Lead'],
   })
+})
+
+// --- the places, however their root is spelled (martha#995) --------------------------
+
+test('#995: a root declared with a trailing slash places the same clones folder, so the clone under it is found', () => {
+  const said = (field: string, why: string): never => assert.fail(`${field} ${why}`)
+  const clonesOf = (root: string) => theWorkspacesClonesOf({ workspace: { root } }, A_PROJECT_ROOT, said)
+  const withoutOne = clonesOf('projects')
+  const withOne = clonesOf('projects/')
+  assert.equal(withOne, withoutOne)
+  assert.ok(withoutOne !== null, 'the root names no clones folder')
+  const clone = join(withoutOne, 'org', 'repo')
+  // The clone the guard is asked about is found under both spellings, since both read as one place.
+  assert.equal(theCloneOf(clone, withoutOne), clone)
+  assert.equal(theCloneOf(clone, withOne), clone)
 })

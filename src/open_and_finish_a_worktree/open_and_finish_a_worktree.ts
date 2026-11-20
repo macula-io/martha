@@ -16,6 +16,13 @@
 // the crew declared. git runs carry marthasOwnGitArgs (../run_marthas_own_git) and go through the contract's
 // processes.run, as every other run of Martha's own git does.
 //
+// Two refusals were added for what a finish used to lose or could not read (martha#915). An ignored entry — a build
+// output, a recording, a node_modules — is read with `status --ignored`, and is thrown away only when the call names
+// it in discard_ignored; anything ignored and unnamed refuses the finish by name, so nothing goes silently. And the
+// branch on origin is removed when the default branch holds its WORK, not only its tip: an ancestor counts, and so does
+// every file the branch changed being on the default branch exactly as the branch left it, which is what a squash or a
+// rebase landing leaves behind.
+//
 // Finishing sends one thing over the network: the deletion of the branch on origin. That is an outward act, so it
 // goes out through the ledger (../log_ledger, martha#25): its row is kept first, and when the store will not keep
 // it, git is not run. The package it is kept under is named by the member, as it is on every other row.
@@ -80,7 +87,7 @@ export const WORKTREE_OPEN_DESCRIPTION = 'Makes a worktree for one package of a 
 
 /** What `worktree_finish` says it is for (martha#256). */
 export const WORKTREE_FINISH_DESCRIPTION =
-  'Removes a worktree and its branch once its work has landed, and names the package the deletion is kept under. Refused while it holds work no remote has.'
+  'Removes a worktree and its branch once its work has landed, and names the package the deletion is kept under. Refused while it holds work no remote has, or an ignored entry the call did not name in discard_ignored.'
 
 /** The places one call works in, or why the crew and the arguments name none. */
 function placesOf(request: WorktreesRequest, args: Readonly<Record<string, unknown>>): Places | Refused {
@@ -112,6 +119,16 @@ async function gitSaid(host: WorktreesRequest['host'], cwd: string, args: readon
   return outcome.exit_code === 0 ? outcome.stdout.trim() : undefined
 }
 
+/**
+ * What git said byte for byte, when it ended well; undefined when it did not. A NUL-separated name list is read
+ * through this: `trim()` would take a space off the first or last name, and a name that does not match itself passes
+ * as held (review r=1).
+ */
+async function gitSaidAsIs(host: WorktreesRequest['host'], cwd: string, args: readonly string[]): Promise<string | undefined> {
+  const outcome = await git(host, cwd, args)
+  return outcome.exit_code === 0 ? outcome.stdout : undefined
+}
+
 /** What git said it could not do, as one line: its own words, or the status it ended with when it said none. */
 function saidBy(outcome: ProcessOutcome): string {
   const words = outcome.stderr.trim() === '' ? outcome.stdout.trim() : outcome.stderr.trim()
@@ -141,12 +158,27 @@ export async function finishAWorktree(request: WorktreesRequest, args: Readonly<
   if ('refused' in places) return places
   const package_name = packageOf(args)
   if ('refused' in package_name) return package_name
+  const discard_ignored = theDiscardList(args)
+  if ('refused' in discard_ignored) return discard_ignored
   const { host } = request
   const branch = await branchAt(host, places)
   if ('refused' in branch) return branch
-  const held = await workNoOtherCopyHas(host, places)
-  if (held !== undefined) return held
-  return removeTheWorktree(host, places, branch.name, { package: package_name.name, member: request.member })
+  const held = await workNoOtherCopyHas(host, places, discard_ignored.names)
+  if ('refused' in held) return held
+  return removeTheWorktree(host, places, branch.name, { package: package_name.name, member: request.member }, held.discarded)
+}
+
+/**
+ * What the call named it may throw away: the ignored entries standing in the worktree, by the name git gives them. An
+ * entry is discarded only when it is named, so nothing ignored goes unnamed (martha#915).
+ */
+function theDiscardList(args: Readonly<Record<string, unknown>>): { readonly names: readonly string[] } | Refused {
+  const named = args['discard_ignored']
+  if (named === undefined) return { names: [] }
+  if (!Array.isArray(named) || named.some((one) => typeof one !== 'string' || one.trim() === '')) {
+    return no(`discard_ignored must be a list of the ignored entries to throw away, as git names them; ${JSON.stringify(named)} is not.`)
+  }
+  return { names: named as readonly string[] }
 }
 
 /** The package a finish keeps its act's row under, or why the argument names none: an act is filed against one. */
@@ -166,27 +198,92 @@ async function branchAt(host: WorktreesRequest['host'], places: Places): Promise
   return { name }
 }
 
-/** Why the worktree's work must not be removed yet, or undefined when no other copy of it exists. */
-async function workNoOtherCopyHas(host: WorktreesRequest['host'], places: Places): Promise<Refused | undefined> {
-  const changes = await gitSaid(host, places.path, ['status', '--porcelain'])
-  if (changes === undefined) return no(`${places.path} could not be read: git would not say what it holds.`)
-  if (changes !== '') return no(`${places.path} has uncommitted changes (${changes.split('\n')[0] ?? ''}): commit them or remove them, then try again.`)
+/** Why the worktree's work must not be removed yet, or what the call named it may throw away when nothing stops it. */
+async function workNoOtherCopyHas(
+  host: WorktreesRequest['host'],
+  places: Places,
+  discard_ignored: readonly string[],
+): Promise<{ readonly discarded: readonly string[] } | Refused> {
+  // Read with the ignored entries in: plain `status --porcelain` leaves them out, so a build output or a private
+  // recording stood unseen and went with the worktree, named by nothing (martha#915). Traditional shape, so an ignored
+  // directory is one entry rather than every file under it.
+  const status = await gitSaid(host, places.path, ['status', '--porcelain', '--ignored=traditional'])
+  if (status === undefined) return no(`${places.path} could not be read: git would not say what it holds.`)
+  const lines = status === '' ? [] : status.split('\n')
+  const ignored = lines.filter((line) => line.startsWith(IGNORED_ENTRY)).map((line) => line.slice(IGNORED_ENTRY.length).trim())
+  const changed = lines.filter((line) => !line.startsWith(IGNORED_ENTRY)).map((line) => line.slice(STATUS_PREFIX).trim())
+  if (changed.length > 0) {
+    return no(`${places.path} has uncommitted changes (${changed.join(', ')}): commit them or remove them, then try again.`)
+  }
+  const unnamed = ignored.filter((one) => !discard_ignored.includes(one))
+  if (unnamed.length > 0) {
+    return no(
+      `${places.path} holds ignored entries Martha will not throw away unnamed (${unnamed.join(', ')}): name each in discard_ignored, then try again.`,
+    )
+  }
+  const absent = discard_ignored.filter((one) => !ignored.includes(one))
+  if (absent.length > 0) {
+    return no(`${places.path} holds no ignored entry ${absent.join(', ')}: discard_ignored names what is not there, so nothing was removed.`)
+  }
   const count = await gitSaid(host, places.path, ['rev-list', '--count', 'HEAD', '--not', '--remotes'])
   if (count === undefined) return no(`${places.path} could not be read: git would not say what it holds.`)
   if (count !== '0') return no(`${places.path} holds ${count} commit(s) on no remote branch: push ${places.branch}, then try again.`)
-  return undefined
+  return { discarded: ignored }
 }
 
-async function removeTheWorktree(host: WorktreesRequest['host'], places: Places, branch: string, work: TheAct): Promise<WorktreeAnswer> {
+/** How a `git status --porcelain` line starts when it names an ignored entry. */
+const IGNORED_ENTRY = '!! '
+/** The two status characters and their space, in front of the path a porcelain line names. */
+const STATUS_PREFIX = IGNORED_ENTRY.length
+
+async function removeTheWorktree(
+  host: WorktreesRequest['host'],
+  places: Places,
+  branch: string,
+  work: TheAct,
+  discarded: readonly string[],
+): Promise<WorktreeAnswer> {
   const tip = await gitSaid(host, places.path, ['rev-parse', 'HEAD'])
+  // No `--force`: git removes a worktree that holds ignored entries without one, which is how they went silently before
+  // the check above; what keeps them is that the check refuses before this runs unless each was named (martha#915).
   const removed = await git(host, places.clone, ['worktree', 'remove', places.path])
   if (removed.exit_code !== 0) return no(`${places.path} was not removed: ${saidBy(removed)}.`)
   const local = await git(host, places.clone, ['branch', '-D', branch])
   const branchWord = local.exit_code === 0 ? `removed ${branch}` : `left ${branch} (${saidBy(local)})`
-  return { told: `removed ${places.path} and ${branchWord}${await originWord(host, places.clone, tip, branch, work)}` }
+  const discardedWord = discarded.length === 0 ? '' : `, discarding ${discarded.join(', ')}`
+  return { told: `removed ${places.path} and ${branchWord}${discardedWord}${await originWord(host, places.clone, tip, branch, work)}` }
 }
 
-/** What became of the branch on origin: removed when the default branch already holds its tip, otherwise left. */
+/**
+ * Whether `default_branch` already holds the work at `commit`: the commit is an ancestor of it, or every file the
+ * commit changed is on the default branch exactly as the commit left it — which is what a squash or a rebase landing
+ * leaves behind, where the tip is an ancestor of nothing (martha#915). `differs` names the files that stop it.
+ */
+async function theDefaultBranchHolds(
+  host: WorktreesRequest['host'],
+  clone: string,
+  commit: string,
+  default_branch: string,
+): Promise<{ readonly holds: boolean; readonly differs: readonly string[] }> {
+  const ancestor = await git(host, clone, ['merge-base', '--is-ancestor', commit, default_branch])
+  if (ancestor.exit_code === 0) return { holds: true, differs: [] }
+  const base = await gitSaid(host, clone, ['merge-base', commit, default_branch])
+  if (base === undefined) return { holds: false, differs: [] }
+  // Every path, as git holds it: `--no-renames` names both sides of a rename, so a default that took only the new name
+  // is not taken as holding the old one gone; `-z` hands each path unquoted and untrimmed, so a name git would quote,
+  // or one with a space at its edge, still matches itself below rather than matching nothing (review r=1).
+  const changed = await gitSaidAsIs(host, clone, ['diff', '--no-renames', '-z', '--name-only', base, commit])
+  if (changed === undefined) return { holds: false, differs: [] }
+  const files = changed.split('\0').filter((file) => file !== '')
+  // A commit that changed no file of its own has nothing left to prove, and nothing that could be lost with it.
+  if (files.length === 0) return { holds: true, differs: [] }
+  // Each name is a literal path, never a pattern: git reads a name that starts with a colon as pathspec magic, which
+  // names another path, so a file that differs would match nothing and pass as held (review r=2).
+  const same = await git(host, clone, ['--literal-pathspecs', 'diff', '--quiet', default_branch, commit, '--', ...files])
+  return same.exit_code === 0 ? { holds: true, differs: [] } : { holds: false, differs: files }
+}
+
+/** What became of the branch on origin: removed when the default branch already holds its work, otherwise left. */
 async function originWord(host: WorktreesRequest['host'], clone: string, tip: string | undefined, branch: string, work: TheAct): Promise<string> {
   // Read afresh, and pruned: the package may have landed since this clone last heard from origin, so a stale ref
   // would keep a branch origin no longer needs; and a branch deleted on origin by someone else would still be
@@ -196,10 +293,14 @@ async function originWord(host: WorktreesRequest['host'], clone: string, tip: st
   const default_branch = await defaultBranchIn(host, clone)
   if (default_branch === undefined) return `; ${branch} stays on origin, since the clone cannot say which branch is the default`
   if (tip === undefined) return `; ${branch} stays on origin, since git did not name the commit removed`
-  const held = await git(host, clone, ['merge-base', '--is-ancestor', tip, default_branch])
-  if (held.exit_code !== 0) return `; ${branch} stays on origin, which its tip is not on yet`
+  const held = await theDefaultBranchHolds(host, clone, tip, default_branch)
+  if (!held.holds) return `; ${branch} stays on origin, which its tip is not on yet${notWhatTheDefaultHolds(held.differs, default_branch)}`
   return removeTheBranch(host, clone, branch, default_branch, work)
 }
+
+/** The rest of a "not merged" answer when files stop the proof: which, and that they are what the default does not hold. */
+const notWhatTheDefaultHolds = (differs: readonly string[], default_branch: string): string =>
+  differs.length === 0 ? '' : ` (${differs.join(', ')} is not what ${default_branch} holds)`
 
 /**
  * Removes the branch on origin, or says why it stays. Its head on origin has to be a commit the default branch
@@ -215,9 +316,9 @@ async function removeTheBranch(
 ): Promise<string> {
   const on_origin = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
   if (on_origin === undefined) return `; ${branch} is no longer on origin`
-  const held = await git(host, clone, ['merge-base', '--is-ancestor', on_origin, default_branch])
-  if (held.exit_code !== 0) {
-    return `; ${branch} stays on origin, where it is at ${on_origin}, which the default branch does not hold`
+  const held = await theDefaultBranchHolds(host, clone, on_origin, default_branch)
+  if (!held.holds) {
+    return `; ${branch} stays on origin, where it is at ${on_origin}, which the default branch does not hold${notWhatTheDefaultHolds(held.differs, default_branch)}`
   }
   return deleteTheBranch(host, clone, branch, work)
 }

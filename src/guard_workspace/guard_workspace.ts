@@ -157,7 +157,8 @@ const isAnOption = (word: string): boolean => word.startsWith('-')
 const theWordsNotOptions = (words: readonly string[]): readonly string[] => words.filter((word) => !isAnOption(word))
 
 /** Whether a directory is a place or stands under it: the place itself, or a path past the separator that ends it. */
-const isUnder = (directory: string, place: string): boolean => directory === place || directory.startsWith(`${place}${sep}`)
+/** Whether `directory` is `place` or under it: the one test of a place both the guard and the stale-clone note use. */
+export const isUnder = (directory: string, place: string): boolean => directory === place || directory.startsWith(`${place}${sep}`)
 
 /** The clone a directory lands in, as `worktree_open` lays one out: `<clones>/<org>/<repo>`, the first two words past it. */
 export function theCloneOf(directory: string | null, clones: string | null): string | null {

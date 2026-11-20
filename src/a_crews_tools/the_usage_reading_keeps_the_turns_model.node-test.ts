@@ -6,6 +6,7 @@
 //
 // The mutant each test kills is named in its title.
 
+import { THE_BUDGET_ASK } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -195,4 +196,21 @@ test('#860 R4: a refusal while the flow waits on the phase it wrote earlier is s
   answerAgain()
   await aTurnEnds(crew, 't-4', 0.625)
   assert.deepEqual(theRowPhaseOf(crew), flows, 'once a reading was kept, the row does not say the flow\'s own phase as the flow wrote it')
+})
+
+test('#990: a turn\'s weekly reading is the crew\'s budget: /crew-budget shows it, sets the reviewer gauge, and the pane draws the line (mutant: the reading not kept)', async () => {
+  const crew = await aCrewOfTools()
+  const resets_at = STARTED_AT + 3 * 24 * 60 * MINUTE_MS
+  const weekly = { kind: 'seven_day', percentUsed: 37, resetsAt: new Date(resets_at).toISOString() }
+  crew.aTurnLater()
+  const asked = await crew.tools.answer(THE_REFRESH_ASK, { usage: { startedAt: STARTED_AT, context: { percent: 5 }, cost: { usd: 1 }, rateLimits: [weekly] }, turn_id: 'turn-990', answer: '' }, SESSION)
+  assert.ok('answer' in asked, `the flow refused the question: ${'refused' in asked ? asked.refused : ''}`)
+  const shown = await crew.tools.answer(THE_BUDGET_ASK, { typed: '' }, SESSION)
+  assert.ok('answer' in shown && shown.answer.startsWith('Budget: weekly 37% · resets in 3d.'), `the budget was not shown from the turn's reading: ${JSON.stringify(shown)}`)
+  const set = await crew.tools.answer(THE_BUDGET_ASK, { typed: `${THE_REVIEWER_MODEL} 56` }, SESSION)
+  assert.ok('answer' in set && set.answer.includes(' · Fable 56% (set 1m ago).'), `the reviewer gauge was not set: ${JSON.stringify(set)}`)
+  const pane = await crew.tools.answer('see_the_crew', {}, SESSION)
+  assert.ok('answer' in pane)
+  const lines = (JSON.parse(pane.answer) as { lines: string[] }).lines
+  assert.ok(lines.some((line) => line.startsWith('Budget: weekly 37% · resets in 3d') && line.endsWith('Fable 56% (set 1m ago)')), `the pane draws no budget line: ${lines.join(' | ')}`)
 })
