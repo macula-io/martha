@@ -285,6 +285,11 @@ the receipt. Neither command takes a turn of that member's model, so the model
 never reads what you typed. In a session Martha did not start, `/crew` says so
 and sends nothing.
 
+A martha-engine member's tab takes `/crew` the same way, and prints the same
+lines and receipt. It takes nothing else yet: any other command is refused in
+one line, and so is plain text, because typing a turn to an engine member is not
+there yet (martha#953). Nothing you type there reaches the engine.
+
 ## Parking a member, and waking it
 
 A member can park itself when it has nothing to do, so it is not refreshed and

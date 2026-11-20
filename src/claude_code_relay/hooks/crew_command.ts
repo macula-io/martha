@@ -20,6 +20,9 @@ const SEE = 'see_the_crew'
 /** The launcher's tool a member says something to the crew with, as ./crew.tsx answers the model's call of it. */
 const SAY = 'say_to_the_crew'
 
+/** The command as the owner types it, on either host (martha#927): the engine's tab reads the same word. */
+export const THE_CREW_COMMAND = '/crew'
+
 /** What `/crew` says when it is given a member and nothing to say to them. */
 export const CREW_USAGE = '/crew shows your crew. /crew <member> <text> says the text to that member. Nothing was sent.'
 

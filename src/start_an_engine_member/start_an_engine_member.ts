@@ -10,6 +10,7 @@ import { isAbsolute, join } from 'node:path'
 import process from 'node:process'
 import { randomUUID } from 'node:crypto'
 import { lstatSync, readFileSync, type Stats } from 'node:fs'
+import { createInterface } from 'node:readline'
 
 import { THE_HOMES_PREFIX, writtenOut } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
@@ -54,6 +55,8 @@ import { mintALaunchToken } from '../serve_the_relay_to_a_launch/the_launchs_tok
 import { serveTheRelay, type RelayServer } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
 import { isOnTheOwnersTerminal } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
+import { whatTheOwnersLineGets } from './the_owners_lines_at_the_tab.ts'
+import type { HearTheLauncher } from '../claude_code_relay/hooks/crew_command.ts'
 import type { AStartOnItsHost, TheCrewToolsOfAHost } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { theMembersTelling } from '../tell_the_member_a_line/tell_the_member_a_line.ts'
 import { theModelOfAnEngineMember, whyAKeyFileIsNotTheOwners, whyTheConfigRunsAnotherModel } from './the_engines_model.ts'
@@ -343,8 +346,55 @@ async function theStartRuns(start: AStartOnItsHost, seams: TheEnginesStartSeams,
     void turns.take(turn).then((did) => seams.heard_a_turn?.(turn, did))
   }
   const crew = theCrewsTurnsOf(start, turns, seams)
-  const stopped = launch.engine.exited.then(() => crew.stop()).then(theEnd)
+  const owners = theOwnersLinesOf(start, theCrewToolsHeardBy(answers, driven.session_id))
+  const stopped = launch.engine.exited.then(() => theReadersStopped(owners, crew)).then(theEnd)
   return { started: true, pid: launch.engine.pid, stopped, stop: stopMember }
+}
+
+/**
+ * The launch's crew tools, asked as this member's session asks them (martha#927 part 2): what the owner's `/crew` at the
+ * tab hears, in the launch's own order, so a send is attributed, checked and kept as the model's own call would be.
+ */
+export const theCrewToolsHeardBy = (answers: Pick<TheAnswersOfOneLaunch, 'inOrder' | 'aCrewToolAsked'>, session_id: string): HearTheLauncher =>
+  async (tool, args) => {
+    const answered = await answers.inOrder(async () => answers.aCrewToolAsked({ session_id, tool, args }))
+    return 'answer' in answered ? { said: answered.answer } : { why: answered.refused }
+  }
+
+/** The owner's lines as this launch hears them: until stopped. */
+export interface TheOwnersLines {
+  stop(): void
+}
+
+/**
+ * The owner's lines at this member's tab (martha#927 part 2), each told what it gets, one line at a time and in the
+ * order typed. None reaches the engine. A line whose answer throws is told so, and the next line is still heard.
+ */
+export function hearTheOwnersLines(input: NodeJS.ReadableStream, hear: HearTheLauncher, tell: (line: string) => void): TheOwnersLines {
+  const lines = createInterface({ input, terminal: false })
+  let heard: Promise<void> = Promise.resolve()
+  lines.on('line', (line) => {
+    heard = heard
+      .then(async () => {
+        const told = await whatTheOwnersLineGets(line, hear)
+        if (told !== null) tell(told)
+      })
+      .catch((error: unknown) => tell(`Martha could not answer that line: ${String(error)}`))
+  })
+  return { stop: () => lines.close() }
+}
+
+/** Where this start hears the owner: the lines a start is handed, else this process's input when it is the owner's terminal. */
+function theOwnersLinesOf(start: AStartOnItsHost, hear: HearTheLauncher): TheOwnersLines {
+  const input = start.owners_lines ?? (isOnTheOwnersTerminal(start.stdio) ? process.stdin : undefined)
+  if (input === undefined) return { stop: () => {} }
+  return hearTheOwnersLines(input, hear, (line) => start.tellOwner(line))
+}
+
+/** The owner's lines and the crew's messages, no longer heard once the engine has exited. */
+const theReadersStopped = (owners: TheOwnersLines, crew: TheCrewsMessagesAsTurns): ReturnType<TheCrewsMessagesAsTurns['stop']> => {
+  owners.stop()
+  return crew.stop()
 }
 
 /** Milliseconds in a second: the crew's read interval is declared in seconds. */

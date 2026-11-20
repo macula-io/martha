@@ -33,11 +33,17 @@ import { ALLOW_ONCE } from '../speak_acp_to_an_agent/answer_a_permission_once.ts
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { launcherPlacesOf, startMember, type MemberStartRequest } from '../start_a_member/start_a_member.ts'
-import { appendToTheChannel, takenInBy, type ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
+import { appendToTheChannel, readTheChannel, takenInBy, type ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { framed } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import type { AnAgentScript, AStandInsSessionRow, AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
-import { theScreenAnEngineStartSees } from './start_an_engine_member.ts'
+import { PassThrough } from 'node:stream'
+import { hearTheOwnersLines, theCrewToolsHeardBy, theScreenAnEngineStartSees } from './start_an_engine_member.ts'
+import { ONLY_THE_CREW_COMMAND, TYPED_TURNS_ARE_NOT_THERE_YET } from './the_owners_lines_at_the_tab.ts'
+import { THE_CREW_COMMAND } from '../claude_code_relay/hooks/crew_command.ts'
+import type { ACrewToolAsked } from '../host_contract/host_contract.ts'
+import { SAY_TO_THE_CREW_TOOL } from '../send_a_crew_message/say_to_the_crew_tool.ts'
+import { SEE_THE_CREW_TOOL } from '../see_the_crew/the_see_the_crew_tool.ts'
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
@@ -135,8 +141,12 @@ const THE_SESSIONS_ROW: AStandInsSessionRow = {
   },
 }
 
-/** The owner's start of the member, with the engine's path first and the key in the environment; `environment` adds to it. */
-async function started(place: Place, engine: { readonly dir: string }, lines: string[], environment: Readonly<Record<string, string>> = {}): Promise<MemberStarted> {
+/**
+ * The owner's start of the member, with the engine's path first and the key in the environment. `owners_lines` types into
+ * the member's terminal (martha#927 part 2), and `environment` adds a variable to the launch's own (row 174's case reads
+ * a CLAUDE_CONFIG_DIR that cannot be resolved).
+ */
+async function started(place: Place, engine: { readonly dir: string }, lines: string[], owners_lines?: NodeJS.ReadableStream, environment: Readonly<Record<string, string>> = {}): Promise<MemberStarted> {
   await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   const places = launcherPlacesOf(place.state, place.relay_root, place.root)
   assert.ok('rows' in places, 'refusal' in places ? places.refusal : '')
@@ -152,6 +162,7 @@ async function started(place: Place, engine: { readonly dir: string }, lines: st
     stdio: 'ignore',
     documents,
     initial_prompt: THE_START_PROMPT,
+    ...(owners_lines === undefined ? {} : { owners_lines }),
     tellOwner: (line) => void lines.push(line),
   }
   const start = await startMember(request)
@@ -210,7 +221,7 @@ test("#601 row 174: an owner's Claude Code settings that turn hooks off do not r
 test("#601 row 174: the watch is gone but a CLAUDE_CONFIG_DIR that cannot be resolved still refuses an engine member's start, since it places the owner's whole Claude config folder (mutant: that refusal dropped with the watch)", async (t) => {
   const place = aPlace(t)
   const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
-  const start = await started(place, engine, [], { CLAUDE_CONFIG_DIR: 'a-folder-not-absolute' })
+  const start = await started(place, engine, [], undefined, { CLAUDE_CONFIG_DIR: 'a-folder-not-absolute' })
   assert.equal(start.started, false, 'an engine member was started with a CLAUDE_CONFIG_DIR that cannot be resolved')
   assert.match(start.started ? '' : start.refusal, /CLAUDE_CONFIG_DIR is "a-folder-not-absolute", not an absolute directory/)
   assert.equal(existsSync(engine.heard), false, 'no engine was started')
@@ -504,6 +515,73 @@ test('#511 part B: a crew message for the engine member reaches its engine as a 
   await new Promise((settle) => setTimeout(settle, 2_500))
   assert.equal(theRequests(engine.heard).filter((request) => request.method === 'session/prompt').length, 2, lines.join('\n'))
   assert.deepEqual([...(await takenInBy(channel, MEMBER))], [position])
+})
+
+/** Waits until `lines` holds a line `matches` accepts, and returns it. */
+async function untilTold(lines: readonly string[], matches: (line: string) => boolean, what: string): Promise<string> {
+  const deadline = Date.now() + THE_WAIT_MS
+  for (;;) {
+    const told = lines.find(matches)
+    if (told !== undefined) return told
+    assert.ok(Date.now() < deadline, `the owner was never told ${what}: ${lines.join('\n')}`)
+    await new Promise((settle) => setTimeout(settle, POLL_MS))
+  }
+}
+
+test('#927 part 2: the owner\'s lines are told what they get one at a time, in the order typed, and a line whose answer throws does not stop the next', async () => {
+  const input = new PassThrough()
+  const told: string[] = []
+  const asked: string[] = []
+  const owners = hearTheOwnersLines(input, async (tool) => {
+    asked.push(tool)
+    if (asked.length === 1) throw new Error('the launcher went away')
+    return { said: 'a receipt' }
+  }, (line) => void told.push(line))
+  input.write(`${THE_CREW_COMMAND} ${A_CREW_MATE} first\n\n/compact\nplain text\n${THE_CREW_COMMAND} ${A_CREW_MATE} second\n`)
+  await untilTold(told, (line) => line === 'a receipt', 'the second send\'s receipt')
+  owners.stop()
+  assert.deepEqual(told, ['Martha could not answer that line: Error: the launcher went away', ONLY_THE_CREW_COMMAND('/compact'), TYPED_TURNS_ARE_NOT_THERE_YET, 'a receipt'])
+  assert.deepEqual(asked, [SAY_TO_THE_CREW_TOOL.name, SAY_TO_THE_CREW_TOOL.name])
+})
+
+test('#927 part 2: /crew at an engine tab asks the launch\'s crew tools as the member\'s own session, in the launch\'s order', async () => {
+  const asks: ACrewToolAsked[] = []
+  let ordered = 0
+  const answers = {
+    inOrder: async <T>(work: () => Promise<T>): Promise<T> => {
+      ordered += 1
+      return work()
+    },
+    aCrewToolAsked: async (ask: ACrewToolAsked) => {
+      asks.push(ask)
+      return ask.tool === SEE_THE_CREW_TOOL.name ? { answer: 'the rows' } : { refused: 'not a member' }
+    },
+  }
+  const hear = theCrewToolsHeardBy(answers, 'the-members-session')
+  assert.deepEqual(await hear(SEE_THE_CREW_TOOL.name, {}), { said: 'the rows' })
+  assert.deepEqual(await hear(SAY_TO_THE_CREW_TOOL.name, { to: ['x'], text: 'y' }), { why: 'not a member' })
+  assert.deepEqual(asks, [{ session_id: 'the-members-session', tool: SEE_THE_CREW_TOOL.name, args: {} }, { session_id: 'the-members-session', tool: SAY_TO_THE_CREW_TOOL.name, args: { to: ['x'], text: 'y' } }])
+  assert.equal(ordered, 2, 'an ask did not go through the launch\'s order')
+})
+
+test('#927 part 2 DW3, DW4, DW6: at a running engine member\'s tab, /crew shows the crew and says to a mate, other lines are refused, and the engine is sent no prompt for any of them', async (t) => {
+  const place = aPlace(t)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }], [{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const typed = new PassThrough()
+  const start = await started(place, engine, lines, typed)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  await untilTheEngineHeardPrompts(engine.heard, 1)
+  typed.write(`${THE_CREW_COMMAND}\n`)
+  const crew = await untilTold(lines, (line) => line.includes(A_CREW_MATE) && line.includes(MEMBER), 'the crew\'s rows')
+  assert.ok(crew.split('\n').length >= 3, `the crew's header and a line per member are not told: ${crew}`)
+  typed.write(`${THE_CREW_COMMAND} ${A_CREW_MATE} ${A_CREW_MESSAGE}\n/compact\n${A_CREW_MESSAGE}\n`)
+  await untilTold(lines, (line) => line === TYPED_TURNS_ARE_NOT_THERE_YET, 'the plain line\'s refusal')
+  assert.ok(lines.some((line) => new RegExp(`^sent as message \\d+ to ${A_CREW_MATE}\\. `).test(line)), `no receipt was told: ${lines.join('\n')}`)
+  assert.ok(lines.includes(ONLY_THE_CREW_COMMAND('/compact')), 'the other command was not refused by name')
+  const said = (await readTheChannel(theChannelOf(place))).filter((placed) => placed.message.text === A_CREW_MESSAGE)
+  assert.deepEqual(said.map((placed) => ({ from: placed.message.from, to: placed.message.to })), [{ from: MEMBER, to: [A_CREW_MATE] }], 'the mate was not said the text once, from this member')
+  assert.equal(theRequests(engine.heard).filter((request) => request.method === 'session/prompt').length, 1, 'a typed line reached the engine as a prompt')
 })
 
 test('#931 C: an engine member\'s owner\'s screen is told of the notices its crew declares', () => {
