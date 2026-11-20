@@ -69,8 +69,8 @@ const theSupervisorAsks = (reader: TheBacklogReader, changes: Partial<UnheldWork
   unheldWorkOver({
     settings: {
       members: [
-        { name: 'Supervisor', role: SUPERVISOR, model: null, host: null, parked: false },
-        { name: 'Vesta', role: 'builder', model: null, host: null, parked: false },
+        { name: 'Supervisor', role: SUPERVISOR, model: null, host: null, parked: false, billing: null },
+        { name: 'Vesta', role: 'builder', model: null, host: null, parked: false, billing: null },
       ],
       mode: { name: 'team', roles: [SUPERVISOR, 'builder'], may: { assign_work: [SUPERVISOR], approve_landing: ['owner'], resume_parked_work: [SUPERVISOR], offer_owner_asks: ['owner'], restart_member: ['owner'], [HOLD_REVIEWS]: ['owner'] } },
       backlog: { places: ['macula-io'], idle_minutes: 30 },
@@ -139,7 +139,7 @@ test('#319 B: only a role the table grants assign_work may ask, and a crew with 
   const builder = await theSupervisorAsks(reader, { asker: 'Vesta' })
   assert.ok('refused' in builder && builder.refused.startsWith('Vesta may not ask for unheld work'))
   const none = await theSupervisorAsks(reader, {
-    settings: { members: [{ name: 'Supervisor', role: SUPERVISOR, model: null, host: null, parked: false }], mode: { name: 'team', roles: [SUPERVISOR], may: { assign_work: [SUPERVISOR], approve_landing: ['owner'], resume_parked_work: ['owner'], offer_owner_asks: ['owner'], restart_member: ['owner'], [HOLD_REVIEWS]: ['owner'] } }, backlog: null , clock_zone: CLOCK_ZONE_WHEN_UNNAMED },
+    settings: { members: [{ name: 'Supervisor', role: SUPERVISOR, model: null, host: null, parked: false, billing: null }], mode: { name: 'team', roles: [SUPERVISOR], may: { assign_work: [SUPERVISOR], approve_landing: ['owner'], resume_parked_work: ['owner'], offer_owner_asks: ['owner'], restart_member: ['owner'], [HOLD_REVIEWS]: ['owner'] } }, backlog: null , clock_zone: CLOCK_ZONE_WHEN_UNNAMED },
   })
   assert.deepEqual(none, { refused: 'this crew declares no backlog, so there are no places to look for unheld work in.' })
   assert.equal(reader.calls(), 0, 'a refused ask still asked GitHub')
