@@ -28,10 +28,10 @@ import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../appro
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
-import { DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, OWNER_BELL, sameMemberName, THE_ENGINES_HOST, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, ENGINE_ENDPOINT, OWNER_BELL, sameMemberName, THE_ENGINES_HOST, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
 import { noCrewDeclaredAt, upStarts } from '../bring_up_the_declared_crew/bring_up_the_declared_crew.ts'
 import { declareTheEnginesEndpoint } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
-import { theKeyInAFile } from '../start_an_engine_member/start_an_engine_member.ts'
+import { theKeyInAFile } from '../read_a_providers_key_file/read_a_providers_key_file.ts'
 import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
@@ -425,7 +425,7 @@ async function up(io: CommandIo, places: Places, prompt?: string): Promise<numbe
   if (typeof crew === 'string') return refused(io, crew)
   const anEngineMemberStarts = crew.settings.members.some((member) => upStarts(member) && theHostOfMember(crew.settings, member) === THE_ENGINES_HOST)
   if (anEngineMemberStarts && crew.settings.engine_endpoint === null) {
-    const endpoint = await declareTheEnginesEndpoint({ root: places.root, home: places.home, documents, env: io.env, ask: io.terminal.ask, whyNotTheOwnersKeyFile: (key_file) => whyNotAKey(theKeyInAFile(key_file)) })
+    const endpoint = await declareTheEnginesEndpoint({ root: places.root, home: places.home, documents, env: io.env, ask: io.terminal.ask, whyNotTheOwnersKeyFile: (key_file) => whyNotAKey(theKeyInAFile(key_file, `${ENGINE_ENDPOINT}.key_file`)) })
     if ('refusal' in endpoint) return refused(io, endpoint.refusal)
     io.out(endpoint.told)
   }

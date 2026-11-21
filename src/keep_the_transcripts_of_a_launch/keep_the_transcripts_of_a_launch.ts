@@ -38,8 +38,8 @@ export interface WhatIsKept {
   readonly config_folder: string
   /** The launch's own name: one directory per launch, so no launch is overwritten by another. */
   readonly theLaunch: string
-  /** The key this launch handed its member, redacted by its exact value wherever it was printed. */
-  readonly theLaunchKey: string
+  /** Every key this launch handed its member — its own, and the provider's on a provider member — redacted by exact value wherever printed. */
+  readonly theLaunchKeys: readonly string[]
   /** The crew's transcript bounds as declared (martha#931 B). */
   readonly transcripts: CrewTranscripts
 }
@@ -148,7 +148,7 @@ export function keepTheTranscriptsOf(what: WhatIsKept): readonly string[] {
   const here = directoryOf(place, what.theLaunch)
   const chosen = chooseTheTranscripts({
     files: whatTheFolderHolds(what.config_folder, bytesKeptOf(what.transcripts)),
-    theLaunchKey: what.theLaunchKey,
+    theLaunchKeys: what.theLaunchKeys,
     bytes_kept: bytesKeptOf(what.transcripts),
   })
   const trouble: string[] = []

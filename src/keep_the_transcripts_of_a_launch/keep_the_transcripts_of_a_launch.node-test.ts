@@ -55,7 +55,7 @@ test('a transcript is kept with its token redacted, 0600, and the mark says whic
   const token = `${TOKEN_PREFIXES[0] ?? 'ghp_'}abcdefghijklmnop`
   aTranscriptIn(ending.config, 's-1.jsonl', `{"text":"git push with ${token} here"}\n`)
   writeFileSync(join(ending.config, 'notes.txt'), '{"model":"sonnet"}')
-  const trouble = keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKey: 'sk-ant-the-key', transcripts: TRANSCRIPTS_WHEN_UNNAMED })
+  const trouble = keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKeys: ['sk-ant-the-key'], transcripts: TRANSCRIPTS_WHEN_UNNAMED })
   assert.deepEqual(trouble, [], 'the keep said it could not keep what it should have')
   const keptText = readFileSync(ending.kept('s-1.jsonl'), 'utf8')
   assert.equal(keptText.includes(token), false, 'the token was kept in the clear')
@@ -68,14 +68,14 @@ test('a folder with no transcript keeps nothing, and a launch with no token gets
   const ending = aLaunchEnding(t)
   writeFileSync(join(ending.config, 'notes.txt'), '{"model":"sonnet"}')
   aTranscriptIn(ending.config, 's-1.jsonl', '{"text":"nothing secret here"}\n')
-  keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKey: 'sk-ant-the-key', transcripts: TRANSCRIPTS_WHEN_UNNAMED })
+  keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKeys: ['sk-ant-the-key'], transcripts: TRANSCRIPTS_WHEN_UNNAMED })
   assert.equal(readFileSync(ending.kept('s-1.jsonl'), 'utf8'), '{"text":"nothing secret here"}\n', 'a clean transcript was not kept as written')
   assert.throws(() => statSync(join(ending.place, encodeURIComponent('launch-1'), THE_MARK_FILE)), 'a mark was written for a launch that held no token')
 })
 
 test('a member whose config folder is gone is kept with nothing and is no failure (martha#646)', (t) => {
   const ending = aLaunchEnding(t)
-  const trouble = keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: join(ending.home, 'not-there'), theLaunch: 'launch-1', theLaunchKey: '', transcripts: TRANSCRIPTS_WHEN_UNNAMED })
+  const trouble = keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: join(ending.home, 'not-there'), theLaunch: 'launch-1', theLaunchKeys: [], transcripts: TRANSCRIPTS_WHEN_UNNAMED })
   assert.deepEqual(trouble, [], 'a folder the host never made was reported as a failure')
 })
 
@@ -84,7 +84,7 @@ test('a file that is not the host\'s transcript shape is never read, however lar
   // Sparse, so the size is real to `stat` without writing the bytes: a reader that walks by size alone would read this.
   spacedTo(join(ending.config, THE_HOSTS_PROJECTS_PLACE, 'the-project', 'not-a-transcript.bin'), TRANSCRIPTS_LAUNCH_BYTES_KEPT)
   aTranscriptIn(ending.config, 's-1.jsonl', aLineOf('kept whole'))
-  const trouble = keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKey: '', transcripts: TRANSCRIPTS_WHEN_UNNAMED })
+  const trouble = keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKeys: [], transcripts: TRANSCRIPTS_WHEN_UNNAMED })
   assert.deepEqual(trouble, [])
   assert.equal(readFileSync(ending.kept('s-1.jsonl'), 'utf8'), aLineOf('kept whole'), 'a file of another shape took the transcript\'s room in the launch\'s bound')
   assert.equal(readdirSync(join(ending.place, encodeURIComponent('launch-1'), THE_HOSTS_PROJECTS_PLACE, 'the-project')).sort().join(','), 's-1.jsonl', 'a file that is not the host\'s transcript was kept')
@@ -97,7 +97,7 @@ test('the launch\'s bound stops the reads, and a transcript past it is kept as t
   spacedTo(join(ending.config, THE_HOSTS_PROJECTS_PLACE, 'the-project', 's-1.jsonl'), half)
   spacedTo(join(ending.config, THE_HOSTS_PROJECTS_PLACE, 'the-project', 's-2.jsonl'), half)
   aTranscriptIn(ending.config, 's-3.jsonl', aLineOf('one byte too many'))
-  keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKey: '', transcripts: TRANSCRIPTS_WHEN_UNNAMED })
+  keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKeys: [], transcripts: TRANSCRIPTS_WHEN_UNNAMED })
   assert.match(readFileSync(ending.kept('s-3.jsonl'), 'utf8'), /of one launch\]$/, 'a transcript past the launch\'s bound was read and kept, or its note names another bound')
 })
 
@@ -106,7 +106,7 @@ test('a keep whose write fails leaves no half under the staging name (martha#646
   aTranscriptIn(ending.config, 's-1.jsonl', aLineOf('kept'))
   // A directory where the kept file goes: the write lands whole under the staging name, and the rename cannot replace it.
   mkdirSync(ending.kept('s-1.jsonl'), { recursive: true })
-  const trouble = keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKey: '', transcripts: TRANSCRIPTS_WHEN_UNNAMED })
+  const trouble = keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch: 'launch-1', theLaunchKeys: [], transcripts: TRANSCRIPTS_WHEN_UNNAMED })
   assert.equal(trouble.length, 1, 'a transcript that could not be renamed into place was not said as trouble')
   const left = readdirSync(join(ending.place, encodeURIComponent('launch-1'), THE_HOSTS_PROJECTS_PLACE, 'the-project'))
   assert.equal(left.filter((name) => name.startsWith(STAGING_PREFIX)).length, 0, `a half-written file was left behind: ${left.join(', ')}`)
@@ -137,7 +137,7 @@ test('#931 B: a launch keeps to the declared transcripts.megabytes_kept and prun
   const declared = { launches_kept: 2, megabytes_kept: 1 }
   const between = bytesKeptOf(declared) + 1
   const keep = (ending: ReturnType<typeof aLaunchEnding>, theLaunch: string, transcripts: typeof declared) =>
-    keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch, theLaunchKey: '', transcripts })
+    keepTheTranscriptsOf({ ...ending, project_root: ending.project, config_folder: ending.config, theLaunch, theLaunchKeys: [], transcripts })
 
   const byDefault = aLaunchEnding(t)
   spacedTo(join(byDefault.config, THE_HOSTS_PROJECTS_PLACE, 'the-project', 's-1.jsonl'), between)

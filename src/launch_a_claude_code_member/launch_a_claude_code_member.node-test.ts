@@ -4744,7 +4744,7 @@ test('T7, T9a: an inherited host skill catalog and an inherited bare mode never 
 const A_LAUNCHERS_KEY = 'a-launchers-key-916-not-token-shaped'
 
 test("martha#916: a member billed by the subscription, not handed the launcher's key, still has that key redacted from its kept transcript", async (t) => {
-  assert.equal(redactTheTokens(A_LAUNCHERS_KEY, '').found, false, 'the key is in no token shape, so the shape redaction cannot hide it')
+  assert.equal(redactTheTokens(A_LAUNCHERS_KEY, []).found, false, 'the key is in no token shape, so the shape redaction cannot hide it')
   const place = placeFor(t)
   const transcript = theHostsTranscriptPath('a-project-key', `a-session${TRANSCRIPTS_SUFFIX}`)
   const dir = join(place.home, 'fake-writes-a-transcript')
@@ -4789,8 +4789,8 @@ test('#931 B: a launch keeps its member\'s transcripts to its crew\'s declared b
   assert.deepEqual(theTranscriptBoundsOf({ crew_settings: crew }), declared)
   assert.deepEqual(theTranscriptBoundsOf({}), TRANSCRIPTS_WHEN_UNNAMED)
   const where = { places: { state_root: '/state' }, place: { launch_dir: '/project' } } as unknown as Parameters<typeof whatALaunchKeeps>[0]
-  assert.deepEqual(whatALaunchKeeps({ ...where, crew_settings: crew }, '/the-members-folder', '/snapshots/launch-7', 'the-key').transcripts, declared, 'the launch\'s end does not keep to the crew\'s declared bounds')
-  assert.deepEqual(whatALaunchKeeps(where, '/the-members-folder', '/snapshots/launch-7', 'the-key').transcripts, TRANSCRIPTS_WHEN_UNNAMED, 'a launch with no crew does not keep to the defaults')
+  assert.deepEqual(whatALaunchKeeps({ ...where, crew_settings: crew }, '/the-members-folder', '/snapshots/launch-7', ['the-key']).transcripts, declared, 'the launch\'s end does not keep to the crew\'s declared bounds')
+  assert.deepEqual(whatALaunchKeeps(where, '/the-members-folder', '/snapshots/launch-7', ['the-key']).transcripts, TRANSCRIPTS_WHEN_UNNAMED, 'a launch with no crew does not keep to the defaults')
 })
 
 test('#931 C: a launch\'s owner\'s screen is told of its crew\'s declared notices, and of the defaults with no crew', () => {

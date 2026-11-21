@@ -12,10 +12,8 @@ import {
   THE_ENDPOINTS_BASE_PATH_SETTING,
   THE_ENDPOINTS_HOST_SETTING,
   THE_ENDPOINTS_KEY_SECRET,
-  THE_MODE_BITS_OF_GROUP_AND_OTHERS,
   theModelOfAnEngineMember,
   theModelTheConfigNames,
-  whyAKeyFileIsNotTheOwners,
   whyTheConfigRunsAnotherModel,
 } from './the_engines_model.ts'
 
@@ -96,14 +94,4 @@ test('#511 part B: a key file the start may not read starts nothing, and the ref
   const why = 'a reason a test names'
   const refused = theModelOfAnEngineMember({ ...ASKED, endpoint: { ...AN_ENDPOINT, key_from: null, key_file: '/a-key-file' }, readTheKeyFile: () => ({ refusal: why }) })
   assert.deepEqual(refused, { refusal: `${ASKED.member} cannot reach ${ASKED.model}: ${why}` })
-})
-
-test('#511 part B: a key file is read only when it is this user\'s own plain file with no right for the group or others', () => {
-  const owners = { plain_file: true, owner_is_this_user: true, mode: 0o100600 }
-  assert.equal(whyAKeyFileIsNotTheOwners('/k', owners), undefined)
-  assert.match(whyAKeyFileIsNotTheOwners('/k', { ...owners, plain_file: false }) ?? '', /\/k is not a plain file/)
-  assert.match(whyAKeyFileIsNotTheOwners('/k', { ...owners, owner_is_this_user: false }) ?? '', /\/k is not this user's own file/)
-  for (let bit = 1; bit <= THE_MODE_BITS_OF_GROUP_AND_OTHERS; bit <<= 1) {
-    assert.match(whyAKeyFileIsNotTheOwners('/k', { ...owners, mode: owners.mode | bit }) ?? '', /open to the group or to others/, `mode bit ${bit.toString(8)} was let through`)
-  }
 })
