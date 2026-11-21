@@ -141,6 +141,7 @@ import { theMembersTelling } from '../tell_the_member_a_line/tell_the_member_a_l
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import {
   API_KEY_VARIABLE,
+  AUTH_TOKEN_VARIABLE,
   hostTrustsTheFolder,
   ownerCanAnswerTheHost,
   SESSION_START_DEADLINE_MS,
@@ -180,7 +181,8 @@ import { isBelowACarriedFolder } from '../refuse_launch_of_unapproved_config/car
 import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
-import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDroppedPluginsLines } from './the_environment_a_member_is_given.ts'
+import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDeclaredProviderOf, theDroppedPluginsLines } from './the_environment_a_member_is_given.ts'
+import type { TheProviderAMemberRunsOn } from './the_provider_a_member_runs_on.ts'
 import { theArtifactRefusal } from './the_artifacts_a_key_cannot_open.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
@@ -240,21 +242,21 @@ export type CrewToolsOfALaunch = (sessions: { readonly of: (session_id: string) 
 export const theTranscriptBoundsOf = (launch: { readonly crew_settings?: CrewSettings }): CrewTranscripts => launch.crew_settings?.transcripts ?? TRANSCRIPTS_WHEN_UNNAMED
 
 /**
- * What a launch's end keeps of its member's session: where, under which launch's name, the key redacted, and to the
- * crew's declared bounds. The launch is named by its approval when the gate recorded one, and otherwise by its snapshot,
- * which is made afresh for each launch.
+ * What a launch's end keeps of its member's session: where, under which launch's name, every key it handed its member
+ * redacted, and to the crew's declared bounds. The launch is named by its approval when the gate recorded one, and
+ * otherwise by its snapshot, which is made afresh for each launch.
  */
 export const whatALaunchKeeps = (
   launch: Pick<ClaudeCodeMemberLaunch, 'places' | 'place'> & { readonly crew_settings?: CrewSettings },
   config_folder: string,
   snapshot_dir: string,
-  theLaunchKey: string,
+  theLaunchKeys: readonly string[],
 ): WhatIsKept => ({
   state_root: launch.places.state_root,
   project_root: launch.place.launch_dir,
   config_folder,
   theLaunch: launch.place.since_approval?.launch_id ?? basename(snapshot_dir),
-  theLaunchKey,
+  theLaunchKeys,
   transcripts: theTranscriptBoundsOf(launch),
 })
 
@@ -270,6 +272,12 @@ export interface ClaudeCodeMemberLaunch {
    * Absent, no crew text is handed and the launch is as it was before this existed.
    */
   readonly crew_settings?: CrewSettings
+  /**
+   * The provider this member's profile names, read from the declaration for this member (gap 4 of martha#957): its
+   * endpoint and key, the model's context window. Absent or null, the member runs on Anthropic's own service and keeps
+   * martha#916's billing, as every launch before this did.
+   */
+  readonly provider?: TheProviderAMemberRunsOn | null
   /**
    * Whether this member's bells ring when its host asks the owner something (`house_rules.owner_bell`, read once by
    * `martha start`), with the owner's own mute of this member read on top of it every time a bell is about to ring
@@ -419,12 +427,14 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
   if ('refusal' in owners) return owners.refusal
   const memberConfig = membersConfigFolderOf(prepared)
   return giveAMemberItsStart({
+    member: launch.member_name,
     inherited: launch.inherited,
     switches: prepared.switches,
     crew: { state_root: launch.places.state_root, rows: launch.places.rows },
     member_config: memberConfig,
     host: CLAUDE_CODE,
     billing,
+    provider: launch.provider ?? theDeclaredProviderOf(launch.crew_settings, launch.member_name),
     checkout: launch.place.launch_dir,
     skills: theCarriedSkills(prepared.carried_files),
   })
@@ -480,11 +490,12 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch, billing: Billing): ReadyLau
   // The host writes the member's session under the folder this snapshot holds, so the keep is taken here, beside the
   // snapshot's removal, and each of the three ends calls it (martha#646). A launch on an approval keeps the id its own
   // writes are kept under; any other launch is named by its snapshot, which is made afresh for each launch.
-  // The key redacted is the launcher's, which is the member's own under api_key and still one a member billed by the
-  // subscription may meet in the owner's files though it is not handed it (martha#916).
+  // The keys redacted are the launcher's, which is the member's own under api_key and still one a member billed by the
+  // subscription may meet in the owner's files though it is not handed it (martha#916), and the provider's own key when
+  // the member runs on one (gap 4 of martha#957).
   const keepTranscripts = (): void => {
     try {
-      const kept = whatALaunchKeeps(launch, membersConfigFolderOf(prepared), prepared.snapshot_dir, launch.inherited[API_KEY_VARIABLE] ?? '')
+      const kept = whatALaunchKeeps(launch, membersConfigFolderOf(prepared), prepared.snapshot_dir, [launch.inherited[API_KEY_VARIABLE] ?? '', hostEnv[AUTH_TOKEN_VARIABLE] ?? ''])
       for (const line of keepTheTranscriptsOf(kept)) launch.tellOwner(`Not kept for ${launch.member_name}: ${line}`)
     } catch (error) {
       try {

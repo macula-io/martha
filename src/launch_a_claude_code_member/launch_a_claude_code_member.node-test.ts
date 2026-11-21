@@ -38,6 +38,7 @@ import { CREW_ROWS_PLACE, CREWS_PLACE, projectStateDirectory, TRANSCRIPTS_PLACE 
 import { REDACTED, redactTheTokens, theHostsTranscriptPath, TRANSCRIPTS_SUFFIX } from '../choose_the_transcripts_to_keep/choose_the_transcripts_to_keep.ts'
 import { STATE_HOME_VARIABLE } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
 import { crewToolsOver, type CrewTools } from '../a_crews_tools/a_crews_tools.ts'
+import { THE_CONTEXT_TOKENS_VARIABLE, THE_MODELS_VARIABLE, THE_PROVIDERS_ENDPOINT_VARIABLE } from './the_provider_a_member_runs_on.ts'
 import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
@@ -49,7 +50,7 @@ import { handedAtThisStart, memberRelay, NO_SIGNED_RUNS, type MemberRelay, type 
 import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
-import { API_KEY_VARIABLE, HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { API_KEY_VARIABLE, AUTH_TOKEN_VARIABLE, HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { hostAnswers, reportsOutputStyles, refusesTheRelay, SIGNED_IN_ANSWER, type HostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
 import { ARTIFACT_LINES } from '../read_a_crew_line/crew_lines.ts'
 import { ARTIFACT_TOOLS } from './the_artifacts_a_key_cannot_open.ts'
@@ -85,7 +86,9 @@ import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_ru
 import { THE_REFRESH_THE_MOD_RUNS } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 import { CLAUDE, CLAUDE_CODE, CLAUDE_FOLDER, MCP_CONFIG_SWITCH } from '../know_claude_codes_own_facts/claude_code_facts.ts'
-import { BILLED_BY_SUBSCRIPTION, MINUTE_MS, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { ACTS, BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, DECLARATION_DIRECTORY, DECLARATION_FILE, DECLARATION_VERSION, MINUTE_MS, OWNER, SOLO_MODE, declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { OPEN_VOCABULARY } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { GIT_SETTINGS_VARIABLE } from '../refuse_code_a_checkout_runs_itself/refuse_code_a_checkout_runs_itself.ts'
 import { THE_HOOKS_DIRECTORY_NAME } from '../guard_the_git_a_member_runs/the_guard_of_a_launch.ts'
 import { CLAUDE_SKILLS } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -4744,7 +4747,7 @@ test('T7, T9a: an inherited host skill catalog and an inherited bare mode never 
 const A_LAUNCHERS_KEY = 'a-launchers-key-916-not-token-shaped'
 
 test("martha#916: a member billed by the subscription, not handed the launcher's key, still has that key redacted from its kept transcript", async (t) => {
-  assert.equal(redactTheTokens(A_LAUNCHERS_KEY, '').found, false, 'the key is in no token shape, so the shape redaction cannot hide it')
+  assert.equal(redactTheTokens(A_LAUNCHERS_KEY, []).found, false, 'the key is in no token shape, so the shape redaction cannot hide it')
   const place = placeFor(t)
   const transcript = theHostsTranscriptPath('a-project-key', `a-session${TRANSCRIPTS_SUFFIX}`)
   const dir = join(place.home, 'fake-writes-a-transcript')
@@ -4783,14 +4786,83 @@ test("martha#916: a member billed by the subscription, not handed the launcher's
   assert.ok(text.includes(REDACTED), `the key's place is marked redacted: ${text}`)
 })
 
+// The key a test's provider's variable carries, and the provider, profile and window the test's declaration names
+// (gap 4): made up, no real key and no constant's value.
+const A_PROVIDERS_OWN_KEY = 'a-key-a-provider-owns-957'
+const THE_PROVIDERS_KEY_VARIABLE = 'A_PROVIDERS_KEY_957'
+const THE_PROVIDERS_NAME = 'a-provider-957'
+const THE_PROFILES_NAME = 'a-profile-957'
+const THE_PROVIDERS_ENDPOINT_957 = 'https://a-provider-957.test/anthropic'
+const THE_PROVIDERS_MODEL = 'a-provider-model-957'
+const THE_PROVIDERS_WINDOW = 957_000
+
+/**
+ * The crew a launch is given for that test, read from a declaration as `martha up` reads one: one builder on the
+ * provider its profile names, with an endpoint, a key variable and a context window (gap 4 of martha#957). Billed by
+ * its key, so the launch never asks the host whether the owner is signed in.
+ */
+async function aCrewOnAProvider(place: Place): Promise<CrewSettings> {
+  const declaration = {
+    version: DECLARATION_VERSION,
+    owner: OWNER,
+    harnesses: { [CLAUDE]: {} },
+    providers: { [THE_PROVIDERS_NAME]: { endpoint: THE_PROVIDERS_ENDPOINT_957, key_from: THE_PROVIDERS_KEY_VARIABLE, billing: BILLED_BY_API_KEY } },
+    profiles: { [THE_PROFILES_NAME]: { model: THE_PROVIDERS_MODEL, harness: CLAUDE, provider: THE_PROVIDERS_NAME, context_limit: THE_PROVIDERS_WINDOW } },
+    members: [{ name: 'Mercury', role: 'builder', profile: THE_PROFILES_NAME }],
+    mode: { name: SOLO_MODE, roles: ['builder'], may: Object.fromEntries(ACTS.map((act) => [act, [OWNER]])) },
+    channel_read_seconds: 30,
+  }
+  const { host } = hostForTests({ documents: { [join(place.checkout, DECLARATION_DIRECTORY, DECLARATION_FILE)]: JSON.stringify(declaration) } })
+  return declareCrew(host.stores.documents, place.checkout, { kind: OPEN_VOCABULARY, names: [] })
+}
+
+test("gap 4 of martha#957: the declaration's provider fills the launch, so the member is handed its base URL, model, window and its own key, never the launcher's", async (t) => {
+  const place = placeFor(t)
+  const dir = join(place.home, 'fake-dumps-its-env-957')
+  mkdirSync(dir)
+  const envFile = join(dir, 'env')
+  const command = join(dir, CLAUDE)
+  writeFileSync(
+    command,
+    [
+      '#!/bin/sh',
+      ...hostAnswers(),
+      `env > '${envFile}.being-written'`,
+      `mv '${envFile}.being-written' '${envFile}'`,
+      'exec sleep 600',
+      '',
+    ].join('\n'),
+    { mode: 0o700 },
+  )
+  const crew_settings = await aCrewOnAProvider(place)
+  // The launch itself names no provider: only the declaration does, and that is what has to reach the member.
+  const launch = memberLaunch(place, command, place.approved)
+  const started = await aMemberStartedIn(t, place, {
+    ...launch,
+    crew_settings,
+    inherited: { ...launch.inherited, [API_KEY_VARIABLE]: A_LAUNCHERS_KEY, [THE_PROVIDERS_KEY_VARIABLE]: A_PROVIDERS_OWN_KEY },
+  })
+  if (!started.started) assert.fail(started.refusal)
+  await until('the fake host to write what it was started with', () => existsSync(envFile), t)
+  const spawned = environmentOfDump(readFileSync(envFile, 'utf8'))
+  const provider = crew_settings.members[0]!.provider!
+  assert.equal(spawned[THE_PROVIDERS_ENDPOINT_VARIABLE], provider.endpoint, "the declaration's endpoint did not reach the member")
+  assert.equal(spawned[AUTH_TOKEN_VARIABLE], A_PROVIDERS_OWN_KEY, "the provider's own key is the member's bearer token")
+  assert.equal(spawned[THE_MODELS_VARIABLE], provider.model, "the declaration's model did not reach the member")
+  assert.equal(spawned[THE_CONTEXT_TOKENS_VARIABLE], String(provider.context_limit), "the declaration's context window did not reach the member")
+  assert.equal(Object.hasOwn(spawned, API_KEY_VARIABLE), false, "the launcher's own key reached a member on a provider")
+  started.stop('the test is over')
+  await started.stopped
+})
+
 test('#931 B: a launch keeps its member\'s transcripts to its crew\'s declared bounds, and to the defaults with no crew', () => {
   const declared = { launches_kept: 2, megabytes_kept: 1 }
   const crew = { transcripts: declared } as unknown as CrewSettings
   assert.deepEqual(theTranscriptBoundsOf({ crew_settings: crew }), declared)
   assert.deepEqual(theTranscriptBoundsOf({}), TRANSCRIPTS_WHEN_UNNAMED)
   const where = { places: { state_root: '/state' }, place: { launch_dir: '/project' } } as unknown as Parameters<typeof whatALaunchKeeps>[0]
-  assert.deepEqual(whatALaunchKeeps({ ...where, crew_settings: crew }, '/the-members-folder', '/snapshots/launch-7', 'the-key').transcripts, declared, 'the launch\'s end does not keep to the crew\'s declared bounds')
-  assert.deepEqual(whatALaunchKeeps(where, '/the-members-folder', '/snapshots/launch-7', 'the-key').transcripts, TRANSCRIPTS_WHEN_UNNAMED, 'a launch with no crew does not keep to the defaults')
+  assert.deepEqual(whatALaunchKeeps({ ...where, crew_settings: crew }, '/the-members-folder', '/snapshots/launch-7', ['the-key']).transcripts, declared, 'the launch\'s end does not keep to the crew\'s declared bounds')
+  assert.deepEqual(whatALaunchKeeps(where, '/the-members-folder', '/snapshots/launch-7', ['the-key']).transcripts, TRANSCRIPTS_WHEN_UNNAMED, 'a launch with no crew does not keep to the defaults')
 })
 
 test('#931 C: a launch\'s owner\'s screen is told of its crew\'s declared notices, and of the defaults with no crew', () => {

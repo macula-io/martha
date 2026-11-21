@@ -34,20 +34,6 @@ export interface AnEngineMembersModelAsked {
 }
 
 /**
- * Why a key file may not be read, from what the start found there (martha#511 part B): not a plain file, someone else's,
- * or open to the group or to others. Undefined when it is the owner's own file, closed to everyone else.
- */
-export function whyAKeyFileIsNotTheOwners(at: string, found: { readonly plain_file: boolean; readonly owner_is_this_user: boolean; readonly mode: number }): string | undefined {
-  if (!found.plain_file) return `${ENGINE_ENDPOINT}.key_file ${at} is not a plain file`
-  if (!found.owner_is_this_user) return `${ENGINE_ENDPOINT}.key_file ${at} is not this user's own file`
-  if ((found.mode & THE_MODE_BITS_OF_GROUP_AND_OTHERS) !== 0) return `${ENGINE_ENDPOINT}.key_file ${at} is open to the group or to others: close it to its owner`
-  return undefined
-}
-
-/** The mode bits a key file must have clear: every right of its group and of others. */
-export const THE_MODE_BITS_OF_GROUP_AND_OTHERS = 0o077
-
-/**
  * The model one engine member's launch runs, or why it may not start: no model declared, no endpoint declared, a key
  * variable named and empty, or a recording whose provider no longer reads the settings the endpoint is written under.
  * The key's value is never in a refusal.

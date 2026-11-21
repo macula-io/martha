@@ -18,7 +18,8 @@ import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugin
 import { KITTY_VARIABLE_PREFIX } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDroppedPluginsLines, theEnvironmentAMemberIsGiven, type TheBillingOfALaunch } from './the_environment_a_member_is_given.ts'
+import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDeclaredProviderOf, theDroppedPluginsLines, theEnvironmentAMemberIsGiven, type TheBillingOfALaunch } from './the_environment_a_member_is_given.ts'
+import { THE_CONTEXT_TOKENS_VARIABLE, THE_MODELS_VARIABLE, THE_PROVIDERS_ENDPOINT_VARIABLE, THE_SMALL_MODELS_VARIABLE, type TheProviderAMemberRunsOn } from './the_provider_a_member_runs_on.ts'
 
 test('K3: a member is handed none of KITTY_LISTEN_ON, KITTY_WINDOW_ID, KITTY_PID and KITTY_PUBLIC_KEY, and keeps the rest', () => {
   const inherited = { HOME: '/srv/owner', TERM: 'xterm-kitty', KITTY_LISTEN_ON: 'fd:5', KITTY_WINDOW_ID: '3', KITTY_PID: '9', KITTY_PUBLIC_KEY: '1:abc' }
@@ -40,6 +41,7 @@ function aStart(
   t: TestContext,
   billing: Billing,
   inherited: Readonly<Record<string, string>>,
+  provider: TheProviderAMemberRunsOn | null = null,
 ): { readonly started: Record<string, string> | string; readonly record: () => Record<string, unknown>; readonly member_config: string } {
   const dir = mkdtempSync(join(tmpdir(), 'martha-916-'))
   t.after(() => removeTheTree(dir))
@@ -47,12 +49,14 @@ function aStart(
   mkdirSync(checkout)
   const member_config = join(dir, 'the-members-config')
   const started = giveAMemberItsStart({
+    member: 'a-member',
     inherited: { HOME: '/srv/owner', ...inherited },
     switches: { args: [], env: {}, env_dropped: [] },
     crew: { state_root: join(dir, 'state'), rows: join(dir, 'state', 'its-rows') },
     member_config,
     host: CLAUDE_CODE,
     billing,
+    provider,
     checkout,
     skills: {},
   })
@@ -228,11 +232,84 @@ test('#511: with no plugin folder named, or a blank one, nothing is said', () =>
 })
 
 test('martha#916: a launch reads the billing its own member is declared with, by the member\'s name, and none without a declaration', () => {
-  const aMember = (name: string, billing: Billing | null) => ({ name, role: 'builder', model: null, host: CLAUDE_CODE, parked: false, billing })
+  const aMember = (name: string, billing: Billing | null) => ({ name, role: 'builder', model: null, host: CLAUDE_CODE, parked: false, billing, provider: null })
   const settings = { members: [aMember('Vesta', BILLED_BY_API_KEY), aMember('Ceres', BILLED_BY_SUBSCRIPTION), aMember('Juno', null)] }
   assert.equal(theDeclaredBillingOf(settings, 'Vesta'), BILLED_BY_API_KEY)
   assert.equal(theDeclaredBillingOf(settings, 'ceres'), BILLED_BY_SUBSCRIPTION, 'a member is found as the crew folds its names')
   assert.equal(theDeclaredBillingOf(settings, 'Juno'), null)
   assert.equal(theDeclaredBillingOf(settings, 'Pallas'), null, 'a member the declaration does not hold names no billing')
   assert.equal(theDeclaredBillingOf(undefined, 'Vesta'), null)
+})
+
+/** The key a provider's variable carries in these tests: no real key, and no constant's value. */
+const A_PROVIDERS_KEY = 'a-key-the-provider-names-957'
+
+/** The provider these tests declare: an endpoint of its own, the key in a variable and a context window. */
+const A_PROVIDER: TheProviderAMemberRunsOn = {
+  name: 'a-provider-a-test-names',
+  named_at: 'providers.a-provider-a-test-names',
+  endpoint: 'https://a-provider.test/anthropic',
+  key_from: 'A_PROVIDERS_KEY_VARIABLE_A_TEST_NAMES',
+  key_file: null,
+  model: 'a-model-a-test-names',
+  context_limit: 1_000_000,
+}
+
+test('gap 4 of martha#957: a launch reads the provider its own member is declared with, by the member\'s name, and none without a declaration', () => {
+  const aMember = (name: string, provider: TheProviderAMemberRunsOn | null) => ({ name, role: 'builder', model: null, host: CLAUDE_CODE, parked: false, billing: null, provider })
+  const settings = { members: [aMember('Vesta', A_PROVIDER), aMember('Juno', null)] }
+  assert.deepEqual(theDeclaredProviderOf(settings, 'Vesta'), A_PROVIDER)
+  assert.deepEqual(theDeclaredProviderOf(settings, 'vesta'), A_PROVIDER, 'a member is found as the crew folds its names')
+  assert.equal(theDeclaredProviderOf(settings, 'Juno'), null)
+  assert.equal(theDeclaredProviderOf(settings, 'Pallas'), null, 'a member the declaration does not hold names no provider')
+  assert.equal(theDeclaredProviderOf(undefined, 'Vesta'), null)
+})
+
+test('gap 4: a member on its provider\'s endpoint is handed that key and base URL, and never the launcher\'s key, the sign-in store or a provider switch', (t) => {
+  // The launcher's own shell names another endpoint, model and window: none of them may stand beside the provider's own.
+  const start = aStart(t, BILLED_BY_API_KEY, {
+    [API_KEY_VARIABLE]: A_LAUNCHERS_KEY,
+    [CLAUDE_CODE_SIGN_IN_STORE_VARIABLE]: '',
+    [A_PROVIDER.key_from as string]: A_PROVIDERS_KEY,
+    [THE_PROVIDERS_ENDPOINT_VARIABLE]: 'https://the-launchers-own-endpoint.test',
+    [THE_MODELS_VARIABLE]: 'a-model-the-launchers-shell-names',
+    [THE_CONTEXT_TOKENS_VARIABLE]: '9',
+    ...EVERY_PROVIDER_SWITCH,
+  }, A_PROVIDER)
+  assert.notEqual(typeof start.started, 'string', `the start was refused: ${String(start.started)}`)
+  const env = start.started as Record<string, string>
+  assert.equal(env[THE_PROVIDERS_ENDPOINT_VARIABLE], A_PROVIDER.endpoint, "the launcher's own base URL stood beside the provider's")
+  assert.equal(env[THE_CONTEXT_TOKENS_VARIABLE], String(A_PROVIDER.context_limit), "the launcher's own window stood beside the provider's")
+  assert.equal(env[AUTH_TOKEN_VARIABLE], A_PROVIDERS_KEY, "the provider's own key is the bearer token")
+  assert.equal(env[THE_MODELS_VARIABLE], A_PROVIDER.model)
+  assert.equal(env[THE_SMALL_MODELS_VARIABLE], A_PROVIDER.model)
+  assert.equal(env[THE_CONTEXT_TOKENS_VARIABLE], String(A_PROVIDER.context_limit))
+  assert.ok(!(API_KEY_VARIABLE in env), `the member's environment holds ${API_KEY_VARIABLE}`)
+  assert.ok(!(CLAUDE_CODE_SIGN_IN_STORE_VARIABLE in env), `the member's environment holds ${CLAUDE_CODE_SIGN_IN_STORE_VARIABLE}`)
+  assert.deepEqual(CLAUDE_CODE_PROVIDER_SWITCH_VARIABLES.filter((name) => name in env), [], 'a provider switch reached the member')
+  assert.ok(!(API_KEY_ANSWERS_KEY in start.record()), `the member's host record answers a key it never runs on: ${API_KEY_ANSWERS_KEY}`)
+})
+
+test('gap 4: a provider member whose launcher carries no key of its own still starts, since the provider\'s key is its own', (t) => {
+  const start = aStart(t, BILLED_BY_API_KEY, { [A_PROVIDER.key_from as string]: A_PROVIDERS_KEY }, A_PROVIDER)
+  assert.notEqual(typeof start.started, 'string', `the start was refused: ${String(start.started)}`)
+  assert.equal((start.started as Record<string, string>)[AUTH_TOKEN_VARIABLE], A_PROVIDERS_KEY)
+})
+
+test('gap 4: a key file the provider names but the launcher cannot read refuses the start by the field it is named at, and the member\'s folder is not made', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'martha-957-key-'))
+  t.after(() => removeTheTree(dir))
+  const missing = join(dir, 'no-such-key-file')
+  const start = aStart(t, BILLED_BY_API_KEY, { HOME: dir }, { ...A_PROVIDER, key_from: null, key_file: missing })
+  assert.equal(typeof start.started, 'string', 'a key file that cannot be read started a member')
+  assert.ok((start.started as string).startsWith(`${A_PROVIDER.named_at}.key_file ${missing}`), start.started as string)
+  assert.ok(!existsSync(start.member_config), "the member's folder was made beside a refused start")
+})
+
+test('gap 4: a provider with no endpoint is Anthropic\'s own and keeps martha#916\'s billing, the launcher\'s key and all', (t) => {
+  const start = aStart(t, BILLED_BY_API_KEY, { [API_KEY_VARIABLE]: A_LAUNCHERS_KEY }, { ...A_PROVIDER, endpoint: null, key_from: null })
+  assert.notEqual(typeof start.started, 'string', `the start was refused: ${String(start.started)}`)
+  const env = start.started as Record<string, string>
+  assert.equal(env[API_KEY_VARIABLE], A_LAUNCHERS_KEY, "Anthropic's own member lost the launcher's key")
+  assert.ok(!(AUTH_TOKEN_VARIABLE in env) && !(THE_PROVIDERS_ENDPOINT_VARIABLE in env), 'a member on Anthropic\'s own service was handed a provider\'s endpoint')
 })

@@ -188,8 +188,8 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
   owner: 'Ann',
   host: THE_HOST_A_MEMBER_RAN_ON,
   members: [
-    { name: LEAD, role: SUPERVISOR, model: null, host: null, parked: false, billing: null },
-    { name: BUILDER, role: 'builder', model: null, host: null, parked: false, billing: null },
+    { name: LEAD, role: SUPERVISOR, model: null, host: null, parked: false, billing: null, provider: null },
+    { name: BUILDER, role: 'builder', model: null, host: null, parked: false, billing: null, provider: null },
   ],
   mode: {
     name: 'team',
@@ -213,12 +213,15 @@ const theSettingsWith = (clones: string | null): CrewSettings => ({
     [REFRESH_BETWEEN_TASKS]: false,
     [OWNER_BELL]: false,
     [NUDGES]: false,
+    wake: false,
     review_model: null,
     [CLONES]: clones,
     [WORKTREES]: join(home, 'the-worktrees'),
     [STALLED_MINUTES]: null,
     [REVIEW_MINUTES]: null,
     [PERSON_MINUTES]: null,
+    wake_after_minutes: null,
+    wake_cap_minutes: null,
   },
   // Off: these tests ask about the tips a removal covers, and the gate is not theirs (martha#321).
   gate: { kind: 'off' },

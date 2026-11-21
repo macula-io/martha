@@ -15,6 +15,7 @@
 import { join } from 'node:path'
 
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, ENGINE_ENDPOINT, isAKeyFilesPath } from '../declare_crew/declare_crew.ts'
+import { THE_HOMES_PREFIX, writtenOut } from '../read_a_providers_key_file/read_a_providers_key_file.ts'
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { THE_ENGINES_ENDPOINT, THE_KEY_FILE_QUESTION } from './bring_up_the_declared_crew.ts'
@@ -34,15 +35,6 @@ export interface EndpointRequest {
 
 /** Where the key is read from: the provider's variable, or a file the owner named. */
 type TheKeysPlace = { readonly key_from: string } | { readonly key_file: string }
-
-/**
- * What a typed key file's path opens with when it is under the owner's home. The declaration takes absolute paths
- * only, so the path is written out against the home here, in the adapter, before it is checked or written.
- */
-export const THE_HOMES_PREFIX = '~/'
-
-/** An owner's typed path, with a leading `~/` written out against `home`; the engine's start writes a provider's key file out the same way (martha#931). */
-export const writtenOut = (typed: string, home: string): string => (typed.startsWith(THE_HOMES_PREFIX) ? join(home, typed.slice(THE_HOMES_PREFIX.length)) : typed)
 
 /** An answer refused before it is checked as a file: it is not repeated, since it may be the key itself. */
 export const NOT_A_KEY_FILES_PATH = `that is not an absolute path or one under ${THE_HOMES_PREFIX}, so nothing was written. Name the file your key is in, never the key.`

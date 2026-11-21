@@ -11,7 +11,9 @@
 // It is handed no variable kitty sets for the programs it starts either (#572 T6, #547 S6): a member run in a kitty tab
 // must not find that kitty's remote-control line or window. And it is handed one credential, the one its billing picks
 // (martha#916, ../give_a_member_its_own_config): the other is taken out last, so no inherited value, switch or later
-// layer puts it back.
+// layer puts it back. A member whose profile's provider names an endpoint is the other side of that rule (gap 4 of
+// martha#957): it is handed that provider's own base URL and key, and neither the launcher's key nor the owner's
+// sign-in store, and those are applied last of all — see ./the_provider_a_member_runs_on.
 //
 // When the crew declares no billing, the launch asks the host whether the owner is signed in, before anything of the
 // member is made: the host binary the command resolves to on the launcher's PATH, asked `auth status --json` in the
@@ -52,6 +54,7 @@ import {
 } from '../refuse_launch_of_unapproved_config/the_crews_state_a_member_is_kept_out_of.ts'
 
 import { launchEnvironment, type Host, type HostSwitches } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
+import { theProviderMembersEnvironment, type AProviderMembersEnvironment, type TheProviderAMemberRunsOn } from './the_provider_a_member_runs_on.ts'
 
 /** The session id a stream directory under the crew's rows holds, or undefined for any other stream. */
 function theSessionIn(entry: string): string | undefined {
@@ -101,9 +104,18 @@ export interface AMembersEnvironment {
   readonly host: Host
   /** The credential the member is billed by (martha#916). */
   readonly billing: Billing
+  /**
+   * What a member whose profile's provider names an endpoint is handed instead of a billing's credential (gap 4 of
+   * martha#957), with the ones it is never handed; absent for Anthropic's own, which keeps martha#916's billing.
+   */
+  readonly on_a_provider?: AProviderMembersEnvironment | undefined
 }
 
-/** The environment a member is handed (martha#683), composed as the header says. */
+/**
+ * The environment a member is handed (martha#683), composed as the header says. A member on a provider's endpoint has
+ * this provider's own variables applied last, after every other layer and after the billing's never-given list, so no
+ * inherited value puts another credential or another base URL beside the one its provider names (gap 4 of martha#957).
+ */
 export function theEnvironmentAMemberIsGiven(asking: AMembersEnvironment): Record<string, string> {
   const named = stateRootOf(asking.inherited.HOME ?? '', asking.inherited[STATE_HOME_VARIABLE])
   const kept = withoutTheCrewsState(asking.inherited, {
@@ -115,27 +127,54 @@ export function theEnvironmentAMemberIsGiven(asking: AMembersEnvironment): Recor
     ...theMembersConfigEnvironment(asking.member_config, asking.billing),
     ...theCrewsStateAMemberIsGiven(asking.crew.state_root),
   }
-  const notGiven = notGivenUnder(asking.billing)
-  return Object.fromEntries(Object.entries(composed).filter(([name]) => !notGiven.includes(name)))
+  const notGiven = [...notGivenUnder(asking.billing), ...(asking.on_a_provider?.not_given ?? [])]
+  const filtered = Object.fromEntries(Object.entries(composed).filter(([name]) => !notGiven.includes(name)))
+  return { ...filtered, ...(asking.on_a_provider?.env ?? {}) }
 }
 
 /** What a member starts with beside its environment: the approved checkout it works in, and the skills that checkout carries. */
 export interface AMembersStart extends AMembersEnvironment {
+  readonly member: string
   readonly checkout: string
   readonly skills: Readonly<Record<string, Uint8Array>>
+  /**
+   * The provider the member's profile names, when this launch knows it (gap 4 of martha#957); null or absent for a
+   * member whose profile names none, which keeps martha#916's billing. A provider with no endpoint hands nothing.
+   */
+  readonly provider?: TheProviderAMemberRunsOn | null
+}
+
+/** What the member's provider hands this start, or why it cannot; nothing when the launch knows no provider or names none. */
+function theProvidersPartOfAStart(asking: AMembersStart): AProviderMembersEnvironment | undefined | { readonly refusal: string } {
+  if (asking.provider == null) return undefined
+  return theProviderMembersEnvironment({ member: asking.member, provider: asking.provider, inherited: asking.inherited, home: asking.inherited.HOME ?? '' })
+}
+
+/**
+ * The launcher's key a member billed by the key is handed, and written into the host's answers for it; or why the start
+ * is refused when the launcher carries none. A member on a provider's endpoint is billed by that provider's key, which
+ * is not the launcher's, so it is handed none of this and the host's answers say nothing of a key.
+ */
+function theBillingKeyOfAStart(asking: AMembersStart, env: Readonly<Record<string, string>>, on_a_provider: AProviderMembersEnvironment | undefined): { readonly key: string | undefined } | { readonly refusal: string } {
+  if (asking.billing !== BILLED_BY_API_KEY || on_a_provider !== undefined) return { key: undefined }
+  const key = env[API_KEY_VARIABLE]
+  if (key === undefined || key === '') return { refusal: `the crew bills its members by ${BILLED_BY_API_KEY}, and the launcher's environment carries no ${API_KEY_VARIABLE}` }
+  return { key }
 }
 
 /**
  * The environment a member is handed, with its own config folder made for it; or why not: a member billed by the key
- * whose launcher carries none, or a folder that could not be made.
+ * whose launcher carries none, a provider's key the declaration names but the launcher cannot reach, or a folder that
+ * could not be made. A member on a provider's own endpoint is billed by that provider's key, so the launcher's own key
+ * is neither demanded nor written into the host's answers for it.
  */
 export function giveAMemberItsStart(asking: AMembersStart): Record<string, string> | string {
-  const env = theEnvironmentAMemberIsGiven(asking)
-  const billedKey = asking.billing === BILLED_BY_API_KEY ? env[API_KEY_VARIABLE] : undefined
-  if (asking.billing === BILLED_BY_API_KEY && (billedKey === undefined || billedKey === '')) {
-    return `the crew bills its members by ${BILLED_BY_API_KEY}, and the launcher's environment carries no ${API_KEY_VARIABLE}`
-  }
-  const made = makeTheMembersConfig(asking.member_config, asking.checkout, billedKey, asking.skills)
+  const onAProvider = theProvidersPartOfAStart(asking)
+  if (onAProvider !== undefined && 'refusal' in onAProvider) return onAProvider.refusal
+  const env = theEnvironmentAMemberIsGiven({ ...asking, on_a_provider: onAProvider })
+  const billing = theBillingKeyOfAStart(asking, env, onAProvider)
+  if ('refusal' in billing) return billing.refusal
+  const made = makeTheMembersConfig(asking.member_config, asking.checkout, billing.key, asking.skills)
   return made.made ? env : made.refusal
 }
 
@@ -178,6 +217,15 @@ async function theOwnersSignIn(asking: ALaunchesBilling): Promise<TheSignIn> {
  */
 export function theDeclaredBillingOf(settings: Pick<CrewSettings, 'members'> | undefined, member: string): Billing | null {
   return settings?.members.find((one) => sameMemberName(one.name, member))?.billing ?? null
+}
+
+/**
+ * The provider the declaration names for the member a launch starts (gap 4 of martha#957): its profile's, read from the
+ * crew's members by the member's name; null when the launch has no declaration, names a member it does not hold, or that
+ * member names no profile. A launch given a provider of its own keeps it, so a test's provider is never overridden.
+ */
+export function theDeclaredProviderOf(settings: Pick<CrewSettings, 'members'> | undefined, member: string): TheProviderAMemberRunsOn | null {
+  return settings?.members.find((one) => sameMemberName(one.name, member))?.provider ?? null
 }
 
 /** The billing of a launch (martha#916): the declared one, else the one the owner's sign-in and the launcher's key give. */

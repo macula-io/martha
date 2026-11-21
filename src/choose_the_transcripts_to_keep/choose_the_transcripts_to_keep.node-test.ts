@@ -42,8 +42,8 @@ const theKeptTextOf = (kept: string): string =>
 
 const aTranscriptPath = (name: string) => `${THE_HOSTS_PROJECTS_PLACE}/the-project/${name}${TRANSCRIPTS_SUFFIX}`
 
-const choosing = (files: WhatTheConfigFolderHolds['files'], theLaunchKey = THE_LAUNCH_KEY) =>
-  chooseTheTranscripts({ files, theLaunchKey, bytes_kept: TRANSCRIPTS_FILE_BYTES_KEPT })
+const choosing = (files: WhatTheConfigFolderHolds['files'], theLaunchKeys: readonly string[] = [THE_LAUNCH_KEY]) =>
+  chooseTheTranscripts({ files, theLaunchKeys, bytes_kept: TRANSCRIPTS_FILE_BYTES_KEPT })
 
 test('only the host\'s own transcripts are kept, never the rest of the member\'s config folder (martha#646)', () => {
   const chosen = choosing([
@@ -69,6 +69,17 @@ test('a token of every shape the repo names is redacted, and a classic one the n
 test('the key the launch handed the member is redacted by its exact value, whatever shape it has (martha#646)', () => {
   const chosen = choosing([aFile(aTranscriptPath('s-1'), aLineOf(`ANTHROPIC_API_KEY=${THE_LAUNCH_KEY}`))])
   assert.equal(chosen.kept[0]?.text.includes(THE_LAUNCH_KEY), false, 'the launch\'s own key was kept in the clear')
+})
+
+/** A provider's key, in no token shape either: gap 4 of martha#957 hands one beside the launcher's own. */
+const A_PROVIDERS_KEY = 'providers-key-4d81c6a2b9'
+
+test('gap 4 of martha#957: every key the launch handed its member is redacted, so a provider\'s key is hidden beside the launcher\'s', () => {
+  const chosen = choosing([aFile(aTranscriptPath('s-1'), aLineOf(`ANTHROPIC_API_KEY=${THE_LAUNCH_KEY} ANTHROPIC_AUTH_TOKEN=${A_PROVIDERS_KEY}`))], [THE_LAUNCH_KEY, A_PROVIDERS_KEY])
+  const text = chosen.kept[0]?.text ?? ''
+  assert.equal(text.includes(THE_LAUNCH_KEY), false, 'the launcher\'s key was kept in the clear beside the provider\'s')
+  assert.equal(text.includes(A_PROVIDERS_KEY), false, 'the provider\'s key was kept in the clear')
+  assert.deepEqual(chosen.marked, [aTranscriptPath('s-1')], 'the transcript holding either key was not marked')
 })
 
 test('a token a line break split is withheld whole, on the value as the host wrote it, never on the file\'s bytes (martha#646 r=1 R1)', () => {

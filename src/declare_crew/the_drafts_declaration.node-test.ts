@@ -173,6 +173,24 @@ test('martha#916: a member is billed as its profile\'s provider declares, and by
   assert.deepEqual(await billingOf(onItsOwn), { Lead: null }, 'a member that names no profile names no billing')
 })
 
+test('gap 4 of martha#957: a member carries the provider its profile names, and a member that names no profile carries none', async () => {
+  const providersOf = async (declaration: unknown) => Object.fromEntries((await declare(declaration)).members.map((member) => [member.name, member.provider]))
+  const onTheAccount = { name: 'an_account', named_at: 'providers.an_account', endpoint: null, key_from: null, key_file: '~/keys/another-key-file', model: 'model-big', context_limit: 300000 }
+  const onTheEngine = { name: 'an_engine_provider', named_at: 'providers.an_engine_provider', endpoint: 'api.a-provider.test', key_from: null, key_file: '~/keys/a-key-file', model: 'model-quick', context_limit: 400000 }
+  assert.deepEqual(await providersOf(draft), { Lead: onTheAccount, Checker: onTheAccount, Maker: onTheEngine, Sleeper: onTheEngine })
+  const onItsOwn = { ...draft, members: [{ name: 'Lead', role: 'supervisor', model: 'model-big', host: CLAUDE_CODE }] }
+  assert.deepEqual(await providersOf(onItsOwn), { Lead: null }, 'a member that names no profile names no provider')
+})
+
+test('gap 4 of martha#957: a subscription beside an endpoint is refused by the billing, since a third party serves its key', async () => {
+  const anEndpoint = { endpoint: 'api.another-provider.test', key_file: '~/keys/another-key-file' }
+  const withAccount = (billing: unknown) => ({ ...draft, providers: { ...draft.providers, an_account: { ...anEndpoint, billing } } })
+  await refusedWith(withAccount(BILLED_BY_SUBSCRIPTION), 'providers.an_account.billing', /a subscription is the owner's own sign-in/)
+  const byKey = await declare(withAccount(BILLED_BY_API_KEY))
+  assert.equal(byKey.members[0]!.billing, BILLED_BY_API_KEY, 'a provider reached at an endpoint is billed by its key')
+  assert.equal(byKey.members[0]!.provider?.endpoint, 'api.another-provider.test', 'and its member reaches that endpoint')
+})
+
 test('martha#916: a provider\'s billing is the subscription or the key, refused by field otherwise: how the host says a session was billed is not a choice', async () => {
   const withAccount = (billing: unknown) => ({ ...draft, providers: { ...draft.providers, an_account: { ...draft.providers.an_account, billing } } })
   for (const billing of ['metered', 'unknown', 'Subscription', 'key', '', null, true, [BILLED_BY_API_KEY]]) {

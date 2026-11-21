@@ -119,10 +119,10 @@ export interface AConfigFile {
   readonly unread?: 'file' | 'launch' | 'could-not-read'
 }
 
-/** What the member's config folder holds, and the key this launch handed its member. */
+/** What the member's config folder holds, and every key this launch handed its member: its own key and, on a provider, that provider's. */
 export interface WhatTheConfigFolderHolds {
   readonly files: readonly AConfigFile[]
-  readonly theLaunchKey: string
+  readonly theLaunchKeys: readonly string[]
   /**
    * One transcript's bound, and one launch's whole bound, in bytes: the crew's declared transcripts.megabytes_kept
    * (martha#931 B, ../declare_crew/the_crews_transcripts's bytesKeptOf). The two bounds are one number, as they were.
@@ -150,18 +150,19 @@ export const isTheHostsTranscript = (path: string): boolean => {
 }
 
 /**
- * One string as the host wrote it, DECODED, with every token shape and the launch's own key replaced by REDACTED, and
- * whether either was there. A string whose flattened form holds a token it does not hold whole is withheld whole: no
- * single piece of it is the token. It is handed decoded values only, so a break in one is a break and not `\n`.
+ * One string as the host wrote it, DECODED, with every token shape and every key this launch handed its member replaced
+ * by REDACTED, and whether either was there. A string whose flattened form holds a token it does not hold whole is
+ * withheld whole: no single piece of it is the token. It is handed decoded values only, so a break in one is a break and
+ * not `\n`.
  */
-export function redactTheTokens(text: string, theLaunchKey: string): { readonly text: string; readonly found: boolean } {
+export function redactTheTokens(text: string, theLaunchKeys: readonly string[]): { readonly text: string; readonly found: boolean } {
   const flat = flattened(text)
   const shapes = [...flat.matchAll(THE_TOKEN_SHAPE)].map((found) => found[0])
-  const tokens = [theLaunchKey, ...shapes].filter((one) => one !== '')
+  const tokens = [...theLaunchKeys.filter((one) => one !== ''), ...shapes]
   const split = tokens.some((token) => flat.split(token).length > text.split(token).length)
   if (split) return { text: WITHHELD, found: true }
-  const withoutTheKey = theLaunchKey === '' ? text : text.split(theLaunchKey).join(REDACTED)
-  const kept = withoutTheKey.replace(THE_TOKEN_SHAPE, REDACTED)
+  const withoutTheKeys = theLaunchKeys.filter((one) => one !== '').reduce((without, key) => without.split(key).join(REDACTED), text)
+  const kept = withoutTheKeys.replace(THE_TOKEN_SHAPE, REDACTED)
   return { text: kept, found: kept !== text }
 }
 
@@ -175,21 +176,21 @@ interface ARedactedValue {
  * `value` with every string in it redacted, however deep, and whether any held a token. Its structure and its non-string
  * scalars are kept as they were: only what a person can read is redacted.
  */
-function redactEveryStringIn(value: unknown, theLaunchKey: string): ARedactedValue {
+function redactEveryStringIn(value: unknown, theLaunchKeys: readonly string[]): ARedactedValue {
   if (typeof value === 'string') {
-    const redacted = redactTheTokens(value, theLaunchKey)
+    const redacted = redactTheTokens(value, theLaunchKeys)
     return { value: redacted.text, found: redacted.found }
   }
-  if (Array.isArray(value)) return redactEveryStringInAList(value, theLaunchKey)
+  if (Array.isArray(value)) return redactEveryStringInAList(value, theLaunchKeys)
   if (typeof value !== 'object' || value === null) return { value, found: false }
-  return redactEveryStringInARecord(value as Readonly<Record<string, unknown>>, theLaunchKey)
+  return redactEveryStringInARecord(value as Readonly<Record<string, unknown>>, theLaunchKeys)
 }
 
 /** Each element of `list` redacted, and whether any of them held a token. */
-function redactEveryStringInAList(list: readonly unknown[], theLaunchKey: string): ARedactedValue {
+function redactEveryStringInAList(list: readonly unknown[], theLaunchKeys: readonly string[]): ARedactedValue {
   let found = false
   const value = list.map((one) => {
-    const redacted = redactEveryStringIn(one, theLaunchKey)
+    const redacted = redactEveryStringIn(one, theLaunchKeys)
     found = found || redacted.found
     return redacted.value
   })
@@ -201,12 +202,12 @@ function redactEveryStringInAList(list: readonly unknown[], theLaunchKey: string
  * a reader of the transcript can read, so a token the member put in one is a token kept in the clear (martha#646 r=3
  * R7). Two keys that redact alike become one, the later value standing: a value is lost, never the token.
  */
-function redactEveryStringInARecord(record: Readonly<Record<string, unknown>>, theLaunchKey: string): ARedactedValue {
+function redactEveryStringInARecord(record: Readonly<Record<string, unknown>>, theLaunchKeys: readonly string[]): ARedactedValue {
   let found = false
   const value = Object.fromEntries(
     Object.entries(record).map(([key, one]) => {
-      const theKey = redactTheTokens(key, theLaunchKey)
-      const redacted = redactEveryStringIn(one, theLaunchKey)
+      const theKey = redactTheTokens(key, theLaunchKeys)
+      const redacted = redactEveryStringIn(one, theLaunchKeys)
       found = found || theKey.found || redacted.found
       return [theKey.text, redacted.value]
     }),
@@ -220,9 +221,9 @@ interface AKeptLine {
   readonly withheld: boolean
 }
 
-/** Whether `line`'s own bytes hold a token shape or the launch's own key: exact only for a line with no escape in it. */
-const theLinesOwnBytesHoldAToken = (line: string, theLaunchKey: string): boolean =>
-  (theLaunchKey !== '' && line.includes(theLaunchKey)) || [...line.matchAll(THE_TOKEN_SHAPE)].length > 0
+/** Whether `line`'s own bytes hold a token shape or one of the launch's own keys: exact only for a line with no escape in it. */
+const theLinesOwnBytesHoldAToken = (line: string, theLaunchKeys: readonly string[]): boolean =>
+  theLaunchKeys.some((key) => key !== '' && line.includes(key)) || [...line.matchAll(THE_TOKEN_SHAPE)].length > 0
 
 /**
  * Whether a line may be kept exactly as the host wrote it. It must hold no token of its own bytes, and no escape at all:
@@ -230,8 +231,8 @@ const theLinesOwnBytesHoldAToken = (line: string, theLaunchKey: string): boolean
  * parse, since `JSON.parse` keeps only the last value of a repeated key. A line that cannot be shown clean is written
  * out again from the parse — it loses the value the parse dropped, and never the token (martha#646 r=4 R9).
  */
-const mayBeKeptAsWritten = (line: string, theLaunchKey: string): boolean =>
-  !line.includes('\\') && !theLinesOwnBytesHoldAToken(line, theLaunchKey)
+const mayBeKeptAsWritten = (line: string, theLaunchKeys: readonly string[]): boolean =>
+  !line.includes('\\') && !theLinesOwnBytesHoldAToken(line, theLaunchKeys)
 
 /**
  * One line of a transcript, kept: parsed as the host wrote it, every string in it — and every key — redacted, and the
@@ -244,7 +245,7 @@ const mayBeKeptAsWritten = (line: string, theLaunchKey: string): boolean =>
  * handler twenty seconds for a file the bound should turn into one line (martha#646 r=3 R6). Such a line is withheld,
  * never kept, so nothing of it can reach a reader.
  */
-function redactOneLine(line: string, theLaunchKey: string, found: { any: boolean }): AKeptLine {
+function redactOneLine(line: string, theLaunchKeys: readonly string[], found: { any: boolean }): AKeptLine {
   if (line === '') return { text: line, withheld: false }
   const begins = line.trimStart().charAt(0)
   if (begins !== '{' && begins !== '[') return { text: WITHHELD_LINE, withheld: true }
@@ -254,9 +255,9 @@ function redactOneLine(line: string, theLaunchKey: string, found: { any: boolean
   } catch {
     return { text: WITHHELD_LINE, withheld: true }
   }
-  const redacted = redactEveryStringIn(record, theLaunchKey)
-  if (!redacted.found && mayBeKeptAsWritten(line, theLaunchKey)) return { text: line, withheld: false }
-  found.any = found.any || redacted.found || theLinesOwnBytesHoldAToken(line, theLaunchKey)
+  const redacted = redactEveryStringIn(record, theLaunchKeys)
+  if (!redacted.found && mayBeKeptAsWritten(line, theLaunchKeys)) return { text: line, withheld: false }
+  found.any = found.any || redacted.found || theLinesOwnBytesHoldAToken(line, theLaunchKeys)
   return { text: JSON.stringify(redacted.value), withheld: false }
 }
 
@@ -275,7 +276,7 @@ export interface ATranscriptWithinItsBound {
  * costs its own size and not a string grown past what the engine can hold (martha#646 r=3 R6): a transcript past a
  * bound is kept as its note, never in part. `over` is the size counted by then, the crossing line's own included.
  */
-export function redactTheTranscriptWithin(text: string, theLaunchKey: string, cap: number): ATranscriptWithinItsBound {
+export function redactTheTranscriptWithin(text: string, theLaunchKeys: readonly string[], cap: number): ATranscriptWithinItsBound {
   const found = { any: false }
   const lines: string[] = []
   let bytes = 0
@@ -300,7 +301,7 @@ export function redactTheTranscriptWithin(text: string, theLaunchKey: string, ca
     return keep(one)
   }
   for (const line of text.split('\n')) {
-    const kept = redactOneLine(line, theLaunchKey, found)
+    const kept = redactOneLine(line, theLaunchKeys, found)
     if (kept.withheld) {
       withheld += 1
       continue
@@ -317,9 +318,9 @@ export function redactTheTranscriptWithin(text: string, theLaunchKey: string, ca
  * is never more than it and the launch's is the bound a kept text passes. A redaction that throws is this file's note
  * and no other file's business, since one transcript never costs a launch the rest.
  */
-function theKeptTextOf(transcript: AConfigFile, theLaunchKey: string, room: number, bytes_kept: number): { readonly text: string; readonly found: boolean } {
+function theKeptTextOf(transcript: AConfigFile, theLaunchKeys: readonly string[], room: number, bytes_kept: number): { readonly text: string; readonly found: boolean } {
   try {
-    const redacted = redactTheTranscriptWithin(transcript.text ?? '', theLaunchKey, room)
+    const redacted = redactTheTranscriptWithin(transcript.text ?? '', theLaunchKeys, room)
     if (redacted.over === null) return { text: redacted.text, found: redacted.found }
     return { text: tooLargeToKeep(redacted.over, bytes_kept, 'launch'), found: false }
   } catch {
@@ -360,7 +361,7 @@ export function chooseTheTranscripts(holds: WhatTheConfigFolderHolds): TheTransc
       noteKept(transcript.path, COULD_NOT_READ)
       continue
     }
-    const keptText = theKeptTextOf(transcript, holds.theLaunchKey, holds.bytes_kept - theLaunchesBytes, holds.bytes_kept)
+    const keptText = theKeptTextOf(transcript, holds.theLaunchKeys, holds.bytes_kept - theLaunchesBytes, holds.bytes_kept)
     noteKept(transcript.path, keptText.text)
     if (keptText.found) marked.push(transcript.path)
   }

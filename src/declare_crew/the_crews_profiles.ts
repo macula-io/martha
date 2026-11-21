@@ -61,6 +61,29 @@ export interface Provider {
   readonly billing: Billing | null
 }
 
+/**
+ * What the declaration says of the provider a member's profile names (gap 4 of martha#957): its name and the place it
+ * is named at, where it is reached and where its key is read from, the model its profile runs, and that model's context
+ * window. A member on a provider with an endpoint is handed that provider's own base URL, key and model and nothing of
+ * the launcher's (../launch_a_claude_code_member/the_provider_a_member_runs_on); a provider with none is Anthropic's own.
+ */
+export interface TheProviderAMemberRunsOn {
+  /** The provider's name, as the declaration writes it. */
+  readonly name: string
+  /** The place the declaration names it at, `providers.<name>`, so a refusal says which line to look at. */
+  readonly named_at: string
+  /** The Anthropic-compatible endpoint the member reaches, or null when the provider is Anthropic's own. */
+  readonly endpoint: string | null
+  /** The variable the key is in, or null when the declaration names no variable. */
+  readonly key_from: string | null
+  /** The file the key is in, written as the owner typed it, or null when the declaration names no file. */
+  readonly key_file: string | null
+  /** The model the member's profile names, which is the model the host is told to run. */
+  readonly model: string
+  /** The model's context window in tokens, or null when the profile names none. */
+  readonly context_limit: number | null
+}
+
 /** A profile as read: the model, the host its harness starts, its provider's name, and the context in tokens or null. */
 export interface Profile {
   readonly model: string
@@ -142,7 +165,20 @@ function aProviderOf(entry: Block, at: string, refuse: RefuseAProfile): Provider
   }
   if (isText(entry['account']) && looksLikeAKey(entry['account'])) refuse(`${at}.account`, 'reads as a key, not an account name: the key itself never goes in the declaration')
   refuseTheKeysPlace(entry, at, refuse)
-  return { endpoint: textOrNull(entry['endpoint']), key_from: textOrNull(entry['key_from']), key_file: textOrNull(entry['key_file']), billing: aBillingOf(entry['billing'], at, refuse) }
+  const endpoint = textOrNull(entry['endpoint'])
+  const billing = aBillingOf(entry['billing'], at, refuse)
+  refuseTheSubscriptionAtAnEndpoint(at, endpoint, billing, refuse)
+  return { endpoint, key_from: textOrNull(entry['key_from']), key_file: textOrNull(entry['key_file']), billing }
+}
+
+/**
+ * A subscription is the owner's own sign-in to Anthropic, and a provider reached at an endpoint is a third party that
+ * serves its key: the two never sit in one provider (gap 4 of martha#957). The refusal names the billing, the field the
+ * owner would change, and never the key.
+ */
+function refuseTheSubscriptionAtAnEndpoint(at: string, endpoint: string | null, billing: Billing | null, refuse: RefuseAProfile): void {
+  if (billing !== BILLED_BY_SUBSCRIPTION || endpoint === null) return
+  refuse(`${at}.billing`, `is ${BILLED_BY_SUBSCRIPTION}, and ${at}.endpoint is named: a subscription is the owner's own sign-in to Anthropic, and a provider reached at an endpoint is billed by ${BILLED_BY_API_KEY}`)
 }
 
 /** A provider's billing, or null when it names none; any other value is refused by name, never read as the default. */
@@ -225,18 +261,32 @@ function aProfileOf(entry: Block, at: string, declared: TheNamesDeclared, refuse
 const isAWholeNumberOfTokens = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1
 
 /**
- * A member's model and host from the profile it names (martha#931), and the billing of that profile's provider
- * (martha#916), or null when it names none. A member that names a
+ * A member's model and host from the profile it names (martha#931), the billing of that profile's provider
+ * (martha#916), and the provider itself (gap 4 of martha#957), or null when it names none. A member that names a
  * profile and one of `own` (its own model or host) is refused, so the two never disagree.
  */
-export function theProfileOfAMember(member: Block, at: string, read: TheProfiles, own: readonly string[], refuse: RefuseAProfile): (Pick<Profile, 'model' | 'host'> & Pick<Provider, 'billing'>) | null {
+export function theProfileOfAMember(member: Block, at: string, read: TheProfiles, own: readonly string[], refuse: RefuseAProfile): (Pick<Profile, 'model' | 'host'> & Pick<Provider, 'billing'> & { readonly provider: TheProviderAMemberRunsOn }) | null {
   const profile = member[PROFILE]
   if (profile === undefined) return null
   const declared = typeof profile === 'string' ? read.profiles.get(profile) : undefined
   if (declared === undefined) return refuse(`${at}.${PROFILE}`, `is not a profile this declaration names (it names ${theNamesIn(read.profiles)})`)
   const named = own.find((key) => member[key] !== undefined)
   if (named !== undefined) refuse(`${at}.${named}`, `is named beside ${PROFILE}, which names it`)
-  return { model: declared.model, host: declared.host, billing: read.providers.get(declared.provider)!.billing }
+  const provider = read.providers.get(declared.provider)!
+  return {
+    model: declared.model,
+    host: declared.host,
+    billing: provider.billing,
+    provider: {
+      name: declared.provider,
+      named_at: `${PROVIDERS}.${declared.provider}`,
+      endpoint: provider.endpoint,
+      key_from: provider.key_from,
+      key_file: provider.key_file,
+      model: declared.model,
+      context_limit: declared.context_limit,
+    },
+  }
 }
 
 /**

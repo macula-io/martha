@@ -6,13 +6,12 @@
 // turn are recorded before the engine sees anything; and the end stops the engine, reads its permission store, closes
 // what was served and removes the launch's directory.
 
-import { isAbsolute, join } from 'node:path'
+import { join } from 'node:path'
 import process from 'node:process'
 import { randomUUID } from 'node:crypto'
-import { lstatSync, readFileSync, type Stats } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
-import { THE_HOMES_PREFIX, writtenOut } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
@@ -59,7 +58,8 @@ import { whatTheOwnersLineGets } from './the_owners_lines_at_the_tab.ts'
 import type { HearTheLauncher } from '../claude_code_relay/hooks/crew_command.ts'
 import type { AStartOnItsHost, TheCrewToolsOfAHost } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { theMembersTelling } from '../tell_the_member_a_line/tell_the_member_a_line.ts'
-import { theModelOfAnEngineMember, whyAKeyFileIsNotTheOwners, whyTheConfigRunsAnotherModel } from './the_engines_model.ts'
+import { theModelOfAnEngineMember, whyTheConfigRunsAnotherModel } from './the_engines_model.ts'
+import { theKeyInTheOwnersFile } from '../read_a_providers_key_file/read_a_providers_key_file.ts'
 import { theEnginesRefresh, type TheEnginesRefresh, type TheEnginesRefreshPlaces } from './the_engines_refresh.ts'
 import { THE_ENGINES_USAGE_HOST } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 import { ENGINE_ENDPOINT } from '../declare_crew/declare_crew.ts'
@@ -110,7 +110,7 @@ const NOTHING_REPORTED: TheServedToolsWatch = {
  * writes — a leak, which is one of the three a refusal stays for. Or why the launch cannot start at all.
  */
 function whatTheLaunchIsGiven(start: AStartOnItsHost) {
-  const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited, readTheKeyFile: (key_file) => theKeyInTheOwnersFile(key_file, start.home) })
+  const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited, readTheKeyFile: (key_file) => theKeyInTheOwnersFile(key_file, start.home, `${ENGINE_ENDPOINT}.key_file`) })
   if ('refusal' in model) return model
   const user = userSettingsPath(start.inherited)
   if ('refusal' in user) return user
@@ -120,31 +120,6 @@ function whatTheLaunchIsGiven(start: AStartOnItsHost) {
 /** The owner's settings files a member's writes are held away from: the host's managed ones, and the user's own file. */
 function theOwnersSettingsFiles(managed: ManagedSettingsPlace, owners_settings_file: string): readonly string[] {
   return [join(managed.dir, managed.file), ...dropInFiles(join(managed.dir, managed.drop_in)), owners_settings_file]
-}
-
-/**
- * The key in the file the crew's endpoint names, as the declaration writes it (martha#931): a provider's `~/` path written
- * out against the owner's home first, then read as theKeyInAFile reads one.
- */
-export const theKeyInTheOwnersFile = (key_file: string, home: string): ReturnType<typeof theKeyInAFile> => theKeyInAFile(writtenOut(key_file, home))
-
-/**
- * The key in the file the crew's endpoint names by its absolute path (martha#511 part B): only this user's own plain file, closed to the group and to others, and never a link, since a link's own mode says nothing of
- * its target. The key is trimmed of the line end a file ends with and never named in a refusal.
- */
-export function theKeyInAFile(at: string): { readonly key: string } | { readonly refusal: string } {
-  // A provider's key file is kept as the owner wrote it (martha#931); written out, it must be absolute, or it would be read against wherever the start runs.
-  if (!isAbsolute(at)) return { refusal: `the key file ${at} is not an absolute path or one under ${THE_HOMES_PREFIX}` }
-  let found: Stats
-  try {
-    found = lstatSync(at)
-  } catch (error) {
-    return { refusal: `${ENGINE_ENDPOINT}.key_file ${at} cannot be read (${(error as NodeJS.ErrnoException).code ?? String(error)})` }
-  }
-  const why = whyAKeyFileIsNotTheOwners(at, { plain_file: found.isFile(), owner_is_this_user: found.uid === process.getuid?.(), mode: found.mode })
-  if (why !== undefined) return { refusal: why }
-  const key = readFileSync(at, 'utf8').trim()
-  return key === '' ? { refusal: `${ENGINE_ENDPOINT}.key_file ${at} is empty` } : { key }
 }
 
 /** The launch's config read back to the declared model, then the crew text composed from what the launch carried; or why not. */
