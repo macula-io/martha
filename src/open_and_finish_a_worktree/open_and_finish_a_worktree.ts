@@ -440,7 +440,7 @@ async function finishTheWorktree(
   const path = form.path
   const read = await theBranchMarthasNamingMade(request, form, path)
   if ('refused' in read) return read
-  const guards = await theLiveFormsGuards(request, form, read.branch, args)
+  const guards = await theLiveFormsGuards(request, form, read.branch, read.owner, args)
   if ('refused' in guards) return guards
   const held = await workNoOtherCopyHas(host, path, read.branch, discard_ignored, guards.approved)
   if ('refused' in held) return held
@@ -468,9 +468,10 @@ async function theLiveFormsGuards(
   request: WorktreesRequest,
   form: Extract<FinishForm, { readonly form: 'worktree' }>,
   branch: string,
+  owner: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<{ readonly approved: AnApprovedRemoval | undefined } | Refused> {
-  const allowed = whoseItIs(request, theOwnerOfBranch(branch, request.settings.members) ?? request.member, branch, args)
+  const allowed = whoseItIs(request, owner, branch, args)
   if (allowed !== undefined) return allowed
   const approved = await theApprovedRemoval(request.host, args, form.repo, branch)
   if (approved !== undefined && 'refused' in approved) return approved
