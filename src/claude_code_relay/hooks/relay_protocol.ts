@@ -112,8 +112,9 @@ export interface Taken {
   readonly taken: 1
   readonly end_turn?: string
   /**
-   * On a ran read's report, the line its result carries for the model (martha#969): the clone it read in is behind its
-   * origin. The relay adds it to the result and changes nothing else.
+   * On a ran tool's report, the lines its result carries for the model: a read in a clone behind its origin (martha#969),
+   * and a brief the call wrote that breaks the owner-items rule (martha#999 package 2b). The relay adds them to the
+   * result and changes nothing else.
    */
   readonly note?: string
 }
@@ -223,7 +224,7 @@ function theYesCarrying(value: Record<string, unknown>): Heard | undefined {
   return { yes: true, ...Object.fromEntries(carried.map((key) => [key, value[key]])) }
 }
 
-/** What a taken answer may carry beside the yes: the turn a ran tool ends, the note a ran read carries, and the crew state a prompt is handed. */
+/** What a taken answer may carry beside the yes: the turn a ran tool ends, the note its result carries, and the crew state a prompt is handed. */
 const TAKEN_CARRIES = ['end_turn', 'note', 'handed'] as const
 
 /** The keys a taken answer may hold: the yes itself, and what it carries. */

@@ -79,7 +79,7 @@ const userScopeFor = (home: string): OwnerUserScope => ({
 })
 
 /** A crew that refuses no call, over the one hold on the end of a running turn the test drives (martha#311). */
-function aCrewHolding(ends: TheEndsHold): CrewTools {
+function aCrewHolding(ends: TheEndsHold, note = ''): CrewTools {
   return {
     tools: [],
     answer: async () => ({ answer: '' }),
@@ -98,6 +98,7 @@ function aCrewHolding(ends: TheEndsHold): CrewTools {
     noteTheCallsAnswer: () => undefined,
     refusesTheSubagent: async () => undefined,
     refusesTheGitIn: async () => undefined,
+    theNoteAfterACall: async () => note,
   }
 }
 
@@ -158,13 +159,13 @@ const THE_TURN = 'the-running-turn'
 const ownersSettingsOf = (places: Places): string => join(places.home, CLAUDE_FOLDER, USER_SETTINGS_FILE)
 
 /** A relay over a crew holding `ends`, its session started, with what it took receipts for and why it stopped. */
-async function aStartedRelay(t: TestContext, ends: TheEndsHold | undefined, volatile_roots?: readonly string[]) {
+async function aStartedRelay(t: TestContext, ends: TheEndsHold | undefined, volatile_roots?: readonly string[], note = '') {
   const places = placesOf(t)
   mkdirSync(join(places.home, CLAUDE_FOLDER), { recursive: true })
   writeFileSync(ownersSettingsOf(places), '{}\n')
   const allowed: string[] = []
   const stops: string[] = []
-  const relay = relayFor(places, ends === undefined ? undefined : aCrewHolding(ends), theReceiptsTaken(allowed), stops, volatile_roots)
+  const relay = relayFor(places, ends === undefined ? undefined : aCrewHolding(ends, note), theReceiptsTaken(allowed), stops, volatile_roots)
   await startedOn(relay)
   return { places, relay, allowed, stops }
 }
@@ -290,6 +291,18 @@ test('#608: a ran tool\'s report hands the crew the posted input and the host\'s
   const answer = { ref: 1, result: { questions, answers: { 'Which?': '0. Go?' }, annotations: {} }, text: 'The user answered.', isReadOnly: true }
   await relay.answer('tool_answered', { ...menu, answer })
   assert.deepEqual(heard, [{ tool: MENU_TOOL, input: { tool_use_id: `toolu_${MENU_TOOL}`, questions }, answer }])
+})
+
+test('#999 package 2b: the crew\'s note after a call rides on the report\'s yes, beside the end of the turn, and no note leaves the yes as it was (mutant: drop the note)', async (t) => {
+  const A_NOTE = 'Crew: the brief this command wrote breaks the owner-item rule'
+  const ends = holdingTheEnds()
+  const noted = await aStartedRelay(t, ends, undefined, A_NOTE)
+  assert.deepEqual(await noted.relay.answer('tool_called', A_COMMAND), { answered: true, body: { allow: 1 } }, 'the gate did not allow the call this test runs')
+  ends.hold(SESSION, THE_TURN)
+  assert.deepEqual(await noted.relay.answer('tool_answered', A_COMMAND), { answered: true, body: { taken: 1, end_turn: THE_TURN, note: A_NOTE } }, 'the note did not ride on the yes')
+  const plain = await aStartedRelay(t, holdingTheEnds())
+  await plain.relay.answer('tool_called', A_COMMAND)
+  assert.deepEqual(await plain.relay.answer('tool_answered', A_COMMAND), { answered: true, body: { taken: 1 } }, 'a yes with no note was changed')
 })
 
 // martha#980 package 2: a SendMessage the host ran is handed the volatile-path note beside its answer, as say_to_the_crew
