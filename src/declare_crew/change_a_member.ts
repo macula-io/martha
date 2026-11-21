@@ -20,6 +20,7 @@ import {
   DeclarationRefused,
   declareCrewOnHosts,
   HOST,
+  MEMBER_NAME,
   theHostOfMember,
   type CrewSettings,
   type Member,
@@ -37,12 +38,20 @@ import { aReviewerMembersModelRefusal } from '../run_reviews_on_the_review_model
 export const CREW_VERBS = ['add', 'remove', 'set-model', 'set-host'] as const
 export const [ADD, REMOVE, SET_MODEL, SET_HOST] = CREW_VERBS
 
+/**
+ * The change `martha rename <Old> <New>` makes (martha#985, gap 20 of #957). Not a `crew` verb: crew-code types it as
+ * a verb of the launcher itself. The change's own kind is `renamed`, so no literal of the command's word collides with
+ * it; the word the owner types is the command's, and is spelled where every other act's word is.
+ */
+export const RENAMED = 'renamed_member'
+
 /** One change to one member. A null model is the host's own; a null host is the crew's. */
 export type CrewChange =
   | { readonly kind: typeof ADD; readonly member: string; readonly role: string; readonly model: string | null; readonly host: string | null }
   | { readonly kind: typeof REMOVE; readonly member: string }
   | { readonly kind: typeof SET_MODEL; readonly member: string; readonly model: string | null }
   | { readonly kind: typeof SET_HOST; readonly member: string; readonly host: string | null }
+  | { readonly kind: typeof RENAMED; readonly member: string; readonly to: string }
 
 /**
  * The declaration's text before and after the change, and the crew the reader makes of the text after it; or why
@@ -79,6 +88,12 @@ function withField(member: Fields, key: string, value: unknown): Fields {
   return { ...member, [key]: value }
 }
 
+/** The members with the one at `at` named `to`; or why that name is another member's. */
+function renamedAmong(members: readonly Fields[], at: number, to: string): readonly Fields[] | string {
+  const taken = members.some((member, i) => i !== at && typeof member['name'] === 'string' && sameMemberName(member['name'], to))
+  return taken ? `${to} is already on the crew; pick another name.` : members.map((member, i) => (i === at ? { ...member, name: to } : member))
+}
+
 /** The members after the change; or why the member it names is not on the crew. */
 function membersAfter(members: readonly Fields[], change: CrewChange): readonly Fields[] | string {
   if (change.kind === ADD) {
@@ -88,6 +103,7 @@ function membersAfter(members: readonly Fields[], change: CrewChange): readonly 
   const at = members.findIndex((member) => typeof member['name'] === 'string' && sameMemberName(member['name'], change.member))
   if (at === -1) return `${notOnTheCrew(change.member, members.map((member) => String(member['name'])))}.`
   if (change.kind === REMOVE) return members.filter((_, i) => i !== at)
+  if (change.kind === RENAMED) return renamedAmong(members, at, change.to)
   const changed = change.kind === SET_MODEL ? { ...members[at]!, model: change.model } : withField(members[at]!, HOST, change.host ?? undefined)
   return members.map((member, i) => (i === at ? changed : member))
 }
@@ -120,7 +136,8 @@ export async function aChangedDeclaration(documents: DocumentStore, root: string
  */
 function theMemberChanged(settings: CrewSettings, change: CrewChange): Member | undefined {
   if (change.kind === REMOVE) return undefined
-  return settings.members.find((member) => sameMemberName(member.name, change.member))
+  const named = change.kind === RENAMED ? change.to : change.member
+  return settings.members.find((member) => sameMemberName(member.name, named))
 }
 
 /**
@@ -182,8 +199,24 @@ export function theCrewChangeAsked(words: readonly string[]): CrewChange | undef
 function theChangeInALine(change: CrewChange, settings: CrewSettings): string {
   if (change.kind === ADD) return `${change.member} is on the crew now, as ${change.role}.`
   if (change.kind === REMOVE) return `${change.member} is off the crew now. Its node id stays in Martha's state, so adding ${change.member} again keeps it.`
+  if (change.kind === RENAMED) return `${change.member} is ${change.to} now, on the crew and in the declaration, and keeps its node id.`
   if (change.kind === SET_MODEL) return `${change.member}'s model is ${change.model ?? "the host's own"} now.`
   return `${change.member}'s host is ${change.host ?? `the crew's, ${settings.host},`} now.`
+}
+
+/**
+ * Why `from` cannot become `to`, in the words the owner is told, or undefined when it can (martha#985): a new name
+ * that is not plain, the same name as the old, one already on the crew, or a member the declaration does not know. The
+ * declaration's own reader makes the same name rule, and this is asked first so the owner hears it before anything is
+ * read or written.
+ */
+export function aNameToRenameTo(members: readonly { readonly name: string }[], from: string, to: string): string | undefined {
+  if (!MEMBER_NAME.test(to)) return `'${to}' is not a plain name: letters, digits, _ and -.`
+  if (sameMemberName(from, to)) return `'${from}' and '${to}' are the same name.`
+  const names = members.map((member) => member.name)
+  if (!names.some((name) => sameMemberName(name, from))) return `${notOnTheCrew(from, names)}.`
+  if (names.some((name) => sameMemberName(name, to))) return `${to} is already on the crew; pick another name.`
+  return undefined
 }
 
 /**

@@ -45,7 +45,9 @@ export {
   type EngineEndpoint,
 } from './the_engines_endpoint.ts'
 import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theWorkspacesClonesOf, whereTheCrewOpens, type WhereTheCrewOpens } from './the_crews_workspace.ts'
-import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
+import { WAKE, WAKE_MINUTES, refuseTheWakeWindows } from './the_crews_wake.ts'
+import { isAbsolute, dirname, join, normalize, sep } from 'node:path'
+import { WORKTREES_BESIDE_CLONES, type WorkspaceLayout } from './what_a_checkout_proves.ts'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
@@ -195,7 +197,10 @@ export const NUDGES = 'nudges'
 export const STALLED_MINUTES = 'stalled_minutes'
 export const REVIEW_MINUTES = 'review_minutes'
 export const PERSON_MINUTES = 'person_minutes'
-export const HOUSE_RULE_MINUTES = [STALLED_MINUTES, REVIEW_MINUTES, PERSON_MINUTES] as const
+export const NUDGE_MINUTES = [STALLED_MINUTES, REVIEW_MINUTES, PERSON_MINUTES] as const
+
+/** Every window a house rule names, in whole minutes: the nudge windows, and the wake's two (./the_crews_wake). */
+export const HOUSE_RULE_MINUTES = [...NUDGE_MINUTES, ...WAKE_MINUTES] as const
 export type HouseRuleMinutes = (typeof HOUSE_RULE_MINUTES)[number]
 
 /** How many milliseconds a minute is: the unit these windows are named in, and the one the rules read them as. */
@@ -234,7 +239,7 @@ export const OWNER_ITEMS = 'owner_items'
 export const WORKSPACE_LAYOUT = 'workspace_layout'
 
 /** The house rules a crew can switch on. Each is off unless the declaration says true. */
-export const HOUSE_RULE_SWITCHES = [OWNER_ITEMS, WORKSPACE_LAYOUT, 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES] as const
+export const HOUSE_RULE_SWITCHES = [OWNER_ITEMS, WORKSPACE_LAYOUT, 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES, WAKE] as const
 export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
 
 /** The house rule that names a model rather than switching a rule on. */
@@ -251,46 +256,9 @@ export const WORKTREES = 'worktrees'
 export const HOUSE_RULE_PLACES = [CLONES, WORKTREES] as const
 export type HouseRulePlace = (typeof HOUSE_RULE_PLACES)[number]
 
-/** The two places a crew's workspace layout names (martha#256): where its clones sit, and where its worktrees are made. */
-export interface WorkspaceLayout {
-  readonly clones: string
-  readonly worktrees: string
-}
+export { LAYOUT_TO_ADD, WORKTREES_BESIDE_CLONES, workspaceLayoutOf, type WhatACheckoutProves, type WorkspaceLayout } from './what_a_checkout_proves.ts'
 
-/** The place a crew's worktrees sit in, beside the place that holds its clones: `worktrees` next to `clones`. */
-export const WORKTREES_BESIDE_CLONES = 'worktrees'
-
-/** What a checkout that proves no layout is told to add, in the words of this declaration's own keys (martha#611). */
-export const LAYOUT_TO_ADD = 'Add "workspace_layout": true with "clones" and "worktrees" to house_rules to declare one.'
-
-/** What a checkout's own path proves about its workspace (martha#611): the layout to declare, and the line `martha init` says of it. */
-export interface WhatACheckoutProves {
-  /** The two places to declare, or null when the checkout proves none. */
-  readonly layout: WorkspaceLayout | null
-  /** The line init says after its first: the two places, or why there is none and what to add. */
-  readonly said: string
-}
-
-/** A checkout that proves no layout: none to declare, and the line that says why and what to add instead. */
-const noLayout = (why: string): WhatACheckoutProves => ({ layout: null, said: `No workspace layout: ${why}. ${LAYOUT_TO_ADD}` })
-
-/**
- * The workspace layout a checkout's own path proves (martha#611): a checkout at `<clones>/<org>/<name>`, whose origin
- * names that same `org/name`, keeps its clones in `<clones>` and its worktrees in `worktrees` beside them. A checkout
- * the origin does not place there proves no layout — what would be written is a guess about places the owner never
- * named — so the reason is answered instead, and `martha init` reads it (../declare_a_solo_crew).
- */
-export function workspaceLayoutOf(root: string, repo: string | undefined, origin: string | null): WhatACheckoutProves {
-  if (repo === undefined) {
-    // The origin is not quoted back: it can carry a token in its userinfo, and this line is printed.
-    const why = origin === null ? `${root} names no origin remote` : `the origin of ${root} names no repository as org/name`
-    return noLayout(why)
-  }
-  if (`${basename(dirname(root))}/${basename(root)}` !== repo) return noLayout(`${root} does not sit at <clones>/${repo}`)
-  const clones = dirname(dirname(root))
-  const layout = { clones, worktrees: join(dirname(clones), WORKTREES_BESIDE_CLONES) }
-  return { layout, said: `Workspace layout declared: clones ${layout.clones}, worktrees ${layout.worktrees}.` }
-}
+export { theWorkspaceTheCrewDeclared, type ThePlacesTheCrewNamed } from './the_crews_workspace.ts'
 
 /** The mode a solo crew is declared in: a name for people to read. */
 export const SOLO_MODE = 'solo'
@@ -672,20 +640,31 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
 }
 
 /**
- * The house rules as the reader judges them (martha#931): `gate_enforce`, as Raf's draft spells it, read as
- * `gate_enforces`; and, when the declaration names a workspace root and the rules name neither place, the clones in that
- * root and the worktrees beside it, as a checkout's own path proves them (workspaceLayoutOf). A place named in both is
- * refused, so the two can never disagree.
+ * The house rules as the reader judges them (martha#931): `gate_enforce`, as Raf's draft spells it, read as `gate_enforces`;
+ * and the root's clones and the worktrees beside them, as a checkout's own path proves them (workspaceLayoutOf), filled
+ * whether or not the file has a `house_rules` block: the places are the fact, so a crew declared as `martha up` teaches is
+ * guarded from its first run, a place beside the root is refused, and the `workspace_layout` switch is not read (martha#958).
  */
 function houseRulesAsRead(refuse: Refuse, value: unknown, clones: string | null): unknown {
-  if (!isObject(value)) return value
-  const { [GATE_ENFORCE_AS_DRAFTED]: drafted, ...rules } = value
+  const block = isObject(value) ? value : undefined
+  const read = theDraftsGateName(refuse, block)
+  if (clones === null) return block === undefined ? value : read
+  return withTheWorkspacesPlaces(refuse, read, clones)
+}
+
+/** The rules with the draft's `gate_enforce` read as `gate_enforces`, refused when both are named (martha#931). */
+function theDraftsGateName(refuse: Refuse, block: Readonly<Record<string, unknown>> | undefined): Json {
+  if (block === undefined) return {}
+  const { [GATE_ENFORCE_AS_DRAFTED]: drafted, ...rules } = block
   if (drafted !== undefined && rules[GATE_ENFORCES] !== undefined) refuse.at(`house_rules.${GATE_ENFORCE_AS_DRAFTED}`, `is named beside ${GATE_ENFORCES}, which it is read as`)
-  const read: Json = drafted === undefined ? rules : { ...rules, [GATE_ENFORCES]: drafted }
-  if (clones === null) return read
-  const named = HOUSE_RULE_PLACES.find((place) => read[place] !== undefined)
+  return drafted === undefined ? rules : { ...rules, [GATE_ENFORCES]: drafted }
+}
+
+/** The rules with the workspace root's two places filled in, refused when a rule names one anyway (martha#958). */
+function withTheWorkspacesPlaces(refuse: Refuse, rules: Json, clones: string): Json {
+  const named = HOUSE_RULE_PLACES.find((place) => rules[place] !== undefined)
   if (named !== undefined) refuse.at(`house_rules.${named}`, `is named beside ${THE_WORKSPACES_ROOT}, which places the clones and the worktrees`)
-  return { ...read, [CLONES]: clones, [WORKTREES]: join(dirname(clones), WORKTREES_BESIDE_CLONES) }
+  return { ...rules, [CLONES]: clones, [WORKTREES]: join(dirname(clones), WORKTREES_BESIDE_CLONES) }
 }
 
 /**
@@ -1048,10 +1027,16 @@ function refuseMinutes(refuse: Refuse, value: Json): void {
       refuse.at(`house_rules.${minutes}`, 'is not a whole number of minutes, zero or more')
     }
   }
-  if (value[NUDGES] !== true) return
-  const missing = HOUSE_RULE_MINUTES.find((minutes) => value[minutes] === undefined)
+  refuseTheWindowsOf(refuse, value, NUDGES, NUDGE_MINUTES)
+  refuseTheWakeWindows((field, why) => refuse.at(field, why), value)
+}
+
+/** A window a rule needs, refused by name when the rule is on and the window is missing: never one the code made up. */
+function refuseTheWindowsOf(refuse: Refuse, value: Json, rule: HouseRuleSwitch, windows: readonly string[]): void {
+  if (value[rule] !== true) return
+  const missing = windows.find((minutes) => value[minutes] === undefined)
   if (missing !== undefined) {
-    refuse.at(`house_rules.${missing}`, `is missing, and house_rules.${NUDGES} is on in this declaration`)
+    refuse.at(`house_rules.${missing}`, `is missing, and house_rules.${rule} is on in this declaration`)
   }
 }
 

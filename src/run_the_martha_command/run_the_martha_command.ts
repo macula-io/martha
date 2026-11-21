@@ -23,22 +23,27 @@ import process from 'node:process'
 import { createInterface } from 'node:readline/promises'
 import { isatty } from 'node:tty'
 
+import { aWorkDirectoryOnThisMachine } from '../a_work_directory_on_this_machine/a_work_directory_on_this_machine.ts'
+import { digestOf } from '../digest_a_work_directory/digest_a_work_directory.ts'
+import { ROSTER_FILE, whereLinesOf } from '../say_where_the_crew_keeps_things/say_where_the_crew_keeps_things.ts'
+import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { approveConfig, NOTHING_TO_APPROVE, type OwnersTerminal } from '../approve_a_checkouts_config/approve_a_checkouts_config.ts'
 import { installThePinnedInstaller } from '../install_the_pinned_installer/install_the_pinned_installer.ts'
 import { installWordsAreAWay } from '../read_the_words_of_martha_install/read_the_words_of_martha_install.ts'
 import { floorRecordOf, launchBelowTheFloor, readTheRecord, releaseVersionOf } from '../hold_the_launch_to_the_version_floor/hold_the_launch_to_the_version_floor.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, declareCrew, OWNER_BELL, sameMemberName, THE_ENGINES_HOST, theHostOfMember, type CrewSettings, type Member } from '../declare_crew/declare_crew.ts'
-import { noCrewDeclaredAt, upStarts } from '../bring_up_the_declared_crew/bring_up_the_declared_crew.ts'
+import { guardsLineOf, noCrewDeclaredAt, upStarts } from '../bring_up_the_declared_crew/bring_up_the_declared_crew.ts'
 import { declareTheEnginesEndpoint } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import { theKeyInAFile } from '../start_an_engine_member/start_an_engine_member.ts'
-import { ADD, aChangedDeclaration, REMOVE, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
+import { ADD, aChangedDeclaration, aNameToRenameTo, REMOVE, RENAMED, theChangeTold, theCrewChangeAsked, type CrewChange } from '../declare_crew/change_a_member.ts'
+import { moveTheRecordedName, whatIsHeldUnder, type TheRecordsMoved, type TheRecordStores } from '../move_a_members_records/move_a_members_records.ts'
 import { writeAChangedDeclaration } from '../declare_a_solo_crew/write_a_changed_declaration.ts'
 import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
-import { appendStateLine, crewRowsDirectory, crewStateDirectory, nodeIdsFor, openState, readApprovals, readStateFile, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { appendStateLine, crewRowsDirectory, crewStateDirectory, moveANodeId, nodeIdsFor, nodeIdsKept, openState, readApprovals, readStateFile, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { showTheWeek, weekOf } from '../show_the_week_of_the_ledger/show_the_week_of_the_ledger.ts'
 import { stateRootOf } from '../find_a_homes_state_root/find_a_homes_state_root.ts'
@@ -82,7 +87,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha up [--prompt <text>] | martha attach [<member>] | martha approve | martha todo | martha start [<member> [--prompt <text>] [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha week [<YYYY-Www>] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha version | martha help'
+  'usage: martha init | martha up [--prompt <text>] | martha attach [<member>] | martha approve | martha todo | martha start [<member> [--prompt <text>] [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha week [<YYYY-Www>] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha digest <dir> | martha where | martha rename <Old> <New> | martha version | martha help'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -423,6 +428,7 @@ async function up(io: CommandIo, places: Places, prompt?: string): Promise<numbe
   if (!existsSync(declaration)) return refused(io, noCrewDeclaredAt(declaration))
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
+  sayWhatTheGuardIs(io, declaration, crew.settings)
   const anEngineMemberStarts = crew.settings.members.some((member) => upStarts(member) && theHostOfMember(crew.settings, member) === THE_ENGINES_HOST)
   if (anEngineMemberStarts && crew.settings.engine_endpoint === null) {
     const endpoint = await declareTheEnginesEndpoint({ root: places.root, home: places.home, documents, env: io.env, ask: io.terminal.ask, whyNotTheOwnersKeyFile: (key_file) => whyNotAKey(theKeyInAFile(key_file)) })
@@ -430,6 +436,12 @@ async function up(io: CommandIo, places: Places, prompt?: string): Promise<numbe
     io.out(endpoint.told)
   }
   return opensInTmux(crew.settings.opens.terminal) ? openTheCrewInTmuxHere(io, places, crew, prompt) : openTheCrewInKittyHere(io, places, crew.settings, prompt)
+}
+
+/** Says the one line `up` owes a crew whose declaration names no places (martha#958), before any member starts. */
+function sayWhatTheGuardIs(io: CommandIo, declaration: string, settings: CrewSettings): void {
+  const guards = guardsLineOf(declaration, settings)
+  if (guards !== undefined) io.out(guards)
 }
 
 /** Why `martha up`'s first prompt cannot be typed in (martha#919), or undefined when it can or none was given. */
@@ -459,6 +471,93 @@ async function changeTheCrew(io: CommandIo, places: Places, change: CrewChange):
   const ids = change.kind === ADD ? nodeIdsFor(places.state, [change.member], tellOwnerOn(io)) : undefined
   theChangeTold(change, outcome, THE_VOCABULARIES_OF_HOST).forEach(tellOwnerOn(io))
   return ids !== undefined && 'refusal' in ids ? refused(io, ids.refusal) : EXIT_DONE
+}
+
+/** What a rename wrote again, in one line: what `martha start <New>` resumes, and what the crew's buttons read. */
+function theRecordsMovedTold(moved: TheRecordsMoved, to: string): string {
+  const parts = [...(moved.handovers.length > 0 ? [`${moved.handovers.length} handover(s)`] : []), ...(moved.row ? ['the dashboard row'] : []), ...(moved.park ? ['the park'] : [])]
+  return parts.length === 0 ? `Nothing that was left under another name had to move.` : `Moved to ${to}: ${parts.join(', ')}.`
+}
+
+/** What a rename had done when a store refused it, so the owner is told rather than left with half a rename (r=1). */
+interface AHalfRename {
+  readonly from: string
+  readonly to: string
+  readonly stores: TheRecordStores
+  readonly moved: TheRecordsMoved
+  /** Whether the handovers were attempted: a node id that refused stopped the rename before any record. */
+  readonly handoversTried: boolean
+  readonly nodeIdMoved: boolean
+}
+
+/** The records a rename wrote again, as words. */
+const wroteInWords = (moved: TheRecordsMoved): readonly string[] => [
+  ...(moved.handovers.length > 0 ? [`${moved.handovers.length} handover(s)`] : []),
+  ...(moved.park ? ['the park'] : []),
+  ...(moved.row ? ['the dashboard row'] : []),
+]
+
+/** The records a rename did not finish, as words: the handovers only when the rename stopped before them. */
+const stillInWords = (half: AHalfRename): readonly string[] => [
+  ...(half.handoversTried ? [] : ['the handovers']),
+  ...(half.moved.park ? [] : ['the park']),
+  ...(half.moved.row ? [] : ['the dashboard row']),
+]
+
+/**
+ * What a refusal after the declaration was written must say as well (review r=1): which names the new name now, what
+ * was written again, and what the crew still keeps under the old one. A rename has no way back, and crew-code has none
+ * either, so the owner is told exactly where it stopped.
+ */
+function theHalfDoneTold(half: AHalfRename): string {
+  const now = half.nodeIdMoved
+    ? `The declaration and ${half.to}'s node id now name ${half.to}.`
+    : `The declaration now names ${half.to}; ${half.from}'s node id did not move.`
+  const wrote = wroteInWords(half.moved)
+  const still = stillInWords(half)
+  const left = still.length > 0 ? ` Still under ${half.from}: ${still.join(', ')}.` : ''
+  const copies = half.handoversTried ? ` A handover's old copy is never deleted, so what was copied stays under ${half.from}.` : ''
+  return `${now}${wrote.length > 0 ? ` Moved: ${wrote.join(', ')}.` : ''}${left}${copies}`
+}
+
+/** Why a rename may not take `name`: the crew still keeps something under it (crew-code's `name_in_use`, review r=1). */
+function whyTheNameIsInUse(state: MarthaState, stores: TheRecordStores, name: string): string | undefined {
+  const kept = nodeIdsKept(state)
+  if ('refusal' in kept) return kept.refusal
+  const inUse = [...(Object.hasOwn(kept.ids, name) ? ['a node id'] : []), ...whatIsHeldUnder(stores, name)]
+  return inUse.length === 0 ? undefined : `${name} is already in use: the crew still keeps ${inUse.join(', ')} under it. Pick another name.`
+}
+
+/**
+ * `martha rename <Old> <New>` (martha#985, gap 20 of #957): the declaration changes first, through its own reader, so
+ * every refusal leaves the declaration, the node ids and the records exactly as they were; then the node id moves to
+ * the new name, the same id, and the records the member left move with it.
+ */
+async function renamed(io: CommandIo, places: Places, from: string, to: string): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  const stores: TheRecordStores = { crew: keepTheCrewsFilesAsDirectories(crew.crew), stamps: handoverStampsIn(crew.crew), rows: dashboardRowsIn(crew.launcher.dashboard) }
+  const unnameable = aNameToRenameTo(crew.settings.members, from, to)
+  if (unnameable !== undefined) return refused(io, unnameable)
+  const inUse = whyTheNameIsInUse(places.state, stores, to)
+  if (inUse !== undefined) return refused(io, inUse)
+  const running = await whyItStays(io, places, from)
+  if (running !== undefined) return refused(io, running)
+  const change: CrewChange = { kind: RENAMED, member: from, to }
+  const outcome = await aChangedDeclaration(documents, places.root, THE_VOCABULARIES_OF_HOST, change)
+  if ('refusal' in outcome) return refused(io, outcome.refusal)
+  const unwritten = writeAChangedDeclaration(places.root, outcome)
+  if (unwritten !== undefined) return refused(io, unwritten)
+  const node_id = moveANodeId(places.state, from, to, tellOwnerOn(io))
+  if (node_id !== undefined) {
+    const half = { from, to, stores, moved: { handovers: [], row: false, park: false }, handoversTried: false, nodeIdMoved: false }
+    return refused(io, `${node_id.refusal}\n${theHalfDoneTold(half)}`)
+  }
+  const moved = moveTheRecordedName(stores, from, to)
+  if (moved.refusal !== undefined) return refused(io, `${moved.refusal.refusal}\n${theHalfDoneTold({ from, to, stores, moved, handoversTried: true, nodeIdMoved: true })}`)
+  theChangeTold(change, outcome, THE_VOCABULARIES_OF_HOST).forEach(tellOwnerOn(io))
+  io.out(theRecordsMovedTold(moved, to))
+  return EXIT_DONE
 }
 
 /** Why `member` stays on the crew: it is running, as `martha stop` reads it, or the crew cannot be read; or undefined. */
@@ -594,7 +693,7 @@ async function keepShapes(io: CommandIo, places: Places, path: string): Promise<
 
 /** The act asked for, with its arguments, or undefined when the words are no way the command is used. */
 export const VERSION_WORDS: readonly string[] = ['--version', 'version']
-export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', ...VERSION_WORDS]
+export const ACTS_ALONE: readonly string[] = ['init', 'approve', 'todo', 'ls', 'where', ...VERSION_WORDS]
 
 /** The words that ask for the help (martha#511): each alone prints HELP. */
 export const HELP_WORDS: readonly string[] = ['help', '-h', '--help']
@@ -621,6 +720,9 @@ export const HELP: readonly string[] = [
   'martha week [<YYYY-Www>]     the crew ledger for a week: cost in work, cycle time, owner wait, rework and releases',
   'martha crew [<verb> ...]     show the crew strip, or add, remove or change a member',
   'martha run <shape>           run a command shape the owner signed, from inside a member',
+  'martha digest <dir>          print <dir>@sha256:<hex> over every file under it, for a handoff outside git',
+  'martha where                 print where this crew keeps its declaration, state, crew files and roster',
+  'martha rename <Old> <New>    rename a member in the declaration, keeping its node id and the records it left',
   'martha install [<version>]   install or upgrade Martha',
   'martha pin-key <file>        pin your hardware key for this project',
   'martha keep-shapes <file>    keep the command shapes you signed',
@@ -631,7 +733,7 @@ export const HELP: readonly string[] = [
 /** Whether `word` is a word the command knows as an act. */
 const isAnAct = (word: string): boolean => ACTS_ALONE.includes(word) || ACTS_OF_ONE.includes(word) || Object.hasOwn(ACTS_OF_THEIR_OWN, word)
 /** The acts that take exactly one argument (martha#129). */
-export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release']
+export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release', 'digest']
 
 type Asked = { readonly act: string; readonly member?: string; readonly args: readonly string[]; readonly prompt?: string }
 
@@ -650,6 +752,7 @@ const installOf = (act: string, argv: readonly string[]): Asked | undefined => (
 /** The acts that read their own arguments: each parser answers undefined when the words are no way it is used. */
 export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: readonly string[]) => Asked | undefined>> = {
   install: installOf,
+  rename: renameOf,
   gate: gateOf,
   bells: bellsOf,
   [STOP]: stopOf,
@@ -668,6 +771,13 @@ function crewOf(act: string, argv: readonly string[]): Asked | undefined {
   if (argv.length === 3 && argv[1] === TAB_OF && argv[2] !== '') return { act, args: argv.slice(1) }
   const change = theCrewChangeAsked(argv.slice(1))
   return change === undefined ? undefined : { act, member: change.member, args: argv.slice(1) }
+}
+
+/** `rename <Old> <New>` (martha#985): two plain words, neither a switch. */
+function renameOf(act: string, argv: readonly string[]): Asked | undefined {
+  const [, from, to, ...rest] = argv
+  const aWord = (word: string | undefined): word is string => word !== undefined && word !== '' && !word.startsWith('-')
+  return rest.length === 0 && aWord(from) && aWord(to) ? { act, args: [from, to] } : undefined
 }
 
 /** `--prompt <text>` at the head of `words`: the prompt and the words after it; nothing when the head is not it; undefined when it has no text. */
@@ -816,6 +926,7 @@ const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Place
   [UP]: (io, places, asked) => up(io, places, asked.prompt),
   [ATTACH]: (io, places, asked) => attach(io, places, asked.member),
   answer: (io, places, asked) => answerInAProject(io, places, asked.member, asked.args),
+  rename: (io, places, asked) => renamed(io, places, asked.args[0]!, asked.args[1]!),
 }
 
 /**
@@ -843,6 +954,39 @@ function theMemberThisRunsInside(io: CommandIo, places: Places, act: string): st
   })
 }
 
+/**
+ * `martha digest <dir>` (martha#985): the one line a handoff of work outside git names, `<dir>@sha256:<hex>`, or the
+ * refusal that says why there is none. A crew directory's own runtime place is left out, by crew-code's own rule, so
+ * the two programs name the same value for the same tree.
+ */
+async function theDigest(io: CommandIo, _places: Places, directory: string): Promise<number> {
+  const answered = await digestOf({ directory, read: aWorkDirectoryOnThisMachine })
+  if ('refusal' in answered) return refused(io, answered.refusal)
+  io.out(answered.line)
+  return EXIT_DONE
+}
+
+/**
+ * `martha where` (martha#985): every place this crew keeps something, one `KEY=path` a line, each read from the slice
+ * that already knows it, so a script outside the launcher acts on this crew instead of assuming a layout.
+ */
+async function theWhere(io: CommandIo, places: Places): Promise<number> {
+  const crew = await crewsPlacesOf(io, places)
+  if (typeof crew === 'string') return refused(io, crew)
+  const shown = {
+    declaration: join(places.root, DECLARATION_DIRECTORY, DECLARATION_FILE),
+    state: places.state.directory,
+    crew: crew.crew,
+    handovers: join(crew.crew, HANDOVERS_PLACE),
+    clones: crew.settings.house_rules.clones,
+    worktrees: crew.settings.house_rules.worktrees,
+    roster: existsSync(join(crew.crew, ROSTER_FILE)) ? join(crew.crew, ROSTER_FILE) : null,
+    mode: crew.settings.mode.name,
+  }
+  whereLinesOf(shown).forEach((line) => io.out(line))
+  return EXIT_DONE
+}
+
 /** Each act that works inside a project but `start`, which every other word falls to, by its word. */
 const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places, asked: Asked) => Promise<number>>> = {
   ...THE_OWNERS_OWN_ACTS,
@@ -856,6 +1000,8 @@ const ACTS_IN_A_PROJECT: Readonly<Record<string, (io: CommandIo, places: Places,
   week: showTheWeek,
   [STOP]: (io, places, asked) => stop(io, places, asked.member),
   [RESTART]: (io, places, asked) => restart(io, places, asked.member!, asked.args.includes(FRESH)),
+  digest: (io, places, asked) => theDigest(io, places, asked.args[0]!),
+  where: (io, places) => theWhere(io, places),
 }
 
 /**
