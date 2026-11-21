@@ -14,7 +14,7 @@ import {
   type Hit,
   type Rules,
   type Source,
-} from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
+} from '../know_the_private_text_classes/the_private_text_classes.ts'
 import { resolveOnGitHub, rulesOf } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
 import { selfTest } from './plant_every_surface.ts'
 import { postedTextSources } from './posted_text.ts'

@@ -33,6 +33,8 @@ page does not name.
 | `github` | no | How the crew spends its GitHub allowance (below). | the values below |
 | `transcripts` | no | How many launches' transcripts are kept, and how large (below). | the values below |
 | `owner_notices` | no | Which of the host's notices reach the owner (below). | the notices shown as a dialog before |
+| `friction_repos` | no | The repositories a member may file a tool-friction note in, each `owner/name` (martha#318). A repository not named here is refused by name, and a crew that names none files no note. | none |
+| `public_emails` | no | The email domains a friction note may name besides the ones every note may (martha#318), each a domain such as `acme.example`. | none |
 
 ## `members[]`
 
@@ -187,3 +189,7 @@ Martha keeps each ended launch's transcripts, redacted, so the owner can read wh
 | Field | Required | What it holds |
 |---|---|---|
 | `show` | no | The notices that reach the owner, by the host's own names (`agent_needs_input`, `worker_permission_prompt`, ...). A name the host does not send is refused; an empty list tells the owner of nothing. Left out, the owner is told of every notice Martha showed as a dialog before. |
+
+## Friction notes
+
+A note filed with `file_a_friction_note` is refused when it carries a home path, a private address, an email outside the domains `public_emails` names, a hex id, a token or a lab hostname; the refusal names the class and never the value. Every class the private-text scan runs is one the note refuses, so a note cannot turn the daily posted-text report red (the Supervisor's ruling on martha#318, which the owner can overrule). There is no `lab_hosts` field: the machine-name family the scan knows is not one a crew declares.

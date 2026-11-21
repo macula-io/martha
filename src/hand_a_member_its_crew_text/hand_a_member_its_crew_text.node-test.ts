@@ -77,6 +77,8 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     owner_notices: OWNER_NOTICES_WHEN_UNNAMED,
     clock_zone: CLOCK_ZONE_WHEN_UNNAMED,
     opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
+    friction_repos: [],
+    public_emails: [],
   }
 }
 

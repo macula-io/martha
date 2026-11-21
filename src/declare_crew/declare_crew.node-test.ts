@@ -53,6 +53,7 @@ import {
 } from './declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import { PROFILE } from './the_crews_profiles.ts'
+import { FRICTION_REPOS, PUBLIC_EMAILS } from './the_crews_friction.ts'
 import { WAKE, WAKE_AFTER_MINUTES, WAKE_CAP_MINUTES } from './the_crews_wake.ts'
 import { repoOfTheOrigin } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
 import { CLOSED_VOCABULARY, OPEN_VOCABULARY, type ModelVocabulary } from './a_hosts_model_vocabulary.ts'
@@ -187,6 +188,24 @@ test('a root that is not absolute, an empty list and a root named twice are refu
   await refusedWith({ ...solo, [VOLATILE_PATHS]: ['/var/scratch', '/var/scratch/'] }, `${VOLATILE_PATHS}[1]`)
 })
 
+test('the repositories and email domains a friction note may name are the declaration\'s, and a crew that names none files no note (martha#318)', async () => {
+  const unnamed = await declare(solo).settings
+  assert.deepEqual(unnamed.friction_repos, [], 'a crew that names no repository declared one, so a note would be filed somewhere')
+  assert.deepEqual(unnamed.public_emails, [], 'a crew that names no domain declared one of its own')
+
+  const named = await declare({ ...solo, [FRICTION_REPOS]: ['acme/plans', 'acme/notes'], [PUBLIC_EMAILS]: ['acme.example'] }).settings
+  assert.deepEqual(named.friction_repos, ['acme/notes', 'acme/plans'], 'the repositories were kept in the order the hand wrote them, so a refusal names them that way too')
+  assert.deepEqual(named.public_emails, ['acme.example'], 'the domains the declaration names were not read')
+})
+
+test('a friction repository that is not "<org>/<repo>", and either list naming an entry twice, are refused by field (martha#318)', async () => {
+  await refusedWith({ ...solo, [FRICTION_REPOS]: 'acme/notes' }, FRICTION_REPOS)
+  await refusedWith({ ...solo, [FRICTION_REPOS]: ['notes'] }, `${FRICTION_REPOS}[0]`)
+  await refusedWith({ ...solo, [FRICTION_REPOS]: ['acme/notes', 'acme/notes'] }, FRICTION_REPOS)
+  await refusedWith({ ...solo, [PUBLIC_EMAILS]: 'acme.example' }, PUBLIC_EMAILS)
+  await refusedWith({ ...solo, [PUBLIC_EMAILS]: ['not a domain'] }, `${PUBLIC_EMAILS}[0]`)
+  await refusedWith({ ...solo, [PUBLIC_EMAILS]: ['acme.example', 'acme.example'] }, PUBLIC_EMAILS)
+})
 
 test('the mode is data: a mode of any name reads exactly as the same table named team', async () => {
   const renamed = { ...team, mode: { ...team.mode, name: 'pairing' } }

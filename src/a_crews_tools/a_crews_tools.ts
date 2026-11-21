@@ -42,7 +42,7 @@ import { theHostsReadingIn } from '../keep_what_a_session_spent/the_hosts_usage.
 
 import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL, theParkToolOver, type AParkAsked } from '../park_and_wake_a_member/the_park_tools.ts'
 import type { AGuardedSwitch, OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
-import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack, type AnOrderAsked } from '../put_the_owners_model_back/the_guarded_switch.ts'
+import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack } from '../put_the_owners_model_back/the_guarded_switch.ts'
 import { menusTheLauncherKeeps, type ACallAnswered, type TheOwnersMenus } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import {
   LIST_ASKS_TOOL,
@@ -53,8 +53,6 @@ import {
   queueTheAsk,
   theSettlingOfTheAsks,
   theTakeOfTheAsks,
-  type TheAsksAsked,
-  type TheOfferingAsked,
 } from '../queue_the_owners_asks/the_ask_tools.ts'
 import { refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import {
@@ -104,13 +102,16 @@ import { READ_THE_RECEIPTS_TOOL, theReceiptsOver } from '../show_what_a_message_
 import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
-import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
+import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver } from '../switch_a_members_model/the_switch_tools.ts'
 import { theBeatOverTheCrewTools, theBeatsMarkedOn, withTheOwedLine, withTheTimesLineOnAReturn, type AHandedWindow, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
 import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { FILE_A_FRICTION_NOTE_TOOL, fileAFrictionNote } from '../file_a_friction_note/the_friction_tool.ts'
+import { startSweepingTheNotes } from '../file_a_friction_note/the_friction_sweep.ts'
+import { anOrderOver, beatsOf, theAsksAsked, theOfferingAsked, theOwnersListAsked, theStandingAsked, triggerPlaceOf } from './the_places_a_tool_is_decided_over.ts'
 import type { AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 
 /**
@@ -267,8 +268,9 @@ export interface CrewTools extends TheReviewRule {
   /** Starts the heartbeat, which keeps this member's row fresh; returns the stop. */
   startBeating(): () => void
   /**
-   * Starts the sweep of the owner's list (martha#316): once every SWEEP_INTERVAL_MS, while this member may keep the
-   * list, every open row's check is asked whether its act is done. Returns the stop.
+   * Starts the sweeps this launch keeps (martha#316, #318): once every interval, the owner's list while this member may
+   * keep it, and the crew's index of friction notes while this member is the one the crew's work is routed to. Returns
+   * the stop of both.
    */
   startSweeping(): () => void
   /**
@@ -388,6 +390,7 @@ const THE_TOOLS = [
   STANDING_CLOSE_TOOL,
   STANDING_TOOL,
   WAIT_FOR_CI_TOOL,
+  FILE_A_FRICTION_NOTE_TOOL,
 ] as const
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
@@ -400,7 +403,7 @@ export const CREW_TOOLS: readonly CrewTool[] = THE_TOOLS
 export type { TheStartLine }
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
-interface SessionState {
+export interface SessionState {
   held: DashboardRow | null
   session: string
   /**
@@ -502,7 +505,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
       timer.unref()
       return () => clearInterval(timer)
     },
-    startSweeping: () => sweepTheOwnersList(held),
+    startSweeping: () => startTheSweeps(held),
     theLineToHandAtStart: (session_id) => theStartLineOf(held, state, session_id),
     theCrewStateOfATurn: () => theCrewStateOf(held),
     noteTheStart: (session_id, taken) => noteTheStartIn(held, state, session_id, taken),
@@ -593,6 +596,26 @@ function sweepTheOwnersList(places: CrewToolPlaces): () => void {
   if (places.processes === undefined) return () => undefined
   // The declaration is read again at each sweep, so an edited table takes effect without a relaunch.
   return startSweeping({ ledger: places.ledger, root: places.root, member: places.member, processes: places.processes, settings: () => theSettingsOrRefusal(places) })
+}
+
+/**
+ * The sweeps this launch keeps (martha#316, #318): the owner's list, and the crew's index of friction notes. Each is
+ * gated by its own rule inside its slice — the list by the declaration's table, the notes by the member the crew's work
+ * is routed to — so a launch that keeps neither still starts nothing that acts.
+ */
+function startTheSweeps(places: CrewToolPlaces): () => void {
+  const stopTheList = sweepTheOwnersList(places)
+  const stopTheNotes = startSweepingTheNotes({
+    crew: places.stores.crew,
+    root: places.root,
+    member: places.member,
+    ...(places.processes === undefined ? {} : { processes: places.processes }),
+    settings: () => theSettingsOrRefusal(places),
+  })
+  return () => {
+    stopTheList()
+    stopTheNotes()
+  }
 }
 
 /** How often the mod is to read the crew channel, as the declaration gives it. */
@@ -733,58 +756,6 @@ async function thePredecessorOf(places: CrewToolPlaces, session_id: string): Pro
   return flow.clear_from
 }
 
-/** Every member's beat, by name, for `seeTheCrew` to lay out in the declaration's order. */
-function beatsOf(store: DashboardStore, settings: CrewSettings): Readonly<Record<string, DashboardRow>> {
-  const held = store.all()
-  const beats: Record<string, DashboardRow> = {}
-  for (const member of settings.members) {
-    const beat = held[member.name]
-    if (beat !== undefined) beats[member.name] = beat
-  }
-  return beats
-}
-
-/** Where a model switch is recorded, for the return a park, a report or the return tool makes of it (martha#315). */
-const triggerPlaceOf = (places: CrewToolPlaces): TheTriggerPlace => ({ stores: places.stores, member: places.member, ledger: places.ledger })
-
-/** What an order is decided over: where the switch is recorded, the owner's settings file, and this session's guard. */
-const anOrderOver = (places: CrewToolPlaces, state: SessionState): AnOrderAsked => ({ ...triggerPlaceOf(places), owners: places.owners_settings, session: state })
-
-/** What the owner's list is handed: the streams, this member, the declaration's table, and the checkout its checks run in. */
-const theOwnersListAsked = (places: CrewToolPlaces, settings: CrewSettings) => ({
-  ledger: places.ledger,
-  member: places.member,
-  settings,
-  root: places.root,
-  ...(places.processes === undefined ? {} : { processes: places.processes }),
-  now: places.ledger.clock.now(),
-})
-
-/** What the standing items' tools are handed: the streams, this member, the declaration's table, and the day. */
-const theStandingAsked = (places: CrewToolPlaces, settings: CrewSettings) => ({
-  ledger: places.ledger,
-  member: places.member,
-  settings,
-  now: places.ledger.clock.now(),
-})
-
-/** What the owner's asks' tools are handed: the stream, this member and session, the table, and a removal's clone. */
-const theAsksAsked = (places: CrewToolPlaces, state: SessionState): TheAsksAsked => ({
-  ledger: places.ledger,
-  member: places.member,
-  session: state.session,
-  menus: places.menus,
-  ...(places.processes === undefined ? {} : { processes: places.processes }),
-  // The clone a branch removal is read in is the one the launch was declared with, as every acting tool reads it.
-  clones: places.settings?.house_rules.clones,
-})
-
-/** What the two tools that take and settle the asks are handed: the queue's place, and the declaration that says who may. */
-const theOfferingAsked = (places: CrewToolPlaces, state: SessionState, settings: CrewSettings): TheOfferingAsked => ({
-  ...theAsksAsked(places, state),
-  settings,
-})
-
 /** What `who_is_free` is answered over: the declaration's rows laid out, and the park each member's marker says. */
 const theWhoIsFreeAsked = (places: CrewToolPlaces, settings: CrewSettings, args: Readonly<Record<string, unknown>>) => {
   const parked = parkedPlace(places)
@@ -846,6 +817,22 @@ const whoMayResume = async (places: CrewToolPlaces) => {
 }
 
 /** What each tool answers, over one place: every tool is one slice's answer, told to the member. */
+/** The friction note's handler (martha#318): the note is judged before gh runs, and filed through this launch's processes. */
+const filingAFrictionNote = (places: CrewToolPlaces): AHandler =>
+  declaring(places, async (declared, args) =>
+    fileAFrictionNote(
+      {
+        member: places.member,
+        settings: declared.settings,
+        root: places.root,
+        crew: places.stores.crew,
+        ...(places.processes === undefined ? {} : { processes: places.processes }),
+        now: places.ledger.clock.now(),
+      },
+      args,
+    ),
+  )
+
 function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Record<CrewToolName, AHandler>> {
   const ledger = { ledger: places.ledger, member: places.member }
   const parked = (declared: CrewDeclared, args: Readonly<Record<string, unknown>>, act: typeof parkAMember): Promise<CoreToolAnswer> =>
@@ -906,6 +893,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [WAIT_FOR_CI_TOOL.name]: namedThenDeclaring(places, theCiWaitACallNames, async (declared, named) =>
       actingOn(named, (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock, github: declared.settings.github, clock_zone: declared.settings.clock_zone }), asked)),
     ),
+    [FILE_A_FRICTION_NOTE_TOOL.name]: filingAFrictionNote(places),
   }
 }
 

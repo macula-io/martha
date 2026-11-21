@@ -15,11 +15,11 @@ import {
   type Rules,
   type Source,
   withoutLabNames,
-} from './check_nothing_private_gets_in.ts'
+} from './the_private_text_classes.ts'
 import { HEX_SLOT, PUBLIC_DIGEST_FORMS } from './public_digest.ts'
 import { GITHUB_TOKEN_PREFIXES, TOKEN_BODY } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
 import { ID_HEX_DIGITS } from './public_text.ts'
-import { commitSources, commitsOf, treeSources } from './read_sources.ts'
+import { commitSources, commitsOf, treeSources } from '../check_nothing_private_gets_in/read_sources.ts'
 
 // Every value planted here is a synthetic form, because this file is in the
 // public tree the check reads. The class tests switch the synthetic allowance

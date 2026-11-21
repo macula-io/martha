@@ -369,6 +369,7 @@ const answerStandingAdd = ($: CrewEngine, e: Record<string, unknown>): Promise<u
 const answerStandingClose = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing_close')
 const answerStanding = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'standing')
 const answerWaitForCi = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'wait_for_ci')
+const answerFileAFrictionNote = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'file_a_friction_note')
 const answerReleaseTheFiles = ($: CrewEngine, e: Record<string, unknown>): Promise<unknown> => answerFromTheLauncher($, e, 'release_the_files_a_killed_run_left')
 
 /** The owner's `/crew` (martha#927): what follows the name, asked of the launcher as the model's own calls are. */
@@ -422,8 +423,8 @@ async function registerTheCommands($: CrewEngine): Promise<void> {
   await $.command.register({ name: BUDGET_COMMAND, description: "Show the crew's budget, or set the reviewer model's gauge", argumentHint: '[<reviewer model> <percent>|off]' })
 }
 
-/** The crew's tools registered with this host, and the pane drawn. */
-export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
+/** The crew's tools this host answers, each registered under the name the launcher names it by. */
+const registerTheCrewTools = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
   // Every tool is named in full here, because the host refuses a hook that builds its name; the manifest holds the
   // plugin's name, and the test pairing tools with hooks reads it, so a rename fails there (martha#343).
   on('tool.call', { tool: 'mcp__martha__report_where_the_work_stands' }, answerReportProgress)
@@ -458,7 +459,13 @@ export const register = (on: (event: string, options?: unknown, handler?: unknow
   on('tool.call', { tool: 'mcp__martha__standing_close' }, answerStandingClose)
   on('tool.call', { tool: 'mcp__martha__standing' }, answerStanding)
   on('tool.call', { tool: 'mcp__martha__wait_for_ci' }, answerWaitForCi)
+  on('tool.call', { tool: 'mcp__martha__file_a_friction_note' }, answerFileAFrictionNote)
   on('tool.call', { tool: 'mcp__martha__release_the_files_a_killed_run_left' }, answerReleaseTheFiles)
+}
+
+/** The crew's tools registered with this host, and the pane drawn. */
+export const register = (on: (event: string, options?: unknown, handler?: unknown) => unknown): void => {
+  registerTheCrewTools(on)
 
   // The pane's own command opens it and answers nothing: the drawing is `ui.render`'s (martha#313).
   on('command.run', { command: PANE }, async ($: CrewEngine) => { await openThePane($); return { text: '' } })

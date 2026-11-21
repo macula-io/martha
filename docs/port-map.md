@@ -80,7 +80,7 @@ links check fails on it, so the table is changed on the landing that moves it.
 | 6. ask_owner, then switch_model | built | [`queue_the_owners_asks`](../src/queue_the_owners_asks), [`switch_a_members_model`](../src/switch_a_members_model), [`put_the_owners_model_back`](../src/put_the_owners_model_back) |
 | 7. keep_operator_todo | built | [`keep_the_owners_todo_list`](../src/keep_the_owners_todo_list) |
 | 7. keep_standing_items | built | [`keep_the_supervisors_standing_items`](../src/keep_the_supervisors_standing_items) |
-| 7. file_friction | planned | [#318](https://github.com/macula-io/martha/issues/318) |
+| 7. file_friction | built | [`file_a_friction_note`](../src/file_a_friction_note); the lists it is judged against are [`declare_crew`](../src/declare_crew)'s `friction_repos` and `public_emails` |
 | 7. track_backlog | built | [`find_the_unheld_work`](../src/find_the_unheld_work), [`see_who_is_free`](../src/see_who_is_free), [`nudge_an_idle_crew`](../src/nudge_an_idle_crew), [`wake_an_idle_member`](../src/wake_an_idle_member) |
 | 7. nudge_review_waits | built | [`nudge_the_supervisor`](../src/nudge_the_supervisor) |
 | 7. watch_waits | built | [`watch_waits`](../src/watch_waits) |

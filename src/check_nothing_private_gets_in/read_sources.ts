@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import type { Line, Source } from './check_nothing_private_gets_in.ts'
+import type { Line, Source } from '../know_the_private_text_classes/the_private_text_classes.ts'
 
 const git = (root: string, args: readonly string[]): string =>
   execFileSync('git', ['-C', root, '-c', 'core.quotepath=off', ...args], {

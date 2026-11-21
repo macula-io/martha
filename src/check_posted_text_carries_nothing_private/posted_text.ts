@@ -3,7 +3,7 @@
 // Source, so the classes and the lookup are the ones the tree scan already uses
 // (martha#265).
 
-import type { Line, Source } from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
+import type { Line, Source } from '../know_the_private_text_classes/the_private_text_classes.ts'
 
 /** One posted object, named as a person acts on it: `pull 263 review 4810`. */
 export interface PostedText {

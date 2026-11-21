@@ -4,7 +4,7 @@
 // imported (martha#265): a second check cannot import either one from there, and
 // a copy of the rules would be a second definition of what a scan refuses.
 
-import type { Resolve, Rules } from './check_nothing_private_gets_in.ts'
+import type { Resolve, Rules } from '../know_the_private_text_classes/the_private_text_classes.ts'
 import { DECLARED } from './declared.ts'
 
 // Asks GitHub whether a repository is public. The answer is the repository's own
