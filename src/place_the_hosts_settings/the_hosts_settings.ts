@@ -48,6 +48,7 @@ export function meshServersPlaced(
     serverConfig: new TextDecoder().decode(serverConfig),
     root: launch.places.mesh_servers,
     hostEnvironment,
+    ...(launch.mesh_identity === undefined ? {} : { identity: launch.mesh_identity }),
     ...(launch.mesh_trees === undefined ? {} : { recording: launch.mesh_trees }),
   })
   if ('refusal' in placed) return placed.refusal

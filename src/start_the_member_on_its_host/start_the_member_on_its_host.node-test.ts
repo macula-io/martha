@@ -6,7 +6,7 @@
 // have to clean it up.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
@@ -32,13 +32,17 @@ import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { HandoverStampStore } from '../host_contract/host_contract.ts'
 import type { Approval } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
+import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { THE_HOMES_PREFIX } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
 import {
   THE_LAUNCHERS_OF_HOST,
   leftoversOfALaunch,
   noLauncherFor,
   theLaunchOfAClaudeCodeStart,
+  placeOfAWrittenKey,
+  theMeshKeyOfAStart,
   theStartOfAHost,
   theStartOfAMember,
   type AHostsLauncher,
@@ -335,4 +339,69 @@ test('#784: a real start hands its launcher the launch it built, so a literal at
   assert.deepEqual(launch.place.approved_fingerprints, [THE_APPROVAL.fingerprint], 'the launch was not held to the approval the start was given')
   assert.equal(launch.place.approved_tree, THE_APPROVAL.tree, 'the launch was not read under the tree the owner approved')
   assert.equal(launch.place.since_approval?.member, PLANTED.member, 'the launch kept no own writes for the member that was started')
+})
+
+/** A planted start of a team crew whose keys folder is a scratch folder of this test's own, with the given key files in it. */
+function aTeamStart(t: TestContext, keys: Readonly<Record<string, number>>): { readonly start: AStartOnItsHost; readonly folder: string } {
+  const planted = aPlantedStart(t)
+  const folder = mkdtempSync(join(tmpdir(), 'martha-team-keys-'))
+  t.after(() => removeTheTree(folder))
+  for (const [file, mode] of Object.entries(keys)) {
+    writeFileSync(join(folder, file), 'a key')
+    chmodSync(join(folder, file), mode)
+  }
+  const settings = { ...planted.settings, mode: { ...planted.settings.mode, name: A_TEAM }, mesh_keys: { folder, named: {} } }
+  return { start: { ...planted, settings }, folder }
+}
+
+/** The team mode as the owner writes it in a declaration. */
+const A_TEAM = 'team'
+
+const keyOf = (member: string): string => `agent-${member.toLowerCase()}.key`
+
+test('#1016: a written key path is under the home for the home prefix, itself when absolute, else under the project root', () => {
+  const home = '/planted/home'
+  const root = '/planted/project'
+  const placeOf = placeOfAWrittenKey(home, root)
+  assert.equal(placeOf(`${THE_HOMES_PREFIX}a/b.key`), `${home}/a/b.key`)
+  assert.equal(placeOf('/abs/b.key'), '/abs/b.key')
+  assert.equal(placeOf('rel/../rel/b.key'), `${root}/rel/b.key`)
+  assert.equal(placeOf('~notme/b.key'), `${root}/~notme/b.key`)
+})
+
+test("#1016: a team member's key is read on this disk, and a link, a key others can read and a missing key are refused", (t) => {
+  const { start, folder } = aTeamStart(t, { [keyOf(PLANTED.member)]: 0o600, [keyOf(PLANTED.another_member)]: 0o600 })
+  assert.deepEqual(theMeshKeyOfAStart(start), { path: join(folder, keyOf(PLANTED.member)) })
+  chmodSync(join(folder, keyOf(PLANTED.member)), 0o640)
+  const readable = theMeshKeyOfAStart(start)
+  assert.ok('refusal' in readable && readable.refusal.includes('can be read by others'), JSON.stringify(readable))
+  chmodSync(join(folder, keyOf(PLANTED.member)), 0o600)
+  // Another member's key, linked in as this one's: a link is refused, so two members never share a key through one.
+  const linked = aTeamStart(t, { [keyOf(PLANTED.another_member)]: 0o600 })
+  symlinkSync(join(linked.folder, keyOf(PLANTED.another_member)), join(linked.folder, keyOf(PLANTED.member)))
+  const refused = theMeshKeyOfAStart(linked.start)
+  assert.ok('refusal' in refused && refused.refusal.endsWith('is a link, and a key must be the file itself'), JSON.stringify(refused))
+  const missing = aTeamStart(t, {})
+  const none = theMeshKeyOfAStart(missing.start)
+  assert.ok('refusal' in none && none.refusal.includes('there is no key at'), JSON.stringify(none))
+  mkdirSync(join(missing.folder, keyOf(PLANTED.member)))
+  const folderKey = theMeshKeyOfAStart(missing.start)
+  assert.ok('refusal' in folderKey && folderKey.refusal.endsWith('is not a file'), JSON.stringify(folderKey))
+})
+
+test("#1016 T1: a team member whose key cannot be read is not started, and the owner is told why by name", async (t) => {
+  const { start } = aTeamStart(t, {})
+  const told: string[] = []
+  const started = await THE_LAUNCHERS_OF_HOST[CLAUDE_CODE]!.start({ ...start, tellOwner: (line) => void told.push(line) })
+  assert.equal(started.started, false)
+  assert.ok(!started.started && started.refusal.startsWith(`${NOT_STARTED}: ${PLANTED.member}'s mesh key: there is no key at`), JSON.stringify(started))
+  assert.deepEqual(told, [!started.started ? started.refusal : ''])
+})
+
+test("#1016: a team member's key reaches its launch, and a solo crew's member's launch carries none", (t) => {
+  const { start, folder } = aTeamStart(t, { [keyOf(PLANTED.member)]: 0o600, [keyOf(PLANTED.another_member)]: 0o600 })
+  assert.equal(theLaunchOfAClaudeCodeStart(start, theMeshKeyOfAStart(start)).mesh_identity, join(folder, keyOf(PLANTED.member)))
+  const solo = aPlantedStart(t)
+  assert.deepEqual(theMeshKeyOfAStart(solo), { none: SOLO_MODE })
+  assert.equal(Object.hasOwn(theLaunchOfAClaudeCodeStart(solo, theMeshKeyOfAStart(solo)), 'mesh_identity'), false)
 })

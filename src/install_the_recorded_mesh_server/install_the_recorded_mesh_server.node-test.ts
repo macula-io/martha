@@ -24,14 +24,15 @@ import {
   type MeshTreeRecording,
 } from '../prove_the_mesh_server_bytes/prove_the_mesh_server_bytes.ts'
 import { fakeNpmRegistry, type FakePackage, type FakeRegistry } from '../run_the_nodes_own_npm_alone/fake_npm_registry.ts'
-import { placeRecordedMeshServers, recordMeshTree, SERVER_NEEDS } from './install_the_recorded_mesh_server.ts'
+import { AGENT_SETTING, IDENTITY_SETTING, meshServerEnvironments, placeRecordedMeshServers, NODE_ID_BIN, recordMeshTree, SERVER_NEEDS, startOfARecordedBin } from './install_the_recorded_mesh_server.ts'
 import { MANIFEST, DEPENDENCIES } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
 
 const VERSION = '7.8.9'
 const DEPENDENCY = 'mesh-dependency'
 const BIN = 'macula-mcp'
 const OTHER_BIN = 'macula-mcp-realm'
-const SETTING = 'MACULA_MCP_AGENT'
+/** The stand-in server's own setting: a name the fake package reads, no setting of the real server's. */
+const SETTING = 'MACULA_MCP_STAND_IN'
 const RECORDED_MARK = 'the recorded mesh server'
 const PLANTED_MARK = 'planted bytes'
 /** The dependency's one file: the server prints it, so a run shows which dependency bytes it had. */
@@ -342,6 +343,25 @@ test('the server starts with HOME, PATH and its approved settings: every other v
   assert.equal(seen.PATH, process.env.PATH)
 })
 
+test("#1016: a team member's key is pinned last into its mesh server's entry: no approved setting and no host variable names another", async (t) => {
+  const { good } = await registries(t)
+  const recording = recorded(t, good)
+  const root = scratch(t, 'servers')
+  const key = '/a/team/keys/agent-venus.key'
+  const host = { HOME: root, PATH: process.env.PATH, [IDENTITY_SETTING]: '/the/owners/own.key', [AGENT_SETTING]: 'the-owners-agent' }
+  const serverConfig = pinnedConfig(undefined, { [IDENTITY_SETTING]: '/an/approved/other.key', [AGENT_SETTING]: 'an-approved-agent' })
+  const pinned = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: host, serverConfig, root, recording, identity: key }))
+  assert.equal(pinned.env?.[IDENTITY_SETTING], key)
+  assert.equal(pinned.env?.[AGENT_SETTING], '')
+  // The reading the gate is handed is the environment the server really gets, pin and all (martha#251).
+  assert.deepEqual(Object.values(meshServerEnvironments({ serverConfig, hostEnvironment: host, identity: key })), [pinned.env])
+  // A solo crew's member is placed as before: the approved settings stand, and the host's own are emptied.
+  const solo = placedEntry(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: host, serverConfig, root, recording }))
+  assert.equal(solo.env?.[IDENTITY_SETTING], '/an/approved/other.key')
+  assert.equal(solo.env?.[AGENT_SETTING], 'an-approved-agent')
+  assert.deepEqual({ ...solo.env, [IDENTITY_SETTING]: key, [AGENT_SETTING]: '' }, pinned.env)
+})
+
 /** A module that, when loaded, writes its name into `marker`. */
 function plantModule(dir: string, marker: string): void {
   mkdirSync(dir, { recursive: true })
@@ -505,4 +525,13 @@ test('an installed file changed, removed or added since the install refuses the 
   writeFileSync(planted, 'evil()\n')
   const plantedRefusal = refusalOf(placeRecordedMeshServers({ servers: SERVERS, hostEnvironment: HOST, serverConfig: pinnedConfig(), root, recording }))
   assert.ok(plantedRefusal.includes(`${DEPENDENCIES}/${MESH_SERVER_PACKAGE}/dist/preload.js`), plantedRefusal)
+})
+
+test('#1016: a recorded bin starts only when it is one of the newest recorded version\'s bins, and nothing is installed before', (t) => {
+  const root = join(scratch(t, 'bins'), 'mesh-servers')
+  const unknown = startOfARecordedBin({ bin: `${NODE_ID_BIN}-planted`, root })
+  assert.ok('refusal' in unknown && unknown.refusal.startsWith(`${NODE_ID_BIN}-planted is none of the bins recorded for ${MESH_SERVER_PACKAGE}`), JSON.stringify(unknown))
+  const none = startOfARecordedBin({ bin: NODE_ID_BIN, root, servers: [] })
+  assert.ok('refusal' in none && none.refusal.startsWith(`no version of ${MESH_SERVER_PACKAGE} is recorded`), JSON.stringify(none))
+  assert.equal(existsSync(root), false, 'a refused bin installed a tree')
 })

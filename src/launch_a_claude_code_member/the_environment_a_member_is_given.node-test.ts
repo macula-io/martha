@@ -18,6 +18,7 @@ import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugin
 import { KITTY_VARIABLE_PREFIX } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
+import { AGENT_SETTING, IDENTITY_SETTING } from '../install_the_recorded_mesh_server/install_the_recorded_mesh_server.ts'
 import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDroppedPluginsLines, theEnvironmentAMemberIsGiven, type TheBillingOfALaunch } from './the_environment_a_member_is_given.ts'
 
 test('K3: a member is handed none of KITTY_LISTEN_ON, KITTY_WINDOW_ID, KITTY_PID and KITTY_PUBLIC_KEY, and keeps the rest', () => {
@@ -220,6 +221,24 @@ test('#511 (#601 row 72): a member is not handed the plugin folders the launcher
   const lines = theDroppedPluginsLines('Vesta', inherited)
   assert.equal(lines.length, 1)
   assert.ok(lines[0]!.startsWith(`Vesta is not handed ${PLUGIN_DIRS_VARIABLE} `), lines[0]!)
+})
+
+test("#1016 T5: a member's own environment carries no mesh identity the owner's shell exports, under either billing", () => {
+  const inherited = { HOME: '/srv/owner', [IDENTITY_SETTING]: '/srv/owner/keys/owner.key', [AGENT_SETTING]: 'the-owner', MACULA_MCP_MODEL: 'kept' }
+  const env = theEnvironmentFrom(inherited)
+  assert.equal(Object.hasOwn(env, IDENTITY_SETTING), false)
+  assert.equal(Object.hasOwn(env, AGENT_SETTING), false)
+  assert.equal(env['MACULA_MCP_MODEL'], 'kept', 'only the identity is taken out')
+  const keyed = theEnvironmentAMemberIsGiven({
+    inherited: { ...inherited, [API_KEY_VARIABLE]: 'a-key' },
+    switches: { args: [], env: {}, env_dropped: [] },
+    crew: { state_root: '/state/martha', rows: '/state/martha/c/r' },
+    member_config: '/state/martha/members/Vesta',
+    host: CLAUDE_CODE,
+    billing: BILLED_BY_API_KEY,
+  })
+  assert.equal(Object.hasOwn(keyed, IDENTITY_SETTING), false)
+  assert.equal(Object.hasOwn(keyed, AGENT_SETTING), false)
 })
 
 test('#511: with no plugin folder named, or a blank one, nothing is said', () => {

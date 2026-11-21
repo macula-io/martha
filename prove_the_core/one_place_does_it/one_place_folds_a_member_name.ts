@@ -53,6 +53,7 @@ export const FOLDS_THAT_ARE_NOT_NAMES: readonly AFoldThatIsNotAName[] = [
   { path: 'send_a_crew_message/the_runs_a_handoff_names.ts', folds: 1, reason: "a run's head sha, which GitHub writes as hex and a HANDOFF line's tip is compared with" },
   { path: 'serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts', folds: 2, reason: "an environment variable's name, which the Goose engine drops from an entry ignoring ASCII case" },
   { path: 'trust_only_signed_lists/trust_only_signed_lists.ts', folds: 2, reason: A_NODE_ID },
+  { path: 'write_the_crews_roster/write_the_crews_roster.ts', folds: 1, reason: A_NODE_ID },
 ]
 
 /** One fold the rule names: where it stands, and why it is named. */

@@ -44,7 +44,7 @@ page does not name.
 | `host` | no | The host this member runs on; left out, the crew's `host`. |
 | `parked` | no | `true` keeps the member down: `martha up` does not start it, and `martha ls` shows it parked. |
 | `profile` | no | A profile under `profiles`: the member runs on its harness's host and its model. Never beside `model` or `host`. |
-| `mesh_key` | no | The file the member's mesh key is in; left out, `<mesh.keys>/agent-<lowercased name>.key`. Read by no part of Martha today. |
+| `mesh_key` | no | The file the member's mesh key is in; left out, `<mesh.keys>/agent-<lowercased name>.key`. A path under `~/` is under your home, an absolute path is itself, any other is under the project. In a team crew the member starts on this key, and is refused by name when it is missing, a link, not yours, readable by others, or another member's. Martha never makes a key. |
 
 ## `mode`
 
@@ -127,7 +127,7 @@ Each field is optional. A field left out reads the value Martha used before it w
 | Field | Required | What it holds |
 |---|---|---|
 | `realm` | no | The realm, 64 hex characters. |
-| `keys` | no | The folder members' mesh keys sit in. |
+| `keys` | no | The folder members' mesh keys sit in; `~/` is under your home. `martha up` writes the crew's roster (each member's node id) from these keys. |
 | `mail` | no | `{ "service": <name>, "on": true or false }`. |
 | `memory` | no | The same shape. |
 | `graph` | no | The same shape. |

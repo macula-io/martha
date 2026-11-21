@@ -240,6 +240,14 @@ test('#932: the crew\'s id and terminal are read as declared, and a declaration 
   assert.deepEqual((await declare(unnamed)).opens, { id: null, terminal: 'kitty' })
 })
 
+test("#1016: the mesh's keys folder and each member's own mesh_key reach the settings as written, by the member's name key", async () => {
+  assert.deepEqual((await declare(draft)).mesh_keys, { folder: '~/a-keys-folder', named: {} })
+  const members = draft.members.map((member) => (member.name === 'Maker' ? { ...member, mesh_key: ' ~/elsewhere/maker.key ' } : member))
+  assert.deepEqual((await declare({ ...draft, members })).mesh_keys, { folder: '~/a-keys-folder', named: { maker: '~/elsewhere/maker.key' } })
+  const { mesh: _mesh, ...meshless } = draft
+  assert.deepEqual((await declare(meshless)).mesh_keys, { folder: null, named: {} })
+})
+
 test('#931: the mesh, the terminal and the id are checked field by field', async () => {
   await refusedWith({ ...draft, terminal: 'a-terminal' }, 'terminal')
   await refusedWith({ ...draft, id: '' }, 'id')

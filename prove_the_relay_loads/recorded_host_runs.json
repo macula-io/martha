@@ -76,5 +76,10 @@
     "file": "src/drive_the_recorded_host/a_stale_clone_note_on_the_recorded_host.node-test.ts",
     "cases": 2,
     "proves": "a Read in a clone behind its origin carries the stale-clone note to the model, and a current clone none (martha#969)"
+  },
+  {
+    "file": "src/drive_the_recorded_host/a_mesh_call_on_the_recorded_host.node-test.ts",
+    "cases": 1,
+    "proves": "the relay's mesh call reaches the member's own mesh server through the host's $.mcp, sealed, on one server (martha#1016)"
   }
 ]

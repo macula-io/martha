@@ -8,6 +8,8 @@
 
 import { isAbsolute, join, normalize, sep } from 'node:path'
 
+import { memberNameKey } from './member_names.ts'
+
 /** The declaration's keys for the four blocks, kept here: declare_crew reads them through the lists below. */
 const CREW_ID = 'id'
 const TERMINAL = 'terminal'
@@ -40,6 +42,37 @@ export const WORKSPACE_KEYS = ['root', 'root_allowed', 'own_orgs'] as const
 export const MESH_KEYS = ['realm', 'keys'] as const
 export const MESH_SERVICES = ['mail', 'memory', 'graph', 'kanban'] as const
 export const MESH_SERVICE_KEYS = ['service', 'on'] as const
+
+/**
+ * Where the crew's member keys are declared to sit (martha#1016): the mesh block's `keys` folder as written, and each
+ * member's own `mesh_key` as written, by the member's name key (./member_names.ts). Neither is resolved here: the slice
+ * that reads a key (../read_a_members_mesh_key) resolves both against the owner's home and the project root.
+ */
+export interface TheCrewsMeshKeys {
+  readonly folder: string | null
+  readonly named: Readonly<Record<string, string>>
+}
+
+/** The keys a declaration that names no mesh key declares: none. */
+export const NO_MESH_KEYS: TheCrewsMeshKeys = { folder: null, named: {} }
+
+/** The mesh block's `keys` folder as written, from a declaration theWorkspacesClonesOf has already checked; null when it names none. */
+export function theMeshKeysFolderOf(declaration: Block): string | null {
+  const mesh = declaration[MESH]
+  if (!isBlock(mesh)) return null
+  const keys = mesh['keys']
+  return isText(keys) ? keys.trim() : null
+}
+
+/** Each member's own key file as written under `field`, by its name key, from members the reader has checked in order; a member that names none is not in it (martha#1016). */
+export function theNamedMeshKeysOf(names: readonly string[], declared: unknown, field: string): Record<string, string> {
+  if (!Array.isArray(declared)) return {}
+  return Object.fromEntries(names.flatMap((name, i) => {
+    const entry: unknown = declared[i]
+    const named = isBlock(entry) ? entry[field] : undefined
+    return isText(named) ? [[memberNameKey(name), named.trim()]] : []
+  }))
+}
 
 /** A realm, as the mesh names one: 64 hex characters. */
 export const A_REALM = /^[0-9a-f]{64}$/
