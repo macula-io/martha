@@ -117,6 +117,25 @@ function theMessageRead(input: Saying): AMessageRead | { readonly refused: strin
   return { to, text: input.text, lines: reading.lines, ...(notices.length === 0 ? {} : { notice: notices.join(' ') }) }
 }
 
+/**
+ * What a send's lines are checked against before it goes (martha#980 package 3): each line comes to the lines it adds,
+ * a notice for what failed and a mark for what could not be checked; nothing, when it holds.
+ */
+export type CheckTheLines = (line: CrewLineRead) => Promise<readonly string[]>
+
+/**
+ * The message with what its lines came to: carried under its text, so the receiver reads it, and said to the sender
+ * beside the send. Nothing is refused (the Supervisor's ruling 4, under DECIDED 2026-11-20 "Yes, list then cut").
+ */
+async function withWhatTheLinesCameTo(read: AMessageRead, checkTheLines: CheckTheLines | undefined): Promise<AMessageRead> {
+  if (checkTheLines === undefined) return read
+  const found: string[] = []
+  for (const line of read.lines) found.push(...(await checkTheLines(line)))
+  if (found.length === 0) return read
+  const notice = [read.notice, ...found].filter((said) => said !== undefined).join(' ')
+  return { ...read, text: `${read.text}\n\n${found.join('\n')}`, notice }
+}
+
 /** Keeps each crew line's row, in the order the message carries them. */
 async function keepEveryLinesRow(host: LedgerHost, member: string, lines: readonly CrewLineRead[]): Promise<void> {
   for (const line of lines) await keepTheLinesRow(host, member, line)
@@ -126,9 +145,10 @@ async function keepEveryLinesRow(host: LedgerHost, member: string, lines: readon
 const theNoticeSaid = (notice: string | undefined): string => (notice === undefined ? '' : ` notice: ${notice}`)
 
 /** Says one thing, keeps the row first, and concludes the act: what the member is told, or why nothing was sent. */
-export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Saying): Promise<SendOutcome> {
-  const read = theMessageRead(input)
-  if ('refused' in read) return read
+export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Saying, checkTheLines?: CheckTheLines): Promise<SendOutcome> {
+  const asRead = theMessageRead(input)
+  if ('refused' in asRead) return asRead
+  const read = await withWhatTheLinesCameTo(asRead, checkTheLines)
   const { to, text } = read
   let sent = 0
   const send = async (): Promise<string> => {

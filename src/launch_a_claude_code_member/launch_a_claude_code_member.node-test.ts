@@ -50,7 +50,9 @@ import { receiptsInMemory } from '../run_an_owner_signed_command/receipts.ts'
 import { signedRunsOf, type SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { resultBuiltFrom, RUN_COMMAND_PREFIX, sha256Of } from '../keep_the_shell_for_an_owner_signed_command/keep_the_shell.ts'
 import { API_KEY_VARIABLE, HOST_TRUST_RECORD_FILE, notACommandThisLauncherCanRun } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
-import { hostAnswers, reportsOutputStyles, refusesTheRelay, type HostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
+import { hostAnswers, reportsOutputStyles, refusesTheRelay, SIGNED_IN_ANSWER, type HostAnswers } from '../drive_the_recorded_host/host_stand_in.ts'
+import { ARTIFACT_LINES } from '../read_a_crew_line/crew_lines.ts'
+import { ARTIFACT_TOOLS } from './the_artifacts_a_key_cannot_open.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FIELD, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, CLAUDE_CODE_SIGN_IN_STORE_VARIABLE, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { CONFIG_DIR_VARIABLE, PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { MEMBER_CONFIG_FOLDER, MEMBERS_OWN_SETTINGS, theMembersConfigEnvironment } from '../give_a_member_its_own_config/give_a_member_its_own_config.ts'
@@ -4368,6 +4370,28 @@ test('with no exact-pin mesh server, the launch hands the relay no reading of it
   assert.equal(heard[0]?.wordless_answers, undefined, 'a launch with no mesh server told the relay how to read an answer anyway')
   started.stop('the test is over')
   await started.stopped
+})
+
+/** The relay place a launch hands, started with the launcher's key and the host's answer to the sign-in question. */
+async function theRelayPlaceOfALaunch(t: TestContext, signInAnswer: string): Promise<MemberRelayPlace | undefined> {
+  const place = placeFor(t)
+  const fake = fakeClaude(place, { signInAnswer })
+  const heard: MemberRelayPlace[] = []
+  const launch = memberLaunch(place, fake.command)
+  const started = await aMemberStartedIn(t, place, { ...launch, inherited: { ...launch.inherited, [API_KEY_VARIABLE]: A_LAUNCHERS_KEY }, hearRelayPlace: (relayPlace) => void heard.push(relayPlace) })
+  if (!started.started) assert.fail(started.refusal)
+  started.stop('the test is over')
+  await started.stopped
+  return heard[0]
+}
+
+test('#957 gap 13: a member billed by the key has its Artifact calls refused by the relay, naming the line to the Supervisor; one billed by the subscription has none refused (mutant: the launch not handing the refusal on)', async (t) => {
+  const byTheKey = await theRelayPlaceOfALaunch(t, JSON.stringify({ loggedIn: false }))
+  for (const tool of ARTIFACT_TOOLS) {
+    assert.ok(byTheKey?.refusesACallItsBillingCannotRun?.(tool)?.includes(ARTIFACT_LINES.read), `${tool} is not refused to a member billed by the key`)
+  }
+  const bySubscription = await theRelayPlaceOfALaunch(t, SIGNED_IN_ANSWER)
+  for (const tool of ARTIFACT_TOOLS) assert.equal(bySubscription?.refusesACallItsBillingCannotRun?.(tool), undefined, `${tool} is refused to a member billed by the subscription`)
 })
 
 test('with two exact-pin mesh servers, the launch hands the relay no reading: one server’s environment is not the other’s (martha#251)', async (t) => {

@@ -61,20 +61,10 @@ export const SWEEP_INTERVAL_MS = 45_000
  */
 export const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u
 
-/** A fine-grained GitHub token's prefix: one definition, which the live run's kept record builds its pattern from too. */
-export const FINE_GRAINED_TOKEN_PREFIX = 'github_pat_'
-
-/**
- * A GitHub token's prefixes: the classic personal, OAuth, user-to-server, server-to-server and refresh forms, and the
- * fine-grained one. The private scan refuses the same in any text it reads (martha#904).
- */
-export const GITHUB_TOKEN_PREFIXES = ['ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', FINE_GRAINED_TOKEN_PREFIX] as const
-
-/** The prefixes of the secrets a command may not hold: a row names a variable, never its value. */
-export const TOKEN_PREFIXES = [...GITHUB_TOKEN_PREFIXES, 'glpat-', 'xoxb-', 'xoxp-', 'sk-ant-', 'AKIA', 'npm_', 'hf_'] as const
-
-/** How many characters of a token's body follow its prefix before a word is read as a secret; the private scan's too. */
-export const TOKEN_BODY = 16
+// The token prefixes and a token body's length live in their own leaf file, so the declaration's reader can name them
+// without loading this slice (martha#942).
+import { TOKEN_BODY, TOKEN_PREFIXES } from './token_prefixes.ts'
+export { FINE_GRAINED_TOKEN_PREFIX, GITHUB_TOKEN_PREFIXES, TOKEN_BODY, TOKEN_PREFIXES } from './token_prefixes.ts'
 
 /** The longest command a row holds, in characters. */
 export const MAX_COMMAND = 500

@@ -16,9 +16,9 @@ import type { ACalledTool, AResultOfACall, TheAnswerToAResult } from '../host_co
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import type { SessionStore } from '../know_the_goose_engines_facts/the_engines_facts_in_its_source.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { STAND_IN_SESSION, theEnginesNamingOf, type AStep, type AnAgentScript } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
+import { STAND_IN_SESSION, theEnginesNamingOf, theStandInsSession, type AStep, type AnAgentScript } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 import { TOOL_CALL_STATUS, UPDATE } from '../speak_acp_to_an_agent/the_acp_client.ts'
-import { driveTheEngine, theSessionsGateKept, type TheEngineDriven } from './drive_the_engine.ts'
+import { driveTheEngine, theLineOfAnotherSession, theSessionsGateKept, type ASessionOpened, type TheEngineDriven } from './drive_the_engine.ts'
 
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
 const NAMING = RECORDED_GOOSE_ENGINE.tool_naming
@@ -38,6 +38,8 @@ interface AStore {
   readonly store: string
   readonly launch_dir: string
   readonly set: (column: string, value: string) => void
+  /** Adds a session's row as the engine writes one at `session/new` (martha#1002): the launch's fields, the mode given. */
+  readonly add: (session_id: string, mode?: string) => void
 }
 
 /** A store holding the stand-in's session as the launch created it on `launch_dir`, and the writer the engine holds. */
@@ -53,11 +55,13 @@ function aStore(t: TestContext, { working_dir }: { readonly working_dir?: string
   engine.exec('PRAGMA journal_mode = WAL')
   engine.exec(`CREATE TABLE the_rows (${COLUMNS.map((column) => `${column} TEXT`).join(', ')})`)
   const states = JSON.stringify({ 'enabled_extensions.v0': { extensions: LAUNCHED.extensions.map((name) => ({ name })) } })
-  engine
-    .prepare('INSERT INTO the_rows (id, working_dir, goose_mode, provider_name, model_config_json, extension_data) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(STAND_IN_SESSION, working_dir ?? launch_dir, LAUNCHED.mode, LAUNCHED.provider, JSON.stringify({ model_name: LAUNCHED.model }), states)
+  const add = (session_id: string, mode = LAUNCHED.mode): void =>
+    void engine
+      .prepare('INSERT INTO the_rows (id, working_dir, goose_mode, provider_name, model_config_json, extension_data) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(session_id, working_dir ?? launch_dir, mode, LAUNCHED.provider, JSON.stringify({ model_name: LAUNCHED.model }), states)
+  add(STAND_IN_SESSION)
   const set = (column: string, value: string): void => void engine.prepare(`UPDATE the_rows SET ${column} = ? WHERE id = ?`).run(value, STAND_IN_SESSION)
-  return { store, launch_dir, set }
+  return { store, launch_dir, set, add }
 }
 
 interface WhatTheEntryHeard {
@@ -70,7 +74,7 @@ interface WhatTheEntryHeard {
 async function driven(
   t: TestContext,
   script: Omit<AnAgentScript, 'currentModeId'> & { readonly currentModeId?: string | undefined },
-  { at, answerToAResult = { taken: 1 }, between }: { readonly at: AStore; readonly answerToAResult?: TheAnswerToAResult; readonly between?: () => void },
+  { at, answerToAResult = { taken: 1 }, between, after, session_gate = theSessionsGateKept() }: { readonly at: AStore; readonly answerToAResult?: TheAnswerToAResult; readonly between?: () => void; readonly after?: (engine: TheEngineDriven) => Promise<void>; readonly session_gate?: ReturnType<typeof theSessionsGateKept> },
 ): Promise<WhatTheEntryHeard & { readonly refusal?: string }> {
   const heard: WhatTheEntryHeard = { called: [], results: [], stops: [] }
   const child = spawn(process.execPath, [STAND_IN, JSON.stringify({ currentModeId: LAUNCHED.mode, ...script })], { stdio: ['pipe', 'pipe', 'inherit'] })
@@ -95,20 +99,21 @@ async function driven(
       aToolCalled: async (call) => (heard.called.push(call), { allowed: 1 }),
       aResultCame: async (result) => (heard.results.push(result), answerToAResult),
     },
-    session_gate: theSessionsGateKept(),
+    session_gate,
     decideOver: (gate) => async (request) => ((await gate(request)).verdict === 'allow' ? 'allow' : 'reject'),
     stopMember: (why) => void heard.stops.push(why),
   })
   if ('refusal' in engine) return { ...heard, refusal: engine.refusal }
   between?.()
-  await oneTurn(engine)
+  await oneTurn(engine, after)
   await queue
   return heard
 }
 
-async function oneTurn(engine: TheEngineDriven): Promise<void> {
+async function oneTurn(engine: TheEngineDriven, after?: (engine: TheEngineDriven) => Promise<void>): Promise<void> {
   try {
     await engine.client.prompt(engine.session_id, 'go')
+    await after?.(engine)
   } finally {
     engine.client.end()
   }
@@ -163,4 +168,65 @@ test("a call of the crew's tool server is a tool server's result, a developer ca
   const heard = await driven(t, { turns: [[{ call: { id: 'crew-1', title: 'a crew tool', input: {}, name: crew } }]] }, { at: aStore(t) })
   assert.equal(heard.results[0]?.tool, crew)
   assert.equal(heard.results[0]?.from_a_tool_server, true)
+})
+
+/** The stand-in's second session, as a clear opens it. */
+const THE_NEXT_SESSION = theStandInsSession(2)
+
+/** A clear after the first turn: the next session opened, then one turn on it; what it opened, and the ids closed. */
+function aClearThenATurn(at: AStore, mode?: string): { readonly after: (engine: TheEngineDriven) => Promise<void>; readonly opened: () => ASessionOpened | undefined; readonly closed: () => unknown } {
+  let opened: ASessionOpened | undefined
+  let closed: unknown
+  return {
+    after: async (engine) => {
+      at.add(THE_NEXT_SESSION, mode)
+      opened = await engine.aNewSession()
+      if ('refusal' in opened) return
+      const turn = await engine.client.prompt(opened.session_id, 'next')
+      closed = JSON.parse(turn.text || 'null')
+    },
+    opened: () => opened,
+    closed: () => closed,
+  }
+}
+
+test("a clear opens the next session, reads it back, makes it current, and closes the predecessor once its prompt has returned (martha#1002 design points 1-3; mutant: the opened set holds only the first id)", async (t) => {
+  const at = aStore(t)
+  const gate = theSessionsGateKept()
+  const clear = aClearThenATurn(at)
+  const heard = await driven(t, { turns: [[A_CALL], [{ closed: 1 }]] }, { at, after: clear.after, session_gate: gate })
+  assert.deepEqual(clear.opened(), { session_id: THE_NEXT_SESSION })
+  assert.equal(gate.get()?.id, THE_NEXT_SESSION)
+  assert.deepEqual(gate.get()?.opened, [STAND_IN_SESSION, THE_NEXT_SESSION])
+  assert.deepEqual(clear.closed(), [STAND_IN_SESSION])
+  assert.deepEqual(heard.stops, [])
+})
+
+test("a next session whose row runs another mode is refused by name, and the gate stays on the predecessor (martha#1002 design point 3)", async (t) => {
+  const at = aStore(t)
+  const gate = theSessionsGateKept()
+  const clear = aClearThenATurn(at, 'auto')
+  await driven(t, { turns: [[A_CALL]] }, { at, after: clear.after, session_gate: gate })
+  const opened = clear.opened()
+  assert.ok(opened !== undefined && 'refusal' in opened && /the mode "auto"/.test(opened.refusal), JSON.stringify(opened))
+  assert.equal(gate.get()?.id, STAND_IN_SESSION)
+})
+
+test("after the clear, a permission request naming the predecessor is rejected and stops the member, and the gate is never asked (martha#1002 design point 5; mutant: no session compare at a request)", async (t) => {
+  const at = aStore(t)
+  const late: AStep = { under_session: STAND_IN_SESSION, steps: [{ call: { ...A_CALL.call, id: 'call-late' } }] }
+  const heard = await driven(t, { turns: [[], [late]] }, { at, after: aClearThenATurn(at).after })
+  // The launch keeps the first stop only (start_an_engine_member.ts `stopMember`): rule (a)'s stop on the cancelled
+  // call's failed update comes after it.
+  assert.equal(heard.stops[0], theLineOfAnotherSession('a permission request', STAND_IN_SESSION, THE_NEXT_SESSION))
+  assert.deepEqual(heard.called, [])
+})
+
+test("after the clear, a late result of a call the predecessor asked about stops the member and never reaches the entry (martha#1002 design point 5; mutant: no session compare at an update)", async (t) => {
+  const at = aStore(t)
+  const asked: AStep = { ...A_CALL, no_result: 1 }
+  const result: AStep = { under_session: STAND_IN_SESSION, steps: [{ update: { sessionUpdate: UPDATE.toolCallUpdate, toolCallId: 'call-1', status: TOOL_CALL_STATUS.completed } }] }
+  const heard = await driven(t, { turns: [[asked], [result]] }, { at, after: aClearThenATurn(at).after })
+  assert.deepEqual(heard.stops, [theLineOfAnotherSession('the result of call call-1', STAND_IN_SESSION, THE_NEXT_SESSION)])
+  assert.deepEqual(heard.results, [])
 })
