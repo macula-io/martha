@@ -28,6 +28,7 @@ import { READ_THE_RECEIPTS } from '../show_what_a_message_became/show_what_a_mes
 import { RESTART_A_MEMBER } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL, SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
 import { WAIT_FOR_CI } from '../wait_for_ci/wait_for_ci.ts'
+import { RECALL_WHAT_THE_CREW_KEPT, REMEMBER_FOR_THE_CREW } from '../keep_crew_memory/keep_crew_memory.ts'
 import { WRITE_MY_HANDOVER_TOOL } from '../write_my_handover/write_my_handover.ts'
 import { THE_RELEASE_ACT } from '../tell_a_member_what_its_relaunch_killed/tell_a_member_what_its_relaunch_killed.ts'
 import { REFRESH_BEAT_MS } from './hooks/crew_turn_beat.ts'
@@ -78,6 +79,9 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: PARK_A_MEMBER, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: WAKE_A_MEMBER, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: WAIT_FOR_CI, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  // Crew memory's two tools (martha#1016), whose hooks carry a mesh order.
+  { value: REMEMBER_FOR_THE_CREW, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
+  { value: RECALL_WHAT_THE_CREW_KEPT, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: RESTART_A_MEMBER, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   { value: REFRESH_THIS_SESSION, file: 'claude_code_relay/hooks/crew.tsx', reason: A_HOOKS_MODULE_CANNOT_IMPORT },
   // The Supervisor's who-is-free tool (martha#319): the same reason, one more tool the mod answers by a literal.

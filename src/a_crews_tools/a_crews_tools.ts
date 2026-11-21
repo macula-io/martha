@@ -62,6 +62,7 @@ import {
 } from '../refuse_calls_outside_the_package_contract/the_acts_of_a_call.ts'
 import type { TheContractHanded } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
 import { THE_BUDGET_ASK, keepTheWeekly, theBudgetCommandAnswer, theBudgetCommandIn } from '../keep_what_a_session_spent/the_crews_budget.ts'
+import { CREW_MEMORY_TOOLS, answerTheCrewMemoryAsk, crewMemoryHandlers, type TheMemoryAsked } from '../keep_crew_memory/keep_crew_memory.ts'
 import {
   THE_REFRESH_ASK,
   aSwitchMayFollow,
@@ -254,6 +255,8 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * and a crew that declared no workspace layout hands none.
    */
   readonly refusesTheHandOff?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
+  /** Crew memory's roster and private classes (martha#1016), handed only by a host that carries a mesh order: memory is off without them. */
+  readonly crews_memory?: TheMemoryAsked['host']
 }
 
 /** The tools a crew's member can call. */
@@ -385,6 +388,7 @@ const THE_TOOLS = [
   STANDING_CLOSE_TOOL,
   STANDING_TOOL,
   WAIT_FOR_CI_TOOL,
+  ...CREW_MEMORY_TOOLS,
 ] as const
 
 /** The names the crew's tools are registered under, and the only ones the launcher answers. */
@@ -564,7 +568,7 @@ async function answerAnAskOfTheMods(
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
   if (name === THE_BUDGET_ASK) return await theBudgetAsked(places, args)
-  return undefined
+  return await answerTheCrewMemoryAsk(memoryAskedOf(places), name, args)
 }
 
 /** `/crew-budget` as the owner typed it at this session's tab (martha#990): the line shown, or the reviewer gauge set. */
@@ -870,6 +874,7 @@ function handlersOver(places: CrewToolPlaces, state: SessionState): Readonly<Rec
     [SETTLE_ASKS_TOOL.name]: declaring(places, async (declared, args) => theSettlingOfTheAsks(theOfferingAsked(places, state, declared.settings), args)),
     [STANDING_ADD_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => recordAStandingItem(places.ledger, args, places.member))),
     [STANDING_CLOSE_TOOL.name]: declaring(places, async (declared, args) => keepTheStandingItems(theStandingAsked(places, declared.settings), () => closeAStandingItem(places.ledger, args, places.member))),
+    ...crewMemoryHandlers(memoryAskedOf(places)),
     [STANDING_TOOL.name]: async () => theStandingToolOver({ ledger: places.ledger, now: places.ledger.clock.now() }),
     [WAIT_FOR_CI_TOOL.name]: namedThenDeclaring(places, theCiWaitACallNames, async (declared, named) =>
       actingOn(named, (on, asked) => theCiWaitOver(theGithubSpenderOf({ stores: on.stores, root: on.root, processes: on.processes, clock: on.ledger.clock, github: declared.settings.github, clock_zone: declared.settings.clock_zone }), asked)),
@@ -1043,6 +1048,9 @@ async function crewOrRefusal(places: CrewToolPlaces): Promise<CrewDeclared | { r
     return { refused: `the crew's declaration could not be read: ${error instanceof Error ? error.message : String(error)}` }
   }
 }
+
+/** What crew memory reads of a place (martha#1016): whose call it is, the declaration, and the roster a host hands. */
+const memoryAskedOf = (places: CrewToolPlaces): TheMemoryAsked => ({ member: places.member, settings: () => theSettingsOrRefusal(places), host: places.crews_memory })
 
 /** The declaration's settings alone, or why it could not be read: what a slice that reads no crew names needs. */
 async function theSettingsOrRefusal(places: CrewToolPlaces): Promise<CrewSettings | { readonly refused: string }> {

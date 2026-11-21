@@ -48,6 +48,7 @@ import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL } from '../switch
 import { WRITE_MY_HANDOVER_SCHEMA } from '../write_my_handover/the_handover_tool.ts'
 import { WORKTREE_FINISH_TOOL, WORKTREE_OPEN_TOOL } from '../open_and_finish_a_worktree/the_worktree_tools.ts'
 import { WAIT_FOR_CI_TOOL } from '../wait_for_ci/the_ci_wait_tool.ts'
+import { RECALL_WHAT_THE_CREW_KEPT, REMEMBER_FOR_THE_CREW } from '../keep_crew_memory/keep_crew_memory.ts'
 import { CREW_TOOL_NAMES, REFRESH_THIS_SESSION, crewToolsOver, type CrewTools } from './a_crews_tools.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-every-act-'))
@@ -211,6 +212,8 @@ const EVERY_CREW_TOOL: Readonly<Record<string, ALedgerLine>> = {
   [STANDING_TOOL.name]: { ungated: 'reads the standing items' },
   [WAIT_FOR_CI_TOOL.name]: { ungated: 'reads CI runs; it changes nothing' },
   [RELEASE_THE_FILES_TOOL.name]: { ungated: "releases paths the caller's own record holds as leftovers, after the caller has looked at them; it writes only the caller's own release list" },
+  [REMEMBER_FOR_THE_CREW]: { ungated: "keeps a note in the realm's public commons; a note carrying a private class is refused before anything is sent (martha#1016 M1)" },
+  [RECALL_WHAT_THE_CREW_KEPT]: { ungated: "reads the notes members on the crew's roster kept; it changes nothing" },
 }
 
 test('#607: the ledger names every tool the crew registers, and no tool the crew does not', () => {

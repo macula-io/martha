@@ -195,7 +195,7 @@ function theHooksAnswerOf(mod: string, tool: string): string | null {
 
 /** The tool name one of the mod's answer functions forwards to the launcher, or null when it forwards none. */
 function theForwardedToolOf(mod: string, answer: string): string | null {
-  const forwarded = new RegExp(`const ${asAWord(answer)} = \\(\\$: CrewEngine, e: Record<string, unknown>\\): Promise<unknown> => answerFromTheLauncher\\(\\$, e, '([^']+)'\\)`).exec(mod)
+  const forwarded = new RegExp(`const ${asAWord(answer)} = \\(\\$: CrewEngine, e: Record<string, unknown>\\): Promise<unknown> => (?:answerFromTheLauncher|answerWithAMeshOrder)\\(\\$, e, '([^']+)'\\)`).exec(mod)
   return forwarded === null ? null : (forwarded[1] ?? null)
 }
 

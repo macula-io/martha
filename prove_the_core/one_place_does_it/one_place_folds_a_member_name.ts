@@ -36,6 +36,7 @@ export const FOLDS_THAT_ARE_NOT_NAMES: readonly AFoldThatIsNotAName[] = [
   { path: 'know_the_goose_engines_facts/an_engine_source_from_its_facts.ts', folds: 1, reason: "a wire id written back as the Rust variant the engine's source names it by" },
   { path: 'know_the_goose_engines_facts/the_engines_facts_in_its_source.ts', folds: 1, reason: "a Rust variant name, spelled as the engine's serde snake_case puts it on the wire" },
   { path: 'keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts', folds: 1, reason: A_NODE_ID },
+  { path: 'keep_crew_memory/keep_crew_memory.ts', folds: 3, reason: "a node id from mcl-rag's provenance and the roster, compared case-folded by the mesh, and the crew's id in its mcl-rag topic, lowercased as crew-code's topic is (martha#1016); not a member name" },
   { path: 'keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts', folds: 2, reason: 'a package, owner/repo#n, which GitHub names ignoring case' },
   { path: 'keep_what_a_session_spent/the_crews_budget.ts', folds: 1, reason: "the reviewer model's name, its first letter capitalised for the budget line the owner reads" },
   { path: 'launch_a_goose_member/the_engines_decisions.ts', folds: 1, reason: "the engine's name, spelled as its folder-layout crate names a folder after it (etcetera unixy_name)" },
