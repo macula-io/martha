@@ -6,6 +6,10 @@
 // - max-depth 2: eslint counts the blocks inside a function and not the function body itself, so 2 is an `if`
 //   inside an `if`, no deeper.
 // - complexity 9: cyclomatic, branch points + 1.
+// - sonarjs/cognitive-complexity 15: how hard a function is to follow, not just how many ways it branches
+//   (martha#1045, DECIDED 2026-11-21 "add the cognitive complexity rule and lower the file cap"). Sonar's own
+//   default, counted by nesting as well as branching, so a deeply nested function the cyclomatic cap lets through
+//   still cannot reach main.
 // - max-lines-per-function 60: lines of a function, blank lines and comments not counted.
 // - max-lines 1105: lines of a source file, every line counted, as `wc -l` counts them. It replaces the per-directory
 //   ceilings package.json kept (owner's decision 2026-11-19 "Per-folder size ceilings (Recommended)"). The number is
@@ -24,11 +28,13 @@
 // The `_` prefix this repository already uses for a name it cannot avoid, such as a handler that must take the place
 // it is given and does not read it, is read differently by the two halves: eslint lets any name it checks here carry
 // one, while tsc exempts a parameter only. An unused `_local` is still a local the compiler names.
+import sonarjs from 'eslint-plugin-sonarjs'
 import tseslint from 'typescript-eslint'
 
 export const STRUCTURAL_CAPS = {
   'max-depth': ['error', { max: 2 }],
   complexity: ['error', { max: 9 }],
+  'sonarjs/cognitive-complexity': ['error', 15],
   'max-lines-per-function': ['error', { max: 60, skipBlankLines: true, skipComments: true }],
 }
 
@@ -56,6 +62,8 @@ export default [
     files: ['**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}'],
     languageOptions: { parser: tseslint.parser, ecmaVersion: 'latest', sourceType: 'module' },
     linterOptions: { noInlineConfig: true },
+    // The plugin is registered here only because a cap above is one of its rules; no other sonarjs rule is on.
+    plugins: { sonarjs },
     rules: STRUCTURAL_CAPS,
   },
   {

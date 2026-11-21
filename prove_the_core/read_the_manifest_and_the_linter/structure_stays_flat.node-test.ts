@@ -1,5 +1,5 @@
 // The structural floor bites (martha#87). eslint.config.mjs names the caps once: how deep a function may nest,
-// how many ways it may branch, how many lines it may run, how many lines a source file may hold. This reads them back from eslint's own resolved config
+// how many ways it may branch, how hard it is to follow, how many lines it may run, how many lines a source file may hold. This reads them back from eslint's own resolved config
 // for a source file, never restating a number, and plants a function at each cap and one step over it. The one
 // at the cap passes; the one over fails, naming its rule. A function over a cap with an eslint-disable comment
 // still fails: the floor has no exception carried in the code. CI runs the floor over the whole tree
@@ -20,6 +20,9 @@ const DEPTH = 'max-depth'
 const COMPLEXITY = 'complexity'
 const LENGTH = 'max-lines-per-function'
 const FILE_LENGTH = 'max-lines'
+// The cap on how hard a function is to follow (martha#1045): Sonar's own measure, in this config while the others
+// above are eslint's.
+const COGNITIVE = 'sonarjs/cognitive-complexity'
 // A test file's path beside the planted source: the file cap does not hold a test file.
 const PLANTED_TEST = 'src/planted_by_the_floor_test/planted.node-test.ts'
 const ERROR = 2
@@ -42,7 +45,17 @@ const capOf = (rules: Partial<Linter.RulesRecord>, rule: string): Cap => {
 const capsOf = async () => {
   const config = (await eslint.calculateConfigForFile(join(repository, PLANTED))) as Linter.Config
   const rules = config.rules ?? {}
-  return { depth: capOf(rules, DEPTH), complexity: capOf(rules, COMPLEXITY), length: capOf(rules, LENGTH), file: capOf(rules, FILE_LENGTH) }
+  return { depth: capOf(rules, DEPTH), complexity: capOf(rules, COMPLEXITY), length: capOf(rules, LENGTH), file: capOf(rules, FILE_LENGTH), cognitive: cognitiveCapOf(rules) }
+}
+
+/** The cognitive cap is the rule's whole option: a number of points, where the caps above take a `max` object. */
+const cognitiveCapOf = (rules: Partial<Linter.RulesRecord>): number => {
+  const entry = rules[COGNITIVE]
+  assert.ok(Array.isArray(entry), `${COGNITIVE} is not configured with a cap`)
+  assert.equal(entry[0], ERROR, `${COGNITIVE} is not an error`)
+  const threshold = entry[1]
+  assert.equal(typeof threshold, 'number', `${COGNITIVE} names no maximum`)
+  return threshold as number
 }
 
 const rulesBrokenBy = async (code: string, planted: string = PLANTED): Promise<string[]> => {
@@ -63,6 +76,18 @@ const branching = (complexity: number) =>
 const long = (lines: number) =>
   `export function planted(): number {\n  let total = 0\n${'\n  // not counted\n  total += 1\n'.repeat(lines - 4)}  return total\n}\n`
 
+/**
+ * A function whose cognitive complexity is `points` (martha#1045): one `if` around the rest — a point of its own —
+ * then `if`s inside it, two points each, and an `else` on as many of them as points are still owed, since an `else`
+ * costs a point and no branch point. `within` is how many inner `if`s the cyclomatic cap leaves room for.
+ */
+const cognitively = (points: number, within: number) => {
+  const pairs = Math.min(Math.floor((points - 1) / 2), within)
+  const elses = points - 1 - 2 * pairs
+  const inner = Array.from({ length: pairs }, (_, at) => `    if (a > ${at}) { total += 1 }${at < elses ? ' else { total -= 1 }' : ''}\n`).join('')
+  return `export function planted(a: number, b: boolean): number {\n  let total = 0\n  if (b) {\n${inner}  }\n  return total\n}\n`
+}
+
 test('eslint.config.mjs caps nesting, complexity and length at error, each with a maximum', async () => {
   const caps = await capsOf()
   assert.equal(caps.length.skipBlankLines, true, 'the length cap counts blank lines')
@@ -79,6 +104,14 @@ test('a function one branch past the complexity cap fails by name; one at the ca
   const { complexity } = await capsOf()
   assert.deepEqual(await rulesBrokenBy(branching(complexity.max)), [])
   assert.deepEqual(await rulesBrokenBy(branching(complexity.max + 1)), [COMPLEXITY])
+})
+
+test('a function one step past the cognitive cap fails by name; one at the cap passes', async () => {
+  const { cognitive, complexity } = await capsOf()
+  // The inner `if`s that still fit the cyclomatic cap: one branch point each, and one for the `if` around them.
+  const within = complexity.max - 2
+  assert.deepEqual(await rulesBrokenBy(cognitively(cognitive, within)), [])
+  assert.deepEqual(await rulesBrokenBy(cognitively(cognitive + 1, within)), [COGNITIVE])
 })
 
 test('a function one line past the length cap fails by name; one at the cap passes, blank lines and comments aside', async () => {
