@@ -37,6 +37,9 @@ jobs:
   drift:
     name: the recording says what the engine says
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 32 s at its longest in 5 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:

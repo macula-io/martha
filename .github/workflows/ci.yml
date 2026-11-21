@@ -20,6 +20,9 @@ jobs:
   links:
     name: links resolve
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 14 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     env:
       # The options, defined once and used by both runs below: --offline keeps
       # every request off the network, so only this repository's own files and
@@ -87,6 +90,9 @@ jobs:
   gate:
     name: gate coverage
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 1416 s at its longest in 4 green runs; 40 minutes is half again
+    # as much, rounded up to the next five, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 40
     # A signed run (martha#129) happens in a sandbox or not at all, so its tests
     # skip where none can be built. Here one must be: a missing sandbox fails a
     # test by name instead of skipping the gate in silence.
@@ -213,6 +219,9 @@ jobs:
   structure:
     name: structural floor
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 25 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -238,6 +247,9 @@ jobs:
   names:
     name: Martha's names are its own
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 26 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -271,6 +283,9 @@ jobs:
   cycles:
     name: no import cycle
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 21 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -310,6 +325,9 @@ jobs:
   relay:
     name: the relay loads in the recorded host
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 868 s at its longest in 4 green runs; 25 minutes is half again
+    # as much, rounded up to the next five, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -326,6 +344,9 @@ jobs:
   drift-bites:
     name: the host drift check bites
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 62 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -345,6 +366,9 @@ jobs:
   engine-drift-bites:
     name: the engine drift check bites
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 27 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -362,6 +386,9 @@ jobs:
   posted-text-bites:
     name: the posted text check bites
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 13 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -378,6 +405,9 @@ jobs:
   clean-install:
     name: the clean-install proof removes its container
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 1067 s at its longest in 4 green runs; 30 minutes is half again
+    # as much, rounded up to the next five, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -394,6 +424,9 @@ jobs:
   live-run-ring:
     name: the ring reaches the owner on the live run's tmux
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 32 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -409,6 +442,9 @@ jobs:
   workflows:
     name: workflows are valid
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 28 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
@@ -464,6 +500,9 @@ jobs:
   private:
     name: nothing private
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 18 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
@@ -498,6 +537,9 @@ jobs:
   base-tests:
     name: no test the base passed goes missing
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 34 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     env:
       BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
       HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
@@ -571,6 +613,9 @@ jobs:
   pictures:
     name: the pictures change only with the version
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 25 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     env:
       BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
       HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
@@ -650,6 +695,9 @@ jobs:
   restated-values:
     name: no literal restates a defined value
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 59 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     env:
       BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
       HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
@@ -697,6 +745,9 @@ jobs:
   every-check-runs:
     name: every check runs in a job
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 12 s at its longest in 4 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -708,3 +759,27 @@ jobs:
         run: npm run --silent check:every-check-runs-in-a-job -- --self-test
       - name: every check script is run by a job a pull request triggers
         run: npm run --silent check:every-check-runs-in-a-job
+
+  # Every job that runs on a runner names a timeout-minutes (martha#992). A job a runner never finishes — a step
+  # waiting on a container, a socket or a network read that never returns — otherwise holds its landing, its branch
+  # and a concurrency slot until GitHub's six-hour default; with a timeout it fails by name in minutes. A job that
+  # calls a reusable workflow cannot carry one (GitHub refuses the file), so its own jobs are where its time is held.
+  # The check reads the workflows with the same reader this repository already uses, and the self-test plants a job
+  # with none and requires it named.
+  every-job-has-a-timeout:
+    name: every job has a timeout
+    runs-on: ubuntu-latest
+    # New in this change: one Node program over ten small workflow files, the same shape as every-check-runs,
+    # measured on 2026-11-20 at 12 s. Five minutes is the same floor, and far under GitHub's six hours.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: the check bites on a planted job with no timeout
+        run: npm run --silent check:every-job-has-a-timeout -- --self-test
+      - name: every job that runs on a runner names a timeout-minutes
+        run: npm run --silent check:every-job-has-a-timeout

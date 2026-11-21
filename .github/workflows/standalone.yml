@@ -38,6 +38,9 @@ jobs:
         # linux-x64: the one platform of carry_marthas_own_node/the_node_runtime.ts.
         runner: [ubuntu-latest]
     runs-on: ${{ matrix.runner }}
+    # Measured 2026-11-20: 26 s at its longest in 5 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The Node that runs the assembler only; the release carries and is proven with its own pinned Node.
@@ -63,6 +66,9 @@ jobs:
   pin:
     name: the pinned Node is nodejs.org's
     runs-on: ubuntu-latest
+    # Measured 2026-11-20: 14 s at its longest in 5 green runs; five minutes is the floor for a job
+    # of seconds, and far under GitHub's six hours (martha#992).
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
