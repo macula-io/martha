@@ -18,10 +18,10 @@ import { declareCrew, OWNER_ITEMS, type CrewSettings } from '../declare_crew/dec
 import { briefsPlace } from '../read_a_members_brief/read_a_members_brief.ts'
 import { theNoteAfterABriefWrite } from '../read_a_members_brief/note_a_brief_write.ts'
 import { holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
-import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
+import { answerAChannelAsk } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { theLineToHandAtStart, type TheStartLine } from '../hand_a_member_its_crew_text/the_start_line.ts'
 import { theCrewStateOfATurn } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
-import type { DocumentStore, HandoverStampStore, HostContract, HostFileTools, Refused, TheCrewFilesStores, ToolNames } from '../host_contract/host_contract.ts'
+import type { HostContract, ToolNames } from '../host_contract/host_contract.ts'
 import { VERIFY_RANGE_TOOL, verifyTheRangeOver } from '../check_a_range_before_the_owner_says_yes/the_verify_range_tool.ts'
 import { theRangeACallNames } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
 import { THE_CHANNEL_READ_ASK, theChannelReadAsk } from '../keep_the_crew_channel/the_channel_read.ts'
@@ -40,9 +40,9 @@ import { finishAWorktree, openAWorktree, type WorktreesRequest } from '../open_a
 import { WORKTREE_FINISH_TOOL, WORKTREE_OPEN_TOOL, theWorktreeToolOver } from '../open_and_finish_a_worktree/the_worktree_tools.ts'
 import { parkAMember, parkedPlace, theParkOf, unparkAMember } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL, theParkToolOver, type AParkAsked } from '../park_and_wake_a_member/the_park_tools.ts'
-import type { AGuardedSwitch, OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
+import type { AGuardedSwitch } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack, type AnOrderAsked } from '../put_the_owners_model_back/the_guarded_switch.ts'
-import { menusTheLauncherKeeps, type ACallAnswered, type TheOwnersMenus } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { menusTheLauncherKeeps, type ACallAnswered } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import {
   LIST_ASKS_TOOL,
   QUEUE_ASK_TOOL,
@@ -79,7 +79,7 @@ import { REPORT_PROGRESS_TOOL, reportProgressOver } from '../report_where_the_wo
 import { theBudgetOver, theSpendOnARow, type TheBudgetAsACrewHoldsIt } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
 import type { ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
 import type { TheCrew } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
-import { type ASpawnedAgent, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
+import { theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { SEE_THE_CREW_TOOL, seeTheCrewOver } from '../see_the_crew/the_see_the_crew_tool.ts'
@@ -101,16 +101,14 @@ import {
 } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { READ_THE_RECEIPTS_TOOL, theReceiptsOver } from '../show_what_a_message_became/the_receipts_tool.ts'
 import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_budget.ts'
-import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
 import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
-import { theBeatOverTheCrewTools, theBeatsMarkedOn, withTheOwedLine, withTheTimesLineOnAReturn, type AHandedWindow, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
-import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
+import { theBeatOverTheCrewTools, theBeatsMarkedOn, withTheOwedLine, withTheTimesLineOnAReturn, type AHandedWindow, type HoldingTheWatch } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { WAIT_FOR_CI_TOOL, theCiWaitACallNames, theCiWaitOver } from '../wait_for_ci/the_ci_wait_tool.ts'
 import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_handover/the_handover_tool.ts'
-import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
-import type { AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
+import { NO_MODEL_NAMED } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import type { CrewToolPlaces } from './the_crews_tools_places.ts'
 
 /**
  * The name the refresh tool is registered under (martha#343). It is the tool a member calls, and not the word a
@@ -156,113 +154,6 @@ export type CoreToolAnswer = { readonly answer: string } | { readonly refused: s
 
 /** What a tool's call named, read by the slice that owns the tool: what it names, or why the call is refused. */
 type AnAsked<Asked> = { readonly ok: Asked } | { readonly refused: string }
-
-/**
- * What the tools are given: whose row it is, where the crew's place is, and how the declaration is read; and what the
- * host adapter reads of its sessions' crew tools (martha#658), so a launch given none keeps no window.
- */
-export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
-  readonly member: string
-  /** The crew's streams: the ledger and the session records. */
-  readonly ledger: LedgerHost
-  /** The crew's dashboard rows: one per member, kept by the host (../dashboard_rows_directory/dashboard_rows_directory). */
-  readonly beats: DashboardStore
-  /** The checkout the crew is declared in. */
-  readonly root: string
-  readonly documents: DocumentStore
-  /** The crew's own store: the park marker this member keeps, and the handovers a wake reads (../park_and_wake_a_member). */
-  readonly stores: TheCrewFilesStores
-  /**
-   * The host's own processes: the tools that read a range, land a batch or move a worktree run git and gh through
-   * these, so nothing that acts runs inside the member's session (martha#256). A place that holds none refuses
-   * those five by name rather than pretending to act.
-   */
-  readonly processes?: HostContract['processes']
-  /**
-   * The sink a line about an act the tools carried on past is said through (martha#601): the launcher's writer to the
-   * process's own error output. Absent, nothing is said.
-   */
-  readonly note?: ((line: string) => void) | undefined
-  /**
-   * Where a restart is asked of a member's launcher (martha#312): the crew's lifecycle requests, the launch records and
-   * the ledger. A launch given none refuses `restart_a_member` by name.
-   */
-  readonly lifecycle?: StoppingHost
-  /** The crew's declaration, whose workspace places the two worktree tools read (martha#256). */
-  readonly settings?: CrewSettings
-  /**
-   * The models the host runs, as its adapter records them (martha#315): the declaration is read back against them, so a
-   * crew whose `review_model` the host cannot spell is refused by name. A place given none names no model, and a
-   * declaration naming one is then refused — nothing here invents a model list.
-   */
-  readonly models?: ModelVocabulary
-  /** The host a session's usage is kept under (martha#999 package 5): an engine launch names its own; Claude Code when none. */
-  readonly usage_host?: AUsageHost
-  /** The model this member was launched on (martha#315): what its row says until a switch is confirmed. */
-  readonly launched_on?: string
-  /**
-   * How this host spawns a subagent (martha#315): which tool, and which of its arguments say what the agent is and
-   * which model runs it, as the adapter records it. A place given none holds no review to the crew's reviewer model.
-   */
-  readonly spawn?: ASpawnedAgent
-  /**
-   * The owner's own settings file, and where the one lock that guards it lives (martha#359): the file the host's model
-   * command saves the switched model into as the owner's default. A launch given none refuses a switch by name, because
-   * a switch that cannot be put back would leave the owner's every new session on the member's model.
-   */
-  readonly owners_settings?: OwnersDefaultPlace | Refused
-  /**
-   * What hands this member the crew's messages it has not taken in (martha#253). The mod asks for one each time it
-   * starts and after each turn; a launch given none refuses the ask rather than answering an empty channel.
-   */
-  readonly carrier?: MessageCarrier
-  /** Where the host keeps the stamps its handovers carry (martha#255). A launch given none writes no handover. */
-  readonly stamps?: HandoverStampStore
-  /** The sessions this launch took in, by id: what a handover is stamped with, and the predecessor a refresh inherits. */
-  readonly sessions?: { readonly of: (session_id: string) => HostSession | undefined }
-  /**
-   * What this launcher keeps of the menus its host closed (martha#313): a settle of the owner's asks is refused unless a
-   * menu closed in the session that took the batch. A launch given none settles no batch, and says so.
-   */
-  readonly menus?: TheOwnersMenus
-  /** The share each session began at, by session id: kept here, so every threshold is measured from where it started. */
-  readonly began_at?: Map<string, number>
-  /**
-   * The roots a reboot deletes on this machine (martha#314), for a crew whose declaration names none: derived by the
-   * adapter that launches, from the OS, and handed in here rather than written into a slice. A place given none holds
-   * no machine root, so the note then names only what the declaration names.
-   */
-  readonly volatile_roots?: readonly string[]
-  /**
-   * What the workspace guard refuses of a git call a member's shell is about to run (martha#562, seam a): the adapter
-   * that asks git hands the refusal here, so the relay asks the crew once. A place given none refuses nothing, and a
-   * crew that declared no workspace layout hands none.
-   */
-  readonly refusesTheGitCall?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
-  /**
-   * What the workspace guard refuses of a git call the launch's own `git` was handed (martha#562, seam b): the words a
-   * member's shell gave the shim, and the directory it runs them in. A place given none refuses nothing, and a crew that
-   * declared no workspace layout hands none.
-   */
-  readonly refusesTheGitOnThePath?: (call: { readonly directory: string; readonly args: readonly string[] }) => Promise<string | undefined>
-  /**
-   * What the workspace guard refuses of the refs a clone's transaction would update (martha#562, seam c): a delete of
-   * another member's branch that reached git past the shell and past the shim. A place given none refuses nothing.
-   */
-  readonly refusesTheRefUpdate?: (updates: readonly { readonly ref: string; readonly deletes: boolean }[]) => string | undefined
-  /**
-   * What the killed-run record refuses of a hand-off (martha#719): a `say_to_crew` whose first line is a HANDOFF line,
-   * while a leftover the record kept still stands where the record says it stands. A place given none refuses nothing,
-   * and a crew that declared no workspace layout hands none.
-   */
-  readonly refusesTheHandOff?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
-  /**
-   * The host's own names for what writes a file and what runs a shell line (martha#999 package 2b): a call of either
-   * that wrote one of the crew's briefs, breaking the owner-items rule, is answered with a note. A host whose member
-   * cannot be handed a line after a tool hands none, and no call is noted.
-   */
-  readonly brief_writes?: { readonly file_tools: HostFileTools; readonly shell_tool: string }
-}
 
 /** The tools a crew's member can call. */
 export interface CrewTools extends TheReviewRule {
@@ -407,7 +298,7 @@ export type CrewToolName = (typeof THE_TOOLS)[number]['name']
 /** The tools, as the mod registers them. */
 export const CREW_TOOLS: readonly CrewTool[] = THE_TOOLS
 
-export type { TheStartLine }
+export type { CrewToolPlaces, TheStartLine }
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
 interface SessionState {
