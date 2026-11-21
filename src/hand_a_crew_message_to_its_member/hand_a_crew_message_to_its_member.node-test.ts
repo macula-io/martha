@@ -148,3 +148,18 @@ test('#253: a member with nothing addressed to it is handed nothing', async () =
   assert.equal(await b.carrierFor('B').next(), null)
   assert.equal((await readTheChannel(b.host)).length, 1)
 })
+
+test('#959: a carrier says whether a message for its member is waiting, without handing it', async () => {
+  const b = bench()
+  const carrier = b.carrierFor('B')
+  assert.equal(await carrier.waiting(), false, 'a member with an empty channel was said to have a message waiting')
+  await say(b, 'A', ['C'], 'not for B')
+  assert.equal(await carrier.waiting(), false, 'a message for another member was said to be waiting for B')
+  await say(b, 'A', ['B'], 'a hand-off')
+  assert.equal(await carrier.waiting(), true, 'a message in the channel for B was not said to be waiting')
+  assert.equal(await carrier.waiting(), true, 'the ask handed the message it was only asked about')
+  assert.equal(await carrier.next(), framed(1, 'A', 'a hand-off'), 'the message was handed to somebody other than its member')
+  assert.equal(await carrier.waiting(), true, 'a message handed and not taken in was not said to be waiting')
+  await carrier.aTurnStarted()
+  assert.equal(await carrier.waiting(), false, 'a message taken in was said to be waiting still')
+})
