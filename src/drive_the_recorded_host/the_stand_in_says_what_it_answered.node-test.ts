@@ -4,11 +4,14 @@
 // defects: a host that never sent the request, and a stand-in that received it and never answered. Only the stand-in
 // knows which, so it records the two times the red is read by: when it had the request whole, and when its reply went
 // out. These cases post to it over HTTP, as the host does, on the real server and with no recorded host behind it.
+//
+// What it counts is the owner's turns: the host's own asks are answered and never numbered, whether they offer no tools
+// (a title, a summary) or the whole list (its ask for a suggestion of the owner's next words, martha#1037).
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { theStandInModel, type ModelRequest, type ScriptedTurn } from './drive_the_recorded_host.ts'
+import { theStandInModel, THE_HOSTS_ASK_FOR_A_SUGGESTION, type ModelRequest, type ScriptedTurn } from './drive_the_recorded_host.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 
 /** A model request that offers the model tools: the kind that is counted, and answered by the script. */
@@ -16,6 +19,20 @@ const OFFERS_TOOLS = { model: 'the-stand-in', tools: [{ name: WHOLE_FILE_TOOL }]
 
 /** A request the host's own side makes — a title, a summary: it offers no tools, so it is answered and not counted. */
 const OFFERS_NONE = { model: 'the-stand-in', messages: [] }
+
+/**
+ * The host's ask for a suggestion of the owner's next turn (martha#1037), as this host sends it: the whole tool list,
+ * over the conversation, with its own instruction as the last thing said.
+ */
+const ASKS_FOR_A_SUGGESTION = {
+  model: 'the-stand-in',
+  tools: [{ name: WHOLE_FILE_TOOL }],
+  messages: [
+    { role: 'user', content: 'Note what is held, then stop.' },
+    { role: 'assistant', content: 'Done.' },
+    { role: 'user', content: `${THE_HOSTS_ASK_FOR_A_SUGGESTION} Suggest what the user might naturally type next into Claude Code.]\n\nFIRST: look at the user's recent messages.` },
+  ],
+}
 
 /** Posts a request to the stand-in the way the host does, and reads its reply whole. */
 async function ask(url: string, body: Readonly<Record<string, unknown>>): Promise<string> {
@@ -84,4 +101,17 @@ test('#264: a scripted turn still owed is a request the stand-in read and has no
     await stand.close()
   }
   assert.ok(heard[0]?.answered_at !== undefined, 'the reply went out and the stand-in still says it never answered')
+})
+
+test('#1037: the host\'s ask for a suggestion offers tools and is still counted as no turn of the owner\'s', async () => {
+  const heard: ModelRequest[] = []
+  const asked: string[] = []
+  const stand = await theStandInModel((request) => (asked.push(String(request.number)), { text: 'a suggestion' }), heard, () => {})
+  try {
+    assert.match(await ask(stand.url, ASKS_FOR_A_SUGGESTION), /"type":"text_delta"/, 'the stand-in answered the ask, and not as the host reads an answer')
+    assert.deepEqual(asked, [], 'the host\'s ask for a suggestion was handed the script as if it were a turn')
+    assert.deepEqual(heard, [], 'the host\'s ask for a suggestion was counted as a turn, so every turn after it was numbered one too high and the run waited on a reply the host never drew as one (martha#1037)')
+  } finally {
+    await stand.close()
+  }
 })
