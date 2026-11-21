@@ -22,6 +22,8 @@ import type { CrewTools } from '../a_crews_tools/a_crews_tools.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
+import { SEND_MESSAGE_TOOL } from '../answer_a_tool_call/a_crew_line_goes_through_say_to_the_crew.ts'
+import { theVolatileNote } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OUTPUT_STYLES_FOLDER, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -109,7 +111,7 @@ function theReceiptsTaken(allowed: string[]): SignedRuns {
 }
 
 /** The relay for one member, over a crew's own tools and the receipts a call would take. */
-function relayFor(places: Places, crew: CrewTools | undefined, signed_runs: SignedRuns, stops: string[] = []): MemberRelay {
+function relayFor(places: Places, crew: CrewTools | undefined, signed_runs: SignedRuns, stops: string[] = [], volatile_roots?: readonly string[]): MemberRelay {
   return memberRelay({
     records: sessionRecordsIn(rowStreamsDirectory(places.rows)),
     launch: { host: CLAUDE_CODE, launch_dir: places.checkout, stop_dir: places.home, approved_fingerprints: [] },
@@ -136,6 +138,7 @@ function relayFor(places: Places, crew: CrewTools | undefined, signed_runs: Sign
     }),
     journal: relayJournalKeptIn(places.journal, THE_LAUNCH),
     ...(crew === undefined ? {} : { crew }),
+    ...(volatile_roots === undefined ? {} : { volatile_roots }),
     signed_runs,
     stopMember: (why) => void stops.push(why),
   })
@@ -155,13 +158,13 @@ const THE_TURN = 'the-running-turn'
 const ownersSettingsOf = (places: Places): string => join(places.home, CLAUDE_FOLDER, USER_SETTINGS_FILE)
 
 /** A relay over a crew holding `ends`, its session started, with what it took receipts for and why it stopped. */
-async function aStartedRelay(t: TestContext, ends: TheEndsHold | undefined) {
+async function aStartedRelay(t: TestContext, ends: TheEndsHold | undefined, volatile_roots?: readonly string[]) {
   const places = placesOf(t)
   mkdirSync(join(places.home, CLAUDE_FOLDER), { recursive: true })
   writeFileSync(ownersSettingsOf(places), '{}\n')
   const allowed: string[] = []
   const stops: string[] = []
-  const relay = relayFor(places, ends === undefined ? undefined : aCrewHolding(ends), theReceiptsTaken(allowed), stops)
+  const relay = relayFor(places, ends === undefined ? undefined : aCrewHolding(ends), theReceiptsTaken(allowed), stops, volatile_roots)
   await startedOn(relay)
   return { places, relay, allowed, stops }
 }
@@ -287,4 +290,36 @@ test('#608: a ran tool\'s report hands the crew the posted input and the host\'s
   const answer = { ref: 1, result: { questions, answers: { 'Which?': '0. Go?' }, annotations: {} }, text: 'The user answered.', isReadOnly: true }
   await relay.answer('tool_answered', { ...menu, answer })
   assert.deepEqual(heard, [{ tool: MENU_TOOL, input: { tool_use_id: `toolu_${MENU_TOOL}`, questions }, answer }])
+})
+
+// martha#980 package 2: a SendMessage the host ran is handed the volatile-path note beside its answer, as say_to_the_crew
+// is (a port of crew-code's note on a DM). The relay's own tests pin that the line reaches the answer's context.
+
+/** A root a reboot deletes, for the test: a stand-in, never this machine's own. */
+const A_VOLATILE_ROOT = '/srv/a-volatile-root'
+const A_CITED_PATH = `${A_VOLATILE_ROOT}/the-notes.md`
+
+test('#980: a SendMessage citing a path a reboot deletes is handed the volatile note beside its answer (mutant: no note)', async (t) => {
+  const { relay } = await aStartedRelay(t, undefined, [A_VOLATILE_ROOT])
+  const send = call(SEND_MESSAGE_TOOL, { to: 'a-member', message: `The notes are in ${A_CITED_PATH}, read them.` })
+  assert.deepEqual(await relay.answer('tool_called', send), { answered: true, body: { allow: 1 } }, 'the gate did not allow the send this test runs')
+  const answered = await relay.answer('tool_answered', { ...send, answer: { success: true } })
+  assert.deepEqual(answered, { answered: true, body: { taken: 1, note: theVolatileNote([A_CITED_PATH]) } })
+  assert.ok(theVolatileNote([A_CITED_PATH]).includes(A_CITED_PATH), 'the note does not name the cited path')
+})
+
+test('#980: no note for a send that cites no such path, a send the host answered with an error, another tool, or a launch with no roots (mutants: note every send; note every tool)', async (t) => {
+  const { relay } = await aStartedRelay(t, undefined, [A_VOLATILE_ROOT])
+  const plain = call(SEND_MESSAGE_TOOL, { to: 'a-member', message: 'The notes are in the handover.' })
+  const failed = call(SEND_MESSAGE_TOOL, { to: 'a-member', message: `See ${A_CITED_PATH}.` })
+  const shell = call(CLAUDE_CODE_SHELL_TOOL, { command: `cat ${A_CITED_PATH}` })
+  // Another tool whose input also holds a message: only the send is told.
+  const other = call('AnotherTool', { message: `See ${A_CITED_PATH}.` })
+  for (const [made, answer] of [[plain, { success: true }], [failed, { isError: true }], [shell, { stdout: '' }], [other, {}]] as const) {
+    await relay.answer('tool_called', made)
+    assert.deepEqual(await relay.answer('tool_answered', { ...made, answer }), { answered: true, body: { taken: 1 } }, made.call.tool)
+  }
+  const unrooted = await aStartedRelay(t, undefined)
+  await unrooted.relay.answer('tool_called', failed)
+  assert.deepEqual(await unrooted.relay.answer('tool_answered', { ...failed, answer: { success: true } }), { answered: true, body: { taken: 1 } })
 })

@@ -36,7 +36,7 @@ import { launcherPlacesOf, startMember, type MemberStartRequest } from '../start
 import { appendToTheChannel, readTheChannel, takenInBy, type ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { framed } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import type { AnAgentScript, AStandInsSessionRow, AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
+import { STAND_IN_SESSION, theStandInsSession, type AnAgentScript, type AStandInsSessionRow, type AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 import { PassThrough } from 'node:stream'
 import { hearTheOwnersLines, theCrewToolsHeardBy, theScreenAnEngineStartSees } from './start_an_engine_member.ts'
 import { ONLY_THE_CREW_COMMAND, TYPED_TURNS_ARE_NOT_THERE_YET } from './the_owners_lines_at_the_tab.ts'
@@ -45,9 +45,11 @@ import type { ACrewToolAsked } from '../host_contract/host_contract.ts'
 import { SAY_TO_THE_CREW_TOOL } from '../send_a_crew_message/say_to_the_crew_tool.ts'
 import { SEE_THE_CREW_TOOL } from '../see_the_crew/the_see_the_crew_tool.ts'
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
-import { THE_HANDOVER_WRITTEN, theResumePrompt } from '../write_my_handover/write_my_handover.ts'
+import { THE_HANDOVER_WRITTEN, theResumePrompt, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
 import { aFlowStarting, keepTheFlow, refreshesPlace, theFlowClearing } from '../refresh_a_member/refresh_a_member.ts'
-import { keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
+import { handoverStampsIn, keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
+import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
@@ -410,9 +412,9 @@ const WRITES_WHILE_THE_ASK_WAITS: readonly AWriteWhileTheAskWaits[] = [
     says: () => 'enabled extensions were changed after it started',
   },
   {
-    what: 'a second session in the store',
+    what: 'a session the launch did not open, planted in the store',
     write: (root) => onTheStore(root, `INSERT INTO ${TABLE} (${THE_SESSIONS_ROW.columns.join(', ')}) SELECT ${THE_SESSIONS_ROW.columns.map((column) => (column === 'id' ? `'${A_SECOND_SESSION}'` : column)).join(', ')} FROM ${TABLE}`),
-    says: (at) => `the session store at ${at} holds 2 sessions`,
+    says: (at) => `the session store at ${at} holds 1 session(s) this launch did not open`,
   },
   {
     what: "the engine's config file",
@@ -653,4 +655,49 @@ test('#999 package 5 r=2: a member whose flow is clearing from another session s
   assert.ok(first?.includes(theResumesOpening()), `the first prompt is not the resume: ${String(first)}`)
   assert.ok(first !== undefined && !first.includes(THE_START_PROMPT), 'the start prompt went with or before the resume')
   assert.ok(second?.endsWith(THE_START_PROMPT), `the second prompt is not the start prompt: ${String(second)}`)
+})
+
+/**
+ * The member's handover, written by the crew's own writer as its `write_my_handover` tool writes it, for the session
+ * named, while the engine's turn waits on the owner: the stand-in runs no tool server of its own.
+ */
+async function aHandoverWrittenFor(place: Place, session_id: string): Promise<void> {
+  const crew = crewStateDirectory(place.state.state_root, place.root)
+  assert.ok('path' in crew, 'refusal' in crew ? crew.refusal : '')
+  const places = launcherPlacesOf(place.state, place.relay_root, place.root)
+  assert.ok('rows' in places, 'refusal' in places ? places.refusal : '')
+  const rows = rowStreamsDirectory(places.rows)
+  const records = sessionRecordsIn(rows, releasesIn(rows))
+  await records.load(session_id)
+  const gate = records.store.read(session_id)
+  assert.ok(gate !== undefined, `no record of ${session_id}`)
+  const written = writeMyHandover(
+    { stores: { crew: keepTheCrewsFilesAsDirectories(crew.path) } },
+    { member: MEMBER, content: 'first rules; what runs\n', at: new Date(), stamps: handoverStampsIn(crew.path), session: { id: session_id, gate, record_missing: false } },
+  )
+  assert.equal(written, THE_HANDOVER_WRITTEN)
+}
+
+test("martha#1002: the clear the crew orders after the handover opens the next session through the read-back, closes the predecessor after its prompt returned, and sends the resume as the next session's first turn", async (t) => {
+  const place = aPlace(t)
+  const pastTheLimit: AStep = { update: { sessionUpdate: 'usage_update', used: 199, size: 200 } }
+  // The handover turn waits on the owner's answer to a call, so the test writes the handover before the turn ends.
+  const turns: AStep[][] = [[{ say: 'the first turn' }, pastTheLimit], [A_SHELL_CALL, { say: THE_HANDOVER_WRITTEN }], [{ echo: 1 }]]
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns, session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  const ask = await untilAnAskIsOpen(place)
+  await aHandoverWrittenFor(place, STAND_IN_SESSION)
+  assert.equal((await theOwnerAnswers(place, ask.key, 'allow')).code, 0)
+  const prompts = await untilTheEngineHeardPrompts(engine.heard, 3)
+  const methods = theRequests(engine.heard).map((request) => request.method)
+  assert.equal(methods.filter((method) => method === 'session/new').length, 2, `${methods.join(', ')} || ${lines.join(' / ')}`)
+  const closes = theRequests(engine.heard).filter((request) => request.method === 'session/close')
+  assert.deepEqual(closes.map((close) => close.params['sessionId']), [STAND_IN_SESSION])
+  assert.ok(methods.indexOf('session/close') > methods.lastIndexOf('session/new'), 'the predecessor was closed before the next session was opened and read back')
+  assert.deepEqual(prompts.map((prompt) => prompt.params['sessionId']), [STAND_IN_SESSION, STAND_IN_SESSION, theStandInsSession(2)])
+  const resume = theTextOf(prompts[2]?.params ?? {})
+  assert.ok(resume.includes(theResumesOpening()), `the next session's first turn is not the resume: ${resume}`)
+  assert.ok(!lines.some((line) => line.includes('is stopped')), lines.join('\n'))
 })
