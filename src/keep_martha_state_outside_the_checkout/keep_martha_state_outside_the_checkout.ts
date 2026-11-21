@@ -313,6 +313,29 @@ function readNodeIds(path: string, note: (line: string) => void): { readonly ids
  * The node id of each named member: the one kept for it, or 32 random bytes made now and kept. The owner never
  * types one. In solo mode a node id only names a member in its launch record; nothing signs with it.
  */
+/**
+ * A member's node id kept under a new name, the same id, and the old name gone from the record (martha#985): a rename
+ * must not hand a member a new identity, and must not leave the old one behind for a name nobody holds.
+ */
+export function moveANodeId(state: MarthaState, from: string, to: string, note: (line: string) => void = () => {}): Refused | undefined {
+  const path = join(state.directory, MEMBERS_FILE)
+  const kept = readNodeIds(path, note)
+  if ('refusal' in kept) return kept
+  const id = kept.ids[from]
+  if (id === undefined) return undefined
+  const moved = Object.fromEntries(Object.entries(kept.ids).filter(([name]) => name !== from))
+  keepStateFile(state, MEMBERS_FILE, `${JSON.stringify({ ...moved, [to]: id }, null, 2)}\n`)
+  return undefined
+}
+
+/**
+ * The node ids the crew keeps, as they are, and nothing made: for an act that must ask whether a name already has one
+ * without giving it one (martha#985, a rename's `name_in_use`).
+ */
+export function nodeIdsKept(state: MarthaState, note: (line: string) => void = () => {}): { readonly ids: Readonly<Record<string, string>> } | Refused {
+  return readNodeIds(join(state.directory, MEMBERS_FILE), note)
+}
+
 export function nodeIdsFor(
   state: MarthaState,
   names: readonly string[],

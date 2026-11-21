@@ -213,6 +213,13 @@ const layoutDeclared = (on: boolean): CrewSettings =>
     members: [{ name: 'Hygiea' }, { name: 'Uranus' }],
   }) as unknown as CrewSettings
 
+/** A declaration that names no places at all: the one a crew with no workspace layout is read from. */
+const noPlacesDeclared = (): CrewSettings =>
+  ({
+    house_rules: { workspace_layout: false, clones: null, worktrees: null },
+    members: [{ name: 'Hygiea' }, { name: 'Uranus' }],
+  }) as unknown as CrewSettings
+
 test('a start hands its launch the workspace its declaration lays out, and the crew store its end reads (#562, #693)', () => {
   // The launch tests hand `leftovers.workspace` in themselves, so nothing there says a real start gives the scan one at
   // all: this reads the start's own builder, from a planted declaration, and holds it to the planted places.
@@ -220,7 +227,9 @@ test('a start hands its launch the workspace its declaration lays out, and the c
   const declared = leftoversOfALaunch(layoutDeclared(true), crew)
   assert.deepEqual(declared.workspace, { clones: LAID_OUT.clones, worktrees: LAID_OUT.worktrees, members: ['Hygiea', 'Uranus'] })
   assert.equal(declared.crew, crew, 'the crew store the launch end keeps what a killed command left in is not the one the start was given')
-  assert.equal(leftoversOfALaunch(layoutDeclared(false), crew).workspace, undefined, 'a crew that declared no layout handed its launch a workspace anyway')
+  // The places are what turns the launch's workspace on, not the switch (martha#958).
+  assert.equal(leftoversOfALaunch(layoutDeclared(false), crew).workspace?.clones, LAID_OUT.clones, 'a crew that named its places handed its launch no workspace')
+  assert.equal(leftoversOfALaunch(noPlacesDeclared(), crew).workspace, undefined, 'a crew that named no places handed its launch a workspace anyway')
 })
 
 /**

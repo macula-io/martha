@@ -222,6 +222,29 @@ export interface ScratchDirectories {
 /** Why a host would not do it, in the words the owner reads. */
 export type Refused = { readonly refusal: string }
 
+/** One entry of a directory on this machine, as a reader of a work directory needs it: a name and what it is. */
+export interface ATreeEntry {
+  readonly name: string
+  readonly kind: 'file' | 'directory' | 'link' | 'other'
+}
+
+/**
+ * A directory of files on this machine, read the way a digest names one (martha#985): what the core may ask of a host
+ * to list one, read a file's permission bits, read a file's bytes, and resolve a path's links. A slice names no path on
+ * the machine and opens nothing; the glue answers each of these for the machine Martha runs on.
+ */
+export interface WorkDirectory {
+  /** The entries of one directory, or why it could not be listed. */
+  list(path: string): Promise<readonly ATreeEntry[] | Refused>
+  /** A file's permission and setuid, setgid and sticky bits, or why they could not be read. */
+  modeOf(path: string): Promise<{ readonly mode: number } | Refused>
+  /** A file's bytes as they are, or why they could not be read. */
+  bytesOf(path: string): Promise<{ readonly bytes: Buffer } | Refused>
+  /** The path with every link resolved, or undefined when it does not resolve. */
+  realOf(path: string): Promise<string | undefined>
+}
+
+
 /**
  * One place in the crew's own store: a directory every member of one crew reads, holding whole files a slice keeps
  * and reads back (martha#254 R1, #255).

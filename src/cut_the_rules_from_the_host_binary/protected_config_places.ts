@@ -15,9 +15,11 @@
 //     resolved through that function's own template and the constant it closes
 //     over, so what a signature file is called comes from the host too;
 //   - `config_code_places`: the places the host's own statements say it runs:
-//     the four folders its "This writes to the Claude Code <name> folder."
-//     statements name, and the file named beside them, in the sentence that
-//     spells the same four out with it. The two must agree;
+//     the folders its "This writes to the Claude Code <name> folder."
+//     statements name, and the file named beside them in the sentence that
+//     spells some of those folders out with it. A folder only the statements
+//     name is one the host states it runs; the sentence may not name a folder
+//     the statements do not;
 //   - `legacy_global_config_names`: the file the host prefers over `.claude.json`
 //     for its global config at the config dir's root, where the owner's user MCP
 //     servers are read from: the literal its one chooser joins to the config dir,
@@ -150,18 +152,24 @@ function protectedArrayIn(text: string): { readonly source: string; readonly at:
 
 /** Where the host states that it writes a code folder, and where it spells that folder out beside the file. */
 const CODE_FOLDER_STATEMENT = /This writes to the Claude Code ([\w.-]+) folder\./g
-const CODE_PLACE_SENTENCE = /the ([\w-]+), ([\w-]+), ([\w-]+) or ([\w-]+) folder or (?:in|to) ([\w.-]+) of the Claude Code config directory/g
+/** The sentence the host words its catch-all refusal with: the folders it names, one or more, and the file beside them. */
+const CODE_PLACE_SENTENCE = /the ([\w-]+(?:, [\w-]+)*(?: or [\w-]+)) folder or (?:in|to) ([\w.-]+) of the Claude Code config directory/g
 
-/** The four folders the host's statements name, checked against the sentence that names them with the file beside them. */
+/**
+ * The folders the host's statements name, and the file its sentence names beside them. The statements are the places:
+ * each is the host's own "This writes to the Claude Code <name> folder." for one it runs. The sentence is a second
+ * witness, so it may not name a folder the statements do not; it may name fewer, which 2.1.330 does, its statements
+ * naming the rm-guard folder its sentence had not yet listed (martha#1031).
+ */
 function codePlacesIn(text: string): ConfigCodePlaces {
   const stated = sortedUnique([...text.matchAll(CODE_FOLDER_STATEMENT)].map((match) => match[1] ?? ''))
-  const spelled = new Set([...text.matchAll(CODE_PLACE_SENTENCE)].map((match) => [...match.slice(1, 5)].sort().join(',') + `|${match[5] ?? ''}`))
+  if (stated.length === 0) throw new Error('The host states no folder of the Claude Code config directory that it runs, so the places it runs cannot be told.')
+  const spelled = new Set([...text.matchAll(CODE_PLACE_SENTENCE)].map((match) => `${(match[1] ?? '').split(/, | or /).sort().join(',')}|${match[2] ?? ''}`))
   if (spelled.size !== 1) throw new Error(`The host holds ${String(spelled.size)} sentences naming the folders it runs beside a file, not one.`)
   const [only = ''] = [...spelled]
   const [folders = '', file = ''] = only.split('|')
-  if (stated.length === 0 || folders !== stated.join(',')) {
-    throw new Error(`The host's statements name ${stated.join(', ') || 'no folders'} where its sentence names ${folders}, so the places it runs cannot be told.`)
-  }
+  const unknown = folders.split(',').filter((folder) => folder !== '' && !stated.includes(folder))
+  if (unknown.length > 0) throw new Error(`The host's sentence names ${unknown.join(', ')}, which its statements do not, so the places it runs cannot be told.`)
   return { folders: stated, files: [file] }
 }
 

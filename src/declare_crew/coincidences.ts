@@ -6,7 +6,7 @@ import { HOST_ANSWER_TIMEOUT_MS } from '../ask_the_host_what_it_loads/host_runs_
 import { THE_CHANNEL_READ_ASK } from '../keep_the_crew_channel/the_channel_read.ts'
 import { CARRY_A_MODEL } from '../refresh_a_member/the_refresh_flow.ts'
 import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
-import { HOST, OWNER, ROLE_TEXTS_DIRECTORY } from './declare_crew.ts'
+import { HOST, OWNER, ROLE_TEXTS_DIRECTORY, WORKTREES } from './declare_crew.ts'
 import { THE_MODELS_SWITCH } from '../pass_only_switches_that_load_no_config/pass_only_switches_that_load_no_config.ts'
 import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
@@ -36,6 +36,7 @@ export const COINCIDENCES: readonly Exception[] = [
   { value: THE_CHANNEL_READ_ASK, file: 'declare_crew/declare_crew.ts', reason: A_FIELD_OF_THE_DECLARATION },
   { value: OWNER, file: 'declare_crew/declare_crew.node-test.ts', reason: A_FIELD_OF_THE_DECLARATION },
   { value: OWNER, file: 'declare_crew/declare_crew.ts', reason: A_FIELD_OF_THE_DECLARATION },
+  { value: WORKTREES, file: 'declare_crew/what_a_checkout_proves.ts', reason: 'the folder a crew\'s worktrees sit in beside its clones, named the same word as the house_rules key and not that key' },
   { value: SUPERVISOR, file: 'declare_crew/declare_crew.node-test.ts', reason: A_ROLE_A_TEST_CREW_DECLARES },
   { value: SUPERVISOR, file: 'declare_crew/the_drafts_declaration.node-test.ts', reason: A_ROLE_A_TEST_CREW_DECLARES },
   // PR 939 ruling: Martha's team table names its supervisor role; report_where_the_work_stands imports this slice, so its constant cannot be imported back.
