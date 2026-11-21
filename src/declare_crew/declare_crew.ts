@@ -45,6 +45,7 @@ export {
   type EngineEndpoint,
 } from './the_engines_endpoint.ts'
 import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theWorkspacesClonesOf, whereTheCrewOpens, type WhereTheCrewOpens } from './the_crews_workspace.ts'
+import { CONFINEMENT, CONFINEMENT_REQUIRED_KEYS, theConfinementOf, type AConfinement } from './the_crews_confinement.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -311,7 +312,7 @@ export const SOLO_MEMBERS = [
  * other act is the owner's alone. A declaration written before the act existed names it nowhere, which reads as the
  * owner's alone, so an older crew is unchanged.
  */
-export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = null, host: string = THE_HOST_A_MEMBER_RAN_ON) {
+export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = null, host: string = THE_HOST_A_MEMBER_RAN_ON, confinement: AConfinement | null = null) {
   return {
     version: DECLARATION_VERSION,
     owner,
@@ -323,6 +324,8 @@ export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = 
       may: { ...Object.fromEntries(ACTS.map((act) => [act, [OWNER]])), [HOLD_REVIEWS]: [OWNER, SOLO_REVIEWER_ROLE] },
     },
     ...(layout === null ? {} : { house_rules: { [WORKSPACE_LAYOUT]: true, [CLONES]: layout.clones, [WORKTREES]: layout.worktrees } }),
+    // The members' ceiling (martha#989), numbers in the file, never in code; init names one only where it holds.
+    ...(confinement === null ? {} : { [CONFINEMENT]: confinement }),
     channel_read_seconds: CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   }
 }
@@ -420,6 +423,11 @@ export interface CrewSettings {
   readonly volatile_paths: readonly string[]
   /** Where an engine member's model is reached (martha#541 package A), or null when the declaration names none. */
   readonly engine_endpoint: EngineEndpoint | null
+  /**
+   * The crew's confinement (martha#989): the CPU slice, each member's scope and its systemd-only bus (./the_crews_confinement).
+   * Null when the declaration names none: every member runs uncapped, the launch saying so in one line.
+   */
+  readonly confinement: AConfinement | null
   /** The crew's thresholds (martha#931 A): see ./the_crews_thresholds; each field the declaration leaves out reads today's value. */
   readonly thresholds: CrewThresholds
   /** The crew's GitHub block (martha#931 B): see ./the_crews_github. */
@@ -447,7 +455,7 @@ export class DeclarationRefused extends Error {
   }
 }
 
-const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS, GITHUB, TRANSCRIPTS, OWNER_NOTICES, CLOCK_ZONE, ...WORKSPACE_TOP_LEVEL_KEYS, ...PROFILE_TOP_LEVEL_KEYS] as const
+const TOP_LEVEL_KEYS = ['version', 'owner', 'members', 'mode', 'house_rules', 'conventions', 'channel_read_seconds', 'handover_ceiling_minutes', BACKLOG, VOLATILE_PATHS, HOST, ENGINE_ENDPOINT, THRESHOLDS, GITHUB, TRANSCRIPTS, OWNER_NOTICES, CLOCK_ZONE, CONFINEMENT, ...WORKSPACE_TOP_LEVEL_KEYS, ...PROFILE_TOP_LEVEL_KEYS] as const
 const REQUIRED_MEMBER_KEYS = ['name', 'role'] as const
 /** The member key `martha up` reads to leave a declared member down (martha#511). */
 export const PARKED = 'parked'
@@ -490,6 +498,7 @@ export const DECLARATION_FIELDS: Readonly<Record<string, readonly string[]>> = {
   house_rules: HOUSE_RULE_KEYS,
   [BACKLOG]: BACKLOG_KEYS,
   [ENGINE_ENDPOINT]: [...ENGINE_ENDPOINT_REQUIRED_KEYS, ...ENGINE_ENDPOINT_OPTIONAL_KEYS],
+  [CONFINEMENT]: CONFINEMENT_REQUIRED_KEYS,
   [THRESHOLDS]: THRESHOLDS_KEYS,
   [GITHUB]: GITHUB_KEYS,
   [TRANSCRIPTS]: TRANSCRIPTS_KEYS,
@@ -659,6 +668,7 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
     backlog: backlogOf(refuse, value[BACKLOG]),
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
     engine_endpoint: theEnginesEndpointOf(said, value, profiles, (field, why) => refuse.say(field, why)),
+    confinement: theConfinementOf((field, why) => refuse.at(field, why), value[CONFINEMENT], (field, why) => refuse.say(field, why)),
     opens: whereTheCrewOpens(value),
   }
 }

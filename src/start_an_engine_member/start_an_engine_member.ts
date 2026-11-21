@@ -164,7 +164,9 @@ export async function startOnTheEngine(start: AStartOnItsHost, shared: TheShared
   const { model, managed, owners_settings_file } = before
 
   const token = mintALaunchToken()
-  const launch = await launchTheGooseEngine({ facts, binary: start.command, place: shared.place, relay_root: start.places.relay_root, model, tool_server: { token } })
+  const launch = await launchTheGooseEngine({ facts, binary: start.command, place: shared.place, relay_root: start.places.relay_root, model, tool_server: { token },
+    confined: { confinement: start.settings.confinement, member: start.member, inherited: start.inherited, tell_owner: (line) => start.tellOwner(line) },
+  })
   if ('refusal' in launch) return { started: false, refusal: launch.refusal }
   const ending = async (why: string): Promise<MemberStarted> => {
     await launch.end()

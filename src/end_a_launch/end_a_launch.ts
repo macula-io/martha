@@ -27,6 +27,7 @@ import { CLAUDE_SERVERS, launchEnvironment } from '../refuse_launch_of_unapprove
 import { isOnTheOwnersTerminal, startForegroundJob, type ForegroundJob } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
 import { recordTheMember } from '../sweep_leftover_launch_directories/leftover_relay_directories.ts'
 import { meshServersPlaced } from '../place_the_hosts_settings/the_hosts_settings.ts'
+import { theConfinedStart, type AConfinedStart } from '../confine_a_member/confine_a_launch.ts'
 import type { ClaudeCodeMemberLaunch, LaunchMade, MemberStopped } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 
 /** The start of every refusal: the member was not started. */
@@ -133,7 +134,7 @@ export async function startedMember(
   starting: Starting,
 ): Promise<StartedMember | string> {
   const { prepared, relayDirectory } = made
-  const { args: memberArgs, env } = starting
+  const { env } = starting
   // The host hands a server its own environment and then the settings files' env,
   // so the server's is built from both.
   const placed = meshServersPlaced(prepared.carried_files[CLAUDE_SERVERS], launch, prepared.snapshot_dir, { ...env, ...made.settingsEnv })
@@ -141,6 +142,8 @@ export async function startedMember(
     await removeWhatTheLaunchMade(made)
     return `${NOT_STARTED}: ${placed}`
   }
+  const confined = await theMembersConfinedStart(launch, made, starting)
+  if (typeof confined === 'string') return confined
   const launchRecords = launchRecordsDirectory(launch.places.launch_records)
   const record = (pid: number): LaunchRecorded =>
     recordMemberLaunch(launchRecords, linuxProcessIdentities, {
@@ -154,13 +157,13 @@ export async function startedMember(
   // directory's record is written inside the same hold: a launcher killed in
   // between then leaves a record that already names its member (#124).
   const job = isOnTheOwnersTerminal(launch.stdio)
-    ? startForegroundJob(made.binary, memberArgs, { cwd: launch.place.launch_dir, env }, (pid) =>
+    ? startForegroundJob(confined.command, confined.args, { cwd: launch.place.launch_dir, env: confined.env }, (pid) =>
         refusedIfTheRunIsGone(made, () => recordedInsideTheHold(relayDirectory.directory, pid, record(pid))),
       )
     : undefined
   // On the owner's terminal `child` is the job-control shell: it exits once the
   // member has and the terminal is given back, so its exit is the member's.
-  const child = job?.shell ?? spawn(made.binary, memberArgs, { cwd: launch.place.launch_dir, env, detached: true, stdio: launch.stdio })
+  const child = job?.shell ?? spawn(confined.command, confined.args, { cwd: launch.place.launch_dir, env: confined.env, detached: true, stdio: launch.stdio })
 
   const spawned = await new Promise<Error | undefined>((resolve) => {
     child.once('spawn', () => resolve(undefined))
@@ -175,6 +178,30 @@ export async function startedMember(
   const memberError = start.inTheLaunchRecord ? undefined : await recordTheStartedMember(relayDirectory.directory, start.pid, child, made)
   if (memberError !== undefined) return memberError
   return { child, pid: start.pid, recorded: start.recorded, launchRecords }
+}
+
+/**
+ * The member's own start, inside its scope when the crew declares a confinement (martha#989), with the owner told what
+ * the confined start says; or the refusal, with everything the launch made gone. The relay was handed the host's own
+ * words and environment; what spawns is the same command, placed.
+ */
+async function theMembersConfinedStart(launch: ClaudeCodeMemberLaunch, made: LaunchMade, starting: Starting): Promise<AConfinedStart | string> {
+  const confined = await theConfinedStart({
+    confinement: launch.crew_settings?.confinement ?? null,
+    member: launch.member_name,
+    launcher_pid: process.pid,
+    inherited: launch.inherited,
+    command: made.binary,
+    args: starting.args,
+    env: starting.env,
+    launch_directory: made.relayDirectory.directory,
+  })
+  if ('refusal' in confined) {
+    await removeWhatTheLaunchMade(made)
+    return `${NOT_STARTED}: ${confined.refusal}`
+  }
+  confined.told.forEach((line) => launch.tellOwner(line))
+  return confined
 }
 
 /**

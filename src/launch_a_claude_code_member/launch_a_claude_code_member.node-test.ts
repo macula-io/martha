@@ -59,6 +59,10 @@ import { MEMBER_CONFIG_FOLDER, MEMBERS_OWN_SETTINGS, theMembersConfigEnvironment
 import { hookSettingsWatch, realPathOf } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { launchClaudeCodeMember } from './launch_a_claude_code_member.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
+import { CONFINEMENT, CONFINEMENT_THAT_INIT_WRITES } from '../declare_crew/the_crews_confinement.ts'
+import { DECLARATION_DIRECTORY, DECLARATION_FILE, SOLO_MEMBERS, declareCrew, soloDeclaration } from '../declare_crew/declare_crew.ts'
+import { CLOSED_VOCABULARY } from '../declare_crew/a_hosts_model_vocabulary.ts'
+import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { keepTheLifelineIn, RUN_LIFELINE_FD } from '../end_a_launch_when_its_run_ends/keep_the_lifeline_in.ts'
 import { RUN_LIFELINE_VARIABLE, THE_RUN_IS_GONE } from '../end_a_launch_when_its_run_ends/the_run_lifeline.ts'
 import { RELAY_PLUGIN_DIR } from '../ask_the_host_what_it_loads/what_the_host_loads.ts'
@@ -4803,4 +4807,18 @@ test('#931 C: a launch\'s owner\'s screen is told of its crew\'s declared notice
   const where = { member_name: 'Vesta', places: { dashboard: '/the-rows' }, owner_bell: undefined, stdio: 'pipe' } as unknown as Parameters<typeof theScreenALaunchSees>[0]
   assert.deepEqual(theScreenALaunchSees({ ...where, crew_settings: crew }, () => false).shown_notices, declared, 'the owner\'s screen is not told of the crew\'s declared notices')
   assert.deepEqual(theScreenALaunchSees(where, () => false).shown_notices, OWNER_NOTICES_WHEN_UNNAMED.show, 'a launch with no crew is not told of the defaults')
+})
+
+test('#989: a Claude Code member starts through the confined start: a declared confinement no user manager can hold refuses it, leaving nothing (mutant: the confined start dropped)', async (t) => {
+  const place = placeFor(t)
+  const fake = fakeClaude(place)
+  // A crew read through the declaration's own reader, naming the confinement `martha init` writes; the launch's
+  // environment holds no runtime dir, so no user manager can place the member in the declared slice.
+  const root = '/martha-989-a-launch'
+  const declaration = join(root, DECLARATION_DIRECTORY, DECLARATION_FILE)
+  const { host } = hostForTests({ documents: { [declaration]: JSON.stringify({ ...soloDeclaration('the-owner'), [CONFINEMENT]: CONFINEMENT_THAT_INIT_WRITES }) } })
+  const crew = await declareCrew(host.stores.documents, root, { kind: CLOSED_VOCABULARY, names: [] })
+  const refusal = await refusedLeavingNothing(t, place, { ...memberLaunch(place, fake.command), member_name: SOLO_MEMBERS[0].name, crew_settings: crew }, fake.ranFile)
+  assert.ok(refusal.startsWith(NOT_STARTED), `the refusal is not a launch's: ${refusal}`)
+  assert.ok(refusal.includes(CONFINEMENT_THAT_INIT_WRITES.slice), `the refusal does not name the slice: ${refusal}`)
 })

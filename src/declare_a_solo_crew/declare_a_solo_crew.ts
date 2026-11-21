@@ -30,6 +30,8 @@ import {
 } from '../declare_crew/declare_crew.ts'
 import { nodeIdsFor, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { repoOfTheCheckout } from '../read_the_origin_a_clone_has/read_the_origin_a_clone_has.ts'
+import { CONFINEMENT_THAT_INIT_WRITES, theConfinementInitLeftOut, type AConfinement } from '../declare_crew/the_crews_confinement.ts'
+import { aUserManagerListensIn } from '../confine_a_member/the_systemd_only_bus.ts'
 
 export interface SoloCrewRequest {
   /** The project's absolute path. */
@@ -47,10 +49,22 @@ export interface SoloCrewRequest {
    * plugin's init names Claude Code; the standalone install's names the engine, from its own recording.
    */
   readonly host: string
+  /**
+   * The launcher's `$XDG_RUNTIME_DIR`, or undefined when unset (martha#989): init declares crew-code's confinement only
+   * when a user manager listens under it, since a declared ceiling no manager can hold refuses every member's start.
+   */
+  readonly runtime_dir: string | undefined
 }
 
 export type SoloCrewDeclared =
-  | { readonly declared: true; readonly settings: CrewSettings; readonly declaration: string; readonly workspace: string }
+  | {
+      readonly declared: true
+      readonly settings: CrewSettings
+      readonly declaration: string
+      readonly workspace: string
+      /** The line that says no confinement was declared and which block to add, or undefined when one was. */
+      readonly confinement_left_out: string | undefined
+    }
   | { readonly declared: false; readonly refusal: string }
 
 export const NO_OWNER =
@@ -88,7 +102,8 @@ export async function declareSoloCrew(request: SoloCrewRequest): Promise<SoloCre
   const directory = join(request.root, DECLARATION_DIRECTORY), declaration = join(directory, DECLARATION_FILE)
   const unmade = declarationDirectory(directory)
   if (unmade !== undefined) return { declared: false, refusal: unmade }
-  const unwritten = writeOnce(declaration, `${JSON.stringify(soloDeclaration(owner, workspace.layout, request.host), null, 2)}\n`)
+  const confined = theConfinementInitDeclares(request.runtime_dir, declaration)
+  const unwritten = writeOnce(declaration, `${JSON.stringify(soloDeclaration(owner, workspace.layout, request.host, confined.confinement), null, 2)}\n`)
   if (unwritten !== undefined) return { declared: false, refusal: unwritten }
 
   let settings: CrewSettings
@@ -100,5 +115,14 @@ export async function declareSoloCrew(request: SoloCrewRequest): Promise<SoloCre
   }
   const ids = nodeIdsFor(request.state, settings.members.map((member) => member.name))
   if ('refusal' in ids) return { declared: false, refusal: ids.refusal }
-  return { declared: true, settings, declaration, workspace: workspace.said }
+  return { declared: true, settings, declaration, workspace: workspace.said, confinement_left_out: confined.left_out }
+}
+
+/**
+ * crew-code's confinement when a user manager listens under `runtime_dir` to hold it; else none, with the line that
+ * says so and names the block to add to `declaration` (martha#989).
+ */
+function theConfinementInitDeclares(runtime_dir: string | undefined, declaration: string): { readonly confinement: AConfinement | null; readonly left_out: string | undefined } {
+  const holds = runtime_dir !== undefined && runtime_dir !== '' && aUserManagerListensIn(runtime_dir)
+  return holds ? { confinement: CONFINEMENT_THAT_INIT_WRITES, left_out: undefined } : { confinement: null, left_out: theConfinementInitLeftOut(declaration) }
 }

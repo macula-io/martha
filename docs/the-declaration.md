@@ -21,6 +21,7 @@ page does not name.
 | `volatile_paths` | no | The absolute roots a reboot deletes. | the machine's own roots |
 | `host` | no | The host a member runs on when the member names none. | `claude-code` |
 | `engine_endpoint` | no | Where an engine member's model is reached (below). | none; an engine member is refused at its start |
+| `confinement` | no | The CPU ceiling the crew's members share, each member's own, and the systemd-only bus a member reaches (below). | no ceiling and the owner's whole desktop bus; the launch says so in one line |
 | `thresholds` | no | When a row reads offline, when a member hands over, when a report is stale (below). | the values below |
 | `id` | no | The crew's name: the name of its tmux session when `terminal` is `tmux` (martha#932). | none |
 | `terminal` | no | The terminal `martha up` opens members in: `kitty`, or `tmux`, where each member gets a window in one session named by `id` on Martha's own tmux server, shown with `martha attach [<member>]` (martha#932). `tmux` needs `id`. | `kitty` |
@@ -97,6 +98,26 @@ Each switch is off unless the file says `true`.
 
 Left out, and an engine member's profile names a provider with an `endpoint`, the endpoint is that provider's. Both at
 once is refused.
+
+## `confinement`
+
+| Field | Required | What it holds |
+|---|---|---|
+| `slice` | yes | The slice every member, and everything a member starts, runs under: a unit name ending `.slice`. |
+| `slice_cpu_quota` | yes | That slice's CPU quota, as systemd reads one: a whole percentage, one or more, with its `%`. |
+| `slice_cpu_weight` | yes | That slice's CPU weight: a whole number from 1 to 10000. |
+| `member_cpu_quota` | yes | Each member's own scope quota in that slice, in the same shape as `slice_cpu_quota`. |
+| `member_cpu_weight` | yes | Each member's own scope weight: a whole number from 1 to 10000. |
+| `systemd_only_bus` | yes | The bus a member reaches instead of the owner's desktop bus: `{ unit, socket }`. |
+
+`systemd_only_bus.unit` is the proxy's unit name, without its `.service` (Martha adds it): letters, digits and
+`: _ . \ -` only. `systemd_only_bus.socket` is a bare file name under the owner's runtime directory — no `/`, not empty,
+not `.` or `..`. `--filter` and `--talk=org.freedesktop.systemd1` are Martha's own: the bus reaching the systemd user
+manager alone is the control, not a setting.
+
+Left out, every member runs as it does today, and each launch says in one line that no CPU ceiling is declared and that
+the member's bus is the owner's whole desktop bus. Declared, a ceiling that cannot be applied refuses the launch rather
+than starting the member uncapped. Linux only. `martha init` writes crew-code's own values.
 
 ## `thresholds`
 

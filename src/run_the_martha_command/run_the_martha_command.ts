@@ -38,6 +38,7 @@ import { THE_VOCABULARIES_OF_HOST } from '../start_the_member_on_its_host/start_
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { declareSoloCrew } from '../declare_a_solo_crew/declare_a_solo_crew.ts'
+import { RUNTIME_DIR_KEY } from '../confine_a_member/the_systemd_only_bus.ts'
 import { appendStateLine, crewRowsDirectory, crewStateDirectory, nodeIdsFor, openState, readApprovals, readStateFile, stateSubdirectory, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theLeftoversThisMachineShows } from '../read_a_kernel_and_a_home/read_a_kernel_and_a_home.ts'
 import { showTheWeek, weekOf } from '../show_the_week_of_the_ledger/show_the_week_of_the_ledger.ts'
@@ -150,10 +151,11 @@ async function init(io: CommandIo, places: Places): Promise<number> {
   const named = gitSays(places.root, 'config', 'user.name')
   const owner = named ?? io.env['USER'] ?? io.env['LOGNAME'] ?? ''
   if (named === undefined) tellOwnerOn(io)(`git holds no user.name, so the crew's owner is this login (${owner})`)
-  const declared = await declareSoloCrew({ root: places.root, owner: owner === '' ? null : owner, origin: gitSays(places.root, 'remote', 'get-url', 'origin') ?? null, state: places.state, documents, models: CLAUDE_CODE_MODELS, host: CLAUDE_CODE })
+  const declared = await declareSoloCrew({ root: places.root, owner: owner === '' ? null : owner, origin: gitSays(places.root, 'remote', 'get-url', 'origin') ?? null, state: places.state, documents, models: CLAUDE_CODE_MODELS, host: CLAUDE_CODE, runtime_dir: io.env[RUNTIME_DIR_KEY] })
   if (!declared.declared) return refused(io, declared.refusal)
   io.out(`Declared a solo crew in ${declared.declaration}: ${declared.settings.members.map((member) => member.name).join(', ')}.`)
   io.out(declared.workspace)
+  if (declared.confinement_left_out !== undefined) io.out(declared.confinement_left_out)
   return EXIT_DONE
 }
 

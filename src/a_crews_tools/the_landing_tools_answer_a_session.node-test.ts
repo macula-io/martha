@@ -142,6 +142,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     backlog: null,
     volatile_paths: [],
     engine_endpoint: null,
+    confinement: null,
     thresholds: THRESHOLDS_WHEN_UNNAMED,
     github: GITHUB_WHEN_UNNAMED,
     transcripts: TRANSCRIPTS_WHEN_UNNAMED,

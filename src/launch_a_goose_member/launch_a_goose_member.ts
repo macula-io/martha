@@ -81,6 +81,8 @@ import { recordTheLauncher, recordTheMember, sweepLeftoverLaunchDirectories } fr
 import { theToolServersEntry } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts'
 import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { theFoldersReadBackWhole, theRootsWatch } from './the_roots_watch.ts'
+import { theConfinedStart } from '../confine_a_member/confine_a_launch.ts'
+import type { AConfinement } from '../declare_crew/the_crews_confinement.ts'
 
 /** The folder under the path root the engine keeps its config in. */
 export const THE_CONFIG_FOLDER = 'config'
@@ -185,9 +187,15 @@ export type TheEngineStart = TheEngineStarted | { readonly refusal: string }
  * the engine would run every tool on whatever its shell falls back to, and the next one to notice would be a
  * reader three layers away finding `undefined` (martha#781).
  */
-export async function startTheEngine(facts: RecordedEngine, binary: string, places: ThePlacesOfALaunch, environment: Readonly<Record<string, string>>): Promise<TheEngineStart> {
+export async function startTheEngine(
+  facts: RecordedEngine,
+  binary: string,
+  places: ThePlacesOfALaunch,
+  environment: Readonly<Record<string, string>>,
+  placed: { readonly command: string; readonly args: readonly string[] } = { command: binary, args: [facts.acp_command] },
+): Promise<TheEngineStart> {
   if (!environment['PATH']) return { refusal: `The member is not started: the environment a launch hands ${binary} holds no PATH.` }
-  const child = spawn(binary, [facts.acp_command], { cwd: places.checkout, env: environment, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
+  const child = spawn(placed.command, placed.args, { cwd: places.checkout, env: environment, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
   const failed = await new Promise<Error | undefined>((resolve) => {
     child.once('spawn', () => resolve(undefined))
     child.once('error', resolve)
@@ -367,12 +375,22 @@ export interface AGooseLaunchAsked {
   readonly model: TheModelALaunchRuns
   /** The token the crew's tool server carries: the launch's own, minted for it. Its socket is in the launch's directory. */
   readonly tool_server: { readonly token: string }
+  /** The crew's confinement and what the confined start reads (martha#989): the engine starts in its own scope when one is declared. */
+  readonly confined: TheConfinementOfAnEngine
   /** A test's hand on the config root (and the secrets file beside it) between their write and the engine's start; a real launch gives none. */
   readonly before_the_start?: (config_at: string) => void
   /** A test's hand right after the launcher is recorded, before anything else of the launch is written; a real launch gives none. */
   readonly when_the_launcher_is_recorded?: (directory: string) => void
   /** A test's hand between the engine's spawn and its record; a real launch gives none. */
   readonly before_the_member_is_recorded?: (pid: number) => Promise<void>
+}
+
+/** What an engine's confined start reads: the declaration's confinement (null when none), the member, the launcher's environment, and the owner's ear. */
+export interface TheConfinementOfAnEngine {
+  readonly confinement: AConfinement | null
+  readonly member: string
+  readonly inherited: Readonly<Record<string, string | undefined>>
+  readonly tell_owner: (line: string) => void
 }
 
 /**
@@ -487,7 +505,19 @@ function theRootReadBackAndWatched(asked: AGooseLaunchAsked, made: ALaunchMade):
  * (`started`), and when it could not be recorded, the engine stopped and why. The caller leaves nothing of the launch.
  */
 async function theEngineStartedAndRecorded(asked: AGooseLaunchAsked, places: ThePlacesOfALaunch, directory: ARelayDirectoryMade): Promise<AGooseLaunch['engine'] | { readonly refusal: string; readonly started?: { readonly refusal: string } }> {
-  const started = await startTheEngine(asked.facts, asked.binary, places, theEnvironmentOfALaunch(asked.facts, places))
+  const confined = await theConfinedStart({
+    confinement: asked.confined.confinement,
+    member: asked.confined.member,
+    launcher_pid: process.pid,
+    inherited: asked.confined.inherited,
+    command: asked.binary,
+    args: [asked.facts.acp_command],
+    env: theEnvironmentOfALaunch(asked.facts, places),
+    launch_directory: directory.directory,
+  })
+  if ('refusal' in confined) return refused(confined.refusal)
+  confined.told.forEach((line) => asked.confined.tell_owner(line))
+  const started = await startTheEngine(asked.facts, asked.binary, places, confined.env, confined)
   if ('refusal' in started) return { refusal: started.refusal, started }
   await asked.before_the_member_is_recorded?.(started.pid)
   const member = recordTheMember(directory.directory, started.pid)

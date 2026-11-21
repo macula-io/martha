@@ -35,6 +35,7 @@ const planted = JSON.parse(readFileSync(join(import.meta.dirname, 'planted_launc
 const THE_HOST_ADAPTERS = [
     'answer_the_relay',
     'approve_a_checkouts_config',
+    'confine_a_member',
     'ask_git_what_a_member_is_about_to_change',
     'ask_git_how_far_a_clone_is_behind',
     'ask_the_host_what_it_loads',
