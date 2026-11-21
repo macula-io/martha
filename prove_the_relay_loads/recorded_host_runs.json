@@ -66,5 +66,15 @@
     "file": "src/drive_the_recorded_host/the_crew_command_on_the_recorded_host.node-test.ts",
     "cases": 4,
     "proves": "the owner's /crew at a member's tab draws the crew or sends one message, /martha opens the pane, and the model is sent nothing, then or on the next turn (martha#927)"
+  },
+  {
+    "file": "src/drive_the_recorded_host/the_crew_state_on_the_recorded_host.node-test.ts",
+    "cases": 3,
+    "proves": "the member who assigns work is handed the crew state with its next prompted turn, not again while it is unchanged; a member granted no work is handed none (martha#984)"
+  },
+  {
+    "file": "src/drive_the_recorded_host/a_stale_clone_note_on_the_recorded_host.node-test.ts",
+    "cases": 2,
+    "proves": "a Read in a clone behind its origin carries the stale-clone note to the model, and a current clone none (martha#969)"
   }
 ]

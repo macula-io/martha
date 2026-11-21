@@ -13,6 +13,7 @@ import { test } from 'node:test'
 import { CREW_CODE_DECLARATION_DIRECTORY, DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, HOLD_REVIEWS, THE_HOST_A_MEMBER_RAN_ON, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
+import { ARTIFACT_LINES } from '../read_a_crew_line/crew_lines.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { CLAUDE_CODE_MODELS } from '../claude_code_host/claude_code_host.ts'
 import { thisMachine } from '../linux_process_identity/files_and_processes_on_this_machine.ts'
@@ -38,6 +39,12 @@ import { TRANSCRIPTS_WHEN_UNNAMED } from '../declare_crew/the_crews_transcripts.
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED } from '../declare_crew/the_crews_clock_zone.ts'
 import { WHERE_A_CREW_OPENS_WHEN_UNNAMED } from '../declare_crew/the_crews_workspace.ts'
+import { REPORT_WHERE_THE_WORK_STANDS } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
+import { TAKE_ASKS } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { SWITCH_YOUR_MODEL } from '../switch_a_members_model/the_switch_tools.ts'
+import { VERIFY_RANGE } from '../check_a_range_before_the_owner_says_yes/check_a_range_before_the_owner_says_yes.ts'
+import { WORKTREE_FINISH } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
+import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
 
 const ROOT = `/${CREWS_PLACE}/site`
 const CREW = join(ROOT, DECLARATION_DIRECTORY)
@@ -52,8 +59,8 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
     owner: 'Raf',
     host: THE_HOST_A_MEMBER_RAN_ON,
     members: [
-      { name: 'builder', role: 'builder', model: null, host: null, parked: false },
-      { name: 'reviewer', role: 'reviewer', model: null, host: null, parked: false },
+      { name: 'builder', role: 'builder', model: null, host: null, parked: false, billing: null },
+      { name: 'reviewer', role: 'reviewer', model: null, host: null, parked: false, billing: null },
     ],
     mode: { name: mode, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER], [HOLD_REVIEWS]: [OWNER] } },
     house_rules: { owner_items: false, workspace_layout: false, member_work: false, practice: overrides.practice ?? false, strict_gate: false, owner_bell: false, dashboard: false, refresh_between_tasks: false, nudges: false, stalled_minutes: null, review_minutes: null, person_minutes: null, review_model: null, clones: null, worktrees: null },
@@ -89,6 +96,9 @@ const sectionFor = (settings: CrewSettings, member: string, read: ReadAText): Th
 
 const textAt = (file: string, text: string): ATextAndItsFile => ({ file, text })
 
+/** A member the ported rules hand only the progress part: no layout, no review model, no grant. */
+const NOTHING_PORTED: TheTextsAMemberReads['ported'] = { layout: null, review_model: null, assigns_work: false, offers_owner_asks: false }
+
 /** Everything a composer needs, which each case changes one field of. */
 const textsOf = (change: Partial<TheTextsAMemberReads> = {}): TheTextsAMemberReads => ({
   member: 'builder',
@@ -99,13 +109,14 @@ const textsOf = (change: Partial<TheTextsAMemberReads> = {}): TheTextsAMemberRea
   role_text: textAt(join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, 'builder.md'), shipped(join(ROLE_TEXTS_DIRECTORY, 'builder.md'))),
   mode_text: textAt(join(SHIPPED_TEXTS, MODE_TEXTS_DIRECTORY, 'solo.md'), shipped(join(MODE_TEXTS_DIRECTORY, 'solo.md'))),
   conventions: null,
+  ported: NOTHING_PORTED,
   ...change,
 })
 
 test('#306: the section carries who the member is, its practice, its role, its mode, the lines it sends, and its crew conventions, in that order', () => {
   const section = handAMemberItsCrewText(textsOf({ conventions: textAt(join(CREW, 'CONVENTIONS.md'), 'Write the issue before the code.') }))
   const headings = section.split('\n').filter((line) => line.startsWith('## '))
-  assert.deepEqual(headings, ['## You are builder, the crew\'s builder', '## Crew practice', '## Your role: builder', '## How this crew works: solo', '## The lines you send', '## Conventions'])
+  assert.deepEqual(headings, ['## You are builder, the crew\'s builder', '## Crew practice', '## Your role: builder', '## How this crew works: solo', '## The lines you send', '## Progress', '## Conventions'])
   assert.match(section, /its owner is Raf/, 'the section does not name the crew\'s owner')
   assert.match(section, /Write the issue before the code\./, 'the conventions the crew declared are not in the section')
   assert.doesNotMatch(section, /\{\{/, 'a placeholder was left in the section, reading as a rule')
@@ -231,6 +242,14 @@ test('#306: every line the section teaches parses with the reader the crew accep
   }
 })
 
+test('#957 gap 13: the Supervisor\'s role text names both lines that hand it an Artifact, filled in, and no placeholder is left (mutant: a line left unfilled)', () => {
+  const role_text = textAt(join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, `${SUPERVISOR}.md`), shipped(join(ROLE_TEXTS_DIRECTORY, `${SUPERVISOR}.md`)))
+  const section = handAMemberItsCrewText(textsOf({ member: SUPERVISOR, role: SUPERVISOR, role_text }))
+  assert.ok(section.includes(`\`${ARTIFACT_LINES.read}\``), 'the read line is not in the Supervisor\'s text')
+  assert.ok(section.includes(`\`${ARTIFACT_LINES.publish}\``), 'the publish line is not in the Supervisor\'s text')
+  assert.ok(!section.includes('{{'), 'a placeholder is left in the Supervisor\'s text')
+})
+
 test('#306: the files a crew must approve are its roles\' texts, its mode\'s text and the conventions it names', () => {
   const files = crewTextFilesOf(settingsOf({ conventions: 'CONVENTIONS.md' }))
   assert.deepEqual(files, [join(CREW, ROLE_TEXTS_DIRECTORY, 'builder.md'), join(CREW, ROLE_TEXTS_DIRECTORY, 'reviewer.md'), join(CREW, MODE_TEXTS_DIRECTORY, SOLO_MODE + '.md'), join(CREW, 'CONVENTIONS.md')])
@@ -241,7 +260,7 @@ test('#306: the files a crew must approve are its roles\' texts, its mode\'s tex
 test('#306: Martha\'s own texts compose for every role it ships, in both modes, with no placeholder left and nothing refused', () => {
   for (const [mode, member] of [[SOLO_MODE, 'builder'], [SOLO_MODE, 'reviewer'], ['team', 'builder'], ['team', 'reviewer'], ['team', 'sup']] as const) {
     const settings = settingsOf({ mode })
-    const texts = sectionFor({ ...settings, members: [...settings.members, { name: 'sup', role: SUPERVISOR, model: null, host: null, parked: false }] }, member, shippedReader())
+    const texts = sectionFor({ ...settings, members: [...settings.members, { name: 'sup', role: SUPERVISOR, model: null, host: null, parked: false, billing: null }] }, member, shippedReader())
     const section = handAMemberItsCrewText({ ...texts, practice: textAt(join(SHIPPED_TEXTS, PRACTICE_TEXT), shipped(PRACTICE_TEXT)) })
     assert.doesNotMatch(section, /\{\{/, `the ${member} text in ${mode} leaves a placeholder: ${section.slice(section.indexOf('## Your role'))}`)
   }
@@ -301,4 +320,53 @@ test('#306: a project with no declaration approves no crew text, and a declarati
     (error: unknown) => error instanceof DeclarationRefused && error.message.startsWith(`${declaration}: `),
     'a declaration that is there and is refused was approved as a project with no crew text',
   )
+})
+
+/** A declaration whose house rules turn every ported part on, its table granting the builder both acts (martha#971). */
+const settingsWithEveryPortedRule = (): CrewSettings => {
+  const base = settingsOf()
+  return {
+    ...base,
+    mode: { ...base.mode, may: { ...base.mode.may, assign_work: ['builder'], [OFFER_OWNER_ASKS]: ['builder'] } },
+    house_rules: { ...base.house_rules, workspace_layout: true, clones: '/a/place/for/copies', worktrees: '/a/place/for/branches', review_model: 'a-review-model' },
+  }
+}
+
+/** The headings of the ported parts a composed section carries, in its order. */
+const thePortedHeadings = (section: string): readonly string[] =>
+  [...section.matchAll(/^## (Progress|Briefs|Rhythm|Workspace rules|The ask queue|Reviews|Models)$/gm)].map((found) => found[1] ?? '')
+
+test("martha#971: a member granted assign_work and offer_owner_asks, in a crew that turns every rule on, is handed every ported part, in crew-code's order, in Martha's tool names (mutants: each part dropped; each switch or grant read as off)", () => {
+  const section = handAMemberItsCrewText(sectionFor(settingsWithEveryPortedRule(), 'builder', shippedReader()))
+  assert.deepEqual(thePortedHeadings(section), ['Progress', 'Briefs', 'Rhythm', 'Workspace rules', 'The ask queue', 'Reviews', 'Models'])
+  assert.ok(section.includes(`Call ${REPORT_WHERE_THE_WORK_STANDS} when you start an assigned task`), 'the progress part names another tool')
+  assert.ok(section.includes(`Run ${VERIFY_RANGE} on the range`), 'the rhythm part names another tool')
+  assert.ok(section.includes('A clone in /a/place/for/copies/<org>/<repo> stays on its default branch'), 'the workspace part names another clones place')
+  assert.ok(section.includes('a worktree at /a/place/for/branches/<repo>-<slug>'), 'the workspace part names another worktrees place')
+  assert.ok(section.includes(`(4) A worktree or branch whose name starts with another member's is theirs: only they remove it, through ${WORKTREE_FINISH}.`), 'the member-work rule is not the fourth')
+  assert.ok(section.includes(`call ${TAKE_ASKS} and offer what it returns to Raf as ONE multi-select menu`), 'the ask-queue part names another tool or owner')
+  assert.ok(section.includes("Reviews run on a-review-model. When you spawn a subagent to review or attack work, pass model: 'a-review-model'"), 'the reviews part names another model')
+  assert.ok(section.includes(`the member switches with ${SWITCH_YOUR_MODEL}`), 'the models part names another tool')
+  assert.ok(!section.includes('Held messages'), 'a held-note was handed, and Martha holds no message yet (gap 15)')
+})
+
+test("martha#971: a member with neither grant is handed the parts every member reads, and none of the ones for whoever assigns work or offers the asks (mutant: a grant read from another role)", () => {
+  const section = handAMemberItsCrewText(sectionFor(settingsWithEveryPortedRule(), 'reviewer', shippedReader()))
+  assert.deepEqual(thePortedHeadings(section), ['Progress', 'Workspace rules', 'Reviews'])
+})
+
+test("martha#971: a crew that turns no ported rule on hands the progress part alone, and the workspace part follows the git guard's own reading, never member_work (mutants: the progress part dropped; the layout read when it is off; review r=1: rule (4) on member_work)", () => {
+  assert.deepEqual(thePortedHeadings(handAMemberItsCrewText(sectionFor(settingsOf(), 'builder', shippedReader()))), ['Progress'])
+  const base = settingsOf()
+  // member_work is read by no guard: with no layout the guard refuses nothing, so no workspace rule is handed.
+  const memberWorkOnly = { ...base, house_rules: { ...base.house_rules, member_work: true } }
+  assert.deepEqual(thePortedHeadings(handAMemberItsCrewText(sectionFor(memberWorkOnly, 'builder', shippedReader()))), ['Progress'], 'a rule the guard does not hold was handed as Martha\'s')
+  // The guard refuses another member's worktree wherever it holds the places, so that rule is handed with the others.
+  const layoutOnly = { ...base, house_rules: { ...base.house_rules, workspace_layout: true, member_work: false, clones: '/a/place/for/copies', worktrees: '/a/place/for/branches' } }
+  const guarded = handAMemberItsCrewText(sectionFor(layoutOnly, 'builder', shippedReader()))
+  assert.ok(guarded.includes(`(4) A worktree or branch whose name starts with another member's is theirs: only they remove it, through ${WORKTREE_FINISH}.`), 'the rule the guard refuses by was not taught')
+  // Places named with the switch off: the part is handed exactly when the guard reads a workspace from the declaration.
+  const placesNamedLayoutOff = { ...base, house_rules: { ...base.house_rules, clones: '/a/place/for/copies', worktrees: '/a/place/for/branches' } }
+  const handed = thePortedHeadings(handAMemberItsCrewText(sectionFor(placesNamedLayoutOff, 'builder', shippedReader()))).includes('Workspace rules')
+  assert.equal(handed, theWorkspaceTheCrewDeclared(placesNamedLayoutOff) !== undefined, 'the workspace part and the guard read the places differently')
 })

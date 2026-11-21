@@ -31,7 +31,8 @@ import { TRANSCRIPTS, TRANSCRIPTS_KEYS, transcriptsOf, type CrewTranscripts } fr
 import { THRESHOLDS, THRESHOLDS_KEYS, thresholdsOf, type CrewThresholds } from './the_crews_thresholds.ts'
 import { OWNER_NOTICES, OWNER_NOTICES_KEYS, ownerNoticesOf, type CrewOwnerNotices } from './the_crews_owner_notices.ts'
 import { CLOCK_ZONE, clockZoneOf } from './the_crews_clock_zone.ts'
-import { PROFILE, PROFILE_BLOCK_FIELDS, PROFILE_TOP_LEVEL_KEYS, profilesOf, theProfileOfAMember, type TheProfiles } from './the_crews_profiles.ts'
+import { PROFILE, PROFILE_BLOCK_FIELDS, PROFILE_TOP_LEVEL_KEYS, profilesOf, theProfileOfAMember, type Billing, type TheProfiles } from './the_crews_profiles.ts'
+export { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, BILLINGS, type Billing } from './the_crews_profiles.ts'
 import { ENGINE_ENDPOINT, ENGINE_ENDPOINT_OPTIONAL_KEYS, ENGINE_ENDPOINT_REQUIRED_KEYS, theEnginesEndpointOf, type EngineEndpoint } from './the_engines_endpoint.ts'
 export {
   AN_ENVIRONMENT_NAME,
@@ -218,11 +219,14 @@ export interface Backlog {
   readonly idle_minutes: number
 }
 
+/** The house rule that has every owner's item in a handover or a brief marked DECIDED or IDEA (martha#999 package 2). */
+export const OWNER_ITEMS = 'owner_items'
+
 /** The house rule that turns a crew's workspace layout on (martha#256), which brings the two places below with it. */
 export const WORKSPACE_LAYOUT = 'workspace_layout'
 
 /** The house rules a crew can switch on. Each is off unless the declaration says true. */
-export const HOUSE_RULE_SWITCHES = ['owner_items', WORKSPACE_LAYOUT, 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES] as const
+export const HOUSE_RULE_SWITCHES = [OWNER_ITEMS, WORKSPACE_LAYOUT, 'member_work', 'practice', STRICT_GATE, DASHBOARD, REFRESH_BETWEEN_TASKS, OWNER_BELL, NUDGES] as const
 export type HouseRuleSwitch = (typeof HOUSE_RULE_SWITCHES)[number]
 
 /** The house rule that names a model rather than switching a rule on. */
@@ -349,6 +353,11 @@ export interface Member {
    * not parked; false when the declaration does not say. Not the park a running member's work is put in.
    */
   readonly parked: boolean
+  /**
+   * The credential this member is billed through when it runs on Claude Code (martha#916): its profile's provider's
+   * `billing`; null when it names no profile, or its provider names none, and the launch then picks.
+   */
+  readonly billing: Billing | null
 }
 
 export interface Mode {
@@ -854,13 +863,16 @@ function memberOf(refuse: Refuse, member: unknown, at: string, read: TheMembersR
   return { name, role, ...theModelAndHostOf(refuse, member, at, read.profiles), parked: parkedOf(refuse, parked, `${at}.${PARKED}`) }
 }
 
-/** A member's model and host: its profile's (martha#931), or the member's own `model` and `host` as before. */
-function theModelAndHostOf(refuse: Refuse, member: Json, at: string, read: TheProfiles): Pick<Member, 'model' | 'host'> {
+/**
+ * A member's model and host: its profile's (martha#931), or the member's own `model` and `host` as before. Its billing
+ * is its profile's provider's (martha#916); a member with no profile names no billing, and the launch picks.
+ */
+function theModelAndHostOf(refuse: Refuse, member: Json, at: string, read: TheProfiles): Pick<Member, 'model' | 'host' | 'billing'> {
   const profiled = theProfileOfAMember(member, at, read, ['model', HOST], (field, why) => refuse.at(field, why))
   if (profiled !== null) return profiled
   const { model, host } = member
   if (model !== undefined && model !== null && !isText(model)) refuse.at(`${at}.model`, 'is not a model name, or null for the host\'s own')
-  return { model: model ?? null, host: host === undefined ? null : hostNamed(refuse, host, `${at}.${HOST}`) }
+  return { model: model ?? null, host: host === undefined ? null : hostNamed(refuse, host, `${at}.${HOST}`), billing: null }
 }
 
 /** A member's `parked` (martha#511): false when the declaration does not say, and refused by its field when it is not true or false. */

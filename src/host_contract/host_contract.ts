@@ -372,6 +372,14 @@ export interface ProcessRequest {
   readonly command: string
   readonly args: readonly string[]
   readonly cwd: string
+  /** How the process's environment differs from the host's own; left out, it runs with the host's own, unchanged. */
+  readonly environment?: EnvironmentChange
+  /**
+   * The longest the process may run (martha#980 package 3, a port of crew-code's bounded runs). On the bound, its whole
+   * process group is killed, a child it started included, and the outcome says `timed_out` at once, without waiting for
+   * an output a surviving descendant could hold open. Left out, the process runs until it ends.
+   */
+  readonly timeout_ms?: number
 }
 
 /** How a process ended. `exit_code` is null when a signal ended it. */
@@ -379,6 +387,8 @@ export interface ProcessOutcome {
   readonly exit_code: number | null
   readonly stdout: string
   readonly stderr: string
+  /** Present when the request's `timeout_ms` ended it: its group was killed, and what it had written is kept. */
+  readonly timed_out?: true
 }
 
 /**
@@ -394,7 +404,6 @@ export interface EnvironmentChange {
 
 /** A process to run now, and how its environment differs from the host's. */
 export interface ProcessRequestNow extends ProcessRequest {
-  readonly environment?: EnvironmentChange
   /**
    * The text handed to the process on its standard input, which ends after it. Left out, the process reads an input
    * that is empty, as one with no standard input written to it does.
@@ -462,6 +471,7 @@ export type TurnSource =
   | 'subagent'
   | 'standing_items'
   | 'package_contract'
+  | 'state_of_the_crew'
 
 /**
  * What a host attests about who sent one delivery: the sending process, as the

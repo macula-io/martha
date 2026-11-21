@@ -46,7 +46,9 @@ import { RESTART, STOP } from '../stop_and_restart_a_member/stop_and_restart_a_m
 import { CLONES, DECLARATION_DIRECTORY, DECLARATION_FILE, WORKTREES_BESIDE_CLONES } from '../declare_crew/declare_crew.ts'
 import { crewKeyOf } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { rowFileNameOf, theRowWithNothingSaid } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
+import { rowStreamsDirectory, streamDirectoryNameOf } from '../row_streams_directory/row_streams_directory.ts'
+import { ledgerStreamOf } from '../log_ledger/log_ledger.ts'
+import { ASKS_SETTLED, ASK_QUEUED, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { sessionRecordStreamOf } from '../session_records_in_rows/session_records_in_rows.ts'
 import { releaseMarksIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { MANIFEST } from '../keep_the_shell_for_an_owner_signed_command/exactly_the_lock.ts'
@@ -1271,4 +1273,34 @@ test('#619: martha bells shows each flip the owner typed with its terminal, and 
   assert.match(listed.out, /line 1: history before /, listed.out)
   assert.match(listed.out, /line 2: typed at \/dev\/pts\/\d+ \(session \d+\)/, listed.out)
   assert.match(listed.out, /line 3: WRITTEN WITHOUT THE MARTHA COMMAND/, listed.out)
+})
+
+test("martha week answers one ISO week from the crew's own rows, and a word that is not a week is refused by name (martha#308)", async (t) => {
+  const place = placeFor(t)
+  const rows = join(place.home, 'state', STATE_ROOT_NAME, CREWS_PLACE, crewKeyOf(place.root), CREW_ROWS_PLACE)
+  mkdirSync(rows, { recursive: true, mode: 0o700 })
+  const stored = rowStreamsDirectory(rows)
+  const package_name = 'synthetic-owner/repo#7'
+  const at = Date.UTC(2026, 10, 17, 10)
+  await stored.append(ledgerStreamOf(package_name), { kind: 'review_round_closed', package: package_name, member: 'Hygiea', at, note: 'r=1 asked for two things' })
+  await stored.append(ledgerStreamOf(package_name), { kind: 'package_landed', package: package_name, member: 'Hygiea', at: at + 60 * 60 * 1000, note: 'landed' })
+  await stored.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'Delete the merged branch?', asked_by: 'Hygiea', since: at })
+  await stored.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 1, yes: [0], at: at + 30 * 60 * 1000, by: 'the owner' })
+  mkdirSync(join(rows, streamDirectoryNameOf('ledger/not-a-package')), { mode: 0o700 })
+
+  const answered = martha(place, 'week', '2026-W47')
+  assert.equal(answered.status, EXIT_DONE, answered.said)
+  assert.ok(answered.out.includes('2026-W47 (Mon 16 Nov 00:00 UTC – Mon 23 Nov 00:00 UTC)'), answered.out)
+  assert.ok(answered.out.includes(`${package_name} — cycle 1 h 0 min`), answered.out)
+  assert.ok(answered.out.includes('owner wait: 1 ask, 1 answered, 0 still waiting'), answered.out)
+  assert.ok(answered.out.includes('money: not in the rows'), answered.out)
+  assert.ok(answered.out.includes('skipped: ledger/not-a-package (not a package name)'), 'a ledger stream no package owns was not named as skipped')
+  allSaidByMartha(answered.err)
+
+  const refusedWeek = martha(place, 'week', '2026-47')
+  assert.equal(refusedWeek.status, EXIT_REFUSED, refusedWeek.said)
+  assert.match(refusedWeek.err, /is not an ISO week/)
+
+  const refusedWords = martha(place, 'week', '--wat')
+  assert.equal(refusedWords.status, EXIT_USAGE, refusedWords.said)
 })

@@ -12,6 +12,8 @@ import { OPEN_VOCABULARY } from './a_hosts_model_vocabulary.ts'
 import { CLOCK_ZONE } from './the_crews_clock_zone.ts'
 import {
   ACTS,
+  BILLED_BY_API_KEY,
+  BILLED_BY_SUBSCRIPTION,
   DECLARATION_DIRECTORY,
   DECLARATION_FILE,
   DeclarationRefused,
@@ -49,7 +51,7 @@ const draft = {
   harnesses: { [CLAUDE]: { config: '~/a-config-folder' }, [THE_ENGINES_HOST]: {} },
   providers: {
     an_engine_provider: { endpoint: 'api.a-provider.test', key_file: '~/keys/a-key-file' },
-    an_account: { account: 'an account', key_file: '~/keys/another-key-file', billing: 'subscription' },
+    an_account: { account: 'ann@example.org', key_file: '~/keys/another-key-file', billing: BILLED_BY_SUBSCRIPTION },
   },
   profiles: {
     big: { model: 'model-big', harness: CLAUDE, provider: 'an_account', context_limit: 300000 },
@@ -159,6 +161,25 @@ test('#931: a profile names a model, a harness and a provider the declaration na
   await refusedWith({ ...draft, profiles: [] }, 'profiles')
 })
 
+test('martha#916: a member is billed as its profile\'s provider declares, and by the launch\'s pick when the provider or the member names none', async () => {
+  const billingOf = async (declaration: unknown) => Object.fromEntries((await declare(declaration)).members.map((member) => [member.name, member.billing]))
+  const withAccount = (billing: unknown) => ({ ...draft, providers: { ...draft.providers, an_account: { ...draft.providers.an_account, billing } } })
+  for (const billing of [BILLED_BY_SUBSCRIPTION, BILLED_BY_API_KEY]) {
+    assert.deepEqual(await billingOf(withAccount(billing)), { Lead: billing, Checker: billing, Maker: null, Sleeper: null }, billing)
+  }
+  const { billing: _named, ...unbilled } = draft.providers.an_account
+  assert.deepEqual(await billingOf({ ...draft, providers: { ...draft.providers, an_account: unbilled } }), { Lead: null, Checker: null, Maker: null, Sleeper: null })
+  const onItsOwn = { ...draft, members: [{ name: 'Lead', role: 'supervisor', model: 'model-big', host: CLAUDE_CODE }] }
+  assert.deepEqual(await billingOf(onItsOwn), { Lead: null }, 'a member that names no profile names no billing')
+})
+
+test('martha#916: a provider\'s billing is the subscription or the key, refused by field otherwise: how the host says a session was billed is not a choice', async () => {
+  const withAccount = (billing: unknown) => ({ ...draft, providers: { ...draft.providers, an_account: { ...draft.providers.an_account, billing } } })
+  for (const billing of ['metered', 'unknown', 'Subscription', 'key', '', null, true, [BILLED_BY_API_KEY]]) {
+    await refusedWith(withAccount(billing), 'providers.an_account.billing', new RegExp(`is not one of ${BILLED_BY_SUBSCRIPTION}, ${BILLED_BY_API_KEY}$`))
+  }
+})
+
 test('#931: a provider names where its key is, never the key: a variable\'s name or a path with no `..` and no space', async () => {
   const provider = (fields: Record<string, unknown>) => ({ ...draft, providers: { ...draft.providers, an_account: fields } })
   await refusedWith(provider({ key_file: '~/keys/../a-file' }), 'providers.an_account.key_file')
@@ -168,6 +189,28 @@ test('#931: a provider names where its key is, never the key: a variable\'s name
   await refusedWith(provider({ billing: 'by the hour' }), 'providers.an_account.billing')
   await refusedWith(provider({ endpoint: 7 }), 'providers.an_account.endpoint')
   await refusedWith(provider({ token: 'x' }), 'providers.an_account.token')
+})
+
+test('#942: a key pasted into a provider\'s account is refused at that field, and the key is never in the refusal', async () => {
+  const account = (value: string) => ({ ...draft, providers: { ...draft.providers, an_account: { ...draft.providers.an_account, account: value } } })
+  const pasted = [
+    ['a known key prefix, short', ['hf', 'a1b2c3'].join('_')],
+    ['a long unbroken run, as a key with no known prefix is', ['sk', 'a1b2c3d4e5f6'.repeat(3)].join('-')],
+    ['white space a pasted key brings', 'ann@example.org\n'],
+    ['a UUID-length run that is not a UUID', 'a1b2c3d4-e5f6-a7b8-c9d0-e1f2a3b4c5d6x'],
+  ] as const
+  for (const [shape, value] of pasted) {
+    await assert.rejects(declare(account(value)), (error: unknown) => {
+      assert.ok(error instanceof DeclarationRefused, `${shape}: expected a DeclarationRefused, got ${String(error)}`)
+      assert.equal(error.field, 'providers.an_account.account', shape)
+      assert.match(error.message, /the key itself never goes in the declaration/, shape)
+      assert.ok(!error.message.includes(value.trim()), `${shape}: the refusal holds the key's text`)
+      return true
+    })
+  }
+  for (const value of ['ann.with.a.long.name.of.her.own@example.org', 'a-team-account', 'Ann', '3f2b8c1e-9a4d-4e7f-b6c2-5d8e1a0f7c93', '3F2B8C1E-9A4D-4E7F-B6C2-5D8E1A0F7C93']) {
+    assert.ok((await declare(account(value))).members.length > 0, `an account written ${value} is read`)
+  }
 })
 
 test('#931: gate_enforce, as the draft spells it, is read as gate_enforces, and never beside it', async () => {

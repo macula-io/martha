@@ -25,6 +25,10 @@ import { UNHELD_WORK } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
 import { crewToolsOver, type CoreToolAnswer, type CrewTools } from './a_crews_tools.ts'
 import { offlineAfterMsOf, THRESHOLDS, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
+import { recordAStandingItem } from '../keep_the_supervisors_standing_items/keep_the_supervisors_standing_items.ts'
+import { UNHELD_IDLE_FILE } from '../nudge_an_idle_crew/nudge_an_idle_crew.ts'
+import { BACKLOG_PLACE } from '../find_the_unheld_work/keep_the_backlog_read.ts'
+import { CREW_STATE_SOURCE, NUDGES_HANDED_ON_A_TURN, theNudgesHandedOnATurn } from '../hand_a_member_its_crew_text/the_crew_state_of_a_turn.ts'
 
 const NOW = Date.parse('2026-11-16T12:00:00Z')
 const IDLE_MINUTES = 30
@@ -32,7 +36,11 @@ const WINDOW = IDLE_MINUTES * MINUTE_MS
 const RECEIVER = 'Supervisor'
 const MEMBER = 'Vesta'
 
-/** A GitHub that answers the backlog search with two open issues, one held by a member and one by a stranger. */
+/**
+ * A GitHub that answers the backlog search with two open issues, one held by a member and one by a stranger. The crew's
+ * budget asks what is left before each search (martha#947); that question is answered with plenty and not counted, so
+ * `calls` is the searches alone.
+ */
 function aGithub(): { readonly calls: () => number; readonly run: (request: ProcessRequest) => Promise<ProcessOutcome> } {
   let calls = 0
   const node = (number: number, holder: string) => ({
@@ -48,6 +56,7 @@ function aGithub(): { readonly calls: () => number; readonly run: (request: Proc
   return {
     calls: () => calls,
     run: async (request) => {
+      if (request.args[1] === 'rate_limit') return { exit_code: 0, stdout: JSON.stringify({ resources: { core: { remaining: 5000, reset: 0 } } }), stderr: '' }
       calls += 1
       assert.equal(request.args[1], 'graphql', `the backlog read asked GitHub something else: ${request.args.join(' ')}`)
       return { exit_code: 0, stdout: JSON.stringify(page), stderr: '' }
@@ -166,4 +175,52 @@ test('#931 A: the see_the_crew tool reads the declared offline time: a row quiet
   assert.deepEqual(await drawnFor(), [], 'under the default offline time the quiet member is offline, and no nudge names it')
   const declared = { offline_after_seconds: THRESHOLDS_WHEN_UNNAMED.offline_after_seconds * 3 }
   assert.deepEqual(await drawnFor(declared), ['- unheld: Vesta idle beside 1 issues nobody holds, since 12:00 UTC'], 'the declared offline time was not read')
+})
+
+/** The crew's state a turn of `member` is handed (martha#984), through the launcher's own crew tools. */
+async function theTurnsState(paths: ReturnType<typeof aCrewHome>, now: number, member: string, github: ReturnType<typeof aGithub>): Promise<string | null> {
+  const state = await aLauncher(paths, now, member, github).theCrewStateOfATurn()
+  if (state !== null) assert.deepEqual(state.taken_in, [CREW_STATE_SOURCE])
+  return state?.line ?? null
+}
+
+test("martha#984: each turn of the Supervisor is handed the crew's state rebuilt, a standing item added between two turns included, with no call to GitHub", async (t) => {
+  const paths = aCrewHome(t)
+  const github = aGithub()
+  beatIdle(paths, MEMBER, NOW)
+  // The pane looks first, as it does on its own beat: it reads GitHub and keeps the backlog read and the idle clock.
+  await aLauncher(paths, NOW, RECEIVER, github).answer('see_the_crew', {}, 's')
+  const asked = github.calls()
+  beatIdle(paths, MEMBER, NOW + WINDOW)
+  const first = await theTurnsState(paths, NOW + WINDOW, RECEIVER, github)
+  assert.ok(first !== null && first.includes('- unheld: Vesta idle beside 1 issues nobody holds, since 12:00 UTC'), `the first turn was not handed the unheld nudge: ${String(first)}`)
+  const ledger = { clock: { now: () => NOW + WINDOW }, stores: { rows: rowStreamsDirectory(paths.rows) } }
+  const recorded = await recordAStandingItem(ledger, { kind: 'held', id: 'the-landing', item: 'the landing of batch 997', reason: 'the owner reads it first', until: 'the owner says yes' }, RECEIVER)
+  assert.ok('told' in recorded, 'refused' in recorded ? recorded.refused : '')
+  const second = await theTurnsState(paths, NOW + WINDOW, RECEIVER, github)
+  assert.ok(second !== null && second.includes('the landing of batch 997') && !first.includes('the landing of batch 997'), `the second turn's state was not rebuilt: ${String(second)}`)
+  assert.equal(github.calls(), asked, 'a turn asked GitHub')
+})
+
+test("martha#984: a turn keeps no idle clock and writes no backlog read; a member the table grants no work is handed nothing, and asks nothing", async (t) => {
+  const paths = aCrewHome(t)
+  const github = aGithub()
+  beatIdle(paths, MEMBER, NOW)
+  await theTurnsState(paths, NOW, RECEIVER, github)
+  const place = keepTheCrewsFilesAsDirectories(paths.crew).place(BACKLOG_PLACE)
+  assert.ok(!('refusal' in place) && place.read(UNHELD_IDLE_FILE) === undefined, "a turn's look kept the idle clock")
+  const kept = 'refusal' in place ? place : place.names()
+  assert.ok(Array.isArray(kept) && kept.length === 0, `a turn's look wrote into the backlog place: ${JSON.stringify(kept)}`)
+  await recordAStandingItem({ clock: { now: () => NOW }, stores: { rows: rowStreamsDirectory(paths.rows) } }, { kind: 'held', id: 'a-package', item: 'a pull request', reason: 'a demo', until: 'the demo is over' }, RECEIVER)
+  assert.equal(await theTurnsState(paths, NOW, MEMBER, github), null, 'a builder was handed the Supervisor\'s crew state')
+  assert.equal(github.calls(), 0)
+})
+
+test(`martha#984: a turn is handed at most ${String(NUDGES_HANDED_ON_A_TURN)} nudge lines, the rest named by count with the tool that shows them (mutant: no cap)`, () => {
+  const lines = ['Crew nudges: heading', ...Array.from({ length: NUDGES_HANDED_ON_A_TURN + 2 }, (_, at) => `- stalled: m${String(at)}`)]
+  const handed = theNudgesHandedOnATurn(lines)
+  assert.equal(handed?.split('\n').length, NUDGES_HANDED_ON_A_TURN + 2)
+  assert.ok(handed?.endsWith('… and 2 more: call see_the_crew for the rest.'), handed ?? '')
+  assert.equal(theNudgesHandedOnATurn([]), null)
+  assert.equal(theNudgesHandedOnATurn(lines.slice(0, 3)), lines.slice(0, 3).join('\n'))
 })

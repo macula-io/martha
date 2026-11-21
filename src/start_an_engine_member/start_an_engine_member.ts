@@ -13,11 +13,12 @@ import { lstatSync, readFileSync, type Stats } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 import { THE_HOMES_PREFIX, writtenOut } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
+import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
 import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import { agentRunsKept, answersOver, type TheAnswersOfOneLaunch } from '../answer_what_a_host_reports/answer_what_a_host_reports.ts'
 import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_HOOK_SWITCHES, CLAUDE_CODE_OWNERS_MARKDOWN, RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
+import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS, THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
@@ -30,7 +31,7 @@ import { appendStateLine, crewSubdirectory, readStateFile } from '../keep_martha
 import { relayJournalKeptIn } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
 import type { MemberStarted, MemberStopped } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
-import { driveTheEngine, theSessionsGateKept } from '../launch_a_goose_member/drive_the_engine.ts'
+import { driveTheEngine, theSessionsGateKept, type TheEngineDriven } from '../launch_a_goose_member/drive_the_engine.ts'
 import { launchTheGooseEngine, type AGooseLaunch } from '../launch_a_goose_member/launch_a_goose_member.ts'
 import { theEnginesPlaces, type TheSharedPlaces } from '../launch_a_goose_member/the_engines_places.ts'
 import { anEngineRelay } from '../launch_a_goose_member/the_engines_relay.ts'
@@ -40,7 +41,7 @@ import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reachi
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { ownerMemoryPlaces, userScopeUnder } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import type { SnapshotPlace } from '../refuse_launch_of_unapproved_config/refuse_launch_of_unapproved_config.ts'
-import { dropInFiles, hookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
+import { dropInFiles } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { NOTHING_IS_MUTED, theMuteOf, theMutedStartLine, type TheMute } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
 import { theOwnersScreenOfALaunch, type TheScreenOfALaunch } from '../say_what_the_host_is_asking/the_owners_screen.ts'
@@ -59,6 +60,8 @@ import type { HearTheLauncher } from '../claude_code_relay/hooks/crew_command.ts
 import type { AStartOnItsHost, TheCrewToolsOfAHost } from '../start_the_member_on_its_host/start_the_member_on_its_host.ts'
 import { theMembersTelling } from '../tell_the_member_a_line/tell_the_member_a_line.ts'
 import { theModelOfAnEngineMember, whyAKeyFileIsNotTheOwners, whyTheConfigRunsAnotherModel } from './the_engines_model.ts'
+import { theEnginesRefresh, type TheEnginesRefresh, type TheEnginesRefreshPlaces } from './the_engines_refresh.ts'
+import { THE_ENGINES_USAGE_HOST } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 import { ENGINE_ENDPOINT } from '../declare_crew/declare_crew.ts'
 
 /** What every host's start builds alike from the start, handed in by the start table so this slice imports none of it. */
@@ -98,20 +101,25 @@ const NOTHING_REPORTED: TheServedToolsWatch = {
 }
 
 /**
- * What the launch is given before anything is made: the member's model at the crew's endpoint, the owner's settings
- * file, and the owner's Claude Code settings watch, the same one a Claude Code launch runs (design r=4 R2): a setting
- * that turns hooks off already refuses the start, and the launch runs it first in every re-check. Or why not.
+ * What the launch is given before anything is made: the member's model at the crew's endpoint, and the owner's Claude Code
+ * user settings file. The owner's Claude Code settings watch is not run here (martha#601 row 174): those are Claude Code's
+ * own files, which an engine member never reads, so a setting that turns hooks off neither refuses an engine start nor
+ * stops it while it works. A CLAUDE_CONFIG_DIR that cannot be resolved is still refused: the owner's user settings file is
+ * not one file, it places the owner's whole Claude config folder (`ownerMemoryPlaces` builds that folder's settings,
+ * CLAUDE.md, rules and output styles from it), and an unresolvable value would leave all of it unguarded for a member's
+ * writes — a leak, which is one of the three a refusal stays for. Or why the launch cannot start at all.
  */
 function whatTheLaunchIsGiven(start: AStartOnItsHost) {
   const model = theModelOfAnEngineMember({ facts: RECORDED_GOOSE_ENGINE, member: start.member, model: start.model, endpoint: start.settings.engine_endpoint, environment: start.inherited, readTheKeyFile: (key_file) => theKeyInTheOwnersFile(key_file, start.home) })
   if ('refusal' in model) return model
   const user = userSettingsPath(start.inherited)
   if ('refusal' in user) return user
-  const managed = RECORDED_HOST.managed_settings
-  const owners = hookSettingsWatch({ user: user.path, home: start.home, approved: undefined, managed, switches: CLAUDE_CODE_HOOK_SWITCHES, markdown: CLAUDE_CODE_OWNERS_MARKDOWN })
-  const already = owners.check()
-  if (already !== undefined) return { refusal: already }
-  return { model, user, managed, owners }
+  return { model, managed: RECORDED_HOST.managed_settings, owners_settings_file: user.path }
+}
+
+/** The owner's settings files a member's writes are held away from: the host's managed ones, and the user's own file. */
+function theOwnersSettingsFiles(managed: ManagedSettingsPlace, owners_settings_file: string): readonly string[] {
+  return [join(managed.dir, managed.file), ...dropInFiles(join(managed.dir, managed.drop_in)), owners_settings_file]
 }
 
 /**
@@ -153,10 +161,10 @@ export async function startOnTheEngine(start: AStartOnItsHost, shared: TheShared
   const notStarted = (why: string): MemberStarted => ({ started: false, refusal: `${NOT_STARTED}: ${why}` })
   const before = whatTheLaunchIsGiven(start)
   if ('refusal' in before) return notStarted(before.refusal)
-  const { model, user, managed, owners } = before
+  const { model, managed, owners_settings_file } = before
 
   const token = mintALaunchToken()
-  const launch = await launchTheGooseEngine({ facts, binary: start.command, place: shared.place, relay_root: start.places.relay_root, model, tool_server: { token }, owners_settings: () => owners.check() })
+  const launch = await launchTheGooseEngine({ facts, binary: start.command, place: shared.place, relay_root: start.places.relay_root, model, tool_server: { token } })
   if ('refusal' in launch) return { started: false, refusal: launch.refusal }
   const ending = async (why: string): Promise<MemberStarted> => {
     await launch.end()
@@ -171,14 +179,14 @@ export async function startOnTheEngine(start: AStartOnItsHost, shared: TheShared
     facts,
     root: launch.places.root,
     home: start.home,
-    owners_settings_file: user.path,
+    owners_settings_file,
     owner_memory: ownerMemoryPlaces({
       launcher_env: start.inherited,
       member_env: start.inherited,
       home: start.home,
       launch_dir: start.root,
       martha_state_root: start.state.state_root,
-      settings_files: [join(managed.dir, managed.file), ...dropInFiles(join(managed.dir, managed.drop_in)), user.path],
+      settings_files: theOwnersSettingsFiles(managed, owners_settings_file),
       user_scope: userScopeUnder(start.home),
     }),
     launcher_env: start.inherited,
@@ -225,7 +233,8 @@ function theSharedPlacesOf(start: AStartOnItsHost, shared: TheSharedOfAStart, la
     handed_at_start: [...new Set(launch.text_a_start_loads.map((text) => text.source))],
     // The engine runs any model its delegate is handed and spawns no subagent Martha names, and it has no settings file
     // of its own the model command switches: the crew tools are given its models and neither of the other two.
-    crew: crewToolsOver(shared.crewTools({ of: (session_id) => sessions.get(session_id) }, NOTHING_REPORTED, { models: RECORDED_GOOSE_ENGINE.subagent_models })),
+    // Its usage is kept under the engine's own name: its launch asks the crew's refresh question too (martha#999 package 5).
+    crew: crewToolsOver(shared.crewTools({ of: (session_id) => sessions.get(session_id) }, NOTHING_REPORTED, { models: RECORDED_GOOSE_ENGINE.subagent_models, usage_host: THE_ENGINES_USAGE_HOST })),
     crew_text,
     // The same kept table a Claude Code launch keeps: empty, because the engine spawns no review Martha names.
     reviews: reviewSpawnsRemembered(),
@@ -319,30 +328,91 @@ async function theStartRuns(start: AStartOnItsHost, seams: TheEnginesStartSeams,
     stopMember,
   })
   if ('refusal' in driven) return notStarted(driven.refusal)
+  const opened_at = Date.now()
   const begun = await answers.inOrder(async () => answers.aSessionStarted({ session_id: driven.session_id, outcome: 'fresh' }))
   if ('refused' in begun) return notStarted(begun.refused)
 
-  // What the entry hands the session as it starts (the crew text among it) goes ahead of the first turn's text: the
-  // engine has no hook that adds context, so the first prompt carries it, recorded by the start above.
-  let handed = begun.taken
+  const now = theSessionNow(driven, answers, begun.taken, stopMember)
+  const refresh = theRefreshOfTheSession(start, answers, driven, opened_at, now.clear)
   const turns = theEngineMembersTurns(start.member, {
-    session_id: driven.session_id,
+    get session_id() {
+      return now.session_id()
+    },
     aTurnArrived: async (session_id, turn) => answers.inOrder(async () => answers.aTurnArrived(session_id, turn)),
     send: async (session_id, text) => {
-      const ahead = handed
-      handed = ''
+      const ahead = now.takeTheHanded()
       return driven.client.prompt(session_id, ahead === '' ? text : `${ahead}\n\n${text}`)
     },
     tell: (line) => start.tellOwner(line),
+    after: async (ended) => refresh.afterATurn(ended),
   })
-  if (start.prompt !== undefined) {
-    const turn: ATurnToSend = { text: start.prompt, arrival: { source: THE_START_PROMPTS_SOURCE } }
-    void turns.take(turn).then((did) => seams.heard_a_turn?.(turn, did))
-  }
+  // The act the session's start is answered with goes first: a resume the flow holds for this member, before its prompt.
+  queued(turns, seams, await refresh.atTheStart())
+  queued(turns, seams, start.prompt === undefined ? undefined : { text: start.prompt, arrival: { source: THE_START_PROMPTS_SOURCE } })
   const crew = theCrewsTurnsOf(start, turns, seams)
-  const owners = theOwnersLinesOf(start, theCrewToolsHeardBy(answers, driven.session_id))
-  const stopped = launch.engine.exited.then(() => theReadersStopped(owners, crew)).then(theEnd)
+  const owners = theOwnersLinesOf(start, async (tool, args) => theCrewToolsHeardBy(answers, now.session_id())(tool, args))
+  // The turns still queued settle before the end: a refresh question still in flight writes the crew's stores, which
+  // the end must not outlive (martha#999 package 5).
+  const stopped = launch.engine.exited.then(() => theReadersStopped(owners, crew)).then(() => turns.settled()).then(theEnd)
   return { started: true, pid: launch.engine.pid, stopped, stop: stopMember }
+}
+
+/** The session the member works in now, the text its start handed, and the clear that moves both on. */
+interface TheSessionNow {
+  session_id(): string
+  /** What the entry handed the current session as it started, once: it goes ahead of that session's first turn. */
+  takeTheHanded(): string
+  readonly clear: TheEnginesRefreshPlaces['clear']
+}
+
+/**
+ * The member's current session: the first, then each one a refresh's clear opens (martha#1002). What the entry hands a
+ * session as it starts (the crew text among it) goes ahead of that session's first turn: the engine has no hook that
+ * adds context, so the first prompt carries it. A clear that cannot open the next session, or whose start the entry
+ * refuses, stops the member: the store may then hold a row the gate does not.
+ */
+function theSessionNow(driven: TheEngineDriven, answers: TheAnswersOfOneLaunch, taken: string, stopMember: (why: string) => void): TheSessionNow {
+  let session_id = driven.session_id
+  let handed = taken
+  const stoppedBy = (why: string): { readonly why: string } => (stopMember(why), { why })
+  return {
+    session_id: () => session_id,
+    takeTheHanded: () => {
+      const ahead = handed
+      handed = ''
+      return ahead
+    },
+    clear: async () => {
+      const next = await driven.aNewSession()
+      if ('refusal' in next) return stoppedBy(next.refusal)
+      const started_at = Date.now()
+      // The start goes through the entry as the first one did; the flow's clear makes it inherit the predecessor's record.
+      const begins = await answers.inOrder(async () => answers.aSessionStarted({ session_id: next.session_id, outcome: 'fresh' }))
+      if ('refused' in begins) return stoppedBy(begins.refused)
+      session_id = next.session_id
+      handed = begins.taken
+      return { session_id, started_at }
+    },
+  }
+}
+
+/** A turn put on the queue, if there is one, and what it came to told to a test's seam. */
+function queued(turns: TheEngineMembersTurns, seams: TheEnginesStartSeams, turn: ATurnToSend | undefined): void {
+  if (turn !== undefined) void turns.take(turn).then((did) => seams.heard_a_turn?.(turn, did))
+}
+
+/** The crew's refresh question, asked as the session asks it, at its start and after each turn (martha#999 package 5). */
+function theRefreshOfTheSession(start: AStartOnItsHost, answers: TheAnswersOfOneLaunch, driven: TheEngineDriven, opened_at: number, clear: TheEnginesRefreshPlaces['clear']): TheEnginesRefresh {
+  return theEnginesRefresh({
+    member: start.member,
+    session_id: driven.session_id,
+    started_at: opened_at,
+    usageOf: (session_id) => driven.client.usageOf(session_id),
+    // Asked as the session the refresh names: the current one, which a clear moves on (martha#1002).
+    ask: async (session_id, tool, args) => theCrewToolsHeardBy(answers, session_id)(tool, args),
+    tell: (line) => start.tellOwner(line),
+    clear,
+  })
 }
 
 /**

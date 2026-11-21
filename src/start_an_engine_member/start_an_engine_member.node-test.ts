@@ -19,8 +19,10 @@ import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, ENGINE_ENDPOINT, HOST, SOLO_MEMBERS, soloDeclaration, THE_ENGINES_HOST } from '../declare_crew/declare_crew.ts'
 import { THE_EXTENSION_A_MEMBER_KEEPS, THE_MODE_THAT_ASKS_THE_CLIENT } from '../derive_the_config_of_a_goose_launch/derive_the_config_of_a_goose_launch.ts'
 import { shortRelayRoot } from '../drive_the_recorded_host/short_relay_root.ts'
-import { crewSubdirectory, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { crewStateDirectory, crewSubdirectory, openState, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
+import { CLAUDE_FOLDER } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { USER_SETTINGS_FILE } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import type { MemberStarted } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
 import { THE_ROOT_OF_A_LAUNCH, THE_STORES_PERMISSIONS_KEY, theConfigFileOf, thePermissionStoreOf } from '../launch_a_goose_member/launch_a_goose_member.ts'
 import { ALREADY_ANSWERED, type AnOpenAsk } from '../hear_an_acp_agents_asks/hear_an_acp_agents_asks.ts'
@@ -34,7 +36,7 @@ import { launcherPlacesOf, startMember, type MemberStartRequest } from '../start
 import { appendToTheChannel, readTheChannel, takenInBy, type ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { framed } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { rowStreamsDirectory } from '../row_streams_directory/row_streams_directory.ts'
-import type { AnAgentScript, AStandInsSessionRow, AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
+import { STAND_IN_SESSION, theStandInsSession, type AnAgentScript, type AStandInsSessionRow, type AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 import { PassThrough } from 'node:stream'
 import { hearTheOwnersLines, theCrewToolsHeardBy, theScreenAnEngineStartSees } from './start_an_engine_member.ts'
 import { ONLY_THE_CREW_COMMAND, TYPED_TURNS_ARE_NOT_THERE_YET } from './the_owners_lines_at_the_tab.ts'
@@ -43,9 +45,25 @@ import type { ACrewToolAsked } from '../host_contract/host_contract.ts'
 import { SAY_TO_THE_CREW_TOOL } from '../send_a_crew_message/say_to_the_crew_tool.ts'
 import { SEE_THE_CREW_TOOL } from '../see_the_crew/the_see_the_crew_tool.ts'
 import { OWNER_NOTICES_WHEN_UNNAMED } from '../declare_crew/the_crews_owner_notices.ts'
+import { THE_HANDOVER_WRITTEN, theResumePrompt, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { aFlowStarting, keepTheFlow, refreshesPlace, theFlowClearing } from '../refresh_a_member/refresh_a_member.ts'
+import { handoverStampsIn, keepTheCrewsFilesAsDirectories } from '../keep_the_crews_files_as_directories/keep_the_crews_files_as_directories.ts'
+import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
+import { releasesIn } from '../apply_the_owners_release/apply_the_owners_release.ts'
 
 const FACTS = RECORDED_GOOSE_ENGINE
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
+
+/** Where the owner's Claude Code user settings file sits in this home: the folder Claude Code reads, its settings file. */
+const ownerSettingsIn = (home: string): string => join(home, CLAUDE_FOLDER, USER_SETTINGS_FILE)
+
+/** Writes the owner's Claude Code settings, as a Claude Code member's launch reads them and an engine member's never does. */
+function writeTheOwnersSettings(home: string, settings: unknown): string {
+  const at = ownerSettingsIn(home)
+  mkdirSync(dirname(at), { recursive: true })
+  writeFileSync(at, `${JSON.stringify(settings)}\n`)
+  return at
+}
 const documents = { read: (path: string) => readFile(path, 'utf8') }
 const yes = { is_terminal: true, ask: () => Promise.resolve('yes') }
 
@@ -128,8 +146,12 @@ const THE_SESSIONS_ROW: AStandInsSessionRow = {
   },
 }
 
-/** The owner's start of the member, with the engine's path first and the key in the environment. */
-async function started(place: Place, engine: { readonly dir: string }, lines: string[], owners_lines?: NodeJS.ReadableStream): Promise<MemberStarted> {
+/**
+ * The owner's start of the member, with the engine's path first and the key in the environment. `owners_lines` types into
+ * the member's terminal (martha#927 part 2), and `environment` adds a variable to the launch's own (row 174's case reads
+ * a CLAUDE_CONFIG_DIR that cannot be resolved).
+ */
+async function started(place: Place, engine: { readonly dir: string }, lines: string[], owners_lines?: NodeJS.ReadableStream, environment: Readonly<Record<string, string>> = {}): Promise<MemberStarted> {
   await approveConfig({ root: place.root, home: place.home, state: place.state, terminal: yes, documents, tellOwner: () => {}, now: () => new Date() })
   const places = launcherPlacesOf(place.state, place.relay_root, place.root)
   assert.ok('rows' in places, 'refusal' in places ? places.refusal : '')
@@ -141,7 +163,7 @@ async function started(place: Place, engine: { readonly dir: string }, lines: st
     is_terminal: true,
     state: place.state,
     places,
-    inherited: { PATH: `${engine.dir}:${process.env['PATH'] ?? ''}`, HOME: place.home, [A_KEY_VARIABLE]: 'a-key-a-test-names' },
+    inherited: { PATH: `${engine.dir}:${process.env['PATH'] ?? ''}`, HOME: place.home, [A_KEY_VARIABLE]: 'a-key-a-test-names', ...environment },
     stdio: 'ignore',
     documents,
     initial_prompt: THE_START_PROMPT,
@@ -189,6 +211,25 @@ test('#541 package A: a declaration naming the engine starts through the table; 
   const prompts = requests.filter((request) => request.method === 'session/prompt')
   assert.equal(prompts.length, 1)
   assert.ok(theTextOf(prompts[0]?.params ?? {}).endsWith(THE_START_PROMPT), theTextOf(prompts[0]?.params ?? {}))
+})
+
+test("#601 row 174: an owner's Claude Code settings that turn hooks off do not refuse an engine member's start: its session opens and the start prompt reaches its engine (mutant: the settings watch put back in the start)", async (t) => {
+  const place = aPlace(t)
+  writeTheOwnersSettings(place.home, { disableAllHooks: true })
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  await untilTheEngineHeard(engine.heard, 'session/prompt')
+})
+
+test("#601 row 174: the watch is gone but a CLAUDE_CONFIG_DIR that cannot be resolved still refuses an engine member's start, since it places the owner's whole Claude config folder (mutant: that refusal dropped with the watch)", async (t) => {
+  const place = aPlace(t)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const start = await started(place, engine, [], undefined, { CLAUDE_CONFIG_DIR: 'a-folder-not-absolute' })
+  assert.equal(start.started, false, 'an engine member was started with a CLAUDE_CONFIG_DIR that cannot be resolved')
+  assert.match(start.started ? '' : start.refusal, /CLAUDE_CONFIG_DIR is "a-folder-not-absolute", not an absolute directory/)
+  assert.equal(existsSync(engine.heard), false, 'no engine was started')
 })
 
 for (const [mode, says] of [['auto', 'auto'], [undefined, 'undefined']] as const) {
@@ -371,9 +412,9 @@ const WRITES_WHILE_THE_ASK_WAITS: readonly AWriteWhileTheAskWaits[] = [
     says: () => 'enabled extensions were changed after it started',
   },
   {
-    what: 'a second session in the store',
+    what: 'a session the launch did not open, planted in the store',
     write: (root) => onTheStore(root, `INSERT INTO ${TABLE} (${THE_SESSIONS_ROW.columns.join(', ')}) SELECT ${THE_SESSIONS_ROW.columns.map((column) => (column === 'id' ? `'${A_SECOND_SESSION}'` : column)).join(', ')} FROM ${TABLE}`),
-    says: (at) => `the session store at ${at} holds 2 sessions`,
+    says: (at) => `the session store at ${at} holds 1 session(s) this launch did not open`,
   },
   {
     what: "the engine's config file",
@@ -554,4 +595,109 @@ test('#931 C: an engine member\'s owner\'s screen is told of the notices its cre
   assert.notDeepEqual(declared, OWNER_NOTICES_WHEN_UNNAMED.show)
   const start = { member: MEMBER, places: { dashboard: '/the-rows' }, settings: { house_rules: { owner_bell: undefined }, owner_notices: { show: declared } }, stdio: 'pipe' } as unknown as Parameters<typeof theScreenAnEngineStartSees>[0]
   assert.deepEqual(theScreenAnEngineStartSees(start, () => false).shown_notices, declared, 'the owner\'s screen is not told of the crew\'s declared notices')
+})
+
+test("#601 row 174: a write to the owner's Claude Code settings while the ask waits stops nothing: the crew's next message still reaches the engine (mutant: the settings watch put back in the re-check)", async (t) => {
+  const place = aPlace(t)
+  readingEverySecond(place)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[A_SHELL_CALL], [{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  const ask = await untilAnAskIsOpen(place)
+  writeTheOwnersSettings(place.home, { disableAllHooks: true })
+  assert.equal((await theOwnerAnswers(place, ask.key, 'allow')).code, 0)
+  await appendToTheChannel(theChannelOf(place), { from: A_CREW_MATE, to: [MEMBER], text: A_CREW_MESSAGE, sent_at: Date.now() })
+  const prompts = await untilTheEngineHeardPrompts(engine.heard, 2)
+  assert.ok(theTextOf(prompts[1]?.params ?? {}).includes(A_CREW_MESSAGE), theTextOf(prompts[1]?.params ?? {}))
+})
+
+test('#999 package 5: a turn whose usage the engine reports past the handover limit is followed by the handover prompt, sent as the member\'s next turn (mutant: the refresh question never asked after a turn)', async (t) => {
+  const place = aPlace(t)
+  // The engine's own usage at the turn's end: 199 of 200, past any handover limit a crew can declare.
+  const pastTheLimit: AStep = { update: { sessionUpdate: 'usage_update', used: 199, size: 200 } }
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ say: 'the first turn' }, pastTheLimit], [{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  const prompts = await untilTheEngineHeardPrompts(engine.heard, 2)
+  assert.ok(theTextOf(prompts[0]?.params ?? {}).endsWith(THE_START_PROMPT))
+  assert.match(theTextOf(prompts[1]?.params ?? {}), new RegExp(THE_HANDOVER_WRITTEN), 'the second turn is not the handover prompt')
+})
+
+/** A clear told and never carried: the member's flow still clears from the session before, so a new launch's first question is a successor's. */
+function aClearNeverCarried(place: Place): void {
+  const crew = crewStateDirectory(place.state.state_root, place.root)
+  assert.ok('path' in crew, 'refusal' in crew ? crew.refusal : '')
+  const flows = refreshesPlace({ stores: { crew: keepTheCrewsFilesAsDirectories(crew.path) } })
+  assert.ok(!('refusal' in flows), 'refusal' in flows ? flows.refusal : '')
+  const now = Date.now()
+  const handingOver = aFlowStarting({ trigger: 'asked', reason: 'a test asks', at: now, started_at_percent: 0, percent: 0, asked_on: 'the-session-before', refreshed_at: [] })
+  assert.equal(keepTheFlow(flows, MEMBER, theFlowClearing(handingOver, 'the-session-before', [], now)), undefined)
+}
+
+/** The resume's own opening, read from the prompt's maker up to the file it names, so no word of it is restated here. */
+function theResumesOpening(): string {
+  const mark = '\u0000'
+  const opening = theResumePrompt({ member: MEMBER, file: mark, acts: [] }).split(mark)[0] ?? ''
+  assert.notEqual(opening, '')
+  return opening
+}
+
+test('#999 package 5 r=2: a member whose flow is clearing from another session starts on the resume, and its start prompt comes after it (mutant: the start prompt queued before the start\'s refresh question is answered)', async (t) => {
+  const place = aPlace(t)
+  aClearNeverCarried(place)
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns: [[{ echo: 1 }], [{ echo: 1 }]], session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  const [first, second] = (await untilTheEngineHeardPrompts(engine.heard, 2)).map((prompt) => theTextOf(prompt.params))
+  assert.ok(first?.includes(theResumesOpening()), `the first prompt is not the resume: ${String(first)}`)
+  assert.ok(first !== undefined && !first.includes(THE_START_PROMPT), 'the start prompt went with or before the resume')
+  assert.ok(second?.endsWith(THE_START_PROMPT), `the second prompt is not the start prompt: ${String(second)}`)
+})
+
+/**
+ * The member's handover, written by the crew's own writer as its `write_my_handover` tool writes it, for the session
+ * named, while the engine's turn waits on the owner: the stand-in runs no tool server of its own.
+ */
+async function aHandoverWrittenFor(place: Place, session_id: string): Promise<void> {
+  const crew = crewStateDirectory(place.state.state_root, place.root)
+  assert.ok('path' in crew, 'refusal' in crew ? crew.refusal : '')
+  const places = launcherPlacesOf(place.state, place.relay_root, place.root)
+  assert.ok('rows' in places, 'refusal' in places ? places.refusal : '')
+  const rows = rowStreamsDirectory(places.rows)
+  const records = sessionRecordsIn(rows, releasesIn(rows))
+  await records.load(session_id)
+  const gate = records.store.read(session_id)
+  assert.ok(gate !== undefined, `no record of ${session_id}`)
+  const written = writeMyHandover(
+    { stores: { crew: keepTheCrewsFilesAsDirectories(crew.path) } },
+    { member: MEMBER, content: 'first rules; what runs\n', at: new Date(), stamps: handoverStampsIn(crew.path), session: { id: session_id, gate, record_missing: false } },
+  )
+  assert.equal(written, THE_HANDOVER_WRITTEN)
+}
+
+test("martha#1002: the clear the crew orders after the handover opens the next session through the read-back, closes the predecessor after its prompt returned, and sends the resume as the next session's first turn", async (t) => {
+  const place = aPlace(t)
+  const pastTheLimit: AStep = { update: { sessionUpdate: 'usage_update', used: 199, size: 200 } }
+  // The handover turn waits on the owner's answer to a call, so the test writes the handover before the turn ends.
+  const turns: AStep[][] = [[{ say: 'the first turn' }, pastTheLimit], [A_SHELL_CALL, { say: THE_HANDOVER_WRITTEN }], [{ echo: 1 }]]
+  const engine = anEngineOnThePath(place, { currentModeId: THE_MODE_THAT_ASKS_THE_CLIENT, turns, session_row: THE_SESSIONS_ROW })
+  const lines: string[] = []
+  const start = await started(place, engine, lines)
+  assert.ok(start.started, start.started ? '' : `${start.refusal}\n${lines.join('\n')}`)
+  const ask = await untilAnAskIsOpen(place)
+  await aHandoverWrittenFor(place, STAND_IN_SESSION)
+  assert.equal((await theOwnerAnswers(place, ask.key, 'allow')).code, 0)
+  const prompts = await untilTheEngineHeardPrompts(engine.heard, 3)
+  const methods = theRequests(engine.heard).map((request) => request.method)
+  assert.equal(methods.filter((method) => method === 'session/new').length, 2, `${methods.join(', ')} || ${lines.join(' / ')}`)
+  const closes = theRequests(engine.heard).filter((request) => request.method === 'session/close')
+  assert.deepEqual(closes.map((close) => close.params['sessionId']), [STAND_IN_SESSION])
+  assert.ok(methods.indexOf('session/close') > methods.lastIndexOf('session/new'), 'the predecessor was closed before the next session was opened and read back')
+  assert.deepEqual(prompts.map((prompt) => prompt.params['sessionId']), [STAND_IN_SESSION, STAND_IN_SESSION, theStandInsSession(2)])
+  const resume = theTextOf(prompts[2]?.params ?? {})
+  assert.ok(resume.includes(theResumesOpening()), `the next session's first turn is not the resume: ${resume}`)
+  assert.ok(!lines.some((line) => line.includes('is stopped')), lines.join('\n'))
 })

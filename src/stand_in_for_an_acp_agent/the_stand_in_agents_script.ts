@@ -11,16 +11,21 @@ import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_
 /** One step of a scripted turn. */
 export type AStep =
   | { readonly say: string }
-  | { readonly call: { readonly id: string; readonly title: string; readonly input: unknown; readonly name?: string }; readonly options?: readonly unknown[] }
+  /** A call asked about; `no_result` leaves its result unsent, for a later step to send (martha#1002). */
+  | { readonly call: { readonly id: string; readonly title: string; readonly input: unknown; readonly name?: string }; readonly options?: readonly unknown[]; readonly no_result?: 1 }
   | { readonly ask: string }
   | { readonly line: string }
   | { readonly echo: 1 }
+  /** Says the ids the client closed so far, as JSON (martha#1002). */
+  | { readonly closed: 1 }
   | { readonly capabilities: 1 }
   | { readonly exit: 1 }
   /** A `session/update` sent as written: a call the engine reports and never asks about, or a status of its own. */
   | { readonly update: Readonly<Record<string, unknown>> }
   /** Steps played after the turn's prompt is answered, outside any turn (#541 package A, design R4). */
   | { readonly after_the_answer: readonly AStep[] }
+  /** Steps played under another session's id than the prompt's (martha#1002): a closed predecessor's late request or result. */
+  | { readonly under_session: string; readonly steps: readonly AStep[] }
 
 /** What the stand-in answers: its version and mode, and one list of steps per prompt, in order. */
 export interface AnAgentScript {
@@ -58,6 +63,8 @@ export const theEnginesNamingOf = (name: string): Record<string, unknown> =>
 
 /** The session id the stand-in opens. */
 export const STAND_IN_SESSION = 'stand-in-session'
+/** The id of the nth session the stand-in opens (martha#1002): the first is STAND_IN_SESSION, each later one numbered. */
+export const theStandInsSession = (nth: number): string => (nth === 1 ? STAND_IN_SESSION : `${STAND_IN_SESSION}-${nth}`)
 /** How the engine reads an answer's id: a kind it offers that starts with this lets the call run. */
 const LETS_IT_RUN = 'allow_'
 /** And one that ends with this saves a rule that later skips the client (crates/goose/src/permission). */

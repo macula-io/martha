@@ -9,7 +9,7 @@ import process from 'node:process'
 import { PassThrough } from 'node:stream'
 import { test } from 'node:test'
 
-import { AcpClient, METHOD_NOT_FOUND, type ATurn, type Decide } from './the_acp_client.ts'
+import { ACP, AcpClient, METHOD_NOT_FOUND, type ATurn, type Decide } from './the_acp_client.ts'
 import { STAND_IN_SESSION, THE_ENGINES_OPTIONS, whatTheEngineMakesOf, type AnAgentScript } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 import { ALLOW_ONCE, REJECT_ONCE } from './answer_a_permission_once.ts'
 
@@ -361,4 +361,70 @@ test('a listener that throws is noted, and the turn goes on (#541 package A, des
     if (child.exitCode === null) child.kill()
     await exited
   }
+})
+
+/** A usage the engine reports, as the standard ACP `usage_update` carries it (martha-engine acp/server.rs build_usage_updates). */
+const aUsage = (used: number, size: number, cost?: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> => ({ sessionUpdate: 'usage_update', used, size, ...(cost === undefined ? {} : { cost }) })
+
+test('#999 package 5: the client keeps each session\'s latest usage, mid-turn and at the turn\'s end, and a session that reported none has none (mutant: the usage not kept)', async () => {
+  const first = aUsage(1_200, 200_000)
+  const last = aUsage(152_000, 200_000, { amount: 0.75, currency: 'USD' })
+  await withTheAgent({ turns: [[{ update: first }, { say: 'mid' }, { update: last }]] }, allow, async (client) => {
+    const { sessionId } = await client.newSession('/')
+    assert.equal(client.usageOf(sessionId), undefined)
+    await client.prompt(sessionId, 'go')
+    assert.deepEqual(client.usageOf(sessionId), { used: 152_000, size: 200_000, cost: { amount: 0.75, currency: 'USD' } })
+    assert.equal(client.usageOf('another-session'), undefined)
+  })
+})
+
+test('#999 package 5: a usage update the client cannot read is noted, and drops what was kept, so a stale share is never read as now (mutant: the malformed update kept, or the old one left)', async () => {
+  const unreadable = [aUsage(10, 0), { sessionUpdate: 'usage_update', used: 'many', size: 100 }, aUsage(10, 100, { amount: 'cheap', currency: 'USD' })]
+  for (const bad of unreadable) {
+    await withTheAgent({ turns: [[{ update: aUsage(50, 100) }, { update: bad }]] }, allow, async (client) => {
+      const { sessionId } = await client.newSession('/')
+      await client.prompt(sessionId, 'go')
+      assert.equal(client.usageOf(sessionId), undefined, JSON.stringify(bad))
+      assert.ok(client.notes.some((note) => note.startsWith('a usage update this client cannot read')), JSON.stringify(client.notes))
+    })
+  }
+})
+
+test('a close waits for the session\'s running prompt to be answered, then is sent once (martha#1002 design point 1; mutant: the close sent at once)', async () => {
+  const toClient = new PassThrough()
+  const fromClient = new PassThrough()
+  const sent: { id?: unknown; method?: unknown; params?: unknown }[] = []
+  const prompts: unknown[] = []
+  const client = new AcpClient(toClient, fromClient, allow)
+  const say = (message: object): void => void toClient.write(`${JSON.stringify(message)}\n`)
+  fromClient.setEncoding('utf8')
+  fromClient.on('data', (chunk: string) => {
+    for (const line of chunk.split('\n').filter((one) => one !== '')) {
+      const message = JSON.parse(line) as { id?: unknown; method?: unknown; params?: unknown }
+      sent.push(message)
+      if (message.method === 'session/prompt') prompts.push(message.id)
+      if (message.method === 'session/close') say({ jsonrpc: '2.0', id: message.id, result: {} })
+    }
+  })
+  const turn = client.prompt('s-1', 'go')
+  await drained()
+  let closed = false
+  const closing = client.closeSession('s-1').then(() => void (closed = true))
+  await drained()
+  assert.deepEqual(sent.filter((message) => message.method === 'session/close'), [], 'the close went out while the prompt still ran')
+  assert.equal(closed, false)
+  say({ jsonrpc: '2.0', id: prompts[0], result: { stopReason: 'end_turn' } })
+  await turn
+  await closing
+  const methods = sent.map((message) => message.method)
+  assert.deepEqual(methods, ['session/prompt', 'session/close'])
+  assert.deepEqual(sent[1]?.params, { sessionId: 's-1' })
+  client.end()
+})
+
+test('the client sends no session/load: no method of its own names it, so a closed session is never made current again (martha#1002 T4, the load row)', () => {
+  const ACP_LOAD = ['session', 'load'].join('/')
+  assert.ok(!Object.values(ACP).includes(ACP_LOAD as never), 'the ACP methods the client sends name session/load')
+  const methods = Object.getOwnPropertyNames(AcpClient.prototype)
+  assert.deepEqual(methods.filter((name) => /load/i.test(name)), [])
 })
