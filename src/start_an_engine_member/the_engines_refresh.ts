@@ -9,10 +9,11 @@
 // The question is the mod's own, sent through the launch's crew tools as the member's session sends it, so the flow in
 // ../refresh_a_member/the_refresh_flow.ts decides for both hosts alike. The engine's usage is ACP's `usage_update`
 // (../speak_acp_to_an_agent/the_acp_client.ts `usageOf`), turned into the usage shape the flow reads
-// (../keep_what_a_session_spent/the_hosts_usage.ts). The act carried is the prompt, sent as the member's next turn
-// ahead of any other. The clear is not carried yet: a second ACP session adds a row the #541 store guard refuses, and
-// its design is martha#1002 (the Supervisor's ruling, 2026-11-20). An order this launch does not carry — the clear, a
-// model switch, the end of a running turn — is told to the owner by name, never dropped silently.
+// (../keep_what_a_session_spent/the_hosts_usage.ts). The acts carried are the prompt, sent as the member's next turn
+// ahead of any other, and the clear (martha#1002, option B): the launch opens a new ACP session on the same engine,
+// records its start, and asks the question at that session's start, so the resume the flow holds for the member is the
+// new session's first turn. An order this launch does not carry (a model switch, the end of a running turn, a clear at
+// a session's own start) is told to the owner by name, never dropped silently.
 
 import { randomUUID } from 'node:crypto'
 
@@ -56,6 +57,8 @@ export interface TheEnginesRefreshPlaces {
   readonly ask: (session_id: string, tool: string, args: Readonly<Record<string, unknown>>) => Promise<Heard>
   /** Tells the owner what the launch could not carry. */
   readonly tell: (line: string) => void
+  /** The clear: the next session opened and its start recorded, or why not (martha#1002). */
+  readonly clear: () => Promise<{ readonly session_id: string; readonly started_at: number } | { readonly why: string }>
 }
 
 /** An engine member's refresh: the turn that follows its session's start or one of its turns. */
@@ -83,32 +86,44 @@ export function anOrderIn(said: string): { readonly carry: typeof CARRY_A_TEXT; 
 /** The line the owner is told when an act cannot be carried. */
 export const theLineOfAnActNotCarried = (member: string, why: string): string => `Martha did not carry ${member}'s refresh act: ${why}`
 
-/** What the owner is told of a clear the crew ordered: the engine's clear waits on its own design. */
-export const THE_CLEAR_WAITS = `the clear is not carried for an engine member until martha#1002 lands (a second session trips the #541 store guard); the refresh flow abandons it when its window ends`
+/**
+ * What the owner is told of a clear ordered at a session's own start: the session is already fresh, and carrying it
+ * would open sessions without end.
+ */
+export const THE_CLEAR_AT_A_START = 'a clear ordered at a session\'s start is not carried: the session is already new'
 
 /** The word an order says nothing under: the flow's `'none'`, spelled as ../refresh_a_member/the_refresh_flow.ts `theOrderOf` gives it. */
 const NOTHING_ORDERED = 'none'
 
 /** The refresh of one engine member. */
 export function theEnginesRefresh(places: TheEnginesRefreshPlaces): TheEnginesRefresh {
-  const { session_id } = places
+  let current: { readonly session_id: string; readonly started_at: number } = { session_id: places.session_id, started_at: places.started_at }
   const question = (turn_id: string, answer: string): Readonly<Record<string, unknown>> => ({
-    usage: theEnginesUsageAsAHostsUsage(places.usageOf(session_id), places.started_at),
+    usage: theEnginesUsageAsAHostsUsage(places.usageOf(current.session_id), current.started_at),
     turn_id,
     answer,
   })
   const notCarried = (why: string): undefined => void places.tell(theLineOfAnActNotCarried(places.member, why))
-  const carried = (heard: Heard): ATurnToSend | undefined => {
+  const atTheStart = async (): Promise<ATurnToSend | undefined> => carried(await places.ask(current.session_id, THE_REFRESH_ASK, question('', '')), true)
+  /** The clear carried: the next session, then the question at its start, whose act is its first turn. */
+  const cleared = async (): Promise<ATurnToSend | undefined> => {
+    const next = await places.clear()
+    if ('why' in next) return notCarried(next.why)
+    current = next
+    return atTheStart()
+  }
+  const carried = async (heard: Heard, at_a_start: boolean): Promise<ATurnToSend | undefined> => {
     if ('why' in heard) return notCarried(heard.why)
     const order = anOrderIn(heard.said)
     if (order === null || order.carry === NOTHING_ORDERED) return undefined
     if ('text' in order) return { text: order.text, arrival: THE_ARRIVAL_OF_A_REFRESH_PROMPT }
-    return notCarried(order.carry === CARRY_THE_CLEAR ? THE_CLEAR_WAITS : `an engine member is not ordered to ${order.carry}`)
+    if (order.carry !== CARRY_THE_CLEAR) return notCarried(`an engine member is not ordered to ${order.carry}`)
+    return at_a_start ? notCarried(THE_CLEAR_AT_A_START) : cleared()
   }
   return {
-    atTheStart: async () => carried(await places.ask(session_id, THE_REFRESH_ASK, question('', ''))),
+    atTheStart,
     // The engine stamps no turn of its own: each ended turn gets a fresh id, the one the flow's question needs, and a
     // turn's answer is the text the engine streamed in it.
-    afterATurn: async (ended) => carried(await places.ask(session_id, THE_REFRESH_ASK, question(randomUUID(), (ended as Partial<ATurn> | undefined)?.text ?? ''))),
+    afterATurn: async (ended) => carried(await places.ask(current.session_id, THE_REFRESH_ASK, question(randomUUID(), (ended as Partial<ATurn> | undefined)?.text ?? '')), false),
   }
 }

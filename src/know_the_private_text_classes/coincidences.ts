@@ -4,7 +4,7 @@
 import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_checkout/coincidences.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
-import { FINE_GRAINED_TOKEN_PREFIX } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
+import { FINE_GRAINED_TOKEN_PREFIX } from '../keep_the_owners_todo_list/token_prefixes.ts'
 
 /**
  * Why the test states GitHub's token kinds by literal (martha#904 r=1): a test that read the prefixes from the list it
