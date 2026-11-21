@@ -8,11 +8,12 @@
 //
 // It stands on its own so the two slices that need it read a URL in one place: git writes an origin in four forms (the
 // `git@host:org/name` shorthand, `ssh://`, `https://`, and a local path), and a second copy of that reading would drift
-// from this one. The shape of `org/name` itself is not defined here either: it is ../open_and_finish_a_worktree's REPO,
+// from this one. The shape of `org/name` itself is not defined here either: it is ../open_and_finish_a_worktree's
+// the_repositorys_name, REPO,
 // the one home that name has.
 
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
-import { REPO } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
+import { REPO } from '../open_and_finish_a_worktree/the_repositorys_name.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 import { GIT } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 

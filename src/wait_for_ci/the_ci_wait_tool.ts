@@ -5,7 +5,7 @@
 // arguments first, and asks this launch for its processes only after them (martha#443 part 5 r=2): a call that names no
 // repository is answered by that, even in a launch that could not act, which is the order the base's handler had.
 
-import { REPO } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
+import { REPO } from '../open_and_finish_a_worktree/the_repositorys_name.ts'
 import type { TheGithubSpender } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import { A_COMMIT, A_RUN_ID, WAIT_FOR_CI, WAIT_FOR_CI_DESCRIPTION, theAnswerOf, theNameOf, waitForCi, type TheCiWait } from './wait_for_ci.ts'
 

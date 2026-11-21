@@ -46,9 +46,16 @@ export const WORKTREE_OPEN_TOOL = {
   },
 }
 
+/** The id of an ask the owner answered yes to, when a finish stands on one (martha#973). */
+export const A_THE_OWNERS_YES: Readonly<Record<string, unknown>> = {
+  type: 'string',
+  description:
+    "The id of an ask the owner answered yes to about removing this very repository's branch, as see_the_owners_asks prints it. The owner's yes covers the tip the ask recorded, and nothing else. Leave it out and the branch stays unless the default branch holds its work.",
+}
+
 /**
- * What `worktree_finish` takes: the worktree (or the branch a finished worktree left), the package it closes, and what
- * it may throw away (martha#962).
+ * What `worktree_finish` takes: the worktree (or the branch a finished worktree left), the package it closes, what it may
+ * throw away, and the owner's ask it may stand on (martha#962, martha#915, martha#973).
  */
 export const WORKTREE_FINISH_TOOL = {
   name: WORKTREE_FINISH,
@@ -69,6 +76,7 @@ export const WORKTREE_FINISH_TOOL = {
           "1 when another member has said the package is closed, from a session whose role the crew's table grants finish_a_members_worktree: it closes that member's worktree or branch. Never set for one's own, and never by a member whose role the table does not grant it.",
       },
       discard_ignored: A_DISCARD_LIST,
+      ask: A_THE_OWNERS_YES,
     },
     required: ['repo', 'package'],
   },

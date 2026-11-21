@@ -17,7 +17,7 @@
 import { join } from 'node:path'
 
 import type { HostContract } from '../host_contract/host_contract.ts'
-import { REPO } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
+import { REPO } from '../open_and_finish_a_worktree/the_repositorys_name.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
 
 /**
@@ -26,18 +26,22 @@ import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts
  */
 export const A_COMMIT_ID = /^[0-9a-f]{7,64}$/
 
-/** The branch an ask would remove, and the tip each copy of it stands at. Either tip may be absent, which says no copy holds it. */
+/** The branch an ask would remove, the repository it is in, and the tip each copy of it stands at. Either tip may be
+ * absent, which says no copy holds it. `repo` is absent on an ask queued before it was kept (martha#973): such an ask
+ * still waits and still settles, and a finish cannot stand on it, because it never said which repository it was about. */
 export interface ABranchItRemoves {
+  readonly repo?: string
   readonly branch: string
   readonly local_tip: string | null
   readonly origin_tip: string | null
 }
 
 /** What an ask that removes a branch says of the tips it removes: one line naming every copy, so one yes covers all. */
-export function theTipsItRemoves({ branch, local_tip, origin_tip }: ABranchItRemoves): string {
+export function theTipsItRemoves({ repo, branch, local_tip, origin_tip }: ABranchItRemoves): string {
   const local = local_tip === null ? 'no copy of its own' : `this clone at ${local_tip}`
   const origin = origin_tip === null ? 'no copy on origin' : `origin at ${origin_tip}`
-  return `It removes ${branch}, and the ask records both tips the yes covers: ${local}, ${origin}.`
+  const in_repo = repo === undefined ? '' : ` in ${repo}`
+  return `It removes ${branch}${in_repo}, and the ask records both tips the yes covers: ${local}, ${origin}.`
 }
 
 /** Why half a removal is refused: the words the member that asked is answered with, and the words a test pins. */
@@ -106,7 +110,7 @@ export async function theBranchItRemoves(
   if ('refused' in origin) return origin
   return local_tip === null && origin.found === null
     ? { refused: theNeitherCopySays(clone, named.branch) }
-    : { branch: named.branch, local_tip, origin_tip: origin.found }
+    : { repo: named.repo, branch: named.branch, local_tip, origin_tip: origin.found }
 }
 
 /** The commit the clone's own branch stands at, or null when the clone has no such branch: a ref git will not resolve is a copy that is not there. */

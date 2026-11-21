@@ -28,6 +28,8 @@ import { test, type TestContext } from 'node:test'
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, type CrewSettings, FINISH_A_MEMBERS_WORKTREE, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, HOLD_REVIEWS, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, THE_HOST_A_MEMBER_RAN_ON } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
+import { ASKS_SETTLED, ASK_QUEUED, OWNER_ASKS_STREAM } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
+import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { noteRecovery, readLedger } from '../log_ledger/log_ledger.ts'
 import {
@@ -128,8 +130,10 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
     opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
 })
 
-/** A real git, so a test sees what git does rather than what a stand-in is told to say. */
+/** A real git, and a GitHub that knows of no open pull request unless the test says otherwise (martha#973): no test in
+ * this file reaches the network, and no stand-in answers for git. */
 const runReal = async (request: ProcessRequest): Promise<ProcessOutcome> => {
+  if (request.command === GITHUB_CLI) return { exit_code: 0, stdout: '[]', stderr: '' }
   const outcome = spawnSync(request.command, [...request.args], { cwd: request.cwd, encoding: 'utf8' })
   return { exit_code: outcome.status, stdout: outcome.stdout, stderr: outcome.stderr }
 }
@@ -959,3 +963,130 @@ test('worktree_finish stays the branch on origin and names the file the default 
   assert.ok(onOrigin(fixture, `${MEMBER}/${SLUG}`), 'the branch on origin went although the default branch does not hold its work')
 })
 
+
+// --- the owner's yes as a proof, and an open pull request's base (martha#973) ---------------------
+
+/** The tip a copy of `branch` stands at in the crew's clone, and on origin. */
+const tipInTheClone = (fixture: Fixture, branch: string): string => gitIn(fixture.clone, 'rev-parse', `refs/heads/${branch}`).trim()
+const tipOnOrigin = (fixture: Fixture, branch: string): string =>
+  execFileSync('git', ['--git-dir', fixture.origin, 'rev-parse', `refs/heads/${branch}`], { encoding: 'utf8' }).trim()
+
+/** An ask about a removal the owner answered yes to, kept in the crew's own queue; answers the id it was kept at. */
+async function anAnsweredAsk(tools: Tools, removal: Readonly<Record<string, unknown>>): Promise<number> {
+  const rows = tools.host.host.stores.rows
+  const at = (await rows.read(OWNER_ASKS_STREAM)).length
+  await rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'Delete that branch?', asked_by: MEMBER, since: 0, removes: removal }, at)
+  await rows.append(OWNER_ASKS_STREAM, { kind: ASKS_SETTLED, batch: 0, yes: [at], at: 0, by: OWNER }, at + 1)
+  return at
+}
+
+/** An ask about a removal nobody answered: it waits for the owner. */
+async function anUnansweredAsk(tools: Tools, removal: Readonly<Record<string, unknown>>): Promise<number> {
+  const rows = tools.host.host.stores.rows
+  const at = (await rows.read(OWNER_ASKS_STREAM)).length
+  await rows.append(OWNER_ASKS_STREAM, { kind: ASK_QUEUED, question: 'Delete that branch?', asked_by: MEMBER, since: 0, removes: removal }, at)
+  return at
+}
+
+/** A tip an ask may name that is no tip of this fixture's. */
+const A_TIP_NOTHING_STANDS_AT = 'a'.repeat(40)
+
+/** The branch form's own work, its worktree already taken away by hand. */
+async function aBranchWithoutItsWorktree(fixture: Fixture, tools: Tools): Promise<string> {
+  const path = await aPushedWorktree(fixture, tools)
+  gitIn(fixture.clone, 'worktree', 'remove', '--force', path)
+  return `${MEMBER}/${SLUG}`
+}
+
+test("worktree_finish removes a branch the default branch does not hold, on an ask the owner answered yes to (martha#973)", async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const branch = await aBranchWithoutItsWorktree(fixture, tools)
+  const id = await anAnsweredAsk(tools, { repo: 'acme/widget', branch, local_tip: tipInTheClone(fixture, branch), origin_tip: tipOnOrigin(fixture, branch) })
+  const answer = toldOf(await tools.finish.answer({ ...finishedBranch(branch), ask: String(id) }))
+  assert.match(answer, new RegExp(`Removed origin/${branch}`))
+  assert.equal(onOrigin(fixture, branch), false, 'the branch the owner said yes to is still on origin')
+  assert.equal(gitIn(fixture.clone, 'branch', '--list', branch), '', "the clone's copy is still there")
+})
+
+test('worktree_finish refuses an ask that was never answered yes, and removes nothing (martha#973)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const branch = await aBranchWithoutItsWorktree(fixture, tools)
+  const id = await anUnansweredAsk(tools, { repo: 'acme/widget', branch, local_tip: tipInTheClone(fixture, branch), origin_tip: tipOnOrigin(fixture, branch) })
+  assert.match(refusedOf(await tools.finish.answer({ ...finishedBranch(branch), ask: String(id) })), /was never answered yes by the owner/)
+  assert.equal(onOrigin(fixture, branch), true, 'a branch nobody said yes to was removed')
+  assert.notEqual(gitIn(fixture.clone, 'branch', '--list', branch), '', "the clone's copy was removed")
+})
+
+test("worktree_finish refuses an ask about another branch, or another repository, naming which (martha#973)", async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const branch = await aBranchWithoutItsWorktree(fixture, tools)
+  const tips = { local_tip: tipInTheClone(fixture, branch), origin_tip: tipOnOrigin(fixture, branch) }
+  const otherBranch = await anAnsweredAsk(tools, { repo: 'acme/widget', branch: `${MEMBER}/another-work`, ...tips })
+  assert.match(
+    refusedOf(await tools.finish.answer({ ...finishedBranch(branch), ask: String(otherBranch) })),
+    new RegExp(`\\b${String(otherBranch)}\\b was asked about acme/widget ${MEMBER}/another-work, and this finish is acme/widget ${branch}`),
+  )
+  const otherRepo = await anAnsweredAsk(tools, { repo: 'acme/other', branch, ...tips })
+  assert.match(
+    refusedOf(await tools.finish.answer({ ...finishedBranch(branch), ask: String(otherRepo) })),
+    new RegExp(`\\b${String(otherRepo)}\\b was asked about acme/other ${branch}, and this finish is acme/widget ${branch}`),
+  )
+  assert.equal(onOrigin(fixture, branch), true, 'a branch a yes for another branch or repository was taken for was removed')
+})
+
+test('worktree_finish refuses an ask queued without a repository, and one at a tip the owner did not approve (martha#973)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  const branch = await aBranchWithoutItsWorktree(fixture, tools)
+  const unnamedRepo = await anAnsweredAsk(tools, { branch, local_tip: tipInTheClone(fixture, branch), origin_tip: tipOnOrigin(fixture, branch) })
+  assert.match(refusedOf(await tools.finish.answer({ ...finishedBranch(branch), ask: String(unnamedRepo) })), /was queued without a repository/)
+  const anotherTip = await anAnsweredAsk(tools, { repo: 'acme/widget', branch, local_tip: A_TIP_NOTHING_STANDS_AT, origin_tip: A_TIP_NOTHING_STANDS_AT })
+  assert.match(
+    refusedOf(await tools.finish.answer({ ...finishedBranch(branch), ask: String(anotherTip) })),
+    new RegExp(`stands at ${tipOnOrigin(fixture, branch)}, and the owner approved ${A_TIP_NOTHING_STANDS_AT}`),
+  )
+  assert.equal(onOrigin(fixture, branch), true, 'a copy at a tip the owner never saw was removed')
+})
+
+test('worktree_finish removes a live worktree whose commits are on no remote, when the tip the owner approved holds them (martha#973)', async (t) => {
+  const fixture = aCrew(t)
+  const tools = toolsOf(settingsFor(fixture, fixture))
+  await tools.open.answer(asked('acme/widget', SLUG))
+  const path = join(fixture.worktrees, `widget-${SLUG}`)
+  writeFileSync(join(path, 'work.txt'), 'the work\n')
+  commitIn(path, 'the work')
+  const tip = gitIn(path, 'rev-parse', 'HEAD').trim()
+  const id = await anAnsweredAsk(tools, { repo: 'acme/widget', branch: `${MEMBER}/${SLUG}`, local_tip: tip, origin_tip: null })
+  assert.match(toldOf(await tools.finish.answer({ ...finished('acme/widget', SLUG), ask: String(id) })), /removed .*widget-261/)
+  assert.equal(existsSync(path), false, 'the worktree stayed although the owner said yes to the one tip it holds')
+})
+
+test('worktree_finish keeps a branch an open pull request is based on, names it, and leaves the clone\'s copy (martha#973)', async (t) => {
+  const fixture = aCrew(t)
+  const branch = `${MEMBER}/${SLUG}`
+  const aPullRequestBasedThere = async (request: ProcessRequest): Promise<ProcessOutcome> =>
+    request.command === GITHUB_CLI
+      ? { exit_code: 0, stdout: JSON.stringify([{ number: 77, title: 'the work in hand' }]), stderr: '' }
+      : runReal(request)
+  const tools = toolsOf(settingsFor(fixture, fixture), MEMBER, aPullRequestBasedThere)
+  await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  const refusal = refusedOf(await tools.finish.answer(finished('acme/widget', SLUG)))
+  assert.match(refusal, /#77 the work in hand/, 'the refusal does not name the pull request whose base would go')
+  assert.equal(onOrigin(fixture, branch), true, 'the base of an open pull request was deleted')
+  assert.notEqual(gitIn(fixture.clone, 'branch', '--list', branch), '', "the clone's copy went while origin's stayed, which is half a finish")
+})
+
+test('worktree_finish refuses when the pull requests based on the branch cannot be read, rather than deleting blind (martha#973)', async (t) => {
+  const fixture = aCrew(t)
+  const aGitHubThatCannotAnswer = async (request: ProcessRequest): Promise<ProcessOutcome> =>
+    request.command === GITHUB_CLI ? { exit_code: 1, stdout: '', stderr: 'gh: could not connect to api.github.com' } : runReal(request)
+  const tools = toolsOf(settingsFor(fixture, fixture), MEMBER, aGitHubThatCannotAnswer)
+  await aPushedWorktree(fixture, tools)
+  landTheBranch(fixture)
+  assert.match(refusedOf(await tools.finish.answer(finished('acme/widget', SLUG))), /could not be read \(gh: could not connect to api\.github\.com\)/)
+  assert.equal(onOrigin(fixture, `${MEMBER}/${SLUG}`), true, 'the branch went although nothing said which pull requests stand on it')
+})

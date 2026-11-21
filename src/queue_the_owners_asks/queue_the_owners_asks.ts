@@ -157,10 +157,34 @@ const isATipOrNothing = (value: unknown): value is string | null =>
  */
 function theRemovalIn(held: unknown): ABranchItRemoves | undefined | 'malformed' {
   if (held === undefined) return undefined
-  const { branch, local_tip, origin_tip } = (held ?? {}) as Readonly<Record<string, unknown>>
-  if (typeof branch !== 'string' || !isATipOrNothing(local_tip) || !isATipOrNothing(origin_tip)) return 'malformed'
-  if (local_tip === null && origin_tip === null) return 'malformed'
+  const { repo, branch, local_tip, origin_tip } = (held ?? {}) as Readonly<Record<string, unknown>>
+  const of_a_branch = theBranchAndItsTips(branch, local_tip, origin_tip)
+  if (of_a_branch === undefined) return 'malformed'
+  const named_repo = theRepoOfARemoval(repo)
+  if (named_repo === 'malformed') return 'malformed'
+  return named_repo === undefined ? of_a_branch : { repo: named_repo, ...of_a_branch }
+}
+
+/** The branch a stored removal names and the tips it stands at, or undefined when the row is no removal this queue wrote. */
+function theBranchAndItsTips(
+  branch: unknown,
+  local_tip: unknown,
+  origin_tip: unknown,
+): { readonly branch: string; readonly local_tip: string | null; readonly origin_tip: string | null } | undefined {
+  if (typeof branch !== 'string') return undefined
+  if (!isATipOrNothing(local_tip) || !isATipOrNothing(origin_tip)) return undefined
+  if (local_tip === null && origin_tip === null) return undefined
   return { branch, local_tip, origin_tip }
+}
+
+/**
+ * The repository a stored removal names, or nothing when it names none, or `malformed` when it names one this queue never
+ * wrote. A row written before the repository was kept (martha#973) is still a removal: it waits and settles as it did,
+ * and a finish simply cannot stand on it.
+ */
+function theRepoOfARemoval(repo: unknown): string | undefined | 'malformed' {
+  if (repo === undefined) return undefined
+  return typeof repo === 'string' ? repo : 'malformed'
 }
 
 /** The ask a stored row holds, or null when it is no row of this queue. */

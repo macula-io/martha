@@ -32,15 +32,18 @@ import { join } from 'node:path'
 import { FINISH_A_MEMBERS_WORKTREE, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import type { HostContract, ProcessOutcome } from '../host_contract/host_contract.ts'
 import { WORK_PACKAGE, type LedgerHost } from '../log_ledger/log_ledger.ts'
+import { theAsksSaidYesToWithTheirWords } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
 import { marthasOwnGitArgs } from '../run_marthas_own_git/run_marthas_own_git.ts'
+import { GITHUB_CLI } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { REPO } from './the_repositorys_name.ts'
 
 /** The tools this slice registers. */
 export const WORKTREE_OPEN = 'worktree_open'
 export const WORKTREE_FINISH = 'worktree_finish'
 
 /** A repository as it is cloned under `clones`: `org/name`, neither part able to be a dot or to climb out. */
-export const REPO = /^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/
+export { REPO }
 
 /** The end of a worktree's path and of its branch: lowercase, so one slug names one directory on any machine. */
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -84,11 +87,13 @@ const no = (why: string): Refused => ({ refused: why })
 /** What `worktree_open` says it is for, as the launcher answers the mod's ask (martha#256). */
 export const WORKTREE_OPEN_DESCRIPTION = 'Makes a worktree for one package of a repository, on a new branch of your own, and answers where it is.'
 
-/** What `worktree_finish` says it is for (martha#256, martha#915, martha#962). */
+/** What `worktree_finish` says it is for (martha#256, martha#915, martha#962, martha#973). */
 export const WORKTREE_FINISH_DESCRIPTION =
   'Removes a worktree and its branch once its work has landed, and names the package the deletion is kept under. Refused while it holds work no remote has, or an ignored entry the call did not name in discard_ignored. ' +
+  'A branch the default branch does not hold goes only on the owner\'s yes, named as ask: the ask must be one they answered, about that exact repository and branch, and its tips cover the tip they were shown. ' +
   'It takes a live worktree (repo and slug) or a branch whose worktree is already gone (repo and branch), and a member finishes its own without more; ' +
-  "another member's is closed on that member's word, by a session whose role the crew's table grants finish_a_members_worktree, with owner_ok=1."
+  "another member's is closed on that member's word, by a session whose role the crew's table grants finish_a_members_worktree, with owner_ok=1. " +
+  'Nothing goes while an open pull request uses the branch as its base: deleting the base closes the pull request, and one whose base is gone cannot be reopened.'
 
 /** The repository a call names, as org/name, or why it names none. */
 function theRepoNamed(args: Readonly<Record<string, unknown>>): { readonly repo: string } | Refused {
@@ -268,6 +273,129 @@ function whoseItIs(request: WorktreesRequest, owner: string, branch: string, arg
 }
 
 /**
+ * The owner's yes a finish stands on (martha#973): the tips the yes covers, once the ask has been read and found to be
+ * about this very repository and branch. Absent when the call names no ask, which is the finish as it was before.
+ */
+interface AnApprovedRemoval {
+  readonly origin_tip: string | null
+  readonly local_tip: string | null
+}
+
+/** The id of the ask a call names, as `see_the_owners_asks` prints it, or why it names none. */
+function theAskIdNamed(named: unknown): { readonly id: number } | Refused {
+  if (typeof named !== 'string' || !/^[0-9]{1,15}$/.test(named)) {
+    return no(`${JSON.stringify(named)} is not an ask's id: name the id the owner's list prints, as a string of digits.`)
+  }
+  return { id: Number(named) }
+}
+
+/**
+ * The ask a finish stands on, when the call names one (martha#973): an ask the owner answered yes to, about this very
+ * repository and this very branch. Every other ask is refused by name — one never answered, one about another branch or
+ * repository, one queued before the ask recorded its repository — because a yes is evidence only about what the owner
+ * was shown.
+ */
+async function theApprovedRemoval(
+  host: WorktreesRequest['host'],
+  args: Readonly<Record<string, unknown>>,
+  repo: string,
+  branch: string,
+): Promise<AnApprovedRemoval | Refused | undefined> {
+  const named = args['ask']
+  if (named === undefined) return undefined
+  const read = theAskIdNamed(named)
+  if ('refused' in read) return read
+  const id = String(read.id)
+  const asked = (await theAsksSaidYesToWithTheirWords(host)).find((one) => one.id === read.id)
+  if (asked === undefined) {
+    return no(`ask ${id} was never answered yes by the owner: name an ask they ticked in their list, or leave ask out.`)
+  }
+  const removes = asked.removes
+  if (removes === undefined) return no(`ask ${id} names no branch to remove, so it cannot stand for this finish.`)
+  if (removes.repo === undefined) {
+    return no(`ask ${id} was queued without a repository, so it cannot say whose ${removes.branch} the owner said yes to: queue the removal again, then finish.`)
+  }
+  if (removes.repo !== repo || removes.branch !== branch) {
+    return no(`ask ${id} was asked about ${removes.repo} ${removes.branch}, and this finish is ${repo} ${branch}: the owner's yes covers the one they were asked about.`)
+  }
+  return { origin_tip: removes.origin_tip, local_tip: removes.local_tip }
+}
+
+/** One pull request as GitHub answers for it here: its number, and the title the owner would know it by. */
+interface APullRequest {
+  readonly number: number
+  readonly title: string
+}
+
+/** The pull requests GitHub says use `branch` as their base, or why they could not be read (martha#973). */
+async function theOpenPullsBasedOn(
+  host: WorktreesRequest['host'],
+  clone: string,
+  repo: string,
+  branch: string,
+): Promise<{ readonly pulls: readonly APullRequest[] } | Refused> {
+  const asked = await host.processes.run({
+    command: GITHUB_CLI,
+    args: ['api', `repos/${repo}/pulls?state=open&base=${encodeURIComponent(branch)}&per_page=100`],
+    cwd: clone,
+  })
+  if (asked.exit_code !== 0) {
+    const why = asked.stderr.trim() === '' ? `gh ended ${String(asked.exit_code)}` : (asked.stderr.trim().split('\n')[0] ?? '')
+    return no(`${branch}'s pull requests could not be read (${why}), so nothing was removed.`)
+  }
+  const pulls = thePullsIn(asked.stdout)
+  if (pulls === undefined) {
+    return no(`${branch}'s pull requests could not be read: GitHub answered something that is not a list of pull requests, so nothing was removed.`)
+  }
+  return { pulls }
+}
+
+/** The pull requests in what `gh` printed, or undefined when it printed something that is not one. */
+function thePullsIn(printed: string): readonly APullRequest[] | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(printed)
+  } catch {
+    return undefined
+  }
+  if (!Array.isArray(parsed)) return undefined
+  const pulls: APullRequest[] = []
+  for (const one of parsed as readonly unknown[]) {
+    const { number, title } = (one ?? {}) as Readonly<Record<string, unknown>>
+    if (typeof number !== 'number' || !Number.isInteger(number) || typeof title !== 'string') return undefined
+    pulls.push({ number, title })
+  }
+  return pulls
+}
+
+/**
+ * Why the branch stays while open pull requests use it as their base, or undefined when none does (martha#973): deleting
+ * the base closes them, and a pull request whose base is gone cannot be reopened.
+ */
+async function keptForItsPullRequests(host: WorktreesRequest['host'], clone: string, repo: string, branch: string): Promise<Refused | undefined> {
+  const based = await theOpenPullsBasedOn(host, clone, repo, branch)
+  if ('refused' in based) return based
+  if (based.pulls.length === 0) return undefined
+  const named = based.pulls.map((one) => `#${String(one.number)} ${one.title}`).join(', ')
+  return no(`${branch} stays on origin, which open pull request(s) use as their base (${named}): deleting the base closes them, and one whose base is gone cannot be reopened.`)
+}
+
+/** Whether the tip the owner approved holds every commit this worktree has that no remote has (martha#973). */
+async function theApprovedTipHolds(host: WorktreesRequest['host'], path: string, approved: AnApprovedRemoval | undefined): Promise<boolean> {
+  if (approved === undefined) return false
+  const approved_tip = approved.origin_tip ?? approved.local_tip
+  if (approved_tip === null) return false
+  const holds = await git(host, path, ['merge-base', '--is-ancestor', 'HEAD', approved_tip])
+  return holds.exit_code === 0
+}
+
+/** Why a copy at `tip` is not the copy the owner approved, where an ask was named: the two tips, side by side. */
+const notWhatTheOwnerApproved = (copy: string, tip: string, approved: string | null): string =>
+  approved === null
+    ? `${copy} stands at ${tip}, and no copy of it was there when the owner was asked`
+    : `${copy} stands at ${tip}, and the owner approved ${approved}`
+
+/**
  * What the call named it may throw away: the ignored entries standing in the worktree, by the name git gives them. An
  * entry is discarded only when it is named, so nothing ignored goes unnamed (martha#915).
  */
@@ -310,18 +438,45 @@ async function finishTheWorktree(
 ): Promise<WorktreeAnswer> {
   const { host } = request
   const path = form.path
-  const branch = await branchAt(host, path)
+  const read = await theBranchMarthasNamingMade(request, form, path)
+  if ('refused' in read) return read
+  const guards = await theLiveFormsGuards(request, form, read.branch, args)
+  if ('refused' in guards) return guards
+  const held = await workNoOtherCopyHas(host, path, read.branch, discard_ignored, guards.approved)
+  if ('refused' in held) return held
+  return removeTheWorktree(host, { clone: form.clone, path }, read.branch, work, held.discarded)
+}
+
+/** The branch the live worktree holds, and whose it is, or why this is no worktree Martha's own naming made (martha#962). */
+async function theBranchMarthasNamingMade(
+  request: WorktreesRequest,
+  form: Extract<FinishForm, { readonly form: 'worktree' }>,
+  path: string,
+): Promise<{ readonly branch: string; readonly owner: string } | Refused> {
+  const branch = await branchAt(request.host, path)
   if ('refused' in branch) return branch
   const owner = theOwnerOfBranch(branch.name, request.settings.members)
   const theirs = `${owner ?? request.member}/${form.slug}`
   if (owner === undefined || branch.name !== theirs) {
     return no(`${path} is on ${branch.name}, not ${theirs}: Martha removes only the worktree its own naming made.`)
   }
-  const allowed = whoseItIs(request, owner, branch.name, args)
+  return { branch: branch.name, owner }
+}
+
+/** Who may close it, the ask it stands on, and the pull requests that keep it: the live form's guards (martha#962, #973). */
+async function theLiveFormsGuards(
+  request: WorktreesRequest,
+  form: Extract<FinishForm, { readonly form: 'worktree' }>,
+  branch: string,
+  args: Readonly<Record<string, unknown>>,
+): Promise<{ readonly approved: AnApprovedRemoval | undefined } | Refused> {
+  const allowed = whoseItIs(request, theOwnerOfBranch(branch, request.settings.members) ?? request.member, branch, args)
   if (allowed !== undefined) return allowed
-  const held = await workNoOtherCopyHas(host, path, branch.name, discard_ignored)
-  if ('refused' in held) return held
-  return removeTheWorktree(host, { clone: form.clone, path }, branch.name, work, held.discarded)
+  const approved = await theApprovedRemoval(request.host, args, form.repo, branch)
+  if (approved !== undefined && 'refused' in approved) return approved
+  const kept = await keptForItsPullRequests(request.host, form.clone, form.repo, branch)
+  if (kept !== undefined) return kept
+  return { approved }
 }
 
 /** Why the worktree's work must not be removed yet, or what the call named it may throw away when nothing stops it. */
@@ -330,6 +485,7 @@ async function workNoOtherCopyHas(
   path: string,
   branch: string,
   discard_ignored: readonly string[],
+  approved: AnApprovedRemoval | undefined,
 ): Promise<{ readonly discarded: readonly string[] } | Refused> {
   // Read with the ignored entries in: plain `status --porcelain` leaves them out, so a build output or a private
   // recording stood unseen and went with the worktree, named by nothing (martha#915). Traditional shape, so an ignored
@@ -352,7 +508,9 @@ async function workNoOtherCopyHas(
   }
   const count = await gitSaid(host, path, ['rev-list', '--count', 'HEAD', '--not', '--remotes'])
   if (count === undefined) return no(`${path} could not be read: git would not say what it holds.`)
-  if (count !== '0') return no(`${path} holds ${count} commit(s) on no remote branch: push ${branch}, then try again.`)
+  if (count !== '0' && !(await theApprovedTipHolds(host, path, approved))) {
+    return no(`${path} holds ${count} commit(s) on no remote branch: push ${branch}, or name the ask the owner answered yes to, then try again.`)
+  }
   return { discarded: ignored }
 }
 
@@ -529,11 +687,11 @@ async function finishTheBranch(request: WorktreesRequest, form: Extract<FinishFo
   // origin, and a branch deleted on origin by someone else would still be remembered here.
   const fetched = await git(host, clone, ['fetch', '--quiet', '--prune', 'origin'])
   if (fetched.exit_code !== 0) return no(`origin could not be read (${saidBy(fetched)}), so nothing of ${branch} was removed.`)
-  const on_origin = await bothSidesJudged(host, clone, branch, guarded.default_branch)
+  const on_origin = await bothSidesJudged(host, clone, branch, guarded.default_branch, guarded.approved)
   if ('refused' in on_origin) return on_origin
   const remote = on_origin.state === 'held' ? await theOriginSide(host, clone, branch, on_origin.tip, work) : on_origin
   if (remote.state === 'kept') return no(`the origin still holds origin/${branch}, ${remote.why}; the clone's copy is untouched.`)
-  const local = await theCloneSide(host, clone, branch, guarded.default_branch)
+  const local = await theCloneSide(host, clone, branch, guarded.default_branch, guarded.approved)
   return { told: branchFinishLine(branch, remote, local) }
 }
 
@@ -542,7 +700,11 @@ async function finishTheBranch(request: WorktreesRequest, form: Extract<FinishFo
  * (a member's branch is closed by that member, or on their word by a role the table grants), then never the default
  * branch, never a branch no member owns, and never one a live worktree still holds (martha#962).
  */
-async function theBranchGuards(request: WorktreesRequest, form: Extract<FinishForm, { readonly form: 'branch' }>, args: Readonly<Record<string, unknown>>): Promise<{ readonly default_branch: string } | Refused> {
+async function theBranchGuards(
+  request: WorktreesRequest,
+  form: Extract<FinishForm, { readonly form: 'branch' }>,
+  args: Readonly<Record<string, unknown>>,
+): Promise<{ readonly default_branch: string; readonly approved: AnApprovedRemoval | undefined } | Refused> {
   const { host } = request
   const { clone, branch } = form
   const owner = theOwnerOfBranch(branch, request.settings.members)
@@ -557,7 +719,22 @@ async function theBranchGuards(request: WorktreesRequest, form: Extract<FinishFo
   if (holding.path !== '') {
     return no(`the worktree at ${holding.path} holds branch "${branch}"; finish it with its repo, its slug and the package, so its directory goes with the branch.`)
   }
-  return { default_branch }
+  const allowed_by_ask = await theAskAndThePullRequests(request, form, branch, args)
+  if ('refused' in allowed_by_ask) return allowed_by_ask
+  return { default_branch, approved: allowed_by_ask.approved }
+}
+
+/** The ask the branch form stands on, and the pull requests that keep it: what the guards answer once the branch is theirs. */
+async function theAskAndThePullRequests(
+  request: WorktreesRequest,
+  form: Extract<FinishForm, { readonly form: 'branch' }>,
+  branch: string,
+  args: Readonly<Record<string, unknown>>,
+): Promise<{ readonly approved: AnApprovedRemoval | undefined } | Refused> {
+  const approved = await theApprovedRemoval(request.host, args, form.repo, branch)
+  if (approved !== undefined && 'refused' in approved) return approved
+  const kept = await keptForItsPullRequests(request.host, form.clone, form.repo, branch)
+  return kept === undefined ? { approved } : kept
 }
 
 /**
@@ -565,20 +742,35 @@ async function theBranchGuards(request: WorktreesRequest, form: Extract<FinishFo
  * branch kept on one side is never deleted from the other (martha#962 review r=1). Answers the origin's copy, absent or
  * held, or why nothing is removed.
  */
-async function bothSidesJudged(host: WorktreesRequest['host'], clone: string, branch: string, default_branch: string): Promise<{ readonly state: 'absent' } | { readonly state: 'held'; readonly tip: string } | Refused> {
-  const on_origin = await theOriginCopy(host, clone, branch, default_branch)
+async function bothSidesJudged(
+  host: WorktreesRequest['host'],
+  clone: string,
+  branch: string,
+  default_branch: string,
+  approved: AnApprovedRemoval | undefined,
+): Promise<{ readonly state: 'absent' } | { readonly state: 'held'; readonly tip: string } | Refused> {
+  const on_origin = await theOriginCopy(host, clone, branch, default_branch, approved)
   if (on_origin.state === 'kept') return no(`the origin still holds origin/${branch}, ${on_origin.why}; the clone's copy is untouched.`)
-  const unheld = await whatTheDefaultLacksIn(host, clone, branch, default_branch)
+  const unheld = await whatTheDefaultLacksIn(host, clone, branch, default_branch, approved)
   if (unheld !== undefined) return no(`the clone still holds ${branch}, ${unheld}; origin/${branch} is untouched.`)
   return on_origin
 }
 
 /** Why the clone's copy of `branch` must stay (its tip, which the default branch does not hold), or undefined. */
-async function whatTheDefaultLacksIn(host: WorktreesRequest['host'], clone: string, branch: string, default_branch: string): Promise<string | undefined> {
+async function whatTheDefaultLacksIn(
+  host: WorktreesRequest['host'],
+  clone: string,
+  branch: string,
+  default_branch: string,
+  approved: AnApprovedRemoval | undefined,
+): Promise<string | undefined> {
   const tip = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
   if (tip === undefined) return undefined
   const held = await git(host, clone, ['merge-base', '--is-ancestor', tip, default_branch])
-  return held.exit_code === 0 ? undefined : `where it is at ${tip}, which the default branch does not hold`
+  if (held.exit_code === 0) return undefined
+  // The owner's yes is the other proof (martha#973): it covers the tip they were shown, and no other.
+  if (approved !== undefined) return approved.local_tip === tip ? undefined : notWhatTheOwnerApproved(`the clone's ${branch}`, tip, approved.local_tip)
+  return `where it is at ${tip}, which the default branch does not hold`
 }
 
 /** The origin's copy of `branch` as the fetch left it: absent, held by the default branch at its tip, or kept with why. */
@@ -587,11 +779,19 @@ async function theOriginCopy(
   clone: string,
   branch: string,
   default_branch: string,
+  approved: AnApprovedRemoval | undefined,
 ): Promise<{ readonly state: 'absent' } | { readonly state: 'held'; readonly tip: string } | { readonly state: 'kept'; readonly why: string }> {
   const on_origin = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
   if (on_origin === undefined) return { state: 'absent' }
   const held = await git(host, clone, ['merge-base', '--is-ancestor', on_origin, default_branch])
-  return held.exit_code === 0 ? { state: 'held', tip: on_origin } : { state: 'kept', why: `where it is at ${on_origin}, which the default branch does not hold` }
+  if (held.exit_code === 0) return { state: 'held', tip: on_origin }
+  // The owner's yes is the other proof (martha#973): origin's copy goes when it stands at the tip the owner approved.
+  if (approved !== undefined) {
+    return approved.origin_tip === on_origin
+      ? { state: 'held', tip: on_origin }
+      : { state: 'kept', why: notWhatTheOwnerApproved(`origin's ${branch}`, on_origin, approved.origin_tip) }
+  }
+  return { state: 'kept', why: `where it is at ${on_origin}, which the default branch does not hold` }
 }
 
 /** Deletes the origin's copy, held by the default branch at `on_origin`: gone, or kept with why. */
@@ -616,12 +816,19 @@ async function theOriginSide(host: WorktreesRequest['host'], clone: string, bran
   }
 }
 
-/** The clone's own copy: gone only when the default branch holds its tip, since a copy that moved on is the only one it has. */
-async function theCloneSide(host: WorktreesRequest['host'], clone: string, branch: string, default_branch: string): Promise<ASideOfABranch> {
+/** The clone's own copy: gone only when the default branch holds its tip, or the owner's yes covers it, since a copy that
+ * moved on is the only one it has (martha#962, martha#973). */
+async function theCloneSide(
+  host: WorktreesRequest['host'],
+  clone: string,
+  branch: string,
+  default_branch: string,
+  approved: AnApprovedRemoval | undefined,
+): Promise<ASideOfABranch> {
   const tip = await gitSaid(host, clone, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
   if (tip === undefined) return { state: 'absent' }
-  const held = await git(host, clone, ['merge-base', '--is-ancestor', tip, default_branch])
-  if (held.exit_code !== 0) return { state: 'kept', why: `where it is at ${tip}, which the default branch does not hold` }
+  const stays = await whyTheCloneCopyStays(host, clone, branch, tip, default_branch, approved)
+  if (stays !== undefined) return { state: 'kept', why: stays }
   const deleted = await git(host, clone, ['branch', '-D', branch])
   if (deleted.exit_code === 0) return { state: 'gone' }
   // `branch -D` refuses a branch a worktree record still names, and a record outlives its directory: dropping the ref is
@@ -633,6 +840,21 @@ async function theCloneSide(host: WorktreesRequest['host'], clone: string, branc
   }
   const dropped = await git(host, clone, ['update-ref', '-d', `refs/heads/${branch}`])
   return dropped.exit_code === 0 ? { state: 'gone' } : { state: 'kept', why: `which git refused to delete (${saidBy(dropped)})` }
+}
+
+/** Why the clone's copy at `tip` must stay, or undefined when it may go: the default branch holds it, or the yes covers it. */
+async function whyTheCloneCopyStays(
+  host: WorktreesRequest['host'],
+  clone: string,
+  branch: string,
+  tip: string,
+  default_branch: string,
+  approved: AnApprovedRemoval | undefined,
+): Promise<string | undefined> {
+  const held = await git(host, clone, ['merge-base', '--is-ancestor', tip, default_branch])
+  if (held.exit_code === 0) return undefined
+  if (approved === undefined) return `where it is at ${tip}, which the default branch does not hold`
+  return approved.local_tip === tip ? undefined : notWhatTheOwnerApproved(`the clone's ${branch}`, tip, approved.local_tip)
 }
 
 /** What finishing a branch says once the guards passed: each side named as it went, or as it stayed (martha#962). */

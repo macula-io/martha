@@ -86,7 +86,7 @@ const REFUSED = (said: Awaited<ReturnType<typeof theBranchItRemoves>>): string =
 test('both tips are read in the clone the ask names, and origin is asked of the remote (mutants: the tips read in the clones root, and origin read from the ref again)', async () => {
   const asked: Ran[] = []
   const removes = await theBranchItRemoves(aPlace({ processes: aGitThatAnswers(THE_TWO_COPIES, asked) }), anAsk())
-  assert.deepEqual(removes, { branch: BRANCH, local_tip: LOCAL_TIP, origin_tip: ORIGIN_TIP }, 'the clone is one commit ahead of origin, and both tips are kept')
+  assert.deepEqual(removes, { repo: REPO, branch: BRANCH, local_tip: LOCAL_TIP, origin_tip: ORIGIN_TIP }, 'the clone is one commit ahead of origin, and both tips are kept')
 
   assert.deepEqual(
     asked.map((one) => one.cwd),
@@ -114,7 +114,7 @@ test('origin\'s tip is the line whose ref is the branch, never the first line or
     }),
     anAsk(),
   )
-  assert.deepEqual(removes, { branch: BRANCH, local_tip: LOCAL_TIP, origin_tip: ORIGIN_TIP }, 'the deeper ref that ends with the branch is no copy of it')
+  assert.deepEqual(removes, { repo: REPO, branch: BRANCH, local_tip: LOCAL_TIP, origin_tip: ORIGIN_TIP }, 'the deeper ref that ends with the branch is no copy of it')
 })
 
 test('the clone\'s own copy is a copy only when git resolved it and answered a commit (probes X1 and X2: the exit code, and the commit-id check)', async () => {
@@ -125,7 +125,7 @@ test('the clone\'s own copy is a copy only when git resolved it and answered a c
   )
   assert.deepEqual(
     resolved,
-    { branch: BRANCH, local_tip: null, origin_tip: ORIGIN_TIP },
+    { repo: REPO, branch: BRANCH, local_tip: null, origin_tip: ORIGIN_TIP },
     'a resolve that failed is a copy that is not there, even when it printed something: a tip git did not stand behind is no tip',
   )
 
@@ -135,7 +135,7 @@ test('the clone\'s own copy is a copy only when git resolved it and answered a c
   )
   assert.deepEqual(
     notACommit,
-    { branch: BRANCH, local_tip: null, origin_tip: ORIGIN_TIP },
+    { repo: REPO, branch: BRANCH, local_tip: null, origin_tip: ORIGIN_TIP },
     'an answer that is not a commit id is no tip: a row carrying one would be read back as malformed and the ask would vanish',
   )
 })
