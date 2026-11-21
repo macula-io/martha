@@ -580,6 +580,10 @@ async function theContractTheMemberHolds(
  * The asks the mod makes on a session's behalf, never a model's: the tools to register, how often to read the channel,
  * what this session should do now, and what model it runs on. Undefined when `name` is one a member calls itself, which
  * the handlers answer.
+ *
+ * They are held in one table, keyed by the name the mod asks them under (martha#1000): the reading below stays as long
+ * however many asks the crew registers, and a later ask is one entry. The channel's two asks and the owner's tab's own
+ * are answered by name as before, after the table finds nothing.
  */
 async function answerAnAskOfTheMods(
   places: CrewToolPlaces,
@@ -589,18 +593,20 @@ async function answerAnAskOfTheMods(
   args: Readonly<Record<string, unknown>>,
   from: string,
 ): Promise<CoreToolAnswer | undefined> {
-  if (name === THE_TOOLS_ASK) return { answer: JSON.stringify(CREW_TOOLS) }
-  if (name === THE_CHANNEL_READ_ASK) return await theChannelRead(places)
-  if (name === THE_WAKE_ASK) return await theWakeOfThisSession(places, args)
+  const asks = new Map<string, () => Promise<CoreToolAnswer>>([
+    [THE_TOOLS_ASK, async () => ({ answer: JSON.stringify(CREW_TOOLS) })],
+    [THE_CHANNEL_READ_ASK, () => theChannelRead(places)],
+    [THE_WAKE_ASK, () => theWakeOfThisSession(places, args)],
+    [THE_REFRESH_ASK, () => theSessionsAct(places, state, budget, args, from)],
+    [THE_MODEL_REPORT_ASK, () => theModelReported(places, state, args)],
+    [THE_OWNERS_TODO_ASK, () => theOwnersTodoList(places, args)],
+    [THE_BUDGET_ASK, () => theBudgetAsked(places, args)],
+  ])
+  const named = asks.get(name)
+  if (named !== undefined) return await named()
   const channel = await answerAChannelAsk(places.carrier, name, args)
   if (channel !== undefined) return channel
-  if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
-  if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
-  const fromTheTab = anAskTheSessionsOwnTabMakes(ownTabAsksPlace(places, state), name, args)
-  if (fromTheTab !== undefined) return fromTheTab
-  if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
-  if (name === THE_BUDGET_ASK) return await theBudgetAsked(places, args)
-  return undefined
+  return anAskTheSessionsOwnTabMakes(ownTabAsksPlace(places, state), name, args)
 }
 
 /**
