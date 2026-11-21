@@ -15,6 +15,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { sayToTheCrewOver } from './say_to_the_crew_tool.ts'
+import { TRIMS_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
 import { FETCH_MS, LOCAL_MS, theCommitsAHandoffNames } from './the_commits_a_handoff_names.ts'
 
 const PACKAGE = 'synthetic-acme/widget#7'
@@ -174,6 +175,7 @@ test('#980 p3 Done-when 3: a HANDOFF naming a commit the clone does not hold is 
     to: ['Reviewer'],
     text,
     volatile_roots: [],
+      trims: TRIMS_WHEN_UNNAMED,
     models: [],
     commits: { processes: recording(), clones: at.clones },
   })
@@ -198,6 +200,7 @@ test('#980 p3 T1: a range shaped as a git option is read as prose, and no git ru
       to: ['Reviewer'],
       text: `HANDOFF ${PACKAGE} ${range} r=1`,
       volatile_roots: [],
+      trims: TRIMS_WHEN_UNNAMED,
       models: [],
       commits: { processes: yes, clones: '/nowhere' },
     })
@@ -210,7 +213,7 @@ test('#980 p3: a send given no clone check runs nothing and sends the text as it
   const { host } = hostForTests({ now: 9_800 })
   const ledger = { clock: host.clock, stores: { rows: host.stores.rows } }
   const text = `HANDOFF ${PACKAGE} ${'a'.repeat(40)}..${NO_COMMIT} r=1 ci=41700170944`
-  await sayToTheCrewOver({ ledger, member: 'Builder', roster: ['Builder', 'Reviewer'], receivers: [], held: null, to: ['Reviewer'], text, volatile_roots: [], models: [] })
+  await sayToTheCrewOver({ ledger, member: 'Builder', roster: ['Builder', 'Reviewer'], receivers: [], held: null, to: ['Reviewer'], text, volatile_roots: [], trims: TRIMS_WHEN_UNNAMED, models: [] })
   assert.deepEqual((await readTheChannel(ledger)).map(({ message }) => message.text), [text])
 })
 

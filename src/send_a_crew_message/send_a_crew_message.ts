@@ -18,11 +18,13 @@
 // is, and a hand-off or verdict line that does not read goes as prose with the field that did not read named.
 
 import { sameMemberName } from '../declare_crew/declare_crew.ts'
+import type { TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { type Addressee, type ChannelHost, appendToTheChannel, readTheChannel, THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheLinesRow, readEveryCrewLine, type CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
+import { lineCountOf, theDriftNotices, theDriftOf, theRoundOf } from '../read_a_crew_line/the_drift_on_a_package.ts'
 import { assignedModelNotes, type ADeclaredModel } from './the_assigned_model_note.ts'
 
 /** The name the crew registers this tool under (martha#343): the one tool that speaks, and it speaks to the crew. */
@@ -50,6 +52,8 @@ export interface Saying {  /** The member the launcher started: never the model'
   readonly package: string | null
   readonly to: unknown
   readonly text: unknown
+  /** The crew's four trims, whose mosts the send is checked against before the line goes out (martha#1010). */
+  readonly trims: TheCrewsTrims
   /**
    * The model the declaration gives each member, which an ASSIGN's `model=` is noted against (martha#980 package 5).
    * A send that is not given them notes nothing about models.
@@ -117,6 +121,31 @@ function theMessageRead(input: Saying): AMessageRead | { readonly refused: strin
   return { to, text: input.text, lines: reading.lines, ...(notices.length === 0 ? {} : { notice: notices.join(' ') }) }
 }
 
+/** Keeps each crew line's row, in the order the message carries them, each with the message's own line count. */
+async function keepEveryLinesRow(host: LedgerHost, member: string, lines: readonly CrewLineRead[], text_lines: number): Promise<void> {
+  for (const line of lines) await keepTheLinesRow(host, member, line, text_lines)
+}
+
+/**
+ * What the crew's mosts say about the lines this send carries (martha#1010), read from the package's own ledger before
+ * the rows are kept: a round past the crew's most, and a message past its length, are notices and nothing more. A
+ * message may carry several crew lines (martha#980), so the round read is the highest any of its hand-offs or verdicts
+ * named, and the length is the message's own.
+ */
+async function theDriftAboutToBeSent(host: LedgerHost, read: AMessageRead, package_name: string | null, trims: TheCrewsTrims): Promise<readonly string[]> {
+  const said = read.lines.filter((line) => line.verb === 'HANDOFF' || line.verb === 'VERDICT')
+  if (said.length === 0 || package_name === null) return []
+  const drift = await theDriftOf(host, package_name)
+  const highest = said.reduce((one, two) => ((theRoundOf(two) ?? 0) > (theRoundOf(one) ?? 0) ? two : one))
+  return theDriftNotices({ verb: highest.verb, round: theRoundOf(highest), lines: lineCountOf(read.text) }, drift, trims)
+}
+
+/** The one line about what this send carried on past: the message's own, and then the drift's. */
+const theNoticeOf = (read: AMessageRead, drift: readonly string[]): string | undefined => {
+  const said = [...(read.notice === undefined ? [] : [read.notice]), ...drift]
+  return said.length === 0 ? undefined : said.join(' ')
+}
+
 /**
  * What a send's lines are checked against before it goes (martha#980 package 3): each line comes to the lines it adds,
  * a notice for what failed and a mark for what could not be checked; nothing, when it holds.
@@ -136,11 +165,6 @@ async function withWhatTheLinesCameTo(read: AMessageRead, checkTheLines: CheckTh
   return { ...read, text: `${read.text}\n\n${found.join('\n')}`, notice }
 }
 
-/** Keeps each crew line's row, in the order the message carries them. */
-async function keepEveryLinesRow(host: LedgerHost, member: string, lines: readonly CrewLineRead[]): Promise<void> {
-  for (const line of lines) await keepTheLinesRow(host, member, line)
-}
-
 /** The one line a send adds about what it carried on past, or nothing. */
 const theNoticeSaid = (notice: string | undefined): string => (notice === undefined ? '' : ` notice: ${notice}`)
 
@@ -150,6 +174,7 @@ export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Sa
   if ('refused' in asRead) return asRead
   const read = await withWhatTheLinesCameTo(asRead, checkTheLines)
   const { to, text } = read
+  const notice = theNoticeOf(read, await theDriftAboutToBeSent(host, read, input.package, input.trims))
   let sent = 0
   const send = async (): Promise<string> => {
     sent = await appendToTheChannel(host, { from: input.member, to, text, sent_at: host.clock.now() })
@@ -160,8 +185,8 @@ export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Sa
   // either: the message is still sent, and the answer says that nothing was announced to a package.
   if (input.package === null) {
     const told = await send()
-    await keepEveryLinesRow(host, input.member, read.lines)
-    return { sent, told: `${told} No package was held, so nothing was announced to a package's ledger.${theNoticeSaid(read.notice)}` }
+    await keepEveryLinesRow(host, input.member, read.lines, lineCountOf(read.text))
+    return { sent, told: `${told} No package was held, so nothing was announced to a package's ledger.${theNoticeSaid(notice)}` }
   }
 
   const since = host.clock.now()
@@ -173,8 +198,8 @@ export async function sendACrewMessage(host: ChannelHost & LedgerHost, input: Sa
   }
   const sending = await sentThroughTheRecovery(host, { ...input, package: input.package }, read, { send, look })
   if ('refused' in sending) return sending
-  await keepEveryLinesRow(host, input.member, read.lines)
-  return { sent, told: `${sending.told}${theNoticeSaid(read.notice)}` }
+  await keepEveryLinesRow(host, input.member, read.lines, lineCountOf(read.text))
+  return { sent, told: `${sending.told}${theNoticeSaid(notice)}` }
 }
 
 /** The send of a message on a package, through the recovery: what it said, or the recovery's own words for why not. */

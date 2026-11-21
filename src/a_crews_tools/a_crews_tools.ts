@@ -940,6 +940,7 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   held: state.held === null ? places.beats.read(places.member) : state.held,
   to: args['to'],
   text: args['text'],
+  trims: settings.house_rules,
   volatile_roots: theRootsInForce(settings.volatile_paths, places.volatile_roots ?? []),
   models: settings.members.map(({ name, model }) => ({ name, model })),
   // A HANDOFF's range is read in the crew's clone when the launch handed the host's processes (martha#980 package 3).

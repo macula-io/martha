@@ -26,6 +26,7 @@ import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { DECLARATION_DIRECTORY, DECLARATION_FILE, type CrewSettings, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, HOLD_REVIEWS, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, THE_HOST_A_MEMBER_RAN_ON } from '../declare_crew/declare_crew.ts'
+import { TRIMS_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
 import type { HostContract, ProcessOutcome, ProcessRequest } from '../host_contract/host_contract.ts'
 import { hostForTests, type HostForTests } from '../host_contract/host_for_tests.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
@@ -117,6 +118,7 @@ const settingsFor = (fixture: Fixture, places: { readonly clones: string | null;
     review_model: null,
     clones: places.clones,
     worktrees: places.worktrees,
+    ...TRIMS_WHEN_UNNAMED,
   },
   // Off unless the declaration says otherwise (martha#321 reads the gate's mode from it).
   gate: { kind: 'off' },

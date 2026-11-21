@@ -13,6 +13,7 @@ import type { ChannelHost } from '../keep_the_crew_channel/crew_channel.ts'
 import { keepTheMilestone } from '../keep_the_ledger/keep_the_ledger.ts'
 import { ONE_ENTRY_MS, readLedger, type LedgerHost } from '../log_ledger/log_ledger.ts'
 import { packagesNamedIn } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { TRIMS_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
 import { sendACrewMessage } from './send_a_crew_message.ts'
 
 const BASE = 'a'.repeat(40)
@@ -31,6 +32,7 @@ const saying = (text: string): Parameters<typeof sendACrewMessage>[1] => ({
   package: null,
   to: ['Reviewer'],
   text,
+  trims: TRIMS_WHEN_UNNAMED,
 })
 
 /** What a send told its member, or a failure naming what it answered instead. */

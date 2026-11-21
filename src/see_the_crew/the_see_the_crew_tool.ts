@@ -12,7 +12,9 @@ import type { Processes, TheCrewFilesStores } from '../host_contract/host_contra
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
 import { landingsOf } from '../land_passed_work_as_one_batch/land_passed_work_as_one_batch.ts'
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
-import { headNudges, nudgesOf, packagesNamedIn, theNudgesGoTo, theNudgesPartLines, theWaitsTheClosesLeave, windowsOf, type Nudge, type SentMessage, type WhatEndsAWait } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { WORK_PACKAGE } from '../log_ledger/log_ledger.ts'
+import { driftNudges, headNudges, nudgesOf, packagesNamedIn, theNudgesGoTo, theNudgesPartLines, theWaitsTheClosesLeave, windowsOf, type Nudge, type SentMessage, type WhatEndsAWait } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
+import { theDriftOf, type APackagesDrift } from '../read_a_crew_line/the_drift_on_a_package.ts'
 import { theParkedMembers } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { theBacklogReaderIn } from '../find_the_unheld_work/the_backlog_reader_of_a_launch.ts'
 import { theUnheldNudgesFor } from '../nudge_an_idle_crew/nudge_an_idle_crew.ts'
@@ -102,7 +104,16 @@ async function theNudgeListFor(asked: SeeTheCrewAsked, keeps_the_clock: boolean)
   const heads = await theHeadsOfTheWaiters(asked, waits)
   const unheld = await theUnheldNudgesFor({ backlog: settings.backlog, members: settings.members.map((member) => member.name), reader: theBacklogReaderIn({ ...asked, github: settings.github, clock_zone: settings.clock_zone }), rows: input.rows, parked: input.parked, receivers, offline_ms: input.windows.offline_ms, keeps_the_clock })
   const paused = await thePausedNudges(asked.ledger, [...input.rows.map((row) => row.holds), ...packagesNamedIn(messages)])
-  return nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads), ...unheld, ...paused])
+  const drifts = await theDriftsIn(asked, [...input.rows.map((row) => row.holds), ...packagesNamedIn(messages)])
+  return nudgesOf(input, [...deadlockNudges(input), ...headNudges(waits, heads), ...unheld, ...paused, ...driftNudges(drifts, settings.house_rules)])
+}
+
+/**
+ * The drift each package the crew's rows hold or its own lines name shows (martha#1010), read from that package's
+ * ledger: the two numbers a package is nudged about are its own, so no crew-wide count is made up for it.
+ */
+async function theDriftsIn(asked: SeeTheCrewAsked, packages: readonly string[]): Promise<readonly APackagesDrift[]> {
+  return Promise.all([...new Set(packages.filter((package_name) => WORK_PACKAGE.test(package_name)))].map((package_name) => theDriftOf(asked.ledger, package_name)))
 }
 
 /** What ends a wait besides the channel's lines, for nudge_the_supervisor to apply (martha#415): the landings the ledgers

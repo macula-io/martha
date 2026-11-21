@@ -31,6 +31,7 @@ import { TRANSCRIPTS, TRANSCRIPTS_KEYS, transcriptsOf, type CrewTranscripts } fr
 import { THRESHOLDS, THRESHOLDS_KEYS, thresholdsOf, type CrewThresholds } from './the_crews_thresholds.ts'
 import { OWNER_NOTICES, OWNER_NOTICES_KEYS, ownerNoticesOf, type CrewOwnerNotices } from './the_crews_owner_notices.ts'
 import { CLOCK_ZONE, clockZoneOf } from './the_crews_clock_zone.ts'
+import { HOUSE_RULE_TRIMS, theTrimsRefused, trimsFrom, type TheCrewsTrims } from './the_crews_trims.ts'
 import { PROFILE, PROFILE_BLOCK_FIELDS, PROFILE_TOP_LEVEL_KEYS, profilesOf, theProfileOfAMember, type Billing, type TheProfiles } from './the_crews_profiles.ts'
 export { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, BILLINGS, type Billing } from './the_crews_profiles.ts'
 import { ENGINE_ENDPOINT, ENGINE_ENDPOINT_OPTIONAL_KEYS, ENGINE_ENDPOINT_REQUIRED_KEYS, theEnginesEndpointOf, type EngineEndpoint } from './the_engines_endpoint.ts'
@@ -339,7 +340,7 @@ export type HouseRules = Readonly<Record<HouseRuleSwitch, boolean>> & {
   readonly review_model: string | null
   readonly clones: string | null
   readonly worktrees: string | null
-} & Readonly<Record<HouseRuleMinutes, number | null>>
+} & Readonly<Record<HouseRuleMinutes, number | null>> & TheCrewsTrims
 
 export interface CrewPaths {
   readonly root: string
@@ -441,6 +442,7 @@ const HOUSE_RULE_KEYS: readonly string[] = [
   REVIEW_MODEL,
   ...HOUSE_RULE_PLACES,
   ...HOUSE_RULE_MINUTES,
+  ...HOUSE_RULE_TRIMS,
   GATE_ENFORCES,
   GATE_AUDITS,
   GATE_ENFORCE_AS_DRAFTED,
@@ -930,6 +932,8 @@ function houseRulesOf(refuse: Refuse, value: unknown, models: TheModelsTheRuleRe
   noteTheReviewModel(refuse, value[REVIEW_MODEL], models, crew)
   refusePlaces(refuse, value)
   refuseMinutes(refuse, value)
+  const trim_refusal = theTrimsRefused(value)
+  if (trim_refusal !== null) refuse.at(`house_rules.${trim_refusal.field}`, trim_refusal.why)
   return houseRulesFrom(value)
 }
 
@@ -1039,6 +1043,7 @@ function houseRulesFrom(value: Json): HouseRules {
     ...(switches as Record<HouseRuleSwitch, boolean>),
     ...(places as Record<HouseRulePlace, string | null>),
     ...(minutes as Record<HouseRuleMinutes, number | null>),
+    ...trimsFrom(value),
     // A value that is not a model name is read as no model, since a notice names it and the crew reads on (martha#601).
     review_model: isText(value[REVIEW_MODEL]) ? textOrNull(value[REVIEW_MODEL]) : null,
   }

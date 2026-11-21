@@ -13,3 +13,7 @@ A plan or a design for review (an issue comment) is handed off as:
 {{doc_handoff}}
 
 Say plainly in the handoff what you have not observed live, and claim only what you ran.
+
+{{handoff_lines_most}}
+
+{{mutants_on_guards_only}}

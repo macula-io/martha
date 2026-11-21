@@ -174,7 +174,7 @@ function aHostOver(run: (request: ProcessRequest) => Promise<ProcessOutcome>, ro
 const aPassedVerdict = async (tests: HostForTests, work_package: string, base: string, head: string): Promise<void> => {
   const reading = readACrewLine(`VERDICT ${work_package} PASS ${base}..${head} r=2 ci=1 req=0`)
   if (!('line' in reading) || reading.line === null) throw new Error(`the crew's own PASS line was not read: ${JSON.stringify(reading)}`)
-  await keepTheLinesRow(tests.host, 'Mercurius', reading.line)
+  await keepTheLinesRow(tests.host, 'Mercurius', reading.line, 1)
 }
 
 /** Passed packages named by this test: the packages, their heads, and GitHub's answer for each head. */

@@ -12,6 +12,7 @@ import { test } from 'node:test'
 
 import { CREW_CODE_DECLARATION_DIRECTORY, DeclarationRefused, DECLARATION_DIRECTORY, DECLARATION_FILE, MODE_TEXTS_DIRECTORY, HANDOVER_CEILING_MINUTES_WHEN_UNNAMED, HOLD_REVIEWS, THE_HOST_A_MEMBER_RAN_ON, OFFER_OWNER_ASKS, OWNER, RESTART_MEMBER, ROLE_TEXTS_DIRECTORY, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
+import { TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import { readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
 import { ARTIFACT_LINES } from '../read_a_crew_line/crew_lines.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
@@ -63,7 +64,7 @@ const settingsOf = (overrides: { readonly practice?: boolean; readonly mode?: st
       { name: 'reviewer', role: 'reviewer', model: null, host: null, parked: false, billing: null },
     ],
     mode: { name: mode, roles: ['builder', 'reviewer'], may: { assign_work: [OWNER], approve_landing: [OWNER], resume_parked_work: [OWNER], [OFFER_OWNER_ASKS]: [OWNER], [RESTART_MEMBER]: [OWNER], [HOLD_REVIEWS]: [OWNER] } },
-    house_rules: { owner_items: false, workspace_layout: false, member_work: false, practice: overrides.practice ?? false, strict_gate: false, owner_bell: false, dashboard: false, refresh_between_tasks: false, nudges: false, wake: false, stalled_minutes: null, review_minutes: null, person_minutes: null, wake_after_minutes: null, wake_cap_minutes: null, review_model: null, clones: null, worktrees: null },
+    house_rules: { owner_items: false, workspace_layout: false, member_work: false, practice: overrides.practice ?? false, strict_gate: false, owner_bell: false, dashboard: false, refresh_between_tasks: false, nudges: false, wake: false, stalled_minutes: null, review_minutes: null, person_minutes: null, wake_after_minutes: null, wake_cap_minutes: null, review_model: null, clones: null, worktrees: null, ...TRIMS_WHEN_UNNAMED },
     // Off unless the declaration says otherwise (martha#321 reads the gate's mode from it).
     gate: { kind: 'off' },
     channel_read_seconds: 30,
@@ -109,6 +110,7 @@ const textsOf = (change: Partial<TheTextsAMemberReads> = {}): TheTextsAMemberRea
   role_text: textAt(join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, 'builder.md'), shipped(join(ROLE_TEXTS_DIRECTORY, 'builder.md'))),
   mode_text: textAt(join(SHIPPED_TEXTS, MODE_TEXTS_DIRECTORY, 'solo.md'), shipped(join(MODE_TEXTS_DIRECTORY, 'solo.md'))),
   conventions: null,
+  trims: TRIMS_WHEN_UNNAMED,
   ported: NOTHING_PORTED,
   ...change,
 })
@@ -320,6 +322,37 @@ test('#306: a project with no declaration approves no crew text, and a declarati
     (error: unknown) => error instanceof DeclarationRefused && error.message.startsWith(`${declaration}: `),
     'a declaration that is there and is refused was approved as a project with no crew text',
   )
+})
+
+// martha#1010: the crew's four trims are taught by the cards, filled from the declaration, and a trim turned off drops
+// the line that carried it rather than leaving a blank one.
+
+test('#1010: the cards teach the crew\'s mosts and its two trims, filled from the declaration', () => {
+  const trims = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: 5, handoff_lines_most: 12 }
+  const builder = handAMemberItsCrewText(textsOf({ trims }))
+  const reviewer = handAMemberItsCrewText(textsOf({
+    trims,
+    role: 'reviewer',
+    role_text: textAt(join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, 'reviewer.md'), shipped(join(ROLE_TEXTS_DIRECTORY, 'reviewer.md'))),
+  }))
+
+  assert.match(builder, new RegExp(`At most ${String(trims.review_rounds_most)} review rounds per package`), 'the practice does not teach the crew\'s most rounds')
+  assert.match(builder, new RegExp(`A HANDOFF or VERDICT is at most ${String(trims.handoff_lines_most)} lines`), 'the builder\'s card does not teach the crew\'s most lines')
+  assert.match(builder, /Mutants and planted bugs only on guard and security code/, 'the builder\'s card does not teach where mutants go')
+  assert.match(reviewer, /FAIL only for harm a user or the owner would hit/, 'the reviewer\'s card does not teach a FAIL only for harm')
+  assert.doesNotMatch(`${builder}\n${reviewer}`, /\{\{/, 'a placeholder reached the member unfilled')
+})
+
+test('#1010: a trim turned off drops its line rather than leaving a blank one, and the rounds sentence falls back', () => {
+  const off = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: false, handoff_lines_most: false, fail_only_on_harm: false, mutants_on_guards_only: false } as TheCrewsTrims
+  const section = handAMemberItsCrewText(textsOf({ role: 'reviewer', role_text: textAt(join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, 'reviewer.md'), shipped(join(ROLE_TEXTS_DIRECTORY, 'reviewer.md'))), trims: off }))
+
+  assert.doesNotMatch(section, /At most .* review rounds/, 'a number turned off was still taught')
+  assert.doesNotMatch(section, /A HANDOFF or VERDICT is at most/, 'a number turned off was still taught lines')
+  assert.doesNotMatch(section, /FAIL only for harm/, 'the harm trim was turned off and still taught')
+  assert.doesNotMatch(section, /Mutants and planted bugs only/, 'the mutants trim was turned off and still taught')
+  assert.match(section, /the bar never drops to end a round/, 'with no cap the crew\'s own rule is back, and it was not taught')
+  assert.doesNotMatch(section, /\n\n\n/, 'a dropped line left a blank one behind')
 })
 
 /** A declaration whose house rules turn every ported part on, its table granting the builder both acts (martha#971). */

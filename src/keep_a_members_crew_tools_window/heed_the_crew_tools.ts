@@ -79,7 +79,7 @@ async function sayToTheSupervisor(places: TheWindowPlaces, line: string): Promis
   const supervisor = settings?.members.find((one) => one.role === SUPERVISOR)
   if (settings === undefined || supervisor === undefined) return
   const roster = settings.members.map((one) => one.name)
-  await sendACrewMessage(places.ledger, { member: places.member, roster, receivers: theNudgesGoTo(settings), package: null, to: [supervisor.name], text: line })
+  await sendACrewMessage(places.ledger, { member: places.member, roster, receivers: theNudgesGoTo(settings), package: null, to: [supervisor.name], text: line, trims: settings.house_rules })
 }
 
 /**

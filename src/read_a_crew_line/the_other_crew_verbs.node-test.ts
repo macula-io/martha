@@ -85,7 +85,7 @@ test('#980: a LAND keeps a checkpoint in each package it names, and a FIX keeps 
   const ledger: LedgerHost = { clock: host.clock, stores: { rows: host.stores.rows } }
   const read = readEveryCrewLine('LAND macula-io/martha#8,#11 main=abc1234 ci=41700170944\nFIX macula-io/martha#8 reviewer=Venus')
   assert.deepEqual(read.notices, [])
-  for (const line of read.lines) await keepTheLinesRow(ledger, 'Builder', line)
+  for (const line of read.lines) await keepTheLinesRow(ledger, 'Builder', line, read.lines.length)
   for (const named of ['macula-io/martha#8', 'macula-io/martha#11']) {
     const rows = await readLedger(ledger, named)
     assert.deepEqual(rows.map((row) => (row.kind === 'checkpoint_reached' ? `${row.kind} ${row.note}` : row.kind)), [

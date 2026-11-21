@@ -23,6 +23,7 @@ import { join, relative, sep } from 'node:path'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf, DeclarationRefused, declareCrew, DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 export { crewTextFilesOf }
+import { aMostIsSet, HANDOFF_LINES_MOST, FAIL_ONLY_ON_HARM, HOUSE_RULE_TRIMS, MUTANTS_ON_GUARDS_ONLY, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { DocumentStore, FileTree } from '../host_contract/host_contract.ts'
 import { ARTIFACT_LINES, CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
@@ -67,6 +68,8 @@ export interface TheTextsAMemberReads {
   readonly mode_text: ATextAndItsFile | null
   /** The crew's conventions, when its declaration names one. */
   readonly conventions: ATextAndItsFile | null
+  /** The crew's four trims, whose sentences the cards teach (martha#1010). */
+  readonly trims: TheCrewsTrims
   /** What the crew-code rules Martha hands are read from (martha#971): the declaration's switches and this member's grants. */
   readonly ported: Omit<WhatThePortedRulesRead, 'owner'>
 }
@@ -161,16 +164,21 @@ export async function crewTextFilesToApprove(documents: DocumentStore, root: str
   }
 }
 
-/** The placeholders a text may carry, in the words the crew's own texts use. The owner's is the word the declaration
- * names the owner by, so a text and a declaration cannot come to spell the same person two ways. */
-export const PLACEHOLDERS = [OWNER, 'handoff', 'doc_handoff', 'verdict', 'doc_verdict', 'artifact_read', 'artifact_publish'] as const
-export type Placeholder = (typeof PLACEHOLDERS)[number]
-
 /** The placeholders that stand for a line that hands an Artifact to the Supervisor (martha#957 gap 13), which the line reader does not read. */
 export type ArtifactPlaceholder = 'artifact_read' | 'artifact_publish'
 
+/** The placeholders one of the crew's trims fills, named as the house rule is (martha#1010). */
+export const TRIM_PLACEHOLDERS = HOUSE_RULE_TRIMS
+export type TrimPlaceholder = (typeof HOUSE_RULE_TRIMS)[number]
+
+/** The placeholders a text may carry, in the words the crew's own texts use. The owner's is the word the declaration
+ * names the owner by, so a text and a declaration cannot come to spell the same person two ways. The crew's four trims
+ * are placeholders too (martha#1010): each fills with a sentence, or with nothing when the owner turned its notice off. */
+export const PLACEHOLDERS = [OWNER, 'handoff', 'doc_handoff', 'verdict', 'doc_verdict', 'artifact_read', 'artifact_publish', ...TRIM_PLACEHOLDERS] as const
+export type Placeholder = (typeof PLACEHOLDERS)[number]
+
 /** The placeholders that stand for a line a member sends. */
-export type LinePlaceholder = Exclude<Placeholder, typeof OWNER | ArtifactPlaceholder>
+export type LinePlaceholder = Exclude<Placeholder, typeof OWNER | ArtifactPlaceholder | TrimPlaceholder>
 
 /**
  * The lines the section teaches, keyed by the placeholder a text names them with, generated from the same definitions
@@ -216,6 +224,7 @@ export function theTextsAMemberReads(settings: CrewSettings, member: string, rea
     role_text: firstOf(join(settings.paths.crew, ROLE_TEXTS_DIRECTORY, `${onTheCrew.role}.md`), join(SHIPPED_TEXTS, ROLE_TEXTS_DIRECTORY, `${onTheCrew.role}.md`)),
     mode_text: firstOf(join(settings.paths.crew, MODE_TEXTS_DIRECTORY, `${settings.mode.name}.md`), join(SHIPPED_TEXTS, MODE_TEXTS_DIRECTORY, `${settings.mode.name}.md`)),
     conventions: conventionsOf(settings, member, firstOf),
+    trims: settings.house_rules,
     ported: thePortedRulesOf(settings, onTheCrew.role),
   }
 }
@@ -293,20 +302,64 @@ function theLinesTaughtText(): string {
 
 /** What each placeholder stands for, from the declaration and the lines the reader accepts. */
 function placeholdersFor(texts: TheTextsAMemberReads): Readonly<Record<Placeholder, string>> {
-  return { [OWNER]: texts.owner, ...theLinesTaught(), artifact_read: ARTIFACT_LINES.read, artifact_publish: ARTIFACT_LINES.publish }
+  return {
+    [OWNER]: texts.owner,
+    ...theLinesTaught(),
+    ...theTrimSentences(texts.trims),
+    artifact_read: ARTIFACT_LINES.read,
+    artifact_publish: ARTIFACT_LINES.publish,
+  }
+}
+
+/**
+ * What a crew's trim says to a member (martha#1010), or nothing when the owner turned it off: a number with no fixed
+ * line (0, or false) leaves the crew's own rule in place for the rounds, and drops a line that says only what the trim
+ * asked for. What is written here is the only copy: a card that quotes a trim quotes this text.
+ */
+function theTrimSentences(trims: TheCrewsTrims): Readonly<Record<TrimPlaceholder, string>> {
+  const rounds = trims[REVIEW_ROUNDS_MOST]
+  const lines = trims[HANDOFF_LINES_MOST]
+  return {
+    [REVIEW_ROUNDS_MOST]: aMostIsSet(rounds)
+      ? `At most ${String(rounds)} review rounds per package. A FAIL after the last one goes to the owner as a scope question, never as another round.`
+      : 'Review rounds repeat as fix-and-verify until every required review passes; the bar never drops to end a round.',
+    [HANDOFF_LINES_MOST]: aMostIsSet(lines) ? `A HANDOFF or VERDICT is at most ${String(lines)} lines.` : '',
+    [FAIL_ONLY_ON_HARM]: trims[FAIL_ONLY_ON_HARM]
+      ? 'FAIL only for harm a user or the owner would hit: a behaviour bug, lost work, a leak, a security hole. Anything else is a PASS note.'
+      : '',
+    [MUTANTS_ON_GUARDS_ONLY]: trims[MUTANTS_ON_GUARDS_ONLY] ? 'Mutants and planted bugs only on guard and security code.' : '',
+  }
 }
 
 /**
  * Fills the placeholders a text may carry, naming the file that holds one this composer does not know. A crew text
  * naming something nobody fills would otherwise reach every member's session with `{{…}}` in it, reading as a rule.
+ * A line whose whole content is placeholders that fill nothing is dropped, so a trim the owner turned off leaves no
+ * blank line in the card (martha#1010).
  */
 function replaceThePlaceholders(text: string, file: string, values: Readonly<Record<Placeholder, string>>): string {
-  return text.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (whole, name: string) => {
-    if (!isPlaceholder(name)) {
-      throw new CrewTextRefused(file, `it names ${whole}, which Martha does not fill (it fills ${PLACEHOLDERS.map((one) => `{{${one}}}`).join(', ')})`)
-    }
-    return values[name]
-  })
+  const filled = text
+    .split('\n')
+    .filter((line) => !saysNothingOnceFilled(line, values))
+    .map((line) => line.replace(A_PLACEHOLDER, (whole, name: string) => {
+      if (!isPlaceholder(name)) {
+        throw new CrewTextRefused(file, `it names ${whole}, which Martha does not fill (it fills ${PLACEHOLDERS.map((one) => `{{${one}}}`).join(', ')})`)
+      }
+      return values[name]
+    }))
+    .join('\n')
+  // A paragraph a dropped line sat between leaves nothing but its blank lines: a card is read, so they go too.
+  return filled.replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/** A placeholder as a text writes it: the name in braces, with the spaces a writer of prose leaves there. */
+const A_PLACEHOLDER = /\{\{\s*([a-z_]+)\s*\}\}/g
+
+/** Whether a line is placeholders alone, every one of them filling nothing: the line a turned-off trim drops. */
+function saysNothingOnceFilled(line: string, values: Readonly<Record<Placeholder, string>>): boolean {
+  const named = [...line.matchAll(A_PLACEHOLDER)].map((match) => match[1] ?? '')
+  if (named.length === 0 || line.replace(A_PLACEHOLDER, '').trim() !== '') return false
+  return named.every((name) => isPlaceholder(name) && values[name] === '')
 }
 
 function isPlaceholder(name: string): name is Placeholder {

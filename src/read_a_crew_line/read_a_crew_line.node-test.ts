@@ -115,7 +115,7 @@ test('#253: every line the generated card text teaches reads, and adds its row t
     assert.ok('line' in reading && reading.line !== null, `the card teaches a line the reader refuses: ${line} → ${JSON.stringify(reading)}`)
 
     const host = ledgerHost()
-    await keepTheLinesRow(host, 'Builder', reading.line)
+    await keepTheLinesRow(host, 'Builder', reading.line, 1)
     const rows = await readLedger(host, PACKAGE)
     assert.ok(rows.length > 0, `a line the card teaches added no row to ${PACKAGE}'s ledger: ${line}`)
   }
@@ -125,12 +125,12 @@ test('#253: a VERDICT adds the verdict it gave, and a HANDOFF the act it announc
   const host = ledgerHost()
   const verdict = readACrewLine(WELL_FORMED[1] ?? '')
   assert.ok('line' in verdict && verdict.line !== null)
-  await keepTheLinesRow(host, 'Mercurius', verdict.line)
+  await keepTheLinesRow(host, 'Mercurius', verdict.line, 1)
   assert.deepEqual((await readLedger(host, PACKAGE)).map((row) => row.kind), ['verdict_given'])
 
   const handoff = readACrewLine(WELL_FORMED[0] ?? '')
   assert.ok('line' in handoff && handoff.line !== null)
-  await keepTheLinesRow(host, 'Pallas', handoff.line)
+  await keepTheLinesRow(host, 'Pallas', handoff.line, 1)
   assert.deepEqual((await readLedger(host, PACKAGE)).map((row) => row.kind), ['verdict_given', 'act_announced', 'act_concluded'])
 })
 
@@ -143,7 +143,7 @@ test('#256: the row a line writes carries the whole line, so its range reads bac
     const host = ledgerHost()
     const reading = readACrewLine(written)
     assert.ok('line' in reading && reading.line !== null, `the line did not read: ${written}`)
-    await keepTheLinesRow(host, 'Mercurius', reading.line)
+    await keepTheLinesRow(host, 'Mercurius', reading.line, 1)
 
     const kept = keptTextOf(await readLedger(host, PACKAGE))
     assert.equal(kept.length, 1, `a line did not keep one text to read back: ${JSON.stringify(kept)}`)

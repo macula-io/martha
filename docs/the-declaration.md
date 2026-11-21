@@ -56,7 +56,7 @@ page does not name.
 
 ## `house_rules`
 
-Each switch is off unless the file says `true`.
+Each switch is off unless the file says `true`. The four trims at the end of the table are on unless the file says `false`.
 
 | Field | What it holds |
 |---|---|
@@ -81,6 +81,10 @@ Each switch is off unless the file says `true`.
 | `gate_enforces` | Who the shell gate enforces for: `all`, `nobody`, or members' names. |
 | `gate_audits` | Who the shell gate audits: members' names. |
 | `gate_enforce` | `gate_enforces`, as the draft of martha#931 spells it; never beside it. |
+| `review_rounds_most` | The most review rounds a package may take, a whole number; 0 is no fixed line, and `false` turns its notice off. A round past it goes to the owner as a scope question. |
+| `handoff_lines_most` | The most lines a HANDOFF or a VERDICT may be, a whole number; 0 is no fixed line, and `false` turns its notice off. |
+| `fail_only_on_harm` | A reviewer FAILs only for harm a user or the owner would hit; `false` turns it off. Read by the role cards alone. |
+| `mutants_on_guards_only` | Mutants and planted bugs go on guard and security code alone; `false` turns it off. Read by the role cards alone. |
 
 ## `backlog`
 

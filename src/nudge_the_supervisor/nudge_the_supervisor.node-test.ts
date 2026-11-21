@@ -13,9 +13,12 @@ import { SUPERVISOR } from '../report_where_the_work_stands/report_where_the_wor
 import { MENU } from '../tell_the_owner_a_session_waits/tell_the_owner_a_session_waits.ts'
 import {
   BUSY,
+  driftNudges,
   lastSaidAt,
+  LINES,
   nudgesOf,
   reviewWaitsIn,
+  ROUNDS,
   theNudgeLine,
   headNudges,
   theNudgesGoTo,
@@ -25,6 +28,7 @@ import {
   type NudgeInput,
   type SentMessage,
 } from './nudge_the_supervisor.ts'
+import { HANDOFF_LINES_MOST, REVIEW_ROUNDS_MOST, TRIMS_WHEN_UNNAMED, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import { offlineAfterMsOf, THRESHOLDS_WHEN_UNNAMED } from '../declare_crew/the_crews_thresholds.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 /** The crew's default, as a declaration that names no thresholds reads it (martha#931 A). */
@@ -387,4 +391,47 @@ test('#931 C: a nudge line names the time it began in the crew\'s declared clock
   const fine = { kind: 'review' as const, member: 'Vesta', package: 'macula-io/martha#320', since: NOW }
   assert.equal(theNudgeLine(fine, { ...CREW, clock_zone: 'Asia/Kolkata' }), '- review: Vesta on macula-io/martha#320, since 03:56 Asia/Kolkata')
   assert.equal(theNudgeLine(fine, CREW), '- review: Vesta on macula-io/martha#320, since 22:26 UTC', 'the default zone is not the one clockOf printed')
+})
+
+// --- 9. the crew's drift (martha#1010) ---------------------------------------
+
+/** One package's drift, as a ledger would show it: five rounds, and a thirty-one-line hand-off. */
+const DRIFT = {
+  package: 'macula-io/martha#1010',
+  rounds: 5,
+  rounds_member: 'Vesta',
+  rounds_at: NOW - 2 * STALLED,
+  longest: 31,
+  longest_member: 'Mars',
+  longest_at: NOW - PERSON,
+}
+
+/** The trims as a test sets them: numbers none of the defaults is, so a default read would show. */
+const TRIMS = { ...TRIMS_WHEN_UNNAMED, review_rounds_most: 4, handoff_lines_most: 7 }
+
+test('#1010: a package past the crew\'s mosts is one drift nudge per number, naming the member whose row crossed it', () => {
+  const nudges = driftNudges([DRIFT], TRIMS)
+  assert.deepEqual(
+    nudges.map((nudge) => [nudge.kind, nudge.member, nudge.number, nudge.value, nudge.most]),
+    [
+      ['drift', 'Vesta', ROUNDS, DRIFT.rounds, TRIMS.review_rounds_most],
+      ['drift', 'Mars', LINES, DRIFT.longest, TRIMS.handoff_lines_most],
+    ],
+  )
+  assert.deepEqual(nudges.map((nudge) => nudge.since), [DRIFT.rounds_at, DRIFT.longest_at], 'a drift is read from the moment its row was kept')
+})
+
+test('#1010: a package inside the crew\'s mosts is no drift nudge, and a number at 0 or false raises none', () => {
+  assert.deepEqual(driftNudges([{ ...DRIFT, rounds: TRIMS.review_rounds_most as number, longest: TRIMS.handoff_lines_most as number }], TRIMS), [], 'a number at the most is inside it')
+  const off: TheCrewsTrims = { ...TRIMS, [REVIEW_ROUNDS_MOST]: 0, [HANDOFF_LINES_MOST]: false }
+  assert.deepEqual(driftNudges([DRIFT], off), [], '0 is no fixed line and false is notices off')
+})
+
+test('#1010: a drift line names the number, its value and the crew\'s most, and nothing a member wrote', () => {
+  const [rounds] = driftNudges([DRIFT], TRIMS)
+  assert.ok(rounds !== undefined)
+  assert.equal(
+    theNudgeLine(rounds, CREW),
+    `- drift: Vesta on macula-io/martha#1010, ${String(DRIFT.rounds)} ${ROUNDS} (the crew's most is ${String(TRIMS.review_rounds_most)}), since ${theClockOf(DRIFT.rounds_at, CLOCK_ZONE_WHEN_UNNAMED)}`,
+  )
 })

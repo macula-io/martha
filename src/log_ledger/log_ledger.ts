@@ -130,11 +130,15 @@ type RowCommon = {
 export type MilestoneRow = RowCommon & {
   readonly kind: Milestone
   readonly note: string
+  /** How many lines the message that carried this line had, when a HANDOFF or a VERDICT wrote it (martha#1010). */
+  readonly lines?: number
 }
 
 export type ActAnnouncedRow = RowCommon & {
   readonly kind: typeof ACT_ANNOUNCED
   readonly act: OutwardAct
+  /** How many lines the message that carried this act had, when a hand-off announced it (martha#1010). */
+  readonly lines?: number
 }
 
 export type ActConcludedRow = RowCommon & {
@@ -193,6 +197,9 @@ export const isAnActConcludedRow = (row: LedgerRow): row is ActConcludedRow => r
 
 /** Whether a row of a package's ledger is a recovery it decided. */
 export const isRecoveryRow = (row: LedgerRow): row is RecoveryRow => row.kind === RECOVERY_DECIDED
+
+/** Whether a row of a package's ledger is an act announced and not yet concluded. */
+export const isActAnnouncedRow = (row: LedgerRow): row is ActAnnouncedRow => row.kind === ACT_ANNOUNCED
 
 /** Whether a row of a package's ledger is a version of its contract. */
 export const isContractKeptRow = (row: LedgerRow): row is ContractKeptRow => row.kind === CONTRACT_KEPT
@@ -305,8 +312,13 @@ const isAContractBlock = (value: unknown): boolean => Array.isArray(value) && va
 
 const isAContractKept = (row: Row): boolean => isAVersion(row['version']) && isText(row['digest']) && isAContractBlock(row['block'])
 
+/** A line count a row may carry (martha#1010): a whole number, one or more, or absent on a row no message wrote. */
+const isALineCount = (value: unknown): boolean =>
+  value === undefined || (typeof value === 'number' && Number.isInteger(value) && value >= 1)
+
 const isLedgerRow = (row: Row): row is LedgerRow => {
   if (!hasCommon(row)) return false
+  if (!isALineCount(row['lines'])) return false
   if ((MILESTONES as readonly unknown[]).includes(row['kind'])) return isText(row['note'])
   if (row['kind'] === ACT_ANNOUNCED) return isOutwardAct(row['act'])
   if (row['kind'] === ACT_CONCLUDED) return isPosition(row['announced_at']) && isOutcome(row['outcome'])
@@ -402,10 +414,10 @@ const theEntryAlreadyKept = (rows: readonly PlacedRow[], milestone: Milestone, n
 const keep = async (host: LedgerHost, row: LedgerRow, expected_length?: number): Promise<number> =>
   host.stores.rows.append(ledgerStreamOf(row.package), row, expected_length)
 
-/** Keeps a milestone of a package. */
+/** Keeps a milestone of a package. `lines` is how many lines the message that carried a VERDICT line had (martha#1010). */
 export async function noteMilestone(
   host: LedgerHost,
-  input: Work & { readonly milestone: Milestone; readonly note: string },
+  input: Work & { readonly milestone: Milestone; readonly note: string; readonly lines?: number },
 ): Promise<void> {
   await keep(host, {
     kind: input.milestone,
@@ -413,6 +425,7 @@ export async function noteMilestone(
     member: input.member,
     at: host.clock.now(),
     note: input.note,
+    ...(input.lines === undefined ? {} : { lines: input.lines }),
   })
 }
 
@@ -425,7 +438,7 @@ export async function noteMilestone(
  */
 export async function noteMilestoneOnce(
   host: LedgerHost,
-  input: Work & { readonly milestone: Milestone; readonly note: string },
+  input: Work & { readonly milestone: Milestone; readonly note: string; readonly lines?: number },
   alike: (row: MilestoneRow) => boolean = EVERY_ROW,
 ): Promise<MilestoneRow | undefined> {
   for (let attempt = 1; attempt <= CONCLUDE_ATTEMPTS; attempt += 1) {
@@ -433,7 +446,7 @@ export async function noteMilestoneOnce(
     const at = host.clock.now()
     const held = theEntryAlreadyKept(rows, input.milestone, at, roundOf(input.note), alike)
     if (held !== undefined) return held
-    const row: MilestoneRow = { kind: input.milestone, package: input.package, member: input.member, at, note: input.note }
+    const row: MilestoneRow = { kind: input.milestone, package: input.package, member: input.member, at, note: input.note, ...(input.lines === undefined ? {} : { lines: input.lines }) }
     if (await keptUnlessMoved(host, row, rows.length)) return undefined
   }
   throw new Error(`the ${input.milestone} of ${input.package} was not kept: the package kept moving for ${CONCLUDE_ATTEMPTS} attempts`)
@@ -625,13 +638,14 @@ export class OutcomeNotKept extends Error {
  * fast-forward): the act runs once, and every package it lands holds the announcement before it runs, so no package's
  * ledger is told afterwards that the act was sent. An act that is one package's alone goes through sendOutwardAct.
  */
-export async function announceAct(host: LedgerHost, input: Work & { readonly act: OutwardAct }): Promise<number> {
+export async function announceAct(host: LedgerHost, input: Work & { readonly act: OutwardAct; readonly lines?: number }): Promise<number> {
   return keep(host, {
     kind: ACT_ANNOUNCED,
     package: input.package,
     member: input.member,
     at: host.clock.now(),
     act: input.act,
+    ...(input.lines === undefined ? {} : { lines: input.lines }),
   }).catch((cause: unknown) => {
     throw new ActNotSent(input.act, cause)
   })
@@ -658,7 +672,7 @@ export async function announceAct(host: LedgerHost, input: Work & { readonly act
  */
 export async function sendOutwardAct(
   host: LedgerHost,
-  input: Work & { readonly act: OutwardAct },
+  input: Work & { readonly act: OutwardAct; readonly lines?: number },
   send: () => Promise<string>,
 ): Promise<string> {
   const announced_at = await announceAct(host, input)
