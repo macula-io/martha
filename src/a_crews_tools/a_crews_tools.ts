@@ -941,6 +941,7 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   to: args['to'],
   text: args['text'],
   volatile_roots: theRootsInForce(settings.volatile_paths, places.volatile_roots ?? []),
+  models: settings.members.map(({ name, model }) => ({ name, model })),
   // A HANDOFF's range is read in the crew's clone when the launch handed the host's processes (martha#980 package 3).
   ...(places.processes === undefined ? {} : { commits: { processes: places.processes, clones: settings.house_rules.clones } }),
   // A HANDOFF's ci= runs are read through the crew's GitHub budget, each gh bounded (martha#980 package 4).
