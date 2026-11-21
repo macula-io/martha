@@ -14,7 +14,7 @@ import { join } from 'node:path'
 
 import type { CrewPlace, CrewStore, HandoverStampStore, Refused } from '../host_contract/host_contract.ts'
 import type { DashboardStore } from '../show_dashboard_beat/show_dashboard_beat.ts'
-import { HANDOVERS_PLACE } from '../write_my_handover/write_my_handover.ts'
+import { HANDOVERS_PLACE, theHandoverFile } from '../write_my_handover/write_my_handover.ts'
 import { PARKED_PLACE, theParkMarker } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 
 /** What a rename writes the member's records through: the crew's own store, its stamps and its dashboard. */
@@ -39,8 +39,20 @@ export interface TheRecordsMove extends TheRecordsMoved {
   readonly refusal?: Refused
 }
 
-/** What ends a handover's own file name for one member: the day stands before it, and the file's suffix after. */
-const endsWithMember = (from: string): string => `_${from}.md`
+/** The day a handover file's name carries. */
+const A_DAY = /\d{4}-\d{2}-\d{2}/
+
+/**
+ * The day of `name` when it is exactly a handover file of `member`, as the writer names one, or null. A suffix is not
+ * enough: a member may hold an underscore, so `Red_Mars`'s files end in `_Mars.md` too, and a rename of `Mars` must not
+ * copy them and stamp the copies for the new name (review r=2).
+ */
+function theHandoverDayOf(name: string, member: string): Date | null {
+  const day = A_DAY.exec(name)?.[0]
+  if (day === undefined) return null
+  const at = new Date(`${day}T00:00:00Z`)
+  return Number.isNaN(at.getTime()) || theHandoverFile(member, at) !== name ? null : at
+}
 
 /** The handovers this crew wrote for `from`, and the refusal that stopped the move part-way. */
 function handoversMoved(stores: TheRecordStores, from: string, to: string): { readonly moved: readonly string[]; readonly refusal?: Refused } {
@@ -49,8 +61,10 @@ function handoversMoved(stores: TheRecordStores, from: string, to: string): { re
   const names = place.names()
   if ('refusal' in names) return { moved: [], refusal: names }
   const moved: string[] = []
-  for (const name of names.filter((one) => one.endsWith(endsWithMember(from)))) {
-    const refusal = oneHandoverMoved(stores, place, name, from, to)
+  for (const name of names) {
+    const at = theHandoverDayOf(name, from)
+    if (at === null) continue
+    const refusal = oneHandoverMoved(stores, place, name, theHandoverFile(to, at), to)
     if (refusal !== undefined) return { moved, refusal }
     moved.push(name)
   }
@@ -58,10 +72,9 @@ function handoversMoved(stores: TheRecordStores, from: string, to: string): { re
 }
 
 /** One handover written again under the new name, and its stamp rewritten; or why it was not. */
-function oneHandoverMoved(stores: TheRecordStores, place: CrewPlace, name: string, from: string, to: string): Refused | undefined {
+function oneHandoverMoved(stores: TheRecordStores, place: CrewPlace, name: string, renamed: string, to: string): Refused | undefined {
   const read = place.read(name)
   if (read === undefined || 'refusal' in read) return { refusal: `${join(place.path, name)} could not be read, so it was not moved to ${to}.` }
-  const renamed = `${name.slice(0, name.length - endsWithMember(from).length)}${endsWithMember(to)}`
   const kept = place.keep(renamed, read.text)
   if (kept !== undefined) return kept
   const stamped = stores.stamps.read(join(place.path, name))
@@ -90,7 +103,7 @@ function rowMoved(stores: TheRecordStores, from: string, to: string): Refused | 
 /** How many handovers the crew wrote for `name`; none when the place cannot be read. */
 function handoverCount(place: CrewPlace, name: string): number {
   const names = place.names()
-  return 'refusal' in names ? 0 : names.filter((one) => one.endsWith(endsWithMember(name))).length
+  return 'refusal' in names ? 0 : names.filter((one) => theHandoverDayOf(one, name) !== null).length
 }
 
 /** Whether the crew holds a park marker for `name`. */

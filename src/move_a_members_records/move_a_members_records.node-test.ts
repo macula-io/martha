@@ -107,6 +107,27 @@ test('a rename leaves the handover the old name wrote as one the new name resume
   assert.equal(wake.handover.content, 'the work Scout left\n', 'the successor resumes what the predecessor left')
 })
 
+test('a rename copies only the old name\'s own handovers, never a member\'s whose name ends in it (review r=2)', (t) => {
+  // The instance: `Red_Scout` writes files ending in `_Scout.md`, so a rename of Scout that matched by suffix copied
+  // them and stamped the copies for Runner, and Runner resumed Red_Scout's work.
+  const place = aPlace(t)
+  assert.equal(martha(place, 'init').status, EXIT_DONE)
+  added(place, 'Scout')
+  added(place, 'Red_Scout')
+  const { crew } = placesOf(place)
+  const handovers = keepTheCrewsFilesAsDirectories(crew).place(HANDOVERS_PLACE)
+  assert.ok(!('refusal' in handovers))
+  const theirs = theHandoverFile('Red_Scout', AT)
+  assert.equal(handovers.keep(theirs, 'the work Red_Scout left\n'), undefined)
+  assert.equal(handoverStampsIn(crew).write(join(handovers.path, theirs), { member: 'Red_Scout', predecessor_id: 'a-session', written_at: AT.toISOString(), digest: 'digest', record_length: 0, record_digest: 'record' }), undefined)
+
+  const run = martha(place, 'rename', 'Scout', 'Runner')
+  assert.equal(run.status, EXIT_DONE, run.said)
+  assert.equal(theNewestHandover(handovers, handoverStampsIn(crew), 'Runner').kind, 'no_handover', 'the new name resumes another member\'s handover')
+  const names = handovers.names()
+  assert.ok(!('refusal' in names) && !names.includes(theHandoverFile('Red_Runner', AT)), 'another member\'s handover was copied under a made-up name')
+})
+
 test('a rename moves the dashboard row and the park the old name had (mutant: the row left under the old name, the park left behind)', (t) => {
   const place = aPlace(t)
   assert.equal(martha(place, 'init').status, EXIT_DONE)
