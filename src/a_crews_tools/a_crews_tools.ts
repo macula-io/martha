@@ -70,9 +70,7 @@ import {
   theOrderOf,
   theQuestionIn,
   theRefreshAct,
-  type TheAct,
   type TheRefreshPlaces,
-  type TheSessionsQuestion,
 } from '../refresh_a_member/the_refresh_flow.ts'
 import { REPORT_PROGRESS_TOOL, reportProgressOver } from '../report_where_the_work_stands/report_progress_tool.ts'
 import { theBudgetOver, theSpendOnARow, type TheBudgetAsACrewHoldsIt } from '../hold_a_package_to_its_budget/the_budget_tools.ts'
@@ -89,11 +87,9 @@ import { SAY_TO_THE_CREW_TOOL, sayToTheCrewOver } from '../send_a_crew_message/s
 import { GH_MS } from '../send_a_crew_message/the_runs_a_handoff_names.ts'
 import {
   BEAT_INTERVAL_MS,
-  SPEND_FIELD,
   beatAfter,
   rowAfterASwitch,
   theRowWithNothingSaid,
-  type AUnitOnARow,
   type DashboardRow,
   type DashboardStore,
   type TheOwnersDefaultTold,
@@ -115,12 +111,12 @@ import {
   mayPutAQuestionToTheOwner,
   theRowSettledBetweenTurns,
   theSessionsOwnState,
-  theStateThisSessionSettlesTo,
   theWorkInHandHeld,
   type AnOwnTabAsked,
   type TheOwnTabAsksPlace,
   type TheSessionsOwnState,
 } from './a_sessions_own_tab.ts'
+import { theRowAfterTheTurn } from './the_row_a_turn_writes.ts'
 import type { AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 
 /**
@@ -685,44 +681,6 @@ async function theNudgesGoToTheOwner(places: CrewToolPlaces): Promise<boolean> {
   return !('refused' in declared) && theNudgesGoTo(declared.settings).some((name) => sameMemberName(name, declared.crew.owner))
 }
 
-/**
- * The row after one turn's question, in ONE write: what the session reported about itself and what the flow said it is
- * doing, because the row store keeps the newest beat and two writes in the same millisecond would lose the second.
- *
- * The turn's end is also where the row settles its state (martha#1000, gap 8 of #957): what the member holds, and a
- * closing question it can put to the owner.
- */
-function theRowAfterTheTurn(
-  state: SessionState,
-  row: DashboardRow,
-  question: TheSessionsQuestion,
-  act: TheAct,
-  spend: readonly AUnitOnARow[] | undefined,
-  may_ask_the_owner: boolean,
-): DashboardRow {
-  const settled =
-    question.at_start || question.turn_running
-      ? row.state
-      : theStateThisSessionSettlesTo(state.own, row, question.session_id, question.answer, may_ask_the_owner, carriesAReviewWord)
-  return {
-    ...row,
-    state: settled,
-    ...(act.refresh === undefined ? {} : { refresh: act.refresh }),
-    needs: theNeedsAfter(state, row),
-    session: question.session_id,
-    host: { ...row.host, contextPercent: question.percent, costUsd: question.cost_usd },
-    [SPEND_FIELD]: spend,
-  }
-}
-
-/** The row's `needs` after this turn (martha#359): what the owner's file said, or its own line taken away again. */
-function theNeedsAfter(state: SessionState, row: DashboardRow): string {
-  const told = state.owner_needs
-  if (told === null) return row.needs
-  state.owner_needs = null
-  if (told.why !== '') return told.why
-  return told.before.includes(row.needs) ? '' : row.needs
-}
 
 /**
  * The line this member's session starts on: what the member's own row says it holds, and every act of that package
