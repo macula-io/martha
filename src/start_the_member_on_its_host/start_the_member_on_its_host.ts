@@ -24,7 +24,8 @@ import process from 'node:process'
 import type { StdioOptions } from 'node:child_process'
 import { crewToolsOver, type CrewToolPlaces } from '../a_crews_tools/a_crews_tools.ts'
 import { CLAUDE_CODE_BASH_RESULT_SHAPES } from '../claude_code_host/claude_code_bash_results.ts'
-import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_MODELS, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_SUBAGENT_SPAWN } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_FILE_TOOLS } from '../claude_code_host/claude_code_file_tools.ts'
 import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_directory.ts'
 import { BILLED_BY_SUBSCRIPTION, OWNER_BELL, THE_ENGINES_HOST, type CrewSettings, type Member, type TheVocabulariesOfHost } from '../declare_crew/declare_crew.ts'
 import { NOT_STARTED } from '../end_a_launch/end_a_launch.ts'
@@ -280,7 +281,7 @@ function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: C
 export const leftoversOfALaunch = (settings: CrewSettings, crew: CrewStore) => ({ crew, workspace: theWorkspaceTheCrewDeclared(settings) })
 
 /** The crew tools' places a host's start does not choose itself: the models it names, how it spawns a subagent, and the settings file its model command saves a switch into. */
-export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings' | 'usage_host'>
+export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings' | 'usage_host' | 'brief_writes'>
 
 /**
  * The crew tools' places every host's start shares (martha#541 package A): built here once, with the host's own
@@ -363,6 +364,9 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeM
         // The settings file the host's model command saves a switch into, and the lock that guards it (martha#359): the
         // member's own since martha#602. The owner's file was finished above, before the host started.
         owners_settings: theMembersSwitchPlace(start, member.config_dir),
+        // What writes a file and what runs a shell line, by Claude Code's own names: a brief one of them wrote that breaks
+        // the owner-items rule is said back with the call's result (martha#999 package 2b).
+        brief_writes: { file_tools: CLAUDE_CODE_FILE_TOOLS, shell_tool: CLAUDE_CODE_SHELL_TOOL },
       })),
     signed_runs: signedRunsOf(
       receiptsInMemory(),

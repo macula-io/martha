@@ -577,9 +577,9 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   const answer = await state.answers.aResultCame(aResultOfACallOf(body, call))
   if ('stop' in answer) return stopMember(place, answer.stop)
   const taken = answer.end_turn === undefined ? TAKEN : { ...TAKEN, end_turn: answer.end_turn }
-  // A ran read may carry its stale-clone note (martha#969), a ran SendMessage its volatile-path note (martha#980): a call
-  // is one or the other, so the one note field carries whichever there is.
-  const note = (await theNoteOfARead(place, session.id, call)) || (theNoteOnASend(place, call, body.answer) ?? '')
+  // A ran read may carry its stale-clone note (martha#969), a ran SendMessage its volatile-path note (martha#980), and
+  // the crew its note after a brief write (martha#999 package 2b): each rides as one line of the one note field.
+  const note = [await theNoteOfARead(place, session.id, call), theNoteOnASend(place, call, body.answer) ?? '', answer.note ?? ''].filter((line) => line !== '').join('\n')
   return answered(note === '' ? taken : { ...taken, note })
 }
 
