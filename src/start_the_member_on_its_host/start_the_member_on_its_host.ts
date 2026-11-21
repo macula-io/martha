@@ -38,6 +38,7 @@ import type { CrewStore, DocumentStore, HandoverStampStore, Refused, RowStore } 
 import {
   ownWritesKeptForLaunch,
   type Approval,
+  readStateFile,
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
@@ -62,6 +63,7 @@ import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { machineRootsFrom } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import type { MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
+import { ROSTER_FILE, theKeptRoster } from '../write_the_crews_roster/write_the_crews_roster.ts'
 
 /** The crew's channel as its carrier counts a message taken in (martha#253): the crew's row stream and a clock. */
 export interface TheCrewChannel {
@@ -377,6 +379,12 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost, key: AMember
       CLAUDE_CODE_BASH_RESULT_SHAPES,
     ),
   }
+}
+
+/** The roster `martha up` kept in Martha's state (martha#1016): none when the file cannot be read. Crew mail and memory read it. */
+export function readTheCrewsRoster(state: MarthaState): Readonly<Record<string, string>> {
+  const read = readStateFile(join(state.directory, ROSTER_FILE))
+  return theKeptRoster('text' in read ? read.text : '')
 }
 
 /** The Claude Code entry: today's launch, unchanged in behaviour, behind the table. */

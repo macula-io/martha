@@ -2,14 +2,11 @@
 // out by name with the bin never started on its path (T4), a bad id left out, and a solo crew with none.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
 import type { AKeyFileSeen } from '../read_a_members_mesh_key/read_a_members_mesh_key.ts'
-import { ROSTER_FILE, readTheCrewsRoster, rosterText, theCrewsRoster, type TheRosterAsked } from './write_the_crews_roster.ts'
+import { rosterText, theKeptRoster, theCrewsRoster, type TheRosterAsked } from './write_the_crews_roster.ts'
 
 const KEYS = '/planted/keys'
 const OWNER_UID = 1234
@@ -64,17 +61,7 @@ test('#1016: a solo crew has no roster, and no key is looked at for it', () => {
 })
 
 test('#1016: the kept roster is read back by member, a bad entry left out, and a missing or broken file is no roster', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'martha-roster-'))
-  const state = { directory, state_root: directory }
-  try {
-    assert.deepEqual(readTheCrewsRoster(state), {})
-    writeFileSync(join(directory, ROSTER_FILE), JSON.stringify({ Venus: AN_ID, Terra: ANOTHER_ID.toUpperCase(), Ceres: 'not an id', Juno: 7 }), { mode: 0o600 })
-    assert.deepEqual(readTheCrewsRoster(state), { Venus: AN_ID })
-    for (const broken of ['not json', '[]', 'null']) {
-      writeFileSync(join(directory, ROSTER_FILE), broken, { mode: 0o600 })
-      assert.deepEqual(readTheCrewsRoster(state), {}, broken)
-    }
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+  assert.deepEqual(theKeptRoster(''), {})
+  assert.deepEqual(theKeptRoster(JSON.stringify({ Venus: AN_ID, Terra: ANOTHER_ID.toUpperCase(), Ceres: 'not an id', Juno: 7 })), { Venus: AN_ID })
+  for (const broken of ['not json', '[]', 'null']) assert.deepEqual(theKeptRoster(broken), {}, broken)
 })
