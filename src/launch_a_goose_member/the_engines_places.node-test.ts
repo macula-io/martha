@@ -154,7 +154,7 @@ test('a result before the session was read back stops the member, by name (#541 
 
 test('after the watch, the session store is read back against the snapshot: a store that is not there stops the member (#541 package A, design R1\')', (t) => {
   const machine = aMachine(t)
-  const gate = { id: 'a-session', fields: {}, enabled_extensions: '' } as unknown as TheSessionsGate
+  const gate = { id: 'a-session', opened: ['a-session'], fields: {}, enabled_extensions: '' } as unknown as TheSessionsGate
   const why = placesFor(machine, { the_sessions_gate: () => gate }).results?.checkTheSettingsStillHold()
   assert.ok(why !== undefined && why !== NO_SESSION_READ_BACK, String(why))
 })

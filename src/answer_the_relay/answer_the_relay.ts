@@ -78,6 +78,8 @@ import type { SignedRuns } from '../run_an_owner_signed_command/signed_runs.ts'
 import { rememberOwnWriteOfCall } from '../launch_a_claude_code_member/remember_own_write_of_a_call.ts'
 import type { JournalAnswer, RelayJournal } from '../keep_the_relays_journal/keep_the_relays_journal.ts'
 import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
+import { theTextASendMessageSends } from '../answer_a_tool_call/a_crew_line_goes_through_say_to_the_crew.ts'
+import { theVolatileNote, volatilePathsIn } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { theGitCallJudged, theRefTransactionJudged, type AGuardsAnswer } from '../guard_the_git_a_member_runs/judge_a_guards_question.ts'
 
@@ -159,6 +161,11 @@ export interface MemberRelayPlace {
    */
   readonly crew_text?: string
   /**
+   * The roots a reboot deletes on this machine, the crew's declared ones with them (../tell_a_citer_of_a_volatile_path):
+   * a SendMessage that cites a path under one is told so beside its answer (martha#980). Absent, no send is told.
+   */
+  readonly volatile_roots?: readonly string[]
+  /**
    * What this launch supplied a mesh answer, and which answer may be read as the member's own (martha#251). Absent,
    * no MCP answer is read that way and every one records on B2, as it did before this existed: a caller that cannot
    * say what it supplied gets the taint, not a guess.
@@ -185,6 +192,11 @@ export interface MemberRelayPlace {
    * launch tells neither and every other answer is as it was.
    */
   readonly telling?: TheMembersTelling
+  /**
+   * Why a call this member's billing cannot run is refused before anything else asks of it (martha#957 gap 13): an
+   * Artifact call by a member billed by the key, which carries no claude.ai login. Absent, no call is refused for it.
+   */
+  readonly refusesACallItsBillingCannotRun?: ((tool: string) => string | undefined) | undefined
   /** Sends SIGKILL to the member's process group. */
   stopMember(why: string): void
 }
@@ -413,6 +425,7 @@ const placesOfTheEntry = (place: MemberRelayPlace, reviews: TheReviewSpawns, age
   signed_runs: place.signed_runs,
   // This host's own two decisions, closed over the files it reads, the launch's directory, the owner's home and the
   // machine (packages 2-4's design, row "2"): they stay here until each host has its own recorded fact set (#257 row 5).
+  refusesACallItsBillingCannotRun: place.refusesACallItsBillingCannotRun,
   refusesAWriteToTheOwnersSettings: (input) => namesTheOwnersSettings(input, place.hookSettings.owners_file, place.launch.launch_dir, place.hookSettings.home, CLAUDE_CODE_FILE_TOOLS),
   refusesAWriteToTheOwnersMemory: (tool, input) => writesTheOwnersMemory(tool, input, place.ownerMemory, place.launch.launch_dir, place.hookSettings.home, thisMachine, CLAUDE_CODE_FILE_TOOLS),
   // What recording a result needs (PR 3): this host's own table and switches as values, and its two decisions over its
@@ -470,7 +483,10 @@ async function promptSubmitted(state: RelayState, body: Body): Promise<RelayRepl
   // Kept and raised, so the entry may name a review the host reports failed in it (martha#390): the origin is the one
   // the engine stamped, never read from the text.
   await state.answers.aReviewTheHostSawFail({ session_id, text: body.text, origin_kind: origin.kind })
-  return answered(TAKEN)
+  // The crew's state rides the turn (martha#984): the host composes the system prompt once per session, so a state
+  // that changes reaches the member with its next prompt. It is in the record before this answer leaves.
+  const handed = await state.answers.theCrewStateToHand(session_id)
+  return answered(handed === undefined ? TAKEN : { taken: 1, handed })
 }
 
 function callOf(body: Body): { readonly tool: string; readonly input: Body; readonly agent_id: string | undefined; readonly id: string | undefined } | undefined {
@@ -561,9 +577,22 @@ async function toolAnswered(state: RelayState, body: Body): Promise<RelayReply> 
   const answer = await state.answers.aResultCame(aResultOfACallOf(body, call))
   if ('stop' in answer) return stopMember(place, answer.stop)
   const taken = answer.end_turn === undefined ? TAKEN : { ...TAKEN, end_turn: answer.end_turn }
-  // The read's note (martha#969) and the crew's note after a brief write (martha#999 package 2b) ride as one line each.
-  const note = [await theNoteOfARead(place, session.id, call), answer.note ?? ''].filter((line) => line !== '').join('\n')
+  // A ran read may carry its stale-clone note (martha#969), a ran SendMessage its volatile-path note (martha#980), and
+  // the crew its note after a brief write (martha#999 package 2b): each rides as one line of the one note field.
+  const note = [await theNoteOfARead(place, session.id, call), theNoteOnASend(place, call, body.answer) ?? '', answer.note ?? ''].filter((line) => line !== '').join('\n')
   return answered(note === '' ? taken : { ...taken, note })
+}
+
+/**
+ * The line a SendMessage the host ran is handed beside its answer when its message cites a path a reboot deletes
+ * (martha#980, a port of crew-code's note on a DM; say_to_the_crew already carries it). Nothing for any other call,
+ * for a send the host answered with an error, or for one that cites no such path.
+ */
+function theNoteOnASend(place: MemberRelayPlace, call: { readonly tool: string; readonly input: Body }, ran: unknown): string | undefined {
+  const text = theTextASendMessageSends(call.tool, call.input, place.names)
+  if (text === undefined || (isBody(ran) && ran['isError'] === true)) return undefined
+  const cited = volatilePathsIn(text, place.volatile_roots ?? [])
+  return cited.length === 0 ? undefined : theVolatileNote(cited)
 }
 
 /**

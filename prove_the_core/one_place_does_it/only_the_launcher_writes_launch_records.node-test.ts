@@ -73,6 +73,7 @@ const THE_HOST_ADAPTERS = [
     'refuse_settings_that_turn_hooks_off',
     'run_an_owner_signed_command',
     'run_the_martha_command',
+    'show_the_week_of_the_ledger',
     'run_the_nodes_own_npm_alone',
     'serve_the_crews_tools_to_an_engine',
     'serve_the_relay_to_a_launch',

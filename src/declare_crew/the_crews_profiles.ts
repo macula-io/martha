@@ -8,6 +8,7 @@
 
 import { CLAUDE, CLAUDE_CODE } from '../know_claude_codes_own_facts/claude_code_facts.ts'
 import { RECORDED_GOOSE_ENGINE } from '../know_the_goose_engines_facts/recorded_goose_engine.ts'
+import { TOKEN_PREFIXES } from '../keep_the_owners_todo_list/token_prefixes.ts'
 
 /** The declaration's keys for the three blocks, read through the lists at the end of this file, and the member key that names a profile. */
 const HARNESSES = 'harnesses'
@@ -139,6 +140,7 @@ function aProviderOf(entry: Block, at: string, refuse: RefuseAProfile): Provider
   for (const key of ['endpoint', 'account'] as const) {
     if (entry[key] !== undefined && !isText(entry[key])) refuse(`${at}.${key}`, 'is not text')
   }
+  if (isText(entry['account']) && looksLikeAKey(entry['account'])) refuse(`${at}.account`, 'reads as a key, not an account name: the key itself never goes in the declaration')
   refuseTheKeysPlace(entry, at, refuse)
   return { endpoint: textOrNull(entry['endpoint']), key_from: textOrNull(entry['key_from']), key_file: textOrNull(entry['key_file']), billing: aBillingOf(entry['billing'], at, refuse) }
 }
@@ -163,6 +165,30 @@ function refuseTheKeysPlace(entry: Block, at: string, refuse: RefuseAProfile): v
  * would bring. Whether it is absolute, or under the owner's home, is the start's to say: it writes the home out.
  */
 const isAKeyFilesPathAsWritten = (value: unknown): value is string => isText(value) && !/\s/.test(value) && !value.split('/').includes('..')
+
+/**
+ * The longest unbroken run of letters, digits, `-` and `_` an account name may hold (martha#942). An account is an
+ * e-mail address, a name without white space, or an organisation's id; an e-mail's `@` and `.` break the run; an API
+ * key is one long run, as `sk-` and 32 hex digits are, with or without a prefix Martha knows.
+ */
+const AN_ACCOUNTS_LONGEST_RUN = 31
+
+/**
+ * An organisation's id as providers commonly write it, a UUID (8-4-4-4-12 hex digits, hyphenated): a run longer than
+ * AN_ACCOUNTS_LONGEST_RUN that is not a key, so it passes (the Supervisor's fold-in on PR 949).
+ */
+const A_UUID = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/
+
+/**
+ * Whether an account, as written, reads as a key pasted in its place (martha#942): it holds white space, as a pasted
+ * key brings, or starts with a prefix the private scan refuses (TOKEN_PREFIXES), or holds an unbroken run of letters,
+ * digits, `-` and `_` longer than AN_ACCOUNTS_LONGEST_RUN that is not A_UUID. The refusal names the field, never the
+ * value.
+ */
+const looksLikeAKey = (account: string): boolean =>
+  /\s/.test(account) ||
+  TOKEN_PREFIXES.some((prefix) => account.startsWith(prefix)) ||
+  (account.match(/[A-Za-z0-9_-]+/g) ?? []).some((run) => run.length > AN_ACCOUNTS_LONGEST_RUN && !A_UUID.test(run))
 
 const textOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null)
 

@@ -203,7 +203,10 @@ export function answeredBody(session_id: string, call: unknown, answer: unknown)
   return body
 }
 
-/** A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the yes, with an `end_turn` and a `note` it may carry. */
+/**
+ * A taken-or-refused answer, as the relay hears it: `{"taken":1}` is the yes, with an `end_turn`, a `note` or, on a prompt,
+ * the crew state the turn is handed (martha#984) it may carry.
+ */
 export function heardTaken(status: number, text: string): Heard {
   if (status !== 200) return NO(`the launcher answered with status ${status}`)
   const value = jsonObjectOf(text)
@@ -221,8 +224,8 @@ function theYesCarrying(value: Record<string, unknown>): Heard | undefined {
   return { yes: true, ...Object.fromEntries(carried.map((key) => [key, value[key]])) }
 }
 
-/** What a taken answer may carry beside the yes: the turn a ran tool ends, and the note its result carries. */
-const TAKEN_CARRIES = ['end_turn', 'note'] as const
+/** What a taken answer may carry beside the yes: the turn a ran tool ends, the note its result carries, and the crew state a prompt is handed. */
+const TAKEN_CARRIES = ['end_turn', 'note', 'handed'] as const
 
 /** The keys a taken answer may hold: the yes itself, and what it carries. */
 const TAKEN_MAY_CARRY: readonly string[] = ['taken', ...TAKEN_CARRIES]

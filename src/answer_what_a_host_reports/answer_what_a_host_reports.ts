@@ -94,6 +94,11 @@ export interface ThePlacesAHostReportsOver {
   readonly handed_at_start: readonly TurnSource[]
   /** The crew's tools (martha#254): a launch with none starts no refresh, hands no start line and names no review. */
   readonly crew?: CrewTools | undefined
+  /**
+   * Why a call this member's billing cannot run is refused before anything else asks of it (martha#957 gap 13): an
+   * Artifact call by a member billed by the key, which carries no claude.ai login. Absent, no call is refused for it.
+   */
+  readonly refusesACallItsBillingCannotRun?: ((tool: string) => string | undefined) | undefined
   /** The crew text this launch hands every session it starts (martha#306); absent, only the start line is handed. */
   readonly crew_text?: string | undefined
   /**
@@ -225,6 +230,12 @@ export interface TheAnswersOfOneLaunch {
   aSessionStarted(start: AStartingSession): Promise<TheAnswerToAStart>
   /** A turn: kept in its session's record, a session the crew refreshed taken in first (martha#255), or refused and why. */
   aTurnArrived(session_id: unknown, turn: ArrivingTurn): Promise<TheAnswerToATurn>
+  /**
+   * The crew's state a prompted turn of this session is handed (martha#984), once the turn is kept: taken into the
+   * session's record on its own source BEFORE it is answered, and undefined when there is none, it is the copy this
+   * session was last handed, or it could not be read or recorded. A host whose turns are prompted asks it.
+   */
+  theCrewStateToHand(session_id: string): Promise<string | undefined>
   /** A review the host saw fail (martha#390), named on the row and to the member, for a session this launch holds. */
   aReviewTheHostSawFail(report: AReviewTheHostSawFail): Promise<void>
   /**
@@ -260,7 +271,6 @@ export function answersOver(
 ): TheAnswersOfOneLaunch {
   /** Why this session may be answered for no more, for the rest of this process. */
   const broken = new Map<string, string>()
-  let queue: Promise<unknown> = Promise.resolve()
 
   const approved_start = approvedStartTreeOf(places.launch, places.machine)
 
@@ -300,15 +310,11 @@ export function answersOver(
     }
   }
 
-  const held: TheSessionsHeld = { places, sessions, broken, keep, vouchFor, approved_start, notices_said: new Set<string>() }
+  const held: TheSessionsHeld = { places, sessions, broken, keep, vouchFor, approved_start, notices_said: new Set<string>(), crew_states_handed: new Map<string, string>() }
 
   return {
     records: places.records,
-    inOrder: <T>(work: () => Promise<T>): Promise<T> => {
-      const next = queue.then(work)
-      queue = next.catch(() => undefined)
-      return next
-    },
+    inOrder: oneOrder(),
     holds: (session_id) => sessions.has(session_id),
     brokenBecause: (session_id) => broken.get(session_id),
     named: (session_id) => sessionNamed(session_id, sessions, broken),
@@ -317,6 +323,7 @@ export function answersOver(
     approved_start,
     aSessionStarted: async (start) => aSessionStartedIn(held, start),
     aTurnArrived: async (session_id, turn) => aTurnArrivedIn(held, session_id, turn),
+    theCrewStateToHand: async (session_id) => theCrewStateToHandIn(held, session_id),
     aReviewTheHostSawFail: async (report) => aReviewTheHostSawFailIn(held, report),
     aToolCalled: async (call) => aToolCalledIn(held, call),
     aResultCame: async (result) => aResultCameIn(held, result),
@@ -342,6 +349,11 @@ interface TheSessionsHeld {
    * on every call past the wall would feed the member a turn for each call it makes.
    */
   readonly notices_said: Set<string>
+  /**
+   * The crew's state each session was last handed (martha#984): an unchanged state is not handed again, and every start
+   * of the session drops it, as a compaction leaves the conversation without the copy.
+   */
+  readonly crew_states_handed: Map<string, string>
 }
 
 /** The session a clear was told in, when this id is the one the crew is waiting for: the crew's own answer, or none. */
@@ -372,9 +384,20 @@ async function takeInARefreshedSessionIn(held: TheSessionsHeld, session_id: stri
   return held.keep(handedAtStart(held.places, startSessionAs(held.places.records.store, { session_id, outcome: 'inherits', predecessor_id: predecessor }), null))
 }
 
+/** One queue: each piece of work runs after every piece already asked for, whether that one failed or not. */
+function oneOrder(): <T>(work: () => Promise<T>) => Promise<T> {
+  let queue: Promise<unknown> = Promise.resolve()
+  return <T>(work: () => Promise<T>): Promise<T> => {
+    const next = queue.then(work)
+    queue = next.catch(() => undefined)
+    return next
+  }
+}
+
 async function aSessionStartedIn(held: TheSessionsHeld, start: AStartingSession): Promise<TheAnswerToAStart> {
   const lost = held.broken.get(start.session_id)
   if (lost !== undefined) return { refused: lost }
+  held.crew_states_handed.delete(start.session_id)
   // A second start of a session this launch already holds changes nothing: re-beginning it would wipe the record the
   // first one kept, which is exactly the wipe a `clear` after a refresh would be (martha#255).
   if (held.sessions.has(start.session_id)) return { taken: '' }
@@ -489,8 +512,10 @@ function noteTheAgentsCall(agents: TheRunTable, session: HostSession, call: ACal
   if (call.call_id !== undefined) run.calls_seen.add(call.call_id)
 }
 
-/** Why this call is refused before it runs, or undefined: the owner's settings, their memory, the gate, then what the crew refuses beside it (the reviewer-model rule, the workspace guard's first seam, a held end). */
+/** Why this call is refused before it runs, or undefined: a call its billing cannot run, the owner's settings, their memory, the gate, then what the crew refuses beside it (the reviewer-model rule, the workspace guard's first seam, a held end). */
 async function theDenialOfACall(places: ThePlacesAHostReportsOver, session: HostSession, call: ACalledTool): Promise<string | undefined> {
+  const unbilled = places.refusesACallItsBillingCannotRun?.(call.tool)
+  if (unbilled !== undefined) return unbilled
   const settings = places.refusesAWriteToTheOwnersSettings(call.input)
   if (settings !== undefined) return settings
   const memory = places.refusesAWriteToTheOwnersMemory(call.tool, call.input)
@@ -672,6 +697,41 @@ async function aCrewToolAskedIn(held: TheSessionsHeld, ask: ACrewToolAsked): Pro
   const why = await takeInARefreshedSessionIn(held, ask.session_id)
   if (why !== undefined) return { refused: why }
   return crew.answer(ask.tool, ask.args, ask.session_id)
+}
+
+/**
+ * The crew's state a prompted turn of this session is handed (martha#984): built by the crew for this launch's own
+ * member, and taken into the session's record on its own source BEFORE it is answered, so the shell gate stands behind
+ * every word the turn is handed. Nothing is handed when the crew has no state, the session was last handed the same
+ * text, or the state could not be read or recorded: the turn itself is kept either way, and a failure is noted.
+ */
+async function theCrewStateToHandIn(held: TheSessionsHeld, session_id: string): Promise<string | undefined> {
+  const crew = held.places.crew
+  const session = held.sessions.get(session_id)
+  if (crew === undefined || session === undefined) return undefined
+  const state = await theCrewStateOrWhy(crew)
+  if (state === null) return undefined
+  if ('why' in state) {
+    held.places.note?.(state.why)
+    return undefined
+  }
+  if (held.crew_states_handed.get(session_id) === state.line) return undefined
+  const why = await held.keep(state.taken_in.reduce((taken, source) => takeInTurn(taken, { source }, held.places.binder), session))
+  if (why !== undefined) {
+    held.places.note?.(`the crew's state was not handed: ${why}`)
+    return undefined
+  }
+  held.crew_states_handed.set(session_id, state.line)
+  return state.line
+}
+
+/** The crew's state, or why the crew could not say it: a read that throws hands nothing, and says why in a note. */
+async function theCrewStateOrWhy(crew: CrewTools): Promise<TheStartLine | null | { readonly why: string }> {
+  try {
+    return await crew.theCrewStateOfATurn()
+  } catch (error) {
+    return { why: `the crew's state could not be read (${error instanceof Error ? error.message : String(error)})` }
+  }
 }
 
 /**
