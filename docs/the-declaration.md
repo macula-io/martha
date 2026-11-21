@@ -85,6 +85,10 @@ Each switch is off unless the file says `true`. The four trims at the end of the
 | `handoff_lines_most` | The most lines a HANDOFF or a VERDICT may be, a whole number; 0 is no fixed line, and `false` turns its notice off. |
 | `fail_only_on_harm` | A reviewer FAILs only for harm a user or the owner would hit; `false` turns it off. Read by the role cards alone. |
 | `mutants_on_guards_only` | Mutants and planted bugs go on guard and security code alone; `false` turns it off. Read by the role cards alone. |
+| `open_issues_most` | The repo's open issues, as a fixed line; 0 is the trend alone, and `false` turns its notices off. Read once a day for each repo the week's packages name. |
+| `untouched_issues_most` | Open issues not updated for `issue_untouched_days`, as a fixed line; 0 is the trend alone, and `false` turns its notices off. |
+| `abandoned_pr_percent_most` | Pull requests closed without merging, as a percentage of all of them; 0 is the trend alone, and `false` turns its notices off. |
+| `issue_untouched_days` | How many days an issue may go without an update before it is counted untouched, a whole number of days. |
 
 ## `backlog`
 

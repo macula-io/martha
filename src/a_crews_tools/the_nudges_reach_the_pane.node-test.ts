@@ -24,7 +24,8 @@ import { dashboardRowsIn } from '../dashboard_rows_directory/dashboard_rows_dire
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { noteMilestone, noteRecovery, readLedger } from '../log_ledger/log_ledger.ts'
 import { keepTheLinesRow, readACrewLine } from '../read_a_crew_line/read_a_crew_line.ts'
-import { HANDOFF_LINES_MOST_WHEN_UNNAMED, REVIEW_ROUNDS_MOST_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
+import { HANDOFF_LINES_MOST_WHEN_UNNAMED, OPEN_ISSUES_MOST, REVIEW_ROUNDS_MOST_WHEN_UNNAMED } from '../declare_crew/the_crews_trims.ts'
+import { dayOf, OPEN_ISSUES } from '../spend_the_github_budget/the_repos_numbers.ts'
 import { CLOCK_ZONE_WHEN_UNNAMED, theClockOf } from '../declare_crew/the_crews_clock_zone.ts'
 import { LOG_A_MILESTONE, RESUME_EVENT } from '../keep_the_ledger/keep_the_ledger.ts'
 import { PARK_A_MEMBER } from '../park_and_wake_a_member/the_park_tools.ts'
@@ -68,7 +69,7 @@ function row(member: string, changes: Partial<DashboardRow> = {}): DashboardRow 
 }
 
 /** The declaration a test writes: three members, the receiver's role routing the work, and nudges on by default. */
-function theDeclaration(nudges: boolean): string {
+function theDeclaration(nudges: boolean, more_house_rules: Readonly<Record<string, unknown>> = {}): string {
   return JSON.stringify({
     version: 1,
     owner: OWNER_NAME,
@@ -84,7 +85,7 @@ function theDeclaration(nudges: boolean): string {
     },
     // The windows are named whether the switch is on or off: a crew that turned nudges off and kept its windows is
     // what tells a launcher that ignores the switch apart from one that reads it.
-    house_rules: { nudges, stalled_minutes: STALLED / MINUTE_MS, review_minutes: REVIEW / MINUTE_MS, person_minutes: PERSON / MINUTE_MS },
+    house_rules: { nudges, stalled_minutes: STALLED / MINUTE_MS, review_minutes: REVIEW / MINUTE_MS, person_minutes: PERSON / MINUTE_MS, ...more_house_rules },
     channel_read_seconds: 30,
   })
 }
@@ -210,15 +211,22 @@ const aClosedIssue = (closed_at: number): ProcessOutcome => ({ exit_code: 0, std
 /** Whether a call the crew made read an issue's state. */
 const readsAnIssue = (args: readonly string[]): boolean => args[0] === 'issue'
 
+/** Whether a call the crew made asked GitHub's search, which is how a repo's numbers are read (martha#1010's addendum). */
+const readsASearch = (args: readonly string[]): boolean => args[0] === 'api' && (args[1] ?? '').startsWith('search/issues')
+
+/** The query a search call asked, as the fake reads it. */
+const theQueryOf = (args: readonly string[]): string => decodeURIComponent((args[1] ?? '').split('q=')[1] ?? '')
+
 /**
  * A GitHub that answers what a head read asks, answers an issue's state with what `issue` says at that moment (open,
  * unless a test says otherwise), and keeps every call the crew made through it.
  */
-function aCountedGithub(issue: () => ProcessOutcome = () => AN_OPEN_ISSUE): { readonly asked: readonly string[][]; readonly processes: HostContract['processes'] } {
+function aCountedGithub(issue: () => ProcessOutcome = () => AN_OPEN_ISSUE, searched: (query: string) => number = () => 0): { readonly asked: readonly string[][]; readonly processes: HostContract['processes'] } {
   const asked: string[][] = []
   const run = async (request: ProcessRequest): Promise<ProcessOutcome> => {
     asked.push([...request.args])
     if (readsAnIssue(request.args)) return issue()
+    if (readsASearch(request.args)) return { exit_code: 0, stdout: JSON.stringify({ total_count: searched(theQueryOf(request.args)) }), stderr: '' }
     if (request.args.includes('rate_limit')) {
       const reset = Math.trunc((Date.now() + HOUR) / 1000)
       return { exit_code: 0, stdout: JSON.stringify({ resources: { core: { remaining: 4_000, reset } } }), stderr: '' }
@@ -236,7 +244,24 @@ test('#320 B: only the receiver\'s launcher asks GitHub, and what it asks is spe
 
   await crew.tools.answer('see_the_crew', {}, 'a-session')
   assert.ok(github.asked.length > 0, 'the receiver\'s pane asked GitHub nothing, so no head can ever move')
-  assert.ok(github.asked.every((args) => args.includes('rate_limit') || args.includes('pr') || readsAnIssue(args)), `something other than the budget's own reads reached GitHub: ${JSON.stringify(github.asked)}`)
+  assert.ok(github.asked.every((args) => args.includes('rate_limit') || args.includes('pr') || readsAnIssue(args) || readsASearch(args)), `something other than the budget's own reads reached GitHub: ${JSON.stringify(github.asked)}`)
+})
+
+/** The repo the test's row holds, and the two numbers its search answers: a count past the most the owner sets. */
+const REPO = 'macula-io/martha'
+const OPEN_FOUND = 13
+const OPEN_MOST = 11
+
+test('#1010 B: a repo past the most the owner set is drawn on the pane, from a read the budget spent', async (t) => {
+  const github = aCountedGithub(undefined, (query) => (query.includes('is:issue is:open') && !query.includes('updated:') ? OPEN_FOUND : 0))
+  const crew = aCrew(t, { processes: github.processes, declaration: theDeclaration(true, { [OPEN_ISSUES_MOST]: OPEN_MOST }) })
+  crew.beat(row(MEMBER))
+
+  const drawn = theNudgesDrawn(await crew.tools.answer('see_the_crew', {}, 'a-session'))
+  const drift = drawn.filter((line) => line.startsWith('- drift: ') && line.includes(OPEN_ISSUES))
+  assert.equal(drift.length, 1, `the repo past its most was not drawn: ${JSON.stringify(drawn)}`)
+  assert.equal(drift[0], `- drift: ${REPO}, ${String(OPEN_FOUND)} ${OPEN_ISSUES} (the crew's most is ${String(OPEN_MOST)}), since ${theClockOf(Date.parse(`${dayOf(NOW)}T00:00:00Z`), CLOCK_ZONE_WHEN_UNNAMED)}`, 'the drift line does not name the repo, the number, its value and the most')
+  assert.ok(github.asked.some((args) => readsASearch(args)), 'the repo\'s numbers were not read through the budget')
 })
 
 test('#320 B: a member that reads no nudges asks GitHub nothing', async (t) => {

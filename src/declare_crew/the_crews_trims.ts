@@ -29,8 +29,22 @@ export type HouseRuleMost = (typeof HOUSE_RULE_MOSTS)[number]
 export const HOUSE_RULE_TRIM_SWITCHES = [FAIL_ONLY_ON_HARM, MUTANTS_ON_GUARDS_ONLY] as const
 export type HouseRuleTrimSwitch = (typeof HOUSE_RULE_TRIM_SWITCHES)[number]
 
+/**
+ * The repo's three numbers (martha#1010's addendum): open issues, open issues untouched for the crew's days, and the
+ * share of pull requests closed without merging. Each is a fixed line an owner may set, with 0 for no fixed line: a repo
+ * number's notices are otherwise its rise against the same number seven days earlier.
+ */
+export const OPEN_ISSUES_MOST = 'open_issues_most'
+export const UNTOUCHED_ISSUES_MOST = 'untouched_issues_most'
+export const ABANDONED_PR_PERCENT_MOST = 'abandoned_pr_percent_most'
+export const HOUSE_RULE_REPO_MOSTS = [OPEN_ISSUES_MOST, UNTOUCHED_ISSUES_MOST, ABANDONED_PR_PERCENT_MOST] as const
+export type HouseRuleRepoMost = (typeof HOUSE_RULE_REPO_MOSTS)[number]
+
+/** How many days an issue may go without an update before it is one of the untouched, a whole number of days. */
+export const ISSUE_UNTOUCHED_DAYS = 'issue_untouched_days'
+
 /** Every house rule the trims are written as, in the order the declaration page names them. */
-export const HOUSE_RULE_TRIMS = [...HOUSE_RULE_MOSTS, ...HOUSE_RULE_TRIM_SWITCHES] as const
+export const HOUSE_RULE_TRIMS = [...HOUSE_RULE_MOSTS, ...HOUSE_RULE_TRIM_SWITCHES, ...HOUSE_RULE_REPO_MOSTS, ISSUE_UNTOUCHED_DAYS] as const
 
 /** The crew's most review rounds when the declaration names none: the crew's own practice (DECIDED 2026-11-20). */
 export const REVIEW_ROUNDS_MOST_WHEN_UNNAMED = 2
@@ -41,11 +55,22 @@ export const HANDOFF_LINES_MOST_WHEN_UNNAMED = 10
 /** Whether a trim's switch is on when the declaration names it nowhere: a trim is a bar, so it stands unless turned off. */
 export const A_TRIM_SWITCH_WHEN_UNNAMED = true
 
+/** How many days an issue may go without an update when the declaration names none: three, as Raf named it. */
+export const ISSUE_UNTOUCHED_DAYS_WHEN_UNNAMED = 3
+
+/** A percentage's whole: the abandoned pull requests are counted as a share of all of them, out of this. */
+export const A_PERCENT = 100
+
+/** What a repo number reads as when the declaration names none: no fixed line, so its notices are the trend alone. */
+export const A_REPO_MOST_WHEN_UNNAMED = 0
+
 /** What the declaration's two numbers read as: a whole number of items, or `false` for notices off. */
 export type AMost = number | false
 
-/** The crew's four trims, as a declaration names them or as the defaults above read them. */
-export type TheCrewsTrims = Readonly<Record<HouseRuleMost, AMost>> & Readonly<Record<HouseRuleTrimSwitch, boolean>>
+/** The crew's trims, as a declaration names them or as the defaults above read them. */
+export type TheCrewsTrims = Readonly<Record<HouseRuleMost, AMost>> &
+  Readonly<Record<HouseRuleTrimSwitch, boolean>> &
+  Readonly<Record<HouseRuleRepoMost, AMost>> & { readonly issue_untouched_days: number }
 
 /** A declaration field this file refuses: the key under `house_rules`, and why it is not one of the trims. */
 export interface ATrimRefusal {
@@ -58,16 +83,36 @@ export interface ATrimRefusal {
  * or false; a switch that is not true or false. A field named against its own name, so the owner sees which one.
  */
 export function theTrimsRefused(value: Readonly<Record<string, unknown>>): ATrimRefusal | null {
-  for (const most of HOUSE_RULE_MOSTS) {
-    const why = aMostRefused(value[most])
-    if (why !== undefined) return { field: most, why }
-  }
-  for (const trim of HOUSE_RULE_TRIM_SWITCHES) {
-    const why = aSwitchRefused(value[trim])
-    if (why !== undefined) return { field: trim, why }
+  return (
+    theFirstRefusal(value, HOUSE_RULE_MOSTS, (_field, named) => aMostRefused(named)) ??
+    theFirstRefusal(value, HOUSE_RULE_REPO_MOSTS, (field, named) => aMostRefused(named) ?? aPercentRefused(field, named)) ??
+    theFirstRefusal(value, [ISSUE_UNTOUCHED_DAYS], (_field, named) => aDaysRefused(named)) ??
+    theFirstRefusal(value, HOUSE_RULE_TRIM_SWITCHES, (_field, named) => aSwitchRefused(named))
+  )
+}
+
+/** The first field a judge refuses, with what the judge says about it, or null when every field reads. */
+function theFirstRefusal<Field extends string>(
+  value: Readonly<Record<string, unknown>>,
+  fields: readonly Field[],
+  refused: (field: Field, named: unknown) => string | undefined,
+): ATrimRefusal | null {
+  for (const field of fields) {
+    const why = refused(field, value[field])
+    if (why !== undefined) return { field, why }
   }
   return null
 }
+
+/** Why the days an issue may go untouched are not one, or undefined when they are: a whole number of days, one or more. */
+const aDaysRefused = (named: unknown): string | undefined =>
+  named === undefined || (typeof named === 'number' && Number.isInteger(named) && named >= 1) ? undefined : 'is not a whole number of days, one or more'
+
+/** Why a share of pull requests is not one, or undefined when it is: a share is out of a hundred. */
+const aPercentRefused = (most: HouseRuleRepoMost, named: unknown): string | undefined =>
+  most !== ABANDONED_PR_PERCENT_MOST || typeof named !== 'number' || named <= A_PERCENT
+    ? undefined
+    : `is a percentage, so it is a whole number from 0 to ${String(A_PERCENT)}`
 
 /** Why a number's value is not one of the numbers this file keeps, or undefined when it is. */
 const aMostRefused = (named: unknown): string | undefined =>
@@ -82,10 +127,13 @@ const aSwitchRefused = (named: unknown): string | undefined =>
 /** The trims a declaration reads as: what it names, and the defaults for what it leaves out. */
 export function trimsFrom(value: Readonly<Record<string, unknown>>): TheCrewsTrims {
   const mosts = Object.fromEntries(HOUSE_RULE_MOSTS.map((most) => [most, mostOf(most, value[most])]))
+  const repo_mosts = Object.fromEntries(HOUSE_RULE_REPO_MOSTS.map((most) => [most, repoMostOf(value[most])]))
   const switches = Object.fromEntries(HOUSE_RULE_TRIM_SWITCHES.map((trim) => [trim, trimOf(value[trim])]))
   return {
     ...(mosts as Record<HouseRuleMost, AMost>),
+    ...(repo_mosts as Record<HouseRuleRepoMost, AMost>),
     ...(switches as Record<HouseRuleTrimSwitch, boolean>),
+    issue_untouched_days: typeof value[ISSUE_UNTOUCHED_DAYS] === 'number' ? (value[ISSUE_UNTOUCHED_DAYS] as number) : ISSUE_UNTOUCHED_DAYS_WHEN_UNNAMED,
   }
 }
 
@@ -102,6 +150,12 @@ function mostOf(most: HouseRuleMost, named: unknown): AMost {
 /** A switch's value as it is kept: what the declaration says, or the crew's own when it names none. */
 function trimOf(named: unknown): boolean {
   return typeof named === 'boolean' ? named : A_TRIM_SWITCH_WHEN_UNNAMED
+}
+
+/** A repo number's value as it is kept: what the declaration names, or no fixed line when it names none. */
+function repoMostOf(named: unknown): AMost {
+  if (typeof named === 'number') return named
+  return named === false ? false : A_REPO_MOST_WHEN_UNNAMED
 }
 
 /**

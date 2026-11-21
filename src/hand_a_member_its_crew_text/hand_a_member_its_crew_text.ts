@@ -23,7 +23,7 @@ import { join, relative, sep } from 'node:path'
 import type { CrewSettings } from '../declare_crew/declare_crew.ts'
 import { crewTextFilesOf, DeclarationRefused, declareCrew, DECLARATION_DIRECTORY, MODE_TEXTS_DIRECTORY, OWNER, ROLE_TEXTS_DIRECTORY } from '../declare_crew/declare_crew.ts'
 export { crewTextFilesOf }
-import { aMostIsSet, HANDOFF_LINES_MOST, FAIL_ONLY_ON_HARM, HOUSE_RULE_TRIMS, MUTANTS_ON_GUARDS_ONLY, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
+import { aMostIsSet, FAIL_ONLY_ON_HARM, HANDOFF_LINES_MOST, MUTANTS_ON_GUARDS_ONLY, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import type { DocumentStore, FileTree } from '../host_contract/host_contract.ts'
 import { ARTIFACT_LINES, CREW_LINES, linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import type { ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
@@ -167,9 +167,10 @@ export async function crewTextFilesToApprove(documents: DocumentStore, root: str
 /** The placeholders that stand for a line that hands an Artifact to the Supervisor (martha#957 gap 13), which the line reader does not read. */
 export type ArtifactPlaceholder = 'artifact_read' | 'artifact_publish'
 
-/** The placeholders one of the crew's trims fills, named as the house rule is (martha#1010). */
-export const TRIM_PLACEHOLDERS = HOUSE_RULE_TRIMS
-export type TrimPlaceholder = (typeof HOUSE_RULE_TRIMS)[number]
+/** The placeholders one of the crew's trims fills (martha#1010): the four the cards hold a rule for. The repo's three
+ * numbers are read from the owner's pane, never from a card, so no card names one. */
+export const TRIM_PLACEHOLDERS = [REVIEW_ROUNDS_MOST, HANDOFF_LINES_MOST, FAIL_ONLY_ON_HARM, MUTANTS_ON_GUARDS_ONLY] as const
+export type TrimPlaceholder = (typeof TRIM_PLACEHOLDERS)[number]
 
 /** The placeholders a text may carry, in the words the crew's own texts use. The owner's is the word the declaration
  * names the owner by, so a text and a declaration cannot come to spell the same person two ways. The crew's four trims

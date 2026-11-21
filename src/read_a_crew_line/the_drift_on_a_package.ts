@@ -12,14 +12,16 @@
 
 import { aMostIsSet, HANDOFF_LINES_MOST, REVIEW_ROUNDS_MOST, type TheCrewsTrims } from '../declare_crew/the_crews_trims.ts'
 import { isActAnnouncedRow, readLedger, VERDICT_GIVEN, type LedgerHost, type LedgerRow, type MilestoneRow } from '../log_ledger/log_ledger.ts'
+import { REPO_NUMBERS } from '../spend_the_github_budget/the_repos_numbers.ts'
 import { readACrewLine } from './read_a_crew_line.ts'
 import type { CrewLineRead } from './read_a_crew_line.ts'
 
-/** The two numbers a package's drift is read as, in the words a notice and a nudge line print them (martha#1010). */
+/** The two numbers a package's drift is read as, and the repo's three, in the words a notice prints them (martha#1010). */
 export const ROUNDS = 'rounds'
 export const LINES = 'lines'
-export const DRIFT_NUMBERS = [ROUNDS, LINES] as const
+export const DRIFT_NUMBERS = [ROUNDS, LINES, ...REPO_NUMBERS] as const
 export type DriftNumber = (typeof DRIFT_NUMBERS)[number]
+export type PackageNumber = typeof ROUNDS | typeof LINES
 
 /** One package's drift, as its ledger shows it: the highest round a line named, and the longest line, each with who wrote it. */
 export interface APackagesDrift {
