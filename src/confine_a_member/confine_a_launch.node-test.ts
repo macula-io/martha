@@ -4,13 +4,14 @@
 // declared, the start is the adapter's own and the owner is told in one line.
 
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import type { AConfinement } from '../declare_crew/the_crews_confinement.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { NO_CONFINEMENT_DECLARED, theConfinedStart, type AConfinedStart, type AConfinedStartAsked } from './confine_a_launch.ts'
 import { THE_SHIM_DIRECTORY_NAME } from './the_podman_shim.ts'
 import { SYSTEMD_RUN, theSliceUnitOf } from './the_slice_and_the_scope.ts'
@@ -59,7 +60,7 @@ async function aPlace(t: { after(fn: () => void): void }, { session = true } = {
   const servers: ReturnType<typeof createServer>[] = []
   t.after(() => {
     for (const server of servers) server.close()
-    rmSync(root, { recursive: true, force: true })
+    removeTheTree(root)
   })
   const [bin, state, proc, runtime, units, launch] = ['bin', 'state', 'proc', 'run', 'units', 'launch'].map((name) => join(root, name)) as [string, string, string, string, string, string]
   for (const dir of [bin, state, proc, join(runtime, 'systemd'), launch]) mkdirSync(dir, { recursive: true })

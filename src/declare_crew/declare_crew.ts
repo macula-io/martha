@@ -324,9 +324,7 @@ export function soloDeclaration(owner: string, layout: WorkspaceLayout | null = 
       may: { ...Object.fromEntries(ACTS.map((act) => [act, [OWNER]])), [HOLD_REVIEWS]: [OWNER, SOLO_REVIEWER_ROLE] },
     },
     ...(layout === null ? {} : { house_rules: { [WORKSPACE_LAYOUT]: true, [CLONES]: layout.clones, [WORKTREES]: layout.worktrees } }),
-    // Every member, and everything it starts, runs under this ceiling, and reaches systemd alone (martha#989): written
-    // into the file so the numbers live in the declaration and never in code. `martha init` names crew-code's own
-    // values only on a host whose user manager can hold them (../declare_a_solo_crew), so a fresh crew is never refused.
+    // The members' ceiling (martha#989), numbers in the file, never in code; init names one only where it holds.
     ...(confinement === null ? {} : { [CONFINEMENT]: confinement }),
     channel_read_seconds: CHANNEL_READ_SECONDS_WHEN_UNNAMED,
   }
@@ -426,9 +424,8 @@ export interface CrewSettings {
   /** Where an engine member's model is reached (martha#541 package A), or null when the declaration names none. */
   readonly engine_endpoint: EngineEndpoint | null
   /**
-   * The crew's confinement (martha#989): the CPU slice its members share, each member's own scope values, and the
-   * systemd-only bus a member reaches; see ./the_crews_confinement. Null when the declaration names none, and every
-   * member then runs as it does today, the launch saying so in one line.
+   * The crew's confinement (martha#989): the CPU slice, each member's scope and its systemd-only bus (./the_crews_confinement).
+   * Null when the declaration names none: every member runs uncapped, the launch saying so in one line.
    */
   readonly confinement: AConfinement | null
   /** The crew's thresholds (martha#931 A): see ./the_crews_thresholds; each field the declaration leaves out reads today's value. */

@@ -14,13 +14,14 @@
 
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { getuid } from 'node:process'
 import { test } from 'node:test'
 
 import type { AConfinement } from '../declare_crew/the_crews_confinement.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { theConfinedStart } from './confine_a_launch.ts'
 import { SYSTEMD_RUN, theScopeUnitOf, theSliceUnitOf } from './the_slice_and_the_scope.ts'
 import { aUserManagerListensIn, BUS_KEY, NO_DESKTOP_BUS, onPathOf, RUNTIME_DIR_KEY } from './the_systemd_only_bus.ts'
@@ -98,7 +99,7 @@ test(`#989 live: a member runs in its own scope inside the declared slice, and i
     }
     // One unit per stop: a stop naming a unit already gone (the collected scope) fails whole and would leave the slice.
     for (const unit of [scope, confinement.slice]) spawnSync('systemctl', ['--user', 'stop', unit], { stdio: 'ignore', env: THE_MANAGERS_ENV })
-    rmSync(root, { recursive: true, force: true })
+    removeTheTree(root)
   })
 
   const inherited = { PATH: bin, [RUNTIME_DIR_KEY]: THE_USERS_RUNTIME_DIR, HOME: root }

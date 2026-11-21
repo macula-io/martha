@@ -4,12 +4,13 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { JOB_SHELL } from '../start_the_member_on_the_owners_terminal/member_on_the_owners_terminal.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { NO_PODMAN, THE_CGROUP_FLAG, THE_SHIM_DIRECTORY_NAME, THE_SHIM_NAME, putThePodmanShimIn, thePodmanShimFor, theRealPodmanOnThisMachine } from './the_podman_shim.ts'
 
 /** A stand-in podman that prints each word it was handed, one per line. */
@@ -18,7 +19,7 @@ const A_STAND_IN_PODMAN = ['#!/bin/sh', `printf '%s\\n' "$@"`, ''].join('\n')
 /** A place to put the shim and the stand-in, removed when the test ends however it ends. */
 function aPlace(t: { after: (fn: () => void) => void }): { readonly place: string; readonly stand_in: string } {
   const place = mkdtempSync(join(tmpdir(), 'martha-989-podman-'))
-  t.after(() => rmSync(place, { recursive: true, force: true }))
+  t.after(() => removeTheTree(place))
   const before = join(place, 'usr-bin')
   mkdirSync(before)
   const stand_in = join(before, THE_SHIM_NAME)
@@ -73,7 +74,7 @@ test('#989 C3: a call that places its own container, and a call that starts noth
 
 test('#989 C3: a launch that found no podman still places the shim, which names the folder and ends 127', (t) => {
   const place = mkdtempSync(join(tmpdir(), 'martha-989-podman-none-'))
-  t.after(() => rmSync(place, { recursive: true, force: true }))
+  t.after(() => removeTheTree(place))
   // A PATH holding nothing, so a machine that does have a podman is never reached by this test.
   const nothing = join(place, 'nothing-on-this-path')
   mkdirSync(nothing, { recursive: true })

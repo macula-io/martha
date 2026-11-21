@@ -2,12 +2,13 @@
 // port of crew-code's memberBusOf and busUnitUnlike (tests/away_from_the_desktop.mjs at macula-sponsors 6f353d51).
 
 import assert from 'node:assert/strict'
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { busUnitUnlike, NO_DESKTOP_BUS, PROXY, SYSTEMD_TALK, theMemberBusOf, type AMemberBus } from './the_systemd_only_bus.ts'
 
 /** A bus block none of whose names is the one `martha init` writes, so a default read would show. */
@@ -16,7 +17,7 @@ const BUS = { unit: 'tests-only-bus', socket: 'tests-only-bus-socket' }
 /** A place of the test's own: a runtime dir, a bin dir, removed after. */
 function aPlace(t: { after(fn: () => void): void }): { readonly runtime: string; readonly bin: string } {
   const root = mkdtempSync(join(tmpdir(), 'martha-989-bus-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => removeTheTree(root))
   const runtime = join(root, 'run')
   const bin = join(root, 'bin')
   mkdirSync(join(runtime, 'systemd'), { recursive: true })

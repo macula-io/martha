@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { openTheSystemdOnlyBus } from './open_the_systemd_only_bus.ts'
 import { PROXY, SYSTEMD_TALK, type ASystemdOnlyBus } from './the_systemd_only_bus.ts'
 import { SYSTEMD_RUN as PLACER } from './the_slice_and_the_scope.ts'
@@ -84,11 +85,11 @@ function aPlace(t: { after(fn: () => void): void }): APlace {
   t.after(() => {
     clearInterval(watching)
     for (const server of servers) server.close()
-    rmSync(root, { recursive: true, force: true })
+    removeTheTree(root)
   })
   const runs = (program: string, words: readonly string[]): void => {
     const at = join(proc, MAIN_PID)
-    rmSync(at, { recursive: true, force: true })
+    removeTheTree(at)
     mkdirSync(at)
     symlinkSync(program, join(at, 'exe'))
     writeFileSync(join(at, 'cmdline'), `${words.join('\0')}\0`)

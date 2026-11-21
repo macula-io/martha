@@ -61,6 +61,7 @@
     "hostAdapters": [
       "src/answer_the_relay",
       "src/approve_a_checkouts_config",
+      "src/confine_a_member",
       "src/ask_git_what_a_member_is_about_to_change",
       "src/ask_git_how_far_a_clone_is_behind",
       "src/ask_the_host_what_it_loads",
