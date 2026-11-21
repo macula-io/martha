@@ -86,12 +86,16 @@ function frontmatterIn(text: string): Pick<MarkdownTheHostLoads, 'frontmatter_pa
   return { frontmatter_pattern: patternNamed(text, patternName), frontmatter_reader: [statement, strips[0] ?? ''] }
 }
 
-/** The source of the regular expression literal assigned to `name`, checked to open at the start with no flags. */
+/**
+ * The source of the frontmatter pattern the parser gives `name`: the literal that opens at the start with no flags.
+ * The minifier reuses a short name in another module (2.1.330 also gives it a markdown-escape pattern, martha#1031),
+ * so a literal of another shape given that name is not the pattern the parser opens a frontmatter with.
+ */
 function patternNamed(text: string, name: string): string {
-  const literal = theOne(text, new RegExp(`[,\\s]${escaped(name)}=\\/((?:\\\\.|[^/\\\\\\n])+)\\/([a-z]*)[,;]`, 'g'), 'the frontmatter pattern')
-  const [, source, flags] = literal
-  if (source === undefined || flags !== '' || !source.startsWith(OPENS_AT_THE_START)) throw new Error(`The frontmatter pattern is /${source ?? ''}/${flags ?? ''}, not one that opens at the start with no flags.`)
-  return source
+  const assigned = [...text.matchAll(new RegExp(`[,\\s]${escaped(name)}=\\/((?:\\\\.|[^/\\\\\\n])+)\\/([a-z]*)[,;]`, 'g'))]
+  const shaped = new Set(assigned.filter(([, source, flags]) => flags === '' && (source ?? '').startsWith(OPENS_AT_THE_START)).map(([, source]) => source ?? ''))
+  if (shaped.size !== 1) throw new Error(`The host gives ${name} ${String(shaped.size)} patterns that open at the start with no flags, not one, so the frontmatter it opens cannot be told.`)
+  return [...shaped][0] ?? ''
 }
 
 /** Where the loader reports what it searched, which only it does. */

@@ -167,6 +167,9 @@ export const PROTECTED_NAME_OWNERS: Readonly<Record<string, ProtectedNameOwner>>
   'session-env': { denied_here: 'folder' },
   jobs: { denied_here: 'folder' },
   daemon: { denied_here: 'folder' },
+  // martha#1031: 2.1.330's statements name this folder among the places it runs — on a hosted worker a script there
+  // runs in place of `rm` in later shell commands — and its protected array does not carry the name.
+  'rm-guard': { denied_here: 'folder' },
   plugins: { denied_here: 'folder' },
   hooks: { denied_here: 'folder' },
   workflows: { denied_here: 'folder' },
