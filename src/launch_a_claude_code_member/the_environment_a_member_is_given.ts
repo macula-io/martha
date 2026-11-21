@@ -219,6 +219,15 @@ export function theDeclaredBillingOf(settings: Pick<CrewSettings, 'members'> | u
   return settings?.members.find((one) => sameMemberName(one.name, member))?.billing ?? null
 }
 
+/**
+ * The provider the declaration names for the member a launch starts (gap 4 of martha#957): its profile's, read from the
+ * crew's members by the member's name; null when the launch has no declaration, names a member it does not hold, or that
+ * member names no profile. A launch given a provider of its own keeps it, so a test's provider is never overridden.
+ */
+export function theDeclaredProviderOf(settings: Pick<CrewSettings, 'members'> | undefined, member: string): TheProviderAMemberRunsOn | null {
+  return settings?.members.find((one) => sameMemberName(one.name, member))?.provider ?? null
+}
+
 /** The billing of a launch (martha#916): the declared one, else the one the owner's sign-in and the launcher's key give. */
 export async function theBillingOfALaunch(asking: ALaunchesBilling): Promise<TheBillingOfALaunch> {
   if (asking.declared !== null) return { billing: asking.declared, told: undefined }

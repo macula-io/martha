@@ -154,7 +154,11 @@ One entry per provider, by a name the crew picks.
 | `key_from` | no | The name of the environment variable that holds the key. |
 | `key_file` | no | The file the key is in: absolute, or under `~/`. Never beside `key_from`, and never the key. |
 | `account` | no | The account it bills: an e-mail address, a name without white space, or an organisation's UUID. One that reads as a key is refused: white space, a known key prefix (`sk-ant-`, `ghp_`, …), or an unbroken run of more than 31 letters, digits, `-` and `_` that is not a UUID. |
-| `billing` | no | How a Claude Code member on a profile of this provider is billed: `subscription` (the owner's sign-in) or `api_key` (the key the launcher carries). Only that credential reaches the member. Left out, the launch asks the host whether you are signed in: the key only when you are not and the launcher carries one; otherwise the subscription, also when the host cannot say. |
+| `billing` | no | How a Claude Code member on a profile of this provider is billed: `subscription` (the owner's sign-in) or `api_key` (the key the launcher carries). Only that credential reaches the member. Left out, the launch asks the host whether you are signed in: the key only when you are not and the launcher carries one; otherwise the subscription, also when the host cannot say. Never `subscription` beside an `endpoint`: a subscription is the owner's own sign-in to Anthropic, and a provider reached at an endpoint is a third party that serves its own key. |
+
+A provider with an `endpoint` is a third party. A member on a profile of it is handed that provider's base URL, its own
+key (from `key_from` or `key_file`), the profile's `model` and `context_limit`, and neither the launcher's key nor the
+owner's sign-in store. A provider with no `endpoint` is Anthropic's own and keeps the `billing` above.
 
 ## `profiles`
 

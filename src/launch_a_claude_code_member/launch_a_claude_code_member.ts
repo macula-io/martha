@@ -181,7 +181,7 @@ import { isBelowACarriedFolder } from '../refuse_launch_of_unapproved_config/car
 import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from '../tell_the_owner_the_workspace_drift/tell_the_owner_the_workspace_drift.ts'
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
-import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDroppedPluginsLines } from './the_environment_a_member_is_given.ts'
+import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDeclaredProviderOf, theDroppedPluginsLines } from './the_environment_a_member_is_given.ts'
 import type { TheProviderAMemberRunsOn } from './the_provider_a_member_runs_on.ts'
 import { theArtifactRefusal } from './the_artifacts_a_key_cannot_open.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
@@ -434,7 +434,7 @@ function membersHostEnvironment(launch: ClaudeCodeMemberLaunch, prepared: Extrac
     member_config: memberConfig,
     host: CLAUDE_CODE,
     billing,
-    provider: launch.provider ?? null,
+    provider: launch.provider ?? theDeclaredProviderOf(launch.crew_settings, launch.member_name),
     checkout: launch.place.launch_dir,
     skills: theCarriedSkills(prepared.carried_files),
   })

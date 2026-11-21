@@ -31,8 +31,8 @@ import { TRANSCRIPTS, TRANSCRIPTS_KEYS, transcriptsOf, type CrewTranscripts } fr
 import { THRESHOLDS, THRESHOLDS_KEYS, thresholdsOf, type CrewThresholds } from './the_crews_thresholds.ts'
 import { OWNER_NOTICES, OWNER_NOTICES_KEYS, ownerNoticesOf, type CrewOwnerNotices } from './the_crews_owner_notices.ts'
 import { CLOCK_ZONE, clockZoneOf } from './the_crews_clock_zone.ts'
-import { PROFILE, PROFILE_BLOCK_FIELDS, PROFILE_TOP_LEVEL_KEYS, profilesOf, theProfileOfAMember, type Billing, type TheProfiles } from './the_crews_profiles.ts'
-export { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, BILLINGS, type Billing } from './the_crews_profiles.ts'
+import { PROFILE, PROFILE_BLOCK_FIELDS, PROFILE_TOP_LEVEL_KEYS, profilesOf, theProfileOfAMember, type Billing, type TheProfiles, type TheProviderAMemberRunsOn } from './the_crews_profiles.ts'
+export { BILLED_BY_API_KEY, BILLED_BY_SUBSCRIPTION, BILLINGS, type Billing, type TheProviderAMemberRunsOn } from './the_crews_profiles.ts'
 import { ENGINE_ENDPOINT, ENGINE_ENDPOINT_OPTIONAL_KEYS, ENGINE_ENDPOINT_REQUIRED_KEYS, theEnginesEndpointOf, type EngineEndpoint } from './the_engines_endpoint.ts'
 export {
   AN_ENVIRONMENT_NAME,
@@ -326,6 +326,12 @@ export interface Member {
    * `billing`; null when it names no profile, or its provider names none, and the launch then picks.
    */
   readonly billing: Billing | null
+  /**
+   * The provider this member's profile names (gap 4 of martha#957): its name, endpoint and where its key is read, with
+   * the profile's model and context window; null when it names no profile. A member on a provider with an endpoint is
+   * handed that provider's own key and base URL (../launch_a_claude_code_member).
+   */
+  readonly provider: TheProviderAMemberRunsOn | null
 }
 
 export interface Mode {
@@ -844,14 +850,15 @@ function memberOf(refuse: Refuse, member: unknown, at: string, read: TheMembersR
 
 /**
  * A member's model and host: its profile's (martha#931), or the member's own `model` and `host` as before. Its billing
- * is its profile's provider's (martha#916); a member with no profile names no billing, and the launch picks.
+ * is its profile's provider's (martha#916), and its provider is that provider (gap 4 of martha#957); a member with no
+ * profile names neither, and the launch picks.
  */
-function theModelAndHostOf(refuse: Refuse, member: Json, at: string, read: TheProfiles): Pick<Member, 'model' | 'host' | 'billing'> {
+function theModelAndHostOf(refuse: Refuse, member: Json, at: string, read: TheProfiles): Pick<Member, 'model' | 'host' | 'billing' | 'provider'> {
   const profiled = theProfileOfAMember(member, at, read, ['model', HOST], (field, why) => refuse.at(field, why))
   if (profiled !== null) return profiled
   const { model, host } = member
   if (model !== undefined && model !== null && !isText(model)) refuse.at(`${at}.model`, 'is not a model name, or null for the host\'s own')
-  return { model: model ?? null, host: host === undefined ? null : hostNamed(refuse, host, `${at}.${HOST}`), billing: null }
+  return { model: model ?? null, host: host === undefined ? null : hostNamed(refuse, host, `${at}.${HOST}`), billing: null, provider: null }
 }
 
 /** A member's `parked` (martha#511): false when the declaration does not say, and refused by its field when it is not true or false. */

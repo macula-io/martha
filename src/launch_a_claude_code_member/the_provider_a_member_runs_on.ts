@@ -15,7 +15,16 @@
 
 import { API_KEY_VARIABLE, AUTH_TOKEN_VARIABLE } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
 import { CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
+import type { TheProviderAMemberRunsOn } from '../declare_crew/the_crews_profiles.ts'
 import { theKeyInTheOwnersFile } from '../read_a_providers_key_file/read_a_providers_key_file.ts'
+
+/**
+ * What the declaration says of the provider a member's profile names (martha#931): its name and the place it is named
+ * at, where it is reached and where its key is read from, the model its profile runs, and that model's context window.
+ * It is declared where the declaration is read (../declare_crew/the_crews_profiles.ts) and re-exported here, so a
+ * launch and the declaration that fills it can never disagree about its shape.
+ */
+export type { TheProviderAMemberRunsOn }
 
 /** The host's variable for the base URL a session's requests go to. */
 export const THE_PROVIDERS_ENDPOINT_VARIABLE = 'ANTHROPIC_BASE_URL'
@@ -28,27 +37,6 @@ export const THE_SMALL_MODELS_VARIABLE = 'ANTHROPIC_SMALL_FAST_MODEL'
 
 /** The host's variable for the context window a model is given. */
 export const THE_CONTEXT_TOKENS_VARIABLE = 'CLAUDE_CODE_MAX_CONTEXT_TOKENS'
-
-/**
- * What the declaration says of the provider a member's profile names (martha#931): its name and the place it is named
- * at, where it is reached and where its key is read from, the model its profile runs, and that model's context window.
- */
-export interface TheProviderAMemberRunsOn {
-  /** The provider's name, as the declaration writes it. */
-  readonly name: string
-  /** The place the declaration names it at, `providers.<name>`, so a refusal says which line to look at. */
-  readonly named_at: string
-  /** The Anthropic-compatible endpoint the member reaches, or null when the provider is Anthropic's own. */
-  readonly endpoint: string | null
-  /** The variable the key is in, or null when the declaration names no variable. */
-  readonly key_from: string | null
-  /** The file the key is in, written as the owner typed it, or null when the declaration names no file. */
-  readonly key_file: string | null
-  /** The model the member's profile names, which is the model the host is told to run. */
-  readonly model: string
-  /** The model's context window in tokens, or null when the profile names none. */
-  readonly context_limit: number | null
-}
 
 /** What a member on a provider's endpoint is handed, and the billing's other credential it is never handed. */
 export interface AProviderMembersEnvironment {

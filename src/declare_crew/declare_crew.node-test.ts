@@ -132,7 +132,7 @@ const without = (key: string, from: Record<string, unknown>) =>
 test('a solo declaration gives typed settings', async () => {
   const settings = await declare(solo).settings
   assert.equal(settings.owner, 'Ann')
-  assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null, host: null, parked: false, billing: null }])
+  assert.deepEqual(settings.members, [{ name: 'Builder', role: 'builder', model: null, host: null, parked: false, billing: null, provider: null }])
   assert.equal(settings.mode.name, SOLO_MODE)
   for (const act of ACTS) assert.deepEqual(settings.mode.may[act], [OWNER], act)
   assert.deepEqual(settings.paths, {
@@ -445,7 +445,7 @@ test('two members whose names differ only in case are one name twice', async () 
 
 test('a model of null is the host\'s own model, the same as leaving the key out', async () => {
   const settings = await declare({ ...team, members: [{ name: 'Lead', role: 'builder', model: null }] }).settings
-  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null, host: null, parked: false, billing: null }])
+  assert.deepEqual(settings.members, [{ name: 'Lead', role: 'builder', model: null, host: null, parked: false, billing: null, provider: null }])
 })
 
 test('the owner\'s name is trimmed', async () => {

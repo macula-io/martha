@@ -18,7 +18,7 @@ import { CONFIG_DIR_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugin
 import { KITTY_VARIABLE_PREFIX } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { PLUGIN_DIRS_VARIABLE } from '../load_the_hosts_markdown/hooks_and_plugins_the_owner_declares.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDroppedPluginsLines, theEnvironmentAMemberIsGiven, type TheBillingOfALaunch } from './the_environment_a_member_is_given.ts'
+import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDeclaredProviderOf, theDroppedPluginsLines, theEnvironmentAMemberIsGiven, type TheBillingOfALaunch } from './the_environment_a_member_is_given.ts'
 import { THE_CONTEXT_TOKENS_VARIABLE, THE_MODELS_VARIABLE, THE_PROVIDERS_ENDPOINT_VARIABLE, THE_SMALL_MODELS_VARIABLE, type TheProviderAMemberRunsOn } from './the_provider_a_member_runs_on.ts'
 
 test('K3: a member is handed none of KITTY_LISTEN_ON, KITTY_WINDOW_ID, KITTY_PID and KITTY_PUBLIC_KEY, and keeps the rest', () => {
@@ -232,7 +232,7 @@ test('#511: with no plugin folder named, or a blank one, nothing is said', () =>
 })
 
 test('martha#916: a launch reads the billing its own member is declared with, by the member\'s name, and none without a declaration', () => {
-  const aMember = (name: string, billing: Billing | null) => ({ name, role: 'builder', model: null, host: CLAUDE_CODE, parked: false, billing })
+  const aMember = (name: string, billing: Billing | null) => ({ name, role: 'builder', model: null, host: CLAUDE_CODE, parked: false, billing, provider: null })
   const settings = { members: [aMember('Vesta', BILLED_BY_API_KEY), aMember('Ceres', BILLED_BY_SUBSCRIPTION), aMember('Juno', null)] }
   assert.equal(theDeclaredBillingOf(settings, 'Vesta'), BILLED_BY_API_KEY)
   assert.equal(theDeclaredBillingOf(settings, 'ceres'), BILLED_BY_SUBSCRIPTION, 'a member is found as the crew folds its names')
@@ -254,6 +254,16 @@ const A_PROVIDER: TheProviderAMemberRunsOn = {
   model: 'a-model-a-test-names',
   context_limit: 1_000_000,
 }
+
+test('gap 4 of martha#957: a launch reads the provider its own member is declared with, by the member\'s name, and none without a declaration', () => {
+  const aMember = (name: string, provider: TheProviderAMemberRunsOn | null) => ({ name, role: 'builder', model: null, host: CLAUDE_CODE, parked: false, billing: null, provider })
+  const settings = { members: [aMember('Vesta', A_PROVIDER), aMember('Juno', null)] }
+  assert.deepEqual(theDeclaredProviderOf(settings, 'Vesta'), A_PROVIDER)
+  assert.deepEqual(theDeclaredProviderOf(settings, 'vesta'), A_PROVIDER, 'a member is found as the crew folds its names')
+  assert.equal(theDeclaredProviderOf(settings, 'Juno'), null)
+  assert.equal(theDeclaredProviderOf(settings, 'Pallas'), null, 'a member the declaration does not hold names no provider')
+  assert.equal(theDeclaredProviderOf(undefined, 'Vesta'), null)
+})
 
 test('gap 4: a member on its provider\'s endpoint is handed that key and base URL, and never the launcher\'s key, the sign-in store or a provider switch', (t) => {
   // The launcher's own shell names another endpoint, model and window: none of them may stand beside the provider's own.
