@@ -3,6 +3,7 @@
 
 import type { Exception } from '../../prove_the_core/a_value_is_said_once/no_literal_restates_a_value.ts'
 import { THE_TAG_OF_NOTHING_TO_APPROVE } from '../approve_a_checkouts_config/coincidences.ts'
+import { WAKE } from '../declare_crew/the_crews_wake.ts'
 import { THE_REPOSITORYS_OWN_NAME } from '../keep_martha_state_outside_the_checkout/coincidences.ts'
 import { STATE_ROOT_NAME } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { EMPTY_DIRECTORY_NAME } from '../launch_a_claude_code_member/launch_a_claude_code_member.ts'
@@ -13,6 +14,10 @@ import { A_TOOLS_OWN_SUBCOMMAND } from '../refuse_a_member_writing_owner_memory/
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { LONGEST_MESSAGE } from '../send_a_crew_message/send_a_crew_message.ts'
+
+/** Why `martha wake` reads a `wake` that is not the declaration's house rule: the verb starts a stopped member, and
+ * the house rule wakes an idle one — one word, two acts (martha#959). */
+const THE_VERB_NOT_THE_HOUSE_RULE = 'the verb that starts a stopped member, which is not the house rule of the same name'
 
 /** Why `crew` is the command's word for the strip: the owner's verb, never the channel's name for every member. */
 const THE_STRIPS_VERB = "the owner's verb that draws the crew strip (martha#572); the channel's word for every member is another value"
@@ -33,4 +38,7 @@ export const COINCIDENCES: readonly Exception[] = [
   // The act the owner types, spelled like the Goose engine's mode that asks its client (martha#541).
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'run_the_martha_command/run_the_martha_command.ts', reason: THE_ACT_THE_OWNER_TYPES },
   { value: THE_MODE_THAT_ASKS_THE_CLIENT, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: THE_ACT_THE_OWNER_TYPES },
+  // The verb `martha wake`, beside the declaration's house rule of the same name (martha#959).
+  { value: WAKE, file: 'run_the_martha_command/run_the_martha_command.ts', reason: THE_VERB_NOT_THE_HOUSE_RULE },
+  { value: WAKE, file: 'run_the_martha_command/run_the_martha_command.node-test.ts', reason: THE_VERB_NOT_THE_HOUSE_RULE },
 ]
