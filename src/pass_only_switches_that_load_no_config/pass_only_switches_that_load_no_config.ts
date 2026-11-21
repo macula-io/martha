@@ -57,6 +57,10 @@ export const THE_RESUME_SWITCH = '--resume'
 /** Whether `word` is a value and not a switch. */
 const isAValue = (word: string | undefined): word is string => word !== undefined && !word.startsWith('-')
 
+/** What `martha start` takes `word` as: 'flag' for a switch that carries no value, 'value' for one that must, and
+ * undefined for a word it does not pass at all. */
+const kindOf = (word: string): 'flag' | 'value' | undefined => (Object.hasOwn(SWITCHES_THAT_LOAD_NO_CONFIG, word) ? SWITCHES_THAT_LOAD_NO_CONFIG[word] : undefined)
+
 const PASSED_SWITCHES = [...Object.keys(SWITCHES_THAT_LOAD_NO_CONFIG), THE_RESUME_SWITCH].join(', ')
 
 const refused = (arg: string, why: string): string =>
@@ -74,7 +78,7 @@ export function unpassedOwnerArgument(args: readonly string[]): string | undefin
       at += isAValue(args[at + 1]) ? 1 : 0
       continue
     }
-    const takes = Object.hasOwn(SWITCHES_THAT_LOAD_NO_CONFIG, arg) ? SWITCHES_THAT_LOAD_NO_CONFIG[arg] : undefined
+    const takes = kindOf(arg)
     if (takes === undefined) return refused(arg, 'is not a switch martha start passes')
     if (takes === 'flag') continue
     const value = args[at + 1]
