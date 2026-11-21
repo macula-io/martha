@@ -570,7 +570,7 @@ test('a host that adds a protected config-dir place, or renames a folder it runs
   }
 })
 
-test('a host whose sentence names a place its statements do not, or that walks two protected arrays, cannot be read, naming the part (martha#187)', (t) => {
+test('a host whose statements and sentence name different places, or that walks two protected arrays, cannot be read, naming the part (martha#187)', (t) => {
   const sentence = PLACE_PARTS.config_code_places ?? ''
   const misnamed = sentence.replace(`land in the ${CODE_PLACES.folders[0] ?? ''},`, 'land in the a-new-place,')
   assert.notEqual(misnamed, sentence, 'the planted sentence names a folder the statements do not')
