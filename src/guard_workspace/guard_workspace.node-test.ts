@@ -18,7 +18,16 @@ import process from 'node:process'
 import { test } from 'node:test'
 
 import { readTheGitCallsInAShellLine } from '../read_the_git_calls_in_a_shell_line/read_the_git_calls_in_a_shell_line.ts'
-import type { CrewSettings } from '../declare_crew/declare_crew.ts'
+import { hostForTests } from '../host_contract/host_for_tests.ts'
+import {
+  DECLARATION_DIRECTORY,
+  DECLARATION_FILE,
+  DECLARATION_VERSION,
+  WORKTREES_BESIDE_CLONES,
+  declareCrew,
+  type CrewSettings,
+} from '../declare_crew/declare_crew.ts'
+import { CLOSED_VOCABULARY, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { theWorkspacesClonesOf } from '../declare_crew/the_crews_workspace.ts'
 import {
   refuseACallInTheWorkspace,
@@ -61,6 +70,9 @@ const refusedWith = (line: string, directory: string | null, member: string, say
   assert.match(refusal, says)
 }
 
+// A crew declared at a workspace, as `martha up` reads it (martha#958): a root the project holds, and no house rules.
+const DECLARED_AT = join(A_PROJECT_ROOT, DECLARATION_DIRECTORY, DECLARATION_FILE)
+
 /** The answer, and everything written to the process's own error output while the call is judged (martha#601). */
 const theNoticeWhile = (act: (note: (line: string) => void) => string | undefined): { readonly answer: string | undefined; readonly notice: string } => {
   const written: string[] = []
@@ -76,21 +88,55 @@ const theNoticeWhile = (act: (note: (line: string) => void) => string | undefine
   }
 }
 
-/** A declaration carrying only what this slice reads: the layout switch, its places, and the members. */
-const settingsWith = (layout: { readonly on: boolean; readonly clones: string | null; readonly worktrees: string | null }): CrewSettings =>
-  ({
-    house_rules: { workspace_layout: layout.on, clones: layout.clones, worktrees: layout.worktrees },
-    members: [{ name: 'Hygiea' }, { name: 'Uranus' }],
-  }) as unknown as CrewSettings
 
-test('a crew that turned no layout on is guarded by nothing, and one that did names its places and its members', () => {
-  assert.equal(theWorkspaceTheCrewDeclared(settingsWith({ on: false, clones: CLONES, worktrees: WORKTREES })), undefined)
-  assert.equal(theWorkspaceTheCrewDeclared(settingsWith({ on: true, clones: null, worktrees: WORKTREES })), undefined)
-  assert.deepEqual(theWorkspaceTheCrewDeclared(settingsWith({ on: true, clones: CLONES, worktrees: WORKTREES })), {
+/** The team a reading test declares: two builders and a lead, no act named, so every act stays the owner's. */
+const aTeam = (extra: Readonly<Record<string, unknown>>): unknown => ({
+  version: DECLARATION_VERSION,
+  owner: 'Ann',
+  members: [
+    { name: 'Hygiea', role: 'builder' },
+    { name: 'Uranus', role: 'builder' },
+    { name: 'Lead', role: 'lead' },
+  ],
+  mode: { name: 'a-team', roles: ['lead', 'builder'], may: {} },
+  ...extra,
+})
+
+/** The models this test's host runs: none, since no declaration here names a model. */
+const HOST_MODELS: ModelVocabulary = { kind: CLOSED_VOCABULARY, names: [] }
+
+/** The settings a declaration is read into, on the core's in-memory host. */
+const declared = (extra: Readonly<Record<string, unknown>>): Promise<CrewSettings> => {
+  const { host } = hostForTests({ documents: { [DECLARED_AT]: JSON.stringify(aTeam(extra)) } })
+  return declareCrew(host.stores.documents, A_PROJECT_ROOT, HOST_MODELS)
+}
+
+test('the places a crew names turn the guard on, whichever block named them (#958)', async () => {
+  // Raf's draft shape: a workspace root alone, and no house_rules at all. The reader derives both places from it.
+  const rootOnly = theWorkspaceTheCrewDeclared(await declared({ workspace: { root: 'projects' } }))
+  assert.deepEqual(rootOnly, {
+    clones: join(A_PROJECT_ROOT, 'projects'),
+    worktrees: join(A_PROJECT_ROOT, WORKTREES_BESIDE_CLONES),
+    members: ['Hygiea', 'Uranus', 'Lead'],
+  })
+  // The older spelling, with no switch beside it: the same fact, read the same way.
+  assert.deepEqual(theWorkspaceTheCrewDeclared(await declared({ house_rules: { clones: CLONES, worktrees: WORKTREES } })), {
     clones: CLONES,
     worktrees: WORKTREES,
-    members: ['Hygiea', 'Uranus'],
+    members: ['Hygiea', 'Uranus', 'Lead'],
   })
+})
+
+test('a crew that named no places is guarded by nothing, and one that named them is guarded by its rules (#958)', async () => {
+  assert.equal(theWorkspaceTheCrewDeclared(await declared({})), undefined)
+  const workspace = theWorkspaceTheCrewDeclared(await declared({ workspace: { root: 'projects' } }))!
+  const judged = (line: string, note?: (line: string) => void) =>
+    refuseACallInTheWorkspace({ calls: readTheGitCallsInAShellLine(line, { directory: join(workspace.clones, 'acme', 'widget') }), workspace, member: 'Hygiea', facts: FACTS }, note)
+  assert.match(judged('git push origin main') ?? '', /default branch/, 'the push rule refuses in a crew declared this way')
+  // The switch rule is the notice martha#601 made it: what this test pins is that the rules are read at all here.
+  const { answer, notice } = theNoticeWhile((note) => judged('git checkout -b mine', note))
+  assert.equal(answer, undefined)
+  assert.match(notice, /a clone stays on its default branch/, 'a crew declared this way is judged, and its rules speak')
 })
 
 // --- a clone stays on its default branch --------------------------------------------
@@ -256,6 +302,17 @@ test('a ref update the shell never saw is judged on the ref it deletes, and only
   assert.equal(refuseARefUpdate({ ref: 'refs/tags/v1', deletes: true }, WORKSPACE, 'Hygiea'), undefined)
   // A create is not a delete: a push of a new branch past the shell is not this rule's.
   assert.equal(refuseARefUpdate({ ref: 'refs/heads/uranus/9', deletes: false }, WORKSPACE, 'Hygiea'), undefined)
+})
+
+test('a workspace_layout switch beside a root is not read: false there is accepted and the crew is still guarded (#958 review r=1)', async () => {
+  // The places are the fact, beside a root as beside house_rules' own places: a switch the reader no longer reads
+  // neither refuses the declaration nor turns the guard off.
+  const workspace = theWorkspaceTheCrewDeclared(await declared({ workspace: { root: 'projects' }, house_rules: { workspace_layout: false } }))
+  assert.deepEqual(workspace, {
+    clones: join(A_PROJECT_ROOT, 'projects'),
+    worktrees: join(A_PROJECT_ROOT, WORKTREES_BESIDE_CLONES),
+    members: ['Hygiea', 'Uranus', 'Lead'],
+  })
 })
 
 // --- the places, however their root is spelled (martha#995) --------------------------
