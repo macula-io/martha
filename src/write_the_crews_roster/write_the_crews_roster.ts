@@ -11,10 +11,15 @@
 // gave a node id for it: the key is read first, so the bin, which makes a key that is missing, is never started on a
 // path with none (T4). Every member left out is named, with why. A solo crew has no roster.
 //
-// It takes no host and starts nothing: the bin's answer is handed in (`nodeIdOf`), by `martha up`, which runs it.
+// It takes no host and starts nothing: the bin's answer is handed in (`nodeIdOf`), by `martha up`, which runs it. The
+// roster `martha up` kept is read back by readTheCrewsRoster, for the crew tools that trust a node id only when a
+// member's key gave it (crew memory's provenance filter, crew mail's sender).
+
+import { join } from 'node:path'
 
 import { NODE_ID } from '../admit_a_room_message/admit_a_room_message.ts'
 import { SOLO_MODE } from '../declare_crew/declare_crew.ts'
+import { readStateFile, type MarthaState } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { theMeshKeyOf, type TheKeysAsked } from '../read_a_members_mesh_key/read_a_members_mesh_key.ts'
 
 /** The roster's file in Martha's state for the crew: `{ <member>: <node id> }`, written whole, the owner's alone. */
@@ -57,3 +62,23 @@ export function theCrewsRoster(asked: TheRosterAsked): TheRoster {
 
 /** The roster file's text: the ids by member, in the declaration's order. */
 export const rosterText = (ids: Readonly<Record<string, string>>): string => `${JSON.stringify(ids, null, 2)}\n`
+
+const parsedOrNothing = (text: string): unknown => {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The roster `martha up` kept for the crew: each member's node id, by member. A file that is missing, unreadable or not
+ * an object reads as no roster at all, and an entry that is not a node id of 64 lowercase hex digits is left out, so a
+ * caller that trusts a node id only when it is on the roster trusts none it was not given.
+ */
+export function readTheCrewsRoster(state: MarthaState): Readonly<Record<string, string>> {
+  const read = readStateFile(join(state.directory, ROSTER_FILE))
+  const kept = 'text' in read ? parsedOrNothing(read.text) : undefined
+  if (kept === null || typeof kept !== 'object' || Array.isArray(kept)) return {}
+  return Object.fromEntries(Object.entries(kept).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && NODE_ID.test(entry[1]) && entry[1] === entry[1].toLowerCase()))
+}
