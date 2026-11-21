@@ -452,3 +452,45 @@ test('#314: a message that cites no path a reboot deletes is answered exactly as
   assert.ok('answer' in answered, `the plain send was not answered: ${JSON.stringify(answered)}`)
   assert.doesNotMatch(answered.answer, /does not survive a reboot/, `a plain send carried a note: ${answered.answer}`)
 })
+
+// --- an ASSIGN that names a model the receiver is not declared on (martha#980 package 5) -------
+
+/** The model the test's declaration gives the receiver, and one it does not. */
+const DECLARED_MODEL = 'opus-4-1'
+const ANOTHER_MODEL = 'sonnet'
+const assigning = (model: string, reviewer = 'Builder'): string => `ASSIGN synthetic-acme/widget#5 brief=/b.md reviewer=${reviewer} model=${model}`
+const ON_MODELS = { ...DECLARATION, members: [{ name: 'Builder', role: 'builder' }, { name: 'Reviewer', role: 'reviewer', model: DECLARED_MODEL }] }
+
+test('#980 package 5: an ASSIGN naming a model the receiver is not declared on is sent, with a note naming both', async (t) => {
+  const crew = crewOverADeclaration(t, ON_MODELS)
+  const answered = await crew.answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: assigning(ANOTHER_MODEL) }, 'session-980')
+
+  assert.ok('answer' in answered, `the ASSIGN was not answered: ${JSON.stringify(answered)}`)
+  assert.match(answered.answer, /^sent as message 0 to Reviewer\./, 'the ASSIGN was not sent')
+  assert.ok(
+    answered.answer.includes(`Assigned with model=${ANOTHER_MODEL}, but Reviewer is declared on ${DECLARED_MODEL}.`),
+    `the note does not name both models: ${answered.answer}`,
+  )
+})
+
+test('#980 package 5: an ASSIGN naming the receiver\'s own model, or its family, carries no note', async (t) => {
+  const crew = crewOverADeclaration(t, ON_MODELS)
+  for (const model of [DECLARED_MODEL, `claude-${DECLARED_MODEL}`, 'opus', `${DECLARED_MODEL}@anthropic`]) {
+    const answered = await crew.answer(SAY_TO_THE_CREW, { to: ['Reviewer'], text: assigning(model) }, 'session-980')
+    assert.ok('answer' in answered, `the ASSIGN was not answered: ${JSON.stringify(answered)}`)
+    assert.doesNotMatch(answered.answer, /Assigned with model=/, `model=${model} was noted against ${DECLARED_MODEL}: ${answered.answer}`)
+  }
+})
+
+test('#980 package 5: a receiver declared on no model is named, and a whole-crew ASSIGN is checked against all but the sender', async (t) => {
+  const crew = crewOverADeclaration(t, ON_MODELS)
+  const answered = await crew.answer(SAY_TO_THE_CREW, { to: THE_WHOLE_CREW, text: assigning(ANOTHER_MODEL, 'Reviewer') }, 'session-980')
+
+  assert.ok('answer' in answered, `the ASSIGN was not answered: ${JSON.stringify(answered)}`)
+  assert.ok(answered.answer.includes(`but Reviewer is declared on ${DECLARED_MODEL}`), `the receiver's model was not checked: ${answered.answer}`)
+  assert.doesNotMatch(answered.answer, /gives Builder no model/, `the sender was checked against its own ASSIGN: ${answered.answer}`)
+
+  const toBuilder = await sendACrewMessage(channelHost(), sending({ member: 'Reviewer', to: ['Builder'], text: assigning(ANOTHER_MODEL, 'Reviewer'), models: [{ name: 'Builder', model: null }] }))
+  assert.ok('sent' in toBuilder)
+  assert.ok(toBuilder.told.includes('the declaration gives Builder no model to check it against'), `a receiver with no model was not named: ${toBuilder.told}`)
+})

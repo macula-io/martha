@@ -75,8 +75,8 @@ test('below this machine\'s record every act but --version and install is told t
 
   const acts = [...ACTS_ALONE, ...ACTS_OF_ONE, ...Object.keys(ACTS_OF_THEIR_OWN)].filter((act) => !ANSWERED_BELOW_THE_FLOOR.includes(act))
   for (const act of acts) {
-    const words = [[act], [act, 'someone']].find((tried) => actOf(tried) !== undefined)
-    assert.ok(words !== undefined, `${act}: the command's parser takes it alone or with one name`)
+    const words = [[act], [act, 'someone'], [act, 'someone', 'anyone']].find((tried) => actOf(tried) !== undefined)
+    assert.ok(words !== undefined, `${act}: the command's parser takes it alone, with one name, or with two`)
     const launched = run(words)
     assert.ok(launched.stderr.includes(notice), `${act}: the floor's line was not said (${launched.stderr})`)
     assert.ok(!launched.stderr.includes('Put the highest signed release back with'), `${act}: the floor refused it (${launched.stderr})`)

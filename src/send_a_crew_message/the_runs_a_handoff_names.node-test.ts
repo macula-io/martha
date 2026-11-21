@@ -192,7 +192,7 @@ test('#980 p4: say_to_the_crew carries what the runs came to under the text, and
   const ledger = { clock: host.clock, stores: { rows: host.stores.rows } }
   const { spender } = aSpender({ [runsOnTheTip]: aPage([{ id: 11, conclusion: 'failure' }]) })
   const text = `HANDOFF ${PACKAGE} ${BASE}..${TIP} r=1 ci=11`
-  const answer = await sayToTheCrewOver({ ledger, member: 'Builder', roster: ['Builder', 'Reviewer'], receivers: [], held: null, to: ['Reviewer'], text, volatile_roots: [], trims: TRIMS_WHEN_UNNAMED, runs: spender })
+  const answer = await sayToTheCrewOver({ ledger, member: 'Builder', roster: ['Builder', 'Reviewer'], receivers: [], held: null, to: ['Reviewer'], text, volatile_roots: [], trims: TRIMS_WHEN_UNNAMED, models: [], runs: spender })
   const notice = 'HANDOFF synthetic-acme/widget#7 names run 11, which concluded failure, not success.'
   assert.ok('answer' in answer, `the send was refused: ${JSON.stringify(answer)}`)
   assert.ok(answer.answer.includes(notice), `the sender was not told: ${answer.answer}`)

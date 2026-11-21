@@ -56,7 +56,8 @@
       "src/linux_process_identity",
       "src/owners_settings_directory",
       "src/row_streams_directory",
-      "src/read_one_file_held_by_its_descriptor"
+      "src/read_one_file_held_by_its_descriptor",
+      "src/a_work_directory_on_this_machine"
     ],
     "hostAdapters": [
       "src/answer_the_relay",

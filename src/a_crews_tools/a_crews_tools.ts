@@ -36,7 +36,10 @@ import { theFastForwardACallNames, theLandingACallNames } from '../land_passed_w
 import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import { finishAWorktree, openAWorktree, type WorktreesRequest } from '../open_and_finish_a_worktree/open_and_finish_a_worktree.ts'
 import { WORKTREE_FINISH_TOOL, WORKTREE_OPEN_TOOL, theWorktreeToolOver } from '../open_and_finish_a_worktree/the_worktree_tools.ts'
-import { parkAMember, parkedPlace, theParkOf, unparkAMember } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { parkAMember, parkedPlace, theParkOf, theParkedMembers, unparkAMember } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
+import { THE_WAKE_ASK, WAKE_PLACE, theWakeFor } from '../wake_an_idle_member/wake_an_idle_member.ts'
+import { theHostsReadingIn } from '../keep_what_a_session_spent/the_hosts_usage.ts'
+
 import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL, theParkToolOver, type AParkAsked } from '../park_and_wake_a_member/the_park_tools.ts'
 import type { AGuardedSwitch, OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
 import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack, type AnOrderAsked } from '../put_the_owners_model_back/the_guarded_switch.ts'
@@ -558,6 +561,7 @@ async function answerAnAskOfTheMods(
 ): Promise<CoreToolAnswer | undefined> {
   if (name === THE_TOOLS_ASK) return { answer: JSON.stringify(CREW_TOOLS) }
   if (name === THE_CHANNEL_READ_ASK) return await theChannelRead(places)
+  if (name === THE_WAKE_ASK) return await theWakeOfThisSession(places, args)
   const channel = await answerAChannelAsk(places.carrier, name, args)
   if (channel !== undefined) return channel
   if (name === THE_REFRESH_ASK) return await theSessionsAct(places, state, budget, args, from)
@@ -595,6 +599,34 @@ function sweepTheOwnersList(places: CrewToolPlaces): () => void {
 async function theChannelRead(places: CrewToolPlaces): Promise<CoreToolAnswer> {
   const settings = await theSettingsOrRefusal(places)
   return 'refused' in settings ? settings : { answer: theChannelReadAsk(settings) }
+}
+
+/**
+ * The wake an idle host is due, answered from this launch's own record (martha#959): the crew's rows and parks, the
+ * backlog read the crew keeps, and the clock it keeps beside it. The session hands in its own context, so a session at
+ * the crew's refresh limit is not woken into a handover the refresh flow would make anyway. No wake is answered while a
+ * crew message is waiting for this member: the wake's turn is the one the carrier would count that message taken in at,
+ * and it would be counted and never read (../hand_a_crew_message_to_its_member, `waiting`).
+ */
+async function theWakeOfThisSession(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const settings = await theSettingsOrRefusal(places)
+  if ('refused' in settings) return settings
+  // The session's own context is read exactly as the refresh flow reads it: a usage this launcher cannot read is refused
+  // by name there, never read as a session that said nothing (martha#860 R5).
+  const usage = theHostsReadingIn(args['usage'])
+  if (typeof usage === 'string') return { refused: usage }
+  if (places.carrier !== undefined && (await places.carrier.waiting())) return { answer: '' }
+  const text = await theWakeFor({
+    settings,
+    member: places.member,
+    rows: beatsOf(places.beats, settings),
+    place: places.stores.crew.place(WAKE_PLACE),
+    parked: theParkedMembers({ stores: places.stores }, settings.members.map((member) => member.name)),
+    reader: theBacklogReaderIn({ ...places, github: settings.github, clock_zone: settings.clock_zone }),
+    now: places.ledger.clock.now(),
+    context_percent: usage.percent,
+  })
+  return { answer: text ?? '' }
 }
 
 /**
@@ -910,6 +942,7 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   text: args['text'],
   trims: settings.house_rules,
   volatile_roots: theRootsInForce(settings.volatile_paths, places.volatile_roots ?? []),
+  models: settings.members.map(({ name, model }) => ({ name, model })),
   // A HANDOFF's range is read in the crew's clone when the launch handed the host's processes (martha#980 package 3).
   ...(places.processes === undefined ? {} : { commits: { processes: places.processes, clones: settings.house_rules.clones } }),
   // A HANDOFF's ci= runs are read through the crew's GitHub budget, each gh bounded (martha#980 package 4).

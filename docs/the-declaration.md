@@ -61,20 +61,23 @@ Each switch is off unless the file says `true`. The four trims at the end of the
 | Field | What it holds |
 |---|---|
 | `owner_items` | A switch; accepted, and read by no part of Martha today. |
-| `workspace_layout` | Members keep clones and worktrees in the two places below. |
+| `workspace_layout` | Read from a file an earlier release wrote: the two places below turn the workspace rules on (martha#958), and this switch no longer gates them. |
 | `member_work` | A switch; accepted, and read by no part of Martha today. |
 | `practice` | Every member is handed the crew practice text. |
 | `strict_gate` | Read only from a file an earlier release wrote: `true` is `gate_enforces: "all"`. |
 | `dashboard` | A session opens the crew's pane and keeps its row. |
 | `refresh_between_tasks` | A member hands over after a finished task, not only at the handover share. |
 | `owner_bell` | The owner's bell rings when a member's host asks the owner something. |
-| `nudges` | The crew tells whoever routes work when work stalls; needs the three windows below. |
+| `nudges` | The crew tells whoever routes work when work stalls; needs the three nudge windows below. |
+| `wake` | A member that is idle with work nobody holds is woken; needs the two wake windows below. |
 | `review_model` | The model reviews run on. |
-| `clones` | Where the crew's clones sit; required with `workspace_layout`. |
-| `worktrees` | Where the crew's worktrees are made; required with `workspace_layout`. |
+| `clones` | Where the crew's clones sit: named here or derived from `workspace.root`, it is one of the two places that turn the workspace rules on (martha#958). |
+| `worktrees` | Where the crew's worktrees are made: named here or derived from `workspace.root`, it is the other place. |
 | `stalled_minutes` | How long a working member may go without a report before a nudge; 0 turns it off. |
 | `review_minutes` | How long a HANDOFF may go unanswered before a nudge; 0 turns it off. |
 | `person_minutes` | How long a wait on a person may last before a nudge; 0 turns it off. |
+| `wake_after_minutes` | How long a member must be idle before it is woken; 0 turns the wake off. The wait doubles per wake. |
+| `wake_cap_minutes` | The longest the doubling may reach between wakes. |
 | `gate_enforces` | Who the shell gate enforces for: `all`, `nobody`, or members' names. |
 | `gate_audits` | Who the shell gate audits: members' names. |
 | `gate_enforce` | `gate_enforces`, as the draft of martha#931 spells it; never beside it. |
@@ -126,7 +129,7 @@ Each field is optional. A field left out reads the value Martha used before it w
 
 | Field | Required | What it holds |
 |---|---|---|
-| `root` | no | The folder the crew's clones sit in, relative to the project root. With `house_rules.workspace_layout` on, the clones are there and the worktrees in `worktrees` beside it; `house_rules.clones` and `worktrees` are then left out. |
+| `root` | no | The folder the crew's clones sit in, relative to the project root. The clones are there and the worktrees in `worktrees` beside it, and those two places turn the crew's workspace rules on (martha#958); `house_rules.clones` and `worktrees` are then left out, since naming them beside this root is refused. |
 | `root_allowed` | no | Folder names allowed beside the clones. Read by no part of Martha today. |
 | `own_orgs` | no | The crew's own GitHub organisations. Read by no part of Martha today. |
 

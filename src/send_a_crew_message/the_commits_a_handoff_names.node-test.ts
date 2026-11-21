@@ -175,7 +175,8 @@ test('#980 p3 Done-when 3: a HANDOFF naming a commit the clone does not hold is 
     to: ['Reviewer'],
     text,
     volatile_roots: [],
-    trims: TRIMS_WHEN_UNNAMED,
+      trims: TRIMS_WHEN_UNNAMED,
+    models: [],
     commits: { processes: recording(), clones: at.clones },
   })
   assert.ok('answer' in answer, `the send was refused: ${JSON.stringify(answer)}`)
@@ -199,7 +200,8 @@ test('#980 p3 T1: a range shaped as a git option is read as prose, and no git ru
       to: ['Reviewer'],
       text: `HANDOFF ${PACKAGE} ${range} r=1`,
       volatile_roots: [],
-    trims: TRIMS_WHEN_UNNAMED,
+      trims: TRIMS_WHEN_UNNAMED,
+      models: [],
       commits: { processes: yes, clones: '/nowhere' },
     })
     assert.ok('answer' in answer, `the send was refused: ${JSON.stringify(answer)}`)
@@ -211,7 +213,7 @@ test('#980 p3: a send given no clone check runs nothing and sends the text as it
   const { host } = hostForTests({ now: 9_800 })
   const ledger = { clock: host.clock, stores: { rows: host.stores.rows } }
   const text = `HANDOFF ${PACKAGE} ${'a'.repeat(40)}..${NO_COMMIT} r=1 ci=41700170944`
-  await sayToTheCrewOver({ ledger, member: 'Builder', roster: ['Builder', 'Reviewer'], receivers: [], held: null, to: ['Reviewer'], text, volatile_roots: [], trims: TRIMS_WHEN_UNNAMED })
+  await sayToTheCrewOver({ ledger, member: 'Builder', roster: ['Builder', 'Reviewer'], receivers: [], held: null, to: ['Reviewer'], text, volatile_roots: [], trims: TRIMS_WHEN_UNNAMED, models: [] })
   assert.deepEqual((await readTheChannel(ledger)).map(({ message }) => message.text), [text])
 })
 
