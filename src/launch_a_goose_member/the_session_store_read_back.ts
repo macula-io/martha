@@ -5,8 +5,15 @@
 //   1. right after the ACP `session/new` answer: the session's row checked against what the launch created (the
 //      working folder, the mode that asks, the config's provider and model, exactly the config's extensions, and no
 //      recipe, prompt override, prompt extras or container). A difference refuses the start; the read is the snapshot;
-//   2. after every result and at every permission request: the launch's row is the only row, every gate field equals
-//      the snapshot, and `extension_data` holds no state the engine does not keep (the recorded `extension_states`).
+//   2. after every result and at every permission request: every row is a session this launch opened, the current
+//      session's row is there, every gate field of it equals the snapshot, and its `extension_data` holds no state the
+//      engine does not keep (the recorded `extension_states`).
+//
+// The opened sessions (martha#1002, option B, design PASS r=2): a refresh's clear opens a new ACP session on the same
+// engine, which adds a row; the engine's `session/close` only detaches the predecessor, so its row stays. The launch
+// keeps the id of every session it opened, in its own memory, where no member process writes; a row with any other id
+// is refused (T1, T5). A closed predecessor's row is not held to a snapshot (T3): the launch never prompts it again,
+// and the engine refuses a load or a run on a closed id by itself (T4).
 //
 // The store is opened read-only (`node:sqlite`, `readOnly: true`); the engine writes it in WAL mode (the recorded
 // `journal_mode`), so a read-only reader sees the last committed write without blocking the engine.
@@ -35,6 +42,8 @@ type AGateColumn = (typeof THE_GATE_COLUMNS)[number]
 /** What the launch reads of its session's row: each gate field as stored, and the enabled extensions' state as stored. */
 export interface TheSessionsGate {
   readonly id: string
+  /** Every session this launch opened, the current one among them (martha#1002): the rows the store may hold. */
+  readonly opened: readonly string[]
   readonly fields: Readonly<Record<AGateColumn, string | null>>
   readonly enabled_extensions: string
 }
@@ -71,20 +80,25 @@ const textOf = (row: Record<string, unknown>, column: string): string | null | {
   return value === null || typeof value === 'string' ? value : { why: `${column} is not text` }
 }
 
-/** The one row of the store, the launch's, read into its gate, or why not. */
-function theOnlyRow(facts: Pick<EngineFacts, 'session_store'>, store: string, session_id: string): { readonly gate: TheSessionsGate; readonly states: readonly string[]; readonly states_value: Record<string, unknown> } | { readonly why: string } {
+/** The ids of the store's rows that are not sessions this launch opened. */
+const theSessionsNotOpened = (rows: ReadonlyArray<Record<string, unknown>>, opened: readonly string[]): string[] =>
+  rows.map((row) => row[THE_ID_COLUMN]).filter((id) => typeof id !== 'string' || !opened.includes(id)).map(String)
+
+/** The current session's row, read into its gate, when every row is a session this launch opened; or why not. */
+function theCurrentRow(facts: Pick<EngineFacts, 'session_store'>, store: string, session_id: string, opened: readonly string[]): { readonly gate: TheSessionsGate; readonly states: readonly string[]; readonly states_value: Record<string, unknown> } | { readonly why: string } {
   const read = theRows(facts, store)
   if ('why' in read) return read
-  if (read.rows.length !== 1) return { why: `the session store at ${store} holds ${read.rows.length} sessions, and a launch's store holds its own one` }
-  const [row] = read.rows
-  if (row === undefined || row[THE_ID_COLUMN] !== session_id) return { why: `the session store at ${store} holds a session that is not this launch's ${session_id}` }
+  const strangers = theSessionsNotOpened(read.rows, opened)
+  if (strangers.length > 0) return { why: `the session store at ${store} holds ${strangers.length} session(s) this launch did not open, and a launch's store holds only its own` }
+  const row = read.rows.find((one) => one[THE_ID_COLUMN] === session_id)
+  if (row === undefined) return { why: `the session store at ${store} holds no row of this launch's session ${session_id}` }
   const fields = theGateFieldsOf(row)
   if ('why' in fields) return fields
   const states = theStatesOf(row[THE_STATES_COLUMN])
   if ('why' in states) return states
   const enabled = theOneEnabledState(states.value)
   if ('why' in enabled) return enabled
-  return { gate: { id: session_id, fields: fields.fields, enabled_extensions: enabled.enabled_extensions }, states: Object.keys(states.value), states_value: states.value }
+  return { gate: { id: session_id, opened, fields: fields.fields, enabled_extensions: enabled.enabled_extensions }, states: Object.keys(states.value), states_value: states.value }
 }
 
 /** The row's gate columns, each as text or null, or why one is neither. */
@@ -156,10 +170,10 @@ function theModelNamed(stored: string | null): unknown {
 /**
  * The first read, right after the `session/new` answer: the snapshot, or why the start is refused. Each value is held to
  * what the launch created, by name, so a session the engine opened on another folder, mode, provider, model or set of
- * extensions never runs a turn.
+ * extensions never runs a turn. `opened` is every session the launch opened, this one among them.
  */
-export function theSessionsFirstRead(facts: Pick<EngineFacts, 'session_store'>, store: string, launched: TheSessionLaunched): { readonly snapshot: TheSessionsGate } | { readonly refusal: string } {
-  const read = theOnlyRow(facts, store, launched.session_id)
+export function theSessionsFirstRead(facts: Pick<EngineFacts, 'session_store'>, store: string, launched: TheSessionLaunched, opened: readonly string[]): { readonly snapshot: TheSessionsGate } | { readonly refusal: string } {
+  const read = theCurrentRow(facts, store, launched.session_id, opened)
   if ('why' in read) return { refusal: read.why }
   const unkept = statesTheEngineDoesNotKeep(facts, read.states)
   const differing = [...theValuesCompared(read, launched), { what: 'the extension states', held: unkept, launched_with: facts.session_store.extension_states, same: unkept.length === 0 }].find(
@@ -195,12 +209,12 @@ function theValuesCompared(read: { readonly gate: TheSessionsGate; readonly stat
 }
 
 /**
- * The read after every result and at every permission request: why the member must stop, or undefined. The launch's row
- * is the only row, each gate field and the enabled extensions are as the snapshot holds them, and no state the engine
- * does not keep has appeared.
+ * The read after every result and at every permission request: why the member must stop, or undefined. Every row is a
+ * session the launch opened, the current session's gate fields and enabled extensions are as the snapshot holds them,
+ * and no state the engine does not keep has appeared in it.
  */
 export function theSessionStillHolds(facts: Pick<EngineFacts, 'session_store'>, store: string, snapshot: TheSessionsGate): string | undefined {
-  const read = theOnlyRow(facts, store, snapshot.id)
+  const read = theCurrentRow(facts, store, snapshot.id, snapshot.opened)
   if ('why' in read) return read.why
   const changed = THE_GATE_COLUMNS.find((column) => read.gate.fields[column] !== snapshot.fields[column])
   if (changed !== undefined) return `the session ${snapshot.id}'s ${changed} was changed after it started, and the engine runs its next step with it`

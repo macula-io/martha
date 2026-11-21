@@ -18,7 +18,7 @@ import { argv, env, exit, stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline'
 import { DatabaseSync } from 'node:sqlite'
 
-import { STAND_IN_SESSION, THE_ENGINES_OPTIONS, theEnginesNamingOf, whatTheEngineMakesOf, type AStandInsSessionRow, type AStep, type AnAgentScript } from './the_stand_in_agents_script.ts'
+import { THE_ENGINES_OPTIONS, theEnginesNamingOf, theStandInsSession, whatTheEngineMakesOf, type AStandInsSessionRow, type AStep, type AnAgentScript } from './the_stand_in_agents_script.ts'
 
 type Json = Record<string, unknown>
 
@@ -27,6 +27,9 @@ const waiting = new Map<number, (message: Json) => void>()
 const prompts: string[] = []
 let clientCapabilities: unknown
 let nextId = 1000
+/** How many sessions the stand-in opened, and the ids the client closed, in order (martha#1002). */
+let opened = 0
+const closed: string[] = []
 /** How long the stand-in waits after a turn's answer before the steps it plays outside the turn. */
 const A_PAUSE_AFTER_THE_ANSWER_MS = 50
 
@@ -53,19 +56,27 @@ async function call(sessionId: string, step: Extract<AStep, { call: unknown }>):
   const toolCall = { toolCallId: id, title, kind: 'other', status: 'pending', rawInput: input }
   const answer = await request('session/request_permission', { sessionId, toolCall, options: step.options ?? THE_ENGINES_OPTIONS })
   const made = whatTheEngineMakesOf(answeredId(answer))
+  if (step.no_result === 1) return
   update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId: id, status: made.runs === 1 ? 'completed' : 'failed', rawOutput: made })
   if (id === '') say(sessionId, JSON.stringify(made))
 }
 
 async function play(sessionId: string, step: AStep): Promise<void> {
-  if ('say' in step) say(sessionId, step.say)
-  else if ('call' in step) await call(sessionId, step)
+  if ('call' in step) await call(sessionId, step)
   else if ('ask' in step) say(sessionId, JSON.stringify(await request(step.ask, { sessionId })))
+  else if ('after_the_answer' in step) return
+  else if ('under_session' in step) for (const one of step.steps) await play(step.under_session, one)
+  else playAtOnce(sessionId, step)
+}
+
+/** A step that waits on nothing the client answers. */
+function playAtOnce(sessionId: string, step: AStep): void {
+  if ('say' in step) say(sessionId, step.say)
   else if ('line' in step) stdout.write(`${step.line}\n`)
   else if ('echo' in step) say(sessionId, prompts.join('|'))
+  else if ('closed' in step) say(sessionId, JSON.stringify(closed))
   else if ('capabilities' in step) say(sessionId, JSON.stringify(clientCapabilities))
   else if ('update' in step) update(sessionId, step.update)
-  else if ('after_the_answer' in step) return
   else exit(0)
 }
 
@@ -91,30 +102,46 @@ function greet(id: unknown, message: Json): void {
 /** The store's writer, held open while the stand-in runs, as the engine holds its own. */
 let writer: DatabaseSync | undefined
 
-/** Writes the session's row the way the engine does when it opens a session: one row, in a WAL store. */
-function writeTheSessionRow(row: AStandInsSessionRow, working_dir: string): void {
-  const store = join(env[row.root_variable] ?? '', ...row.path)
-  mkdirSync(dirname(store), { recursive: true })
-  writer = new DatabaseSync(store)
-  writer.exec('PRAGMA journal_mode = WAL')
-  writer.exec(`CREATE TABLE "${row.table}" (${row.columns.map((column) => `"${column}" TEXT`).join(', ')})`)
-  const fields: Record<string, string> = { ...row.fields, id: STAND_IN_SESSION, working_dir }
+/** Writes the session's row the way the engine does when it opens a session: one row per session, in a WAL store. */
+function writeTheSessionRow(row: AStandInsSessionRow, session_id: string, working_dir: string): void {
+  if (writer === undefined) {
+    const store = join(env[row.root_variable] ?? '', ...row.path)
+    mkdirSync(dirname(store), { recursive: true })
+    writer = new DatabaseSync(store)
+    writer.exec('PRAGMA journal_mode = WAL')
+    writer.exec(`CREATE TABLE "${row.table}" (${row.columns.map((column) => `"${column}" TEXT`).join(', ')})`)
+  }
+  const fields: Record<string, string> = { ...row.fields, id: session_id, working_dir }
   const names = Object.keys(fields)
   writer.prepare(`INSERT INTO "${row.table}" (${names.map((name) => `"${name}"`).join(', ')}) VALUES (${names.map(() => '?').join(', ')})`).run(...names.map((name) => fields[name] ?? null))
 }
 
 function openASession(id: unknown, params: Json): void {
-  if (script.session_row !== undefined) writeTheSessionRow(script.session_row, String(params['cwd']))
+  opened += 1
+  const sessionId = theStandInsSession(opened)
+  if (script.session_row !== undefined) writeTheSessionRow(script.session_row, sessionId, String(params['cwd']))
   const modes = script.currentModeId === undefined ? undefined : { currentModeId: script.currentModeId, availableModes: [] }
-  send({ jsonrpc: '2.0', id, result: { sessionId: STAND_IN_SESSION, modes } })
+  send({ jsonrpc: '2.0', id, result: { sessionId, modes } })
+}
+
+/** A close, answered as the engine answers it: the id kept as closed, the row left in the store (acp/server.rs on_close_session). */
+function closeASession(id: unknown, params: Json): void {
+  closed.push(String(params['sessionId']))
+  send({ jsonrpc: '2.0', id, result: {} })
+}
+
+/** The session methods the stand-in answers, by name. */
+const SESSION_METHODS: Readonly<Record<string, (id: unknown, params: Json) => void>> = {
+  'session/new': openASession,
+  'session/prompt': (id, params) => void prompt(id, params),
+  'session/close': closeASession,
 }
 
 function handle(message: Json): void {
   const { id, method } = message
   if (method === undefined && typeof id === 'number') waiting.get(id)?.(message)
   else if (method === 'initialize') greet(id, message)
-  else if (method === 'session/new') openASession(id, (message['params'] ?? {}) as Json)
-  else if (method === 'session/prompt') void prompt(id, (message['params'] ?? {}) as Json)
+  else if (typeof method === 'string') SESSION_METHODS[method]?.(id, (message['params'] ?? {}) as Json)
 }
 
 createInterface({ input: stdin }).on('line', (line) => {

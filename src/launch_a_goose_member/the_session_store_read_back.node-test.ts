@@ -20,6 +20,8 @@ const COLUMNS = ['id', 'working_dir', 'goose_mode', 'provider_name', 'model_conf
 const FACTS: { readonly session_store: SessionStore } = { session_store: { file: 'a.db', journal_mode: 'Wal', table: 'the_rows', columns: COLUMNS, extension_states: STATES } }
 
 const LAUNCHED: TheSessionLaunched = { session_id: 'a-session', working_dir: '/a/checkout', mode: 'asks', provider: 'a-provider', model: 'a-model', extensions: ['kept', 'a-crew-server'] }
+/** The sessions the launch opened: only its first. */
+const OPENED: readonly string[] = [LAUNCHED.session_id]
 
 /** The extension states a session starts with: the launch's two extensions enabled. */
 const statesWith = (names: readonly string[], more: Record<string, unknown> = {}): string =>
@@ -46,7 +48,7 @@ function aStore(t: TestContext) {
 }
 
 const snapshotOf = (store: string) => {
-  const first = theSessionsFirstRead(FACTS, store, LAUNCHED)
+  const first = theSessionsFirstRead(FACTS, store, LAUNCHED, OPENED)
   assert.ok('snapshot' in first, `the first read refused: ${JSON.stringify(first)}`)
   return first.snapshot
 }
@@ -72,19 +74,40 @@ test('the first read refuses a session whose folder, mode, provider, model, exte
   for (const [column, value, named] of cases) {
     const { store, set } = aStore(t)
     set(column, value)
-    const first = theSessionsFirstRead(FACTS, store, LAUNCHED)
+    const first = theSessionsFirstRead(FACTS, store, LAUNCHED, OPENED)
     assert.ok('refusal' in first && named.test(first.refusal), `${column} = ${value} is refused by name: ${JSON.stringify(first)}`)
   }
 })
 
-test('a store holding a second session, or only another one, is refused at every read (#541 package A, design r=5 item 2)', (t) => {
+test('a row this launch did not open, or a store without the current session, is refused at every read (#541 package A, design r=5 item 2; martha#1002 T1/T5; mutant: the opened-set check dropped)', (t) => {
   const { store, engine } = aStore(t)
   const snapshot = snapshotOf(store)
-  engine.prepare('INSERT INTO the_rows (id, working_dir, extension_data) VALUES (?, ?, ?)').run('another', '/x', '{}')
-  assert.match(theSessionStillHolds(FACTS, store, snapshot) ?? '', /holds 2 sessions/)
-  assert.ok('refusal' in theSessionsFirstRead(FACTS, store, LAUNCHED))
+  engine.prepare('INSERT INTO the_rows (id, working_dir, extension_data) VALUES (?, ?, ?)').run('planted', '/x', '{}')
+  assert.equal(theSessionStillHolds(FACTS, store, snapshot), `the session store at ${store} holds 1 session(s) this launch did not open, and a launch's store holds only its own`)
+  assert.ok('refusal' in theSessionsFirstRead(FACTS, store, LAUNCHED, OPENED))
+  engine.prepare('DELETE FROM the_rows WHERE id = ?').run('planted')
   engine.prepare('DELETE FROM the_rows WHERE id = ?').run(LAUNCHED.session_id)
-  assert.match(theSessionStillHolds(FACTS, store, snapshot) ?? '', /not this launch's a-session/)
+  assert.equal(theSessionStillHolds(FACTS, store, snapshot), `the session store at ${store} holds no row of this launch's session ${LAUNCHED.session_id}`)
+})
+
+test("after a clear, the current session is held to its snapshot and a closed predecessor's row is not; a third id is still refused (martha#1002 design points 2-3, T2/T3; mutants: the current row not found by id, the predecessor held)", (t) => {
+  const { store, engine } = aStore(t)
+  const next = { ...LAUNCHED, session_id: 'a-session-2' }
+  engine
+    .prepare('INSERT INTO the_rows (id, working_dir, goose_mode, provider_name, model_config_json, extension_data) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(next.session_id, next.working_dir, next.mode, next.provider, JSON.stringify({ model_name: next.model }), statesWith(next.extensions))
+  assert.ok('refusal' in theSessionsFirstRead(FACTS, store, next, OPENED), 'a second row is refused while the launch has not opened it')
+  const first = theSessionsFirstRead(FACTS, store, next, [...OPENED, next.session_id])
+  assert.ok('snapshot' in first, JSON.stringify(first))
+  assert.equal(first.snapshot.id, next.session_id)
+  const snapshot = first.snapshot
+  engine.prepare('UPDATE the_rows SET goose_mode = ? WHERE id = ?').run('auto', LAUNCHED.session_id)
+  assert.equal(theSessionStillHolds(FACTS, store, snapshot), undefined, "the closed predecessor's rewritten row does not stop the member")
+  engine.prepare('UPDATE the_rows SET goose_mode = ? WHERE id = ?').run('auto', next.session_id)
+  assert.equal(theSessionStillHolds(FACTS, store, snapshot), `the session ${next.session_id}'s goose_mode was changed after it started, and the engine runs its next step with it`)
+  engine.prepare('UPDATE the_rows SET goose_mode = ? WHERE id = ?').run(next.mode, next.session_id)
+  engine.prepare('INSERT INTO the_rows (id, working_dir, extension_data) VALUES (?, ?, ?)').run('a-session-3', '/x', '{}')
+  assert.match(theSessionStillHolds(FACTS, store, snapshot) ?? '', /1 session\(s\) this launch did not open/)
 })
 
 test('after the start, a gate field, the enabled extensions or a new state stops the member; the turn notes stay open (#541 package A, design r=5 items 2-3; mutants: a field, the extensions or the states not compared)', (t) => {
@@ -107,7 +130,7 @@ test('after the start, a gate field, the enabled extensions or a new state stops
 test('a recording whose store lacks a gate column reads nothing as passing; on the recording the store is under data/ and holds every gate column (#541 package A, design r=5)', (t) => {
   const { store } = aStore(t)
   const lacking = { session_store: { ...FACTS.session_store, columns: COLUMNS.filter((column) => column !== 'goose_mode') } }
-  const first = theSessionsFirstRead(lacking, store, LAUNCHED)
+  const first = theSessionsFirstRead(lacking, store, LAUNCHED, OPENED)
   assert.ok('refusal' in first && first.refusal.includes('no column goose_mode'), JSON.stringify(first))
   assert.deepEqual(theColumnsTheStoreLacks(RECORDED_GOOSE_ENGINE), [])
   assert.equal(theSessionStoreOf(RECORDED_GOOSE_ENGINE, '/r'), '/r/data/sessions.db')
