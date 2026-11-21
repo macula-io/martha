@@ -256,10 +256,20 @@ const A_PROVIDER: TheProviderAMemberRunsOn = {
 }
 
 test('gap 4: a member on its provider\'s endpoint is handed that key and base URL, and never the launcher\'s key, the sign-in store or a provider switch', (t) => {
-  const start = aStart(t, BILLED_BY_API_KEY, { [API_KEY_VARIABLE]: A_LAUNCHERS_KEY, [CLAUDE_CODE_SIGN_IN_STORE_VARIABLE]: '', [A_PROVIDER.key_from as string]: A_PROVIDERS_KEY, ...EVERY_PROVIDER_SWITCH }, A_PROVIDER)
+  // The launcher's own shell names another endpoint, model and window: none of them may stand beside the provider's own.
+  const start = aStart(t, BILLED_BY_API_KEY, {
+    [API_KEY_VARIABLE]: A_LAUNCHERS_KEY,
+    [CLAUDE_CODE_SIGN_IN_STORE_VARIABLE]: '',
+    [A_PROVIDER.key_from as string]: A_PROVIDERS_KEY,
+    [THE_PROVIDERS_ENDPOINT_VARIABLE]: 'https://the-launchers-own-endpoint.test',
+    [THE_MODELS_VARIABLE]: 'a-model-the-launchers-shell-names',
+    [THE_CONTEXT_TOKENS_VARIABLE]: '9',
+    ...EVERY_PROVIDER_SWITCH,
+  }, A_PROVIDER)
   assert.notEqual(typeof start.started, 'string', `the start was refused: ${String(start.started)}`)
   const env = start.started as Record<string, string>
-  assert.equal(env[THE_PROVIDERS_ENDPOINT_VARIABLE], A_PROVIDER.endpoint)
+  assert.equal(env[THE_PROVIDERS_ENDPOINT_VARIABLE], A_PROVIDER.endpoint, "the launcher's own base URL stood beside the provider's")
+  assert.equal(env[THE_CONTEXT_TOKENS_VARIABLE], String(A_PROVIDER.context_limit), "the launcher's own window stood beside the provider's")
   assert.equal(env[AUTH_TOKEN_VARIABLE], A_PROVIDERS_KEY, "the provider's own key is the bearer token")
   assert.equal(env[THE_MODELS_VARIABLE], A_PROVIDER.model)
   assert.equal(env[THE_SMALL_MODELS_VARIABLE], A_PROVIDER.model)
