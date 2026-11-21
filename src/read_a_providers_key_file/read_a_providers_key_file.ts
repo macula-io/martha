@@ -8,13 +8,21 @@
 // engine's or `providers.<name>.key_file` for a member's, so the owner is told which line to look at and never what the
 // key is.
 //
-// It reads no file of the repository's own but the path rule, and keeps nothing: the caller decides where the key goes.
+// It reads no file of the repository's own, and keeps nothing: the caller decides where the key goes. It is host glue,
+// and not a slice, because reading a file is reaching this machine — `martha up`'s adapter and both launches import it.
 
 import { lstatSync, readFileSync, type Stats } from 'node:fs'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import process from 'node:process'
 
-import { THE_HOMES_PREFIX, writtenOut } from '../bring_up_the_declared_crew/declare_the_engines_endpoint.ts'
+/**
+ * What a typed key file's path opens with when it is under the owner's home. The declaration takes absolute paths only,
+ * so the path is written out against the home before it is checked or written (martha#931).
+ */
+export const THE_HOMES_PREFIX = '~/'
+
+/** An owner's typed path, with a leading `~/` written out against `home`. */
+export const writtenOut = (typed: string, home: string): string => (typed.startsWith(THE_HOMES_PREFIX) ? join(home, typed.slice(THE_HOMES_PREFIX.length)) : typed)
 
 /** The mode bits a key file must have clear: every right of its group and of others. */
 export const THE_MODE_BITS_OF_GROUP_AND_OTHERS = 0o077

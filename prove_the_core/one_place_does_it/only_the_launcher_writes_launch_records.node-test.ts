@@ -95,6 +95,7 @@ test('package.json declares the host glue and the host adapter, so the check kno
     'keep_the_crews_files_as_directories',
     'empty_directory_of_a_launch',
     'linux_process_identity',
+    'read_a_providers_key_file',
     'owners_settings_directory',
     'row_streams_directory',
     'read_one_file_held_by_its_descriptor',

@@ -3,12 +3,13 @@
 // endpoint is Anthropic's own and is handed none of it. The key files are real files, made and removed by this test.
 
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { API_KEY_VARIABLE, AUTH_TOKEN_VARIABLE } from '../ask_the_host_what_it_loads/host_runs_the_relay.ts'
+import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { CLAUDE_CODE_SIGN_IN_STORE_VARIABLE } from '../claude_code_host/recorded_claude_code_host.ts'
 import {
   THE_CONTEXT_TOKENS_VARIABLE,
@@ -20,7 +21,7 @@ import {
 } from './the_provider_a_member_runs_on.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'martha-provider-env-'))
-after(() => rmSync(home, { recursive: true, force: true }))
+after(() => removeTheTree(home))
 
 const A_KEY = 'a-key-this-test-names'
 const THE_ENDPOINT = 'https://a-provider.test/anthropic'
