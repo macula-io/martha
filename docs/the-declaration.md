@@ -70,13 +70,16 @@ Each switch is off unless the file says `true`.
 | `dashboard` | A session opens the crew's pane and keeps its row. |
 | `refresh_between_tasks` | A member hands over after a finished task, not only at the handover share. |
 | `owner_bell` | The owner's bell rings when a member's host asks the owner something. |
-| `nudges` | The crew tells whoever routes work when work stalls; needs the three windows below. |
+| `nudges` | The crew tells whoever routes work when work stalls; needs the three nudge windows below. |
+| `wake` | A member that is idle with work nobody holds is woken; needs the two wake windows below. |
 | `review_model` | The model reviews run on. |
 | `clones` | Where the crew's clones sit; required with `workspace_layout`. |
 | `worktrees` | Where the crew's worktrees are made; required with `workspace_layout`. |
 | `stalled_minutes` | How long a working member may go without a report before a nudge; 0 turns it off. |
 | `review_minutes` | How long a HANDOFF may go unanswered before a nudge; 0 turns it off. |
 | `person_minutes` | How long a wait on a person may last before a nudge; 0 turns it off. |
+| `wake_after_minutes` | How long a member must be idle before it is woken; 0 turns the wake off. The wait doubles per wake. |
+| `wake_cap_minutes` | The longest the doubling may reach between wakes. |
 | `gate_enforces` | Who the shell gate enforces for: `all`, `nobody`, or members' names. |
 | `gate_audits` | Who the shell gate audits: members' names. |
 | `gate_enforce` | `gate_enforces`, as the draft of martha#931 spells it; never beside it. |
