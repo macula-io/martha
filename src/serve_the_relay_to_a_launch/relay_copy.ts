@@ -52,6 +52,8 @@ export const RELAY_FILES = [
   'hooks/crew_turn_beat.ts',
   // The owner's `/crew` (martha#927): crew.tsx imports what it asks and prints, so a copy without it is refused.
   'hooks/crew_command.ts',
+  // A crew tool's mesh call as the member, through its own server (martha#1016): carried so the tool that calls it loads.
+  'hooks/call_the_mesh_as_the_member.ts',
 ] as const
 
 /** The copy's name inside a launch's relay directory. */
