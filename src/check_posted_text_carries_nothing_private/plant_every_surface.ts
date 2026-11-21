@@ -5,7 +5,8 @@
 
 import { randomBytes } from 'node:crypto'
 
-import { privateHitsIn, type Resolve, type Rules } from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
+import { privateHitsIn, type Resolve } from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
+import type { Rules } from '../know_what_text_is_private/know_what_text_is_private.ts'
 import { postedTextSources } from './posted_text.ts'
 import { API, PER_PAGE, readPostedText, ROUTES, type Call } from './read_posted_text.ts'
 

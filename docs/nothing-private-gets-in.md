@@ -104,7 +104,7 @@ Out of reach of this check, and said here so nobody assumes otherwise:
   beside it on the same line is still refused. The forms guard against an id
   pasted by accident; an id disguised on purpose as `sha256:<id>` is out of
   reach of any text rule. The forms, with how each is written, are one definition in
-  `src/check_nothing_private_gets_in/public_digest.ts`, and the tests plant
+  `src/know_what_text_is_private/public_digest.ts`, and the tests plant
   every written form with a real-shaped digest drawn at run time.
 - **An id is seen wherever it is written, not only standing alone.** The hex
   class is 64 lowercase hex digits in a row, with no word boundary. So an id

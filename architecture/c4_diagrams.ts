@@ -393,6 +393,10 @@ const COMPONENT_ROWS: readonly (readonly LooseBox[])[] = [
     { col: 0, kind: 'b-cmp', name: 'keep_the_transcripts_of_a_launch, choose_the_transcripts_to_keep', names: ['keep_the_transcripts_of_a_launch', 'choose_the_transcripts_to_keep'], type: '[a session, after it ends]', code: true,
       desc: ['choose_the_transcripts_to_keep reads', 'no file and writes none: from what', 'the member\'s config folder holds', 'it takes the host\'s own transcripts', 'alone, redacts every token shape', 'and the key the launch handed it,', 'withholds whole a text a line break', 'split a token across, and replaces', 'a file the bounds leave no room for', 'with the line that says so;', 'keep_the_transcripts_of_a_launch is', 'the folder work the launch does', 'before it removes the snapshot at', 'every end: 0700 and 0600, written', 'whole and renamed, the mark of a', 'token found beside them, and the', 'launches past the newest 64 pruned', '(martha#646)'] },
   ],
+  [
+    { col: 0, kind: 'b-cmp', name: 'know_what_text_is_private', names: ['know_what_text_is_private'], type: '[what text stays out of public places]', code: true,
+      desc: ['The crew\'s private-text classes, in one', 'place, with no I/O: a lab hostname, a', 'home directory, a private address, an', 'email, a node id or key, a GitHub token;', 'the synthetic form each accepts and the', 'rules a scan holds to. check_nothing_', 'private_gets_in reads the tree with it,', 'and keep_crew_memory refuses a note by', 'its class (martha#1016)'] },
+  ],
 ]
 
 /**
