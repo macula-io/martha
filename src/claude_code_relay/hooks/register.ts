@@ -111,6 +111,16 @@ export interface PromptSubmitted {
 
 export type PromptAnswer = { readonly drop: string } | Readonly<Record<string, unknown>>
 
+/**
+ * A prompt with the crew's state added to the context the host hands its turn (martha#984): the host takes a list of
+ * texts there, so the state is one more entry after any a hook before this one added. The host composes the system
+ * prompt once per session, so the turn is where a state that changes can reach the member.
+ */
+function withTheCrewState(e: PromptSubmitted, line: string): PromptSubmitted {
+  const already = Array.isArray(e['context']) ? (e['context'] as unknown[]) : []
+  return { ...e, context: [...already, line] }
+}
+
 /** A tool call as the engine raises it: the tool's name and its input fields. */
 export type ToolCalled = { readonly tool: string; readonly [field: string]: unknown }
 
@@ -130,6 +140,16 @@ function withTheLineHanded(passed: unknown, line: string): Readonly<Record<strin
   const rest = typeof passed === 'object' && passed !== null && !Array.isArray(passed) ? (passed as Record<string, unknown>) : {}
   const already = Array.isArray(rest['additionalContext']) ? (rest['additionalContext'] as unknown[]) : []
   return { ...rest, additionalContext: [...already, line] }
+}
+
+/**
+ * A ran tool's result with the launcher's note added to what the model is told of it (martha#969): the host's own
+ * `context` list on a tool's answer, the one crew-code's stale-clone note used. The result itself is unchanged.
+ */
+function withTheNote(result: unknown, note: string): Readonly<Record<string, unknown>> {
+  const rest = typeof result === 'object' && result !== null && !Array.isArray(result) ? (result as Record<string, unknown>) : {}
+  const already = Array.isArray(rest['context']) ? (rest['context'] as unknown[]) : []
+  return { ...rest, context: [...already, note] }
 }
 
 /** Posts one event to the launcher and hears its answer; never rejects. */
@@ -232,7 +252,8 @@ export const register = (on: RelayOn): void => {
     const session_id = await $.session.id()
     const marks = { ...(e.command === undefined ? {} : { command: e.command }), ...(e.isMeta === undefined ? {} : { isMeta: e.isMeta }) }
     const heard = await relay($, 'prompt_submitted', { session_id, text: e.text, origin: e.origin, ...marks }, heardTaken)
-    return heard.yes ? next(e) : { drop: refusal(heard.why) }
+    if (!heard.yes) return { drop: refusal(heard.why) }
+    return next(heard.handed === undefined ? e : withTheCrewState(e, heard.handed))
   }).catch(async (_$, e, next) => (next.called ? next(e) : { drop: refusal('its relay failed before the launcher answered') }))
 
   // An agent the host starts under this session, and its stop (martha#170). The stop is the only report of a
@@ -287,7 +308,8 @@ export const register = (on: RelayOn): void => {
     if (!after.yes) return stopThisMember($, after.why)
     // The end of the running turn rides on the yes to the last call in flight (martha#311 ruling D): carried after it.
     if (after.end_turn !== undefined) await $.turn.abort({ turnId: after.end_turn }).catch(() => undefined)
-    return result
+    // A read in a clone behind its origin carries the launcher's note for the model (martha#969), and nothing else changes.
+    return after.note === undefined ? result : withTheNote(result, after.note)
   }).catch(async ($, _e, next) =>
     next.called ? stopThisMember($, 'its relay failed after the tool ran') : { deny: refusal('its relay failed before the launcher answered') },
   )

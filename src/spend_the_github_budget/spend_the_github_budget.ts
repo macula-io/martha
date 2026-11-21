@@ -121,6 +121,10 @@ export const A_FRESH_BUDGET: TheBudget = {
   closes: {},
 }
 
+/** How a refusal of the wait begins, and one of the floor: fixed words a reader of the budget may name (martha#980 package 4). */
+export const BACKING_OFF = "the crew's GitHub budget is backing off"
+export const AT_ITS_FLOOR = "the crew's GitHub budget is at its floor"
+
 /** What the budget says about one call, before any is made. */
 export type TheWord = { readonly may: true } | { readonly may: false; readonly refusal: string }
 
@@ -145,7 +149,7 @@ export function theWaitsWord(budget: TheBudget, now: number, zone: string, of?: 
   const wait = theWaitOn(budget, of)
   const free_at = wait.last_at + wait.wait_ms
   if (wait.wait_ms > 0 && now < free_at) {
-    return { may: false, refusal: `the crew's GitHub budget is backing off until ${theClockOf(free_at, zone)}.` }
+    return { may: false, refusal: `${BACKING_OFF} until ${theClockOf(free_at, zone)}.` }
   }
   return { may: true }
 }
@@ -154,7 +158,7 @@ export function theWaitsWord(budget: TheBudget, now: number, zone: string, of?: 
 export function theFloorsRefusal(budget: TheBudget, floor: number, zone: string): string | undefined {
   if (budget.remaining === null || budget.remaining > floor) return undefined
   const when = budget.resets_at === null ? '' : `, which resets at ${theClockOf(budget.resets_at, zone)}`
-  return `the crew's GitHub budget is at its floor: ${String(budget.remaining)} calls left${when}.`
+  return `${AT_ITS_FLOOR}: ${String(budget.remaining)} calls left${when}.`
 }
 
 /** Whether the crew may spend one call at the count this record holds, or why it may not. */
@@ -375,13 +379,17 @@ export interface TheSpendersPlaces {
   readonly clock_zone: string
 }
 
-/** The spender over one launch's places: the crew's budget record, its clock, and `gh` run in its checkout. */
-export function theGithubSpenderOf(places: TheSpendersPlaces): TheGithubSpender {
+/**
+ * The spender over one launch's places: the crew's budget record, its clock, and `gh` run in its checkout. With
+ * `timeout_ms`, each `gh` it runs is killed with its group at that bound (martha#980 package 4, T5).
+ */
+export function theGithubSpenderOf(places: TheSpendersPlaces, timeout_ms?: number): TheGithubSpender {
   const { processes } = places
+  const bound = timeout_ms === undefined ? {} : { timeout_ms }
   return {
     place: places.stores.crew.place(GITHUB_BUDGET_PLACE),
     clock: places.clock,
-    run: (args) => processes.run({ command: GITHUB_CLI, args, cwd: places.root }),
+    run: (args) => processes.run({ command: GITHUB_CLI, args, cwd: places.root, ...bound }),
     floor: places.github.budget_floor,
     zone: places.clock_zone,
   }
@@ -480,17 +488,48 @@ export async function readTheRunsOn(
   return { kind: 'read', runs }
 }
 
+/**
+ * One run, by its GitHub id, spent through the crew's budget and spaced by that run's own wait (martha#976). It is filed
+ * under `run-<id>`, which is the key crew-code files its own record under, so a wait on a run and a wait on a commit
+ * never stand in for each other. An answer that is not a run is `cannot_tell`: a run id GitHub does not answer for is a
+ * state nothing can be said about, and never a green.
+ */
+export async function readTheRun(
+  spender: TheGithubSpender,
+  ask: { readonly repo: string; readonly run_id: number },
+): Promise<RunsRead> {
+  const args = ['api', `repos/${ask.repo}/actions/runs/${String(ask.run_id)}`]
+  const spent = await spendTheGithubBudget(spender, args, theRunKey(ask.run_id))
+  if ('refusal' in spent) return { kind: 'out_of_budget', refusal: spent.refusal }
+  const run = theOneRunIn(spent.said)
+  if (run === undefined) return { kind: 'cannot_tell', refusal: `GitHub answered for run ${String(ask.run_id)} with something this cannot read.` }
+  return { kind: 'read', runs: [run] }
+}
+
+/** The key a wait on one run is filed under, as crew-code files its record (martha#976). */
+export const theRunKey = (run_id: number): string => `run-${String(run_id)}`
+
+/** GitHub's answer as the one run it names, or undefined when the answer is not one or is a refusal (martha#976). */
+function theOneRunIn(said: ProcessOutcome): ARun | undefined {
+  if (said.exit_code !== 0) return undefined
+  const answered = aRecordIn(said.stdout)
+  return answered === undefined ? undefined : anARun(answered)
+}
+
+/** One run of GitHub's as this slice reads it, or undefined when the answer is not one. */
+function anARun(one: unknown): ARun | undefined {
+  const run = asARecord(one)
+  if (run === undefined || !isACount(run['id']) || typeof run['name'] !== 'string') return undefined
+  if (typeof run['status'] !== 'string' || !isAConclusion(run['conclusion'])) return undefined
+  return { id: run['id'], name: run['name'], status: run['status'], conclusion: run['conclusion'] }
+}
+
 /** GitHub's answer as the runs it holds, or undefined when the answer is not one or is a refusal. */
 function theRunsIn(said: ProcessOutcome): readonly ARun[] | undefined {
   if (said.exit_code !== 0) return undefined
   const listed = aRecordIn(said.stdout)?.['workflow_runs']
   if (!Array.isArray(listed)) return undefined
-  return listed.flatMap((one) => {
-    const run = asARecord(one)
-    if (run === undefined || !isACount(run['id']) || typeof run['name'] !== 'string') return []
-    if (typeof run['status'] !== 'string' || !isAConclusion(run['conclusion'])) return []
-    return [{ id: run['id'], name: run['name'], status: run['status'], conclusion: run['conclusion'] }]
-  })
+  return listed.flatMap((one) => anARun(one) ?? [])
 }
 
 /** JSON's null, as GitHub writes the conclusion of a run that has not ended. */

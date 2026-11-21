@@ -34,12 +34,14 @@ export const ACP = {
   newSession: 'session/new',
   prompt: 'session/prompt',
   cancel: 'session/cancel',
+  /** Detaches a session the launch opened before (martha#1002): sent only once its prompt has returned. */
+  close: 'session/close',
   update: 'session/update',
   requestPermission: 'session/request_permission',
 } as const
 
 /** The session updates a turn reads; every other kind is left for a later reader. */
-export const UPDATE = { toolCall: 'tool_call', toolCallUpdate: 'tool_call_update', messageChunk: 'agent_message_chunk' } as const
+export const UPDATE = { toolCall: 'tool_call', toolCallUpdate: 'tool_call_update', messageChunk: 'agent_message_chunk', usage: 'usage_update' } as const
 
 /** A tool call's statuses, in the protocol's own words (ACP `ToolCallStatus`). */
 export const TOOL_CALL_STATUS = { pending: 'pending', inProgress: 'in_progress', completed: 'completed', failed: 'failed' } as const
@@ -93,6 +95,31 @@ export interface ATurn {
   readonly asked: readonly APermissionAnswered[]
 }
 
+/**
+ * What a session has used, as the agent last said in ACP's `usage_update` (martha#999 package 5): the tokens in its
+ * context, the context's size, and what the session has cost so far when the agent prices it. martha-engine sends one
+ * mid-turn and at every turn's end, before it answers the prompt (acp/server.rs build_usage_updates).
+ */
+export interface AnAgentsUsage {
+  readonly used: number
+  readonly size: number
+  readonly cost?: { readonly amount: number; readonly currency: string }
+}
+
+/** A count ACP sends: a whole number, never below zero. */
+const isACount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0
+
+/** A `usage_update` read strictly, or undefined: a context of size 0 has no share, and a cost needs both its fields. */
+function aUsageIn(update: Json): AnAgentsUsage | undefined {
+  const { used, size } = update
+  if (!isACount(used) || !isACount(size) || size === 0) return undefined
+  if (update['cost'] === undefined || update['cost'] === null) return { used, size }
+  const cost = objectOf(update['cost'])
+  const amount = cost['amount']
+  const currency = cost['currency']
+  return typeof amount === 'number' && Number.isFinite(amount) && typeof currency === 'string' ? { used, size, cost: { amount, currency } } : undefined
+}
+
 /** A session the agent opened, and the mode it says it runs in (undefined when it names none). */
 export interface ASession {
   readonly sessionId: string
@@ -112,6 +139,12 @@ export type Decide = (request: APermissionRequest, withdrawn: AbortSignal) => AD
  * the client goes on.
  */
 export type HearAnUpdate = (sessionId: string, update: unknown) => void
+
+/**
+ * A listener for a permission request that came outside any running turn of its session (martha#1002): the client
+ * has already answered it cancelled; the listener hears whose session it named, so a launch can stop on a closed one.
+ */
+export type HearAStrayRequest = (request: APermissionRequest) => void
 
 interface Pending {
   readonly method: string
@@ -175,16 +208,21 @@ export class AcpClient {
   readonly #to: Writable
   readonly #decide: Decide
   readonly #hearAnUpdate: HearAnUpdate | undefined
+  readonly #hearAStray: HearAStrayRequest | undefined
   readonly #pending = new Map<number, Pending>()
   readonly #turns = new Map<string, ATurnBeingHeard>()
+  /** Each running turn's prompt, settled when the agent answers it, by session: what a close waits on (martha#1002). */
+  readonly #running = new Map<string, Promise<void>>()
+  readonly #usage = new Map<string, AnAgentsUsage>()
   #nextId = 1
   #buffered = ''
   #ended: string | undefined
 
-  constructor(from: Readable, to: Writable, decide: Decide, hearAnUpdate?: HearAnUpdate) {
+  constructor(from: Readable, to: Writable, decide: Decide, hearAnUpdate?: HearAnUpdate, hearAStray?: HearAStrayRequest) {
     this.#to = to
     this.#decide = decide
     this.#hearAnUpdate = hearAnUpdate
+    this.#hearAStray = hearAStray
     from.setEncoding('utf8')
     from.on('data', (chunk: string) => this.#read(chunk))
     from.on('end', () => this.#end('the agent\'s output ended'))
@@ -193,9 +231,9 @@ export class AcpClient {
   }
 
   /** A client over a child's stdio, which the launcher started with both piped. */
-  static overAChild(child: ChildProcess, decide: Decide, hearAnUpdate?: HearAnUpdate): AcpClient {
+  static overAChild(child: ChildProcess, decide: Decide, hearAnUpdate?: HearAnUpdate, hearAStray?: HearAStrayRequest): AcpClient {
     if (child.stdout === null || child.stdin === null) throw new Error('the agent was started without piped stdio')
-    return new AcpClient(child.stdout, child.stdin, decide, hearAnUpdate)
+    return new AcpClient(child.stdout, child.stdin, decide, hearAnUpdate, hearAStray)
   }
 
   /** Opens the connection: this client's version, and no file or terminal capability, so the agent asks for none. */
@@ -207,6 +245,11 @@ export class AcpClient {
     if (answer['protocolVersion'] !== ACP_PROTOCOL_VERSION) {
       throw new Error(`the agent speaks ACP version ${String(answer['protocolVersion'])}, and this client speaks ${ACP_PROTOCOL_VERSION}`)
     }
+  }
+
+  /** The latest usage the agent reported for a session, or undefined when it reported none this client could read. */
+  usageOf(sessionId: string): AnAgentsUsage | undefined {
+    return this.#usage.get(sessionId)
   }
 
   /** A new session in `cwd`, with the tool servers the caller names, and the mode the agent says it runs. */
@@ -224,11 +267,14 @@ export class AcpClient {
     if (this.#turns.has(sessionId)) throw new Error(`session ${sessionId} already has a turn running`)
     const turn: ATurnBeingHeard = { text: '', toolCalls: new Map(), asked: [], waiting: new Set(), cancelled: false }
     this.#turns.set(sessionId, turn)
+    const asked = this.#ask(ACP.prompt, { sessionId, prompt: [{ type: 'text', text }] })
+    this.#running.set(sessionId, asked.then(() => undefined, () => undefined))
     try {
-      const answer = objectOf(await this.#ask(ACP.prompt, { sessionId, prompt: [{ type: 'text', text }] }))
+      const answer = objectOf(await asked)
       return { stopReason: textOf(answer['stopReason']), text: turn.text, toolCalls: [...turn.toolCalls.values()], asked: turn.asked }
     } finally {
       this.#turns.delete(sessionId)
+      this.#running.delete(sessionId)
       // A turn that ended with a request still undecided: the agent has stopped waiting for it, so it is answered
       // cancelled now and its decision is withdrawn. The end of the agent's output comes here too: #end fails the
       // prompt, which ends the turn.
@@ -247,6 +293,16 @@ export class AcpClient {
     if (turn === undefined) return
     turn.cancelled = true
     for (const waiting of turn.waiting) this.#withdraw(turn, waiting)
+  }
+
+  /**
+   * Closes a session the launch opened before (martha#1002, design point 1): sent only after the session's running
+   * prompt, if any, has had the agent's answer, so no turn of it is in flight when the engine detaches it. It waits on
+   * this client's own record of running turns, never on the order its caller keeps.
+   */
+  async closeSession(sessionId: string): Promise<void> {
+    for (let running = this.#running.get(sessionId); running !== undefined; running = this.#running.get(sessionId)) await running
+    await this.#ask(ACP.close, { sessionId })
   }
 
   /** Ends the agent's input: the launcher's way of saying the connection is over. */
@@ -297,6 +353,7 @@ export class AcpClient {
       // Every update reaches the listener first, a turn open or not: #hear's record is the turn's own and returns early
       // outside one (design R4).
       this.#tell(textOf(params['sessionId']), params['update'])
+      this.#keepTheUsage(params)
       this.#hear(params)
     }
   }
@@ -308,6 +365,23 @@ export class AcpClient {
     } catch (error) {
       this.notes.push(`the listener for updates failed: ${error instanceof Error ? error.message : String(error)}`)
     }
+  }
+
+  /**
+   * A session's usage, kept whether a turn is open or not. One this client cannot read drops the one kept before it, and
+   * is noted: an older share read as the session's now would let a session past its limit look under it.
+   */
+  #keepTheUsage(params: Json): void {
+    const update = objectOf(params['update'])
+    if (update['sessionUpdate'] !== UPDATE.usage) return
+    const sessionId = textOf(params['sessionId'])
+    const usage = aUsageIn(update)
+    if (usage !== undefined) {
+      this.#usage.set(sessionId, usage)
+      return
+    }
+    this.#usage.delete(sessionId)
+    this.notes.push(`a usage update this client cannot read, so session ${sessionId} has no usage until the next: ${JSON.stringify(update).slice(0, 200)}`)
   }
 
   #settle(message: Json): void {
@@ -350,6 +424,7 @@ export class AcpClient {
     if (named === undefined || turn === undefined) {
       this.notes.push(`a permission request outside a turn, or naming no call, was cancelled: ${JSON.stringify(params).slice(0, 200)}`)
       this.#send({ jsonrpc: '2.0', id, result: { outcome: { outcome: 'cancelled' } } })
+      if (named !== undefined) this.#hearAStray?.(named)
       return
     }
     const heard = turn.toolCalls.get(named.toolCallId)

@@ -24,6 +24,14 @@ export const A_SLUG: Readonly<Record<string, unknown>> = {
   description: 'What the worktree is for, as lowercase letters, digits and hyphens',
 }
 
+/** The ignored entries a finish may throw away, by the name git gives them (martha#915). */
+export const A_DISCARD_LIST: Readonly<Record<string, unknown>> = {
+  type: 'array',
+  items: { type: 'string' },
+  description:
+    'The ignored entries standing in the worktree that this finish may throw away, each as git names it (for example "node_modules/"). Every ignored entry must be named here, or the finish refuses and names the ones it was not told about.',
+}
+
 /** What `worktree_open` takes, as the mod registers it. */
 export const WORKTREE_OPEN_TOOL = {
   name: WORKTREE_OPEN,
@@ -38,7 +46,10 @@ export const WORKTREE_OPEN_TOOL = {
   },
 }
 
-/** What `worktree_finish` takes: the worktree (or the branch a finished worktree left), and the package it closes (martha#962). */
+/**
+ * What `worktree_finish` takes: the worktree (or the branch a finished worktree left), the package it closes, and what
+ * it may throw away (martha#962).
+ */
 export const WORKTREE_FINISH_TOOL = {
   name: WORKTREE_FINISH,
   description: WORKTREE_FINISH_DESCRIPTION,
@@ -57,6 +68,7 @@ export const WORKTREE_FINISH_TOOL = {
         description:
           "1 when another member has said the package is closed, from a session whose role the crew's table grants finish_a_members_worktree: it closes that member's worktree or branch. Never set for one's own, and never by a member whose role the table does not grant it.",
       },
+      discard_ignored: A_DISCARD_LIST,
     },
     required: ['repo', 'package'],
   },

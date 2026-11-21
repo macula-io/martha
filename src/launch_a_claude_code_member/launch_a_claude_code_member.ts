@@ -95,9 +95,14 @@
 
 import { randomUUID } from 'node:crypto'
 import { rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { StdioOptions } from 'node:child_process'
 import process from 'node:process'
+import { machineRootsFrom, theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
+
+import { staleReadsOver, type TheStaleReads } from '../ask_git_how_far_a_clone_is_behind/ask_git_how_far_a_clone_is_behind.ts'
+import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
@@ -176,6 +181,7 @@ import { aFolderOfTheScan, aTickOfTheRowsWork, type TheScanOfTheWorkspace } from
 import { theDriftInTheWorkspace } from '../check_the_workspace_matches_its_layout/check_the_workspace_matches_its_layout.ts'
 import { relayBackstop } from '../keep_the_backstop_of_a_launch/keep_the_backstop_of_a_launch.ts'
 import { giveAMemberItsStart, theBillingOfALaunch, theDeclaredBillingOf, theDroppedPluginsLines } from './the_environment_a_member_is_given.ts'
+import { theArtifactRefusal } from './the_artifacts_a_key_cannot_open.ts'
 import { userSettingsPath } from '../load_the_hosts_markdown/settings_env_reaching_servers.ts'
 import { type RelayServer, serveTheRelay } from '../serve_the_relay_to_a_launch/serve_the_relay.ts'
 import { sessionRecordsIn } from '../session_records_in_rows/session_records_in_rows.ts'
@@ -381,6 +387,8 @@ export interface ReadyLaunch {
   readonly hookSettings: HookSettingsWatch
   /** The crew text every session this launch starts is handed (martha#306), or empty when the crew declares none. */
   readonly crew_text: string
+  /** The credential the member is billed by (martha#916), which says which of the host's tools it can run (martha#957 gap 13). */
+  readonly billing: Billing
 }
 
 /** Everything a launch has made on disk and on its socket, up to the member's start. */
@@ -486,7 +494,7 @@ function readyLaunch(launch: ClaudeCodeMemberLaunch, billing: Billing): ReadyLau
       }
     }
   }
-  return { prepared, removeSnapshot, keepTranscripts, hostEnv, settingsEnv: fromSettings.env, hookSettings, crew_text }
+  return { prepared, removeSnapshot, keepTranscripts, hostEnv, settingsEnv: fromSettings.env, hookSettings, crew_text, billing }
 }
 
 /**
@@ -580,6 +588,16 @@ function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSessio
     : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared), served_tools }) }
 }
 
+/**
+ * The note a read in a clone behind its origin carries (martha#969): over the workspace the crew declared, asking git on
+ * this machine. A crew that declared no layout gets none, as it gets no git guard.
+ */
+export function staleReadsOf(launch: { readonly crew_settings?: CrewSettings }): { readonly stale_reads?: TheStaleReads } {
+  const workspace = launch.crew_settings === undefined ? undefined : theWorkspaceTheCrewDeclared(launch.crew_settings)
+  if (workspace === undefined || workspace.clones === null || workspace.worktrees === null) return {}
+  return { stale_reads: staleReadsOver({ host: thisMachine, places: { clones: workspace.clones, worktrees: workspace.worktrees }, now: () => Date.now() }) }
+}
+
 /** What this launch raises turns to, or nothing: a launch given none raises nothing (martha#253). */
 function turnsOf(launch: ClaudeCodeMemberLaunch): { readonly turns?: TurnRaising } {
   return launch.turns === undefined ? {} : { turns: launch.turns }
@@ -604,6 +622,10 @@ function thePlacesOfItsOwn(launch: ClaudeCodeMemberLaunch, hearing: (journal: Re
     screen: theOwnersScreenOfALaunch(theScreenALaunchSees(launch, () => mute().muted)),
   }
 }
+
+/** The roots a reboot deletes on this machine, with those the crew declares (../tell_a_citer_of_a_volatile_path). */
+const theVolatileRootsOf = (launch: { readonly crew_settings?: CrewSettings }): readonly string[] =>
+  theRootsInForce(launch.crew_settings?.volatile_paths ?? [], machineRootsFrom(tmpdir(), process.env['XDG_RUNTIME_DIR']))
 
 /** Step 3: the relay's server on the launch's socket, answering with memberRelay; or why it could not be served. */
 async function servedRelay(
@@ -646,8 +668,13 @@ async function servedRelay(
     ...crewOf(launch, sessions, ready, watched.watch),
     // The crew text this launch hands every session it starts (martha#306), composed once from the approved bytes.
     crew_text: ready.crew_text,
+    // What a reboot deletes on this machine, with the roots the crew declares: a SendMessage citing one is told (martha#980).
+    volatile_roots: theVolatileRootsOf(launch),
+    // An Artifact call by a member billed by the key is refused naming the line to the Supervisor (martha#957 gap 13).
+    refusesACallItsBillingCannotRun: (tool) => theArtifactRefusal(ready.billing, tool),
     ...wordlessAnswersOf(launch, ready, starting),
     ...turnsOf(launch),
+    ...staleReadsOf(launch),
     ...thePlacesOfItsOwn(launch, watched.journalOver),
     stopMember: stop,
   }

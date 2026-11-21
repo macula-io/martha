@@ -28,6 +28,7 @@ import {
   type TheDeclaration,
 } from '../park_and_wake_a_member/park_and_wake_a_member.ts'
 import { THE_HANDOVER_WRITTEN, theHandoverFile, writeMyHandover } from '../write_my_handover/write_my_handover.ts'
+import { BRIEFS_PLACE, theBriefFile } from '../read_a_members_brief/read_a_members_brief.ts'
 import { THE_WAKE_CLEARS_THE_PARK, theResumePrompt, wakeAMember, type TheStart, type TheWakeAsking } from './wake_a_member.ts'
 import { CREWS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 
@@ -166,4 +167,18 @@ test('#255 part 2: a start that refuses leaves the park as it was, so the owner 
 test('#255 part 2: the grant that moves another member\'s park is the table\'s, and the wake asks it of nobody', () => {
   assert.equal(mayParkOrUnparkAnother(THE_CREW, 'builder'), false, 'a member with no grant was allowed to move another member\'s park')
   assert.equal(mayParkOrUnparkAnother(THE_CREW, 'supervisor'), true, 'a member whose role is granted the act may not move another\'s park')
+})
+
+test('martha#999 package 1: a woken member is pointed at its newest brief, as crew-code resumes a member it unparks', async () => {
+  const host = aWakeHost()
+  handedOver(host)
+  parked(host)
+  const place = host.stores.crew.place(BRIEFS_PLACE)
+  assert.ok(!('refusal' in place), 'the host refused the briefs place')
+  assert.equal(place.keep(theBriefFile('builder', '2026-11-20'), 'Your package: synthetic-owner/repo#7.'), undefined)
+  const { start, asked } = aStartSaying(true)
+  const woken = await wakeAMember(host, { member: 'builder', declaration: THE_CREW, at: AT }, start)
+  assert.ok(!('refusal' in woken), `the wake refused: ${'refusal' in woken ? woken.refusal : ''}`)
+  const brief = join(place.path, theBriefFile('builder', '2026-11-20'))
+  assert.ok(asked[0]?.prompt.includes(`Read your brief ${brief}: it is your current assignment unless the handover says it is done.`), `the wake did not name the brief: ${asked[0]?.prompt ?? ''}`)
 })
