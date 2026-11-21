@@ -67,6 +67,8 @@ export interface TheEnginesRefresh {
   atTheStart(): Promise<ATurnToSend | undefined>
   /** The question after a turn that ended, and the turn its act sends, if any. */
   afterATurn(ended: unknown): Promise<ATurnToSend | undefined>
+  /** The question once the owner typed `/crew-refresh now` (martha#999 package 3), and the turn its act sends, if any. */
+  onTheOwnersNow(): Promise<ATurnToSend | undefined>
 }
 
 /** The order the crew answered with, read as the mod reads it: a text, or another word. Null when it is neither. */
@@ -125,5 +127,7 @@ export function theEnginesRefresh(places: TheEnginesRefreshPlaces): TheEnginesRe
     // The engine stamps no turn of its own: each ended turn gets a fresh id, the one the flow's question needs, and a
     // turn's answer is the text the engine streamed in it.
     afterATurn: async (ended) => carried(await places.ask(current.session_id, THE_REFRESH_ASK, question(randomUUID(), (ended as Partial<ATurn> | undefined)?.text ?? '')), false),
+    // Asked as Claude Code's mod asks it after the owner's `now` (martha#999 package 3): no turn ended, so none is named.
+    onTheOwnersNow: async () => carried(await places.ask(current.session_id, THE_REFRESH_ASK, question('', '')), false),
   }
 }

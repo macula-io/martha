@@ -65,3 +65,33 @@ export async function theCrewCommandAnswers(args: string, hear: HearTheLauncher)
  * never reads it.
  */
 export const theCrewCommandResult = (text: string): { readonly text: string; readonly isTextDisplayOnly: true } => ({ text, isTextDisplayOnly: true })
+
+/**
+ * The owner's refresh command on either host (martha#999 package 3), as the host registers it: Claude Code's relay
+ * registers this name, and the engine's tab reads it after the `/` a command starts with. Spelled as `/crew-budget`'s
+ * name is (martha#990), without the slash.
+ */
+export const THE_REFRESH_COMMAND = 'crew-refresh'
+
+/** What the mod asks the launcher when the owner types `/crew-refresh`: never a model's tool. */
+const THE_REFRESH_MODE_QUESTION = 'the_refresh_mode_typed'
+
+/** The word that asks for a refresh now, as crew-code reads it: the first word typed. */
+const NOW = 'now'
+
+/** What `/crew-refresh` prints, and whether the launcher took a refresh now, which the host then starts. */
+export interface TheRefreshCommandTold {
+  readonly text: string
+  readonly now: boolean
+}
+
+/**
+ * What `/crew-refresh` prints, having asked the launcher with what was typed, as it was typed. A refresh `now` the
+ * launcher took is one this session starts at once, as crew-code does; one it refused starts nothing.
+ */
+export async function theRefreshCommandAnswers(args: string, hear: HearTheLauncher): Promise<TheRefreshCommandTold> {
+  const typed = args.trim()
+  const heard = await hear(THE_REFRESH_MODE_QUESTION, { typed })
+  if (!('said' in heard)) return { text: heard.why, now: false }
+  return { text: heard.said, now: typed.split(/\s+/)[0] === NOW }
+}

@@ -36,7 +36,7 @@ export const REFRESH_MARGIN_PERCENT = 10
 /** How long a flow may sit in one phase before it is abandoned, once, with the reason on the row. */
 export const FLOW_WINDOW_MS = 30 * MINUTE_MS
 
-/** What started a flow: the limit always, a finished task when the crew switched it on, or someone asking. */
+/** What started a flow: the limit always, a finished task as the member's refresh mode says, or someone asking. */
 export type RefreshTrigger = 'at_the_limit' | 'after_a_task' | 'asked'
 
 /** Where a flow is. `declined` and `abandoned` are its ends; `clearing` is the clear that was told to the mod. */
@@ -212,14 +212,23 @@ export interface TheSessionsReading {
   readonly started_at_percent: number
   /** The report this turn finished, named as the row names it: '' when it finished none. */
   readonly finished_report: string
-  /** Whether the declaration switched the after-a-task trigger on. */
-  readonly refresh_between_tasks: boolean
+  /** What a finished task is measured by in the member's refresh mode (./the_refresh_mode.ts), null when it is off. */
+  readonly after_a_task: AfterATask | null
   /** Whether the member is parked: a parked member is not refreshed between tasks. */
   readonly parked: boolean
   /** Whether someone asked for this refresh: the owner's or the Supervisor's word, which is never declined. */
   readonly asked: boolean
   /** The flow as it stands, undefined when none has run. */
   readonly flow: ARefresh | undefined
+}
+
+/**
+ * What a finished task is measured by: the share of the limit it refreshes at, and how far past where this session began
+ * it must have grown. The limit is never one of these: it hands over whatever the mode says.
+ */
+export interface AfterATask {
+  readonly threshold: number
+  readonly margin: number
 }
 
 /** Whether a refresh is due, and what started it — or why none is. */
@@ -235,7 +244,7 @@ export function aRefreshIsDue(reading: TheSessionsReading): Due {
   const running = heldByARunningFlow(reading.flow)
   if (running !== undefined) return running
   if (reading.asked) return { due: true, trigger: 'asked' }
-  return heldByItsLastAsk(reading) ?? heldByWhereItBegan(reading) ?? atTheLimitOrAfterATask(reading)
+  return heldByItsLastAsk(reading) ?? atTheLimitOrAfterATask(reading)
 }
 
 /** A flow still running holds every later ask back, whatever else would have asked. */
@@ -288,20 +297,28 @@ function aDeclineTakenAtTheLimit(flow: ARefresh, limit_percent: number): boolean
   return flow.phase === 'declined' && flow.percent >= limit_percent
 }
 
-/** The one comparison both thresholds are measured by: a session that began at 75% is not refreshed into the same 75%. */
-function heldByWhereItBegan(reading: TheSessionsReading): Due | undefined {
-  if (reading.percent < reading.started_at_percent + REFRESH_MARGIN_PERCENT) {
-    return { due: false, why: 'it has not grown past the share this session began at' }
-  }
-  return undefined
+/** Why a session is not refreshed into the share it began at: a session that began at 75% is not refreshed into 75%. */
+const NOT_GROWN: Due = { due: false, why: 'it has not grown past the share this session began at' }
+
+/**
+ * The limit first, because it is not a setting, measured from where this session began by REFRESH_MARGIN_PERCENT; then
+ * a finished task, as the member's refresh mode measures it.
+ */
+function atTheLimitOrAfterATask(reading: TheSessionsReading): Due {
+  const grown = reading.percent - reading.started_at_percent
+  if (reading.percent >= reading.limit_percent && grown >= REFRESH_MARGIN_PERCENT) return { due: true, trigger: 'at_the_limit' }
+  return afterATask(reading, grown)
 }
 
-/** The limit first, because it is not a setting; then a finished task, when the crew switched that trigger on. */
-function atTheLimitOrAfterATask(reading: TheSessionsReading): Due {
-  if (reading.percent >= reading.limit_percent) return { due: true, trigger: 'at_the_limit' }
+/** A finished task, in the member's refresh mode: past its share, and grown past where this session began by its margin. */
+function afterATask(reading: TheSessionsReading, grown: number): Due {
+  const after = reading.after_a_task
+  if (after === null && grown < REFRESH_MARGIN_PERCENT) return NOT_GROWN
   if (reading.parked) return { due: false, why: 'it is parked' }
-  if (!reading.refresh_between_tasks) return { due: false, why: 'the crew did not switch the after-a-task trigger on' }
+  if (after === null) return { due: false, why: 'its refresh mode is off' }
   if (reading.finished_report === '') return { due: false, why: 'it finished no task' }
+  if (grown < after.margin) return NOT_GROWN
+  if (reading.percent < after.threshold) return { due: false, why: `it is under the ${after.threshold}% its refresh mode refreshes at` }
   return { due: true, trigger: 'after_a_task' }
 }
 

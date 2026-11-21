@@ -14,7 +14,7 @@
 // tool, the state one place's tools hold between calls, the handler table and the answers the mod asks for by name —
 // the refresh flow's question among them, which reads the launch's every place and so cannot leave this file.
 
-import { declareCrew, type CrewSettings } from '../declare_crew/declare_crew.ts'
+import { declareCrew, REFRESH_BETWEEN_TASKS, type CrewSettings } from '../declare_crew/declare_crew.ts'
 import { holdingTheEnds, type TheEndsHold } from '../end_a_running_turn/hold_the_end.ts'
 import { answerAChannelAsk, type MessageCarrier } from '../hand_a_crew_message_to_its_member/hand_a_crew_message_to_its_member.ts'
 import { theLineToHandAtStart, type TheStartLine } from '../hand_a_member_its_crew_text/the_start_line.ts'
@@ -61,6 +61,7 @@ import {
   type AReadableCall,
 } from '../refuse_calls_outside_the_package_contract/the_acts_of_a_call.ts'
 import type { TheContractHanded } from '../refuse_calls_outside_the_package_contract/refuse_a_call_outside_the_contract.ts'
+import { answerTheRefreshCommand, THE_REFRESH_MODE_ASK } from '../refresh_a_member/the_refresh_command.ts'
 import { THE_BUDGET_ASK, keepTheWeekly, theBudgetCommandAnswer, theBudgetCommandIn } from '../keep_what_a_session_spent/the_crews_budget.ts'
 import {
   THE_REFRESH_ASK,
@@ -564,7 +565,24 @@ async function answerAnAskOfTheMods(
   if (name === THE_MODEL_REPORT_ASK) return await theModelReported(places, state, args)
   if (name === THE_OWNERS_TODO_ASK) return await theOwnersTodoList(places, args)
   if (name === THE_BUDGET_ASK) return await theBudgetAsked(places, args)
+  if (name === THE_REFRESH_MODE_ASK) return await theRefreshModeTyped(places, args)
   return undefined
+}
+
+/** `/crew-refresh` as the owner typed it at this member's tab, on either host (martha#999 package 3). */
+async function theRefreshModeTyped(places: CrewToolPlaces, args: Readonly<Record<string, unknown>>): Promise<CoreToolAnswer> {
+  const settings = await theSettingsOrRefusal(places)
+  if ('refused' in settings) return settings
+  return answerTheRefreshCommand(
+    {
+      stores: places.stores,
+      member: places.member,
+      refresh_between_tasks: settings.house_rules[REFRESH_BETWEEN_TASKS],
+      handover_percent: settings.thresholds.handover_percent,
+      now: places.ledger.clock.now(),
+    },
+    textOf(args['typed']),
+  )
 }
 
 /** `/crew-budget` as the owner typed it at this session's tab (martha#990): the line shown, or the reviewer gauge set. */

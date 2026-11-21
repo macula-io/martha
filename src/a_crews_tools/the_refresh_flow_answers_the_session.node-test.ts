@@ -5,6 +5,7 @@
 // question is answered by the flow. The crew's own store is the real one on this disk (../keep_the_crews_files_as_directories), so the
 // handover read back is the file a launched member would have left, and the stamp is the host's own.
 
+import { PACKAGE_MODE_WAITS, THE_REFRESH_MODE_ASK } from '../refresh_a_member/the_refresh_command.ts'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -516,4 +517,43 @@ test('martha#999 package 2: with owner_items on, a handover carrying the owner\'
 test('martha#999 package 2: with owner_items off, the owner\'s words are not read', async () => {
   const off = await theAnswerToAHandover({}, `${A_FULL_LINE}\n- an owner wants the register flipped.`)
   assert.equal(off.carry, CARRY_THE_CLEAR, 'a crew that does not switch owner_items on had a handover sent back for it')
+})
+
+// The owner's /crew-refresh (martha#999 package 3): the mode is set through the launcher's ask, kept for the member, and
+// the next refresh question measures a finished task by it.
+
+/** What the owner typed after /crew-refresh, asked of the launcher as either host's command asks it. */
+async function typed(crew: ACrew, words: string): Promise<string> {
+  const answered = await crew.tools.answer(THE_REFRESH_MODE_ASK, { typed: words }, 'a-session')
+  assert.ok('answer' in answered, `/crew-refresh ${words} was refused: ${'refused' in answered ? answered.refused : ''}`)
+  return answered.answer
+}
+
+test('#999 package 3: /crew-refresh on 33 refreshes after a task at 33% where the declaration had it off', async () => {
+  const crew = await aCrewOfTools('builder')
+  assert.match(await typed(crew, ''), /^Auto-refresh is off for builder\./)
+  assert.equal(await crew.openTheSession('a-session', 12), 'none')
+  await crew.report('task x', 1, 1)
+  assert.equal(await crew.ask('a-session', 34), 'none', 'a crew with the switch off refreshed after a task')
+  await typed(crew, 'on 33')
+  await crew.report('task y', 1, 1)
+  assert.equal(await crew.ask('a-session', 32), 'none', 'refreshed under the share the owner chose')
+  assert.equal(await crew.ask('a-session', 35), CARRY_A_TEXT, 'a finished task past the chosen share did not ask')
+})
+
+test('#999 package 3: /crew-refresh off keeps a declared crew from refreshing after a task, and now asks at once', async () => {
+  const crew = await aCrewOfTools('builder', { refresh_between_tasks: true })
+  assert.match(await typed(crew, ''), /^Auto-refresh is on after every finished task/)
+  await typed(crew, 'off')
+  assert.equal(await crew.openTheSession('a-session', 12), 'none')
+  await crew.report('task x', 1, 1)
+  assert.equal(await crew.ask('a-session', 50), 'none', 'the owner turned it off, and a finished task still asked')
+  await typed(crew, 'now')
+  assert.equal(await crew.ask('a-session', 50), CARRY_A_TEXT, 'the owner typed now, and the next question did not ask')
+})
+
+test('#999 package 3: /crew-refresh package names gap 22 and changes nothing', async () => {
+  const crew = await aCrewOfTools('builder')
+  assert.deepEqual(await crew.tools.answer(THE_REFRESH_MODE_ASK, { typed: 'package all' }, 'a-session'), { refused: PACKAGE_MODE_WAITS })
+  assert.match(await typed(crew, ''), /^Auto-refresh is off for builder\./)
 })
