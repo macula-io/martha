@@ -42,7 +42,7 @@ import { theHostsReadingIn } from '../keep_what_a_session_spent/the_hosts_usage.
 
 import { PARK_A_MEMBER_TOOL, WAKE_A_MEMBER_TOOL, theParkToolOver, type AParkAsked } from '../park_and_wake_a_member/the_park_tools.ts'
 import type { AGuardedSwitch, OwnersDefaultPlace } from '../put_the_owners_model_back/put_the_owners_model_back.ts'
-import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack, type AnOrderAsked } from '../put_the_owners_model_back/the_guarded_switch.ts'
+import { closeTheGuardNoOneReported, theModelOrder, theOwnersDefaultPutBack } from '../put_the_owners_model_back/the_guarded_switch.ts'
 import { menusTheLauncherKeeps, type ACallAnswered, type TheOwnersMenus } from '../queue_the_owners_asks/queue_the_owners_asks.ts'
 import {
   LIST_ASKS_TOOL,
@@ -53,8 +53,6 @@ import {
   queueTheAsk,
   theSettlingOfTheAsks,
   theTakeOfTheAsks,
-  type TheAsksAsked,
-  type TheOfferingAsked,
 } from '../queue_the_owners_asks/the_ask_tools.ts'
 import { refreshesPlace, theFlowOf } from '../refresh_a_member/refresh_a_member.ts'
 import {
@@ -104,7 +102,7 @@ import { READ_THE_RECEIPTS_TOOL, theReceiptsOver } from '../show_what_a_message_
 import { theGithubSpenderOf } from '../spend_the_github_budget/spend_the_github_budget.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { RESTART_A_MEMBER_TOOL, theRestartToolOver } from '../stop_and_restart_a_member/the_restart_tool.ts'
-import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver, type TheTriggerPlace } from '../switch_a_members_model/the_switch_tools.ts'
+import { RETURN_TO_YOUR_OWN_MODEL_TOOL, SWITCH_YOUR_MODEL_TOOL, returnToYourOwnModelOver, switchTheModelOver } from '../switch_a_members_model/the_switch_tools.ts'
 import { theBeatOverTheCrewTools, theBeatsMarkedOn, withTheOwedLine, withTheTimesLineOnAReturn, type AHandedWindow, type HoldingTheWatch, type TheWindowPlaces } from '../keep_a_members_crew_tools_window/heed_the_crew_tools.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import { theRootsInForce } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
@@ -113,6 +111,7 @@ import { WRITE_MY_HANDOVER_SCHEMA, theHandoverToolOver } from '../write_my_hando
 import { NO_MODEL_NAMED, type ModelVocabulary } from '../declare_crew/a_hosts_model_vocabulary.ts'
 import { FILE_A_FRICTION_NOTE_TOOL, fileAFrictionNote } from '../file_a_friction_note/the_friction_tool.ts'
 import { startSweepingTheNotes } from '../file_a_friction_note/the_friction_sweep.ts'
+import { anOrderOver, beatsOf, theAsksAsked, theOfferingAsked, theOwnersListAsked, theStandingAsked, triggerPlaceOf } from './the_places_a_tool_is_decided_over.ts'
 import type { AUsageHost } from '../keep_what_a_session_spent/keep_what_a_session_spent.ts'
 
 /**
@@ -404,7 +403,7 @@ export const CREW_TOOLS: readonly CrewTool[] = THE_TOOLS
 export type { TheStartLine }
 
 /** What one place's tools hold between calls: the row as this session last left it, and its session id. */
-interface SessionState {
+export interface SessionState {
   held: DashboardRow | null
   session: string
   /**
@@ -756,58 +755,6 @@ async function thePredecessorOf(places: CrewToolPlaces, session_id: string): Pro
   if (flow.phase !== 'clearing' || flow.clear_from === '' || flow.clear_from === session_id) return null
   return flow.clear_from
 }
-
-/** Every member's beat, by name, for `seeTheCrew` to lay out in the declaration's order. */
-function beatsOf(store: DashboardStore, settings: CrewSettings): Readonly<Record<string, DashboardRow>> {
-  const held = store.all()
-  const beats: Record<string, DashboardRow> = {}
-  for (const member of settings.members) {
-    const beat = held[member.name]
-    if (beat !== undefined) beats[member.name] = beat
-  }
-  return beats
-}
-
-/** Where a model switch is recorded, for the return a park, a report or the return tool makes of it (martha#315). */
-const triggerPlaceOf = (places: CrewToolPlaces): TheTriggerPlace => ({ stores: places.stores, member: places.member, ledger: places.ledger })
-
-/** What an order is decided over: where the switch is recorded, the owner's settings file, and this session's guard. */
-const anOrderOver = (places: CrewToolPlaces, state: SessionState): AnOrderAsked => ({ ...triggerPlaceOf(places), owners: places.owners_settings, session: state })
-
-/** What the owner's list is handed: the streams, this member, the declaration's table, and the checkout its checks run in. */
-const theOwnersListAsked = (places: CrewToolPlaces, settings: CrewSettings) => ({
-  ledger: places.ledger,
-  member: places.member,
-  settings,
-  root: places.root,
-  ...(places.processes === undefined ? {} : { processes: places.processes }),
-  now: places.ledger.clock.now(),
-})
-
-/** What the standing items' tools are handed: the streams, this member, the declaration's table, and the day. */
-const theStandingAsked = (places: CrewToolPlaces, settings: CrewSettings) => ({
-  ledger: places.ledger,
-  member: places.member,
-  settings,
-  now: places.ledger.clock.now(),
-})
-
-/** What the owner's asks' tools are handed: the stream, this member and session, the table, and a removal's clone. */
-const theAsksAsked = (places: CrewToolPlaces, state: SessionState): TheAsksAsked => ({
-  ledger: places.ledger,
-  member: places.member,
-  session: state.session,
-  menus: places.menus,
-  ...(places.processes === undefined ? {} : { processes: places.processes }),
-  // The clone a branch removal is read in is the one the launch was declared with, as every acting tool reads it.
-  clones: places.settings?.house_rules.clones,
-})
-
-/** What the two tools that take and settle the asks are handed: the queue's place, and the declaration that says who may. */
-const theOfferingAsked = (places: CrewToolPlaces, state: SessionState, settings: CrewSettings): TheOfferingAsked => ({
-  ...theAsksAsked(places, state),
-  settings,
-})
 
 /** What `who_is_free` is answered over: the declaration's rows laid out, and the park each member's marker says. */
 const theWhoIsFreeAsked = (places: CrewToolPlaces, settings: CrewSettings, args: Readonly<Record<string, unknown>>) => {
