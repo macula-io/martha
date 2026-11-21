@@ -9,7 +9,10 @@ import type { LedgerHost } from '../log_ledger/log_ledger.ts'
 import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts'
 import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { theVolatileNote, volatilePathsIn } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
-import { CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage, type TheHeldProsePlace } from './send_a_crew_message.ts'
+import type { TheGithubSpender } from '../spend_the_github_budget/spend_the_github_budget.ts'
+import { type CheckTheLines, CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage, type TheHeldProsePlace } from './send_a_crew_message.ts'
+import { theCommitsAHandoffNames, type TheCommitsAsked } from './the_commits_a_handoff_names.ts'
+import { theRunsAHandoffNames } from './the_runs_a_handoff_names.ts'
 
 /** What `say_to_the_crew` takes, as the mod registers it. */
 export const SAY_TO_THE_CREW_TOOL = {
@@ -43,6 +46,20 @@ export interface ASendAsked {
   readonly volatile_roots: readonly string[]
   /** Where this sender's prose is kept when the gate let the send through with it held (martha#987 slice 4). */
   readonly hold?: TheHeldProsePlace
+  /** What a HANDOFF line's range is read with (martha#980 package 3); left out, no range is read. */
+  readonly commits?: TheCommitsAsked
+  /** What a HANDOFF line's `ci=` runs are read through: the crew's GitHub budget (martha#980 package 4); left out, none are read. */
+  readonly runs?: TheGithubSpender
+}
+
+/** The checks a send's lines go through: the range in the clone, then the runs on GitHub; undefined when there are none. */
+function theChecksOf(asked: ASendAsked): CheckTheLines | undefined {
+  const { commits, runs } = asked
+  if (commits === undefined && runs === undefined) return undefined
+  return async (line) => [
+    ...(commits === undefined ? [] : await theCommitsAHandoffNames(commits, line)),
+    ...(runs === undefined ? [] : await theRunsAHandoffNames(runs, line)),
+  ]
 }
 
 /** What the tool answers: the position the message was kept at, or why nothing was sent. */
@@ -59,7 +76,7 @@ export async function sayToTheCrewOver(asked: ASendAsked): Promise<AToolAnswer> 
     to: asked.to,
     text: asked.text,
     ...(asked.hold === undefined ? {} : { hold: asked.hold }),
-  })
+  }, theChecksOf(asked))
   return 'refused' in sent ? { refused: sent.refused } : { answer: toldWithTheNote(sent.told, asked) }
 }
 

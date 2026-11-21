@@ -14,6 +14,7 @@ import {
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
 import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+import { SEND_MESSAGE_TOOL } from '../answer_a_tool_call/a_crew_line_goes_through_say_to_the_crew.ts'
 
 // Synthetic node ids, never a real one: this repository is public.
 const crewmate = 'a'.repeat(64)
@@ -47,7 +48,7 @@ const EXECUTING_TOOLS = [
   NOTEBOOK_EDIT_TOOL,
   'Agent',
   'Task',
-  'SendMessage',
+  SEND_MESSAGE_TOOL,
   'Workflow',
   'Skill',
   'CronCreate',

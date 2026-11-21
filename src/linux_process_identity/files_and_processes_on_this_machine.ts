@@ -95,26 +95,46 @@ function codeOf(error: unknown): string | undefined {
  */
 export const runAProcessOnThisMachine: Processes['run'] = (request) =>
   new Promise((resolve, reject) => {
+    // A bounded run leads a process group of its own (martha#980 package 3), so the bound kills what it started too.
+    const bounded = request.timeout_ms !== undefined
     const child = spawn(request.command, [...request.args], {
       cwd: request.cwd,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: environmentWith(request.environment),
-      ...(request.timeout_ms === undefined ? {} : { timeout: request.timeout_ms, killSignal: 'SIGKILL' as const }),
+      detached: bounded,
     })
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
+    const said = () => ({ stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8') })
     child.stdout.on('data', (chunk: Buffer) => void stdout.push(chunk))
     child.stderr.on('data', (chunk: Buffer) => void stderr.push(chunk))
-    child.on('error', reject)
-    child.on('close', (code: number | null, signal: NodeJS.Signals | null) =>
-      resolve({
-        exit_code: signal === null ? code : null,
-        stdout: Buffer.concat(stdout).toString('utf8'),
-        stderr: Buffer.concat(stderr).toString('utf8'),
-      }),
-    )
+    // Killed on the bound, the group is gone; a grandchild that held the output open is no reason to wait on.
+    const timer = bounded
+      ? setTimeout(() => {
+          killTheGroup(child.pid)
+          resolve({ exit_code: null, ...said(), timed_out: true })
+        }, request.timeout_ms)
+      : undefined
+    child.on('error', (error) => {
+      clearTimeout(timer)
+      reject(error)
+    })
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+      clearTimeout(timer)
+      resolve({ exit_code: signal === null ? code : null, ...said() })
+    })
   })
+
+/** Kills a bounded run's whole group; a group already gone has nothing left to kill. */
+function killTheGroup(pid: number | undefined): void {
+  if (pid === undefined) return
+  try {
+    process.kill(-pid, 'SIGKILL')
+  } catch (error) {
+    if (codeOf(error) !== 'ESRCH') throw error
+  }
+}
 
 /**
  * Signals a process group on this machine only while its leader is still the process recorded (martha#312): the

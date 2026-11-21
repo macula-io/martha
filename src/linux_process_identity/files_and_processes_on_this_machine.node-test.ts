@@ -10,7 +10,7 @@ import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import {
   environmentWith,
   filesOnThisMachine as files,
-  runAProcessOnThisMachine as run,
+  runAProcessOnThisMachine,
   runNowOnThisMachine as runNow,
   scratchOnThisMachine as scratch,
   signalAGroupOnThisMachine as signalGroup,
@@ -167,9 +167,9 @@ const onLinux = linuxProcessIdentities.identityOf(process.pid) !== null
 test('#987: a process waited for by a promise runs with the environment asked, and the host\'s own when none is asked', async (t) => {
   const dir = place(t)
   // env prints the environment it was handed, and nothing a shell would add on its own.
-  const asked = await run({ command: '/usr/bin/env', args: [], cwd: dir, environment: { drop_prefixes: [''], set: { MARTHA_987_ASKED: 'set' } } })
+  const asked = await runAProcessOnThisMachine({ command: '/usr/bin/env', args: [], cwd: dir, environment: { drop_prefixes: [''], set: { MARTHA_987_ASKED: 'set' } } })
   assert.deepEqual(asked, { exit_code: 0, stdout: 'MARTHA_987_ASKED=set\n', stderr: '' })
-  const own = await run({ command: '/usr/bin/env', args: [], cwd: dir })
+  const own = await runAProcessOnThisMachine({ command: '/usr/bin/env', args: [], cwd: dir })
   assert.equal(own.stdout.split('\n').some((line) => line.startsWith('PATH=')), true)
   assert.equal(own.stdout.includes('MARTHA_987_ASKED'), false)
 })
@@ -177,10 +177,10 @@ test('#987: a process waited for by a promise runs with the environment asked, a
 test('#987: a process that outlives its time limit is ended, with exit code null; one within it ends as it ends', async (t) => {
   const dir = place(t)
   const started = Date.now()
-  const ended = await run({ command: 'sleep', args: ['30'], cwd: dir, timeout_ms: 100 })
+  const ended = await runAProcessOnThisMachine({ command: 'sleep', args: ['30'], cwd: dir, timeout_ms: 100 })
   assert.equal(ended.exit_code, null)
   assert.ok(Date.now() - started < 9_500, 'the process was not ended at its limit')
-  assert.equal((await run({ command: 'true', args: [], cwd: dir, timeout_ms: 9_500 })).exit_code, 0)
+  assert.equal((await runAProcessOnThisMachine({ command: 'true', args: [], cwd: dir, timeout_ms: 9_500 })).exit_code, 0)
 })
 
 test('#312: a group is signalled only while its leader is the process recorded, and the check is in the same call', { skip: !onLinux }, async (t) => {
@@ -196,4 +196,56 @@ test('#312: a group is signalled only while its leader is the process recorded, 
   assert.deepEqual(signalGroup(pid, identity, 'SIGTERM'), { signalled: true })
   assert.deepEqual(await ended, [null, 'SIGTERM'])
   assert.equal(signalGroup(pid, identity, 'SIGKILL').signalled, false, 'a group that is gone is not signalled again')
+})
+
+// --- a bounded run (martha#980 package 3, threat model T4 and T5) ---------------------------------------------------
+
+/** Whether a process is still alive: signal 0 reaches it, or the kernel says it is gone. */
+const isAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** How long a test waits for a run that should already have ended, before it says the run hung. */
+const A_HUNG_RUN_MS = 5_000
+
+/** The pid a stand-in wrote to `file`, or undefined while it has written none. */
+const thePidIn = (file: string): number | undefined => {
+  const pid = existsSync(file) ? Number(readFileSync(file, 'utf8').trim()) : Number.NaN
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined
+}
+
+test('#980 T4: a run changes only the variables it names, over the host\'s own environment', async (t) => {
+  const named = 'MARTHA_980_A_NAMED_VARIABLE'
+  const outcome = await runAProcessOnThisMachine({
+    command: 'sh',
+    args: ['-c', `printf '%s|%s' "$${named}" "$HOME"`],
+    cwd: place(t),
+    environment: { drop_prefixes: [], set: { [named]: 'set by the request' } },
+  })
+  assert.equal(outcome.stdout, `set by the request|${process.env['HOME'] ?? ''}`)
+})
+
+test('#980 T5: a bounded run whose grandchild holds its output open is killed with its whole group, at the bound', { skip: !onLinux }, async (t) => {
+  const dir = place(t)
+  const grandchild = join(dir, 'grandchild.pid')
+  // The shell starts a sleeper that inherits its output and keeps it open: killing the shell alone ends nothing.
+  const run = runAProcessOnThisMachine({ command: 'sh', args: ['-c', `sleep 30 & echo $! > ${grandchild}; wait`], cwd: dir, timeout_ms: 300 })
+  let hung: NodeJS.Timeout | undefined
+  t.after(() => {
+    clearTimeout(hung)
+    const pid = thePidIn(grandchild)
+    if (pid !== undefined && isAlive(pid)) process.kill(pid, 'SIGKILL')
+  })
+  const outcome = await Promise.race([run, new Promise<'hung'>((resolve) => (hung = setTimeout(() => resolve('hung'), A_HUNG_RUN_MS)))])
+  assert.notEqual(outcome, 'hung', 'the bounded run did not end at its bound')
+  assert.equal(outcome !== 'hung' && outcome.timed_out, true)
+  const pid = thePidIn(grandchild) ?? assert.fail('the stand-in wrote no grandchild pid')
+  const deadline = Date.now() + A_HUNG_RUN_MS
+  while (isAlive(pid) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal(isAlive(pid), false, 'the grandchild outlived the bound: only the leader was killed')
 })

@@ -83,6 +83,7 @@ function aCrewRefusingEverything(asked: string[], git_asked: string[] = [], path
     theContractInForce: async () => undefined,
     startSweeping: () => () => {},
     theLineToHandAtStart: async () => null,
+    theCrewStateOfATurn: async () => null,
     noteTheStart: () => undefined,
     ends: holdingTheEnds(),
     thePredecessorOf: async () => null,

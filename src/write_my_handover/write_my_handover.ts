@@ -16,9 +16,14 @@ import { join } from 'node:path'
 
 import { stampHandover } from '../carry_taint_across_a_refresh/carry_taint_across_a_refresh.ts'
 import { MEMBER_NAME } from '../declare_crew/declare_crew.ts'
+import { handoverGaps, theGapLine, theShapeLine } from './handover_shape.ts'
+import { ownerMarkerShape, unmarkedOwnerItems } from '../read_a_members_brief/owner_items.ts'
 import type { CrewPlace, CrewStore, HandoverStamp, HandoverStampStore, Refused, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { theTellingOnTheNextStart } from '../tell_a_member_what_its_relaunch_killed/the_telling_on_every_start.ts'
 import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
+
+/** How the prompt writes a package in the line it asks for, as crew-code's prompt does. */
+const A_PACKAGE_PLACEHOLDER = '<org/repo#n>'
 
 /** The word a member reads once its handover is written, and the only answer a written handover gives. */
 export const THE_HANDOVER_WRITTEN = 'MARTHA-HANDOVER-WRITTEN'
@@ -130,7 +135,7 @@ export const THE_LIMIT_GROUND = 'it cannot reach a safe point at all'
  * The prompt a member is asked to hand over with. The file is the host's and the member is told no path: the tool
  * writes it where the launcher decided, and a path in a prompt would be a second place a handover could come from.
  */
-export function theHandoverPrompt(asking: { readonly at_limit: boolean; readonly percent: number; readonly limit_percent: number }): string {
+export function theHandoverPrompt(asking: { readonly at_limit: boolean; readonly percent: number; readonly limit_percent: number; readonly owner_items?: string | undefined }): string {
   const first = asking.at_limit
     ? [
         `Your context is at ${asking.percent}%, past the ${asking.limit_percent}% handover limit, so this session hands over to a fresh one.`,
@@ -146,9 +151,27 @@ export function theHandoverPrompt(asking: { readonly at_limit: boolean; readonly
     ...first,
     `${grounds} answer exactly ${THE_REFRESH_DECLINED} and one line saying which ground it is.`,
     `Otherwise write your handover with the ${WRITE_MY_HANDOVER_TOOL} tool, in the shape the practice gives: first rules;`,
-    'what runs; open items in order; pending decisions; gotchas; and one line for each package your row says you hold,',
-    `carrying its branch and tip sha or "nothing committed". Then answer exactly ${THE_HANDOVER_WRITTEN}.`,
+    'what runs; open items in order; pending decisions; gotchas; and one line for each package you hold, in this shape:',
+    `${theShapeLine(A_PACKAGE_PLACEHOLDER)}.`,
+    ...(asking.owner_items === undefined ? [] : [theOwnerItemRule(asking.owner_items)]),
+    `Then answer exactly ${THE_HANDOVER_WRITTEN}.`,
   ].join(' ')
+}
+
+/**
+ * The owner-items rule a handover prompt carries when the crew switches `owner_items` on, as crew-code's ownerItemRule
+ * (hooks/register.tsx:3030-3033). It is fenced: a member copies it into the handover, and the check skips a fenced
+ * block, so the rule itself is never read as an item left unmarked.
+ */
+export const theOwnerItemRule = (owner: string): string =>
+  `\n\`\`\`text\nMark every item that comes from ${owner} (what they said, wanted, ruled or floated) ${ownerMarkerShape(owner)} (no yes yet); a line that quotes ${owner} with neither is sent back.\n\`\`\`\n`
+
+/** What a handover lacks when it carries the owner's words unmarked, as crew-code's gapNote says it; none when it lacks nothing. */
+export function ownerItemsMissingFrom(text: string, owner: string | undefined): readonly string[] {
+  if (owner === undefined) return []
+  const unmarked = unmarkedOwnerItems(text, owner)
+  if (unmarked.length === 0) return []
+  return [`these lines carry ${owner}'s words with no marker: ${unmarked.map((line) => `"${line}"`).join('; ')}. Mark each ${ownerMarkerShape(owner)}, so the next session never waits on an idea`]
 }
 
 /** The note a handover that missed something is sent back with: what was missing, and the word to answer with. */
@@ -177,14 +200,16 @@ export interface TheHandoverRead {
   readonly asked_at: number
   /** The packages the member's row says it holds. */
   readonly holds: readonly string[]
+  /** The owner whose items a handover must mark, when the crew switches `owner_items` on; undefined otherwise. */
+  readonly owner_items?: string | undefined
   /** How many times this flow has already sent one back. */
   readonly sent_back: number
   readonly at_limit: boolean
 }
 
-/** Every package line a handover is missing, in the order the row names the packages. */
+/** Every package a handover does not answer for, by crew-code's shape (./handover_shape.ts), in the order given. */
 export function packagesMissingFrom(text: string, holds: readonly string[]): readonly string[] {
-  return holds.filter((held) => !text.includes(held)).map((held) => `no line naming ${held}`)
+  return handoverGaps(holds, text).map(theGapLine)
 }
 
 /** Whether the handover was written after this flow asked for it, by the host's stamp. */
@@ -201,7 +226,7 @@ export function whatBecameOfTheHandover(reading: TheHandoverRead): HandoverVerdi
   if (!writtenAfterAsking(reading.stamp, reading.asked_at)) {
     return { kind: 'not_written', why: 'the handover was written before this session was asked for one' }
   }
-  const missing = packagesMissingFrom(reading.text, reading.holds)
+  const missing = [...packagesMissingFrom(reading.text, reading.holds), ...ownerItemsMissingFrom(reading.text, reading.owner_items)]
   if (missing.length === 0) return { kind: 'accepted', missing }
   // At the limit a clear cannot wait, and a second miss clears anyway: the row says what was missing either way.
   if (reading.at_limit || reading.sent_back >= 1) return { kind: 'cleared_anyway', missing }
@@ -209,21 +234,28 @@ export function whatBecameOfTheHandover(reading: TheHandoverRead): HandoverVerdi
 }
 
 /**
+ * The line a resume names the member's newest brief with, as crew-code's resume does (hooks/register.tsx:3064): a brief
+ * sent just before the refresh is the assignment, so it is never lost with the chat (martha#999 package 1).
+ */
+export const theBriefLine = (brief: string): string => `Read your brief ${brief}: it is your current assignment unless the handover says it is done.`
+
+/**
  * The prompt the successor resumes on: its handover's file, the acts of its package that were sent and never concluded —
  * so it checks them instead of sending them twice (martha#254's read) — and the package's contract, which it is handed
  * again because a successor is held to the same version its predecessor was (martha#513). The file is named, never
  * quoted. `telling` is what a killed run left, from the one function both resume prompts read it from (#693).
  */
-export function theResumePrompt(resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined; readonly telling?: string | undefined }): string {
+export function theResumePrompt(resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined; readonly telling?: string | undefined; readonly brief?: string | undefined }): string {
   const acts =
     resuming.acts.length === 0
       ? ''
       : ` Before you send anything again, check what became of these acts of your package, which were sent and never concluded: ${resuming.acts.join('; ')}.`
   const contract = resuming.contract === undefined ? '' : `\n\n${resuming.contract}`
   const telling = resuming.telling === undefined ? '' : `\n\n${resuming.telling}`
+  const brief = resuming.brief === undefined ? '' : ` ${theBriefLine(resuming.brief)}`
   return (
     `You are ${resuming.member}. Martha just refreshed this session. Read your handover at ${resuming.file}: it is what ` +
-    `your predecessor left you, and it is the only place your work stands. Then carry on with the packages it names.${acts}${contract}${telling}`
+    `your predecessor left you, and it is the only place your work stands.${brief} Then carry on with the packages it names.${acts}${contract}${telling}`
   )
 }
 
@@ -232,10 +264,10 @@ export function theResumePrompt(resuming: { readonly member: string; readonly fi
  * from the one function both resume prompts read it from, so a caller hands in the crew's store and the clock alone.
  */
 export function theResumePromptWithItsTelling(
-  resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined; readonly crew: CrewStore; readonly now_ms: number },
+  resuming: { readonly member: string; readonly file: string; readonly acts: readonly string[]; readonly contract?: string | undefined; readonly brief?: string | undefined; readonly crew: CrewStore; readonly now_ms: number },
 ): string {
   const telling = theTellingOnTheNextStart({ crew: resuming.crew, member: resuming.member, now_ms: resuming.now_ms })
-  return theResumePrompt({ member: resuming.member, file: resuming.file, acts: resuming.acts, contract: resuming.contract, telling: telling.telling })
+  return theResumePrompt({ member: resuming.member, file: resuming.file, acts: resuming.acts, contract: resuming.contract, telling: telling.telling, brief: resuming.brief })
 }
 
 /**

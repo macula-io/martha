@@ -34,6 +34,8 @@ export const ACP = {
   newSession: 'session/new',
   prompt: 'session/prompt',
   cancel: 'session/cancel',
+  /** Detaches a session the launch opened before (martha#1002): sent only once its prompt has returned. */
+  close: 'session/close',
   update: 'session/update',
   requestPermission: 'session/request_permission',
 } as const
@@ -138,6 +140,12 @@ export type Decide = (request: APermissionRequest, withdrawn: AbortSignal) => AD
  */
 export type HearAnUpdate = (sessionId: string, update: unknown) => void
 
+/**
+ * A listener for a permission request that came outside any running turn of its session (martha#1002): the client
+ * has already answered it cancelled; the listener hears whose session it named, so a launch can stop on a closed one.
+ */
+export type HearAStrayRequest = (request: APermissionRequest) => void
+
 interface Pending {
   readonly method: string
   readonly settle: (value: unknown) => void
@@ -200,17 +208,21 @@ export class AcpClient {
   readonly #to: Writable
   readonly #decide: Decide
   readonly #hearAnUpdate: HearAnUpdate | undefined
+  readonly #hearAStray: HearAStrayRequest | undefined
   readonly #pending = new Map<number, Pending>()
   readonly #turns = new Map<string, ATurnBeingHeard>()
+  /** Each running turn's prompt, settled when the agent answers it, by session: what a close waits on (martha#1002). */
+  readonly #running = new Map<string, Promise<void>>()
   readonly #usage = new Map<string, AnAgentsUsage>()
   #nextId = 1
   #buffered = ''
   #ended: string | undefined
 
-  constructor(from: Readable, to: Writable, decide: Decide, hearAnUpdate?: HearAnUpdate) {
+  constructor(from: Readable, to: Writable, decide: Decide, hearAnUpdate?: HearAnUpdate, hearAStray?: HearAStrayRequest) {
     this.#to = to
     this.#decide = decide
     this.#hearAnUpdate = hearAnUpdate
+    this.#hearAStray = hearAStray
     from.setEncoding('utf8')
     from.on('data', (chunk: string) => this.#read(chunk))
     from.on('end', () => this.#end('the agent\'s output ended'))
@@ -219,9 +231,9 @@ export class AcpClient {
   }
 
   /** A client over a child's stdio, which the launcher started with both piped. */
-  static overAChild(child: ChildProcess, decide: Decide, hearAnUpdate?: HearAnUpdate): AcpClient {
+  static overAChild(child: ChildProcess, decide: Decide, hearAnUpdate?: HearAnUpdate, hearAStray?: HearAStrayRequest): AcpClient {
     if (child.stdout === null || child.stdin === null) throw new Error('the agent was started without piped stdio')
-    return new AcpClient(child.stdout, child.stdin, decide, hearAnUpdate)
+    return new AcpClient(child.stdout, child.stdin, decide, hearAnUpdate, hearAStray)
   }
 
   /** Opens the connection: this client's version, and no file or terminal capability, so the agent asks for none. */
@@ -255,11 +267,14 @@ export class AcpClient {
     if (this.#turns.has(sessionId)) throw new Error(`session ${sessionId} already has a turn running`)
     const turn: ATurnBeingHeard = { text: '', toolCalls: new Map(), asked: [], waiting: new Set(), cancelled: false }
     this.#turns.set(sessionId, turn)
+    const asked = this.#ask(ACP.prompt, { sessionId, prompt: [{ type: 'text', text }] })
+    this.#running.set(sessionId, asked.then(() => undefined, () => undefined))
     try {
-      const answer = objectOf(await this.#ask(ACP.prompt, { sessionId, prompt: [{ type: 'text', text }] }))
+      const answer = objectOf(await asked)
       return { stopReason: textOf(answer['stopReason']), text: turn.text, toolCalls: [...turn.toolCalls.values()], asked: turn.asked }
     } finally {
       this.#turns.delete(sessionId)
+      this.#running.delete(sessionId)
       // A turn that ended with a request still undecided: the agent has stopped waiting for it, so it is answered
       // cancelled now and its decision is withdrawn. The end of the agent's output comes here too: #end fails the
       // prompt, which ends the turn.
@@ -278,6 +293,16 @@ export class AcpClient {
     if (turn === undefined) return
     turn.cancelled = true
     for (const waiting of turn.waiting) this.#withdraw(turn, waiting)
+  }
+
+  /**
+   * Closes a session the launch opened before (martha#1002, design point 1): sent only after the session's running
+   * prompt, if any, has had the agent's answer, so no turn of it is in flight when the engine detaches it. It waits on
+   * this client's own record of running turns, never on the order its caller keeps.
+   */
+  async closeSession(sessionId: string): Promise<void> {
+    for (let running = this.#running.get(sessionId); running !== undefined; running = this.#running.get(sessionId)) await running
+    await this.#ask(ACP.close, { sessionId })
   }
 
   /** Ends the agent's input: the launcher's way of saying the connection is over. */
@@ -399,6 +424,7 @@ export class AcpClient {
     if (named === undefined || turn === undefined) {
       this.notes.push(`a permission request outside a turn, or naming no call, was cancelled: ${JSON.stringify(params).slice(0, 200)}`)
       this.#send({ jsonrpc: '2.0', id, result: { outcome: { outcome: 'cancelled' } } })
+      if (named !== undefined) this.#hearAStray?.(named)
       return
     }
     const heard = turn.toolCalls.get(named.toolCallId)
