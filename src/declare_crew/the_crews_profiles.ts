@@ -18,11 +18,13 @@ export const PROFILE = 'profile'
 
 /**
  * Which credential a Claude Code member on a provider is billed through (martha#916, DECIDED 2026-11-20 "Crew setting
- * (Recommended)", placed under `providers.<name>.billing` by the Supervisor's ruling on #931): the owner's subscription
- * sign-in, or the API key. Only the chosen credential reaches a member; the other is left out of its environment and its
- * config. A provider that names none reads as null, and the launch then picks the subscription when the owner is signed
- * in, else the key when the launcher carries one (../give_a_member_its_own_config). Any other value is refused by name.
- * These are the declaration's words, not the host's own account of how a session was billed (../keep_what_a_session_spent).
+ * (Recommended)", moved to `providers.<name>.billing` by DECIDED 2026-11-21 "billing belongs on the provider"): the
+ * owner's subscription sign-in, or the API key. Only the chosen credential reaches a member; the other is left out of its
+ * environment and its config. A provider that names none reads as null, and the launch then picks the subscription when
+ * the owner is signed in, else the key when the launcher carries one (../give_a_member_its_own_config). Any other value
+ * is refused by name. The subscription is Anthropic's own alone, so a provider that names an endpoint refuses it by
+ * name too. These are the declaration's words, not the host's own account of how a session was billed
+ * (../keep_what_a_session_spent).
  */
 export const BILLED_BY_SUBSCRIPTION = 'subscription'
 export const BILLED_BY_API_KEY = 'api_key'
@@ -142,14 +144,21 @@ function aProviderOf(entry: Block, at: string, refuse: RefuseAProfile): Provider
   }
   if (isText(entry['account']) && looksLikeAKey(entry['account'])) refuse(`${at}.account`, 'reads as a key, not an account name: the key itself never goes in the declaration')
   refuseTheKeysPlace(entry, at, refuse)
-  return { endpoint: textOrNull(entry['endpoint']), key_from: textOrNull(entry['key_from']), key_file: textOrNull(entry['key_file']), billing: aBillingOf(entry['billing'], at, refuse) }
+  const endpoint = textOrNull(entry['endpoint'])
+  return { endpoint, key_from: textOrNull(entry['key_from']), key_file: textOrNull(entry['key_file']), billing: aBillingOf(entry['billing'], endpoint, at, refuse) }
 }
 
-/** A provider's billing, or null when it names none; any other value is refused by name, never read as the default. */
-function aBillingOf(value: unknown, at: string, refuse: RefuseAProfile): Billing | null {
+/**
+ * A provider's billing, or null when it names none; any other value is refused by name, never read as the default. The
+ * subscription is Anthropic's own alone (martha#916, DECIDED 2026-11-21 "billing belongs on the provider"): a provider
+ * that names an endpoint is another provider's, and refuses the subscription by name too.
+ */
+function aBillingOf(value: unknown, endpoint: string | null, at: string, refuse: RefuseAProfile): Billing | null {
   if (value === undefined) return null
   const billing = BILLINGS.find((known) => known === value)
-  return billing ?? refuse(`${at}.billing`, `is not one of ${BILLINGS.join(', ')}`)
+  if (billing === undefined) refuse(`${at}.billing`, `is not one of ${BILLINGS.join(', ')}`)
+  if (billing === BILLED_BY_SUBSCRIPTION && endpoint !== null) refuse(`${at}.billing`, `is ${BILLED_BY_SUBSCRIPTION}, and this provider names an endpoint: a subscription bills only Anthropic's own provider`)
+  return billing
 }
 
 /** Where a provider's key is read from: a variable's name or a file's path, never both, and never the key. */

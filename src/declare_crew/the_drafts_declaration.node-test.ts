@@ -180,6 +180,13 @@ test('martha#916: a provider\'s billing is the subscription or the key, refused 
   }
 })
 
+test('martha#916: the subscription bills only Anthropic\'s own provider: one that names an endpoint refuses it at that provider\'s billing field, and still takes the key', async () => {
+  const withProvider = (fields: Record<string, unknown>) => ({ ...draft, providers: { ...draft.providers, an_engine_provider: fields } })
+  await refusedWith(withProvider({ endpoint: 'api.a-provider.test', key_file: '~/keys/a-key-file', billing: BILLED_BY_SUBSCRIPTION }), 'providers.an_engine_provider.billing', /a subscription bills only Anthropic's own/)
+  const settings = await declare(withProvider({ endpoint: 'api.a-provider.test', key_file: '~/keys/a-key-file', billing: BILLED_BY_API_KEY }))
+  assert.equal(settings.members.find((member) => member.name === 'Maker')?.billing, BILLED_BY_API_KEY, 'the key a provider other than Anthropic\'s own is billed through was refused')
+})
+
 test('#931: a provider names where its key is, never the key: a variable\'s name or a path with no `..` and no space', async () => {
   const provider = (fields: Record<string, unknown>) => ({ ...draft, providers: { ...draft.providers, an_account: fields } })
   await refusedWith(provider({ key_file: '~/keys/../a-file' }), 'providers.an_account.key_file')
