@@ -23,6 +23,7 @@ import { type Addressee, type ChannelHost, appendToTheChannel, readTheChannel, T
 import { PackagePaused, RecoveryDecided, sendAnActAndRecover, type AnInspection } from '../recover_a_failed_act/recover_a_failed_act.ts'
 import { linesACardTeaches } from '../read_a_crew_line/crew_lines.ts'
 import { keepTheLinesRow, readEveryCrewLine, type CrewLineRead } from '../read_a_crew_line/read_a_crew_line.ts'
+import { assignedModelNotes, type ADeclaredModel } from './the_assigned_model_note.ts'
 
 /** The name the crew registers this tool under (martha#343): the one tool that speaks, and it speaks to the crew. */
 export const SAY_TO_THE_CREW = 'say_to_the_crew'
@@ -49,6 +50,11 @@ export interface Saying {  /** The member the launcher started: never the model'
   readonly package: string | null
   readonly to: unknown
   readonly text: unknown
+  /**
+   * The model the declaration gives each member, which an ASSIGN's `model=` is noted against (martha#980 package 5).
+   * A send that is not given them notes nothing about models.
+   */
+  readonly models?: readonly ADeclaredModel[]
 }
 
 /** What became of a send: the message's position in the channel and the line the member is told, or why it was not sent. */
@@ -106,6 +112,7 @@ function theMessageRead(input: Saying): AMessageRead | { readonly refused: strin
       ? [`a message is at most ${LONGEST_MESSAGE} characters, and this one is ${input.text.length}: it was sent as it is.`]
       : []),
     ...reading.notices,
+    ...(input.models === undefined ? [] : assignedModelNotes(reading.lines, to, input.member, input.models)),
   ]
   return { to, text: input.text, lines: reading.lines, ...(notices.length === 0 ? {} : { notice: notices.join(' ') }) }
 }
