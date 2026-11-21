@@ -50,12 +50,11 @@ import { PATH_OF_SOURCE, takeInTurn, type HostSession } from '../take_in_a_turn/
 export const MESH_TOOL_PREFIX = 'mesh_'
 
 /** The tool that sends and returns the reply when told to wait for one. */
-const SENDS_AND_MAY_WAIT = `${MESH_TOOL_PREFIX}say`
+export const SENDS_AND_MAY_WAIT = `${MESH_TOOL_PREFIX}say`
 const WAIT_FOR_A_REPLY = 'wait_reply_seconds'
 
 /** The tool that rings an agent and returns its answer: a decline carries the callee's own reason (A5). */
 export const RINGS_AND_RETURNS_THE_ANSWER = `${MESH_TOOL_PREFIX}ring`
-
 /**
  * The tool that answers a ring this member was given: its result can carry
  * the caller's own text, an acknowledgement it could not read among it (A4).
