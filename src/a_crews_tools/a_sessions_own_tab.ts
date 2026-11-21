@@ -90,7 +90,7 @@ export interface TheOwnTabAsksPlace {
  */
 export function anAskTheSessionsOwnTabMakes(at: TheOwnTabAsksPlace, name: string, args: Readonly<Record<string, unknown>>): AnOwnTabAnswer | undefined {
   if (name === THE_PROGRESS_SWITCH_ASK) return theProgressSwitched(at.asked, at.own, at.session, args)
-  if (name === THE_TASKS_ASK) return theTasksNoted(at.asked, args)
+  if (name === THE_TASKS_ASK) return theTasksNoted(at.asked, at.own, at.session, args)
   if (name === THE_OWNERS_PARK_ASK) return theOwnersParkMoved(at.park, args)
   return undefined
 }
@@ -106,7 +106,9 @@ export function theProgressSwitched(asked: AnOwnTabAsked, own: TheSessionsOwnSta
   if (wanted !== 'on' && wanted !== 'off') return { refused: 'progress reporting is turned on or off: /crew-progress on, or /crew-progress off' }
   if (wanted === 'off') {
     own.progress_off.add(session)
-    asked.writeTheRow((row) => ({ ...row, task: '', progress: { ...row.progress, step: 0 } }))
+    // The task list is progress too: a reader shows its open task where the report's is blank (see_the_crew), so off
+    // clears it with the report, and no list is taken until progress reporting is on again (review r=1).
+    asked.writeTheRow(({ [TASKS_FIELD]: _taken, ...row }) => ({ ...row, task: '', progress: { ...row.progress, step: 0 } }))
   } else {
     own.progress_off.delete(session)
   }
@@ -164,7 +166,10 @@ const THE_DECLARATION_NOT_ASKED: TheDeclaration = { members: [], mode: { may: {}
  * The host's own task list, as the mod folds it (martha#1000, gap 8 of #957): the row's `tasks` moves, and the member's
  * own `task`, `progress` and `reported_at` are left exactly as its report wrote them, because the two are told apart by
  * which wrote them. A task-list write keeps a wait the member declared: only a report ends a wait (crew-code reg:3794).
- */export function theTasksNoted(asked: AnOwnTabAsked, args: Readonly<Record<string, unknown>>): AnOwnTabAnswer {
+ */export function theTasksNoted(asked: AnOwnTabAsked, own: TheSessionsOwnState, session: string, args: Readonly<Record<string, unknown>>): AnOwnTabAnswer {
+  // A session whose owner turned progress reporting off takes no task list either: it is progress the owner asked for
+  // none of (review r=1).
+  if (own.progress_off.has(session)) return { answer: PROGRESS_REPORTING_IS_OFF }
   const tasks = theTasksIn(args['tasks'])
   if (tasks === undefined) return { refused: `a task list is a list of tasks, each with a subject and one of ${TASK_STATUSES.join(', ')}` }
   asked.writeTheRow((row) => ({ ...row, [TASKS_FIELD]: tasks }))

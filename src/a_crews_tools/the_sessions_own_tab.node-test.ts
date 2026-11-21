@@ -20,8 +20,10 @@ import {
   anAskTheSessionsOwnTabMakes,
   holdsASettledWait,
   mayPutAQuestionToTheOwner,
+  PROGRESS_REPORTING_IS_OFF,
   THE_TASKS_ASK,
   theAgentsInHand,
+  theProgressSwitched,
   theRowSettledBetweenTurns,
   theSessionsOwnState,
   theStateAFinishedTurnSettlesTo,
@@ -169,7 +171,23 @@ test('the closing question is read only at a turn\'s end, and only when it ends 
 
 test('a row a session wrote is written by the same one writer the tab asks: nothing here is a second writer', () => {
   const tab = anAskedTab(aRow())
-  const answered = theTasksNoted(tab.asked, { tasks: [] })
+  const answered = theTasksNoted(tab.asked, theSessionsOwnState(), 'a-session', { tasks: [] })
   assert.ok('answer' in answered, `an empty list, which a cleared set of tasks is, was refused: ${'refused' in answered ? answered.refused : ''}`)
   assert.deepEqual(tab.row()[TASKS_FIELD], [], 'a list of no tasks is not written as the row\'s own empty list')
+})
+
+test('progress reporting turned off clears the task list taken, and takes no other until it is on again (review r=1)', () => {
+  // A reader shows the list's open task where the report's is blank (see_the_crew), so a list left on the row, or one
+  // taken after off, is progress the owner asked for none of.
+  const tab = anAskedTab(aRow({ [TASKS_FIELD]: [{ subject: 'write the tests', status: 'in_progress' as const }] }))
+  const own = theSessionsOwnState()
+  const at = { ...aTabPlace(tab.asked), own }
+  assert.ok('answer' in theProgressSwitched(tab.asked, own, at.session, { wanted: 'off' }))
+  assert.equal(tab.row()[TASKS_FIELD], undefined, 'the task list taken stood after progress reporting was turned off')
+  const list = { tasks: [{ subject: 'push', status: 'in_progress' }] }
+  assert.deepEqual(anAskTheSessionsOwnTabMakes(at, THE_TASKS_ASK, list), { answer: PROGRESS_REPORTING_IS_OFF })
+  assert.equal(tab.row()[TASKS_FIELD], undefined, 'a task list was taken while progress reporting was off')
+  theProgressSwitched(tab.asked, own, at.session, { wanted: 'on' })
+  anAskTheSessionsOwnTabMakes(at, THE_TASKS_ASK, list)
+  assert.deepEqual(tab.row()[TASKS_FIELD], list.tasks, 'a task list was not taken again once progress reporting was on')
 })
