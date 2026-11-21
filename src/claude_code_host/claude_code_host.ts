@@ -150,6 +150,7 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
     },
     tools: {
       ownNameOf: ownNameOfCalledTool,
+      marthasOwnToolCalled,
       register: (tool) => {
         if (tools.has(tool.name)) throw new Error(`a tool is already registered: ${tool.name}`)
         tools.set(tool.name, tool)
@@ -178,6 +179,17 @@ export function claudeCodeHost(engine: ClaudeCodeEngine, places: ClaudeCodePlace
 /** What Claude Code puts between the parts of an MCP tool's name: `mcp__<server>__<tool>`. */
 export const MCP_NAME_SEPARATOR = '__'
 export const MCP_NAME_PREFIX = `mcp${MCP_NAME_SEPARATOR}`
+
+/**
+ * The server name Claude Code gives Martha's own crew tools: the plugin's name, read from the manifest the host reads
+ * it from, so it is said once there and never restated here.
+ */
+export const MARTHAS_PLUGIN: string = (
+  JSON.parse(readFileSync(new URL('../claude_code_relay/.claude-plugin/plugin.json', import.meta.url), 'utf8')) as { readonly name: string }
+).name
+
+/** The exact name Claude Code calls Martha's own crew tool by (martha#987 slice 4): `mcp__<plugin>__<own>`. */
+export const marthasOwnToolCalled = (own: string): string => `${MCP_NAME_PREFIX}${MARTHAS_PLUGIN}${MCP_NAME_SEPARATOR}${own}`
 
 /**
  * The name a called tool's own server gave it: what follows the last `__` of an

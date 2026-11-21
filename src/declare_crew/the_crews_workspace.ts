@@ -33,6 +33,16 @@ export function whereTheCrewOpens(declaration: Block): WhereTheCrewOpens {
   return { id: typeof id === 'string' ? id.trim() : WHERE_A_CREW_OPENS_WHEN_UNNAMED.id, terminal: typeof terminal === 'string' ? terminal : WHERE_A_CREW_OPENS_WHEN_UNNAMED.terminal }
 }
 
+/**
+ * The organisations the workspace names as the crew's own (martha#987), read after theWorkspacesClonesOf has refused
+ * any entry that is no organisation; none when it names none.
+ */
+export function theCrewsOwnOrgsOf(declaration: Block): readonly string[] {
+  const workspace = declaration[WORKSPACE]
+  const named = isBlock(workspace) ? workspace['own_orgs'] : undefined
+  return Array.isArray(named) ? named.filter((entry): entry is string => typeof entry === 'string') : []
+}
+
 /** The fields a workspace may name: the folder its clones sit in, the folders allowed beside them, and its own orgs. */
 export const WORKSPACE_KEYS = ['root', 'root_allowed', 'own_orgs'] as const
 

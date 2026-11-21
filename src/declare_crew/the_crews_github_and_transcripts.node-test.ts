@@ -42,6 +42,8 @@ test('#931 B: the defaults are the values the code held before #931, written out
   // Before #931: THE_FLOOR = 500 (spend_the_github_budget), TRANSCRIPTS_LAUNCHES_KEPT = 64 and both byte bounds
   // 16 * 1024 * 1024 (choose_the_transcripts_to_keep).
   assert.equal(GITHUB_WHEN_UNNAMED.budget_floor, 500)
+  // crew-code's GH_AUTHORS_MS (martha#987).
+  assert.equal(GITHUB_WHEN_UNNAMED.author_probe_ms, 20000)
   assert.equal(TRANSCRIPTS_WHEN_UNNAMED.launches_kept, 64)
   assert.equal(bytesKeptOf(TRANSCRIPTS_WHEN_UNNAMED), 16 * 1024 * 1024)
 })
@@ -56,12 +58,13 @@ test('#931 B: a declaration without the blocks reads every default, so an earlie
 
 test('#931 B: each declared field is read, a field left out reads its own default, and a floor of 0 is a floor', async () => {
   const settings = await declared(aCrewWith({ [GITHUB]: { budget_floor: 120 }, [TRANSCRIPTS]: { launches_kept: 3, megabytes_kept: 2 } }))
-  assert.deepEqual(settings.github, { budget_floor: 120 })
+  assert.deepEqual(settings.github, { budget_floor: 120, author_probe_ms: GITHUB_WHEN_UNNAMED.author_probe_ms })
+  assert.deepEqual((await declared(aCrewWith({ [GITHUB]: { author_probe_ms: 7 } }))).github, { budget_floor: GITHUB_WHEN_UNNAMED.budget_floor, author_probe_ms: 7 })
   assert.deepEqual(settings.transcripts, { launches_kept: 3, megabytes_kept: 2 })
   assert.equal(bytesKeptOf(settings.transcripts), 2 * MEGABYTE)
   assert.deepEqual((await declared(aCrewWith({ [TRANSCRIPTS]: { launches_kept: 3 } }))).transcripts, { ...TRANSCRIPTS_WHEN_UNNAMED, launches_kept: 3 })
   assert.deepEqual((await declared(aCrewWith({ [TRANSCRIPTS]: { megabytes_kept: 2 } }))).transcripts, { ...TRANSCRIPTS_WHEN_UNNAMED, megabytes_kept: 2 })
-  assert.deepEqual((await declared(aCrewWith({ [GITHUB]: { budget_floor: 0 } }))).github, { budget_floor: 0 })
+  assert.deepEqual((await declared(aCrewWith({ [GITHUB]: { budget_floor: 0 } }))).github, { budget_floor: 0, author_probe_ms: GITHUB_WHEN_UNNAMED.author_probe_ms })
 })
 
 test('#931 B: a value the block cannot mean is refused by name, never read as the default', async () => {
@@ -71,6 +74,7 @@ test('#931 B: a value the block cannot mean is refused by name, never read as th
     await refusedAt({ [block]: { kept: 1 } }, `${block}.kept`)
   }
   for (const bad of [-1, 1.5, '500', null]) await refusedAt({ [GITHUB]: { budget_floor: bad } }, `${GITHUB}.budget_floor`)
+  for (const bad of [0, -1, 1.5, '20000', null]) await refusedAt({ [GITHUB]: { author_probe_ms: bad } }, `${GITHUB}.author_probe_ms`)
   for (const key of ['launches_kept', 'megabytes_kept']) {
     for (const bad of [0, -1, 1.5, '16', null]) await refusedAt({ [TRANSCRIPTS]: { [key]: bad } }, `${TRANSCRIPTS}.${key}`)
   }

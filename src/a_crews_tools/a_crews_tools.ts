@@ -78,6 +78,7 @@ import { theBudgetOver, theSpendOnARow, type TheBudgetAsACrewHoldsIt } from '../
 import type { ASpendInForce } from '../hold_a_package_to_its_budget/refuse_a_call_past_the_budget.ts'
 import type { TheCrew } from '../report_where_the_work_stands/report_where_the_work_stands.ts'
 import { type ASpawnedAgent, theReviewRuleOver, type TheReviewRule } from '../run_reviews_on_the_review_model/run_reviews_on_the_review_model.ts'
+import { theVouchOfALaunch, type TheVouch } from '../vouch_for_own_github_and_git_lines/the_vouch_of_a_launch.ts'
 import { theNudgesGoTo } from '../nudge_the_supervisor/nudge_the_supervisor.ts'
 import { seeTheCrew } from '../see_the_crew/see_the_crew.ts'
 import { SEE_THE_CREW_TOOL, seeTheCrewOver } from '../see_the_crew/the_see_the_crew_tool.ts'
@@ -85,6 +86,8 @@ import { WHO_IS_FREE_TOOL, whoIsFreeOver } from '../see_who_is_free/who_is_free_
 import { UNHELD_WORK_TOOL, unheldWorkOver } from '../find_the_unheld_work/unheld_work_tool.ts'
 import { theBacklogReaderIn } from '../find_the_unheld_work/the_backlog_reader_of_a_launch.ts'
 import { SAY_TO_THE_CREW_TOOL, sayToTheCrewOver } from '../send_a_crew_message/say_to_the_crew_tool.ts'
+import type { TheHeldProsePlace } from '../send_a_crew_message/send_a_crew_message.ts'
+import { HELD_PLACE, heldFileNameOf } from '../send_a_crew_message/hold_a_tainted_members_prose.ts'
 import { GH_MS } from '../send_a_crew_message/the_runs_a_handoff_names.ts'
 import {
   BEAT_INTERVAL_MS,
@@ -219,6 +222,12 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
   /** The sessions this launch took in, by id: what a handover is stamped with, and the predecessor a refresh inherits. */
   readonly sessions?: { readonly of: (session_id: string) => HostSession | undefined }
   /**
+   * Whether the gate lets this session's `say_to_the_crew` through only with its prose held (martha#987 slice 4): the
+   * launcher's answer, over the same record, policy and gate mode its tool-call gate reads. Absent means held, so a
+   * launch that has not heard of the rule cannot let a tainted member's prose out as crew text.
+   */
+  readonly sendHoldsProse?: (session_id: string) => boolean
+  /**
    * What this launcher keeps of the menus its host closed (martha#313): a settle of the owner's asks is refused unless a
    * menu closed in the session that took the batch. A launch given none settles no batch, and says so.
    */
@@ -254,10 +263,15 @@ export interface CrewToolPlaces extends Pick<TheWindowPlaces, 'served_tools'> {
    * and a crew that declared no workspace layout hands none.
    */
   readonly refusesTheHandOff?: (call: { readonly tool: string; readonly input: Readonly<Record<string, unknown>> }) => Promise<string | undefined>
+  /**
+   * The member's own environment, as its host was started with it (martha#987): the stranger-text gate's vouch asks gh
+   * as the member would. A place given none vouches for no line.
+   */
+  readonly member_env?: Readonly<Record<string, string | undefined>>
 }
 
 /** The tools a crew's member can call. */
-export interface CrewTools extends TheReviewRule {
+export interface CrewTools extends TheReviewRule, TheVouch {
   readonly tools: readonly CrewTool[]
   /** Answers a tool call: the member's name is this launch's, the session's is the one the call came from. */
   answer(name: string, args: Readonly<Record<string, unknown>>, session: string): Promise<CoreToolAnswer>
@@ -507,6 +521,7 @@ export function crewToolsOver(places: CrewToolPlaces): CrewTools | HoldingTheWat
     theSpendInForce: (session_id) => budget.theSpendInForce(session_id),
     noteTheCallCounted: (session_id, own_name) => budget.noteTheCallCounted(session_id, own_name),
     ...theReviewRuleOver({ declared: () => crewOrRefusal(held), spawn: held.spawn }),
+    ...theVouchOfALaunch(held),
     noteTheCallsAnswer: (call, session) => held.menus?.noteTheCallsAnswer(call, session),
     ends: state.ends,
     theContractInForce: (call, names) => theContractTheMemberHolds(held, call, names),
@@ -915,6 +930,25 @@ const theSendAsked = (places: CrewToolPlaces, state: SessionState, settings: Cre
   ...(places.processes === undefined
     ? {}
     : { runs: theGithubSpenderOf({ stores: places.stores, root: places.root, processes: places.processes, clock: places.ledger.clock, github: settings.github, clock_zone: settings.clock_zone }, GH_MS) }),
+  ...((places.sendHoldsProse?.(state.session) ?? true) ? { hold: theHeldProsePlaceOf(places) } : {}),
+})
+
+/** A count of the prose this launch has held, so two sends in one millisecond keep two files. */
+let heldSoFar = 0
+
+/**
+ * Where this member's held prose is kept (martha#987 slice 4): the crew store's held place, under Martha's state root
+ * and outside the checkout, where a member's file tools may not write (martha#619). One file per send.
+ */
+const theHeldProsePlaceOf = (places: CrewToolPlaces): TheHeldProsePlace => ({
+  keep: (text) => {
+    const place = places.stores.crew.place(HELD_PLACE)
+    if ('refusal' in place) return { refused: place.refusal }
+    heldSoFar += 1
+    const name = heldFileNameOf(places.member, places.ledger.clock.now(), heldSoFar)
+    const unkept = place.keep(name, text)
+    return unkept === undefined ? { path: `${place.path}/${name}` } : { refused: unkept.refusal }
+  },
 })
 
 /** What the receipts are read over: the channel's ledger, the member that sent, and the crew it sent to. */

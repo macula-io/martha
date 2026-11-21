@@ -34,7 +34,8 @@
 import { createHash } from 'node:crypto'
 
 import type { RowStore } from '../host_contract/host_contract.ts'
-import type { Ingestion, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { generationOf, type Ingestion, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { RECORD_LOST } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** What prefixes a session's release stream; the rest is the session id, as the session record's stream does. */
 export const RELEASE_STREAM = 'release-of:'
@@ -107,6 +108,34 @@ export function releaseMarkFor(
     at: new Date(now()).toISOString(),
     cleared: raw.length,
   }
+}
+
+/**
+ * Whether an older gate than `generation` recorded this arrival (martha#987). A lost record's mark is never stale: it
+ * says no record could be read, which no gate generation makes safe.
+ */
+export const isStaleArrival = (ingest: Ingestion, generation: number): boolean =>
+  ingest.path !== RECORD_LOST.path && generationOf(ingest) < generation
+
+/**
+ * The mark `martha release --stale` writes (martha#987, crew-code's `/crew-untaint --stale`): it clears what an older
+ * gate recorded, and nothing this gate recorded. It is still a prefix mark, so the launcher and the carry read it as
+ * they read every release:
+ *
+ *   - it counts from where the owner's newest release already stands, never from the start, because the newest
+ *     matching mark is the one applied: a shorter one would hold again what an earlier release cleared;
+ *   - it clears the longest run of stale arrivals at the head of what is still held. A stale arrival after one this
+ *     gate recorded stays held, because a mark clears a prefix and nothing else (fail closed).
+ *
+ * Undefined when nothing at the head of what is held is stale.
+ */
+export function staleReleaseMarkFor(raw: readonly Ingestion[], marks: readonly ReleaseMark[], generation: number, by: string, now: () => number = Date.now): ReleaseMark | undefined {
+  const held = releasedRecordOf(raw, marks).ingested
+  const cleared = held.findIndex((ingest) => !isStaleArrival(ingest, generation))
+  const count = cleared < 0 ? held.length : cleared
+  if (count === 0) return undefined
+  const through = raw.length - held.length + count
+  return { through, digest: recordDigestOf(raw.slice(0, through)), by, at: new Date(now()).toISOString(), cleared: count }
 }
 
 /** A whole number of no less than zero at `key`, or undefined when what is there is not one. */

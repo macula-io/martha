@@ -22,6 +22,7 @@ import { rememberOwnWriteOfCall } from '../launch_a_claude_code_member/remember_
 import { writesTheOwnersMemory, type OwnerMemoryPlaces } from '../refuse_a_member_writing_owner_memory/refuse_a_member_writing_owner_memory.ts'
 import { namesTheOwnersSettings } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import { gooseToolNames } from '../speak_acp_to_an_agent/answer_a_goose_call_by_the_entry.ts'
+import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { namesTheLaunchsRoot, theEnginesFileTools, theEnginesToolResultRows, theOwnersEngineFolders, theRootsFolders } from './the_engines_decisions.ts'
 import { theSessionStillHolds, theSessionStoreOf, type TheSessionsGate } from './the_session_store_read_back.ts'
 
@@ -66,7 +67,7 @@ export function theEnginesPlaces(shared: TheSharedPlaces, own: TheEnginesOwnPlac
   const store = theSessionStoreOf(own.facts, own.root)
   return {
     ...shared,
-    names: gooseToolNames(own.facts.tool_naming),
+    names: gooseToolNames(own.facts.tool_naming, THE_CREWS_TOOL_SERVER),
     refusesAWriteToTheOwnersSettings: (input) =>
       namesTheOwnersSettings(input, own.owners_settings_file, launch_dir, own.home, tools) ?? namesTheLaunchsRoot(input, rootFolders, launch_dir, own.home, tools),
     refusesAWriteToTheOwnersMemory: (tool, input) => writesTheOwnersMemory(tool, input, ownerMemory, launch_dir, own.home, shared.machine, tools),

@@ -53,6 +53,8 @@ export const FOLDS_THAT_ARE_NOT_NAMES: readonly AFoldThatIsNotAName[] = [
   { path: 'send_a_crew_message/the_runs_a_handoff_names.ts', folds: 1, reason: "a run's head sha, which GitHub writes as hex and a HANDOFF line's tip is compared with" },
   { path: 'serve_the_crews_tools_to_an_engine/the_tool_servers_entry.ts', folds: 2, reason: "an environment variable's name, which the Goose engine drops from an entry ignoring ASCII case" },
   { path: 'trust_only_signed_lists/trust_only_signed_lists.ts', folds: 2, reason: A_NODE_ID },
+  { path: 'vouch_for_own_github_and_git_lines/vouch_for_own_github_and_git_lines.ts', folds: 5, reason: 'a GitHub owner/repo and a GitHub login, which GitHub compares ignoring case (martha#987 T5, T6)' },
+  { path: 'vouch_for_own_github_and_git_lines/what_github_and_git_say.ts', folds: 1, reason: "a remote's host name, which DNS compares ignoring case (martha#987 T7)" },
 ]
 
 /** One fold the rule names: where it stands, and why it is named. */

@@ -34,7 +34,7 @@ export const theGooseShellTool = (facts: Pick<EngineFacts, 'tool_naming' | 'shel
  * at the end the recording says, so with the first an own name may itself hold the separator. A name with no separator,
  * or with nothing after it, is its own name.
  */
-export function gooseToolNames(naming: ToolNaming): ToolNames {
+export function gooseToolNames(naming: ToolNaming, crew_server?: string): ToolNames {
   return {
     ownNameOf: (called) => {
       const at = naming.split_at === 'first' ? called.indexOf(naming.separator) : called.lastIndexOf(naming.separator)
@@ -42,6 +42,9 @@ export function gooseToolNames(naming: ToolNaming): ToolNames {
       const own = called.slice(at + naming.separator.length)
       return own === '' ? called : own
     },
+    // Martha's own crew tools are served under the extension key the launch writes and hands here (martha#987 slice 4);
+    // with none handed, the host names no exact send and the gate makes no exception.
+    ...(crew_server === undefined ? {} : { marthasOwnToolCalled: (own: string) => `${crew_server}${naming.separator}${own}` }),
   }
 }
 

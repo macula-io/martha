@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { MINUTE_MS } from '../declare_crew/declare_crew.ts'
+import { GITHUB_WHEN_UNNAMED } from '../declare_crew/the_crews_github.ts'
 import { hostForTests } from '../host_contract/host_for_tests.ts'
 import type { ProcessOutcome, ProcessRequest, Processes, TheCrewFilesStores } from '../host_contract/host_contract.ts'
 import { readTheChannel } from '../keep_the_crew_channel/crew_channel.ts'
@@ -178,7 +179,7 @@ test('#980 p4 T5: every gh the launch\'s spender runs is bounded at GH_MS, and a
     },
   } as Processes
   const spender = theGithubSpenderOf(
-    { stores: aCrewStore(), root: home, processes, clock: { now: () => NOW }, github: { budget_floor: FLOOR }, clock_zone: 'UTC' },
+    { stores: aCrewStore(), root: home, processes, clock: { now: () => NOW }, github: { ...GITHUB_WHEN_UNNAMED, budget_floor: FLOOR }, clock_zone: 'UTC' },
     GH_MS,
   )
   assert.deepEqual(await theRunsAHandoffNames(spender, handing('11')), [`ci not verified (gh did not answer): the runs on ${TIP}`])

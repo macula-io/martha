@@ -17,6 +17,8 @@ import type { TheScreenKeeper } from '../say_what_the_host_is_asking/the_owners_
 import { STAND_IN_SESSION, type AnAgentScript, type AStep } from '../stand_in_for_an_acp_agent/the_stand_in_agents_script.ts'
 import { ALLOW_ONCE, REJECT_ONCE } from './answer_a_permission_once.ts'
 import { gooseToolNames, theGooseGate, theGooseShellTool } from './answer_a_goose_call_by_the_entry.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+import { THE_CREWS_TOOL_SERVER } from '../serve_the_crews_tools_to_an_engine/the_tool_servers_words.ts'
 import { AcpClient } from './the_acp_client.ts'
 
 const STAND_IN = join(import.meta.dirname, '..', 'stand_in_for_an_acp_agent', 'main.ts')
@@ -108,4 +110,15 @@ test('the Goose shell tool is the kept extension\'s, joined by the recorded sepa
   const renamed = { tool_naming: { ...NAMING, separator: `${NAMING.separator}+` }, shell_tool: `${RECORDED_GOOSE_ENGINE.shell_tool}_renamed_by_a_test` }
   assert.equal(gooseToolNames(renamed.tool_naming).ownNameOf(theGooseShellTool(renamed)), renamed.shell_tool)
   assert.ok(theGooseShellTool(renamed).includes(renamed.tool_naming.separator))
+})
+
+test('#987: the engine calls Martha\'s own crew tool by the extension key its launch writes, and reads it back as that tool', () => {
+  const names = gooseToolNames(NAMING, THE_CREWS_TOOL_SERVER)
+  const called = names.marthasOwnToolCalled?.(SAY_TO_THE_CREW) ?? ''
+  assert.equal(called, `${THE_CREWS_TOOL_SERVER}${NAMING.separator}${SAY_TO_THE_CREW}`)
+  assert.equal(names.ownNameOf(called), SAY_TO_THE_CREW)
+})
+
+test('#987: an engine whose launch hands no server key names no exact send, so the gate makes no exception', () => {
+  assert.equal(gooseToolNames(NAMING).marthasOwnToolCalled, undefined)
 })

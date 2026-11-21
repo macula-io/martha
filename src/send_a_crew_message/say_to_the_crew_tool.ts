@@ -10,7 +10,7 @@ import type { DashboardRow } from '../show_dashboard_beat/show_dashboard_beat.ts
 import { THE_WHOLE_CREW } from '../keep_the_crew_channel/crew_channel.ts'
 import { theVolatileNote, volatilePathsIn } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import type { TheGithubSpender } from '../spend_the_github_budget/spend_the_github_budget.ts'
-import { type CheckTheLines, CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage } from './send_a_crew_message.ts'
+import { type CheckTheLines, CREW_SAY_DESCRIPTION, SAY_TO_THE_CREW, sendACrewMessage, type TheHeldProsePlace } from './send_a_crew_message.ts'
 import { theCommitsAHandoffNames, type TheCommitsAsked } from './the_commits_a_handoff_names.ts'
 import { theRunsAHandoffNames } from './the_runs_a_handoff_names.ts'
 
@@ -44,6 +44,8 @@ export interface ASendAsked {
   readonly text: unknown
   /** The roots a reboot deletes (martha#314), already in force: the crew's own, or the machine's when it names none. */
   readonly volatile_roots: readonly string[]
+  /** Where this sender's prose is kept when the gate let the send through with it held (martha#987 slice 4). */
+  readonly hold?: TheHeldProsePlace
   /** What a HANDOFF line's range is read with (martha#980 package 3); left out, no range is read. */
   readonly commits?: TheCommitsAsked
   /** What a HANDOFF line's `ci=` runs are read through: the crew's GitHub budget (martha#980 package 4); left out, none are read. */
@@ -73,6 +75,7 @@ export async function sayToTheCrewOver(asked: ASendAsked): Promise<AToolAnswer> 
     package: held === null || held.holds === '' ? null : held.holds,
     to: asked.to,
     text: asked.text,
+    ...(asked.hold === undefined ? {} : { hold: asked.hold }),
   }, theChecksOf(asked))
   return 'refused' in sent ? { refused: sent.refused } : { answer: toldWithTheNote(sent.told, asked) }
 }

@@ -12,6 +12,7 @@ import { PARKED_PLACE } from '../park_and_wake_a_member/park_and_wake_a_member.t
 import { CONFIG } from '../find_what_a_later_git_run_reads/git_config_a_later_run_reads.ts'
 import { TRANSCRIPTS_PLACE } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { KITTY } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
+import { LONGEST_MESSAGE } from '../send_a_crew_message/send_a_crew_message.ts'
 
 /** Why `'owner'` is written by literal in the declaration (#289 part b). */
 const A_FIELD_OF_THE_DECLARATION = 'a field of the crew declaration, as its schema names it and as a refusal names the field'
@@ -57,4 +58,8 @@ export const COINCIDENCES: readonly Exception[] = [
   // martha#511: a member's `parked`, the field of Raf's draft on #931 that keeps a declared member down at `martha up`.
   { value: PARKED_PLACE, file: 'declare_crew/declare_crew.ts', reason: 'a member\'s field in the declaration that keeps it down at martha up; the crew\'s park place is named the same word and is not this' },
   { value: THE_MODELS_SWITCH, file: 'declare_crew/change_a_member.ts', reason: 'the switch martha crew add takes for a member\'s model, not the switch a host is started with' },
+  // martha#987: crew-code's GH_AUTHORS_MS, the milliseconds one gh call of the gate's vouch may take, is the same number
+  // as the longest crew message in characters; one is a time and the other a length.
+  { value: LONGEST_MESSAGE, file: 'declare_crew/the_crews_github.ts', reason: 'crew-code\'s GH_AUTHORS_MS, a bound in milliseconds on one gh call, not the longest crew message in characters' },
+  { value: LONGEST_MESSAGE, file: 'declare_crew/the_crews_github_and_transcripts.node-test.ts', reason: 'crew-code\'s GH_AUTHORS_MS pinned as written, a bound in milliseconds, not the longest crew message in characters' },
 ]

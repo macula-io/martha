@@ -33,7 +33,7 @@
 // would read as lost — the very refresh the release has to survive.
 
 import type { Row, RowStore } from '../host_contract/host_contract.ts'
-import type { Ingestion, Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { GATE_GENERATION, UNSTAMPED_GENERATION, type Ingestion, type Session } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
 import { RECORD_LOST, type SessionRecordStore } from '../take_in_a_turn/take_in_a_turn.ts'
 
 /** What prefixes a session's stream name; the rest is the session id, which the store encodes. */
@@ -202,12 +202,22 @@ export const sessionRecordStreamOf = (session_id: string): string => `${SESSION_
 const isWhy = (entry: Readonly<Record<string, unknown>>): boolean =>
   Object.hasOwn(entry, 'why') && typeof entry.why === 'string'
 
+/**
+ * The other key a stored ingestion may carry: the generation of the gate that recorded it (martha#987), a whole number
+ * from the first gate's up to this gate's. Any other value makes the record lost: a generation this gate cannot have
+ * written is no record of its own.
+ */
+const isGen = (entry: Readonly<Record<string, unknown>>): boolean =>
+  Object.hasOwn(entry, 'gen') && Number.isInteger(entry.gen) && (entry.gen as number) >= UNSTAMPED_GENERATION && (entry.gen as number) <= GATE_GENERATION
+
 const isIngestion = (value: unknown): value is Ingestion => {
   if (typeof value !== 'object' || value === null) return false
   const entry = value as Record<string, unknown>
-  const keys = Object.keys(entry).length
+  const extra = Object.keys(entry).filter((key) => key !== 'path' && key !== 'from_node_id')
   return (
-    (keys === 2 || (keys === 3 && isWhy(entry))) &&
+    Object.hasOwn(entry, 'path') &&
+    Object.hasOwn(entry, 'from_node_id') &&
+    extra.every((key) => (key === 'why' && isWhy(entry)) || (key === 'gen' && isGen(entry))) &&
     typeof entry.path === 'string' &&
     (entry.from_node_id === null || typeof entry.from_node_id === 'string')
   )
@@ -222,6 +232,7 @@ export function recordOf(row: Row): Session {
       path: entry.path,
       from_node_id: entry.from_node_id,
       ...(entry.why === undefined ? {} : { why: entry.why }),
+      ...(entry.gen === undefined ? {} : { gen: entry.gen }),
     })),
   }
 }

@@ -105,7 +105,7 @@ import { staleReadsOver, type TheStaleReads } from '../ask_git_how_far_a_clone_i
 import { theWorkspaceTheCrewDeclared } from '../guard_workspace/guard_workspace.ts'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, marthasOwnToolCalled, ownNameOfCalledTool } from '../claude_code_host/claude_code_host.ts'
 import { RECORDED_HOST } from '../claude_code_host/recorded_claude_code_host.ts'
 import { type HookSettingsWatch } from '../refuse_settings_that_turn_hooks_off/settings_that_turn_hooks_off.ts'
 import type { ManagedSettingsPlace } from '../cut_the_rules_from_the_host_binary/the_rules_a_hosts_binary_carries.ts'
@@ -231,7 +231,10 @@ export interface LauncherPlaces {
  * How a launch builds its crew's tools: over its sessions, its member's own config folder and the crew tools it watches
  * (martha#658). The tools it returns hold that watch (martha#710), so a builder that leaves it out cannot compile.
  */
-export type CrewToolsOfALaunch = (sessions: { readonly of: (session_id: string) => HostSession | undefined }, member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch }) => HoldingTheWatch<CrewTools>
+export type CrewToolsOfALaunch = (
+  sessions: { readonly of: (session_id: string) => HostSession | undefined },
+  member: { readonly config_dir: string; readonly served_tools: TheServedToolsWatch; readonly env: Readonly<Record<string, string | undefined>> },
+) => HoldingTheWatch<CrewTools>
 
 /**
  * The transcript bounds a launch keeps its member's session to (martha#931 B): its crew's declared `transcripts`, or the
@@ -585,7 +588,7 @@ function wordlessAnswersOf(
 function crewOf(launch: ClaudeCodeMemberLaunch, sessions: Map<string, HostSession>, ready: ReadyLaunch, served_tools: TheServedToolsWatch): { readonly crew?: CrewTools } {
   return launch.crew_tools === undefined
     ? {}
-    : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared), served_tools }) }
+    : { crew: launch.crew_tools({ of: (session_id) => sessions.get(session_id) }, { config_dir: membersConfigFolderOf(ready.prepared), served_tools, env: ready.hostEnv }) }
 }
 
 /**
@@ -658,7 +661,7 @@ async function servedRelay(
     // What the gate does to this member, read from the declaration once (martha#321): absent means enforced, never off.
     gate: launch.crew_settings === undefined ? 'enforced' : gateModeFor(launch.crew_settings.gate, launch.member_name),
     audit: launch.places.gate_audit === undefined ? undefined : { directory: launch.places.gate_audit, member: launch.member_name, lines: { append: appendStateLine, read: readStateFile } },
-    names: { ownNameOf: ownNameOfCalledTool },
+    names: { ownNameOf: ownNameOfCalledTool, marthasOwnToolCalled },
     started_with: startedWithOf(CLAUDE_CODE_READ_ATTACHES_NOTHING, starting.args, starting.env),
     binder: bindNothing,
     handed_at_start: sourcesALaunchHandsTheModel(ready.prepared.carried_files),

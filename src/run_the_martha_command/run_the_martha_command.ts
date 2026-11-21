@@ -59,7 +59,7 @@ import { THE_FIRST_PROMPT_SWITCH } from '../pass_only_switches_that_load_no_conf
 import { TAB_OF } from '../open_the_crew_in_kitty/the_session_kitty_reads.ts'
 import { kittenOnThisMachine, theStripsKitten } from '../open_the_crew_in_kitty/the_strips_kitten.ts'
 import { EXIT_DONE, EXIT_REFUSED, EXIT_USAGE, refused, showingSafely, tellOwnerOn } from '../show_the_owners_text_safely/show_the_owners_text_safely.ts'
-import { releaseAHeldMember, toldOfARelease } from '../release_a_held_member/release_a_held_member.ts'
+import { releaseAHeldMember, releaseEveryMembersStale, toldOfARelease, type TheRelease } from '../release_a_held_member/release_a_held_member.ts'
 import { bellsOf, theBellsTold, theFlipNamed } from '../ring_the_owner/the_mute_of_a_members_bells.ts'
 import { gateModeFor } from '../read_the_gate_mode/read_the_gate_mode.ts'
 import { gateOf, sayWhatTheGateDoes } from '../say_what_the_gate_does/say_what_the_gate_does.ts'
@@ -82,7 +82,7 @@ export const startedLine = (member: string, pid: number | string): string => `${
 
 /** How the command is used. */
 export const USAGE =
-  'usage: martha init | martha up [--prompt <text>] | martha attach [<member>] | martha approve | martha todo | martha start [<member> [--prompt <text>] [-- <claude arguments>]] | martha wake <member> | martha release <member> | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha week [<YYYY-Www>] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha version | martha help'
+  'usage: martha init | martha up [--prompt <text>] | martha attach [<member>] | martha approve | martha todo | martha start [<member> [--prompt <text>] [-- <claude arguments>]] | martha wake <member> | martha release <member> [--stale] | martha release --stale | martha bells [<member> muted|heard] | martha gate [--member <name>] | martha answer [<member> <key> allow|reject] | martha ls | martha stop [<member>] | martha restart <member> [--fresh] | martha week [<YYYY-Www>] | martha crew [add <member> <role> [--model <model>] [--host <host>] | remove <member> | set-model <member> <model>|--host-default | set-host <member> <host>|--crew-default] | martha run <shape> | martha install [<version>] [--downgrade] [--digest sha256:<hex>] [--withdrawal-in <version>] | martha pin-key <public key file> | martha keep-shapes <signed list> | martha version | martha help'
 
 /** Why an owner's act is refused where no owner is at the keyboard. */
 export const OWNERS_ACT_NEEDS_A_TERMINAL = 'only the owner, at a terminal, pins a key or keeps a signed list, and this is no terminal.'
@@ -491,20 +491,40 @@ async function restart(io: CommandIo, places: Places, member: string, fresh: boo
  * `martha release <member>` (martha#321): the owner's release of a member the gate is holding, typed at the owner's
  * terminal. The act is ../release_a_held_member's; this hands it the places and tells the owner its answer.
  */
-async function release(io: CommandIo, places: Places, member: string): Promise<number> {
+async function release(io: CommandIo, places: Places, args: readonly string[]): Promise<number> {
   const crew = await crewsPlacesOf(io, places)
   if (typeof crew === 'string') return refused(io, crew)
-  const released = await releaseAHeldMember({
-    member,
+  const stale = args.includes(STALE_SWITCH)
+  const member = args.find((word) => word !== STALE_SWITCH)
+  const dashboard = dashboardRowsIn(crew.launcher.dashboard)
+  const asked = {
     members: crew.settings.members.map((one) => one.name),
-    row: dashboardRowsIn(crew.launcher.dashboard).read(member),
     rows: rowStreamsDirectory(crew.launcher.rows),
     onATerminal: io.terminal.is_terminal,
-    gate: gateModeFor(crew.settings.gate, member),
-  })
+  }
+  if (member === undefined) {
+    // `martha release --stale` (martha#987): every member, one line each; it is done when any member was released.
+    const answers = await releaseEveryMembersStale({ ...asked, rowOf: (one) => dashboard.read(one), gateOf: (one) => gateModeFor(crew.settings.gate, one) })
+    for (const answer of answers) io.out(toldOfARelease(answer))
+    return answers.some((answer) => answer.released) ? EXIT_DONE : EXIT_REFUSED
+  }
+  const released: TheRelease = await releaseAHeldMember({ ...asked, member, row: dashboard.read(member), gate: gateModeFor(crew.settings.gate, member), stale })
   if (!released.released) return refused(io, toldOfARelease(released))
   io.out(toldOfARelease(released))
   return EXIT_DONE
+}
+
+/** The switch that releases only what an older gate recorded (martha#987, crew-code's `/crew-untaint --stale`). */
+export const STALE_SWITCH = '--stale'
+
+/** `release <member> [--stale]` or `release --stale`: a member's name, the switch, or both, and nothing else. */
+function releaseOf(act: string, argv: readonly string[]): Asked | undefined {
+  const words = argv.slice(1)
+  const names = words.filter((word) => word !== STALE_SWITCH)
+  const switches = words.length - names.length
+  if (switches > 1 || names.length > 1 || words.length === 0) return undefined
+  if (names.some((name) => name === '' || name.startsWith('-'))) return undefined
+  return { act, args: words }
 }
 
 /**
@@ -611,6 +631,7 @@ export const HELP: readonly string[] = [
   'martha start [<member>]      start one member here, or open every member in kitty; --prompt <text> types your first turn into it, in Martha\'s tmux',
   'martha wake <member>         start a parked member on its newest handover',
   'martha release <member>      release a member Martha holds',
+  'martha release [<member>] --stale  release what an older gate recorded, for one member or all',
   'martha bells [<member> ...]  list, mute or hear a member\'s bells',
   'martha gate [--member <m>]   say what the shell gate does for each member',
   'martha answer [...]          list or answer what members wait on you for',
@@ -631,7 +652,7 @@ export const HELP: readonly string[] = [
 /** Whether `word` is a word the command knows as an act. */
 const isAnAct = (word: string): boolean => ACTS_ALONE.includes(word) || ACTS_OF_ONE.includes(word) || Object.hasOwn(ACTS_OF_THEIR_OWN, word)
 /** The acts that take exactly one argument (martha#129). */
-export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake', 'release']
+export const ACTS_OF_ONE: readonly string[] = ['run', 'pin-key', 'keep-shapes', 'wake']
 
 type Asked = { readonly act: string; readonly member?: string; readonly args: readonly string[]; readonly prompt?: string }
 
@@ -659,6 +680,7 @@ export const ACTS_OF_THEIR_OWN: Readonly<Record<string, (act: string, argv: read
   start: startOf,
   answer: answerOf,
   crew: crewOf,
+  release: releaseOf,
   week: weekOf,
 }
 
@@ -812,7 +834,7 @@ const THE_OWNERS_OWN_ACTS: Readonly<Record<string, (io: CommandIo, places: Place
   'pin-key': (io, places, asked) => pinKey(io, places, asked.args[0]!),
   'keep-shapes': (io, places, asked) => keepShapes(io, places, asked.args[0]!),
   approve: (io, places) => approve(io, places),
-  release: (io, places, asked) => release(io, places, asked.args[0]!),
+  release: (io, places, asked) => release(io, places, asked.args),
   [UP]: (io, places, asked) => up(io, places, asked.prompt),
   [ATTACH]: (io, places, asked) => attach(io, places, asked.member),
   answer: (io, places, asked) => answerInAProject(io, places, asked.member, asked.args),

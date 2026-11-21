@@ -458,6 +458,35 @@ for (const file of CODE_FILES) {
   })
 }
 
+/**
+ * The files under a home that run later, which no member's file tool may write (martha#987, gap 15 of #957): a shell's
+ * startup files and the ssh config. The names are this test's own statement of crew-code's list
+ * (macula-sponsors 6f353d51, crew-code/core/protected_writes.ts:58 and :101), never read from the guard, so a name the
+ * guard drops fails here.
+ */
+const FILES_THAT_RUN_LATER: readonly (readonly string[])[] = [['.zshrc'], ['.zprofile'], ['.zshenv'], ['.profile'], ['.bashrc'], ['.bash_profile'], ['.ssh', 'config']]
+
+for (const file of FILES_THAT_RUN_LATER) {
+  test(`a member may not write ~/${file.join('/')}, under the launcher's home and the member's, by its file tools or the host's own rules (martha#987)`, (t) => {
+    const place = placeFor(t)
+    const memberHome = join(place.root, 'member-home')
+    mkdirSync(memberHome, { recursive: true })
+    const places = ownerMemoryPlaces({
+      launcher_env: { HOME: place.home },
+      member_env: { HOME: memberHome },
+      home: place.home,
+      launch_dir: place.worktree,
+      settings_files: [],
+      user_scope: userScopeFor(place),
+    })
+    for (const home of [place.home, memberHome]) {
+      const at = join(home, ...file)
+      assertDeniedBy(places, place.worktree, place.home, at, 'martha#987', `a write to ${at} runs on the next shell or ssh`)
+      assert.ok(memoryDenyRules(places).includes(`${CLAUDE_CODE_FILE_RULE_TOOL}(/${at})`), `the host's own rules refuse a write to ${at}`)
+    }
+  })
+}
+
 test('a member is noticed writing the owner\'s user settings file, in the launcher\'s config dir and in the member\'s (martha#187 r=2)', (t) => {
   const place = placeFor(t)
   const places = placesFor(place)

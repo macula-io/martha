@@ -70,7 +70,7 @@ import { recheckLaunchPassingOwnWrites } from '../refuse_launch_of_unapproved_co
 import { wordsInAMeshAnswer, type WhatTheLaunchSupplies } from '../prove_a_mesh_answer_is_wordless/prove_a_mesh_answer_is_wordless.ts'
 import { sourceOfAMeshToolResult } from '../read_a_room_through_its_gate/read_a_room_through_its_gate.ts'
 import { senderOfARingResult } from '../read_a_ring_results_sender/read_a_ring_results_sender.ts'
-import { takeInToolResult, type ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
+import { takeInToolResult, type ToolResult, type ToolResultRows } from '../take_in_a_tool_result/take_in_a_tool_result.ts'
 import type { SessionRecords } from '../session_records_in_rows/session_records_in_rows.ts'
 import { type HostSession, rememberSession, takeInTurn } from '../take_in_a_turn/take_in_a_turn.ts'
 
@@ -634,24 +634,51 @@ async function recordTheResult(
   if (wordless?.reads_nothing === true) return { stop: undefined, recorded: [] }
   const taken = result.from_a_tool_server
     ? takeInTurn(session, arrivalOfAMeshToolResult(own_name, result.input, result.answer), places.binder)
-    : takeInToolResult(
-        session,
-        {
-          tool: result.tool,
-          input: result.input,
-          rows: where.tool_result_rows,
-          launch: places.launch,
-          approved_start: held.approved_start,
-          started_with: where.started_with,
-          read_attaches_nothing: where.read_attaches_nothing,
-          host: places.machine,
-          ...(agent === undefined ? {} : { agent }),
-        },
-        places.binder,
-      )
+    : await takenFromTheHostsOwnTool(held, where, session, result, agent)
   const recorded = taken.gate.ingested.slice(session.gate.ingested.length).map((ingestion) => ingestion.path)
   if (recorded.length === 0) return { stop: undefined, recorded }
   return { stop: await held.keep(taken), recorded }
+}
+
+/** The session after one of its host's own tools ran: the result placed by its row, the vouch asked first for a command (martha#987). */
+async function takenFromTheHostsOwnTool(
+  held: TheSessionsHeld,
+  where: WhereAResultIsRecorded,
+  session: HostSession,
+  result: AResultOfACall,
+  agent: ToolResult['agent'],
+): Promise<HostSession> {
+  const { places } = held
+  const own_line = await isAnOwnLine(places.crew, where.tool_result_rows, result)
+  return takeInToolResult(
+    session,
+    {
+      tool: result.tool,
+      input: result.input,
+      rows: where.tool_result_rows,
+      launch: places.launch,
+      approved_start: held.approved_start,
+      started_with: where.started_with,
+      read_attaches_nothing: where.read_attaches_nothing,
+      host: places.machine,
+      ...(agent === undefined ? {} : { agent }),
+      ...(own_line ? { own_line: true as const } : {}),
+    },
+    places.binder,
+  )
+}
+
+/**
+ * Whether a command's result is a line the launch's vouch says is crew text (martha#987): asked here, after the result
+ * returned and before its record is written, because the vouch asks gh. A launch with no crew tools, or one whose tools
+ * hold no vouch, vouches for nothing; a vouch that throws vouches for nothing either.
+ */
+async function isAnOwnLine(crew: CrewTools | undefined, rows: ToolResultRows, result: AResultOfACall): Promise<boolean> {
+  const reading = Object.hasOwn(rows, result.tool) ? rows[result.tool] : undefined
+  const vouch = crew?.vouchesForTheLine
+  if (reading?.reads !== 'a_command' || vouch === undefined) return false
+  const line = result.input[reading.field]
+  return typeof line === 'string' && (await vouch(line).catch(() => false))
 }
 
 /** What a mesh tool's result is taken in as: its row, and the node id the result itself attests where the row's station attestation is really there (martha#247). */

@@ -148,6 +148,7 @@ function settingsUnder(root: string, places: { readonly clones: string | null; r
     owner_notices: OWNER_NOTICES_WHEN_UNNAMED,
     clock_zone: CLOCK_ZONE_WHEN_UNNAMED,
     opens: WHERE_A_CREW_OPENS_WHEN_UNNAMED,
+    own_orgs: [],
   }
 }
 

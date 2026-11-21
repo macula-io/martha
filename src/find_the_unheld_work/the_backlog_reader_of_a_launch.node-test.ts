@@ -94,7 +94,7 @@ const theCallsIn = (place: CrewPlace & { readonly files: Map<string, string> }):
 }
 
 const theReaderOver = (stores: TheCrewFilesStores, processes: Processes, now: number = NOW): ReturnType<typeof theBacklogReaderIn> =>
-  theBacklogReaderIn({ stores, root: '/a-checkout', processes, ledger: { clock: { now: () => now } }, github: { budget_floor: FLOOR }, clock_zone: ZONE })
+  theBacklogReaderIn({ stores, root: '/a-checkout', processes, ledger: { clock: { now: () => now } }, github: { ...GITHUB_WHEN_UNNAMED, budget_floor: FLOOR }, clock_zone: ZONE })
 
 /** The waits the budget record holds, by key. */
 const theWaitsIn = (place: CrewPlace & { readonly files: Map<string, string> }): readonly string[] =>

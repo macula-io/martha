@@ -7,6 +7,7 @@
 // pinned where they are decided: the member's own write records nothing, and any other change records B4 — as does a
 // change nothing can be told from, or own writes that can no longer be read, which are fail-closed edges of their own.
 
+import { HELD_PLACE, heldFileNameOf } from '../send_a_crew_message/hold_a_tainted_members_prose.ts'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -15,8 +16,9 @@ import { dirname, join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
-import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_TOOL_RESULT_ROWS } from '../claude_code_host/claude_code_host.ts'
+import { CLAUDE_CODE_READ_ATTACHES_NOTHING, CLAUDE_CODE_SHELL_TOOL, CLAUDE_CODE_TOOL_RESULT_ROWS } from '../claude_code_host/claude_code_host.ts'
 import {
+  CREWS_PLACE,
   openState,
   OWN_WRITES_PLACE,
   ownWritesKeptForLaunch,
@@ -339,4 +341,22 @@ test("the host's own agent tools are placed by the agent, never by the tool's na
   // All three read an agent's answer: a background agent hands it back through SubagentHandback, a foreground one
   // through Agent or Task. A tool here that read anything else would place an agent's answer without its agent.
   for (const tool of ['Agent', 'Task', 'SubagentHandback']) assert.deepEqual(CLAUDE_CODE_TOOL_RESULT_ROWS[tool], { reads: 'an_agents_answer', source: 'subagent' }, tool)
+})
+
+// --- a held file is a stranger's text to whoever reads it (martha#987 slice 4, T11) --------------------------------
+
+test('a member that reads a held file takes its text in: a file tool records B4, and a shell records A13', (t) => {
+  const place = checkoutFor(t)
+  const held = join(place.home, 'state', CREWS_PLACE, 'a-crew', HELD_PLACE, heldFileNameOf('Builder', 1, 1))
+  mkdirSync(dirname(held), { recursive: true })
+  writeFileSync(held, 'a tainted member\'s prose\n')
+  assert.deepEqual(recordedReading(place, held), ['B4:null'])
+
+  const session = { id: 'session-1', gate: startFreshSession(), record_missing: false }
+  const shell = takeInToolResult(
+    session,
+    { tool: CLAUDE_CODE_SHELL_TOOL, input: { command: `cat ${held}` }, rows: CLAUDE_CODE_TOOL_RESULT_ROWS, launch: place.launch, approved_start: place.start_tree, host: thisMachine, started_with: place.started_with, read_attaches_nothing: SWITCHES },
+    bindNothing,
+  )
+  assert.deepEqual(shell.gate.ingested.map((ingest) => ingest.path), ['A13'])
 })

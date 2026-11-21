@@ -7,6 +7,7 @@ import { test } from 'node:test'
 
 import { bindNothing } from '../attribute_a_cross_session_sender/attribute_a_cross_session_sender.ts'
 import {
+  GATE_GENERATION,
   OWNER_AT_THE_TERMINAL,
   refuseExecutionAfterUngatedText,
   type Session,
@@ -81,7 +82,7 @@ test('a channel, a plugin, a schedule, a notification, another agent or an auto-
 // --- the owner's own typed turn (#51) ------------------------------------------
 
 test('a turn the owner typed is the owner\'s, and the member keeps its shell', () => {
-  assert.deepEqual(recordOfKind('composer').ingested, [{ path: PATH_OF_SOURCE.owner_typed, from_node_id: OWNER_AT_THE_TERMINAL }])
+  assert.deepEqual(recordOfKind('composer').ingested, [{ path: PATH_OF_SOURCE.owner_typed, from_node_id: OWNER_AT_THE_TERMINAL, gen: GATE_GENERATION }])
   assert.equal(shellAllowedAfter('composer'), true)
 })
 
@@ -127,7 +128,7 @@ test('the source comes from the kind alone: no arrival carries text, a sender or
   }
   // The envelope rule is never reached, so a pasted envelope cannot move a turn.
   const typed = takeInTurn(beginSession(sessions(), 's-1'), arrivalOfPrompt(CLAUDE_CODE_PROMPT_ORIGINS, 'composer', TYPED), bindNothing)
-  assert.deepEqual(typed.gate.ingested, [{ path: PATH_OF_SOURCE.owner_typed, from_node_id: OWNER_AT_THE_TERMINAL }], PASTED_ENVELOPE)
+  assert.deepEqual(typed.gate.ingested, [{ path: PATH_OF_SOURCE.owner_typed, from_node_id: OWNER_AT_THE_TERMINAL, gen: GATE_GENERATION }], PASTED_ENVELOPE)
 })
 
 test('undeclaredPromptOrigins names each kind the host stamps that the declaration does not list', () => {

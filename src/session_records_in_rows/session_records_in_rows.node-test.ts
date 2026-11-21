@@ -9,8 +9,8 @@ import { test } from 'node:test'
 
 import { recordDigestOf, releaseStreamOf, releasesIn, type ReleaseMark } from '../apply_the_owners_release/apply_the_owners_release.ts'
 import { ROW_NOT_DURABLE, type Row, type RowStore, type StoredRow } from '../host_contract/host_contract.ts'
-import { OWNER_AT_THE_TERMINAL, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
-import { recordOf, sessionRecordsIn, sessionRecordStreamOf } from './session_records_in_rows.ts'
+import { GATE_GENERATION, OWNER_AT_THE_TERMINAL, recordIngestion, startFreshSession, UNSTAMPED_GENERATION, type Ingestion } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { LOST, recordOf, sessionRecordsIn, sessionRecordStreamOf } from './session_records_in_rows.ts'
 
 const SESSION = 'the-session'
 const STREAM = sessionRecordStreamOf(SESSION)
@@ -170,4 +170,38 @@ test('#321: a record the store will not keep is not written back, and the check 
   records.store.write(SESSION, { ingested: [...raw, AUTO_CONTINUATION] })
   await assert.rejects(records.flush(SESSION), (error: unknown) => (error as { code?: string }).code === ROW_NOT_DURABLE)
   assert.deepEqual(await keptIn(refusing), raw, 'a record the store refused was kept anyway')
+})
+
+// The gate's stamp in a stored record (martha#987): a whole number from the first gate's generation up to this gate's,
+// kept as read; anything else makes the record lost, because no gate wrote it.
+
+test('#987: a stored arrival keeps the generation a gate stamped it with', () => {
+  const kept = recordOf({ ingested: [{ path: 'B3', from_node_id: null, gen: UNSTAMPED_GENERATION }, { path: 'A2', from_node_id: null, why: 'one sentence', gen: GATE_GENERATION }] } as unknown as Row)
+  assert.deepEqual(kept.ingested, [
+    { path: 'B3', from_node_id: null, gen: UNSTAMPED_GENERATION },
+    { path: 'A2', from_node_id: null, why: 'one sentence', gen: GATE_GENERATION },
+  ])
+})
+
+for (const [gen, what] of [
+  [GATE_GENERATION + 1, 'a generation newer than this gate'],
+  [0, 'generation 0'],
+  [-1, 'a negative generation'],
+  [1.5, 'a fraction'],
+  ['2', 'a text'],
+  [null, 'null'],
+] as const) {
+  test(`#987: a stored arrival stamped with ${what} makes the record lost`, () => {
+    assert.equal(recordOf({ ingested: [{ path: 'B3', from_node_id: null, gen }] } as unknown as Row), LOST)
+  })
+}
+
+test('#987: a stored arrival with any other key still makes the record lost', () => {
+  assert.equal(recordOf({ ingested: [{ path: 'B3', from_node_id: null, gen: GATE_GENERATION, more: 1 }] } as unknown as Row), LOST)
+  assert.equal(recordOf({ ingested: [{ path: 'B3', gen: GATE_GENERATION }] } as unknown as Row), LOST)
+})
+
+test('#987: the gate stamps every arrival it records with its own generation', () => {
+  const recorded = recordIngestion(startFreshSession(), [{ path: 'B3', from_node_id: null }, { path: 'A6', from_node_id: 'a-node', gen: UNSTAMPED_GENERATION }])
+  assert.deepEqual(recorded.ingested.map((ingest) => ingest.gen), [GATE_GENERATION, GATE_GENERATION])
 })

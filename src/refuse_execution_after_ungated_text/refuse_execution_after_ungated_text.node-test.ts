@@ -13,6 +13,7 @@ import {
 } from './refuse_execution_after_ungated_text.ts'
 import { NOTEBOOK_EDIT_TOOL, WHOLE_FILE_TOOL } from '../claude_code_host/claude_code_file_tools.ts'
 import { CLAUDE_CODE_SHELL_TOOL } from '../claude_code_host/claude_code_host.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
 import { SEND_MESSAGE_TOOL } from '../answer_a_tool_call/a_crew_line_goes_through_say_to_the_crew.ts'
 
 // Synthetic node ids, never a real one: this repository is public.
@@ -245,4 +246,36 @@ test('the owner\'s typed turn does not clear a stranger\'s text, before it or af
   const strangers: Ingestion = { path: 'A6', from_node_id: stranger }
   refusal(CLAUDE_CODE_SHELL_TOOL, [ownerTyped(), strangers])
   refusal(CLAUDE_CODE_SHELL_TOOL, [strangers, ownerTyped()])
+})
+
+// --- a tainted session still sends crew lines (martha#987 slice 4, T12) --------
+
+/** The exact name a host calls Martha's own send by: a Claude Code-shaped name, as a host's table hands it to the gate. */
+const MARTHAS_SEND = `mcp__martha__${SAY_TO_THE_CREW}`
+const strangers: Ingestion = { path: 'A6', from_node_id: stranger }
+const sending = (tool: string, ingests: readonly Ingestion[], crew_send: string | null = MARTHAS_SEND) =>
+  refuseExecutionAfterUngatedText({ tool, session: sessionAfter(...ingests), policy, ...(crew_send === null ? {} : { crew_send }) })
+
+test('a tainted session may call Martha\'s own send, by the exact name its host calls it, only with its prose held', () => {
+  assert.deepEqual(sending(MARTHAS_SEND, [strangers]), { allow: true, holds_prose: true })
+})
+
+test('an untainted session sends as before: nothing is held', () => {
+  assert.deepEqual(sending(MARTHAS_SEND, []), { allow: true })
+  assert.deepEqual(sending(MARTHAS_SEND, [{ path: 'A6', from_node_id: crewmate }]), { allow: true })
+})
+
+test('another server\'s say_to_the_crew, the bare own name, and every other send stay refused while tainted', () => {
+  for (const tool of [`mcp__a_plugin__${SAY_TO_THE_CREW}`, SAY_TO_THE_CREW, MARTHAS_SEND.toUpperCase(), `${MARTHAS_SEND} `, ...EXECUTING_TOOLS]) {
+    assert.equal(sending(tool, [strangers]).allow, false, tool)
+  }
+})
+
+test('a host that names no exact send gets no exception: the gate refuses as before', () => {
+  assert.equal(sending(MARTHAS_SEND, [strangers], null).allow, false)
+})
+
+test('say_to_the_crew is not made a read-only tool: the exception is the gate\'s, never the allow-list\'s', () => {
+  assert.equal(isReadOnlyTool(SAY_TO_THE_CREW), false)
+  assert.equal(isReadOnlyTool(MARTHAS_SEND), false)
 })

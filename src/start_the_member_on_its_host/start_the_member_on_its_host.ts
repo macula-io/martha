@@ -16,6 +16,10 @@
 // already holding the member, so only a start picks a host.
 
 import { randomUUID } from 'node:crypto'
+import { gateModeFor, type GateMode } from '../read_the_gate_mode/read_the_gate_mode.ts'
+import { refuseExecutionAfterUngatedText, type Policy } from '../refuse_execution_after_ungated_text/refuse_execution_after_ungated_text.ts'
+import { SAY_TO_THE_CREW } from '../send_a_crew_message/send_a_crew_message.ts'
+import type { HostSession } from '../take_in_a_turn/take_in_a_turn.ts'
 import fs, { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
@@ -279,8 +283,23 @@ function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: C
  */
 export const leftoversOfALaunch = (settings: CrewSettings, crew: CrewStore) => ({ crew, workspace: theWorkspaceTheCrewDeclared(settings) })
 
-/** The crew tools' places a host's start does not choose itself: the models it names, how it spawns a subagent, and the settings file its model command saves a switch into. */
-export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings' | 'usage_host'>
+/** Who may send a member text it acts on, at every start: nobody by node id, so any attributed sender taints. */
+export const THE_POLICY_OF_A_START: Policy = { may_send_executable_text: [] }
+
+/**
+ * Whether a send from this session goes out with its prose held (martha#987 slice 4): only where the gate enforces, and
+ * there whenever the gate lets `say_to_the_crew` through only with its prose held. A session this launch does not hold,
+ * or whose record cannot be read, is held: neither is a session the gate can call clean.
+ */
+export function sendHoldsProseIn(session: HostSession | undefined, mode: GateMode): boolean {
+  if (mode !== 'enforced') return false
+  if (session === undefined || session.record_missing) return true
+  const decision = refuseExecutionAfterUngatedText({ tool: SAY_TO_THE_CREW, crew_send: SAY_TO_THE_CREW, session: session.gate, policy: THE_POLICY_OF_A_START })
+  return decision.allow && decision.holds_prose === true
+}
+
+/** The crew tools' places a host's start does not choose itself: the models it names, how it spawns a subagent, the settings file its model command saves a switch into, and the member's own environment (martha#987). */
+export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings' | 'member_env' | 'usage_host'>
 
 /**
  * The crew tools' places every host's start shares (martha#541 package A): built here once, with the host's own
@@ -300,6 +319,8 @@ export function theCrewToolsOfAStart(start: AStartOnItsHost, sessions: NonNullab
     stores: { crew: start.crew_stores.crew },
     carrier: carryingTo({ member: start.member, host: channel }),
     sessions,
+    // Whether this member's send goes out with its prose held (martha#987 slice 4): the gate's own answer for it.
+    sendHoldsProse: (session_id) => sendHoldsProseIn(sessions.of(session_id), gateModeFor(start.settings.gate, start.member)),
     // What the launch watches of the crew tools it served (martha#658): 697 handed the member's
     // served window here, where the tools are built now that the launch body moved (#703).
     served_tools,
@@ -341,7 +362,7 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeM
     member_name: start.member,
     node_id: start.node_id,
     place: { host: CLAUDE_CODE, launch_dir: start.root, stop_dir: start.home, snapshot_root: start.snapshot_root, crew_text_files: crewTextFilesOf(start.settings), ...approvedPlace(start.member, start.approval, start.state) },
-    policy: { may_send_executable_text: [] },
+    policy: THE_POLICY_OF_A_START,
     crew_settings: start.settings,
     owner_bell: start.settings.house_rules[OWNER_BELL],
     places: start.places,
@@ -363,6 +384,8 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost): ClaudeCodeM
         // The settings file the host's model command saves a switch into, and the lock that guards it (martha#359): the
         // member's own since martha#602. The owner's file was finished above, before the host started.
         owners_settings: theMembersSwitchPlace(start, member.config_dir),
+        // The member's own environment, so the stranger-text gate's vouch asks gh as the member would (martha#987).
+        member_env: member.env,
       })),
     signed_runs: signedRunsOf(
       receiptsInMemory(),

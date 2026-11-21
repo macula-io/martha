@@ -18,6 +18,9 @@
 //      word of `gh`, or `git` with a subcommand that prints history, adds the
 //      row that names it (B3, B5). A label only ever adds: it changes which row a
 //      refusal names, never whether the shell goes.
+//      The one exception is a line the launch's vouch says is crew text
+//      (martha#987): nothing but `gh` and git reads of the crew's own
+//      repositories, which records nothing.
 //
 //   3. A READ OF THE TREE THE OWNER APPROVED, AS THE MEMBER STARTED ON IT,
 //      RECORDS NOTHING, and only while the checkout still holds that tree. The
@@ -140,6 +143,12 @@ export interface ToolResult {
    * on that account; `unknown` when the launcher never saw the agent at all, and then its answer is B7.
    */
   readonly agent?: { readonly id: string; readonly state: 'vouched' | 'running' | 'unknown' }
+  /**
+   * Set when the launch's vouch said the command is crew text (martha#987, gap 15 T5-T8 and T14): a line of nothing but
+   * `gh` and git reads of the crew's own repositories. Only then does a command's output record nothing; the relay asks
+   * the vouch, never the call.
+   */
+  readonly own_line?: true
 }
 
 /** The session after a tool of its host ran, with what the tool returned recorded. */
@@ -153,7 +162,7 @@ function sourcesOf(reading: ToolResultReading, result: ToolResult): readonly Tur
   if (reading.reads === 'a_source') return [reading.source]
   if (reading.reads === 'an_agents_answer') return answerOfAnAgent(result)
   const named = result.input[reading.field]
-  if (reading.reads === 'a_command') return [reading.source, ...labelsOf(named)]
+  if (reading.reads === 'a_command') return result.own_line === true ? [] : [reading.source, ...labelsOf(named)]
   return readOfTheApprovedStartTree(named, SPAN_OF[reading.reads], result) ? [] : [reading.source]
 }
 

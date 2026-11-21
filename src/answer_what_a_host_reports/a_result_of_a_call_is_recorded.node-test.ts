@@ -32,7 +32,10 @@ const A_MADE_UP_HOSTS_NAMES: ToolNames = { ownNameOf: (called) => called }
 /** The made-up host's own tools, by what their result reads: one fetches the web, one hands an agent's answer back. */
 const ITS_FETCH = 'fetch-a-page'
 const ITS_AGENT = 'start-an-agent'
+const ITS_SHELL = 'run-a-command'
+const ITS_LINE_FIELD = 'line'
 const ITS_ROWS: ToolResultRows = {
+  [ITS_SHELL]: { reads: 'a_command', source: 'checkout_run', field: ITS_LINE_FIELD },
   [ITS_FETCH]: { reads: 'a_source', source: 'web' },
   [ITS_AGENT]: { reads: 'an_agents_answer', source: 'subagent' },
 }
@@ -54,6 +57,8 @@ interface TheLaunchDoes {
   readonly refreshed?: string
   readonly no_crew?: boolean
   readonly nowhere_to_record?: boolean
+  /** What the launch's vouch says of every line (martha#987); left out, the crew holds no vouch. */
+  readonly vouches?: boolean | 'throws'
 }
 
 function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
@@ -82,7 +87,15 @@ function aCrew(does: TheLaunchDoes, seen: Seen): CrewTools {
     theReviewModel: async () => THE_REVIEWER_MODEL,
     noteTheCallsAnswer: (call) => void seen.steps.push(`menu answer noted ${call.tool}`),
     refusesTheSubagent: async () => undefined,
+    ...(does.vouches === undefined ? {} : { vouchesForTheLine: async (line: string) => vouchSays(does.vouches, line, seen) }),
   }
+}
+
+/** What the made-up vouch answers, noted so a test sees which lines it was asked of. */
+function vouchSays(vouches: TheLaunchDoes['vouches'], line: string, seen: Seen): boolean {
+  seen.steps.push(`vouch asked of ${line}`)
+  if (vouches === 'throws') throw new Error('the vouch could not ask gh')
+  return vouches === true
 }
 
 interface AnEntry {
@@ -225,6 +238,31 @@ test('#541 3: an exact signed run records nothing (martha#129), and every other 
 
   assert.deepEqual(await answers.aResultCame(aResult()), { taken: 1 })
   assert.deepEqual(recordedIn(answers, 'session-a'), before)
+})
+
+test('#987: a command the launch vouches for records nothing; one it does not, or a vouch that throws, records A13 and B3', async (t) => {
+  const line = 'gh pr checks 1'
+  const command = aResult({ tool: ITS_SHELL, input: { [ITS_LINE_FIELD]: line } })
+  for (const [vouches, adds] of [[true, []], [false, ['A13', 'B3']], ['throws', ['A13', 'B3']]] as const) {
+    const { answers, seen } = anEntry(t, { vouches })
+    await started(answers)
+    const before = recordedIn(answers, 'session-a')
+    assert.deepEqual(await answers.aResultCame(command), { taken: 1 })
+    assert.deepEqual(recordedIn(answers, 'session-a'), [...before, ...adds], String(vouches))
+    assert.ok(seen.steps.includes(`vouch asked of ${line}`), String(vouches))
+  }
+})
+
+test('#987: the vouch is asked of a command alone, and a crew that holds none records the command as before', async (t) => {
+  const vouching = anEntry(t, { vouches: true })
+  await started(vouching.answers)
+  await vouching.answers.aResultCame(aResult())
+  assert.equal(vouching.seen.steps.some((step) => step.startsWith('vouch asked')), false)
+  const none = anEntry(t)
+  await started(none.answers)
+  const before = recordedIn(none.answers, 'session-a')
+  await none.answers.aResultCame(aResult({ tool: ITS_SHELL, input: { [ITS_LINE_FIELD]: 'gh pr checks 1' } }))
+  assert.deepEqual(recordedIn(none.answers, 'session-a'), [...before, 'A13', 'B3'])
 })
 
 test('#541 3: a tool server’s result is recorded as one, whatever the host’s own rows say of its name', async (t) => {

@@ -45,7 +45,29 @@ export interface Ingestion {
    * leaving the member to guess. Never a party to the decision, only its wording.
    */
   readonly why?: string
+  /**
+   * The generation of the gate that recorded it (martha#987, crew-code's GATE_GENERATION): an arrival with none was
+   * recorded by a gate older than the stamp, generation UNSTAMPED_GENERATION. Never a party to the decision; it only
+   * lets the owner release, in one typed act, what an older gate recorded (`martha release --stale`).
+   */
+  readonly gen?: number
 }
+
+/**
+ * The gate's generation (martha#987, gap 15 of #957). Raise it when a change to what counts as text the crew can act
+ * on means an older gate's records may hold text this gate would not record: the owner can then release every arrival
+ * an older gate recorded in one typed act, while what this gate recorded stays. Martha's count is its own and is never
+ * aligned with crew-code's: 1 is every gate before the stamp, and 2 is the gate that stamps (martha#987), which also reads own_orgs.
+ */
+export const GATE_GENERATION = 2
+/** The generation of an arrival recorded before the stamp: the first gate's. */
+export const UNSTAMPED_GENERATION = 1
+
+/** The generation an arrival was recorded by. */
+export const generationOf = (ingest: Ingestion): number => ingest.gen ?? UNSTAMPED_GENERATION
+
+/** The arrival as this gate records it: stamped with this gate's generation. */
+const stamped = (ingest: Ingestion): Ingestion => ({ ...ingest, gen: GATE_GENERATION })
 
 /**
  * The identity a turn the owner typed at the member's own terminal carries
@@ -72,7 +94,11 @@ export interface Session {
 }
 
 export type Decision =
-  | { readonly allow: true }
+  /**
+   * `holds_prose`: the one call a tainted session still makes (martha#987 slice 4, T12), `say_to_the_crew` by the exact
+   * name the relay serves it under, runs only with its prose held (../send_a_crew_message/hold_a_tainted_members_prose).
+   */
+  | { readonly allow: true; readonly holds_prose?: true }
   /**
    * The refusal, and the arrival it stands on: the audit writes which path and which sender the gate refused for
    * (martha#321), so a refusal never has to be taken apart to find them again.
@@ -89,6 +115,11 @@ export interface GateInput {
    * (../declare_crew) through the launcher, never from here.
    */
   readonly strict_gate?: boolean
+  /**
+   * The exact name this host calls Martha's own `say_to_the_crew` by (martha#987 slice 4, T12): the one call a tainted
+   * session still makes, with its prose held. Absent, the gate makes no exception.
+   */
+  readonly crew_send?: string
 }
 
 /**
@@ -108,7 +139,7 @@ export function startFreshSession(): Session {
 
 /** The session after a turn, carrying what arrived in it. */
 export function recordIngestion(session: Session, arrived: readonly Ingestion[]): Session {
-  return { ingested: [...session.ingested, ...arrived] }
+  return { ingested: [...session.ingested, ...arrived.map(stamped)] }
 }
 
 /**
@@ -121,14 +152,18 @@ export function recordIngestion(session: Session, arrived: readonly Ingestion[])
  * turn is the one ingestion admitted without the policy: the owner's mark on
  * the row the host's engine attests, and that mark nowhere else.
  */
-export function refuseExecutionAfterUngatedText({ tool, session, policy, strict_gate = true }: GateInput): Decision {
+export function refuseExecutionAfterUngatedText({ tool, session, policy, strict_gate = true, crew_send }: GateInput): Decision {
   if (!isShellTool(tool)) return { allow: true }
   // The gate is off unless the owner asked for it (martha#259): the record is still kept, and nothing reads it.
   if (!strict_gate) return { allow: true }
 
   for (const ingest of session.ingested) {
     const refusal = refusalFor(ingest, PATHS_BY_ID.get(ingest.path), policy)
-    if (refusal !== undefined) return { allow: false, refusal, arrival: ingest }
+    if (refusal === undefined) continue
+    // Crew lines pass, prose is held (DECIDED 2026-11-06 "Crew lines pass, prose taints"): the send is let through by its exact
+    // name and nothing else, never as an entry in READ_ONLY_TOOLS, so a namespaced copy and every other send stay refused.
+    if (crew_send !== undefined && tool === crew_send) return { allow: true, holds_prose: true }
+    return { allow: false, refusal, arrival: ingest }
   }
 
   return { allow: true }
