@@ -11,15 +11,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import {
-  privateHitsIn,
-  SYNTHETIC,
-  type Hit,
-  type Resolve,
-  type Rules,
-} from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
-import { rulesOf } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
-import { PUBLIC_TEXT_PATTERNS } from '../check_nothing_private_gets_in/public_text.ts'
+import { privateHitsIn, type Hit, type Resolve } from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
+import { rulesOf, SYNTHETIC, type Rules } from '../know_what_text_is_private/know_what_text_is_private.ts'
+import { PUBLIC_TEXT_PATTERNS } from '../know_what_text_is_private/public_text.ts'
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
 import { postedTextSources } from './posted_text.ts'
 import { standInPage } from './plant_every_surface.ts'

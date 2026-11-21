@@ -6,16 +6,16 @@
 // made. It never passes because it could not look.
 
 import {
-  withoutLabNames,
   privateHitsIn,
   type Hit,
   type Resolve,
   type Source,
   type Visibility,
 } from './check_nothing_private_gets_in.ts'
-import { DECLARED } from './declared.ts'
+import { DECLARED } from '../know_what_text_is_private/declared.ts'
+import { rulesOf, withoutLabNames } from '../know_what_text_is_private/know_what_text_is_private.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
-import { resolveOnGitHub, rulesOf } from './scan_rules_and_visibility.ts'
+import { resolveOnGitHub } from './scan_rules_and_visibility.ts'
 
 const option = (name: string): string | undefined => {
   const at = process.argv.indexOf(name)

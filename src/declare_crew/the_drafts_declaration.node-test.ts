@@ -248,6 +248,14 @@ test("#1016: the mesh's keys folder and each member's own mesh_key reach the set
   assert.deepEqual((await declare(meshless)).mesh_keys, { folder: null, named: {} })
 })
 
+test("#1016: the mesh's realm and each service it names reach the settings, a service on unless it says false", async () => {
+  const { mesh_realm, mesh_services } = await declare({ ...draft, mesh: { ...draft.mesh, graph: undefined, mail: { service: ' a-mail-service ', on: true } } })
+  assert.equal(mesh_realm, draft.mesh.realm)
+  assert.deepEqual(mesh_services, { mail: { service: 'a-mail-service', on: true }, memory: { service: 'a-memory-service', on: true }, kanban: { service: 'a-kanban-service', on: false } })
+  const { mesh: _mesh, ...meshless } = draft
+  assert.deepEqual(await declare(meshless).then(({ mesh_realm: realm, mesh_services: services }) => ({ realm, services })), { realm: null, services: {} })
+})
+
 test('#931: the mesh, the terminal and the id are checked field by field', async () => {
   await refusedWith({ ...draft, terminal: 'a-terminal' }, 'terminal')
   await refusedWith({ ...draft, id: '' }, 'id')

@@ -38,6 +38,7 @@ import type { CrewStore, DocumentStore, HandoverStampStore, Refused, RowStore } 
 import {
   ownWritesKeptForLaunch,
   type Approval,
+  readStateFile,
   type MarthaState,
 } from '../keep_martha_state_outside_the_checkout/keep_martha_state_outside_the_checkout.ts'
 import { openKeptCommandShapes } from '../keep_what_the_owner_signed/keep_what_the_owner_signed.ts'
@@ -62,6 +63,7 @@ import { signedRunsOf } from '../run_an_owner_signed_command/signed_runs.ts'
 import type { StoppingHost } from '../stop_and_restart_a_member/stop_and_restart_a_member.ts'
 import { machineRootsFrom } from '../tell_a_citer_of_a_volatile_path/volatile_paths.ts'
 import type { MemberRelayPlace } from '../answer_the_relay/answer_the_relay.ts'
+import { ROSTER_FILE, theKeptRoster } from '../write_the_crews_roster/write_the_crews_roster.ts'
 
 /** The crew's channel as its carrier counts a message taken in (martha#253): the crew's row stream and a clock. */
 export interface TheCrewChannel {
@@ -282,7 +284,7 @@ function theGitGuardPlaceOf(settings: CrewSettings, member: string, leftovers: C
 export const leftoversOfALaunch = (settings: CrewSettings, crew: CrewStore) => ({ crew, workspace: theWorkspaceTheCrewDeclared(settings) })
 
 /** The crew tools' places a host's start does not choose itself: the models it names, how it spawns a subagent, and the settings file its model command saves a switch into. */
-export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings' | 'usage_host'>
+export type TheCrewToolsOfAHost = Pick<CrewToolPlaces, 'models' | 'spawn' | 'owners_settings' | 'usage_host' | 'crews_memory'>
 
 /**
  * The crew tools' places every host's start shares (martha#541 package A): built here once, with the host's own
@@ -367,6 +369,8 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost, key: AMember
         // The settings file the host's model command saves a switch into, and the lock that guards it (martha#359): the
         // member's own since martha#602. The owner's file was finished above, before the host started.
         owners_settings: theMembersSwitchPlace(start, member.config_dir),
+        // The relay carries a mesh order as the member (martha#1016): crew memory reads the roster `martha up` kept.
+        crews_memory: { roster: () => readTheCrewsRoster(start.state) },
       })),
     signed_runs: signedRunsOf(
       receiptsInMemory(),
@@ -377,6 +381,12 @@ export function theLaunchOfAClaudeCodeStart(start: AStartOnItsHost, key: AMember
       CLAUDE_CODE_BASH_RESULT_SHAPES,
     ),
   }
+}
+
+/** The roster `martha up` kept in Martha's state (martha#1016): none when the file cannot be read. Crew mail and memory read it. */
+export function readTheCrewsRoster(state: MarthaState): Readonly<Record<string, string>> {
+  const read = readStateFile(join(state.directory, ROSTER_FILE))
+  return theKeptRoster('text' in read ? read.text : '')
 }
 
 /** The Claude Code entry: today's launch, unchanged in behaviour, behind the table. */

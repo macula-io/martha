@@ -44,7 +44,7 @@ export {
   isAKeyFilesPath,
   type EngineEndpoint,
 } from './the_engines_endpoint.ts'
-import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theMeshKeysFolderOf, theNamedMeshKeysOf, theWorkspacesClonesOf, whereTheCrewOpens, type TheCrewsMeshKeys, type WhereTheCrewOpens } from './the_crews_workspace.ts'
+import { THE_WORKSPACES_ROOT, WORKSPACE_BLOCK_FIELDS, WORKSPACE_TOP_LEVEL_KEYS, theCrewsMeshOf, theMeshKeysFolderOf, theNamedMeshKeysOf, theWorkspacesClonesOf, whereTheCrewOpens, type TheCrewsMesh, type TheCrewsMeshKeys, type WhereTheCrewOpens } from './the_crews_workspace.ts'
 import { isAbsolute, basename, dirname, join, normalize, sep } from 'node:path'
 
 import type { DocumentStore } from '../host_contract/host_contract.ts'
@@ -381,7 +381,8 @@ export interface CrewPaths {
   readonly conventions: string | null
 }
 
-export interface CrewSettings {
+/** The crew's settings; the mesh's realm and services (martha#1016) are read by ./the_crews_workspace's theCrewsMeshOf. */
+export interface CrewSettings extends TheCrewsMesh {
   readonly paths: CrewPaths
   readonly owner: string
   /**
@@ -662,6 +663,7 @@ function settingsOf(refuse: Refuse, value: unknown, places: ThePlacesRead, model
     volatile_paths: volatilePathsOf(refuse, value[VOLATILE_PATHS]),
     engine_endpoint: theEnginesEndpointOf(said, value, profiles, (field, why) => refuse.say(field, why)),
     opens: whereTheCrewOpens(value),
+    ...theCrewsMeshOf(value),
     mesh_keys: { folder: theMeshKeysFolderOf(value), named: theNamedMeshKeysOf(members.map((member) => member.name), value['members'], MESH_KEY) },
   }
 }

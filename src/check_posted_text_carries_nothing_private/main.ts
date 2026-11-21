@@ -8,14 +8,9 @@
 
 import { readFileSync } from 'node:fs'
 
-import {
-  withoutLabNames,
-  privateHitsIn,
-  type Hit,
-  type Rules,
-  type Source,
-} from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
-import { resolveOnGitHub, rulesOf } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
+import { privateHitsIn, type Hit, type Source } from '../check_nothing_private_gets_in/check_nothing_private_gets_in.ts'
+import { resolveOnGitHub } from '../check_nothing_private_gets_in/scan_rules_and_visibility.ts'
+import { rulesOf, type Rules, withoutLabNames } from '../know_what_text_is_private/know_what_text_is_private.ts'
 import { selfTest } from './plant_every_surface.ts'
 import { postedTextSources } from './posted_text.ts'
 import { readPostedText, API, type Call } from './read_posted_text.ts'

@@ -74,6 +74,33 @@ export function theNamedMeshKeysOf(names: readonly string[], declared: unknown, 
   }))
 }
 
+/** One service the mesh names: the provider it is served by, and whether it is on (left out, it is). */
+export interface AMeshService {
+  readonly service: string
+  readonly on: boolean
+}
+
+/** The mesh's realm and the services it names (martha#1016): read by crew memory and crew mail, each for its own service. */
+export interface TheCrewsMesh {
+  readonly mesh_realm: string | null
+  readonly mesh_services: Readonly<Partial<Record<(typeof MESH_SERVICES)[number], AMeshService>>>
+}
+
+/** The mesh of a declaration that names none: no realm, no service. */
+export const NO_MESH: TheCrewsMesh = { mesh_realm: null, mesh_services: {} }
+
+/** The mesh's realm and services, from a declaration theWorkspacesClonesOf has already checked. */
+export function theCrewsMeshOf(declaration: Block): TheCrewsMesh {
+  const mesh = declaration[MESH]
+  if (!isBlock(mesh)) return NO_MESH
+  const realm = mesh['realm']
+  const services = MESH_SERVICES.flatMap((name) => {
+    const named = mesh[name]
+    return isBlock(named) && isText(named['service']) ? [[name, { service: named['service'].trim(), on: named['on'] !== false }]] : []
+  })
+  return { mesh_realm: typeof realm === 'string' ? realm : null, mesh_services: Object.fromEntries(services) }
+}
+
 /** A realm, as the mesh names one: 64 hex characters. */
 export const A_REALM = /^[0-9a-f]{64}$/
 

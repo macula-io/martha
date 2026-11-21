@@ -7,18 +7,11 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { removeTheTree } from '../serve_the_relay_to_a_launch/relay_copy.ts'
-import {
-  privateHitsIn,
-  refusedValuesIn,
-  SYNTHETIC,
-  type Resolve,
-  type Rules,
-  type Source,
-  withoutLabNames,
-} from './check_nothing_private_gets_in.ts'
-import { HEX_SLOT, PUBLIC_DIGEST_FORMS } from './public_digest.ts'
+import { privateHitsIn, type Resolve, type Source } from './check_nothing_private_gets_in.ts'
+import { refusedValuesIn, SYNTHETIC, type Rules, withoutLabNames } from '../know_what_text_is_private/know_what_text_is_private.ts'
+import { HEX_SLOT, PUBLIC_DIGEST_FORMS } from '../know_what_text_is_private/public_digest.ts'
 import { GITHUB_TOKEN_PREFIXES, TOKEN_BODY } from '../keep_the_owners_todo_list/keep_the_owners_todo_list.ts'
-import { ID_HEX_DIGITS } from './public_text.ts'
+import { ID_HEX_DIGITS } from '../know_what_text_is_private/public_text.ts'
 import { commitSources, commitsOf, treeSources } from './read_sources.ts'
 
 // Every value planted here is a synthetic form, because this file is in the
